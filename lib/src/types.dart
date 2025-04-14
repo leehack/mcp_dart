@@ -1762,20 +1762,25 @@ class ToolInputSchema {
   /// JSON Schema properties definition.
   final Map<String, dynamic>? properties;
 
+  final List<String>? required;
+
   /// Additional JSON Schema properties (e.g., required).
   final Map<String, dynamic> additionalProperties;
 
   const ToolInputSchema({
     this.properties,
+    this.required,
     this.additionalProperties = const {},
   });
 
   factory ToolInputSchema.fromJson(Map<String, dynamic> json) {
     final rest = Map<String, dynamic>.from(json)
       ..remove('type')
-      ..remove('properties');
+      ..remove('properties')
+      ..remove('required');
     return ToolInputSchema(
       properties: json['properties'] as Map<String, dynamic>?,
+      required: json['required'] as List<String>?,
       additionalProperties: rest,
     );
   }
@@ -1783,6 +1788,7 @@ class ToolInputSchema {
   Map<String, dynamic> toJson() => {
         'type': type,
         if (properties != null) 'properties': properties,
+        if (required != null) 'required': required,
         ...additionalProperties,
       };
 }
