@@ -82,7 +82,7 @@ class ResourceTemplateRegistration {
 
 class _RegisteredTool {
   final String? description;
-  final Map<String, dynamic>? inputSchemaProperties;
+  final InputSchemaProperties? inputSchemaProperties;
   final ToolCallback callback;
 
   const _RegisteredTool({
@@ -561,7 +561,7 @@ class McpServer {
   void tool(
     String name, {
     String? description,
-    Map<String, dynamic>? inputSchemaProperties,
+    InputSchemaProperties? inputSchemaProperties,
     required ToolCallback callback,
   }) {
     if (_registeredTools.containsKey(name)) {

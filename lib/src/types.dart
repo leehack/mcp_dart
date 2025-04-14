@@ -1754,15 +1754,50 @@ class JsonRpcPromptListChangedNotification extends JsonRpcNotification {
       const JsonRpcPromptListChangedNotification();
 }
 
+/// Represents the properties definition for a tool input schema.
+class InputSchemaProperties {
+  /// A map of property names to their schema definitions.
+  final Map<String, dynamic>? properties;
+
+  /// List of required property names.
+  final List<String>? required;
+
+  /// Additional schema properties.
+  final Map<String, dynamic> additionalProperties;
+
+  const InputSchemaProperties({
+    this.properties,
+    this.required,
+    this.additionalProperties = const {},
+  });
+
+  factory InputSchemaProperties.fromJson(Map<String, dynamic> json) {
+    final rest = Map<String, dynamic>.from(json)
+      ..remove('properties')
+      ..remove('required');
+    return InputSchemaProperties(
+      properties: json['properties'] as Map<String, dynamic>?,
+      required: (json['required'] as List<dynamic>?)?.cast<String>(),
+      additionalProperties: rest,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (properties != null) 'properties': properties,
+        if (required != null) 'required': required,
+        ...additionalProperties,
+      };
+}
+
 /// Describes the input schema for a tool, based on JSON Schema.
 class ToolInputSchema {
   /// Must be "object".
   final String type = "object";
 
-  /// JSON Schema properties definition.
-  final Map<String, dynamic>? properties;
+  /// The schema properties definition.
+  final InputSchemaProperties? properties;
 
-  /// Additional JSON Schema properties (e.g., required).
+  /// Additional JSON Schema properties.
   final Map<String, dynamic> additionalProperties;
 
   const ToolInputSchema({
@@ -1775,14 +1810,16 @@ class ToolInputSchema {
       ..remove('type')
       ..remove('properties');
     return ToolInputSchema(
-      properties: json['properties'] as Map<String, dynamic>?,
+      properties: json['properties'] == null
+          ? null
+          : InputSchemaProperties.fromJson(json['properties'] as Map<String, dynamic>),
       additionalProperties: rest,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'type': type,
-        if (properties != null) 'properties': properties,
+        if (properties != null) 'properties': properties!.toJson(),
         ...additionalProperties,
       };
 }
