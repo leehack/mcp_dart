@@ -561,15 +561,18 @@ class McpServer {
   void tool(
     String name, {
     String? description,
-    InputSchemaProperties? inputSchemaProperties,
+    Map<String, dynamic>? inputSchemaProperties,
     required ToolCallback callback,
   }) {
     if (_registeredTools.containsKey(name)) {
       throw ArgumentError("Tool name '$name' already registered.");
     }
+    final properties = inputSchemaProperties == null
+        ? null
+        : InputSchemaProperties.fromJson(inputSchemaProperties);
     _registeredTools[name] = _RegisteredTool(
       description: description,
-      inputSchemaProperties: inputSchemaProperties,
+      inputSchemaProperties: properties,
       callback: callback,
     );
     _ensureToolHandlersInitialized();
