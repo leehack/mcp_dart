@@ -1756,11 +1756,11 @@ class JsonRpcPromptListChangedNotification extends JsonRpcNotification {
 
 /// Describes the input schema for a tool, based on JSON Schema.
 class ToolInputSchema {
-  /// Must be "object".
-  final String type = "object";
+  /// Must be "object" at the top level.
+  final String type;
 
   /// JSON Schema properties definition.
-  final Map<String, dynamic>? properties;
+  final ToolInputSchema? properties;
 
   /// Optional list of required properties.
   final List<String>? required;
@@ -1769,6 +1769,7 @@ class ToolInputSchema {
   final Map<String, dynamic> additionalProperties;
 
   const ToolInputSchema({
+    required this.type,
     this.properties,
     this.required,
     this.additionalProperties = const {},
@@ -1780,7 +1781,10 @@ class ToolInputSchema {
       ..remove('properties')
       ..remove('required');
     return ToolInputSchema(
-      properties: json['properties'] as Map<String, dynamic>?,
+      type: json['type'] ?? "object",
+      properties: json['properties'] != null
+          ? ToolInputSchema.fromJson(json['properties'])
+          : null,
       required: (json['required'] as List<dynamic>?)?.cast<String>(),
       additionalProperties: rest,
     );
