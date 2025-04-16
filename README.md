@@ -44,7 +44,7 @@ void main() async {
   server.tool(
     "calculate",
     description: 'Perform basic arithmetic operations',
-    inputSchemaProperties: {
+    inputSchema: {
       'properties': {
         'operation': {
           'type': 'string',
