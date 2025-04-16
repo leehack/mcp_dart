@@ -82,7 +82,7 @@ class ResourceTemplateRegistration {
 
 class _RegisteredTool {
   final String? description;
-  final InputSchemaProperties? inputSchemaProperties;
+  final Map<String, dynamic>? inputSchemaProperties;
   final ToolCallback callback;
 
   const _RegisteredTool({
@@ -92,7 +92,12 @@ class _RegisteredTool {
   });
 
   Tool toTool(String name) {
-    final schema = ToolInputSchema(properties: inputSchemaProperties);
+    final rest = Map<String, dynamic>.from(inputSchemaProperties ?? {})
+      ..remove('required');
+    final schema = ToolInputSchema(
+      properties: rest,
+      required: inputSchemaProperties?['required'],
+    );
     return Tool(name: name, description: description, inputSchema: schema);
   }
 }
@@ -567,12 +572,9 @@ class McpServer {
     if (_registeredTools.containsKey(name)) {
       throw ArgumentError("Tool name '$name' already registered.");
     }
-    final properties = inputSchemaProperties == null
-        ? null
-        : InputSchemaProperties.fromJson(inputSchemaProperties);
     _registeredTools[name] = _RegisteredTool(
       description: description,
-      inputSchemaProperties: properties,
+      inputSchemaProperties: inputSchemaProperties,
       callback: callback,
     );
     _ensureToolHandlersInitialized();
