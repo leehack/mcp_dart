@@ -1777,7 +1777,8 @@ class ToolInputSchema {
   factory ToolInputSchema.fromJson(Map<String, dynamic> json) {
     final rest = Map<String, dynamic>.from(json)
       ..remove('type')
-      ..remove('properties');
+      ..remove('properties')
+      ..remove('required');
     return ToolInputSchema(
       properties: json['properties'] as Map<String, dynamic>?,
       required: (json['required'] as List<dynamic>?)?.cast<String>(),
