@@ -1794,7 +1794,7 @@ class ToolInputSchema {
   /// Must be "object".
   final String type = "object";
 
-  /// The schema properties definition.
+  /// JSON Schema properties definition.
   final InputSchemaProperties? properties;
 
   /// Additional JSON Schema properties.
