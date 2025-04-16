@@ -82,21 +82,21 @@ class ResourceTemplateRegistration {
 
 class _RegisteredTool {
   final String? description;
-  final Map<String, dynamic>? inputSchemaProperties;
+  final Map<String, dynamic>? inputSchema;
   final ToolCallback callback;
 
   const _RegisteredTool({
     this.description,
-    this.inputSchemaProperties,
+    this.inputSchema,
     required this.callback,
   });
 
   Tool toTool(String name) {
-    final rest = Map<String, dynamic>.from(inputSchemaProperties ?? {})
+    final inputSchemaProperties = Map<String, dynamic>.from(inputSchema ?? {})
       ..remove('required');
     final schema = ToolInputSchema(
-      properties: rest,
-      required: inputSchemaProperties?['required'],
+      properties: inputSchemaProperties,
+      required: inputSchema?['required'],
     );
     return Tool(name: name, description: description, inputSchema: schema);
   }
@@ -566,7 +566,7 @@ class McpServer {
   void tool(
     String name, {
     String? description,
-    Map<String, dynamic>? inputSchemaProperties,
+    Map<String, dynamic>? inputSchema,
     required ToolCallback callback,
   }) {
     if (_registeredTools.containsKey(name)) {
@@ -574,7 +574,7 @@ class McpServer {
     }
     _registeredTools[name] = _RegisteredTool(
       description: description,
-      inputSchemaProperties: inputSchemaProperties,
+      inputSchema: inputSchema,
       callback: callback,
     );
     _ensureToolHandlersInitialized();
