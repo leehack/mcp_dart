@@ -92,12 +92,7 @@ class _RegisteredTool {
   });
 
   Tool toTool(String name) {
-    final inputSchemaProperties = Map<String, dynamic>.from(inputSchema ?? {})
-      ..remove('required');
-    final schema = ToolInputSchema(
-      properties: inputSchemaProperties,
-      required: inputSchema?['required'],
-    );
+    final schema = ToolInputSchema.fromJson(inputSchema ?? {});
     return Tool(name: name, description: description, inputSchema: schema);
   }
 }
