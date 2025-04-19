@@ -1,3 +1,7 @@
+# 0.4.1
+
+- Add IOStreamTransport to connect a client and server via dart streams in a single application
+
 ## 0.4.0
 
 - Add support for StreamableHTTP client

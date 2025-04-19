@@ -10,5 +10,6 @@ library;
 
 export 'src/server/module.dart'; // Exports the server module for handling MCP server logic.
 export 'src/client/module.dart'; // Exports the client module for handling MCP client logic.
+export 'src/shared/module.dart'; // Exports the shared module for handling MCP shared logic.
 export 'src/types.dart'; // Exports shared types used across the MCP protocol.
 export 'src/shared/uuid.dart'; // Exports UUID generation utilities.
