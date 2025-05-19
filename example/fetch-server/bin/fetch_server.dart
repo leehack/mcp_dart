@@ -95,7 +95,7 @@ void main(List<String> arguments) async {
         final response = await http.get(Uri.parse(url));
 
         if (response.statusCode != 200) {
-          return CallToolResult(
+          return CallToolResult.fromContent(
             content: [
               TextContent(
                 text:
@@ -120,7 +120,7 @@ void main(List<String> arguments) async {
             (effectiveStartIndex + maxLength).clamp(0, content.length);
         content = content.substring(effectiveStartIndex, effectiveEndIndex);
 
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [
             TextContent(
               text: content,
@@ -128,7 +128,7 @@ void main(List<String> arguments) async {
           ],
         );
       } catch (e) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [
             TextContent(
               text: 'Fetch error: ${e.toString()}',

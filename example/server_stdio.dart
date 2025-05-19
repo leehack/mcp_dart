@@ -27,7 +27,7 @@ void main() async {
       final operation = args!['operation'];
       final a = args['a'];
       final b = args['b'];
-      return CallToolResult(
+      return CallToolResult.fromContent(
         content: [
           TextContent(
             text: switch (operation) {

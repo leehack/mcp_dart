@@ -1,6 +1,7 @@
 // Dart porting of https://github.com/modelcontextprotocol/quickstart-resources/tree/main/weather-server-typescript
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:mcp_dart/mcp_dart.dart';
 
 const String nwsApiBase = "https://api.weather.gov";
@@ -61,7 +62,7 @@ void main() async {
     callback: ({args, extra}) async {
       final state = (args?['state'] as String?)?.toUpperCase();
       if (state == null || state.length != 2) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [TextContent(text: "Invalid state code provided.")],
           isError: true,
         );
@@ -71,14 +72,14 @@ void main() async {
       final alertsData = await makeNWSRequest(alertsUrl);
 
       if (alertsData == null) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [TextContent(text: "Failed to retrieve alerts data.")],
         );
       }
 
       final features = alertsData['features'] as List<dynamic>? ?? [];
       if (features.isEmpty) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [TextContent(text: "No active alerts for $state.")],
         );
       }
@@ -87,7 +88,9 @@ void main() async {
           features.map((feature) => formatAlert(feature)).join("\n");
       final alertsText = "Active alerts for $state:\n\n$formattedAlerts";
 
-      return CallToolResult(content: [TextContent(text: alertsText)]);
+      return CallToolResult.fromContent(
+        content: [TextContent(text: alertsText)],
+      );
     },
   );
 
@@ -107,7 +110,7 @@ void main() async {
       final longitude = args?['longitude'] as num?;
 
       if (latitude == null || longitude == null) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [TextContent(text: "Invalid latitude or longitude.")],
           isError: true,
         );
@@ -118,7 +121,7 @@ void main() async {
       final pointsData = await makeNWSRequest(pointsUrl);
 
       if (pointsData == null) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [
             TextContent(
               text:
@@ -130,7 +133,7 @@ void main() async {
 
       final forecastUrl = pointsData['properties']?['forecast'] as String?;
       if (forecastUrl == null) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [
             TextContent(
               text: "Failed to get forecast URL from grid point data.",
@@ -141,7 +144,7 @@ void main() async {
 
       final forecastData = await makeNWSRequest(forecastUrl);
       if (forecastData == null) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [TextContent(text: "Failed to retrieve forecast data.")],
         );
       }
@@ -149,7 +152,7 @@ void main() async {
       final periods =
           forecastData['properties']?['periods'] as List<dynamic>? ?? [];
       if (periods.isEmpty) {
-        return CallToolResult(
+        return CallToolResult.fromContent(
           content: [TextContent(text: "No forecast periods available.")],
         );
       }
@@ -168,7 +171,9 @@ void main() async {
       final forecastText =
           "Forecast for $latitude, $longitude:\n\n$formattedForecast";
 
-      return CallToolResult(content: [TextContent(text: forecastText)]);
+      return CallToolResult.fromContent(
+        content: [TextContent(text: forecastText)],
+      );
     },
   );
 

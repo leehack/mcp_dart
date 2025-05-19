@@ -1,8 +1,9 @@
-import 'package:test/test.dart';
+import 'dart:async';
+
 import 'package:mcp_dart/src/client/client.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
-import 'dart:async';
+import 'package:test/test.dart';
 
 void main() {
   group('Client', () {
@@ -498,7 +499,7 @@ class MockTransport extends Transport {
         final content = [TextContent(text: "Tool result")];
         onmessage!(JsonRpcResponse(
           id: message.id,
-          result: CallToolResult(content: content).toJson(),
+          result: CallToolResult.fromContent(content: content).toJson(),
         ));
       }
     } else if (message is JsonRpcRequest && message.method == 'prompts/get') {

@@ -72,7 +72,7 @@ McpServer getServer() {
     },
     callback: ({args, extra}) async {
       final name = args?['name'] as String? ?? 'world';
-      return CallToolResult(
+      return CallToolResult.fromContent(
         content: [
           TextContent(text: 'Hello, $name!'),
         ],
@@ -124,7 +124,7 @@ McpServer getServer() {
         data: 'Sending second greeting to $name',
       )));
 
-      return CallToolResult(
+      return CallToolResult.fromContent(
         content: [
           TextContent(text: 'Good morning, $name!'),
         ],
@@ -200,7 +200,7 @@ McpServer getServer() {
         await sleep(interval.toInt());
       }
 
-      return CallToolResult(
+      return CallToolResult.fromContent(
         content: [
           TextContent(
             text: 'Started sending periodic notifications every ${interval}ms',

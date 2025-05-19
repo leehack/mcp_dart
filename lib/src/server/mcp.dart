@@ -4,6 +4,7 @@ import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/shared/uri_template.dart';
 import 'package:mcp_dart/src/types.dart';
+
 import 'server.dart';
 
 typedef CompleteCallback = Future<List<String>> Function(String value);
@@ -82,23 +83,29 @@ class ResourceTemplateRegistration {
 class _RegisteredTool {
   final String? description;
   final Map<String, dynamic>? inputSchemaProperties;
+  final Map<String, dynamic>? outputSchemaProperties;
   final ToolAnnotations? annotations;
   final ToolCallback callback;
 
   const _RegisteredTool({
     this.description,
     this.inputSchemaProperties,
+    this.outputSchemaProperties,
     this.annotations,
     required this.callback,
   });
 
   Tool toTool(String name) {
-    final schema = ToolInputSchema(properties: inputSchemaProperties);
     return Tool(
-        name: name,
-        description: description,
-        inputSchema: schema,
-        annotations: annotations);
+      name: name,
+      description: description,
+      inputSchema: ToolInputSchema(properties: inputSchemaProperties),
+      // Do not include output schema in the payload if it isn't defined
+      outputSchema: outputSchemaProperties != null
+          ? ToolOutputSchema(properties: outputSchemaProperties)
+          : null,
+      annotations: annotations,
+    );
   }
 }
 
@@ -240,7 +247,7 @@ class McpServer {
           );
         } catch (error) {
           print("Error executing tool '$toolName': $error");
-          return CallToolResult(
+          return CallToolResult.fromContent(
             content: [TextContent(text: error.toString())],
             isError: true,
           );
@@ -561,6 +568,7 @@ class McpServer {
     String name, {
     String? description,
     Map<String, dynamic>? inputSchemaProperties,
+    Map<String, dynamic>? outputSchemaProperties,
     ToolAnnotations? annotations,
     required ToolCallback callback,
   }) {
@@ -570,6 +578,7 @@ class McpServer {
     _registeredTools[name] = _RegisteredTool(
       description: description,
       inputSchemaProperties: inputSchemaProperties,
+      outputSchemaProperties: outputSchemaProperties,
       annotations: annotations,
       callback: callback,
     );
