@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Web Client Demo</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f5f5;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    h1 {
+      color: #6200ee;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .screenshot {
+      width: 100%;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      margin-bottom: 30px;
+    }
+    
+    .feature-list {
+      background-color: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin-bottom: 30px;
+    }
+    
+    .feature-list h2 {
+      color: #6200ee;
+      margin-top: 0;
+    }
+    
+    .feature-list ul {
+      padding-left: 20px;
+    }
+    
+    .feature-list li {
+      margin-bottom: 10px;
+    }
+    
+    .code-block {
+      background-color: #f0f0f0;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-x: auto;
+      font-family: monospace;
+      margin-bottom: 20px;
+    }
+    
+    .button {
+      display: inline-block;
+      background-color: #6200ee;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      text-decoration: none;
+      margin-right: 10px;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+    
+    .button:hover {
+      background-color: #3700b3;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MCP Web Client Example</h1>
+    
+    <div class="feature-list">
+      <h2>Features</h2>
+      <ul>
+        <li><strong>Streamable HTTP Connections</strong> - Real-time communication with MCP servers</li>
+        <li><strong>Chat Interface</strong> - Simple text-based interaction with AI models</li>
+        <li><strong>Streaming Responses</strong> - See responses as they are generated</li>
+        <li><strong>Cross-Platform</strong> - Works on web, mobile, and desktop</li>
+        <li><strong>Tool Calling</strong> - Call various MCP tools on the server</li>
+      </ul>
+    </div>
+    
+    <p>The MCP Web Client is a Flutter application that demonstrates how to use the MCP (Model Context Protocol) Dart client in a web environment. This example shows how to establish streamable HTTP connections, call tools, and handle real-time notifications.</p>
+    
+    <h2>Getting Started</h2>
+    <p>Run the test server:</p>
+    <div class="code-block">
+      dart test_server.dart
+    </div>
+    
+    <p>Then run the Flutter web app:</p>
+    <div class="code-block">
+      flutter run -d chrome
+    </div>
+    
+    <p>Connect to the server and start chatting!</p>
+    
+    <h2>Example Code</h2>
+    <p>Here's a simplified example of how to create an MCP client and call a tool:</p>
+    <div class="code-block">
+// Create a transport
+final transport = StreamableHttpClientTransport(
+  serverUrl: 'http://localhost:3000/mcp',
+);
+
+// Create MCP client
+final client = Client(transport: transport);
+
+// Initialize client
+await client.initialize();
+
+// Call a tool with streaming notifications
+final result = await client.callTool(
+  'processText',
+  {'text': 'Hello, world!'},
+  ToolCallOptions(
+    streamNotifications: true,
+    notificationHandler: (notification) {
+      print('Notification: ${notification.data}');
+    },
+  ),
+);
+    </div>
+    
+    <p>Check out the full source code for more detailed examples.</p>
+    
+    <div class="footer">
+      <p>MCP Web Client Example &copy; 2025</p>
+    </div>
+  </div>
+</body>
+</html>
