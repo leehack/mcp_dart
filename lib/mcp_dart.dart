@@ -8,8 +8,10 @@
 /// including server implementations, type definitions, and utilities.
 library;
 
-export 'src/server/module.dart'; // Exports the server module for handling MCP server logic.
-export 'src/client/module.dart'; // Exports the client module for handling MCP client logic.
-export 'src/shared/module.dart'; // Exports the shared module for handling MCP shared logic.
+// Common exports for all platforms
 export 'src/types.dart'; // Exports shared types used across the MCP protocol.
 export 'src/shared/uuid.dart'; // Exports UUID generation utilities.
+
+// Platform-specific exports
+export 'src/exports.dart' // Stub export for other platforms
+    if (dart.library.js_interop) 'src/exports_web.dart'; // Web-specific exports
