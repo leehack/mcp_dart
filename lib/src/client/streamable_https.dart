@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:eventflux/eventflux.dart';
+import 'package:http/http.dart' as http;
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 
@@ -109,11 +110,15 @@ class StreamableHttpClientTransportOptions {
   /// the server will generate a new session ID.
   final String? sessionId;
 
+  /// A custom HTTP client adapter, mainly for testing purposes.
+  final HttpClientAdapter? httpClientAdapter;
+
   const StreamableHttpClientTransportOptions({
     this.authProvider,
     this.requestInit,
     this.reconnectionOptions,
     this.sessionId,
+    this.httpClientAdapter,
   });
 }
 
@@ -121,12 +126,16 @@ class StreamableHttpClientTransportOptions {
 /// It will connect to a server using HTTP POST for sending messages and HTTP GET with Server-Sent Events
 /// for receiving messages.
 class StreamableHttpClientTransport implements Transport {
-  StreamController<bool>? _abortController;
+  final EventFlux _eventFlux;
+  final http.Client _httpClient;
   final Uri _url;
   final Map<String, dynamic>? _requestInit;
   final OAuthClientProvider? _authProvider;
   String? _sessionId;
   final StreamableHttpReconnectionOptions _reconnectionOptions;
+  final HttpClientAdapter? _httpClientAdapter;
+  bool _isClosed = false;
+  int _reconnectionAttempts = 0;
 
   @override
   void Function()? onclose;
@@ -140,12 +149,16 @@ class StreamableHttpClientTransport implements Transport {
   StreamableHttpClientTransport(
     Uri url, {
     StreamableHttpClientTransportOptions? opts,
+    http.Client? httpClient,
   })  : _url = url,
         _requestInit = opts?.requestInit,
         _authProvider = opts?.authProvider,
         _sessionId = opts?.sessionId,
         _reconnectionOptions = opts?.reconnectionOptions ??
-            _defaultStreamableHttpReconnectionOptions;
+            _defaultStreamableHttpReconnectionOptions,
+        _eventFlux = EventFlux.spawn(),
+        _httpClientAdapter = opts?.httpClientAdapter,
+        _httpClient = httpClient ?? http.Client();
 
   Future<void> _authThenStart() async {
     if (_authProvider == null) {
@@ -168,7 +181,7 @@ class StreamableHttpClientTransport implements Transport {
       throw UnauthorizedError();
     }
 
-    return await _startOrAuthSse(const StartSseOptions());
+    return await _startSseConnection(const StartSseOptions());
   }
 
   Future<Map<String, String>> _commonHeaders() async {
@@ -195,261 +208,102 @@ class StreamableHttpClientTransport implements Transport {
     return headers;
   }
 
-  Future<void> _startOrAuthSse(StartSseOptions options) async {
-    final resumptionToken = options.resumptionToken;
-    try {
-      // Try to open an initial SSE stream with GET to listen for server messages
-      // This is optional according to the spec - server may not support it
-      final headers = await _commonHeaders();
-      headers['Accept'] = "text/event-stream";
+  void _handleConnectionError(dynamic error) {
+    if (_isClosed) return;
 
-      // Include Last-Event-ID header for resumable streams if provided
-      if (resumptionToken != null) {
-        headers['last-event-id'] = resumptionToken;
-      }
+    onerror?.call(
+        StreamableHttpError(0, 'SSE connection error: ${error.toString()}'));
 
-      final client = HttpClient();
-      final request = await client.getUrl(_url);
+    if (_reconnectionAttempts < _reconnectionOptions.maxRetries) {
+      final delay = (_reconnectionOptions.initialReconnectionDelay *
+              math.pow(_reconnectionOptions.reconnectionDelayGrowFactor,
+                  _reconnectionAttempts))
+          .toInt();
 
-      headers.forEach((name, value) {
-        request.headers.set(name, value);
+      final cappedDelay =
+          math.min(delay, _reconnectionOptions.maxReconnectionDelay);
+
+      _reconnectionAttempts++;
+      Future.delayed(Duration(milliseconds: cappedDelay), () {
+        if (!_isClosed) {
+          _startSseConnection(const StartSseOptions());
+        }
       });
-
-      final response = await request.close();
-
-      if (response.statusCode != 200) {
-        if (response.statusCode == 401 && _authProvider != null) {
-          // Need to authenticate
-          return await _authThenStart();
-        }
-
-        // 405 indicates that the server does not offer an SSE stream at GET endpoint
-        // This is an expected case that should not trigger an error
-        if (response.statusCode == 405) {
-          return;
-        }
-
-        throw StreamableHttpError(
-          response.statusCode,
-          "Failed to open SSE stream: ${response.reasonPhrase}",
-        );
-      }
-
-      _handleSseStream(response, options);
-    } catch (error) {
-      if (error is Error) {
-        onerror?.call(error);
-      } else {
-        final err = McpError(0, error.toString());
-        onerror?.call(err);
-      }
-      rethrow;
+    } else {
+      close();
     }
   }
 
-  /// Calculates the next reconnection delay using backoff algorithm
-  ///
-  /// @param attempt Current reconnection attempt count for the specific stream
-  /// @returns Time to wait in milliseconds before next reconnection attempt
-  int _getNextReconnectionDelay(int attempt) {
-    // Access default values directly, ensuring they're never undefined
-    final initialDelay = _reconnectionOptions.initialReconnectionDelay;
-    final growFactor = _reconnectionOptions.reconnectionDelayGrowFactor;
-    final maxDelay = _reconnectionOptions.maxReconnectionDelay;
+  Future<void> _startSseConnection(StartSseOptions options) async {
+    if (_isClosed) return;
 
-    // Cap at maximum delay
-    return (initialDelay * math.pow(growFactor, attempt))
-        .round()
-        .clamp(0, maxDelay);
+    try {
+      final headers = await _commonHeaders();
+      headers['Accept'] = 'text/event-stream';
+      headers['Cache-Control'] = 'no-cache';
+
+      if (options.resumptionToken != null) {
+        headers['last-event-id'] = options.resumptionToken!;
+      }
+
+      _eventFlux.connect(
+        EventFluxConnectionType.get,
+        _url.toString(),
+        header: headers,
+        httpClient: _httpClientAdapter,
+        onSuccessCallback: (response) {
+          _reconnectionAttempts = 0; // Reset on successful connection
+          response?.stream?.listen(
+            (event) {
+              _handleSseMessage(event, options);
+            },
+            onError: _handleConnectionError,
+            onDone: () {
+              if (!_isClosed) {
+                _handleConnectionError('SSE stream closed unexpectedly');
+              }
+            },
+          );
+        },
+        onError: (e) {
+          if (e.statusCode == 401 && _authProvider != null) {
+            _authThenStart();
+          } else {
+            _handleConnectionError(e);
+          }
+        },
+      );
+    } catch (e) {
+      _handleConnectionError(e);
+    }
   }
 
-  /// Schedule a reconnection attempt with exponential backoff
-  ///
-  /// @param options The SSE connection options
-  /// @param attemptCount Current reconnection attempt count for this specific stream
-  void _scheduleReconnection(StartSseOptions options, [int attemptCount = 0]) {
-    // Use provided options or default options
-    final maxRetries = _reconnectionOptions.maxRetries;
-
-    // Check if we've exceeded maximum retry attempts
-    if (maxRetries > 0 && attemptCount >= maxRetries) {
-      onerror?.call(
-          McpError(0, "Maximum reconnection attempts ($maxRetries) exceeded."));
+  void _handleSseMessage(EventFluxData event, StartSseOptions sseOptions) {
+    if (event.data.isEmpty) {
       return;
     }
 
-    // Calculate next delay based on current attempt count
-    final delay = _getNextReconnectionDelay(attemptCount);
-
-    // Schedule the reconnection
-    Future.delayed(Duration(milliseconds: delay), () {
-      // Use the last event ID to resume where we left off
-      _startOrAuthSse(options).catchError((error) {
-        final errorMessage =
-            error is Error ? error.toString() : error.toString();
-        onerror?.call(
-            McpError(0, "Failed to reconnect SSE stream: $errorMessage"));
-
-        // Schedule another attempt if this one failed, incrementing the attempt counter
-        _scheduleReconnection(options, attemptCount + 1);
-
-        // Ensure the Future completes
-        return null;
-      });
-    });
-  }
-
-  void _handleSseStream(HttpClientResponse stream, StartSseOptions options) {
-    final onResumptionToken = options.onResumptionToken;
-    final replayMessageId = options.replayMessageId;
-
-    String? lastEventId;
-    String buffer = '';
-    String? eventName;
-    String? eventId;
-    String? eventData;
-
-    // Function to process a complete SSE event
-    void processEvent() {
-      if (eventData == null) return;
-
-      // Update last event ID if provided
-      if (eventId != null) {
-        lastEventId = eventId;
-        onResumptionToken?.call(eventId!);
-      }
-
-      if (eventName == null || eventName == 'message') {
-        try {
-          final message = JsonRpcMessage.fromJson(jsonDecode(eventData!));
-
-          // Can't set id directly if it's final, need to create a new message
-          if (replayMessageId != null && message is JsonRpcResponse) {
-            // Create a new response with the same data but different ID
-            final newMessage = JsonRpcResponse(
-                id: replayMessageId,
-                result: message.result,
-                meta: message.meta);
-            onmessage?.call(newMessage);
-          } else {
-            onmessage?.call(message);
-          }
-        } catch (error) {
-          if (error is Error) {
-            onerror?.call(error);
-          } else {
-            onerror?.call(McpError(0, error.toString()));
-          }
-        }
-      }
-
-      // Reset for next event
-      eventName = null;
-      eventId = null;
-      eventData = null;
+    if (sseOptions.onResumptionToken != null) {
+      sseOptions.onResumptionToken!(event.id);
     }
 
-    // Helper function to handle reconnection logic
-    void handleReconnection(String? eventId, String errorMessage) {
-      if (_abortController != null && !_abortController!.isClosed) {
-        if (eventId != null) {
-          try {
-            _scheduleReconnection(StartSseOptions(
-              resumptionToken: eventId,
-              onResumptionToken: onResumptionToken,
-              replayMessageId: replayMessageId,
-            ));
-          } catch (error) {
-            final errorMessage =
-                error is Error ? error.toString() : error.toString();
-            onerror?.call(McpError(0, "Failed to reconnect: $errorMessage"));
-          }
-        }
+    try {
+      final decodedData = jsonDecode(event.data);
+      if (decodedData is Map<String, dynamic>) {
+        final message = JsonRpcMessage.fromJson(decodedData);
+        onmessage?.call(message);
       }
+    } catch (e) {
+      onerror?.call(McpError(-32700, 'Error parsing SSE message: $e'));
     }
-
-    // Convert the stream to a broadcast stream to allow multiple listeners if needed
-    final broadcastStream = stream.asBroadcastStream();
-
-    // Create a subscription to the stream
-    final subscription =
-        broadcastStream.transform(utf8.decoder).asBroadcastStream().listen(
-      (data) {
-        buffer += data;
-
-        // Process the buffer line by line
-        while (buffer.contains('\n')) {
-          final index = buffer.indexOf('\n');
-          final line = buffer.substring(0, index);
-          buffer = buffer.substring(index + 1);
-
-          if (line.isEmpty) {
-            // Empty line means end of event
-            processEvent();
-            continue;
-          }
-
-          if (line.startsWith(':')) {
-            // Comment line, ignore
-            continue;
-          }
-
-          final colonIndex = line.indexOf(':');
-          if (colonIndex > 0) {
-            final field = line.substring(0, colonIndex);
-            // The value starts after colon + optional space
-            final valueStart = colonIndex +
-                1 +
-                (line.length > colonIndex + 1 && line[colonIndex + 1] == ' '
-                    ? 1
-                    : 0);
-            final value = line.substring(valueStart);
-
-            switch (field) {
-              case 'event':
-                eventName = value;
-                break;
-              case 'id':
-                eventId = value;
-                break;
-              case 'data':
-                eventData = (eventData ?? '') + value;
-                break;
-            }
-          }
-        }
-      },
-      onDone: () {
-        // Process any final event
-        processEvent();
-
-        // Handle stream closure - likely a network disconnect
-        handleReconnection(lastEventId, "Stream closed");
-      },
-      onError: (error) {
-        final errorMessage =
-            error is Error ? error.toString() : error.toString();
-        onerror?.call(McpError(0, "SSE stream disconnected: $errorMessage"));
-
-        // Attempt to reconnect if the stream disconnects unexpectedly
-        handleReconnection(lastEventId, errorMessage);
-      },
-    );
-
-    // Register the subscription cleanup when the abort controller is triggered
-    _abortController?.stream.listen((_) {
-      subscription.cancel();
-    });
   }
 
   @override
   Future<void> start() async {
-    if (_abortController != null) {
-      throw McpError(0,
-          "StreamableHttpClientTransport already started! If using Client class, note that connect() calls start() automatically.");
-    }
-
-    _abortController = StreamController<bool>.broadcast();
+    // With this new model, connection is lazily established when initialized is sent.
+    // If auth is needed, it will be triggered by the first send.
+    // We could pre-emptively auth here if desired.
+    return Future.value();
   }
 
   /// Call this method after the user has finished authorizing via their user agent and is redirected
@@ -469,136 +323,61 @@ class StreamableHttpClientTransport implements Transport {
 
   @override
   Future<void> close() async {
-    // Abort any pending requests
-    _abortController?.add(true);
-    _abortController?.close();
-
-    onclose?.call();
+    if (!_isClosed) {
+      _isClosed = true;
+      _eventFlux.disconnect();
+      _httpClient.close();
+      onclose?.call();
+    }
   }
 
   @override
-  Future<void> send(JsonRpcMessage message,
-      {String? resumptionToken,
-      void Function(String)? onResumptionToken}) async {
+  Future<void> send(JsonRpcMessage message) async {
+    if (_isClosed) {
+      throw McpError(0, 'Transport is closed');
+    }
+
+    // Check for authentication first
+    if (_authProvider != null) {
+      final tokens = await _authProvider!.tokens();
+      if (tokens == null) {
+        await _authProvider!.redirectToAuthorization();
+        throw UnauthorizedError('Authentication required');
+      }
+    }
+
+    final headers = await _commonHeaders();
+    headers['Content-Type'] = 'application/json';
+
     try {
-      if (resumptionToken != null) {
-        // If we have a last event ID, we need to reconnect the SSE stream
-        final replayId = message is JsonRpcRequest ? message.id : null;
-        _startOrAuthSse(StartSseOptions(
-          resumptionToken: resumptionToken,
-          replayMessageId: replayId,
-          onResumptionToken: onResumptionToken,
-        )).catchError((err) {
-          if (err is Error) {
-            onerror?.call(err);
-          } else {
-            onerror?.call(McpError(0, err.toString()));
-          }
-        });
-        return;
-      }
+      final response = await _httpClient.post(
+        _url,
+        headers: headers,
+        body: jsonEncode(message.toJson()),
+      );
 
-      // Check for authentication first - if we need auth, handle it before proceeding
-      if (_authProvider != null) {
-        final tokens = await _authProvider!.tokens();
-        if (tokens == null) {
-          // No tokens available - trigger authentication flow
-          await _authProvider!.redirectToAuthorization();
-          throw UnauthorizedError('Authentication required');
+      _sessionId ??= response.headers['mcp-session-id'];
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (message is JsonRpcRequest && response.body.isNotEmpty) {
+          final responseBody = jsonDecode(response.body);
+          final responseMessage = JsonRpcMessage.fromJson(responseBody);
+          onmessage?.call(responseMessage);
         }
-      }
-
-      final headers = await _commonHeaders();
-      headers['content-type'] = 'application/json';
-      headers['accept'] = 'application/json, text/event-stream';
-
-      final client = HttpClient();
-      final request = await client.postUrl(_url);
-
-      // Add headers
-      headers.forEach((name, value) {
-        request.headers.set(name, value);
-      });
-
-      // Add body
-      final bodyJson = jsonEncode(message.toJson());
-      request.write(bodyJson);
-
-      final response = await request.close();
-
-      // Handle session ID received during initialization
-      final sessionId = response.headers.value('mcp-session-id');
-      if (sessionId != null) {
-        _sessionId = sessionId;
-      }
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        if (response.statusCode == 401 && _authProvider != null) {
-          // Authentication failed with the server - try to refresh or redirect
-          await _authProvider!.redirectToAuthorization();
-          throw UnauthorizedError('Authentication failed with the server');
+        if (message is JsonRpcInitializedNotification) {
+          // After initialized, we start the SSE connection
+          _startSseConnection(const StartSseOptions());
         }
-
-        final text = await response.transform(utf8.decoder).join();
-        throw McpError(0,
-            "Error POSTing to endpoint (HTTP ${response.statusCode}): $text");
-      }
-
-      // If the response is 202 Accepted, there's no body to process
-      if (response.statusCode == 202) {
-        // if the accepted notification is initialized, we start the SSE stream
-        // if it's supported by the server
-        if (_isInitializedNotification(message)) {
-          // Start without a lastEventId since this is a fresh connection
-          _startOrAuthSse(const StartSseOptions()).catchError((err) {
-            if (err is Error) {
-              onerror?.call(err);
-            } else {
-              onerror?.call(McpError(0, err.toString()));
-            }
-          });
-        }
-        return;
-      }
-
-      // Check if the message is a request that expects a response
-      final hasRequests = message is JsonRpcRequest && message.id != null;
-
-      // Check the response type
-      final contentType = response.headers.value('content-type');
-
-      if (hasRequests) {
-        if (contentType?.contains('text/event-stream') ?? false) {
-          // Handle SSE stream responses for requests
-          _handleSseStream(
-              response, StartSseOptions(onResumptionToken: onResumptionToken));
-        } else if (contentType?.contains('application/json') ?? false) {
-          // For non-streaming servers, we might get direct JSON responses
-          final jsonStr = await response.transform(utf8.decoder).join();
-          final data = jsonDecode(jsonStr);
-
-          if (data is List) {
-            for (final item in data) {
-              final msg = JsonRpcMessage.fromJson(item);
-              onmessage?.call(msg);
-            }
-          } else {
-            final msg = JsonRpcMessage.fromJson(data);
-            onmessage?.call(msg);
-          }
-        } else {
-          throw StreamableHttpError(
-            -1,
-            "Unexpected content type: $contentType",
-          );
-        }
-      }
-    } catch (error) {
-      if (error is Error) {
-        onerror?.call(error);
       } else {
-        onerror?.call(McpError(0, error.toString()));
+        throw StreamableHttpError(
+          response.statusCode,
+          'Failed to send message: ${response.reasonPhrase}',
+        );
       }
+    } catch (e) {
+      final error =
+          e is Error ? e : StreamableHttpError(0, 'Failed to send message: $e');
+      onerror?.call(error);
       rethrow;
     }
   }
@@ -616,29 +395,14 @@ class StreamableHttpClientTransport implements Transport {
   /// The server MAY respond with HTTP 405 Method Not Allowed, indicating that
   /// the server does not allow clients to terminate sessions.
   Future<void> terminateSession() async {
-    if (_sessionId == null) {
-      return; // No session to terminate
-    }
-
     try {
       final headers = await _commonHeaders();
 
-      final client = HttpClient();
-      final request = await client.deleteUrl(_url);
+      final client = http.Client();
+      final request = await client.delete(_url, headers: headers);
 
-      // Add headers
-      headers.forEach((name, value) {
-        request.headers.set(name, value);
-      });
-
-      final response = await request.close();
-
-      // We specifically handle 405 as a valid response according to the spec,
-      // meaning the server does not support explicit session termination
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300 && response.statusCode != 405) {
-        throw StreamableHttpError(response.statusCode,
-            "Failed to terminate session: ${response.reasonPhrase}");
+      if (request.statusCode < 200 || request.statusCode >= 300) {
+        throw McpError(0, "Error from DELETE: ${request.reasonPhrase}");
       }
 
       _sessionId = null;
@@ -652,9 +416,12 @@ class StreamableHttpClientTransport implements Transport {
     }
   }
 
-  // Helper method to check if a message is an initialized notification
-  bool _isInitializedNotification(JsonRpcMessage message) {
-    return message is JsonRpcInitializedNotification;
+  /// Re-authenticates if necessary and reconnects the SSE stream.
+  Future<void> resume(StartSseOptions options) async {
+    if (_isClosed) {
+      throw McpError(0, 'Transport is closed');
+    }
+    return await _startSseConnection(options);
   }
 }
 

@@ -8,5 +8,10 @@
     "string": "cpp",
     "string_view": "cpp",
     "vector": "cpp"
+  },
+  "workbench.colorCustomizations": {
+    "activityBar.background": "#102C1F",
+    "titleBar.activeBackground": "#163E2C",
+    "titleBar.activeForeground": "#F7FCFA"
   }
 }
