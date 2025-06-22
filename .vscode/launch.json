@@ -39,6 +39,29 @@
         "GEMINI_API_KEY": "YOUR_API_KEY"
       },
       "console": "terminal"
+    },
+    {
+      "name": "Run All Tests",
+      "type": "dart",
+      "request": "launch",
+      "program": "test_runner.dart",
+      "console": "terminal"
+    },
+    {
+      "name": "Run VM Tests",
+      "type": "dart",
+      "request": "launch",
+      "program": "test_runner.dart",
+      "args": ["--vm-only"],
+      "console": "terminal"
+    },
+    {
+      "name": "Run Web Tests",
+      "type": "dart",
+      "request": "launch",
+      "program": "test_runner.dart",
+      "args": ["--web-only"],
+      "console": "terminal"
     }
   ]
 }

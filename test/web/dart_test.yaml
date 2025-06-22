@@ -1,0 +1,30 @@
+# Configuration for running web tests
+# This file configures test runner for browser-based tests
+
+platforms:
+  - chrome
+  - firefox
+
+# Test timeout for web tests (they may be slower)
+timeout: 30s
+
+# Override configuration for web tests
+override:
+  # Run with JavaScript compilation for better performance
+  platforms:
+    chrome:
+      settings:
+        arguments:
+          - --no-sandbox
+          - --disable-extensions
+          - --disable-dev-shm-usage
+          - --headless
+    firefox:
+      settings:
+        arguments:
+          - --headless
+
+# Tags for organizing tests
+tags:
+  web: "Tests that must run in browser environment"
+  integration: "Integration tests for web functionality"

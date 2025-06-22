@@ -1,11 +1,11 @@
-# MCP(Model Context Protocol) for Dart
+# MCP (Model Context Protocol) for Dart
 
 [![Pub Version](https://img.shields.io/pub/v/mcp_dart?color=blueviolet)](https://pub.dev/packages/mcp_dart)
 [![likes](https://img.shields.io/pub/likes/mcp_dart?logo=dart)](https://pub.dev/packages/mcp_dart/score)
 
 [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open protocol designed to enable seamless integration between LLM applications and external data sources and tools.
 
-This library aims to provide a simple and intuitive way to implement MCP servers and clients in Dart, while adhering to the [MCP protocol spec](https://spec.modelcontextprotocol.io/). The goal is to make this SDK as similar as possible to the official SDKs available in other languages, ensuring a consistent developer experience across platforms.
+This library provides a simple and intuitive way to implement MCP servers and clients in Dart, supporting **both Dart VM and web browsers**. It adheres to the [MCP protocol spec](https://spec.modelcontextprotocol.io/) while ensuring a consistent developer experience across all platforms.
 
 ## Requirements
 
@@ -15,8 +15,9 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 
 ## Features
 
+- **Cross-Platform Support** - Works on Dart VM and Web browsers
 - Stdio support (Server and Client)
-- StreamableHTTP support (Server and Client)
+- StreamableHTTP support (Server and Client) - **Now Web Compatible!**
 - SSE support (Server only) - Deprecated
 - Stream Transport using dart streams (Server and Client in shared process)
 - Tools
@@ -33,7 +34,9 @@ It's also backward compatible with the previous version `2024-11-05` and `2024-1
 
 ## Getting started
 
-Below code is the simplest way to start the MCP server.
+### Server (Dart VM)
+
+Below code is the simplest way to start an MCP server:
 
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
@@ -84,6 +87,39 @@ void main() async {
 }
 ```
 
+### Client (Cross-Platform)
+
+The MCP client now works on **all Dart platforms** - Dart VM, Flutter mobile/desktop, and web browsers! 
+
+**Simple client example (works everywhere):**
+```dart
+import 'package:mcp_dart/mcp_dart.dart';
+
+void main() async {
+  final client = McpClient(
+    Implementation(name: "example-client", version: "1.0.0"),
+  );
+  
+  // This transport works on ALL platforms: VM, mobile, desktop, web!
+  await client.connect(StreamableHttpClientTransport(
+    Uri.parse('https://your-mcp-server.com/mcp'),
+  ));
+}
+```
+
+**Try it yourself - Flutter Demo:**
+```bash
+cd example/flutter_web_client
+flutter pub get
+flutter run -d chrome    # Web browser
+flutter run -d macos     # Desktop
+flutter run               # Mobile
+```
+
+See [`example/flutter_web_client/`](example/flutter_web_client/) for the complete demo that proves cross-platform compatibility.
+
+For technical details about web support, see the [Web Design Document](web-design-doc.md).
+
 ## Usage
 
 Once you compile your MCP server, you can compile the client using the below code.
@@ -119,6 +155,55 @@ To configure it with the client (ex, Claude Desktop), you can use the below code
 ## More examples
 
 <https://github.com/leehack/mcp_dart/tree/main/example>
+
+## Testing
+
+This library includes comprehensive tests for both Dart VM and web environments.
+
+### Running All Tests
+
+**Option 1: Using the test runner (Recommended)**
+```bash
+dart run test_runner.dart
+```
+
+**Option 2: Using Make**
+```bash
+make test              # Run all tests
+make test-vm          # Run VM tests only  
+make test-web         # Run web tests only
+make test-verbose     # Run with verbose output
+```
+
+**Option 3: Using shell script**
+```bash
+./scripts/test-all.sh
+```
+
+### Running Specific Test Types
+
+**VM Tests Only:**
+```bash
+dart test --exclude-tags=web-only
+```
+
+**Web Tests Only:**
+```bash
+dart test test/web/ -p chrome
+```
+
+**VS Code Integration:**
+- Use `Ctrl+Shift+P` → "Tasks: Run Task" → Select test type
+- Or use the debug configurations in Run and Debug panel
+
+### Web Platform Testing
+
+The library includes dedicated web tests that validate cross-platform compatibility, browser integration, and web-specific features.
+
+**For comprehensive testing details, see:**
+- **[Testing Guide](TESTING_GUIDE.md)** - Complete testing instructions and troubleshooting
+- **[Web Design Document](web-design-doc.md)** - Technical implementation details and architecture
+- **[test/web/README.md](test/web/README.md)** - Web-specific test documentation
 
 ## Credits
 

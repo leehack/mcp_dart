@@ -1,0 +1,25 @@
+name: flutter_web_client
+description: A Flutter Web demo of MCP Dart client functionality
+version: 1.0.0
+publish_to: "none"
+
+environment:
+  sdk: ^3.0.0
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_dotenv: ^5.2.1
+  mcp_dart:
+    path: ../../ # Reference the parent mcp_dart package
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env

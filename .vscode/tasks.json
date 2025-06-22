@@ -1,0 +1,80 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Test: All (VM + Web)",
+            "type": "shell",
+            "command": "dart",
+            "args": ["run", "test_runner.dart"],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Test: VM Only",
+            "type": "shell",
+            "command": "dart",
+            "args": ["test", "--exclude-tags=web-only"],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Test: Web Only",
+            "type": "shell",
+            "command": "dart",
+            "args": ["test", "test/web/", "-p", "chrome"],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Test: Web (Firefox)",
+            "type": "shell",
+            "command": "dart",
+            "args": ["test", "test/web/", "-p", "firefox"],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Test: Compile Web Example",
+            "type": "shell",
+            "command": "dart",
+            "args": ["compile", "js", "example/web_example.dart", "-o", "example/web_example.js"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

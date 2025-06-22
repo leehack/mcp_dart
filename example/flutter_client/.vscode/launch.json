@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "flutter_client (Web)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "web-server"
+    },
+    {
+      "name": "flutter_client (macOS)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "macos"
+    }
+  ]
+}
