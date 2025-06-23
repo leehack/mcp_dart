@@ -1,9 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
+
+/// Default reconnection options for StreamableHTTP connections
+const _defaultStreamableHttpReconnectionOptions =
+    StreamableHttpReconnectionOptions(
+  initialReconnectionDelay: 1000,
+  maxReconnectionDelay: 30000,
+  reconnectionDelayGrowFactor: 1.5,
+  maxRetries: 2,
+);
 
 /// Error thrown for Streamable HTTP issues
 class StreamableHttpError extends Error {
@@ -42,21 +52,25 @@ class StartSseOptions {
 
 /// Configuration options for reconnection behavior of the StreamableHttpClientTransport.
 class StreamableHttpReconnectionOptions {
-  /// Initial delay before the first reconnection attempt in milliseconds.
-  final int initialReconnectionDelay;
-
-  /// Maximum delay between reconnection attempts in milliseconds.
+  /// Maximum backoff time between reconnection attempts in milliseconds.
+  /// Default is 30000 (30 seconds).
   final int maxReconnectionDelay;
 
-  /// Factor by which the delay increases after each failed reconnection attempt.
+  /// Initial backoff time between reconnection attempts in milliseconds.
+  /// Default is 1000 (1 second).
+  final int initialReconnectionDelay;
+
+  /// The factor by which the reconnection delay increases after each attempt.
+  /// Default is 1.5.
   final double reconnectionDelayGrowFactor;
 
   /// Maximum number of reconnection attempts before giving up.
+  /// Default is 2.
   final int maxRetries;
 
   const StreamableHttpReconnectionOptions({
-    required this.initialReconnectionDelay,
     required this.maxReconnectionDelay,
+    required this.initialReconnectionDelay,
     required this.reconnectionDelayGrowFactor,
     required this.maxRetries,
   });
@@ -64,7 +78,24 @@ class StreamableHttpReconnectionOptions {
 
 /// Configuration options for the `StreamableHttpClientTransport`.
 class StreamableHttpClientTransportOptions {
-  /// Optional OAuth client provider for authentication.
+  /// An OAuth client provider to use for authentication.
+  ///
+  /// When an `authProvider` is specified and the connection is started:
+  /// 1. The connection is attempted with any existing access token from the `authProvider`.
+  /// 2. If the access token has expired, the `authProvider` is used to refresh the token.
+  /// 3. If token refresh fails or no access token exists, and auth is required,
+  ///    `OAuthClientProvider.redirectToAuthorization` is called, and an `UnauthorizedError`
+  ///    will be thrown from `connect`/`start`.
+  ///
+  /// After the user has finished authorizing via their user agent, and is redirected
+  /// back to the MCP client application, call `StreamableHttpClientTransport.finishAuth`
+  /// with the authorization code before retrying the connection.
+  ///
+  /// If an `authProvider` is not provided, and auth is required, an `UnauthorizedError`
+  /// will be thrown.
+  ///
+  /// `UnauthorizedError` might also be thrown when sending any message over the transport,
+  /// indicating that the session has expired, and needs to be re-authed and reconnected.
   final OAuthClientProvider? authProvider;
 
   /// Customizes HTTP requests to the server.
@@ -73,15 +104,43 @@ class StreamableHttpClientTransportOptions {
   /// Options to configure the reconnection behavior.
   final StreamableHttpReconnectionOptions? reconnectionOptions;
 
-  /// Session ID for the connection.
+  /// Session ID for the connection. This is used to identify the session on the server.
+  /// When not provided and connecting to a server that supports session IDs,
+  /// the server will generate a new session ID.
   final String? sessionId;
+
+  /// HTTP request timeout for browser-level fetch control.
+  ///
+  /// Some MCP servers have slower CORS negotiation in browsers (up to 20+ seconds)
+  /// while native implementations respond quickly. Common timeout strategies:
+  ///
+  /// - `Duration(seconds: 5)`: Fast failure for responsive servers only
+  /// - `Duration(seconds: 15)`: Balanced approach (default)
+  /// - `Duration(seconds: 30)`: Allow slow CORS servers to succeed
+  ///
+  /// Note: VM/native clients typically respond much faster than web browsers
+  /// due to CORS overhead. This timeout only affects browser environments.
+  final Duration? httpTimeout;
 
   const StreamableHttpClientTransportOptions({
     this.authProvider,
     this.requestInit,
     this.reconnectionOptions,
     this.sessionId,
+    this.httpTimeout,
   });
+
+  /// Preset for fast, responsive servers (5s timeout).
+  /// Use this when connecting to well-configured MCP servers with fast CORS.
+  static const fastServers = StreamableHttpClientTransportOptions(
+    httpTimeout: Duration(seconds: 5),
+  );
+
+  /// Preset for slow CORS servers (30s timeout).
+  /// Use this when connecting to servers known to have slow browser CORS negotiation.
+  static const slowCorsServers = StreamableHttpClientTransportOptions(
+    httpTimeout: Duration(seconds: 30),
+  );
 }
 
 /// Web implementation of StreamableHttpClientTransport using package:http
@@ -91,6 +150,18 @@ class StreamableHttpClientTransport implements Transport {
   final Map<String, dynamic>? _requestInit;
   final OAuthClientProvider? _authProvider;
   String? _sessionId;
+  final StreamableHttpReconnectionOptions _reconnectionOptions;
+  final Duration _httpTimeout; // HTTP timeout to avoid CORS delays
+  http.Client? _sseClient;
+
+  // Connection pool to avoid browser connection limits (issue: >5 requests pending)
+  final List<http.Client> _clientPool = [];
+  int _currentClientIndex = 0; // Not final so we can update it
+  static const int _maxPoolSize =
+      4; // Limit pool size to stay under browser limits
+
+  StreamSubscription? _sseSubscription;
+  String? _lastEventId;
 
   @override
   void Function()? onclose;
@@ -106,47 +177,75 @@ class StreamableHttpClientTransport implements Transport {
     StreamableHttpClientTransportOptions? opts,
   })  : _requestInit = opts?.requestInit,
         _authProvider = opts?.authProvider,
-        _sessionId = opts?.sessionId;
+        _sessionId = opts?.sessionId,
+        _reconnectionOptions = opts?.reconnectionOptions ??
+            _defaultStreamableHttpReconnectionOptions,
+        _httpTimeout = opts?.httpTimeout ?? Duration(seconds: 15);
 
-  /// Parses Server-Sent Events response and extracts JSON messages
-  void _parseSseResponse(String sseData) {
-    final lines = sseData.split('\n');
-    String? eventData;
+  /// Creates HTTP client with browser-optimized settings for better timeout control
+  http.Client _createOptimizedClient() {
+    // For web, we could potentially configure the underlying fetch behavior
+    // but package:http doesn't expose direct fetch options
+    return http.Client();
+  }
 
-    for (final line in lines) {
-      final trimmed = line.trim();
-
-      if (trimmed.isEmpty) {
-        // Empty line indicates end of event - process it
-        if (eventData != null) {
-          try {
-            final jsonData = jsonDecode(eventData);
-            final message = JsonRpcMessage.fromJson(jsonData);
-            onmessage?.call(message);
-          } catch (e) {
-            // Ignore malformed JSON in SSE events
-          }
-        }
-
-        // Reset for next event
-        eventData = null;
-      } else if (trimmed.startsWith('data:')) {
-        final dataValue = trimmed.substring(5).trim();
-        eventData = eventData == null ? dataValue : '$eventData\n$dataValue';
-      }
-      // Ignore other SSE fields like event:, id:, retry:
-    }
-
-    // Process final event if no trailing empty line
-    if (eventData != null) {
-      try {
-        final jsonData = jsonDecode(eventData);
-        final message = JsonRpcMessage.fromJson(jsonData);
-        onmessage?.call(message);
-      } catch (e) {
-        // Ignore malformed JSON in SSE events
+  /// Gets a client from the connection pool using round-robin distribution
+  /// This helps avoid browser connection limits that cause >5 requests to become pending
+  http.Client _getPooledClient() {
+    if (_clientPool.isEmpty) {
+      // Initialize the pool if it's empty
+      for (int i = 0; i < _maxPoolSize; i++) {
+        _clientPool.add(_createOptimizedClient());
       }
     }
+
+    // Round-robin selection
+    final client = _clientPool[_currentClientIndex];
+    _currentClientIndex = (_currentClientIndex + 1) % _clientPool.length;
+    return client;
+  }
+
+  /// Closes all clients in the connection pool
+  void _closeClientPool() {
+    for (final client in _clientPool) {
+      client.close();
+    }
+    _clientPool.clear();
+    _currentClientIndex = 0;
+  }
+
+  /// Gets browser-optimized headers that may help with CORS and timeout behavior
+  Future<Map<String, String>> _getOptimizedHeaders() async {
+    final headers = await _commonHeaders();
+
+    // Don't add any custom headers - they interfere with CORS negotiation
+    // Let the browser handle CORS naturally
+
+    return headers;
+  }
+
+  Future<void> _authThenStart() async {
+    if (_authProvider == null) {
+      throw UnauthorizedError("No auth provider");
+    }
+
+    AuthResult result;
+    try {
+      result = await auth(_authProvider!, serverUrl: _url);
+    } catch (error) {
+      if (error is Error) {
+        onerror?.call(error);
+      } else {
+        onerror?.call(McpError(0, error.toString()));
+      }
+      rethrow;
+    }
+
+    if (result != "AUTHORIZED") {
+      throw UnauthorizedError();
+    }
+
+    return await _startOrAuthSse(const StartSseOptions());
   }
 
   Future<Map<String, String>> _commonHeaders() async {
@@ -173,6 +272,261 @@ class StreamableHttpClientTransport implements Transport {
     return headers;
   }
 
+  Future<void> _startOrAuthSse(StartSseOptions options) async {
+    final resumptionToken = options.resumptionToken;
+    try {
+      // Try to open an initial SSE stream with GET to listen for server messages
+      // This is optional according to the spec - server may not support it
+      final headers = await _commonHeaders();
+      headers['Accept'] = "text/event-stream";
+
+      // Include Last-Event-ID header for resumable streams if provided
+      if (resumptionToken != null) {
+        headers['last-event-id'] = resumptionToken;
+        _lastEventId = resumptionToken;
+      }
+
+      // Create a new HTTP client for streaming
+      _sseClient = _createOptimizedClient();
+      final request = http.Request('GET', _url);
+
+      // Add headers to the request
+      headers.forEach((name, value) {
+        request.headers[name] = value;
+      });
+
+      final streamedResponse =
+          await _sseClient!.send(request).timeout(_httpTimeout);
+
+      if (streamedResponse.statusCode != 200) {
+        if (streamedResponse.statusCode == 401 && _authProvider != null) {
+          // Need to authenticate
+          _sseClient?.close();
+          _sseClient = null;
+          return await _authThenStart();
+        }
+
+        // 405 indicates that the server does not offer an SSE stream at GET endpoint
+        // This is an expected case that should not trigger an error
+        if (streamedResponse.statusCode == 405) {
+          _sseClient?.close();
+          _sseClient = null;
+          return;
+        }
+
+        _sseClient?.close();
+        _sseClient = null;
+        throw StreamableHttpError(
+          streamedResponse.statusCode,
+          "Failed to open SSE stream: ${streamedResponse.reasonPhrase}",
+        );
+      }
+
+      _handleSseStream(streamedResponse.stream, options);
+    } catch (error) {
+      _sseClient?.close();
+      _sseClient = null;
+      if (error is Error) {
+        onerror?.call(error);
+      } else {
+        final err = McpError(0, error.toString());
+        onerror?.call(err);
+      }
+      rethrow;
+    }
+  }
+
+  /// Calculates the next reconnection delay using backoff algorithm
+  ///
+  /// @param attempt Current reconnection attempt count for the specific stream
+  /// @returns Time to wait in milliseconds before next reconnection attempt
+  int _getNextReconnectionDelay(int attempt) {
+    // Access default values directly, ensuring they're never undefined
+    final initialDelay = _reconnectionOptions.initialReconnectionDelay;
+    final growFactor = _reconnectionOptions.reconnectionDelayGrowFactor;
+    final maxDelay = _reconnectionOptions.maxReconnectionDelay;
+
+    // Cap at maximum delay
+    return (initialDelay * math.pow(growFactor, attempt))
+        .round()
+        .clamp(0, maxDelay);
+  }
+
+  /// Schedule a reconnection attempt with exponential backoff
+  ///
+  /// @param options The SSE connection options
+  /// @param attemptCount Current reconnection attempt count for this specific stream
+  void _scheduleReconnection(StartSseOptions options, [int attemptCount = 0]) {
+    // Use provided options or default options
+    final maxRetries = _reconnectionOptions.maxRetries;
+
+    // Check if we've exceeded maximum retry attempts
+    if (maxRetries > 0 && attemptCount >= maxRetries) {
+      onerror?.call(
+          McpError(0, "Maximum reconnection attempts ($maxRetries) exceeded."));
+      return;
+    }
+
+    // Calculate next delay based on current attempt count
+    final delay = _getNextReconnectionDelay(attemptCount);
+
+    // Schedule the reconnection
+    Timer(Duration(milliseconds: delay), () {
+      // Use the last event ID to resume where we left off
+      _startOrAuthSse(options).catchError((error) {
+        final errorMessage =
+            error is Error ? error.toString() : error.toString();
+        onerror?.call(
+            McpError(0, "Failed to reconnect SSE stream: $errorMessage"));
+
+        // Schedule another attempt if this one failed, incrementing the attempt counter
+        _scheduleReconnection(options, attemptCount + 1);
+
+        // Ensure the Future completes
+        return null;
+      });
+    });
+  }
+
+  void _handleSseStream(Stream<List<int>> stream, StartSseOptions options) {
+    final onResumptionToken = options.onResumptionToken;
+    final replayMessageId = options.replayMessageId;
+
+    String buffer = '';
+    String? eventName;
+    String? eventId;
+    String? eventData;
+
+    // Function to process a complete SSE event
+    void processEvent() {
+      if (eventData == null) return;
+
+      // Update last event ID if provided
+      if (eventId != null) {
+        _lastEventId = eventId;
+        onResumptionToken?.call(eventId!);
+      }
+
+      if (eventName == null || eventName == 'message') {
+        try {
+          final message = JsonRpcMessage.fromJson(jsonDecode(eventData!));
+
+          // Can't set id directly if it's final, need to create a new message
+          if (replayMessageId != null && message is JsonRpcResponse) {
+            // Create a new response with the same data but different ID
+            final newMessage = JsonRpcResponse(
+                id: replayMessageId,
+                result: message.result,
+                meta: message.meta);
+            onmessage?.call(newMessage);
+          } else {
+            onmessage?.call(message);
+          }
+        } catch (error) {
+          if (error is Error) {
+            onerror?.call(error);
+          } else {
+            onerror?.call(McpError(0, error.toString()));
+          }
+        }
+      }
+
+      // Reset for next event
+      eventName = null;
+      eventId = null;
+      eventData = null;
+    }
+
+    // Helper function to handle reconnection logic
+    void handleReconnection(String? eventId, String errorMessage) {
+      if (_abortController != null && !_abortController!.isClosed) {
+        if (eventId != null) {
+          try {
+            _scheduleReconnection(StartSseOptions(
+              resumptionToken: eventId,
+              onResumptionToken: onResumptionToken,
+              replayMessageId: replayMessageId,
+            ));
+          } catch (error) {
+            final errorMessage =
+                error is Error ? error.toString() : error.toString();
+            onerror?.call(McpError(0, "Failed to reconnect: $errorMessage"));
+          }
+        }
+      }
+    }
+
+    // Convert the stream to a broadcast stream and process chunks
+    _sseSubscription = stream.transform(utf8.decoder).listen(
+      (data) {
+        buffer += data;
+
+        // Process the buffer line by line
+        while (buffer.contains('\n')) {
+          final index = buffer.indexOf('\n');
+          final line = buffer.substring(0, index);
+          buffer = buffer.substring(index + 1);
+
+          if (line.isEmpty) {
+            // Empty line means end of event
+            processEvent();
+            continue;
+          }
+
+          if (line.startsWith(':')) {
+            // Comment line, ignore
+            continue;
+          }
+
+          final colonIndex = line.indexOf(':');
+          if (colonIndex > 0) {
+            final field = line.substring(0, colonIndex);
+            // The value starts after colon + optional space
+            final valueStart = colonIndex +
+                1 +
+                (line.length > colonIndex + 1 && line[colonIndex + 1] == ' '
+                    ? 1
+                    : 0);
+            final value = line.substring(valueStart);
+
+            switch (field) {
+              case 'event':
+                eventName = value;
+                break;
+              case 'id':
+                eventId = value;
+                break;
+              case 'data':
+                eventData = (eventData ?? '') + value;
+                break;
+            }
+          }
+        }
+      },
+      onDone: () {
+        // Process any final event
+        processEvent();
+
+        // Handle stream closure - likely a network disconnect
+        handleReconnection(_lastEventId, "Stream closed");
+      },
+      onError: (error) {
+        final errorMessage =
+            error is Error ? error.toString() : error.toString();
+        onerror?.call(McpError(0, "SSE stream disconnected: $errorMessage"));
+
+        // Attempt to reconnect if the stream disconnects unexpectedly
+        handleReconnection(_lastEventId, errorMessage);
+      },
+    );
+
+    // Register the subscription cleanup when the abort controller is triggered
+    _abortController?.stream.listen((_) {
+      _sseSubscription?.cancel();
+      _sseClient?.close();
+    });
+  }
+
   @override
   Future<void> start() async {
     if (_abortController != null) {
@@ -181,6 +535,8 @@ class StreamableHttpClientTransport implements Transport {
     }
 
     _abortController = StreamController<bool>.broadcast();
+
+    // Connection pool will be initialized lazily in _getPooledClient()
   }
 
   /// Call this method after the user has finished authorizing via their user agent and is redirected
@@ -200,6 +556,15 @@ class StreamableHttpClientTransport implements Transport {
 
   @override
   Future<void> close() async {
+    // Stop SSE streaming
+    await _sseSubscription?.cancel();
+    _sseSubscription = null;
+    _sseClient?.close();
+    _sseClient = null;
+
+    // Close connection pool
+    _closeClientPool();
+
     // Abort any pending requests
     if (_abortController != null && !_abortController!.isClosed) {
       _abortController!.add(true);
@@ -214,6 +579,23 @@ class StreamableHttpClientTransport implements Transport {
       {String? resumptionToken,
       void Function(String)? onResumptionToken}) async {
     try {
+      if (resumptionToken != null) {
+        // If we have a last event ID, we need to reconnect the SSE stream
+        final replayId = message is JsonRpcRequest ? message.id : null;
+        _startOrAuthSse(StartSseOptions(
+          resumptionToken: resumptionToken,
+          replayMessageId: replayId,
+          onResumptionToken: onResumptionToken,
+        )).catchError((err) {
+          if (err is Error) {
+            onerror?.call(err);
+          } else {
+            onerror?.call(McpError(0, err.toString()));
+          }
+        });
+        return;
+      }
+
       // Check for authentication first - if we need auth, handle it before proceeding
       if (_authProvider != null) {
         final tokens = await _authProvider!.tokens();
@@ -224,18 +606,24 @@ class StreamableHttpClientTransport implements Transport {
         }
       }
 
-      final headers = await _commonHeaders();
+      final headers = await _getOptimizedHeaders();
       headers['content-type'] = 'application/json';
+
+      // Accept both JSON and event-stream for fast streaming responses
       headers['accept'] = 'application/json, text/event-stream';
 
       // Add body
       final bodyJson = jsonEncode(message.toJson());
 
-      final response = await http.post(
-        _url,
-        headers: headers,
-        body: bodyJson,
-      );
+      // Use connection pool to distribute requests and avoid browser connection limits
+      final client = _getPooledClient();
+      final response = await client
+          .post(
+            _url,
+            headers: headers,
+            body: bodyJson,
+          )
+          .timeout(_httpTimeout);
 
       // Handle session ID received during initialization
       final sessionId = response.headers['mcp-session-id'];
@@ -256,6 +644,18 @@ class StreamableHttpClientTransport implements Transport {
 
       // If the response is 202 Accepted, there's no body to process
       if (response.statusCode == 202) {
+        // if the accepted notification is initialized, we start the SSE stream
+        // if it's supported by the server
+        if (_isInitializedNotification(message)) {
+          // Start without a lastEventId since this is a fresh connection
+          _startOrAuthSse(const StartSseOptions()).catchError((err) {
+            if (err is Error) {
+              onerror?.call(err);
+            } else {
+              onerror?.call(McpError(0, err.toString()));
+            }
+          });
+        }
         return;
       }
 
@@ -267,8 +667,9 @@ class StreamableHttpClientTransport implements Transport {
 
       if (hasRequests) {
         if (contentType?.contains('text/event-stream') ?? false) {
-          // Handle SSE stream responses for requests
-          _parseSseResponse(response.body);
+          // Handle SSE stream responses for requests - parse the single response
+          _parseSseResponse(response.body,
+              StartSseOptions(onResumptionToken: onResumptionToken));
         } else if (contentType?.contains('application/json') ?? false) {
           // For non-streaming servers, we might get direct JSON responses
           final data = jsonDecode(response.body);
@@ -299,10 +700,112 @@ class StreamableHttpClientTransport implements Transport {
     }
   }
 
+  /// Parse SSE response from a single HTTP response body
+  void _parseSseResponse(String sseData, StartSseOptions options) {
+    final onResumptionToken = options.onResumptionToken;
+    final replayMessageId = options.replayMessageId;
+
+    final lines = sseData.split('\n');
+    String? eventName;
+    String? eventId;
+    String? eventData;
+
+    // Function to process a complete SSE event
+    void processEvent() {
+      if (eventData == null) return;
+
+      // Update last event ID if provided
+      if (eventId != null) {
+        _lastEventId = eventId;
+        onResumptionToken?.call(eventId!);
+      }
+
+      if (eventName == null || eventName == 'message') {
+        try {
+          final message = JsonRpcMessage.fromJson(jsonDecode(eventData!));
+
+          // Can't set id directly if it's final, need to create a new message
+          if (replayMessageId != null && message is JsonRpcResponse) {
+            // Create a new response with the same data but different ID
+            final newMessage = JsonRpcResponse(
+                id: replayMessageId,
+                result: message.result,
+                meta: message.meta);
+            onmessage?.call(newMessage);
+          } else {
+            onmessage?.call(message);
+          }
+        } catch (error) {
+          if (error is Error) {
+            onerror?.call(error);
+          } else {
+            onerror?.call(McpError(0, error.toString()));
+          }
+        }
+      }
+
+      // Reset for next event
+      eventName = null;
+      eventId = null;
+      eventData = null;
+    }
+
+    // Process the buffer line by line
+    for (final line in lines) {
+      final trimmed = line.trim();
+
+      if (trimmed.isEmpty) {
+        // Empty line means end of event
+        processEvent();
+        continue;
+      }
+
+      if (trimmed.startsWith(':')) {
+        // Comment line, ignore
+        continue;
+      }
+
+      final colonIndex = trimmed.indexOf(':');
+      if (colonIndex > 0) {
+        final field = trimmed.substring(0, colonIndex);
+        // The value starts after colon + optional space
+        final valueStart = colonIndex +
+            1 +
+            (trimmed.length > colonIndex + 1 && trimmed[colonIndex + 1] == ' '
+                ? 1
+                : 0);
+        final value = trimmed.substring(valueStart);
+
+        switch (field) {
+          case 'event':
+            eventName = value;
+            break;
+          case 'id':
+            eventId = value;
+            break;
+          case 'data':
+            eventData = (eventData ?? '') + value;
+            break;
+        }
+      }
+    }
+
+    // Process any final event
+    processEvent();
+  }
+
   @override
   String? get sessionId => _sessionId;
 
   /// Terminates the current session by sending a DELETE request to the server.
+  ///
+  /// Clients that no longer need a particular session
+  /// (e.g., because the user is leaving the client application) SHOULD send an
+  /// HTTP DELETE to the MCP endpoint with the Mcp-Session-Id header to explicitly
+  /// terminate the session.
+  ///
+  /// The server MAY respond with HTTP 405 Method Not Allowed, indicating that
+  /// the server does not allow clients to terminate sessions.
   Future<void> terminateSession() async {
     if (_sessionId == null) {
       return; // No session to terminate
@@ -311,10 +814,14 @@ class StreamableHttpClientTransport implements Transport {
     try {
       final headers = await _commonHeaders();
 
-      final response = await http.delete(
-        _url,
-        headers: headers,
-      );
+      // Use connection pool to distribute requests and avoid browser connection limits
+      final client = _getPooledClient();
+      final response = await client
+          .delete(
+            _url,
+            headers: headers,
+          )
+          .timeout(_httpTimeout);
 
       // We specifically handle 405 as a valid response according to the spec,
       // meaning the server does not support explicit session termination
@@ -333,6 +840,11 @@ class StreamableHttpClientTransport implements Transport {
       }
       rethrow;
     }
+  }
+
+  // Helper method to check if a message is an initialized notification
+  bool _isInitializedNotification(JsonRpcMessage message) {
+    return message is JsonRpcInitializedNotification;
   }
 }
 
