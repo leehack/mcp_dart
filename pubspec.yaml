@@ -9,8 +9,7 @@ environment:
 dependencies:
   http: ^1.2.1
   uuid: ^4.4.0
-  web: ^0.5.1
-  eventflux: ^2.2.1
+  web: ^1.1.1
 
 dev_dependencies:
   lints: ^5.0.0

@@ -16,7 +16,7 @@ void main() {
           ),
         ),
       );
-      
+
       expect(client, isA<Client>());
     });
 
@@ -24,7 +24,7 @@ void main() {
       final client = Client(
         Implementation(name: 'test', version: '1.0.0'),
       );
-      
+
       expect(
         () => client.registerCapabilities(
           ClientCapabilities(
@@ -40,7 +40,7 @@ void main() {
       final client = Client(
         Implementation(name: 'test', version: '1.0.0'),
       );
-      
+
       expect(client.getServerVersion(), isNull);
       expect(client.getServerCapabilities(), isNull);
       expect(client.getInstructions(), isNull);
@@ -50,7 +50,7 @@ void main() {
       final client = Client(
         Implementation(name: 'test', version: '1.0.0'),
       );
-      
+
       expect(
         () => client.assertCapabilityForMethod('tools/list'),
         throwsA(isA<StateError>()),
@@ -64,12 +64,12 @@ void main() {
           roots: ClientCapabilitiesRoots(listChanged: false),
         ),
       );
-      
+
       final client = Client(
         Implementation(name: 'test', version: '1.0.0'),
         options: options,
       );
-      
+
       expect(client, isA<Client>());
     });
 
@@ -86,7 +86,7 @@ void main() {
           ),
         ),
       );
-      
+
       expect(transport, isA<StreamableHttpClientTransport>());
       expect(transport.sessionId, isNull); // Not connected yet
     });
@@ -95,22 +95,22 @@ void main() {
       final capabilities1 = ClientCapabilities(
         roots: ClientCapabilitiesRoots(listChanged: true),
       );
-      
+
       final capabilities2 = ClientCapabilities(
         sampling: {'model': 'test'},
         experimental: {'feature': true},
       );
-      
+
       final client1 = Client(
         Implementation(name: 'test1', version: '1.0.0'),
         options: ClientOptions(capabilities: capabilities1),
       );
-      
+
       final client2 = Client(
         Implementation(name: 'test2', version: '1.0.0'),
         options: ClientOptions(capabilities: capabilities2),
       );
-      
+
       expect(client1, isA<Client>());
       expect(client2, isA<Client>());
     });
@@ -119,32 +119,34 @@ void main() {
       final client = Client(
         Implementation(name: 'test', version: '1.0.0'),
       );
-      
+
       // These should not throw - just verify methods exist
       expect(() => client.getServerVersion(), returnsNormally);
       expect(() => client.getServerCapabilities(), returnsNormally);
       expect(() => client.getInstructions(), returnsNormally);
-      
+
       // These will throw StateError since not connected, but that proves they exist
-      expect(() => client.assertCapabilityForMethod('test'), throwsA(isA<StateError>()));
+      expect(() => client.assertCapabilityForMethod('test'),
+          throwsA(isA<StateError>()));
     });
   });
-  
+
   group('Web Platform Validation', () {
     test('validates that web-specific imports work', () {
       // This test validates that our web-compatible imports are working
       expect(true, isTrue); // If this test runs, imports worked
     });
-    
+
     test('can create MCP objects on web platform', () {
       // Test creating various MCP objects to ensure web compatibility
-      final implementation = Implementation(name: 'web-client', version: '1.0.0');
+      final implementation =
+          Implementation(name: 'web-client', version: '1.0.0');
       final capabilities = ClientCapabilities(
         roots: ClientCapabilitiesRoots(listChanged: true),
         sampling: {'test': true},
       );
       final options = ClientOptions(capabilities: capabilities);
-      
+
       expect(implementation.name, equals('web-client'));
       expect(capabilities.roots?.listChanged, isTrue);
       expect(options.capabilities?.sampling?['test'], isTrue);

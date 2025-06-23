@@ -8,8 +8,9 @@ import 'package:mcp_dart/mcp_dart.dart';
 void main() {
   group('Web Client Real Server Tests', () {
     // Real Hugging Face MCP server from their blog post example
-    final hfMcpServerUrl = Uri.parse('https://abidlabs-mcp-tools.hf.space/gradio_api/mcp/sse');
-    
+    final hfMcpServerUrl =
+        Uri.parse('https://abidlabs-mcp-tools.hf.space/gradio_api/mcp/sse');
+
     test('can create web transport for real HF MCP server', () {
       final transport = StreamableHttpClientTransport(hfMcpServerUrl);
       expect(transport, isA<StreamableHttpClientTransport>());
@@ -25,7 +26,7 @@ void main() {
           ),
         ),
       );
-      
+
       expect(client, isA<Client>());
     });
 
@@ -41,7 +42,7 @@ void main() {
           ),
         ),
       );
-      
+
       final client = Client(
         Implementation(name: 'web-test-client', version: '1.0.0'),
         options: ClientOptions(
@@ -77,7 +78,7 @@ void main() {
       try {
         connectionAttempted = true;
         print('🌐 Attempting connection to: $hfMcpServerUrl');
-        
+
         // Try to connect with a timeout
         await client.connect(transport).timeout(
           const Duration(seconds: 10),
@@ -85,14 +86,14 @@ void main() {
             throw TimeoutException('Connection timeout after 10 seconds');
           },
         );
-        
+
         sessionId = transport.sessionId;
         print('✅ Connected! Session ID: $sessionId');
-        
+
         // If we get here, connection was successful
         expect(sessionId, isNotNull);
         expect(client.getServerVersion(), isNotNull);
-        
+
         // Try to list tools
         final tools = await client.listTools().timeout(
           const Duration(seconds: 5),
@@ -100,12 +101,11 @@ void main() {
             throw TimeoutException('List tools timeout');
           },
         );
-        
+
         print('🔧 Found ${tools.tools.length} tools');
         for (final tool in tools.tools) {
           print('  • ${tool.name}: ${tool.description}');
         }
-        
       } catch (e) {
         print('⚠️ Expected connection error: $e');
         // Connection errors are expected in testing environment
@@ -116,9 +116,9 @@ void main() {
       }
 
       // Validate that we actually attempted the connection
-      expect(connectionAttempted, isTrue, 
-        reason: 'Should have attempted connection to real server');
-      
+      expect(connectionAttempted, isTrue,
+          reason: 'Should have attempted connection to real server');
+
       print('📊 Test Results:');
       print('  Connection attempted: $connectionAttempted');
       print('  Received message: $receivedMessage');
@@ -129,7 +129,7 @@ void main() {
 
     test('validates cross-platform compatibility in browser', () async {
       // This test validates that all our cross-platform components work in browser
-      
+
       final transport = StreamableHttpClientTransport(
         hfMcpServerUrl,
         opts: StreamableHttpClientTransportOptions(
@@ -155,11 +155,11 @@ void main() {
       // Test that we can create all the objects without errors
       expect(transport, isA<Transport>());
       expect(client, isA<Client>());
-      
+
       // Test that methods exist and are callable
       expect(() => client.getServerVersion(), returnsNormally);
       expect(() => client.getServerCapabilities(), returnsNormally);
-      
+
       // Test capability registration before connection
       expect(
         () => client.registerCapabilities(
@@ -173,7 +173,7 @@ void main() {
 
     test('validates MCP protocol types work in web environment', () {
       // Test creating various MCP protocol objects to ensure web compatibility
-      
+
       final initParams = InitializeRequestParams(
         protocolVersion: latestProtocolVersion,
         capabilities: ClientCapabilities(
@@ -183,14 +183,14 @@ void main() {
         ),
         clientInfo: Implementation(name: 'web-client', version: '1.0.0'),
       );
-      
+
       final initRequest = JsonRpcInitializeRequest(
         id: 42,
         initParams: initParams,
       );
-      
+
       final pingRequest = JsonRpcPingRequest(id: 43);
-      
+
       final listToolsRequest = JsonRpcListToolsRequest(
         id: 44,
         params: ListToolsRequestParams(),
@@ -200,11 +200,12 @@ void main() {
       expect(initRequest.toJson(), isA<Map<String, dynamic>>());
       expect(pingRequest.toJson(), isA<Map<String, dynamic>>());
       expect(listToolsRequest.toJson(), isA<Map<String, dynamic>>());
-      
+
       expect(initRequest.id, equals(42));
       expect(initRequest.method, equals('initialize'));
-      expect(initRequest.initParams.protocolVersion, equals(latestProtocolVersion));
-      
+      expect(initRequest.initParams.protocolVersion,
+          equals(latestProtocolVersion));
+
       print('✅ MCP protocol types work correctly in web environment');
     });
   });

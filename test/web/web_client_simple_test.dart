@@ -40,8 +40,8 @@ class SimpleTestTransport extends Transport {
   }
 
   void _simulateResponse(JsonRpcMessage message) {
-    Timer.run(() {
-      if (message is JsonRpcInitializeRequest) {
+    if (message is JsonRpcRequest) {
+      if (message.method == 'initialize') {
         if (failInitialization) {
           final error = JsonRpcError(
             id: message.id,
@@ -54,21 +54,22 @@ class SimpleTestTransport extends Transport {
           return;
         }
 
+        final initResult = InitializeResult(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ServerCapabilities.fromJson(Map<String, dynamic>.from({
+            'tools': <String, dynamic>{},
+            'resources': <String, dynamic>{},
+            'prompts': <String, dynamic>{},
+          })),
+          serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
+        );
         final response = JsonRpcResponse(
           id: message.id,
-          result: InitializeResult(
-            protocolVersion: latestProtocolVersion,
-            capabilities: ServerCapabilities.fromJson({
-              'tools': {},
-              'resources': {},
-              'prompts': {},
-            }),
-            serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
-          ).toJson(),
+          result: Map<String, dynamic>.from(initResult.toJson()),
         );
         _sessionId = 'test-session-123';
         onmessage?.call(response);
-      } else if (message is JsonRpcPingRequest) {
+      } else if (message.method == 'ping') {
         if (failPing) {
           final error = JsonRpcError(
             id: message.id,
@@ -83,11 +84,11 @@ class SimpleTestTransport extends Transport {
 
         final response = JsonRpcResponse(
           id: message.id,
-          result: const EmptyResult().toJson(),
+          result: Map<String, dynamic>.from(const EmptyResult().toJson()),
         );
         onmessage?.call(response);
       }
-    });
+    }
   }
 
   @override
@@ -173,8 +174,9 @@ void main() {
       final result = await client.ping();
       expect(result, isA<EmptyResult>());
 
-      final pingMessages =
-          transport.sentMessages.whereType<JsonRpcPingRequest>().toList();
+      final pingMessages = transport.sentMessages
+          .where((msg) => msg is JsonRpcRequest && msg.method == 'ping')
+          .toList();
       expect(pingMessages, hasLength(1));
     });
 

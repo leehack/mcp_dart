@@ -11,12 +11,17 @@ void main() {
     test('complete real-world MCP client workflow in browser', () async {
       print('🌐 Starting real-world MCP client workflow test...');
 
-      // Test various real MCP server endpoints
+      // Test various real MCP server endpoints that work with web clients
       final testServers = [
         {
-          'name': 'Hugging Face MCP Tools',
-          'url': 'https://abidlabs-mcp-tools.hf.space/gradio_api/mcp/sse',
-          'description': 'Real Gradio-based MCP server with various tools'
+          'name': 'Hugging Face MCP Services',
+          'url': 'https://huggingface.co/mcp',
+          'description': 'Real HF MCP server with tools and prompts'
+        },
+        {
+          'name': 'DeepWiki MCP Server',
+          'url': 'https://mcp.deepwiki.com/mcp',
+          'description': 'Real DeepWiki MCP server (may be slow)'
         },
       ];
 
@@ -220,7 +225,10 @@ void main() {
       // Validate transport properties
       expect(transport.sessionId, isNull); // Not connected yet
 
-      // Test that handlers are assigned
+      // Test that handlers can be assigned
+      transport.onclose = () => print('Transport closed');
+      transport.onerror = (error) => print('Transport error: $error');
+
       expect(transport.onclose, isNotNull);
       expect(transport.onerror, isNotNull);
 

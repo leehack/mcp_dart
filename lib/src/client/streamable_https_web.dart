@@ -1,19 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
-
-/// Default reconnection options for StreamableHTTP connections
-const _defaultStreamableHttpReconnectionOptions =
-    StreamableHttpReconnectionOptions(
-  initialReconnectionDelay: 1000,
-  maxReconnectionDelay: 30000,
-  reconnectionDelayGrowFactor: 1.5,
-  maxRetries: 2,
-);
 
 /// Error thrown for Streamable HTTP issues
 class StreamableHttpError extends Error {
@@ -101,7 +91,6 @@ class StreamableHttpClientTransport implements Transport {
   final Map<String, dynamic>? _requestInit;
   final OAuthClientProvider? _authProvider;
   String? _sessionId;
-  final StreamableHttpReconnectionOptions _reconnectionOptions;
 
   @override
   void Function()? onclose;
@@ -117,9 +106,7 @@ class StreamableHttpClientTransport implements Transport {
     StreamableHttpClientTransportOptions? opts,
   })  : _requestInit = opts?.requestInit,
         _authProvider = opts?.authProvider,
-        _sessionId = opts?.sessionId,
-        _reconnectionOptions = opts?.reconnectionOptions ??
-            _defaultStreamableHttpReconnectionOptions;
+        _sessionId = opts?.sessionId;
 
   /// Parses Server-Sent Events response and extracts JSON messages
   void _parseSseResponse(String sseData) {
@@ -128,7 +115,7 @@ class StreamableHttpClientTransport implements Transport {
 
     for (final line in lines) {
       final trimmed = line.trim();
-      
+
       if (trimmed.isEmpty) {
         // Empty line indicates end of event - process it
         if (eventData != null) {
@@ -140,7 +127,7 @@ class StreamableHttpClientTransport implements Transport {
             // Ignore malformed JSON in SSE events
           }
         }
-        
+
         // Reset for next event
         eventData = null;
       } else if (trimmed.startsWith('data:')) {
@@ -149,7 +136,7 @@ class StreamableHttpClientTransport implements Transport {
       }
       // Ignore other SSE fields like event:, id:, retry:
     }
-    
+
     // Process final event if no trailing empty line
     if (eventData != null) {
       try {
@@ -214,8 +201,10 @@ class StreamableHttpClientTransport implements Transport {
   @override
   Future<void> close() async {
     // Abort any pending requests
-    _abortController?.add(true);
-    _abortController?.close();
+    if (_abortController != null && !_abortController!.isClosed) {
+      _abortController!.add(true);
+      await _abortController!.close();
+    }
 
     onclose?.call();
   }
@@ -344,11 +333,6 @@ class StreamableHttpClientTransport implements Transport {
       }
       rethrow;
     }
-  }
-
-  // Helper method to check if a message is an initialized notification
-  bool _isInitializedNotification(JsonRpcMessage message) {
-    return message is JsonRpcInitializedNotification;
   }
 }
 

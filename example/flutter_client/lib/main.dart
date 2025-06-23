@@ -1,20 +1,10 @@
-import 'dart:developer' as dev;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 
+import 'env.dart';
+
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Load environment variables
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    dev.log('Warning: Could not load .env file: $e');
-  }
-
   runApp(const McpCrossPlatformDemo());
 }
 
@@ -258,17 +248,12 @@ class _McpClientPageState extends State<McpClientPage> {
                           onPressed: _isConnected || _isConnecting
                               ? null
                               : () {
-                                  final zapierUrl =
-                                      dotenv.env['ZAPIER_MCP_URL'] ?? '';
+                                  final zapierUrl = Env.ZAPIER_MCP_URL;
                                   if (zapierUrl.isEmpty) {
                                     _addMessage(
-                                        '❌ ZAPIER_MCP_URL not configured in .env file');
+                                        '❌ ZAPIER_MCP_URL not passed via --dart-define');
                                     _addMessage(
-                                        '🔧 First set up a "MCP CLI Proxy MCP Server" on Zapier (https://mcp.zapier.com/)');
-                                    _addMessage(
-                                        '📋 You want the Server URL for Streamable HTTP');
-                                    _addMessage(
-                                        '💾 Then add ZAPIER_MCP_URL=your_url_here to your .env file');
+                                        '📖 See README.md for setup instructions');
                                   } else {
                                     _serverUrlController.text = zapierUrl;
                                   }

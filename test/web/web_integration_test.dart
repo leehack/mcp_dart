@@ -3,11 +3,10 @@ library;
 
 import 'dart:async';
 
-import 'package:web/web.dart';
-
 import 'package:mcp_dart/src/client/streamable_https.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
+import 'package:web/web.dart';
 
 /// Integration test that simulates real web usage patterns
 void main() {
@@ -131,8 +130,8 @@ void main() {
       // Test integration with browser-specific features that a web MCP client might use
 
       // 1. Local storage for session persistence
-      window.localStorage['mcp_test_session'] = 'test-session-123';
-      final storedSession = window.localStorage['mcp_test_session'];
+      window.localStorage.setItem('mcp_test_session', 'test-session-123');
+      final storedSession = window.localStorage.getItem('mcp_test_session');
       expect(storedSession, equals('test-session-123'));
 
       // 2. URL parameters for auth callbacks

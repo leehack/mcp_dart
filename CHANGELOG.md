@@ -1,16 +1,18 @@
 ## 0.6.0
 
-- Web Platform Support: StreamableHttpClientTransport now works in web browsers
-- Replaced `dart:io` dependencies with cross-platform packages (`package:http`
-  and `package:eventflux`)
-- Added comprehensive web test suite with browser-based validation
-- Added multi-platform test runner and VS Code integration
-- Enabled browser-based MCP client applications
-- Maintained 100% backward compatibility with existing VM-based applications
+- Add web browser and WASM compatibility for MCP clients via
+  StreamableHttpClientTransport
+- Add Flutter client demo showcasing cross-platform MCP client usage
+- Implement conditional compilation for platform-specific optimizations while
+  maintaining API consistency
+    - the existing StreamableHttpClientTransport for non-web platforms has been
+      kept for it's performance and reliability.
+    - the new StreamableHttpClientTransport is for web and still being tuned
 
 ## 0.5.1
 
-- Add support for OutputScheme (<https://modelcontextprotocol.io/specification/draft/server/tools#output-schema>)
+- Add support for OutputScheme
+  (<https://modelcontextprotocol.io/specification/draft/server/tools#output-schema>)
 
 ## 0.5.0
 
@@ -29,7 +31,8 @@
 
 ## 0.4.1
 
-- Add IOStreamTransport to connect a client and server via dart streams in a single application
+- Add IOStreamTransport to connect a client and server via dart streams in a
+  single application
 
 ## 0.4.0
 
@@ -65,7 +68,8 @@
 
 ## 0.3.0
 
-- Full refactor of the codebase to match it with the Typescript SDK implementation.
+- Full refactor of the codebase to match it with the Typescript SDK
+  implementation.
 
 ## 0.2.0
 

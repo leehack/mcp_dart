@@ -41,14 +41,14 @@ class MockTransport extends Transport {
     _sentMessages.add(message);
 
     // Simulate server responses
-    await _simulateResponse(message);
+    _simulateResponse(message);
   }
 
-  Future<void> _simulateResponse(JsonRpcMessage message) async {
-    // Simulate async response
-    await Future.delayed(const Duration(milliseconds: 1));
+  void _simulateResponse(JsonRpcMessage message) {
+    // Simulate immediate synchronous response for web tests
+    // await Future.delayed(const Duration(milliseconds: 1));
 
-    if (message is JsonRpcInitializeRequest) {
+    if (message is JsonRpcRequest && message.method == 'initialize') {
       if (shouldFailInitialization) {
         final error = JsonRpcError(
           id: message.id,
@@ -61,26 +61,28 @@ class MockTransport extends Transport {
         return;
       }
 
+      final capabilitiesData = Map<String, dynamic>.from(
+        mockServerCapabilities ??
+            {
+              'tools': <String, dynamic>{},
+              'resources': <String, dynamic>{},
+              'prompts': <String, dynamic>{},
+            },
+      );
+      final initResult = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: ServerCapabilities.fromJson(capabilitiesData),
+        serverInfo: mockServerInfo ??
+            Implementation(name: 'mock-server', version: '1.0.0'),
+        instructions: mockInstructions,
+      );
       final response = JsonRpcResponse(
         id: message.id,
-        result: InitializeResult(
-          protocolVersion: latestProtocolVersion,
-          capabilities: ServerCapabilities.fromJson(
-            mockServerCapabilities ??
-                {
-                  'tools': {},
-                  'resources': {},
-                  'prompts': {},
-                },
-          ),
-          serverInfo: mockServerInfo ??
-              Implementation(name: 'mock-server', version: '1.0.0'),
-          instructions: mockInstructions,
-        ).toJson(),
+        result: Map<String, dynamic>.from(initResult.toJson()),
       );
       _sessionId = 'mock-session-123';
       onmessage?.call(response);
-    } else if (message is JsonRpcPingRequest) {
+    } else if (message is JsonRpcRequest && message.method == 'ping') {
       if (shouldFailPing) {
         final error = JsonRpcError(
           id: message.id,
@@ -95,13 +97,155 @@ class MockTransport extends Transport {
 
       final response = JsonRpcResponse(
         id: message.id,
-        result: const EmptyResult().toJson(),
+        result: Map<String, dynamic>.from(const EmptyResult().toJson()),
       );
       onmessage?.call(response);
-    } else if (message is JsonRpcListToolsRequest) {
+    } else if (message is JsonRpcRequest && message.method == 'tools/list') {
       final response = JsonRpcResponse(
         id: message.id,
-        result: ListToolsResult(tools: mockTools).toJson(),
+        result: Map<String, dynamic>.from(
+            ListToolsResult(tools: mockTools).toJson()),
+      );
+      onmessage?.call(response);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    if (_isClosed) return;
+    _isClosed = true;
+    onclose?.call();
+  }
+}
+
+/// Simple transport that returns initialization error
+class SimpleErrorTransport extends Transport {
+  bool _isStarted = false;
+  bool _isClosed = false;
+
+  @override
+  String? get sessionId => null;
+
+  @override
+  Future<void> start() async {
+    print("ERROR_TRANSPORT_DEBUG: start() called");
+    if (_isStarted) throw StateError('Transport already started');
+    _isStarted = true;
+    print("ERROR_TRANSPORT_DEBUG: start() completed successfully");
+  }
+
+  @override
+  Future<void> send(JsonRpcMessage message) async {
+    print("ERROR_TRANSPORT_DEBUG: send() called with: ${message.toJson()}");
+    print(
+        "ERROR_TRANSPORT_DEBUG: _isClosed: $_isClosed, _isStarted: $_isStarted");
+    if (_isClosed) throw StateError('Transport is closed');
+    if (!_isStarted) throw StateError('Transport not started');
+
+    if (message is JsonRpcRequest && message.method == 'initialize') {
+      print("ERROR_TRANSPORT_DEBUG: sending initialization error");
+      final error = JsonRpcError(
+        id: message.id,
+        error: JsonRpcErrorData(
+          code: ErrorCode.internalError.value,
+          message: 'Simple initialization failure',
+        ),
+      );
+
+      // Call onmessage synchronously to deliver the error
+      print("ERROR_TRANSPORT_DEBUG: calling onmessage with error");
+      onmessage?.call(error);
+      print("ERROR_TRANSPORT_DEBUG: onmessage called");
+
+      // DON'T close the transport here - let the protocol handle cleanup
+      print("ERROR_TRANSPORT_DEBUG: error sent, leaving transport open");
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    print("ERROR_TRANSPORT_DEBUG: close() called");
+    print("ERROR_TRANSPORT_DEBUG: close() stack trace:");
+    print(StackTrace.current);
+    if (_isClosed) return;
+    _isClosed = true;
+    print("ERROR_TRANSPORT_DEBUG: calling onclose");
+    onclose?.call();
+    print("ERROR_TRANSPORT_DEBUG: onclose called");
+  }
+}
+
+/// Completely isolated transport for error testing (won't be affected by tearDown)
+class IsolatedErrorTransport extends Transport {
+  bool _isStarted = false;
+  bool _isClosed = false;
+
+  @override
+  String? get sessionId => null;
+
+  @override
+  Future<void> start() async {
+    if (_isStarted) throw StateError('Transport already started');
+    _isStarted = true;
+  }
+
+  @override
+  Future<void> send(JsonRpcMessage message) async {
+    if (_isClosed) throw StateError('Transport is closed');
+    if (!_isStarted) throw StateError('Transport not started');
+
+    if (message is JsonRpcRequest && message.method == 'initialize') {
+      final error = JsonRpcError(
+        id: message.id,
+        error: JsonRpcErrorData(
+          code: ErrorCode.internalError.value,
+          message: 'Isolated initialization failure',
+        ),
+      );
+
+      // Call onmessage synchronously to deliver the error
+      onmessage?.call(error);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    if (_isClosed) return;
+    _isClosed = true;
+    // NOTE: Do NOT call onclose here unless explicitly requested
+    // onclose?.call();
+  }
+}
+
+/// Custom transport that returns unsupported protocol version
+class CustomProtocolVersionTransport extends Transport {
+  bool _isStarted = false;
+  bool _isClosed = false;
+
+  @override
+  String? get sessionId => null;
+
+  @override
+  Future<void> start() async {
+    if (_isStarted) throw StateError('Transport already started');
+    _isStarted = true;
+  }
+
+  @override
+  Future<void> send(JsonRpcMessage message) async {
+    if (_isClosed) throw StateError('Transport is closed');
+    if (!_isStarted) throw StateError('Transport not started');
+
+    if (message is JsonRpcRequest && message.method == 'initialize') {
+      final initResult = InitializeResult(
+        protocolVersion: '999.0.0', // Unsupported version
+        capabilities: ServerCapabilities.fromJson(
+            Map<String, dynamic>.from({'tools': <String, dynamic>{}})),
+        serverInfo: Implementation(name: 'test', version: '1.0.0'),
+      );
+      final response = JsonRpcResponse(
+        id: message.id,
+        result: Map<String, dynamic>.from(initResult.toJson()),
       );
       onmessage?.call(response);
     }
@@ -206,36 +350,22 @@ void main() {
         );
       });
 
-      test('validates protocol version compatibility', () async {
-        // Create a special transport that returns unsupported version
-        final testTransport = MockTransport();
-        final testClient = Client(
-          Implementation(name: 'test', version: '1.0.0'),
+      test('validates protocol version compatibility - isolated', () async {
+        // Completely self-contained test with isolated transport
+        final isolatedTransport = CustomProtocolVersionTransport();
+        final isolatedClient = Client(
+          Implementation(name: 'isolated-version-test', version: '1.0.0'),
         );
 
-        // Mock to return unsupported protocol version
-        testTransport.onmessage = (message) async {
-          if (message is JsonRpcInitializeRequest) {
-            await Future.delayed(const Duration(milliseconds: 1));
-            final response = JsonRpcResponse(
-              id: message.id,
-              result: InitializeResult(
-                protocolVersion: '999.0.0', // Unsupported version
-                capabilities: ServerCapabilities.fromJson({'tools': {}}),
-                serverInfo: Implementation(name: 'test', version: '1.0.0'),
-              ).toJson(),
-            );
-            testClient.transport?.onmessage?.call(response);
-          }
-        };
-
-        expect(
-          () async => await testClient.connect(testTransport),
-          throwsA(isA<McpError>()),
-        );
-
-        await testClient.close();
-        await testTransport.close();
+        try {
+          await isolatedClient.connect(isolatedTransport);
+          fail('Should have thrown McpError for unsupported protocol version');
+        } catch (e) {
+          expect(e, isA<McpError>());
+        } finally {
+          await isolatedClient.close();
+          await isolatedTransport.close();
+        }
       });
     });
 
@@ -250,8 +380,8 @@ void main() {
 
         final sentMessages = mockTransport.sentMessages;
         final pingMessage = sentMessages.firstWhere(
-          (msg) => msg is JsonRpcPingRequest,
-        ) as JsonRpcPingRequest;
+          (msg) => msg is JsonRpcRequest && msg.method == 'ping',
+        ) as JsonRpcRequest;
         expect(pingMessage, isNotNull);
       });
 
@@ -285,9 +415,9 @@ void main() {
 
         final sentMessages = mockTransport.sentMessages;
         final listMessage = sentMessages.firstWhere(
-          (msg) => msg is JsonRpcListToolsRequest,
-        ) as JsonRpcListToolsRequest;
-        expect(listMessage.listParams.cursor, equals('test-cursor'));
+          (msg) => msg is JsonRpcRequest && msg.method == 'tools/list',
+        ) as JsonRpcRequest;
+        expect(listMessage.params?['cursor'], equals('test-cursor'));
       });
     });
 
@@ -331,16 +461,22 @@ void main() {
     });
 
     group('Error Handling', () {
-      test('handles transport errors during connection', () async {
-        final errorTransport = MockTransport();
-        errorTransport.shouldFailInitialization = true;
-
-        expect(
-          () async => await client.connect(errorTransport),
-          throwsA(isA<McpError>()),
+      test('handles transport errors during connection - isolated', () async {
+        // Completely self-contained test with isolated transport
+        final isolatedErrorTransport = IsolatedErrorTransport();
+        final isolatedClient = Client(
+          Implementation(name: 'isolated-error-test', version: '1.0.0'),
         );
 
-        await errorTransport.close();
+        try {
+          await isolatedClient.connect(isolatedErrorTransport);
+          fail('Should have thrown McpError for initialization failure');
+        } catch (e) {
+          expect(e, isA<McpError>());
+        } finally {
+          await isolatedClient.close();
+          await isolatedErrorTransport.close();
+        }
       });
 
       test('closes properly on initialization failure', () async {

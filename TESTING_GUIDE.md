@@ -24,14 +24,14 @@ dart run test_runner.dart --web-only
 dart run test_runner.dart --vm-only
 ```
 
-### 3. **Shell Script**
+### 2. **Shell Script**
 ```bash
 ./scripts/test-all.sh           # All tests
 ./scripts/test-all.sh --vm-only # VM only
 ./scripts/test-all.sh --web-only # Web only
 ```
 
-### 4. **Direct Dart Commands**
+### 3. **Direct Dart Commands**
 ```bash
 # VM tests (what VS Code runs by default)
 dart test --exclude-tags=web-only
@@ -67,18 +67,20 @@ The web tests require a browser platform (`-p chrome`) which VS Code doesn't han
 
 ## 🌐 Web Test Details
 
-### Web Test Types
-1. **Core Transport Tests** (`test/web/web_transport_test.dart`)
-   - Transport instantiation in browser
-   - HTTP client integration
-   - Authentication flows
-   - Session management
+### Test Types by Category
 
-2. **Integration Tests** (`test/web/web_integration_test.dart`)
-   - Browser environment validation
-   - Cross-platform package compatibility
-   - Security considerations
-   - Error handling
+#### VM Tests (Native Dart)
+- **Client Tests:** MCP client functionality, protocol compliance, capability validation
+- **Server Tests:** MCP server implementation, transport handling, session management  
+- **Integration Tests:** End-to-end stdio communication between client and server
+- **Protocol Tests:** JSON-RPC message handling, timeout management, error handling
+- **Type Tests:** Serialization/deserialization of MCP protocol types
+
+#### Web Tests (Browser Environment)
+- **Transport Tests:** Browser-compatible HTTP transport, authentication, session APIs
+- **Client Tests:** MCP client functionality in web browsers, capability registration
+- **Integration Tests:** Cross-platform compatibility, security considerations, CORS handling
+- **Real-World Tests:** End-to-end connectivity to live MCP servers (HuggingFace, DeepWiki)
 
 ### Web Test Requirements
 - Chrome or Firefox browser installed
@@ -106,10 +108,10 @@ The web tests require a browser platform (`-p chrome`) which VS Code doesn't han
 🎉 All tests passed! Total time: 10s
 ```
 
-### Test Counts
-- **VM Tests:** ~105 tests
-- **Web Tests:** 16 tests  
-- **Total:** ~121 tests
+### Test Categories
+- **VM Tests:** Native Dart tests (client, server, integration, types, protocol)
+- **Web Tests:** Browser-based tests (transport, client, integration, real-world)
+- **Total:** Full cross-platform test coverage
 
 ## 🚨 Troubleshooting
 
@@ -123,6 +125,11 @@ dart test test/web/
 # ✅ Correct - with browser platform  
 dart test test/web/ -p chrome
 ```
+
+**Web test troubleshooting:**
+- Web tests require browser platform specification (`-p chrome`)
+- Transport connection lifecycle issues may occasionally occur
+- Both VM and web tests provide comprehensive coverage
 
 **VS Code not running web tests:**
 - Use Tasks or Debug configurations instead
@@ -155,11 +162,46 @@ dart test test/web/web_transport_test.dart -p chrome
 dart test test/web/ -p chrome --pause-after-load
 ```
 
+## 🎯 How to Run Different Test Categories
+
+### VM Tests Only (Native Dart)
+```bash
+dart run test_runner.dart --vm-only
+# OR
+dart test --exclude-tags=web-only
+```
+
+### Web Tests Only (Browser)
+```bash
+dart run test_runner.dart --web-only
+# OR  
+dart test test/web/ -p chrome
+```
+
+### All Tests (VM + Web)
+```bash
+dart run test_runner.dart
+# OR
+./scripts/test-all.sh
+```
+
+### Specific Test Files
+```bash
+# Run specific VM test
+dart test test/client/client_test.dart
+
+# Run specific web test  
+dart test test/web/web_transport_test.dart -p chrome
+```
+
 ## 🎯 Best Practices
 
 ### For Development
-1. **Use `dart run test_runner.dart`** for comprehensive testing
-4. **Use VS Code tasks** for integrated development workflow
+1. **Use `dart run test_runner.dart`** for comprehensive cross-platform testing
+2. **Use VS Code tasks** for integrated development workflow
+3. **Run VM tests** for core library functionality validation
+4. **Run web tests** for browser compatibility validation
+5. **Use real-world integration tests** to validate live server connectivity
 
 ### For CI/CD
 ```yaml

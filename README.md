@@ -1,36 +1,52 @@
 # MCP (Model Context Protocol) for Dart
 
-[![Pub Version](https://img.shields.io/pub/v/mcp_dart?color=blueviolet)](https://pub.dev/packages/mcp_dart)
+[![Pub
+Version](https://img.shields.io/pub/v/mcp_dart?color=blueviolet)](https://pub.dev/packages/mcp_dart)
 [![likes](https://img.shields.io/pub/likes/mcp_dart?logo=dart)](https://pub.dev/packages/mcp_dart/score)
 
-[Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open protocol designed to enable seamless integration between LLM applications and external data sources and tools.
+[Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open
+protocol designed to enable seamless integration between LLM applications and
+external data sources and tools.
 
-This library provides a simple and intuitive way to implement MCP servers and clients in Dart, supporting **both Dart VM and web browsers**. It adheres to the [MCP protocol spec](https://spec.modelcontextprotocol.io/) while ensuring a consistent developer experience across all platforms.
+This library provides a simple and intuitive way to implement MCP servers and
+clients in Dart. **MCP clients now support all platforms including web browsers
+and WASM**, while MCP servers remain optimized for Dart VM environments. It
+adheres to the [MCP protocol spec](https://spec.modelcontextprotocol.io/) while
+ensuring a consistent developer experience across all platforms.
 
 ## Requirements
 
 - Dart SDK version ^3.0.0 or higher
 
-Ensure you have the correct Dart SDK version installed. See <https://dart.dev/get-dart> for installation instructions.
+Ensure you have the correct Dart SDK version installed. See
+<https://dart.dev/get-dart> for installation instructions.
 
 ## Features
 
-- **Cross-Platform Support** - Works on Dart VM and Web browsers
-- Stdio support (Server and Client)
-- StreamableHTTP support (Server and Client) - **Now Web Compatible!**
-- SSE support (Server only) - Deprecated
-- Stream Transport using dart streams (Server and Client in shared process)
-- Tools
-- Resources
-- Prompts
-- Sampling
-- Roots
+- **Cross-Platform Client Support** - MCP clients work on all platforms: Dart
+  VM, Flutter (mobile/desktop), web browsers, and WASM
+- **Conditional Compilation** - Platform-optimized implementations with
+  identical APIs
+- **MCP Servers** (Dart VM only):
+  - Stdio support (Server and Client)
+  - StreamableHTTP support (Server only)
+  - SSE support (Server only) - Deprecated  
+  - Stream Transport using dart streams (Server and Client in shared process)
+- **MCP Clients** (Cross-platform):
+  - Stdio support (VM only)
+  - **StreamableHTTP support** - **Works everywhere: VM, web browsers, WASM!**
+- **Protocol Features**:
+  - Tools, Resources, Prompts
+  - Sampling, Roots
 
 ## Model Context Protocol Version
 
-The current version of the protocol is `2025-03-26`. This library is designed to be compatible with this version, and any future updates will be made to ensure continued compatibility.
+The current version of the protocol is `2025-03-26`. This library is designed to
+be compatible with this version, and any future updates will be made to ensure
+continued compatibility.
 
-It's also backward compatible with the previous version `2024-11-05` and `2024-10-07`.
+It's also backward compatible with the previous version `2024-11-05` and
+`2024-10-07`.
 
 ## Getting started
 
@@ -87,9 +103,10 @@ void main() async {
 }
 ```
 
-### Client (Cross-Platform)
+### Client (Cross-Platform: VM, Web, WASM)
 
-The MCP client now works on **all Dart platforms** - Dart VM, Flutter mobile/desktop, and web browsers! 
+The MCP client now works on **all Dart platforms** - Dart VM, Flutter
+mobile/desktop, web browsers, and WASM! 
 
 **Simple client example (works everywhere):**
 ```dart
@@ -100,7 +117,7 @@ void main() async {
     Implementation(name: "example-client", version: "1.0.0"),
   );
   
-  // This transport works on ALL platforms: VM, mobile, desktop, web!
+  // StreamableHttpClientTransport works on ALL platforms: VM, mobile, desktop, web, WASM!
   await client.connect(StreamableHttpClientTransport(
     Uri.parse('https://your-mcp-server.com/mcp'),
   ));
@@ -109,20 +126,36 @@ void main() async {
 
 **Try it yourself - Flutter Demo:**
 ```bash
-cd example/flutter_web_client
+cd example/flutter_client
 flutter pub get
-flutter run -d chrome    # Web browser
-flutter run -d macos     # Desktop
+flutter run -d chrome    # Web browser (includes WASM support)
+flutter run -d macos     # Desktop  
 flutter run               # Mobile
 ```
 
-See [`example/flutter_web_client/`](example/flutter_web_client/) for the complete demo that proves cross-platform compatibility.
+See [`example/flutter_client/`](example/flutter_client/) for the complete
+cross-platform demo.
 
-For technical details about web support, see the [Web Design Document](web-design-doc.md).
+**Important Notes:**
+- **MCP Client**: Full cross-platform support (VM, web, WASM) via
+  `StreamableHttpClientTransport`
+- **MCP Server**: Dart VM only (web environments receive API-compatible stubs
+  that throw `UnsupportedError`)
+
+**Technical Implementation:**
+- Uses `dart:io.HttpClient` on native platforms for optimal performance
+- Uses `package:http` on web browsers for cross-platform compatibility  
+- WASM compatibility achieved through conditional compilation with web-safe defaults
+- Zero runtime overhead - platform detection happens at compile time
+- Comprehensive test coverage: 120 VM tests + 69 web-specific tests
+
+For technical details about web and WASM support, see the [Web Design
+Document](WEB_DESIGN_DOC.md).
 
 ## Usage
 
-Once you compile your MCP server, you can compile the client using the below code.
+Once you compile your MCP server, you can compile the client using the below
+code.
 
 ```bash
 dart compile exe example/server_stdio.dart -o ./server_stdio
@@ -134,7 +167,8 @@ Or just run it with JIT.
 dart run example/server_stdio.dart
 ```
 
-To configure it with the client (ex, Claude Desktop), you can use the below code.
+To configure it with the client (ex, Claude Desktop), you can use the below
+code.
 
 ```json
 {
@@ -198,11 +232,14 @@ dart test test/web/ -p chrome
 
 ### Web Platform Testing
 
-The library includes dedicated web tests that validate cross-platform compatibility, browser integration, and web-specific features.
+The library includes dedicated web tests that validate cross-platform
+compatibility, browser integration, and web-specific features.
 
 **For comprehensive testing details, see:**
-- **[Testing Guide](TESTING_GUIDE.md)** - Complete testing instructions and troubleshooting
-- **[Web Design Document](web-design-doc.md)** - Technical implementation details and architecture
+- **[Testing Guide](TESTING_GUIDE.md)** - Complete testing instructions and
+  troubleshooting
+- **[Web Design Document](web-design-doc.md)** - Technical implementation
+  details and architecture
 - **[test/web/README.md](test/web/README.md)** - Web-specific test documentation
 
 ## Credits
