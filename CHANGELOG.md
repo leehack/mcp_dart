@@ -1,9 +1,9 @@
 ## 0.6.0
 
-- Add web browser and WASM compatibility for MCP clients via
+- Added web browser and WASM compatibility for MCP clients via
   StreamableHttpClientTransport
-- Add Flutter client demo showcasing cross-platform MCP client usage
-- Implement conditional compilation for platform-specific optimizations while
+- Added Flutter client demo showcasing cross-platform MCP client usage
+- Implemented conditional compilation for platform-specific optimizations while
   maintaining API consistency
     - the existing StreamableHttpClientTransport for non-web platforms has been
       kept for it's performance and reliability.
