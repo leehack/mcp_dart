@@ -137,6 +137,8 @@ class StreamableHttpClientTransport implements Transport {
   @override
   void Function(JsonRpcMessage message)? onmessage;
 
+  final http.Client _httpClient;
+
   StreamableHttpClientTransport(
     Uri url, {
     StreamableHttpClientTransportOptions? opts,
@@ -145,7 +147,8 @@ class StreamableHttpClientTransport implements Transport {
         _authProvider = opts?.authProvider,
         _sessionId = opts?.sessionId,
         _reconnectionOptions = opts?.reconnectionOptions ??
-            _defaultStreamableHttpReconnectionOptions;
+            _defaultStreamableHttpReconnectionOptions,
+        _httpClient = http.Client();
 
   Future<void> _authThenStart() async {
     if (_authProvider == null) {
@@ -208,10 +211,9 @@ class StreamableHttpClientTransport implements Transport {
         headers['last-event-id'] = resumptionToken;
       }
 
-      final client = http.Client();
       final request = http.Request('GET', _url);
       request.headers.addAll(headers);
-      final response = await client.send(request);
+      final response = await _httpClient.send(request);
 
       if (response.statusCode != 200) {
         if (response.statusCode == 401 && _authProvider != null) {
@@ -468,6 +470,7 @@ class StreamableHttpClientTransport implements Transport {
     // Abort any pending requests
     _abortController?.add(true);
     _abortController?.close();
+    _httpClient.close();
 
     onclose?.call();
   }
@@ -512,7 +515,7 @@ class StreamableHttpClientTransport implements Transport {
       request.headers.addAll(headers);
       request.body = jsonEncode(message.toJson());
 
-      final response = await request.send();
+      final response = await _httpClient.send(request);
 
       // Handle session ID received during initialization
       final sessionId = response.headers['mcp-session-id'];
@@ -611,8 +614,7 @@ class StreamableHttpClientTransport implements Transport {
     try {
       final headers = await _commonHeaders();
 
-      final client = http.Client();
-      final response = await client.delete(_url, headers: headers);
+      final response = await _httpClient.delete(_url, headers: headers);
 
       // We specifically handle 405 as a valid response according to the spec,
       // meaning the server does not support explicit session termination
