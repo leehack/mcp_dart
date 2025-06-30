@@ -1,3 +1,7 @@
+## 0.5.3
+
+- Support Web Client for StreamableHTTP
+
 ## 0.5.2
 
 - Preserve required fields in ToolInputSchema
