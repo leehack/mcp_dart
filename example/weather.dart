@@ -53,12 +53,15 @@ void main() async {
   server.tool(
     "get-alerts",
     description: "Get weather alerts for a state",
-    inputSchemaProperties: {
-      "state": {
-        "type": "string",
-        "description": "Two-letter state code (e.g. CA, NY)",
+    toolInputSchema: ToolInputSchema(
+      properties: {
+        "state": {
+          "type": "string",
+          "description": "Two-letter state code (e.g. CA, NY)",
+        },
       },
-    },
+      required: ["state"],
+    ),
     callback: ({args, extra}) async {
       final state = (args?['state'] as String?)?.toUpperCase();
       if (state == null || state.length != 2) {
@@ -98,13 +101,19 @@ void main() async {
   server.tool(
     "get-forecast",
     description: "Get weather forecast for a location",
-    inputSchemaProperties: {
-      "latitude": {"type": "number", "description": "Latitude of the location"},
-      "longitude": {
-        "type": "number",
-        "description": "Longitude of the location",
+    toolInputSchema: ToolInputSchema(
+      properties: {
+        "latitude": {
+          "type": "number",
+          "description": "Latitude of the location",
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude of the location",
+        },
       },
-    },
+      required: ["latitude", "longitude"],
+    ),
     callback: ({args, extra}) async {
       final latitude = args?['latitude'] as num?;
       final longitude = args?['longitude'] as num?;

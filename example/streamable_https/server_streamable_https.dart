@@ -67,9 +67,15 @@ McpServer getServer() {
   server.tool(
     'greet',
     description: 'A simple greeting tool',
-    inputSchemaProperties: {
-      'name': {'type': 'string', 'description': 'Name to greet'},
-    },
+    toolInputSchema: ToolInputSchema(
+      properties: {
+        'name': {
+          'type': 'string',
+          'description': 'Name to greet',
+        },
+      },
+      required: ['name'],
+    ),
     callback: ({args, extra}) async {
       final name = args?['name'] as String? ?? 'world';
       return CallToolResult.fromContent(
@@ -85,9 +91,15 @@ McpServer getServer() {
     'multi-greet',
     description:
         'A tool that sends different greetings with delays between them',
-    inputSchemaProperties: {
-      'name': {'type': 'string', 'description': 'Name to greet'},
-    },
+    toolInputSchema: ToolInputSchema(
+      properties: {
+        'name': {
+          'type': 'string',
+          'description': 'Name to greet',
+        },
+      },
+      required: [],
+    ),
     annotations: ToolAnnotations(
       title: 'Multiple Greeting Tool',
       readOnlyHint: true,
@@ -162,18 +174,20 @@ McpServer getServer() {
     'start-notification-stream',
     description:
         'Starts sending periodic notifications for testing resumability',
-    inputSchemaProperties: {
-      'interval': {
-        'type': 'number',
-        'description': 'Interval in milliseconds between notifications',
-        'default': 100,
+    toolInputSchema: ToolInputSchema(
+      properties: {
+        'interval': {
+          'type': 'number',
+          'description': 'Interval in milliseconds between notifications',
+          'default': 100,
+        },
+        'count': {
+          'type': 'number',
+          'description': 'Number of notifications to send (0 for 100)',
+          'default': 50,
+        },
       },
-      'count': {
-        'type': 'number',
-        'description': 'Number of notifications to send (0 for 100)',
-        'default': 50,
-      },
-    },
+    ),
     callback: ({args, extra}) async {
       final interval = args?['interval'] as num? ?? 100;
       final count = args?['count'] as num? ?? 50;

@@ -15,14 +15,17 @@ void main() async {
   server.tool(
     'calculate',
     description: 'Perform basic arithmetic operations',
-    inputSchemaProperties: {
-      'operation': {
-        'type': 'string',
-        'enum': ['add', 'subtract', 'multiply', 'divide'],
+    toolInputSchema: ToolInputSchema(
+      properties: {
+        'operation': {
+          'type': 'string',
+          'enum': ['add', 'subtract', 'multiply', 'divide'],
+        },
+        'a': {'type': 'number'},
+        'b': {'type': 'number'},
       },
-      'a': {'type': 'number'},
-      'b': {'type': 'number'},
-    },
+      required: ['operation', 'a', 'b'],
+    ),
     callback: ({args, extra}) async {
       final operation = args!['operation'];
       final a = args['a'];

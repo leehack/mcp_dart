@@ -82,15 +82,15 @@ class ResourceTemplateRegistration {
 
 class _RegisteredTool {
   final String? description;
-  final Map<String, dynamic>? inputSchemaProperties;
-  final Map<String, dynamic>? outputSchemaProperties;
+  final ToolInputSchema? toolInputSchema;
+  final ToolOutputSchema? toolOutputSchema;
   final ToolAnnotations? annotations;
   final ToolCallback callback;
 
   const _RegisteredTool({
     this.description,
-    this.inputSchemaProperties,
-    this.outputSchemaProperties,
+    this.toolInputSchema,
+    this.toolOutputSchema,
     this.annotations,
     required this.callback,
   });
@@ -99,11 +99,9 @@ class _RegisteredTool {
     return Tool(
       name: name,
       description: description,
-      inputSchema: ToolInputSchema(properties: inputSchemaProperties),
+      inputSchema: toolInputSchema ?? ToolInputSchema(),
       // Do not include output schema in the payload if it isn't defined
-      outputSchema: outputSchemaProperties != null
-          ? ToolOutputSchema(properties: outputSchemaProperties)
-          : null,
+      outputSchema: toolOutputSchema,
       annotations: annotations,
     );
   }
@@ -567,7 +565,11 @@ class McpServer {
   void tool(
     String name, {
     String? description,
+    ToolInputSchema? toolInputSchema,
+    ToolOutputSchema? toolOutputSchema,
+    @Deprecated('Use toolInputSchema instead')
     Map<String, dynamic>? inputSchemaProperties,
+    @Deprecated('Use toolOutputSchema instead')
     Map<String, dynamic>? outputSchemaProperties,
     ToolAnnotations? annotations,
     required ToolCallback callback,
@@ -577,8 +579,14 @@ class McpServer {
     }
     _registeredTools[name] = _RegisteredTool(
       description: description,
-      inputSchemaProperties: inputSchemaProperties,
-      outputSchemaProperties: outputSchemaProperties,
+      toolInputSchema: toolInputSchema ??
+          (inputSchemaProperties != null
+              ? ToolInputSchema(properties: inputSchemaProperties)
+              : null),
+      toolOutputSchema: toolOutputSchema ??
+          (outputSchemaProperties != null
+              ? ToolOutputSchema(properties: outputSchemaProperties)
+              : null),
       annotations: annotations,
       callback: callback,
     );
