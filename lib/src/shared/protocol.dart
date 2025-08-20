@@ -745,7 +745,8 @@ abstract class Protocol {
 
     return completer.future.then((response) {
       try {
-        return resultFactory(response.result);
+        return resultFactory(
+            response.toJson()['result'] as Map<String, dynamic>);
       } catch (e, s) {
         throw McpError(
           ErrorCode.internalError.value,

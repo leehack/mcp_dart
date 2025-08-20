@@ -1980,6 +1980,7 @@ class CallToolResult implements BaseResultData {
 
     // Content may optionally be included even if structured based on the unstructuredCompatibility flag.
     result['content'] = content.map((c) => c.toJson()).toList();
+    result['meta'] = meta;
 
     // Structured or unstructured?
     // Error can only be included if unstructured.
