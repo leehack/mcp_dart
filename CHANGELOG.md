@@ -1,3 +1,7 @@
+## 0.6.1
+
+- Fix issue with CallToolResult not including metadata
+
 ## 0.6.0
 
 - Add ToolInputSchema and ToolOutputSchema support in server.tool()
