@@ -378,7 +378,10 @@ class StreamableHttpClientTransport implements Transport {
         // Process the buffer line by line
         while (buffer.contains('\n')) {
           final index = buffer.indexOf('\n');
-          final line = buffer.substring(0, index);
+          var line = buffer.substring(0, index);
+          if (line.endsWith('\r')) {
+            line = line.substring(0, line.length - 1);
+          }
           buffer = buffer.substring(index + 1);
 
           if (line.isEmpty) {
