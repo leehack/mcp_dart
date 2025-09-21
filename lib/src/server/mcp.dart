@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:logging/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/shared/uri_template.dart';
 import 'package:mcp_dart/src/types.dart';
 
 import 'server.dart';
+
+final _logger = Logger("mcp_dart.server.mcp");
 
 typedef CompleteCallback = Future<List<String>> Function(String value);
 
@@ -244,7 +247,7 @@ class McpServer {
             registeredTool.callback(args: toolArgs, extra: extra),
           );
         } catch (error) {
-          print("Error executing tool '$toolName': $error");
+          _logger.warning("Error executing tool '$toolName': $error");
           return CallToolResult.fromContent(
             content: [TextContent(text: error.toString())],
             isError: true,
@@ -295,7 +298,7 @@ class McpServer {
     try {
       return _createCompletionResult(await completer(argInfo.value));
     } catch (e) {
-      print(
+      _logger.warning(
         "Error during prompt argument completion for '${ref.name}.${argInfo.name}': $e",
       );
       throw McpError(ErrorCode.internalError.value, "Completion failed");
@@ -319,7 +322,7 @@ class McpServer {
     try {
       return _createCompletionResult(await completer(argInfo.value));
     } catch (e) {
-      print(
+      _logger.warning(
         "Error during resource template completion for '${ref.uri}' variable '${argInfo.name}': $e",
       );
       throw McpError(ErrorCode.internalError.value, "Completion failed");
@@ -359,7 +362,7 @@ class McpServer {
                 )
                 .toList();
           } catch (e) {
-            print("Error listing resources for template: $e");
+            _logger.warning("Error listing resources for template: $e");
             return <Resource>[];
           }
         });
@@ -475,7 +478,7 @@ class McpServer {
             throw StateError("No callback found");
           }
         } catch (error) {
-          print("Error executing prompt '$name': $error");
+          _logger.warning("Error executing prompt '$name': $error");
           if (error is McpError) rethrow;
           throw McpError(
             ErrorCode.internalError.value,

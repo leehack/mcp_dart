@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:logging/logging.dart';
 import 'package:mcp_dart/src/shared/stdio.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
+
+final _logger = Logger("mcp_dart.shared.iostream");
 
 /// Transport implementation that uses standard I/O for communication.
 class IOStreamTransport implements Transport {
@@ -83,7 +86,7 @@ class IOStreamTransport implements Transport {
       try {
         onerror?.call(startError);
       } catch (e) {
-        print("Error in onerror handler: $e");
+        _logger.warning("Error in onerror handler: $e");
       }
       throw startError; // Rethrow to signal failure
     }
@@ -98,7 +101,7 @@ class IOStreamTransport implements Transport {
 
   /// Internal handler for when the input stream closes
   void _onStreamDone() {
-    print("IOStreamTransport: Input stream closed.");
+    _logger.fine("IOStreamTransport: Input stream closed.");
     close(); // Close transport when input ends
   }
 
@@ -110,7 +113,7 @@ class IOStreamTransport implements Transport {
     try {
       onerror?.call(streamError);
     } catch (e) {
-      print("Error in onerror handler: $e");
+      _logger.warning("Error in onerror handler: $e");
     }
     close();
   }
@@ -124,7 +127,7 @@ class IOStreamTransport implements Transport {
         try {
           onmessage?.call(message);
         } catch (e) {
-          print("Error in onmessage handler: $e");
+          _logger.warning("Error in onmessage handler: $e");
           onerror?.call(StateError("Error in onmessage handler: $e"));
         }
       } catch (error) {
@@ -134,9 +137,9 @@ class IOStreamTransport implements Transport {
         try {
           onerror?.call(parseError);
         } catch (e) {
-          print("Error in onerror handler: $e");
+          _logger.warning("Error in onerror handler: $e");
         }
-        print(
+        _logger.warning(
           "IOStreamTransport: Error processing read buffer: $parseError. Skipping data.",
         );
         break; // Stop processing buffer on error
@@ -149,7 +152,7 @@ class IOStreamTransport implements Transport {
   Future<void> close() async {
     if (_closed || !_started) return; // Already closed or never started
 
-    print("IOStreamTransport: Closing transport...");
+    _logger.fine("IOStreamTransport: Closing transport...");
 
     // Mark as closing immediately to prevent further sends/starts
     _started = false;
@@ -165,9 +168,9 @@ class IOStreamTransport implements Transport {
     try {
       onclose?.call();
     } catch (e) {
-      print("Error in onclose handler: $e");
+      _logger.warning("Error in onclose handler: $e");
     }
-    print("IOStreamTransport: Transport closed.");
+    _logger.fine("IOStreamTransport: Transport closed.");
   }
 
   /// Sends a message to the output stream.
@@ -186,14 +189,15 @@ class IOStreamTransport implements Transport {
       sink.add(utf8.encode(jsonString));
       // No need to flush as StreamSink should handle this
     } catch (error, stackTrace) {
-      print("IOStreamTransport: Error writing to output stream: $error");
+      _logger
+          .warning("IOStreamTransport: Error writing to output stream: $error");
       final Error sendError = (error is Error)
           ? error
           : StateError("Output stream write error: $error\n$stackTrace");
       try {
         onerror?.call(sendError);
       } catch (e) {
-        print("Error in onerror handler: $e");
+        _logger.warning("Error in onerror handler: $e");
       }
       close();
       throw sendError; // Rethrow after cleanup attempt

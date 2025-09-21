@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:io' as io;
 import 'dart:typed_data';
 
+import 'package:logging/logging.dart';
 import 'package:mcp_dart/src/shared/stdio.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
+
+final _logger = Logger("mcp_dart.server.stdio");
 
 /// Server transport for stdio: communicates with a MCP client by reading
 /// from the current process's standard input ([io.stdin]) and writing to
@@ -90,13 +93,13 @@ class StdioServerTransport implements Transport {
     try {
       onerror?.call(dartError);
     } catch (e) {
-      print("Error within onerror handler: $e");
+      _logger.warning("Error within onerror handler: $e");
     }
   }
 
   /// Internal callback for when the stdin stream is closed.
   void _onStdinDone() {
-    print("Stdin closed.");
+    _logger.fine("Stdin closed.");
     close();
   }
 
@@ -111,7 +114,7 @@ class StdioServerTransport implements Transport {
         try {
           onmessage?.call(message);
         } catch (e) {
-          print("Error within onmessage handler: $e");
+          _logger.warning("Error within onmessage handler: $e");
           onerror?.call(StateError("Error in onmessage handler: $e"));
         }
       } catch (error) {
@@ -121,9 +124,9 @@ class StdioServerTransport implements Transport {
         try {
           onerror?.call(dartError);
         } catch (e) {
-          print("Error within onerror handler during parsing: $e");
+          _logger.warning("Error within onerror handler during parsing: $e");
         }
-        print(
+        _logger.warning(
           "StdioServerTransport: Error processing read buffer: $dartError. Attempting to continue.",
         );
       }
@@ -150,7 +153,7 @@ class StdioServerTransport implements Transport {
     try {
       onclose?.call();
     } catch (e) {
-      print("Error within onclose handler: $e");
+      _logger.warning("Error within onclose handler: $e");
     }
   }
 
@@ -163,8 +166,8 @@ class StdioServerTransport implements Transport {
   @override
   Future<void> send(JsonRpcMessage message) {
     if (!_started) {
-      print(
-        "Warning: Attempted to send message on stopped StdioServerTransport.",
+      _logger.warning(
+        "Attempted to send message on stopped StdioServerTransport.",
       );
       return Future.value();
     }
@@ -179,7 +182,7 @@ class StdioServerTransport implements Transport {
       try {
         onerror?.call(dartError);
       } catch (e) {
-        print("Error within onerror handler during send: $e");
+        _logger.warning("Error within onerror handler during send: $e");
       }
       return Future.error(dartError);
     }

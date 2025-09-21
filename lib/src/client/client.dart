@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'package:logging/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
+
+final _logger = Logger("mcp_dart.client");
 
 /// Options for configuring the MCP [Client].
 class ClientOptions extends ProtocolOptions {
@@ -88,11 +91,11 @@ class Client extends Protocol {
       const initializedNotification = JsonRpcInitializedNotification();
       await notification(initializedNotification);
 
-      print(
+      _logger.fine(
         "MCP Client Initialized. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: ${result.protocolVersion}",
       );
     } catch (error) {
-      print("MCP Client Initialization Failed: $error");
+      _logger.severe("MCP Client Initialization Failed: $error");
       await close();
       rethrow;
     }
@@ -150,8 +153,8 @@ class Client extends Protocol {
         requiredCapability = 'prompts or resources';
         break;
       default:
-        print(
-          "Warning: assertCapabilityForMethod called for potentially custom client request: $method",
+        _logger.warning(
+          "assertCapabilityForMethod called for potentially custom client request: $method",
         );
         supported = true;
     }
@@ -175,8 +178,8 @@ class Client extends Protocol {
         }
         break;
       default:
-        print(
-          "Warning: assertNotificationCapability called for potentially custom client notification: $method",
+        _logger.warning(
+          "assertNotificationCapability called for potentially custom client notification: $method",
         );
     }
   }
@@ -199,8 +202,8 @@ class Client extends Protocol {
         }
         break;
       default:
-        print(
-          "Info: Setting request handler for potentially custom method '$method'. Ensure client capabilities match.",
+        _logger.info(
+          "Setting request handler for potentially custom method '$method'. Ensure client capabilities match.",
         );
     }
   }

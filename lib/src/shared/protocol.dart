@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:logging/logging.dart';
 import 'package:mcp_dart/src/types.dart';
 
 import 'transport.dart';
+
+final _logger = Logger("mcp_dart.shared.protocol");
 
 /// Callback for progress notifications.
 typedef ProgressCallback = void Function(Progress progress);
@@ -366,8 +369,8 @@ abstract class Protocol {
     try {
       onerror?.call(error);
     } catch (e) {
-      print("Error occurred in user onerror handler: $e");
-      print("Original error was: $error");
+      _logger.warning("Error occurred in user onerror handler: $e");
+      _logger.warning("Original error was: $error");
     }
   }
 

@@ -9,6 +9,9 @@ import 'package:mcp_dart/src/shared/stdio.dart'; // Adjust import path as needed
 import 'package:mcp_dart/src/shared/transport.dart'; // Adjust import path as needed
 // Assume types are defined in types.dart
 import 'package:mcp_dart/src/types.dart'; // Adjust import path as needed
+import 'package:logging/logging.dart';
+
+final _logger = Logger("mcp_dart.client.stdio");
 
 /// Configuration parameters for launching the stdio server process.
 class StdioServerParameters {
@@ -127,7 +130,9 @@ class StdioClientTransport implements Transport {
         mode: mode, // Handles stdin/stdout/stderr piping/inheritance
       );
 
-      print("StdioClientTransport: Process started (PID: ${_process?.pid})");
+      _logger.fine(
+        "StdioClientTransport: Process started (PID: ${_process?.pid})",
+      );
 
       // --- Setup stream listeners ---
 
@@ -144,7 +149,7 @@ class StdioClientTransport implements Transport {
         // Expose stderr via getter, let user handle it.
         // Optionally add logging here:
         _stderrSubscription = _process!.stderr.listen(
-          (data) => print(
+          (data) => _logger.fine(
             "Server stderr: ${utf8.decode(data, allowMalformed: true)}",
           ),
           onError: _onStreamError, // Report stderr stream errors too
@@ -158,7 +163,7 @@ class StdioClientTransport implements Transport {
       return Future.value();
     } catch (error, stackTrace) {
       // Handle errors during Process.start()
-      print("StdioClientTransport: Failed to start process: $error");
+      _logger.severe("StdioClientTransport: Failed to start process: $error");
       _started = false; // Reset state
       final startError = StateError(
         "Failed to start server process: $error\n$stackTrace",
@@ -166,7 +171,7 @@ class StdioClientTransport implements Transport {
       try {
         onerror?.call(startError);
       } catch (e) {
-        print("Error in onerror handler: $e");
+        _logger.warning("Error in onerror handler: $e");
       }
       throw startError; // Rethrow to signal failure
     }
@@ -193,7 +198,7 @@ class StdioClientTransport implements Transport {
 
   /// Internal handler for when the process's stdout stream closes.
   void _onStdoutDone() {
-    print("StdioClientTransport: Process stdout closed.");
+    _logger.fine("StdioClientTransport: Process stdout closed.");
     // Consider if this should trigger close() - depends if server exiting is expected.
     // Maybe only close if the process has also exited?
     // close(); // Optionally close transport when stdout ends
@@ -207,7 +212,7 @@ class StdioClientTransport implements Transport {
     try {
       onerror?.call(streamError);
     } catch (e) {
-      print("Error in onerror handler: $e");
+      _logger.warning("Error in onerror handler: $e");
     }
     // Consider if stream errors should trigger close()
     // close();
@@ -222,7 +227,7 @@ class StdioClientTransport implements Transport {
         try {
           onmessage?.call(message);
         } catch (e) {
-          print("Error in onmessage handler: $e");
+          _logger.warning("Error in onmessage handler: $e");
           onerror?.call(StateError("Error in onmessage handler: $e"));
         }
       } catch (error) {
@@ -232,9 +237,9 @@ class StdioClientTransport implements Transport {
         try {
           onerror?.call(parseError);
         } catch (e) {
-          print("Error in onerror handler: $e");
+          _logger.warning("Error in onerror handler: $e");
         }
-        print(
+        _logger.severe(
           "StdioClientTransport: Error processing read buffer: $parseError. Skipping data.",
         );
         // Consider clearing buffer or attempting recovery depending on error type.
@@ -247,7 +252,7 @@ class StdioClientTransport implements Transport {
 
   /// Internal handler for when the process exits.
   void _onProcessExit(int exitCode) {
-    print("StdioClientTransport: Process exited with code $exitCode.");
+    _logger.fine("StdioClientTransport: Process exited with code $exitCode.");
     if (!_exitCompleter.isCompleted) {
       _exitCompleter.complete(); // Signal exit if not already closing
     }
@@ -256,14 +261,16 @@ class StdioClientTransport implements Transport {
 
   /// Internal handler for errors retrieving the process exit code.
   void _onProcessExitError(dynamic error, StackTrace stackTrace) {
-    print("StdioClientTransport: Error waiting for process exit: $error");
+    _logger.fine(
+      "StdioClientTransport: Error waiting for process exit: $error",
+    );
     final Error exitError = (error is Error)
         ? error
         : StateError("Process exit error: $error\n$stackTrace");
     try {
       onerror?.call(exitError);
     } catch (e) {
-      print("Error in onerror handler: $e");
+      _logger.warning("Error in onerror handler: $e");
     }
     if (!_exitCompleter.isCompleted) {
       _exitCompleter.completeError(exitError);
@@ -279,7 +286,7 @@ class StdioClientTransport implements Transport {
   Future<void> close() async {
     if (!_started) return; // Already closed or never started
 
-    print("StdioClientTransport: Closing transport...");
+    _logger.fine("StdioClientTransport: Closing transport...");
 
     // Mark as closing immediately to prevent further sends/starts
     _started = false;
@@ -297,13 +304,13 @@ class StdioClientTransport implements Transport {
     _process = null; // Clear reference
 
     if (processToKill != null) {
-      print(
+      _logger.fine(
         "StdioClientTransport: Terminating process (PID: ${processToKill.pid})...",
       );
       // Attempt graceful termination first
       bool killed = processToKill.kill(io.ProcessSignal.sigterm);
       if (!killed) {
-        print(
+        _logger.fine(
           "StdioClientTransport: Failed to send SIGTERM or process already exited.",
         );
         // If SIGTERM fails or wasn't sent (e.g., process already dead),
@@ -312,15 +319,15 @@ class StdioClientTransport implements Transport {
         // Give a short grace period for SIGTERM before SIGKILL
         try {
           await _exitCompleter.future.timeout(const Duration(seconds: 2));
-          print("StdioClientTransport: Process terminated gracefully.");
+          _logger.fine("StdioClientTransport: Process terminated gracefully.");
         } on TimeoutException {
-          print(
+          _logger.warning(
             "StdioClientTransport: Process did not exit after SIGTERM, sending SIGKILL.",
           );
           processToKill.kill(io.ProcessSignal.sigkill); // Force kill
         } catch (e) {
           // Error waiting for exit after SIGTERM (might have exited quickly)
-          print(
+          _logger.severe(
             "StdioClientTransport: Error waiting for process exit after SIGTERM: $e",
           );
         }
@@ -336,9 +343,9 @@ class StdioClientTransport implements Transport {
     try {
       onclose?.call();
     } catch (e) {
-      print("Error in onclose handler: $e");
+      _logger.warning("Error in onclose handler: $e");
     }
-    print("StdioClientTransport: Transport closed.");
+    _logger.fine("StdioClientTransport: Transport closed.");
   }
 
   /// Sends a [JsonRpcMessage] to the server process via its stdin.
@@ -361,14 +368,16 @@ class StdioClientTransport implements Transport {
       // Flushing stdin might be necessary depending on the server's reading behavior.
       await currentProcess.stdin.flush();
     } catch (error, stackTrace) {
-      print("StdioClientTransport: Error writing to process stdin: $error");
+      _logger.warning(
+        "StdioClientTransport: Error writing to process stdin: $error",
+      );
       final Error sendError = (error is Error)
           ? error
           : StateError("Process stdin write error: $error\n$stackTrace");
       try {
         onerror?.call(sendError);
       } catch (e) {
-        print("Error in onerror handler: $e");
+        _logger.warning("Error in onerror handler: $e");
       }
       // Consider closing the transport on stdin write failure
       close();

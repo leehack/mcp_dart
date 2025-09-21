@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:logging/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
+
+final _logger = Logger("mcp_dart.server");
 
 /// Options for configuring the MCP [Server].
 class ServerOptions extends ProtocolOptions {
@@ -129,8 +132,8 @@ class Server extends Protocol {
         break;
 
       default:
-        print(
-          "Warning: assertCapabilityForMethod called for unknown server-sent request method: $method",
+        _logger.warning(
+          "assertCapabilityForMethod called for unknown server-sent request method: $method",
         );
     }
   }
@@ -183,8 +186,8 @@ class Server extends Protocol {
         break;
 
       default:
-        print(
-          "Warning: assertNotificationCapability called for unknown server-sent notification method: $method",
+        _logger.warning(
+          "assertNotificationCapability called for unknown server-sent notification method: $method",
         );
     }
   }
@@ -243,8 +246,8 @@ class Server extends Protocol {
         break;
 
       default:
-        print(
-          "Info: Setting request handler for potentially custom method '$method'. Ensure server capabilities match.",
+        _logger.info(
+          "Setting request handler for potentially custom method '$method'. Ensure server capabilities match.",
         );
     }
   }

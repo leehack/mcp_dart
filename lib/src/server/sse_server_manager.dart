@@ -1,7 +1,11 @@
 import 'dart:io';
 
+import 'package:logging/logging.dart';
+
 import 'mcp.dart';
 import 'sse.dart';
+
+final _logger = Logger("mcp_dart.server.sse.manager");
 
 /// Manages Server-Sent Events (SSE) connections and routes HTTP requests.
 class SseServerManager {
@@ -25,7 +29,7 @@ class SseServerManager {
 
   /// Routes incoming HTTP requests to appropriate handlers.
   Future<void> handleRequest(HttpRequest request) async {
-    print("Received request: ${request.method} ${request.uri.path}");
+    _logger.fine("Received request: ${request.method} ${request.uri.path}");
 
     if (request.uri.path == ssePath) {
       if (request.method == 'GET') {
@@ -46,7 +50,7 @@ class SseServerManager {
 
   /// Handles the initial GET request to establish an SSE connection.
   Future<void> handleSseConnection(HttpRequest request) async {
-    print("Client connecting for SSE at /sse...");
+    _logger.fine("Client connecting for SSE at /sse...");
     SseServerTransport? transport;
 
     try {
@@ -57,23 +61,23 @@ class SseServerManager {
 
       final sessionId = transport.sessionId;
       activeSseTransports[sessionId] = transport;
-      print("Stored new SSE transport for session: $sessionId");
+      _logger.fine("Stored new SSE transport for session: $sessionId");
 
       transport.onclose = () {
-        print(
+        _logger.fine(
           "SSE transport closed (Session: $sessionId). Removing from active list.",
         );
         activeSseTransports.remove(sessionId);
       };
 
       transport.onerror = (error) {
-        print("Error on SSE transport (Session: $sessionId): $error");
+        _logger.warning("Error on SSE transport (Session: $sessionId): $error");
       };
 
       await mcpServer.connect(transport);
-      print("SSE transport connected, session ID: $sessionId");
+      _logger.fine("SSE transport connected, session ID: $sessionId");
     } catch (e) {
-      print("Error setting up SSE connection: $e");
+      _logger.warning("Error setting up SSE connection: $e");
       if (transport != null) {
         activeSseTransports.remove(transport.sessionId);
       }
@@ -90,7 +94,7 @@ class SseServerManager {
   /// Handles POST requests containing client messages.
   Future<void> _handlePostMessage(HttpRequest request) async {
     final sessionId = request.uri.queryParameters['sessionId'];
-    print("Received POST to $messagePath (Session ID: $sessionId)");
+    _logger.fine("Received POST to $messagePath (Session ID: $sessionId)");
 
     if (sessionId == null || sessionId.isEmpty) {
       request.response
@@ -104,7 +108,7 @@ class SseServerManager {
     if (transportToUse != null) {
       await transportToUse.handlePostMessage(request);
     } else {
-      print("No active SSE transport found for session ID: $sessionId");
+      _logger.fine("No active SSE transport found for session ID: $sessionId");
       request.response
         ..statusCode = HttpStatus.notFound
         ..write("No active SSE session found for ID: $sessionId");
