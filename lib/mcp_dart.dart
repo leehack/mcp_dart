@@ -11,6 +11,7 @@ library;
 // Common exports for all platforms
 export 'src/types.dart'; // Exports shared types used across the MCP protocol.
 export 'src/shared/uuid.dart'; // Exports UUID generation utilities.
+export 'src/shared/logging.dart'; // Exports logging for customization
 
 // Platform-specific exports
 export 'src/exports.dart' // Stub export for other platforms
