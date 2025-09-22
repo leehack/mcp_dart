@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:logging/logging.dart';
+import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
@@ -91,11 +91,11 @@ class Client extends Protocol {
       const initializedNotification = JsonRpcInitializedNotification();
       await notification(initializedNotification);
 
-      _logger.fine(
+      _logger.debug(
         "MCP Client Initialized. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: ${result.protocolVersion}",
       );
     } catch (error) {
-      _logger.severe("MCP Client Initialization Failed: $error");
+      _logger.error("MCP Client Initialization Failed: $error");
       await close();
       rethrow;
     }
@@ -153,7 +153,7 @@ class Client extends Protocol {
         requiredCapability = 'prompts or resources';
         break;
       default:
-        _logger.warning(
+        _logger.warn(
           "assertCapabilityForMethod called for potentially custom client request: $method",
         );
         supported = true;
@@ -178,7 +178,7 @@ class Client extends Protocol {
         }
         break;
       default:
-        _logger.warning(
+        _logger.warn(
           "assertNotificationCapability called for potentially custom client notification: $method",
         );
     }

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:logging/logging.dart';
+import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/types.dart';
 
 import 'transport.dart';
@@ -369,8 +369,8 @@ abstract class Protocol {
     try {
       onerror?.call(error);
     } catch (e) {
-      _logger.warning("Error occurred in user onerror handler: $e");
-      _logger.warning("Original error was: $error");
+      _logger.warn("Error occurred in user onerror handler: $e");
+      _logger.warn("Original error was: $error");
     }
   }
 

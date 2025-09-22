@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:logging/logging.dart';
+import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/types.dart';
 
 final _logger = Logger("mcp_dart.shared.stdio");
@@ -44,7 +44,7 @@ class ReadBuffer {
     try {
       line = utf8.decode(lineBytes);
     } catch (e) {
-      _logger.warning("Error decoding UTF-8 line: $e");
+      _logger.warn("Error decoding UTF-8 line: $e");
       _updateBufferAfterRead(newlineIndex);
       return null;
     }
@@ -81,10 +81,10 @@ JsonRpcMessage deserializeMessage(String line) {
     final jsonMap = jsonDecode(line) as Map<String, dynamic>;
     return JsonRpcMessage.fromJson(jsonMap);
   } on FormatException catch (e) {
-    _logger.warning("Failed to decode JSON line: $line");
+    _logger.warn("Failed to decode JSON line: $line");
     throw FormatException("Invalid JSON received: ${e.message}", line);
   } catch (e) {
-    _logger.warning("Failed to parse JsonRpcMessage from line: $line");
+    _logger.warn("Failed to parse JsonRpcMessage from line: $line");
     rethrow;
   }
 }
@@ -96,7 +96,7 @@ String serializeMessage(JsonRpcMessage message) {
   try {
     return '${jsonEncode(message.toJson())}\n';
   } catch (e) {
-    _logger.warning("Failed to serialize JsonRpcMessage: $message");
+    _logger.warn("Failed to serialize JsonRpcMessage: $message");
     rethrow;
   }
 }

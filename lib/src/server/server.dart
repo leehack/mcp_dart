@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:logging/logging.dart';
+import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
 
@@ -132,7 +132,7 @@ class Server extends Protocol {
         break;
 
       default:
-        _logger.warning(
+        _logger.warn(
           "assertCapabilityForMethod called for unknown server-sent request method: $method",
         );
     }
@@ -186,7 +186,7 @@ class Server extends Protocol {
         break;
 
       default:
-        _logger.warning(
+        _logger.warn(
           "assertNotificationCapability called for unknown server-sent notification method: $method",
         );
     }

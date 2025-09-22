@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:logging/logging.dart';
+import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
@@ -96,18 +96,18 @@ class SseServerTransport implements Transport {
       socket.listen(
         (_) {},
         onDone: () {
-          _logger.fine('Client disconnected');
+          _logger.debug('Client disconnected');
           close();
         },
         onError: (error) {
-          _logger.warning('Socket error: $error');
+          _logger.warn('Socket error: $error');
           onerror?.call(
             error is Error ? error : StateError("Socket error: $error"),
           );
         },
       );
     } catch (error) {
-      _logger.severe('Error starting SSE transport: $error');
+      _logger.error('Error starting SSE transport: $error');
     }
   }
 
@@ -218,14 +218,14 @@ class SseServerTransport implements Transport {
     try {
       parsedMessage = JsonRpcMessage.fromJson(messageJson);
     } catch (error) {
-      _logger.warning("Failed to parse JsonRpcMessage from JSON: $messageJson");
+      _logger.warn("Failed to parse JsonRpcMessage from JSON: $messageJson");
       rethrow;
     }
 
     try {
       onmessage?.call(parsedMessage);
     } catch (e) {
-      _logger.warning("Error within onmessage handler: $e");
+      _logger.warn("Error within onmessage handler: $e");
       onerror?.call(StateError("Error in onmessage handler: $e"));
     }
   }
@@ -276,7 +276,7 @@ class SseServerTransport implements Transport {
     try {
       _sink?.close();
     } catch (e) {
-      _logger.warning("Error closing SSE response: $e");
+      _logger.warn("Error closing SSE response: $e");
     }
     _sink = null;
 
@@ -284,7 +284,7 @@ class SseServerTransport implements Transport {
       try {
         onclose?.call();
       } catch (e) {
-        _logger.warning("Error within onclose handler: $e");
+        _logger.warn("Error within onclose handler: $e");
         onerror?.call(StateError("Error in onclose handler: $e"));
       }
     }
