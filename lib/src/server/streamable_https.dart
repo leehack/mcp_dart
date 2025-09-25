@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:mcp_dart/src/shared/uuid.dart';
-
+import '../shared/uuid.dart';
 import '../shared/transport.dart';
 import '../types.dart';
 
@@ -60,12 +59,18 @@ class StreamableHTTPServerTransportOptions {
   /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
   final EventStore? eventStore;
 
+  /// Interval in seconds for sending SSE keep-alive messages.
+  /// Set to null to disable keep-alive messages.
+  /// Default is 25 seconds (recommended to prevent client timeouts).
+  final int? keepAliveInterval;
+
   /// Creates configuration options for StreamableHTTPServerTransport
   StreamableHTTPServerTransportOptions({
     this.sessionIdGenerator,
     this.onsessioninitialized,
     this.enableJsonResponse = false,
     this.eventStore,
+    this.keepAliveInterval = 25,
   });
 }
 
@@ -120,6 +125,8 @@ class StreamableHTTPServerTransport implements Transport {
   final String _standaloneSseStreamId = '_GET_stream';
   final EventStore? _eventStore;
   final void Function(String sessionId)? _onsessioninitialized;
+  final int? _keepAliveInterval;
+  final Map<String, Timer> _keepAliveTimers = {};
 
   @override
   String? sessionId;
@@ -139,7 +146,8 @@ class StreamableHTTPServerTransport implements Transport {
   })  : _sessionIdGenerator = options.sessionIdGenerator,
         _enableJsonResponse = options.enableJsonResponse,
         _eventStore = options.eventStore,
-        _onsessioninitialized = options.onsessioninitialized;
+        _onsessioninitialized = options.onsessioninitialized,
+        _keepAliveInterval = options.keepAliveInterval;
 
   /// Starts the transport. This is required by the Transport interface but is a no-op
   /// for the Streamable HTTP transport as connections are managed per-request.
@@ -241,9 +249,13 @@ class StreamableHTTPServerTransport implements Transport {
     // Assign the response to the standalone SSE stream
     _streamMapping[_standaloneSseStreamId] = req.response;
 
+    // Start keep-alive timer for this SSE connection
+    _startKeepAliveTimer(_standaloneSseStreamId, req.response);
+
     // Set up close handler for client disconnects
     req.response.done.then((_) {
       _streamMapping.remove(_standaloneSseStreamId);
+      _stopKeepAliveTimer(_standaloneSseStreamId);
     });
   }
 
@@ -282,6 +294,15 @@ class StreamableHTTPServerTransport implements Transport {
       );
 
       _streamMapping[streamId] = res;
+      
+      // Start keep-alive timer for this resumed SSE connection
+      _startKeepAliveTimer(streamId, res);
+
+      // Set up close handler for client disconnects
+      res.done.then((_) {
+        _streamMapping.remove(streamId);
+        _stopKeepAliveTimer(streamId);
+      });
     } catch (error) {
       onerror?.call(error is Error ? error : StateError(error.toString()));
     }
@@ -304,6 +325,50 @@ class StreamableHTTPServerTransport implements Transport {
     } catch (e) {
       return false;
     }
+  }
+
+  /// Writes a keep-alive comment to the SSE stream
+  bool _writeKeepAlive(HttpResponse res) {
+    try {
+      // SSE comment format - lines starting with ':' are ignored by clients
+      final timestamp = DateTime.now().toUtc().toIso8601String();
+      res.write(': keep-alive $timestamp\n\n');
+      res.flush();
+      return true;
+    } catch (e) {
+      // Connection closed, timer will be cleaned up
+      return false;
+    }
+  }
+
+  /// Starts a keep-alive timer for the given stream
+  void _startKeepAliveTimer(String streamId, HttpResponse response) {
+    // Only start timer if keep-alive is enabled
+    final keepAliveInterval = _keepAliveInterval;
+    if (keepAliveInterval == null || keepAliveInterval <= 0) {
+      return;
+    }
+
+    // Cancel any existing timer for this stream
+    _keepAliveTimers[streamId]?.cancel();
+
+    // Create new timer
+    _keepAliveTimers[streamId] = Timer.periodic(
+      Duration(seconds: keepAliveInterval),
+      (timer) {
+        if (!_writeKeepAlive(response)) {
+          // Connection closed, cancel timer
+          timer.cancel();
+          _keepAliveTimers.remove(streamId);
+        }
+      },
+    );
+  }
+
+  /// Stops the keep-alive timer for the given stream
+  void _stopKeepAliveTimer(String streamId) {
+    _keepAliveTimers[streamId]?.cancel();
+    _keepAliveTimers.remove(streamId);
   }
 
   /// Handles unsupported requests (PUT, PATCH, etc.)
@@ -503,9 +568,15 @@ class StreamableHTTPServerTransport implements Transport {
           }
         }
 
+        // Start keep-alive timer for SSE streams only
+        if (!_enableJsonResponse) {
+          _startKeepAliveTimer(streamId, req.response);
+        }
+
         // Set up close handler for client disconnects
         req.response.done.then((_) {
           _streamMapping.remove(streamId);
+          _stopKeepAliveTimer(streamId);
         });
 
         // Handle each message
@@ -618,6 +689,12 @@ class StreamableHTTPServerTransport implements Transport {
 
   @override
   Future<void> close() async {
+    // Cancel all keep-alive timers
+    for (final timer in _keepAliveTimers.values) {
+      timer.cancel();
+    }
+    _keepAliveTimers.clear();
+
     // Close all SSE connections - fix concurrent modification by creating a copy of the values first
     final responses = List<HttpResponse>.from(_streamMapping.values);
     for (final response in responses) {
