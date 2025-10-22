@@ -1,3 +1,7 @@
+## 0.6.4
+
+- Fix issue with StreamableHTTP server not setting correct content-type for SSE
+
 ## 0.6.3
 
 - Replace print statements with lightweight logging implementation

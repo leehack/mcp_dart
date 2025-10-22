@@ -298,7 +298,7 @@ class StreamableHTTPServerTransport implements Transport {
     eventData += "data: ${jsonEncode(message.toJson())}\n\n";
 
     try {
-      res.write(eventData);
+      res.add(utf8.encode(eventData));
       res.flush();
       return true;
     } catch (e) {
