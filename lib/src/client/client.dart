@@ -149,8 +149,8 @@ class Client extends Protocol {
         requiredCapability = 'tools';
         break;
       case "completion/complete":
-        supported = serverCaps.prompts != null || serverCaps.resources != null;
-        requiredCapability = 'prompts or resources';
+        supported = serverCaps.completions != null;
+        requiredCapability = 'completions';
         break;
       default:
         _logger.warn(

@@ -68,6 +68,41 @@ void main() {
   });
 
   group('Capabilities Tests', () {
+    test('ServerCapabilitiesCompletions serialization and deserialization', () {
+      final completions = ServerCapabilitiesCompletions(listChanged: true);
+
+      final json = completions.toJson();
+      expect(json['listChanged'], equals(true));
+
+      final deserialized = ServerCapabilitiesCompletions.fromJson(json);
+      expect(deserialized.listChanged, equals(true));
+    });
+
+    test('ServerCapabilities includes completions', () {
+      final capabilities = ServerCapabilities(
+        experimental: {'featureY': true},
+        logging: {'enabled': true},
+        prompts: ServerCapabilitiesPrompts(listChanged: true),
+        resources:
+            ServerCapabilitiesResources(subscribe: true, listChanged: true),
+        tools: ServerCapabilitiesTools(listChanged: true),
+        completions: ServerCapabilitiesCompletions(listChanged: true),
+      );
+
+      final json = capabilities.toJson();
+      expect(json['experimental']['featureY'], equals(true));
+      expect(json['logging']['enabled'], equals(true));
+      expect(json['prompts']['listChanged'], equals(true));
+      expect(json['resources']['subscribe'], equals(true));
+      expect(json['tools']['listChanged'], equals(true));
+      expect(json['completions']['listChanged'], equals(true));
+
+      final deserialized = ServerCapabilities.fromJson(json);
+      expect(deserialized.prompts?.listChanged, equals(true));
+      expect(deserialized.resources?.subscribe, equals(true));
+      expect(deserialized.completions?.listChanged, equals(true));
+    });
+
     test('ServerCapabilities serialization and deserialization', () {
       final capabilities = ServerCapabilities(
         experimental: {'featureY': true},

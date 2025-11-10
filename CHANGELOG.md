@@ -1,3 +1,11 @@
+## 0.7.0
+
+- Add support for Completions capability per MCP 2025-06-18 spec
+- Add ServerCapabilitiesCompletions class for explicit completions capability declaration
+- Update ServerCapabilities to include completions field
+- Update client capability check to use explicit completions capability instead of inferring from prompts/resources
+- Add integration tests and example for completions capability usage
+
 ## 0.6.4
 
 - Fix issue with StreamableHTTP server not setting correct content-type for SSE

@@ -24,6 +24,7 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 - Prompts
 - Sampling
 - Roots
+- Completions
 
 ## Model Context Protocol Version
 

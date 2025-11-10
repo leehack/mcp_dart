@@ -531,6 +531,26 @@ class ServerCapabilitiesTools {
       };
 }
 
+/// Describes capabilities related to completions.
+class ServerCapabilitiesCompletions {
+  /// Whether the server supports `notifications/completions/list_changed`.
+  final bool? listChanged;
+
+  const ServerCapabilitiesCompletions({
+    this.listChanged,
+  });
+
+  factory ServerCapabilitiesCompletions.fromJson(Map<String, dynamic> json) {
+    return ServerCapabilitiesCompletions(
+      listChanged: json['listChanged'] as bool?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (listChanged != null) 'listChanged': listChanged,
+      };
+}
+
 /// Capabilities a server may support.
 class ServerCapabilities {
   /// Experimental, non-standard capabilities.
@@ -548,18 +568,23 @@ class ServerCapabilities {
   /// Present if the server offers tools (`tools/list`, `tools/call`).
   final ServerCapabilitiesTools? tools;
 
+  /// Present if the server offers completions (`completion/complete`).
+  final ServerCapabilitiesCompletions? completions;
+
   const ServerCapabilities({
     this.experimental,
     this.logging,
     this.prompts,
     this.resources,
     this.tools,
+    this.completions,
   });
 
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
     final pMap = json['prompts'] as Map<String, dynamic>?;
     final rMap = json['resources'] as Map<String, dynamic>?;
     final tMap = json['tools'] as Map<String, dynamic>?;
+    final cMap = json['completions'] as Map<String, dynamic>?;
     return ServerCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
       logging: json['logging'] as Map<String, dynamic>?,
@@ -567,6 +592,8 @@ class ServerCapabilities {
       resources:
           rMap == null ? null : ServerCapabilitiesResources.fromJson(rMap),
       tools: tMap == null ? null : ServerCapabilitiesTools.fromJson(tMap),
+      completions:
+          cMap == null ? null : ServerCapabilitiesCompletions.fromJson(cMap),
     );
   }
 
@@ -576,6 +603,7 @@ class ServerCapabilities {
         if (prompts != null) 'prompts': prompts!.toJson(),
         if (resources != null) 'resources': resources!.toJson(),
         if (tools != null) 'tools': tools!.toJson(),
+        if (completions != null) 'completions': completions!.toJson(),
       };
 }
 
