@@ -1,3 +1,16 @@
+## 0.8.0
+
+- Update protocol version to 2025-06-18
+- Add Elicitation support (server-initiated input collection)
+  - API: `McpServer.elicitUserInput()` (server) | `Client.onElicitRequest` (client handler)
+  - Types: ElicitRequestParams (`message`, `requestedSchema`), ElicitResult (`action`, `content`), ClientCapabilitiesElicitation
+  - Uses `elicitation/create` method (Inspector-compatible)
+  - Accepts JSON Schema Maps for flexible schema definition
+  - Helpers: `.accepted`, `.declined`, `.cancelled` getters on ElicitResult
+  - Example: elicitation_http_server.dart
+  - Tests: elicitation_test.dart
+- **CRITICAL FIX**: Logger → stderr (prevents JSON-RPC corruption in stdio)
+
 ## 0.7.0
 
 - Add support for Completions capability per MCP 2025-06-18 spec

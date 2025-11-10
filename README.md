@@ -5,7 +5,7 @@
 
 [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open protocol designed to enable seamless integration between LLM applications and external data sources and tools.
 
-This library aims to provide a simple and intuitive way to implement MCP servers and clients in Dart, while adhering to the [MCP protocol spec](https://spec.modelcontextprotocol.io/). The goal is to make this SDK as similar as possible to the official SDKs available in other languages, ensuring a consistent developer experience across platforms.
+This library aims to provide a simple and intuitive way to implement MCP servers and clients in Dart, while adhering to the [MCP protocol spec 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18). The goal is to make this SDK as similar as possible to the official SDKs available in other languages, ensuring a consistent developer experience across platforms.
 
 ## Requirements
 
@@ -25,12 +25,15 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 - Sampling
 - Roots
 - Completions
+- Elicitation (Server-initiated user input collection)
 
 ## Model Context Protocol Version
 
-The current version of the protocol is `2025-03-26`. This library is designed to be compatible with this version, and any future updates will be made to ensure continued compatibility.
+The current version of the protocol is `2025-06-18`. This library is designed to be compatible with this version, and any future updates will be made to ensure continued compatibility.
 
-It's also backward compatible with the previous version `2024-11-05` and `2024-10-07`.
+It's also backward compatible with previous versions including `2025-03-26`, `2024-11-05`, and `2024-10-07`.
+
+**New in 2025-06-18**: Elicitation support for server-initiated user input collection.
 
 ## Getting started
 

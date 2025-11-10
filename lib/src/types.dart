@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 /// The latest version of the Model Context Protocol supported.
-const latestProtocolVersion = "2025-03-26";
+const latestProtocolVersion = "2025-06-18";
 
 /// List of supported Model Context Protocol versions.
 const supportedProtocolVersions = [
   latestProtocolVersion,
+  "2025-03-26",
   "2024-11-05",
   "2024-10-07"
 ];
@@ -53,6 +54,7 @@ sealed class JsonRpcMessage {
           'resources/unsubscribe' => JsonRpcUnsubscribeRequest.fromJson(json),
           'prompts/list' => JsonRpcListPromptsRequest.fromJson(json),
           'prompts/get' => JsonRpcGetPromptRequest.fromJson(json),
+          'elicitation/create' => JsonRpcElicitRequest.fromJson(json),
           'tools/list' => JsonRpcListToolsRequest.fromJson(json),
           'tools/call' => JsonRpcCallToolRequest.fromJson(json),
           'logging/setLevel' => JsonRpcSetLevelRequest.fromJson(json),
@@ -371,6 +373,18 @@ class ClientCapabilitiesRoots {
       };
 }
 
+/// Describes capabilities related to elicitation (server-initiated user input).
+class ClientCapabilitiesElicitation {
+  /// Empty object indicates support for elicitation
+  const ClientCapabilitiesElicitation();
+
+  factory ClientCapabilitiesElicitation.fromJson(Map<String, dynamic> json) {
+    return const ClientCapabilitiesElicitation();
+  }
+
+  Map<String, dynamic> toJson() => {};
+}
+
 /// Capabilities a client may support.
 class ClientCapabilities {
   /// Experimental, non-standard capabilities.
@@ -382,19 +396,27 @@ class ClientCapabilities {
   /// Present if the client supports listing roots (`roots/list`).
   final ClientCapabilitiesRoots? roots;
 
+  /// Present if the client supports elicitation (`elicitation/create`).
+  final ClientCapabilitiesElicitation? elicitation;
+
   const ClientCapabilities({
     this.experimental,
     this.sampling,
     this.roots,
+    this.elicitation,
   });
 
   factory ClientCapabilities.fromJson(Map<String, dynamic> json) {
     final rootsMap = json['roots'] as Map<String, dynamic>?;
+    final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
     return ClientCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
       sampling: json['sampling'] as Map<String, dynamic>?,
       roots:
           rootsMap == null ? null : ClientCapabilitiesRoots.fromJson(rootsMap),
+      elicitation: elicitationMap == null
+          ? null
+          : ClientCapabilitiesElicitation.fromJson(elicitationMap),
     );
   }
 
@@ -402,6 +424,7 @@ class ClientCapabilities {
         if (experimental != null) 'experimental': experimental,
         if (sampling != null) 'sampling': sampling,
         if (roots != null) 'roots': roots!.toJson(),
+        if (elicitation != null) 'elicitation': elicitation!.toJson(),
       };
 }
 
@@ -2647,6 +2670,168 @@ class CompleteResult implements BaseResultData {
   Map<String, dynamic> toJson() => {'completion': completion.toJson()};
 }
 
+/// Base class for input schemas used in elicitation
+sealed class InputSchema {
+  /// The type of input schema
+  final String type;
+
+  /// Description of what this input is for
+  final String? description;
+
+  const InputSchema({required this.type, this.description});
+
+  /// Creates a specific InputSchema subclass from JSON
+  factory InputSchema.fromJson(Map<String, dynamic> json) {
+    final type = json['type'] as String;
+    return switch (type) {
+      'boolean' => BooleanInputSchema.fromJson(json),
+      'string' => StringInputSchema.fromJson(json),
+      'number' => NumberInputSchema.fromJson(json),
+      'enum' => EnumInputSchema.fromJson(json),
+      _ => throw FormatException('Unknown input schema type: $type'),
+    };
+  }
+
+  /// Converts to JSON
+  Map<String, dynamic> toJson();
+}
+
+/// Boolean input schema for yes/no questions
+class BooleanInputSchema extends InputSchema {
+  /// Default value for the boolean input
+  final bool? defaultValue;
+
+  const BooleanInputSchema({
+    this.defaultValue,
+    super.description,
+  }) : super(type: 'boolean');
+
+  factory BooleanInputSchema.fromJson(Map<String, dynamic> json) {
+    return BooleanInputSchema(
+      defaultValue: json['defaultValue'] as bool?,
+      description: json['description'] as String?,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        if (description != null) 'description': description,
+        if (defaultValue != null) 'defaultValue': defaultValue,
+      };
+}
+
+/// String input schema for text input with validation
+class StringInputSchema extends InputSchema {
+  /// Default value for the string input
+  final String? defaultValue;
+
+  /// Minimum length constraint
+  final int? minLength;
+
+  /// Maximum length constraint
+  final int? maxLength;
+
+  /// Regular expression pattern for validation
+  final String? pattern;
+
+  const StringInputSchema({
+    this.defaultValue,
+    this.minLength,
+    this.maxLength,
+    this.pattern,
+    super.description,
+  }) : super(type: 'string');
+
+  factory StringInputSchema.fromJson(Map<String, dynamic> json) {
+    return StringInputSchema(
+      defaultValue: json['defaultValue'] as String?,
+      minLength: json['minLength'] as int?,
+      maxLength: json['maxLength'] as int?,
+      pattern: json['pattern'] as String?,
+      description: json['description'] as String?,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        if (description != null) 'description': description,
+        if (defaultValue != null) 'defaultValue': defaultValue,
+        if (minLength != null) 'minLength': minLength,
+        if (maxLength != null) 'maxLength': maxLength,
+        if (pattern != null) 'pattern': pattern,
+      };
+}
+
+/// Number input schema for numeric input with range constraints
+class NumberInputSchema extends InputSchema {
+  /// Default value for the number input
+  final num? defaultValue;
+
+  /// Minimum value constraint
+  final num? minimum;
+
+  /// Maximum value constraint
+  final num? maximum;
+
+  const NumberInputSchema({
+    this.defaultValue,
+    this.minimum,
+    this.maximum,
+    super.description,
+  }) : super(type: 'number');
+
+  factory NumberInputSchema.fromJson(Map<String, dynamic> json) {
+    return NumberInputSchema(
+      defaultValue: json['defaultValue'] as num?,
+      minimum: json['minimum'] as num?,
+      maximum: json['maximum'] as num?,
+      description: json['description'] as String?,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        if (description != null) 'description': description,
+        if (defaultValue != null) 'defaultValue': defaultValue,
+        if (minimum != null) 'minimum': minimum,
+        if (maximum != null) 'maximum': maximum,
+      };
+}
+
+/// Enum input schema for multiple choice selection
+class EnumInputSchema extends InputSchema {
+  /// Available options to choose from
+  final List<String> enumValues;
+
+  /// Default selected value
+  final String? defaultValue;
+
+  const EnumInputSchema({
+    required this.enumValues,
+    this.defaultValue,
+    super.description,
+  }) : super(type: 'enum');
+
+  factory EnumInputSchema.fromJson(Map<String, dynamic> json) {
+    return EnumInputSchema(
+      enumValues: (json['enum'] as List<dynamic>).cast<String>(),
+      defaultValue: json['defaultValue'] as String?,
+      description: json['description'] as String?,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        if (description != null) 'description': description,
+        'enum': enumValues,
+        if (defaultValue != null) 'defaultValue': defaultValue,
+      };
+}
+
 /// Represents a root directory or file the server can operate on.
 class Root {
   /// URI identifying the root (must start with `file://`).
@@ -2719,6 +2904,100 @@ class JsonRpcRootsListChangedNotification extends JsonRpcNotification {
     Map<String, dynamic> json,
   ) =>
       const JsonRpcRootsListChangedNotification();
+}
+
+/// Parameters for the `elicitation/create` request
+class ElicitRequestParams {
+  /// The message to present to the user
+  final String message;
+
+  /// The JSON Schema defining what type of input to collect
+  final Map<String, dynamic> requestedSchema;
+
+  const ElicitRequestParams({
+    required this.message,
+    required this.requestedSchema,
+  });
+
+  factory ElicitRequestParams.fromJson(Map<String, dynamic> json) {
+    return ElicitRequestParams(
+      message: json['message'] as String,
+      requestedSchema: json['requestedSchema'] as Map<String, dynamic>,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'message': message,
+        'requestedSchema': requestedSchema,
+      };
+}
+
+/// Request sent from server to client to elicit user input
+class JsonRpcElicitRequest extends JsonRpcRequest {
+  /// The elicit parameters
+  final ElicitRequestParams elicitParams;
+
+  JsonRpcElicitRequest({
+    required super.id,
+    required this.elicitParams,
+    super.meta,
+  }) : super(method: "elicitation/create", params: elicitParams.toJson());
+
+  factory JsonRpcElicitRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for elicit request");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcElicitRequest(
+      id: json['id'],
+      elicitParams: ElicitRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+/// Result data for a successful `elicitation/create` response
+class ElicitResult implements BaseResultData {
+  /// The action taken by the user: 'accept', 'decline', or 'cancel'
+  final String action;
+
+  /// The submitted form data (only present when action is 'accept')
+  final Map<String, dynamic>? content;
+
+  /// Optional metadata
+  @override
+  final Map<String, dynamic>? meta;
+
+  const ElicitResult({
+    required this.action,
+    this.content,
+    this.meta,
+  });
+
+  factory ElicitResult.fromJson(Map<String, dynamic> json) {
+    final meta = json['_meta'] as Map<String, dynamic>?;
+    return ElicitResult(
+      action: json['action'] as String,
+      content: json['content'] as Map<String, dynamic>?,
+      meta: meta,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'action': action,
+        if (content != null) 'content': content,
+      };
+
+  /// Helper to check if the user accepted the input
+  bool get accepted => action == 'accept';
+
+  /// Helper to check if the user declined the input
+  bool get declined => action == 'decline';
+
+  /// Helper to check if the user cancelled the input
+  bool get cancelled => action == 'cancel';
 }
 
 /// Custom error class for MCP specific errors.

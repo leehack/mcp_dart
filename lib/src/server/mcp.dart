@@ -629,4 +629,53 @@ class McpServer {
   CompleteResult _emptyCompletionResult() => CompleteResult(
         completion: CompletionResultData(values: [], hasMore: false),
       );
+
+  /// Requests structured user input from the client.
+  ///
+  /// This sends an `elicitation/create` request to the client with the specified
+  /// [message] text and [requestedSchema] defining the input structure.
+  ///
+  /// The client must have the elicitation capability for this to work.
+  ///
+  /// Returns an [ElicitResult] containing the action taken ('accept', 'decline',
+  /// or 'cancel') and the submitted content when accepted.
+  ///
+  /// Example:
+  /// ```dart
+  /// final result = await server.elicitUserInput(
+  ///   "Enter your name",
+  ///   {
+  ///     'type': 'object',
+  ///     'properties': {
+  ///       'name': {'type': 'string', 'minLength': 1}
+  ///     },
+  ///     'required': ['name']
+  ///   },
+  /// );
+  ///
+  /// if (result.accepted) {
+  ///   print("User entered: ${result.content}");
+  /// }
+  /// ```
+  Future<ElicitResult> elicitUserInput(
+    String message,
+    Map<String, dynamic> requestedSchema, {
+    RequestOptions? options,
+  }) async {
+    server.assertCapabilityForMethod("elicitation/create");
+
+    final request = JsonRpcElicitRequest(
+      id: -1,
+      elicitParams: ElicitRequestParams(
+        message: message,
+        requestedSchema: requestedSchema,
+      ),
+    );
+
+    return await server.request<ElicitResult>(
+      request,
+      (json) => ElicitResult.fromJson(json),
+      options,
+    );
+  }
 }

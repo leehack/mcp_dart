@@ -429,4 +429,185 @@ void main() {
       expect(() => JsonRpcMessage.fromJson(json), throwsFormatException);
     });
   });
+
+  group('InputSchema Tests', () {
+    test('BooleanInputSchema serialization and deserialization', () {
+      final schema = BooleanInputSchema(
+        defaultValue: true,
+        description: "Confirm action",
+      );
+
+      final json = schema.toJson();
+      expect(json['type'], equals('boolean'));
+      expect(json['defaultValue'], equals(true));
+      expect(json['description'], equals('Confirm action'));
+
+      final restored = InputSchema.fromJson(json) as BooleanInputSchema;
+      expect(restored.type, equals('boolean'));
+      expect(restored.defaultValue, equals(true));
+      expect(restored.description, equals('Confirm action'));
+    });
+
+    test('StringInputSchema with constraints serialization', () {
+      final schema = StringInputSchema(
+        minLength: 3,
+        maxLength: 50,
+        pattern: r'^[a-z]+$',
+        description: "Username",
+        defaultValue: "john",
+      );
+
+      final json = schema.toJson();
+      expect(json['type'], equals('string'));
+      expect(json['minLength'], equals(3));
+      expect(json['maxLength'], equals(50));
+      expect(json['pattern'], equals(r'^[a-z]+$'));
+      expect(json['description'], equals('Username'));
+      expect(json['defaultValue'], equals('john'));
+
+      final restored = InputSchema.fromJson(json) as StringInputSchema;
+      expect(restored.minLength, equals(3));
+      expect(restored.maxLength, equals(50));
+      expect(restored.pattern, equals(r'^[a-z]+$'));
+    });
+
+    test('NumberInputSchema with range serialization', () {
+      final schema = NumberInputSchema(
+        minimum: 0,
+        maximum: 100,
+        defaultValue: 50,
+        description: "Age",
+      );
+
+      final json = schema.toJson();
+      expect(json['type'], equals('number'));
+      expect(json['minimum'], equals(0));
+      expect(json['maximum'], equals(100));
+      expect(json['defaultValue'], equals(50));
+
+      final restored = InputSchema.fromJson(json) as NumberInputSchema;
+      expect(restored.minimum, equals(0));
+      expect(restored.maximum, equals(100));
+      expect(restored.defaultValue, equals(50));
+    });
+
+    test('EnumInputSchema with options serialization', () {
+      final schema = EnumInputSchema(
+        enumValues: ['small', 'medium', 'large'],
+        defaultValue: 'medium',
+        description: "Size",
+      );
+
+      final json = schema.toJson();
+      expect(json['type'], equals('enum'));
+      expect(json['enum'], equals(['small', 'medium', 'large']));
+      expect(json['defaultValue'], equals('medium'));
+
+      final restored = InputSchema.fromJson(json) as EnumInputSchema;
+      expect(restored.enumValues, equals(['small', 'medium', 'large']));
+      expect(restored.defaultValue, equals('medium'));
+    });
+
+    test('InputSchema factory throws on invalid type', () {
+      final json = {'type': 'unknown'};
+      expect(() => InputSchema.fromJson(json), throwsFormatException);
+    });
+  });
+
+  group('Elicitation Message Tests', () {
+    test('ElicitRequestParams serialization', () {
+      final params = ElicitRequestParams(
+        message: "Enter your name",
+        requestedSchema: StringInputSchema(minLength: 1).toJson(),
+      );
+
+      final json = params.toJson();
+      expect(json['message'], equals("Enter your name"));
+      expect(json['requestedSchema']['type'], equals('string'));
+
+      final restored = ElicitRequestParams.fromJson(json);
+      expect(restored.message, equals("Enter your name"));
+      expect(restored.requestedSchema['type'], equals('string'));
+    });
+
+    test('JsonRpcElicitRequest serialization and deserialization', () {
+      final request = JsonRpcElicitRequest(
+        id: 42,
+        elicitParams: ElicitRequestParams(
+          message: "Choose option",
+          requestedSchema: EnumInputSchema(enumValues: ['yes', 'no']).toJson(),
+        ),
+      );
+
+      final json = request.toJson();
+      expect(json['jsonrpc'], equals('2.0'));
+      expect(json['id'], equals(42));
+      expect(json['method'], equals('elicitation/create'));
+      expect(json['params']['message'], equals('Choose option'));
+
+      final restored = JsonRpcElicitRequest.fromJson(json);
+      expect(restored.id, equals(42));
+      expect(restored.elicitParams.message, equals('Choose option'));
+      expect(restored.elicitParams.requestedSchema['type'], equals('enum'));
+    });
+
+    test('ElicitResult serialization', () {
+      final result = ElicitResult(
+        action: 'accept',
+        content: {'name': 'John Doe'},
+      );
+
+      final json = result.toJson();
+      expect(json['action'], equals('accept'));
+      expect(json['content']['name'], equals('John Doe'));
+
+      final restored = ElicitResult.fromJson(json);
+      expect(restored.action, equals('accept'));
+      expect(restored.content!['name'], equals('John Doe'));
+      expect(restored.accepted, equals(true));
+    });
+
+    test('ElicitResult with rejected input', () {
+      final result = ElicitResult(
+        action: 'decline',
+      );
+
+      final json = result.toJson();
+      expect(json['action'], equals('decline'));
+      expect(json['content'], isNull);
+
+      final restored = ElicitResult.fromJson(json);
+      expect(restored.action, equals('decline'));
+      expect(restored.declined, equals(true));
+      expect(restored.accepted, equals(false));
+      expect(restored.content, isNull);
+    });
+  });
+
+  group('ClientCapabilitiesElicitation Tests', () {
+    test('ClientCapabilitiesElicitation serialization', () {
+      final capability = ClientCapabilitiesElicitation();
+
+      final json = capability.toJson();
+      expect(json.isEmpty, isTrue);
+
+      final restored = ClientCapabilitiesElicitation.fromJson(json);
+      expect(restored, isNotNull);
+    });
+
+    test('ClientCapabilities includes elicitation', () {
+      final caps = ClientCapabilities(
+        elicitation: ClientCapabilitiesElicitation(),
+        roots: ClientCapabilitiesRoots(),
+      );
+
+      final json = caps.toJson();
+      expect(json['elicitation'], isNotNull);
+      expect(json['roots'], isNotNull);
+
+      final restored = ClientCapabilities.fromJson(json);
+      expect(restored.elicitation, isNotNull);
+      expect(restored.roots, isNotNull);
+    });
+  });
 }
