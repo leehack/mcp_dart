@@ -1,3 +1,7 @@
+## 1.0.1
+
+- Fix Documentation links in README.md
+
 ## 1.0.0
 
 - Update protocol version to 2025-06-18
