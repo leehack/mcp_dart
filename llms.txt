@@ -1,0 +1,291 @@
+# MCP Dart
+
+> Dart implementation of the Model Context Protocol (MCP) SDK
+
+## Overview
+
+MCP Dart is a complete implementation of the Model Context Protocol for Dart and Flutter applications. It provides both server and client implementations, enabling seamless integration between LLM applications and external data sources and tools.
+
+**Version**: 0.8.0
+**Protocol**: MCP 2025-06-18 (backward compatible with 2025-03-26, 2024-11-05, 2024-10-07)
+**Repository**: https://github.com/leehack/mcp_dart
+**Package**: https://pub.dev/packages/mcp_dart
+
+## Key Features
+
+### Transport Layers
+- **Stdio**: Standard input/output transport for command-line integration (Server & Client)
+- **StreamableHTTP**: HTTP-based transport for web applications (Server & Client)
+- **SSE**: Server-Sent Events support (Server only, deprecated)
+- **IOStream**: In-process transport using Dart streams (Server & Client)
+
+### Core Capabilities
+- **Tools**: Expose callable functions to LLM clients
+- **Resources**: Provide structured data access to clients
+- **Prompts**: Define reusable prompt templates
+- **Sampling**: Request LLM completions from clients
+- **Roots**: Expose filesystem roots for resource discovery
+- **Completions**: Provide autocomplete suggestions
+- **Elicitation**: Server-initiated user input collection (NEW in 0.8.0)
+
+### Authentication
+- **OAuth2 Support**: Full OAuth2 authentication for clients and servers
+- **GitHub Integration**: Built-in GitHub OAuth provider
+- **Personal Access Tokens**: PAT authentication support
+- **Extensible Providers**: Easy integration with custom OAuth providers
+
+## Quick Start
+
+### Basic Server Example
+
+```dart
+import 'package:mcp_dart/mcp_dart.dart';
+
+void main() async {
+  McpServer server = McpServer(
+    Implementation(name: "mcp-example-server", version: "1.0.0"),
+    options: ServerOptions(
+      capabilities: ServerCapabilities(
+        tools: ServerCapabilitiesTools(),
+      ),
+    ),
+  );
+
+  server.tool(
+    "calculate",
+    description: 'Perform basic arithmetic operations',
+    inputSchemaProperties: {
+      'operation': {
+        'type': 'string',
+        'enum': ['add', 'subtract', 'multiply', 'divide'],
+      },
+      'a': {'type': 'number'},
+      'b': {'type': 'number'},
+    },
+    callback: ({args, extra}) async {
+      final operation = args!['operation'];
+      final a = args['a'];
+      final b = args['b'];
+      return CallToolResult(
+        content: [
+          TextContent(
+            text: switch (operation) {
+              'add' => 'Result: ${a + b}',
+              'subtract' => 'Result: ${a - b}',
+              'multiply' => 'Result: ${a * b}',
+              'divide' => 'Result: ${a / b}',
+              _ => throw Exception('Invalid operation'),
+            },
+          ),
+        ],
+      );
+    },
+  );
+
+  server.connect(StdioServerTransport());
+}
+```
+
+### Deployment
+
+**Compile to native executable:**
+```bash
+dart compile exe example/server_stdio.dart -o ./server_stdio
+```
+
+**Run with JIT:**
+```bash
+dart run example/server_stdio.dart
+```
+
+**Configure with Claude Desktop:**
+```json
+{
+  "mcpServers": {
+    "my_server": {
+      "command": "/path/to/compiled/server_stdio"
+    }
+  }
+}
+```
+
+## Authentication Guides
+
+### OAuth2 Authentication
+
+MCP Dart provides comprehensive OAuth2 support for securing your MCP servers and authenticating clients.
+
+**Quick Start**: [OAuth Quick Start Guide](https://github.com/leehack/mcp_dart/blob/main/example/authentication/OAUTH_QUICK_START.md)
+**Server Guide**: [OAuth Server Implementation](https://github.com/leehack/mcp_dart/blob/main/example/authentication/OAUTH_SERVER_GUIDE.md)
+**GitHub Setup**: [GitHub OAuth Configuration](https://github.com/leehack/mcp_dart/blob/main/example/authentication/GITHUB_SETUP.md)
+
+### Authentication Examples
+
+- **OAuth Server**: [oauth_server_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/oauth_server_example.dart)
+- **OAuth Client**: [oauth_client_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/oauth_client_example.dart)
+- **GitHub OAuth**: [github_oauth_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/github_oauth_example.dart)
+- **GitHub PAT**: [github_pat_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/github_pat_example.dart)
+
+## Advanced Features
+
+### Elicitation (Server-Initiated Input)
+
+New in version 0.8.0, elicitation allows servers to request user input during tool execution:
+
+```dart
+// Server requests user input
+final result = await extra['elicitUserInput']!(
+  message: 'Please confirm this action',
+  requestedSchema: {
+    'type': 'object',
+    'properties': {
+      'confirmed': {'type': 'boolean'}
+    }
+  }
+);
+
+if (result.accepted) {
+  // Process user input
+  final confirmed = result.content['confirmed'];
+}
+```
+
+### Completions
+
+Provide autocomplete suggestions for prompts and resource URIs:
+
+```dart
+server.setCompletionsHandler((request, extra) async {
+  return CompleteResult(
+    completion: Completion(
+      values: ['suggestion1', 'suggestion2'],
+      total: 2,
+    ),
+  );
+});
+```
+
+### Tool Annotations
+
+Use annotations for cleaner tool definitions:
+
+```dart
+@Tool(
+  name: 'my_tool',
+  description: 'A useful tool',
+)
+Future<CallToolResult> myTool(Map<String, dynamic> args) async {
+  // Tool implementation
+}
+```
+
+## Transport Options
+
+### Stdio Transport
+Best for command-line integration with LLM clients like Claude Desktop:
+```dart
+server.connect(StdioServerTransport());
+```
+
+### HTTP Transport
+Best for web applications and remote access:
+```dart
+server.connect(StreamableHTTPServerTransport(
+  host: 'localhost',
+  port: 8080,
+));
+```
+
+### IOStream Transport
+Best for in-process communication between client and server:
+```dart
+final serverTransport = IOStreamServerTransport();
+final clientTransport = IOStreamClientTransport();
+IOStreamTransport.link(serverTransport, clientTransport);
+```
+
+## Requirements
+
+- Dart SDK ^3.0.0 or higher
+- http: ^1.4.0 (included as dependency)
+
+## Project Structure
+
+```
+mcp_dart/
+├── lib/                      # Core library code
+│   ├── src/                  # Source implementation
+│   │   ├── server/          # Server implementation
+│   │   ├── client/          # Client implementation
+│   │   ├── shared/          # Shared types and utilities
+│   │   └── types/           # Protocol types
+│   └── mcp_dart.dart        # Main export
+├── example/                  # Example implementations
+│   ├── authentication/      # OAuth and auth examples
+│   ├── flutter_http_client/ # Flutter HTTP client example
+│   ├── streamable_https/    # HTTPS server example
+│   └── *.dart               # Various server/client examples
+├── test/                     # Test suite
+└── pubspec.yaml             # Package configuration
+```
+
+## Examples
+
+### Tool Server
+See [server_stdio.dart](https://github.com/leehack/mcp_dart/blob/main/example/server_stdio.dart) for a complete tool server implementation.
+
+### Client Integration
+See [client_stdio.dart](https://github.com/leehack/mcp_dart/blob/main/example/client_stdio.dart) for client usage examples.
+
+### Weather Server
+See [weather.dart](https://github.com/leehack/mcp_dart/blob/main/example/weather.dart) for a real-world weather API integration.
+
+### Flutter HTTP Client
+See [flutter_http_client/](https://github.com/leehack/mcp_dart/tree/main/example/flutter_http_client) for Flutter web integration.
+
+### Elicitation Demo
+See [elicitation_http_server.dart](https://github.com/leehack/mcp_dart/blob/main/example/elicitation_http_server.dart) for server-initiated input collection.
+
+## Testing
+
+Run the test suite:
+```bash
+dart test
+```
+
+## Contributing
+
+Contributions are welcome! Please submit issues and pull requests on GitHub.
+
+## License
+
+See LICENSE file in the repository.
+
+## Credits
+
+Inspired by:
+- [dart_mcp](https://github.com/crbrotea/dart_mcp)
+- [simple_dart_mcp_server](https://github.com/nmfisher/simple_dart_mcp_server)
+
+## Support
+
+- **Issues**: https://github.com/leehack/mcp_dart/issues
+- **Discussions**: https://github.com/leehack/mcp_dart/discussions
+- **Documentation**: https://pub.dev/documentation/mcp_dart/latest/
+
+## Recent Updates
+
+### Version 0.8.0 (Latest)
+- Updated to MCP protocol 2025-06-18
+- Added Elicitation support for server-initiated user input
+- Critical fix: Logger output redirected to stderr (prevents JSON-RPC corruption)
+
+### Version 0.7.0
+- Added Completions capability per MCP 2025-06-18 spec
+- Improved capability declaration and checking
+
+### Version 0.6.0
+- Added ToolInputSchema and ToolOutputSchema support
+- Enhanced schema validation
+
+See [CHANGELOG.md](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md) for complete version history.

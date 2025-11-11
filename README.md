@@ -26,6 +26,7 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 - Roots
 - Completions
 - Elicitation (Server-initiated user input collection)
+- OAuth2 Authentication (Client and Server)
 
 ## Model Context Protocol Version
 
@@ -120,9 +121,38 @@ To configure it with the client (ex, Claude Desktop), you can use the below code
 }
 ```
 
+## Authentication
+
+This library supports OAuth2 authentication for both clients and servers, allowing secure integration with external services.
+
+### OAuth2 Support
+
+- **Client Authentication**: Implement OAuth2 flows in MCP clients to authenticate with protected servers
+- **Server Authentication**: Add OAuth2 protection to your MCP servers to secure access to tools and resources
+- **Provider Integration**: Built-in support for GitHub OAuth and extensible for other providers
+
+### Quick Start Guides
+
+- **[OAuth Quick Start](https://github.com/leehack/mcp_dart/blob/main/example/authentication/OAUTH_QUICK_START.md)**: Get started with OAuth2 in 5 minutes
+- **[OAuth Server Guide](https://github.com/leehack/mcp_dart/blob/main/example/authentication/OAUTH_SERVER_GUIDE.md)**: Comprehensive guide for implementing OAuth2 servers
+- **[GitHub Setup Guide](https://github.com/leehack/mcp_dart/blob/main/example/authentication/GITHUB_SETUP.md)**: Configure GitHub OAuth for your MCP server
+
+### Example Implementations
+
+- **[OAuth Server Example](https://github.com/leehack/mcp_dart/blob/main/example/authentication/oauth_server_example.dart)**: Full OAuth2 server implementation
+- **[OAuth Client Example](https://github.com/leehack/mcp_dart/blob/main/example/authentication/oauth_client_example.dart)**: OAuth2 client integration
+- **[GitHub OAuth Example](https://github.com/leehack/mcp_dart/blob/main/example/authentication/github_oauth_example.dart)**: Complete GitHub OAuth integration
+- **[GitHub PAT Example](https://github.com/leehack/mcp_dart/blob/main/example/authentication/github_pat_example.dart)**: Personal Access Token authentication
+
 ## More examples
 
+For additional examples including authentication, HTTP clients, and advanced features, see:
+
 <https://github.com/leehack/mcp_dart/tree/main/example>
+
+For authentication-specific examples and guides, see:
+
+<https://github.com/leehack/mcp_dart/tree/main/example/authentication>
 
 ## Credits
 
