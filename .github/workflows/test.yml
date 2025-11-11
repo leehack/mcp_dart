@@ -30,6 +30,24 @@ jobs:
       - name: Validate package for publishing
         run: dart pub publish --dry-run
 
+      - name: Run pana (package analysis)
+        run: |
+          dart pub global activate pana
+          dart pub global run pana --json --no-warning --exit-code-threshold 0 > pana_output.json
+          # Filter out log lines and extract scores from the summary
+          RESULT=$(cat pana_output.json | grep -v '^{"logName"')
+          SCORE=$(echo "$RESULT" | grep -o '"grantedPoints": *[0-9]*' | tail -1 | grep -o '[0-9]*$')
+          MAX_POINTS=$(echo "$RESULT" | grep -o '"maxPoints": *[0-9]*' | tail -1 | grep -o '[0-9]*$')
+          echo "Pana score: $SCORE/$MAX_POINTS"
+          if [ "$SCORE" != "160" ] || [ "$MAX_POINTS" != "160" ]; then
+            echo "Error: Package score is $SCORE/$MAX_POINTS. Required: 160/160"
+            echo ""
+            echo "Detailed report:"
+            dart pub global run pana --no-warning
+            exit 1
+          fi
+          echo "✓ Package achieves perfect 160/160 score"
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

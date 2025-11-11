@@ -120,7 +120,8 @@ class UriTemplateExpander {
         final varSpecs = _parseVarSpecs(expr.substring(operator.length));
 
         for (final spec in varSpecs) {
-          _validateLength(spec.name, maxVariableLength, "Variable name '${spec.name}'");
+          _validateLength(
+              spec.name, maxVariableLength, "Variable name '${spec.name}'");
         }
 
         parts.add(_ExpressionPart(operator, varSpecs));

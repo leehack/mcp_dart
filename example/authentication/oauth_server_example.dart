@@ -114,11 +114,14 @@ class OAuthServerConfig {
   final Uri tokenEndpoint;
   final Uri userInfoEndpoint;
   final List<String> requiredScopes;
+
   /// Canonical server URI for resource parameter and audience validation
   /// Must be HTTPS and match the actual server URI
   final String serverUri;
+
   /// Authorization server metadata endpoint
   final Uri? authServerMetadataEndpoint;
+
   /// Allowed redirect URIs for validation
   final List<String> allowedRedirectUris;
 
@@ -168,8 +171,8 @@ class OAuthServerConfig {
           Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
       requiredScopes: requiredScopes,
       serverUri: serverUri,
-      authServerMetadataEndpoint:
-          Uri.parse('https://accounts.google.com/.well-known/openid-configuration'),
+      authServerMetadataEndpoint: Uri.parse(
+          'https://accounts.google.com/.well-known/openid-configuration'),
       allowedRedirectUris: allowedRedirectUris,
     );
   }
@@ -193,11 +196,13 @@ class OAuthTokenInfo {
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
-  String get userId => userInfo['id']?.toString() ?? userInfo['sub']?.toString() ?? 'unknown';
-  String get username => userInfo['login']?.toString() ??
-                        userInfo['name']?.toString() ??
-                        userInfo['email']?.toString() ??
-                        'unknown';
+  String get userId =>
+      userInfo['id']?.toString() ?? userInfo['sub']?.toString() ?? 'unknown';
+  String get username =>
+      userInfo['login']?.toString() ??
+      userInfo['name']?.toString() ??
+      userInfo['email']?.toString() ??
+      'unknown';
 }
 
 /// OAuth validator for MCP servers
@@ -362,7 +367,8 @@ class OAuthServerValidator {
         'redirect_uri': redirectUri,
         'grant_type': 'authorization_code',
         'code_verifier': codeVerifier, // PKCE requirement
-        'resource': config.serverUri, // MCP spec requirement for audience validation
+        'resource':
+            config.serverUri, // MCP spec requirement for audience validation
       };
 
       final response = await http.post(
@@ -574,7 +580,8 @@ class OAuthServerTransport implements Transport {
       _sessionTokens[sessionId] = tokenInfo;
     }
 
-    print('✓ Authenticated request from ${tokenInfo.username} (${tokenInfo.userId})');
+    print(
+        '✓ Authenticated request from ${tokenInfo.username} (${tokenInfo.userId})');
 
     // Forward to inner transport
     await _innerTransport.handleRequest(req, parsedBody);
@@ -839,7 +846,8 @@ Future<void> main(List<String> args) async {
       print('    -out server_cert.pem -days 365 -nodes \\');
       print('    -subj "/CN=localhost"');
       print('');
-      print('For production, use a reverse proxy with proper TLS certificates.');
+      print(
+          'For production, use a reverse proxy with proper TLS certificates.');
       print('Falling back to HTTP mode...');
       print('');
       httpServer = await HttpServer.bind(host, port);
@@ -857,12 +865,14 @@ Future<void> main(List<String> args) async {
   print('  ✅ Token audience validation');
   print('  ✅ Redirect URI validation');
   print('  ✅ OAuth metadata discovery');
-  print('  ${useHttps ? "✅" : "⚠️ "} HTTPS ${useHttps ? "enabled" : "not enabled (use --https)"}');
+  print(
+      '  ${useHttps ? "✅" : "⚠️ "} HTTPS ${useHttps ? "enabled" : "not enabled (use --https)"}');
   print('');
   print('Usage:');
   print('  1. Obtain OAuth access token from provider');
   print('  2. Make requests with: Authorization: Bearer <token>');
-  print('  3. Access metadata: GET $serverUri/.well-known/oauth-authorization-server');
+  print(
+      '  3. Access metadata: GET $serverUri/.well-known/oauth-authorization-server');
   print('');
   print('Server running. Press Ctrl+C to stop.\n');
 
@@ -971,8 +981,8 @@ Future<void> main(List<String> args) async {
     } catch (e) {
       print('Error handling request: $e');
       if (!request.response.headers.contentType
-              .toString()
-              .contains('event-stream')) {
+          .toString()
+          .contains('event-stream')) {
         request.response
           ..statusCode = HttpStatus.internalServerError
           ..write('Internal server error');

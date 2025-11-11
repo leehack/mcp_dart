@@ -28,6 +28,7 @@ class OAuthConfig {
   final Uri tokenEndpoint;
   final List<String> scopes;
   final Uri redirectUri;
+
   /// MCP server URI for resource parameter (audience validation)
   final String serverUri;
 
@@ -125,7 +126,8 @@ class OAuth2Provider implements OAuthClientProvider {
         'scope': config.scopes.join(' '),
         'state': state,
         'code_challenge': codeChallenge, // PKCE parameter
-        'code_challenge_method': 'plain', // Using plain for demo (use S256 in production)
+        'code_challenge_method':
+            'plain', // Using plain for demo (use S256 in production)
       },
     );
 
@@ -198,7 +200,8 @@ class OAuth2Provider implements OAuthClientProvider {
       // Retrieve stored code verifier
       final codeVerifier = await storage.getCodeVerifier();
       if (codeVerifier == null) {
-        throw Exception('Code verifier not found. Complete authorization flow first.');
+        throw Exception(
+            'Code verifier not found. Complete authorization flow first.');
       }
 
       final body = {

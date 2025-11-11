@@ -113,7 +113,12 @@ void main() async {
           def: CompletableDef(
             complete: (value) async {
               // Provide style completions
-              return ['concise', 'detailed', 'security-focused', 'performance-focused'];
+              return [
+                'concise',
+                'detailed',
+                'security-focused',
+                'performance-focused'
+              ];
             },
           ),
         ),
@@ -128,7 +133,8 @@ void main() async {
           PromptMessage(
             role: PromptMessageRole.user,
             content: TextContent(
-              text: 'Please provide a $style code review for $language code:\n\n'
+              text:
+                  'Please provide a $style code review for $language code:\n\n'
                   '(This is where the code would be inserted)',
             ),
           ),

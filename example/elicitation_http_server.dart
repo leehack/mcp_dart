@@ -236,7 +236,9 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
         );
 
         final description = descriptionResult.accepted &&
-                (descriptionResult.content?['description'] as String? ?? '').toLowerCase() != 'skip'
+                (descriptionResult.content?['description'] as String? ?? '')
+                        .toLowerCase() !=
+                    'skip'
             ? (descriptionResult.content?['description'] as String? ?? '')
             : '';
 
@@ -483,7 +485,9 @@ Duration: $duration minutes''',
         );
 
         final phone = phoneResult.accepted &&
-                (phoneResult.content?['phone'] as String? ?? '').toLowerCase() != 'skip'
+                (phoneResult.content?['phone'] as String? ?? '')
+                        .toLowerCase() !=
+                    'skip'
             ? (phoneResult.content?['phone'] as String? ?? '')
             : '';
 
