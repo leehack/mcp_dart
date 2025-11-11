@@ -60,16 +60,16 @@ It's also backward compatible with previous versions including `2025-03-26`, `20
 
 ### Getting Started
 
-- 📖 **[Quick Start Guide](docs/getting-started.md)** - Get up and running in 5 minutes
-- 🔧 **[Server Guide](docs/server-guide.md)** - Complete guide to building MCP servers
-- 💻 **[Client Guide](docs/client-guide.md)** - Complete guide to building MCP clients
+- 📖 **[Quick Start Guide](doc/getting-started.md)** - Get up and running in 5 minutes
+- 🔧 **[Server Guide](doc/server-guide.md)** - Complete guide to building MCP servers
+- 💻 **[Client Guide](doc/client-guide.md)** - Complete guide to building MCP clients
 
 ### Core Concepts
 
-- 🛠️ **[Tools Documentation](docs/tools.md)** - Implementing executable tools
-- 🔌 **[Transport Options](docs/transports.md)** - Built-in and custom transport implementations
-- 📚 **[Examples](docs/examples.md)** - Real-world usage examples
-- ⚡ **[Quick Reference](docs/quick-reference.md)** - Fast lookup guide
+- 🛠️ **[Tools Documentation](doc/tools.md)** - Implementing executable tools
+- 🔌 **[Transport Options](doc/transports.md)** - Built-in and custom transport implementations
+- 📚 **[Examples](doc/examples.md)** - Real-world usage examples
+- ⚡ **[Quick Reference](doc/quick-reference.md)** - Fast lookup guide
 
 ### Advanced Features
 

@@ -856,11 +856,11 @@ See [CHANGELOG.md](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md) f
 ## Resources
 
 ### Documentation
-- **Getting Started**: https://github.com/leehack/mcp_dart/blob/main/docs/getting-started.md
-- **Server Guide**: https://github.com/leehack/mcp_dart/blob/main/docs/server-guide.md
-- **Client Guide**: https://github.com/leehack/mcp_dart/blob/main/docs/client-guide.md
-- **Examples**: https://github.com/leehack/mcp_dart/blob/main/docs/examples.md
-- **Quick Reference**: https://github.com/leehack/mcp_dart/blob/main/docs/quick-reference.md
+- **Getting Started**: https://github.com/leehack/mcp_dart/blob/main/doc/getting-started.md
+- **Server Guide**: https://github.com/leehack/mcp_dart/blob/main/doc/server-guide.md
+- **Client Guide**: https://github.com/leehack/mcp_dart/blob/main/doc/client-guide.md
+- **Examples**: https://github.com/leehack/mcp_dart/blob/main/doc/examples.md
+- **Quick Reference**: https://github.com/leehack/mcp_dart/blob/main/doc/quick-reference.md
 - **API Docs**: https://pub.dev/documentation/mcp_dart/latest/
 
 ### Community
