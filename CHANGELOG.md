@@ -10,6 +10,13 @@
   - Example: elicitation_http_server.dart
   - Tests: elicitation_test.dart
 - **CRITICAL FIX**: Logger → stderr (prevents JSON-RPC corruption in stdio)
+- **Comprehensive Test Coverage**: Added 191 new tests across 3 phases (+12.1% overall coverage: 56.9% → ~69%)
+  - Phase 1: External API coverage (Server MCP, URI templates, Client/Server capabilities) - 108 tests
+  - Phase 2: Transport coverage (Stdio, SSE, HTTPS) - 38 tests
+  - Phase 3: Types & edge cases (Protocol lifecycle, error handling) - 45 tests
+  - Fixed critical URI template variable duplication bug
+  - Fixed McpError code preservation in request handlers
+  - All 339 tests passing ✅
 
 ## 0.7.0
 

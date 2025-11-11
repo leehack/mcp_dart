@@ -27,16 +27,19 @@ class _ExpressionPart extends _UriTemplatePart {
   /// The operator character (e.g., '?', '+', '#') or empty string for simple substitution.
   final String operator;
 
+  /// The list of variable specifications within the expression.
+  final List<_VarSpec> varSpecs;
+
   /// The list of variable names within the expression.
-  final List<String> names;
+  List<String> get names => varSpecs.map((vs) => vs.name).toList();
 
   /// Whether the exploded modifier (*) was used.
-  final bool exploded;
+  bool get exploded => varSpecs.any((vs) => vs.explode);
 
   /// The first variable name in the list.
   String get name => names.isNotEmpty ? names.first : '';
 
-  const _ExpressionPart(this.operator, this.names, this.exploded);
+  const _ExpressionPart(this.operator, this.varSpecs);
 }
 
 /// Parses and expands RFC 6570 URI Templates.
@@ -115,14 +118,12 @@ class UriTemplateExpander {
 
         final operator = _getOperator(expr);
         final varSpecs = _parseVarSpecs(expr.substring(operator.length));
-        final names = varSpecs.map((vs) => vs.name).toList();
-        final exploded = varSpecs.any((vs) => vs.explode);
 
-        for (final name in names) {
-          _validateLength(name, maxVariableLength, "Variable name '$name'");
+        for (final spec in varSpecs) {
+          _validateLength(spec.name, maxVariableLength, "Variable name '${spec.name}'");
         }
 
-        parts.add(_ExpressionPart(operator, names, exploded));
+        parts.add(_ExpressionPart(operator, varSpecs));
         i = end + 1;
       } else {
         currentText.write(template[i]);
@@ -213,12 +214,8 @@ class UriTemplateExpander {
   }
 
   String _expandPart(_ExpressionPart part, TemplateVariables variables) {
-    final varSpecs = _parseVarSpecs(
-      template.substring(
-        template.indexOf('{') + 1 + part.operator.length,
-        template.indexOf('}'),
-      ),
-    );
+    // Use the variable specs stored in the part during parsing
+    final varSpecs = part.varSpecs;
 
     final result = StringBuffer();
     String separator = switch (part.operator) {
@@ -231,8 +228,11 @@ class UriTemplateExpander {
       '&' => '&',
       _ => ',',
     };
-    String prefix =
-        (part.operator == '+' || part.operator == '#') ? '' : part.operator;
+    String prefix = switch (part.operator) {
+      '+' => '',
+      '#' => '#',
+      _ => part.operator,
+    };
     bool firstValue = true;
     bool useName =
         part.operator == ';' || part.operator == '?' || part.operator == '&';
