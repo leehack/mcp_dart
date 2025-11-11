@@ -27,6 +27,9 @@ jobs:
           dart pub global activate coverage
           dart pub global run coverage:test_with_coverage
 
+      - name: Validate package for publishing
+        run: dart pub publish --dry-run
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
