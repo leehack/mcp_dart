@@ -27,7 +27,7 @@ abstract class EventStore {
   /// Replays events after a specified event ID
   ///
   /// [lastEventId] The last event ID received by the client
-  /// [callbacks] Object with a send function that will be called for each event
+  /// [send] Callback function that will be called for each event
   ///
   /// Returns the stream ID associated with the events
   Future<StreamId> replayEventsAfter(

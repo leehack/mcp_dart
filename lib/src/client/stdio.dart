@@ -22,12 +22,12 @@ class StdioServerParameters {
   final List<String> args;
 
   /// Environment variables to use when spawning the process.
-  /// If null, a default restricted environment might be inherited (see [getDefaultEnvironment]).
+  /// If null, the parent process environment will be inherited.
   final Map<String, String>? environment;
 
   /// How to handle the stderr stream of the child process.
-  /// Defaults to [io.ProcessStdio.inheritStdio], printing to the parent's stderr.
-  /// Can be set to [io.ProcessStdio.pipe] to capture stderr via the [stderr] stream getter.
+  /// Defaults to [io.ProcessStartMode.inheritStdio], printing to the parent's stderr.
+  /// Can be set to [io.ProcessStartMode.normal] to capture stderr via the [stderr] stream getter.
   final io.ProcessStartMode stderrMode;
 
   /// The working directory to use when spawning the process.
@@ -96,7 +96,7 @@ class StdioClientTransport implements Transport {
 
   /// Creates a stdio client transport.
   ///
-  /// Requires [serverParams] detailing how to launch the server process.
+  /// Requires [_serverParams] detailing how to launch the server process.
   StdioClientTransport(this._serverParams);
 
   /// Starts the server process and establishes communication pipes.
@@ -179,7 +179,7 @@ class StdioClientTransport implements Transport {
 
   /// Provides access to the stderr stream of the child process,
   /// but only if [StdioServerParameters.stderrMode] was set to
-  /// [io.ProcessStdio.pipe] during construction.
+  /// [io.ProcessStartMode.normal] during construction.
   /// Returns null if stderr is not piped or if the process is not running.
   Stream<List<int>>? get stderr {
     if (_serverParams.stderrMode == io.ProcessStartMode.normal &&
