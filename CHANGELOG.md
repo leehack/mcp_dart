@@ -1,4 +1,4 @@
-## 0.8.0
+## 1.0.0
 
 - Update protocol version to 2025-06-18
 - Add Elicitation support (server-initiated input collection)

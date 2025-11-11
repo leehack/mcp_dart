@@ -1,281 +1,844 @@
-# MCP Dart
+# MCP Dart SDK
 
-> Dart implementation of the Model Context Protocol (MCP) SDK
+> Complete Dart/Flutter implementation of the Model Context Protocol (MCP) for building AI-powered integrations
 
 ## Overview
 
-MCP Dart is a complete implementation of the Model Context Protocol for Dart and Flutter applications. It provides both server and client implementations, enabling seamless integration between LLM applications and external data sources and tools.
+MCP Dart is the official Dart implementation of the Model Context Protocol, enabling seamless integration between AI applications and external data sources, tools, and services. Build production-ready MCP servers and clients for Dart VM, Flutter, and web platforms.
 
-**Version**: 0.8.0
+**Version**: 1.0.0
 **Protocol**: MCP 2025-06-18 (backward compatible with 2025-03-26, 2024-11-05, 2024-10-07)
 **Repository**: https://github.com/leehack/mcp_dart
 **Package**: https://pub.dev/packages/mcp_dart
+**License**: MIT
+
+## Installation
+
+Add to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  mcp_dart: ^1.0.0
+```
+
+Then run:
+```bash
+dart pub get  # For Dart projects
+flutter pub get  # For Flutter projects
+```
+
+## What is MCP?
+
+The Model Context Protocol (MCP) is an open protocol that standardizes how AI applications communicate with external services. It enables:
+
+- **AI Agents to Use Tools**: Execute functions, call APIs, perform computations
+- **Access Contextual Data**: Read files, query databases, fetch from APIs
+- **Use Prompt Templates**: Reusable prompts with dynamic arguments
+- **Request User Input**: Server-initiated input collection during execution
+
+### Architecture
+
+MCP follows a client-server architecture:
+
+```
+User → MCP Host (with Client) → MCP Protocol → Your Server → External Services
+```
+
+- **MCP Host**: AI application (Claude Desktop, VS Code, custom apps)
+- **MCP Client**: Protocol implementation that connects to servers
+- **MCP Server**: Provides capabilities (tools, resources, prompts) to AI
 
 ## Key Features
 
-### Transport Layers
-- **Stdio**: Standard input/output transport for command-line integration (Server & Client)
-- **StreamableHTTP**: HTTP-based transport for web applications (Server & Client)
-- **SSE**: Server-Sent Events support (Server only, deprecated)
-- **IOStream**: In-process transport using Dart streams (Server & Client)
-
 ### Core Capabilities
-- **Tools**: Expose callable functions to LLM clients
-- **Resources**: Provide structured data access to clients
-- **Prompts**: Define reusable prompt templates
-- **Sampling**: Request LLM completions from clients
-- **Roots**: Expose filesystem roots for resource discovery
-- **Completions**: Provide autocomplete suggestions
-- **Elicitation**: Server-initiated user input collection (NEW in 0.8.0)
+
+- ✅ **Tools**: Expose callable functions to AI (computations, API calls, actions)
+- ✅ **Resources**: Provide data access (files, databases, APIs, documents)
+- ✅ **Prompts**: Reusable prompt templates with dynamic arguments
+- ✅ **Sampling**: Request LLM completions from clients
+- ✅ **Roots**: Expose filesystem roots for resource discovery
+- ✅ **Completions**: Autocomplete suggestions for arguments
+- ✅ **Elicitation**: Server-initiated user input collection (NEW in 1.0.0)
+
+### Transport Layers
+
+- **Stdio**: Standard input/output for CLI integration (Server & Client)
+- **StreamableHTTP**: HTTP-based transport for web apps (Server & Client)
+- **IOStream**: In-process communication using Dart streams (Server & Client)
+- **Custom**: Implement your own transport layer
 
 ### Authentication
-- **OAuth2 Support**: Full OAuth2 authentication for clients and servers
+
+- **OAuth2 Support**: Complete OAuth2 implementation with PKCE (RFC 7636)
 - **GitHub Integration**: Built-in GitHub OAuth provider
 - **Personal Access Tokens**: PAT authentication support
-- **Extensible Providers**: Easy integration with custom OAuth providers
+- **Custom Providers**: Easy integration with any OAuth provider
+
+### Platform Support
+
+| Platform | Stdio | StreamableHTTP | IOStream | Custom |
+|----------|-------|----------------|----------|--------|
+| Dart VM | ✅ | ✅ | ✅ | ✅ |
+| Web | ❌ | ✅ | ✅ | ✅ |
+| Flutter | ✅ | ✅ | ✅ | ✅ |
 
 ## Quick Start
 
-### Basic Server Example
+### Creating an MCP Server
 
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
-  McpServer server = McpServer(
-    Implementation(name: "mcp-example-server", version: "1.0.0"),
+  // Create server instance
+  final server = McpServer(
+    Implementation(name: 'my-server', version: '1.0.0'),
     options: ServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
+        resources: ServerCapabilitiesResources(),
+        prompts: ServerCapabilitiesPrompts(),
       ),
     ),
   );
 
+  // Register a tool
   server.tool(
-    "calculate",
-    description: 'Perform basic arithmetic operations',
-    inputSchemaProperties: {
-      'operation': {
-        'type': 'string',
-        'enum': ['add', 'subtract', 'multiply', 'divide'],
+    'calculate',
+    description: 'Perform arithmetic operations',
+    toolInputSchema: ToolInputSchema(
+      properties: {
+        'operation': {
+          'type': 'string',
+          'enum': ['add', 'subtract', 'multiply', 'divide'],
+        },
+        'a': {'type': 'number'},
+        'b': {'type': 'number'},
       },
-      'a': {'type': 'number'},
-      'b': {'type': 'number'},
-    },
+      required: ['operation', 'a', 'b'],
+    ),
     callback: ({args, extra}) async {
-      final operation = args!['operation'];
-      final a = args['a'];
-      final b = args['b'];
-      return CallToolResult(
-        content: [
-          TextContent(
-            text: switch (operation) {
-              'add' => 'Result: ${a + b}',
-              'subtract' => 'Result: ${a - b}',
-              'multiply' => 'Result: ${a * b}',
-              'divide' => 'Result: ${a / b}',
-              _ => throw Exception('Invalid operation'),
-            },
-          ),
-        ],
+      final op = args!['operation'];
+      final a = args['a'] as num;
+      final b = args['b'] as num;
+
+      final result = switch (op) {
+        'add' => a + b,
+        'subtract' => a - b,
+        'multiply' => a * b,
+        'divide' => b != 0 ? a / b : throw Exception('Division by zero'),
+        _ => throw Exception('Invalid operation'),
+      };
+
+      return CallToolResult.fromContent(
+        content: [TextContent(text: 'Result: $result')],
       );
     },
   );
 
-  server.connect(StdioServerTransport());
+  // Register a resource
+  server.resource(
+    'Server Status',
+    'status://server',
+    (uri, extra) async => ReadResourceResult(
+      contents: [
+        TextResourceContents(
+          uri: uri.toString(),
+          text: 'Server running at ${DateTime.now()}',
+          mimeType: 'text/plain',
+        ),
+      ],
+    ),
+  );
+
+  // Register a prompt
+  server.prompt(
+    'code-review',
+    description: 'Generate code review prompt',
+    argsSchema: {
+      'language': PromptArgumentDefinition(
+        type: String,
+        description: 'Programming language',
+        required: true,
+      ),
+    },
+    callback: (args, extra) async => GetPromptResult(
+      messages: [
+        PromptMessage(
+          role: PromptMessageRole.user,
+          content: TextContent(
+            text: 'Review this ${args['language']} code for issues...',
+          ),
+        ),
+      ],
+    ),
+  );
+
+  // Connect transport
+  await server.connect(StdioServerTransport());
 }
 ```
 
-### Deployment
+### Creating an MCP Client
 
-**Compile to native executable:**
-```bash
-dart compile exe example/server_stdio.dart -o ./server_stdio
-```
+```dart
+import 'package:mcp_dart/mcp_dart.dart';
 
-**Run with JIT:**
-```bash
-dart run example/server_stdio.dart
-```
+void main() async {
+  // Create client instance
+  final client = Client(
+    Implementation(name: 'my-client', version: '1.0.0'),
+  );
 
-**Configure with Claude Desktop:**
-```json
-{
-  "mcpServers": {
-    "my_server": {
-      "command": "/path/to/compiled/server_stdio"
-    }
+  // Connect to server
+  final transport = StdioClientTransport(
+    StdioServerParameters(
+      command: 'dart',
+      args: ['run', 'my_server.dart'],
+    ),
+  );
+  await client.connect(transport);
+
+  // List available tools
+  final tools = await client.listTools();
+  print('Available tools: ${tools.tools.map((t) => t.name).join(', ')}');
+
+  // Call a tool
+  final result = await client.callTool(
+    CallToolRequestParams(
+      name: 'calculate',
+      arguments: {'operation': 'add', 'a': 5, 'b': 3},
+    ),
+  );
+  print('Result: ${result.content.first.text}');
+
+  // Read a resource
+  final resource = await client.readResource(
+    ReadResourceRequestParams(uri: 'status://server'),
+  );
+  print('Resource: ${resource.contents.first.text}');
+
+  // Get a prompt
+  final prompt = await client.getPrompt(
+    GetPromptRequestParams(
+      name: 'code-review',
+      arguments: {'language': 'Dart'},
+    ),
+  );
+  // PromptMessage.content is Content type, not directly .text
+  final firstMessage = prompt.messages.first;
+  final textContent = firstMessage.content;
+  if (textContent is TextContent) {
+    print('Prompt: ${textContent.text}');
   }
+
+  // Cleanup
+  await client.close();
 }
 ```
 
-## Authentication Guides
+## Core Concepts
 
-### OAuth2 Authentication
+### Tools
 
-MCP Dart provides comprehensive OAuth2 support for securing your MCP servers and authenticating clients.
+Tools are callable functions that AI can execute to perform actions:
 
-**Quick Start**: [OAuth Quick Start Guide](https://github.com/leehack/mcp_dart/blob/main/example/authentication/OAUTH_QUICK_START.md)
-**Server Guide**: [OAuth Server Implementation](https://github.com/leehack/mcp_dart/blob/main/example/authentication/OAUTH_SERVER_GUIDE.md)
-**GitHub Setup**: [GitHub OAuth Configuration](https://github.com/leehack/mcp_dart/blob/main/example/authentication/GITHUB_SETUP.md)
+```dart
+server.tool(
+  'search-files',
+  description: 'Search files by pattern',
+  toolInputSchema: ToolInputSchema(
+    properties: {
+      'pattern': {'type': 'string', 'description': 'Search pattern'},
+      'path': {'type': 'string', 'description': 'Directory path'},
+    },
+    required: ['pattern'],
+  ),
+  callback: ({args, extra}) async {
+    final pattern = args!['pattern'] as String;
+    final path = args['path'] as String? ?? '.';
 
-### Authentication Examples
+    // Perform search
+    final results = await searchFiles(pattern, path);
 
-- **OAuth Server**: [oauth_server_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/oauth_server_example.dart)
-- **OAuth Client**: [oauth_client_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/oauth_client_example.dart)
-- **GitHub OAuth**: [github_oauth_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/github_oauth_example.dart)
-- **GitHub PAT**: [github_pat_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/github_pat_example.dart)
+    return CallToolResult.fromContent(
+      content: [TextContent(text: jsonEncode(results))],
+    );
+  },
+);
+```
+
+### Resources
+
+Resources provide contextual data to AI:
+
+```dart
+// Static resource
+server.resource(
+  'Project README',
+  'file:///readme.md',
+  (uri, extra) async => ReadResourceResult(
+    contents: [
+      TextResourceContents(
+        uri: uri.toString(),
+        text: await File('README.md').readAsString(),
+        mimeType: 'text/markdown',
+      ),
+    ],
+  ),
+);
+
+// Dynamic resource with URI template
+server.resourceTemplate(
+  'user://{userId}/profile',
+  'User Profile',
+  (uri, extra) async {
+    final userId = uri.pathSegments.first;
+    final profile = await database.getUser(userId);
+
+    return ReadResourceResult(
+      contents: [
+        TextResourceContents(
+          uri: uri.toString(),
+          text: jsonEncode(profile),
+          mimeType: 'application/json',
+        ),
+      ],
+    );
+  },
+);
+```
+
+### Prompts
+
+Prompts are reusable templates with arguments:
+
+```dart
+server.prompt(
+  'translate',
+  description: 'Translate text between languages',
+  argsSchema: {
+    'text': PromptArgumentDefinition(
+      type: String,
+      description: 'Text to translate',
+      required: true,
+    ),
+    'from': PromptArgumentDefinition(
+      type: String,
+      description: 'Source language',
+      required: true,
+    ),
+    'to': PromptArgumentDefinition(
+      type: String,
+      description: 'Target language',
+      required: true,
+    ),
+  },
+  callback: (args, extra) async => GetPromptResult(
+    messages: [
+      PromptMessage(
+        role: PromptMessageRole.user,
+        content: TextContent(
+          text: 'Translate from ${args['from']} to ${args['to']}: ${args['text']}',
+        ),
+      ),
+    ],
+  ),
+);
+```
 
 ## Advanced Features
 
 ### Elicitation (Server-Initiated Input)
 
-New in version 0.8.0, elicitation allows servers to request user input during tool execution:
+NEW in 1.0.0: Servers can request user input during tool execution:
 
 ```dart
-// Server requests user input
-final result = await extra['elicitUserInput']!(
-  message: 'Please confirm this action',
-  requestedSchema: {
-    'type': 'object',
-    'properties': {
-      'confirmed': {'type': 'boolean'}
-    }
-  }
-);
+server.tool(
+  'delete-file',
+  description: 'Delete a file with confirmation',
+  toolInputSchema: ToolInputSchema(
+    properties: {
+      'path': {'type': 'string'},
+    },
+    required: ['path'],
+  ),
+  callback: ({args, extra}) async {
+    final path = args!['path'] as String;
 
-if (result.accepted) {
-  // Process user input
-  final confirmed = result.content['confirmed'];
-}
+    // Request user confirmation
+    final result = await extra['elicitUserInput']!(
+      message: 'Are you sure you want to delete $path?',
+      requestedSchema: {
+        'type': 'object',
+        'properties': {
+          'confirmed': {'type': 'boolean'}
+        }
+      }
+    );
+
+    if (result.accepted && result.content['confirmed'] == true) {
+      await File(path).delete();
+      return CallToolResult.fromContent(
+        content: [TextContent(text: 'File deleted: $path')],
+      );
+    } else {
+      return CallToolResult.fromContent(
+        content: [TextContent(text: 'Deletion cancelled')],
+      );
+    }
+  },
+);
 ```
 
 ### Completions
 
-Provide autocomplete suggestions for prompts and resource URIs:
+Provide autocomplete suggestions for prompt and resource arguments:
 
 ```dart
 server.setCompletionsHandler((request, extra) async {
+  if (request.ref.type == CompletionReferenceType.resourceRef) {
+    final partial = request.argument.value;
+    final suggestions = await getUserIdSuggestions(partial);
+
+    return CompleteResult(
+      completion: Completion(
+        values: suggestions,
+        total: suggestions.length,
+      ),
+    );
+  }
+
   return CompleteResult(
-    completion: Completion(
-      values: ['suggestion1', 'suggestion2'],
-      total: 2,
-    ),
+    completion: Completion(values: [], total: 0),
   );
 });
 ```
 
-### Tool Annotations
+### Progress Notifications
 
-Use annotations for cleaner tool definitions:
+Send progress updates for long-running operations:
 
 ```dart
-@Tool(
-  name: 'my_tool',
-  description: 'A useful tool',
-)
-Future<CallToolResult> myTool(Map<String, dynamic> args) async {
-  // Tool implementation
-}
+server.tool(
+  'process-large-file',
+  callback: ({args, extra}) async {
+    final progressToken = extra?['progressToken'];
+
+    for (var i = 0; i <= 100; i += 10) {
+      await processChunk(i);
+
+      if (progressToken != null) {
+        await server.sendProgress(
+          progressToken: progressToken,
+          progress: i,
+          total: 100,
+        );
+      }
+    }
+
+    return CallToolResult.fromContent(
+      content: [TextContent(text: 'Processing complete')],
+    );
+  },
+);
+```
+
+### Tool Annotations
+
+Use annotations for tool characteristics:
+
+```dart
+// Read-only tool (no side effects)
+server.tool(
+  'get-data',
+  readOnlyHint: true,
+  callback: ({args, extra}) async { /* ... */ },
+);
+
+// Destructive tool (modifies data)
+server.tool(
+  'delete-all',
+  destructiveHint: true,
+  callback: ({args, extra}) async { /* ... */ },
+);
+
+// Idempotent tool (same result on repeated calls)
+server.tool(
+  'update-setting',
+  idempotentHint: true,
+  callback: ({args, extra}) async { /* ... */ },
+);
+
+// Open world tool (accesses external data)
+server.tool(
+  'web-search',
+  openWorldHint: true,
+  callback: ({args, extra}) async { /* ... */ },
+);
 ```
 
 ## Transport Options
 
 ### Stdio Transport
-Best for command-line integration with LLM clients like Claude Desktop:
+
+Best for CLI tools and local services:
+
 ```dart
-server.connect(StdioServerTransport());
+// Server
+final server = McpServer(/* ... */);
+await server.connect(StdioServerTransport());
+
+// Client
+final client = Client(/* ... */);
+await client.connect(StdioClientTransport(
+  StdioServerParameters(
+    command: 'dart',
+    args: ['run', 'server.dart'],
+  ),
+));
 ```
 
-### HTTP Transport
-Best for web applications and remote access:
+### StreamableHTTP Transport
+
+Best for web applications and remote services:
+
 ```dart
-server.connect(StreamableHTTPServerTransport(
-  host: 'localhost',
-  port: 8080,
+// Server
+final server = McpServer(/* ... */);
+await server.connect(StreamableHTTPServerTransport(
+  request: httpRequest,
+  response: httpResponse,
+));
+
+// Client
+final client = Client(/* ... */);
+await client.connect(StreamableHTTPClientTransport(
+  Uri.parse('http://localhost:3000'),
 ));
 ```
 
 ### IOStream Transport
-Best for in-process communication between client and server:
+
+Best for in-process communication and testing:
+
 ```dart
-final serverTransport = IOStreamServerTransport();
-final clientTransport = IOStreamClientTransport();
-IOStreamTransport.link(serverTransport, clientTransport);
+final s2c = StreamController<String>();
+final c2s = StreamController<String>();
+
+// Server
+final server = McpServer(/* ... */);
+await server.connect(IOStreamTransport(
+  inputStream: c2s.stream,
+  outputSink: s2c.sink,
+));
+
+// Client
+final client = Client(/* ... */);
+await client.connect(IOStreamTransport(
+  inputStream: s2c.stream,
+  outputSink: c2s.sink,
+));
 ```
 
-## Requirements
+## Authentication
 
-- Dart SDK ^3.0.0 or higher
-- http: ^1.4.0 (included as dependency)
+MCP Dart supports OAuth2 authentication for secure server-client communication.
 
-## Project Structure
+### OAuth2 with PKCE
 
+The SDK includes complete OAuth2 support with PKCE (Proof Key for Code Exchange) as specified in RFC 7636. See the authentication examples for full implementation:
+
+- **[oauth_server_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/oauth_server_example.dart)** - Complete OAuth2 server with PKCE
+- **[oauth_client_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/oauth_client_example.dart)** - OAuth2 client implementation
+- **[OAUTH_SERVER_GUIDE.md](https://github.com/leehack/mcp_dart/blob/main/example/authentication/OAUTH_SERVER_GUIDE.md)** - Detailed OAuth server guide
+- **[OAUTH_QUICK_START.md](https://github.com/leehack/mcp_dart/blob/main/example/authentication/OAUTH_QUICK_START.md)** - Quick start guide
+
+### GitHub OAuth
+
+Built-in GitHub OAuth provider for easy GitHub integration:
+
+- **[github_oauth_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/github_oauth_example.dart)** - GitHub OAuth flow
+- **[github_pat_example.dart](https://github.com/leehack/mcp_dart/blob/main/example/authentication/github_pat_example.dart)** - Personal access token auth
+- **[GITHUB_SETUP.md](https://github.com/leehack/mcp_dart/blob/main/example/authentication/GITHUB_SETUP.md)** - GitHub app configuration
+
+For implementation details, refer to the example files which include:
+- Token validation and refresh
+- PKCE challenge/verifier generation
+- Scope-based access control
+- Session management
+- Metadata discovery endpoints
+
+## Error Handling
+
+### Tool Error Results
+
+```dart
+server.tool(
+  'divide',
+  callback: ({args, extra}) async {
+    final a = args!['a'] as num;
+    final b = args['b'] as num;
+
+    if (b == 0) {
+      return CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Division by zero')],
+      );
+    }
+
+    return CallToolResult.fromContent(
+      content: [TextContent(text: '${a / b}')],
+    );
+  },
+);
 ```
-mcp_dart/
-├── lib/                      # Core library code
-│   ├── src/                  # Source implementation
-│   │   ├── server/          # Server implementation
-│   │   ├── client/          # Client implementation
-│   │   ├── shared/          # Shared types and utilities
-│   │   └── types/           # Protocol types
-│   └── mcp_dart.dart        # Main export
-├── example/                  # Example implementations
-│   ├── authentication/      # OAuth and auth examples
-│   ├── flutter_http_client/ # Flutter HTTP client example
-│   ├── streamable_https/    # HTTPS server example
-│   └── *.dart               # Various server/client examples
-├── test/                     # Test suite
-└── pubspec.yaml             # Package configuration
+
+### MCP Exceptions
+
+```dart
+try {
+  final result = await client.callTool(request);
+} on McpError catch (e) {
+  print('MCP Error: ${e.message} (${e.code})');
+} on TimeoutException {
+  print('Request timed out');
+} catch (e) {
+  print('Unexpected error: $e');
+}
+```
+
+### Error Codes
+
+```dart
+ErrorCode.parseError       // -32700: Invalid JSON
+ErrorCode.invalidRequest   // -32600: Invalid request object
+ErrorCode.methodNotFound   // -32601: Method not found
+ErrorCode.invalidParams    // -32602: Invalid parameters
+ErrorCode.internalError    // -32603: Internal server error
+```
+
+## Deployment
+
+### Compile to Executable
+
+```bash
+# Compile to native executable
+dart compile exe server.dart -o server
+
+# Run compiled executable
+./server
+```
+
+### Run with JIT
+
+```bash
+# Run directly with Dart JIT
+dart run server.dart
+```
+
+### Configure with Claude Desktop
+
+Add to Claude Desktop configuration file:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "/path/to/compiled/server"
+    },
+    "my-jit-server": {
+      "command": "dart",
+      "args": ["run", "/path/to/server.dart"]
+    }
+  }
+}
+```
+
+### Docker Deployment
+
+```dockerfile
+FROM dart:stable AS build
+
+WORKDIR /app
+COPY pubspec.* ./
+RUN dart pub get
+
+COPY . .
+RUN dart compile exe server.dart -o server
+
+FROM scratch
+COPY --from=build /app/server /server
+ENTRYPOINT ["/server"]
 ```
 
 ## Examples
 
-### Tool Server
-See [server_stdio.dart](https://github.com/leehack/mcp_dart/blob/main/example/server_stdio.dart) for a complete tool server implementation.
+The SDK includes comprehensive examples:
 
-### Client Integration
-See [client_stdio.dart](https://github.com/leehack/mcp_dart/blob/main/example/client_stdio.dart) for client usage examples.
+### Basic Examples
+- **server_stdio.dart**: Complete stdio server with tools, resources, prompts
+- **client_stdio.dart**: Stdio client demonstrating all capabilities
+- **weather.dart**: Real-world weather API integration
 
-### Weather Server
-See [weather.dart](https://github.com/leehack/mcp_dart/blob/main/example/weather.dart) for a real-world weather API integration.
+### Authentication Examples
+- **oauth_server_example.dart**: OAuth2 server with PKCE
+- **oauth_client_example.dart**: OAuth2 client implementation
+- **github_oauth_example.dart**: GitHub OAuth integration
+- **github_pat_example.dart**: GitHub PAT authentication
 
-### Flutter HTTP Client
-See [flutter_http_client/](https://github.com/leehack/mcp_dart/tree/main/example/flutter_http_client) for Flutter web integration.
+### Advanced Examples
+- **completions_capability_demo.dart**: Autocomplete demonstrations
+- **elicitation_http_server.dart**: User input collection
+- **required_fields_demo.dart**: Schema validation
 
-### Elicitation Demo
-See [elicitation_http_server.dart](https://github.com/leehack/mcp_dart/blob/main/example/elicitation_http_server.dart) for server-initiated input collection.
+### LLM Integration
+- **anthropic-client/**: Claude API integration
+- **gemini-client/**: Google Gemini integration
+
+### Flutter Examples
+- **flutter_http_client/**: Cross-platform mobile app
+
+See [examples documentation](https://github.com/leehack/mcp_dart/tree/main/example) for detailed usage.
 
 ## Testing
 
-Run the test suite:
+### Run Test Suite
+
 ```bash
 dart test
 ```
 
-## Contributing
+### Test Pattern
 
-Contributions are welcome! Please submit issues and pull requests on GitHub.
+```dart
+test('tool execution', () async {
+  final s2c = StreamController<String>();
+  final c2s = StreamController<String>();
 
-## License
+  final server = McpServer(
+    Implementation(name: 'test', version: '1.0.0'),
+  );
 
-See LICENSE file in the repository.
+  server.tool('add', callback: ({args, extra}) async {
+    final sum = (args!['a'] as num) + (args['b'] as num);
+    return CallToolResult.fromContent(
+      content: [TextContent(text: '$sum')],
+    );
+  });
 
-## Credits
+  await server.connect(IOStreamTransport(
+    inputStream: c2s.stream,
+    outputSink: s2c.sink,
+  ));
 
-Inspired by:
-- [dart_mcp](https://github.com/crbrotea/dart_mcp)
-- [simple_dart_mcp_server](https://github.com/nmfisher/simple_dart_mcp_server)
+  final client = Client(
+    Implementation(name: 'test', version: '1.0.0'),
+  );
 
-## Support
+  await client.connect(IOStreamTransport(
+    inputStream: s2c.stream,
+    outputSink: c2s.sink,
+  ));
 
-- **Issues**: https://github.com/leehack/mcp_dart/issues
-- **Discussions**: https://github.com/leehack/mcp_dart/discussions
-- **Documentation**: https://pub.dev/documentation/mcp_dart/latest/
+  final result = await client.callTool(
+    CallToolRequestParams(name: 'add', arguments: {'a': 5, 'b': 3}),
+  );
 
-## Recent Updates
+  expect(result.content.first.text, '8');
 
-### Version 0.8.0 (Latest)
+  await client.close();
+  await server.close();
+});
+```
+
+## Best Practices
+
+### Server Development
+- ✅ Validate all tool inputs with JSON schemas
+- ✅ Provide clear, descriptive names and descriptions
+- ✅ Use appropriate tool hints (readOnly, destructive, etc.)
+- ✅ Handle all error cases gracefully
+- ✅ Send progress for long-running operations
+- ✅ Implement proper cleanup in server shutdown
+
+### Client Development
+- ✅ Always close clients when done: `await client.close()`
+- ✅ Check server capabilities before using features
+- ✅ Handle McpError, TimeoutException, and generic exceptions
+- ✅ Use type-safe argument access: `args['key'] as Type`
+- ✅ Implement retry logic for transient failures
+
+### Security
+- ✅ Sanitize and validate all user inputs
+- ✅ Use OAuth2 for production authentication
+- ✅ Never expose sensitive data in error messages
+- ✅ Implement rate limiting for tools
+- ✅ Validate file paths to prevent directory traversal
+- ✅ Use HTTPS for remote transports
+
+### Performance
+- ✅ Use streaming for large data transfers
+- ✅ Implement caching for frequently accessed resources
+- ✅ Batch operations when possible
+- ✅ Set appropriate request timeouts
+- ✅ Monitor memory usage for long-running servers
+
+## API Reference
+
+### Core Types
+
+```dart
+// Server
+class McpServer
+class ServerOptions
+class ServerCapabilities
+
+// Client
+class Client
+class ClientCapabilities
+
+// Tools
+class CallToolResult
+class ToolInputSchema
+class ToolOutputSchema
+
+// Resources
+class ReadResourceResult
+class TextResourceContents
+class BlobResourceContents
+
+// Prompts
+class GetPromptResult
+class PromptMessage
+class PromptArgument
+
+// Transports
+class StdioServerTransport
+class StdioClientTransport
+class StreamableHTTPServerTransport
+class StreamableHTTPClientTransport
+class IOStreamTransport
+
+// Content
+class TextContent
+class ImageContent
+class EmbeddedResource
+
+// Errors
+class McpError
+enum ErrorCode
+
+// Note: OAuth2 classes are demonstrated in authentication examples
+// but are not part of the core SDK exports
+```
+
+## Changelog
+
+### Version 1.0.0 (Latest)
 - Updated to MCP protocol 2025-06-18
 - Added Elicitation support for server-initiated user input
 - Critical fix: Logger output redirected to stderr (prevents JSON-RPC corruption)
@@ -289,3 +852,45 @@ Inspired by:
 - Enhanced schema validation
 
 See [CHANGELOG.md](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md) for complete version history.
+
+## Resources
+
+### Documentation
+- **Getting Started**: https://github.com/leehack/mcp_dart/blob/main/docs/getting-started.md
+- **Server Guide**: https://github.com/leehack/mcp_dart/blob/main/docs/server-guide.md
+- **Client Guide**: https://github.com/leehack/mcp_dart/blob/main/docs/client-guide.md
+- **Examples**: https://github.com/leehack/mcp_dart/blob/main/docs/examples.md
+- **Quick Reference**: https://github.com/leehack/mcp_dart/blob/main/docs/quick-reference.md
+- **API Docs**: https://pub.dev/documentation/mcp_dart/latest/
+
+### Community
+- **Issues**: https://github.com/leehack/mcp_dart/issues
+- **Discussions**: https://github.com/leehack/mcp_dart/discussions
+- **Package**: https://pub.dev/packages/mcp_dart
+
+### Protocol
+- **MCP Specification**: https://modelcontextprotocol.io/specification/2025-06-18
+- **Official Website**: https://modelcontextprotocol.io
+
+## Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new features
+4. Ensure all tests pass
+5. Submit a pull request
+
+## Credits
+
+Inspired by:
+- [dart_mcp](https://github.com/crbrotea/dart_mcp)
+- [simple_dart_mcp_server](https://github.com/nmfisher/simple_dart_mcp_server)
+
+## License
+
+MIT License - See LICENSE file for details
+
+---
+
+**Need help?** Check the [documentation](https://github.com/leehack/mcp_dart/tree/main/docs) or open an [issue](https://github.com/leehack/mcp_dart/issues).
