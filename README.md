@@ -73,7 +73,7 @@ It's also backward compatible with previous versions including `2025-03-26`, `20
 
 ### Advanced Features
 
-- 🔐 **[OAuth Authentication](example/authentication/)** - OAuth2 guides and examples
+- 🔐 **[OAuth Authentication](https://github.com/leehack/mcp_dart/blob/main/example/authentication/)** - OAuth2 guides and examples
 - 📝 For resources, prompts, and other features, see the Server and Client guides
 
 ## Quick Start Example
@@ -168,7 +168,7 @@ To configure your server with AI hosts like Claude Desktop:
 
 ## Authentication
 
-This library supports OAuth2 authentication with PKCE for both clients and servers. For complete authentication guides and examples, see the [OAuth Authentication documentation](example/authentication/).
+This library supports OAuth2 authentication with PKCE for both clients and servers. For complete authentication guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/blob/main/example/authentication/).
 
 ## Platform Support
 
