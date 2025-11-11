@@ -1,3 +1,8 @@
+## 1.0.2
+
+- Fix pana analysis issues
+- Fix Web support for StreamableHTTP client
+
 ## 1.0.1
 
 - Fix Documentation links in README.md
