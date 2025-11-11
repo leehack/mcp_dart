@@ -28,13 +28,16 @@ flutter pub get
 ### What is MCP?
 
 The Model Context Protocol enables bidirectional communication between:
+
 - **Servers**: Provide capabilities (tools, resources, prompts)
 - **Clients**: Use those capabilities (typically AI applications)
 
 ### Key Components
 
 #### 1. **Tools**
+
 Functions that AI can call to perform actions:
+
 ```dart
 // Server provides a tool
 server.tool(
@@ -56,7 +59,9 @@ await client.callTool(
 ```
 
 #### 2. **Resources**
+
 Data and context that AI can access:
+
 ```dart
 // Server provides a resource
 server.resource(
@@ -80,7 +85,9 @@ await client.readResource(
 ```
 
 #### 3. **Prompts**
+
 Reusable prompt templates with arguments:
+
 ```dart
 // Server provides a prompt
 server.prompt(
@@ -115,7 +122,9 @@ await client.getPrompt(
 ```
 
 #### 4. **Transports**
+
 How clients and servers communicate:
+
 - **Stdio**: Process-based (stdin/stdout)
 - **HTTP/SSE**: Web-based (Server-Sent Events)
 - **Stream**: In-process communication
@@ -258,7 +267,8 @@ dart run my_client.dart
 ```
 
 Expected output:
-```
+
+```bash
 Connecting to server...
 
 Available tools:
@@ -284,15 +294,18 @@ Done!
 ## Next Steps
 
 ### Learn More About Servers
+
 - [Server Guide](server-guide.md) - Comprehensive server development guide
 - [Tools](tools.md) - Building powerful tools with validation
 
 ### Learn More About Clients
+
 - [Client Guide](client-guide.md) - Building MCP clients
 - [Calling Tools](client-guide.md#calling-tools) - Advanced tool usage
 - [Reading Resources](client-guide.md#reading-resources) - Resource subscriptions
 
 ### Choose Your Transport
+
 - [Transports Guide](transports.md) - Detailed transport options
 - [Stdio](transports.md#stdio-transport) - Best for CLI tools and local services
 - [HTTP/SSE](transports.md#http-transport) - Best for web and remote services
@@ -388,6 +401,7 @@ server.resourceTemplate(
 ### Server Not Responding
 
 Ensure the transport is properly initialized:
+
 ```dart
 // Stdio: Check process is running
 final transport = StdioClientTransport(
@@ -403,6 +417,7 @@ final transport = StreamableHTTPClientTransport(
 ### Tool Validation Errors
 
 Ensure your input matches the schema:
+
 ```dart
 // Schema requires 'name' as string
 inputSchema: {
@@ -433,6 +448,7 @@ await client.callTool(
 ### Connection Timeout
 
 Increase timeout for slow operations:
+
 ```dart
 final client = Client(
   Implementation(name: 'client', version: '1.0.0'),

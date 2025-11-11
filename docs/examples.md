@@ -23,6 +23,7 @@ dart run example/client_stdio.dart
 ```
 
 **Features**:
+
 - Multiple tools (echo, add, longRunningOperation)
 - Static and template-based resources
 - Prompt templates with arguments
@@ -40,6 +41,7 @@ dart run example/weather.dart
 ```
 
 **Features**:
+
 - External API calls (OpenWeatherMap)
 - Environment variable configuration
 - Error handling for API failures
@@ -59,6 +61,7 @@ dart run example/server_sse.dart
 ```
 
 **Features**:
+
 - HTTP server setup
 - SSE transport configuration
 - Session management
@@ -79,6 +82,7 @@ dart run example/streamable_https/client.dart
 ```
 
 **Features**:
+
 - Session persistence
 - Connection resumption
 - Stateful and stateless modes
@@ -95,6 +99,7 @@ dart run example/iostream-client-server/main.dart
 ```
 
 **Features**:
+
 - Stream transport
 - In-process client-server communication
 - Useful for testing
@@ -113,6 +118,7 @@ dart run example/oauth_server_example.dart
 ```
 
 **Features**:
+
 - OAuth2 authorization flow
 - PKCE support (RFC 7636)
 - Token generation and validation
@@ -130,6 +136,7 @@ dart run example/oauth_client_example.dart
 ```
 
 **Features**:
+
 - Authorization code flow
 - PKCE challenge generation
 - Token exchange
@@ -150,6 +157,7 @@ dart run example/github_oauth_example.dart
 ```
 
 **Features**:
+
 - GitHub OAuth provider
 - User authentication
 - API access with tokens
@@ -167,6 +175,7 @@ dart run example/github_pat_example.dart
 ```
 
 **Features**:
+
 - Personal access token authentication
 - Repository access
 - API integration
@@ -185,6 +194,7 @@ dart run example/completions_capability_demo.dart
 ```
 
 **Features**:
+
 - Resource URI template completion
 - Prompt argument completion
 - Up to 100 suggestions
@@ -201,6 +211,7 @@ dart run example/elicitation_http_server.dart
 ```
 
 **Features**:
+
 - Multiple input types (boolean, string, number, enum)
 - Schema validation
 - Action handling (accept/decline/cancel)
@@ -217,6 +228,7 @@ dart run example/required_fields_demo.dart
 ```
 
 **Features**:
+
 - Required vs optional fields
 - Type validation
 - Error handling for missing fields
@@ -237,6 +249,7 @@ dart run
 ```
 
 **Features**:
+
 - Claude API integration
 - Message formatting
 - Streaming responses
@@ -255,6 +268,7 @@ dart run
 ```
 
 **Features**:
+
 - Gemini API integration
 - Multi-turn conversations
 - Content generation
@@ -274,6 +288,7 @@ flutter run
 ```
 
 **Features**:
+
 - Cross-platform (iOS, Android, Web)
 - HTTP transport configuration
 - UI state management
@@ -528,21 +543,25 @@ flutter run
 ## Next Steps
 
 ### For Beginners
+
 1. Start with [server_stdio.dart](../example/server_stdio.dart)
 2. Try [client_stdio.dart](../example/client_stdio.dart)
 3. Explore [weather.dart](../example/weather.dart) for API integration
 
 ### For Advanced Users
+
 1. Study [oauth_server_example.dart](../example/oauth_server_example.dart)
 2. Explore [completions_capability_demo.dart](../example/completions_capability_demo.dart)
 3. Review [elicitation_http_server.dart](../example/elicitation_http_server.dart)
 
 ### For Flutter Developers
+
 1. Check out [flutter_http_client/](../example/flutter_http_client/)
 2. Understand mobile transport configuration
 3. Learn state management patterns
 
 ### For LLM Integration
+
 1. Review [anthropic-client/](../example/anthropic-client/)
 2. Study [gemini-client/](../example/gemini-client/)
 3. Understand message formatting for LLMs

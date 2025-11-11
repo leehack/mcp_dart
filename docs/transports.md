@@ -19,6 +19,7 @@ Transports handle the communication layer between MCP clients and servers. The S
 ### Overview
 
 Standard input/output transport for process-based communication. Best for:
+
 - Command-line tools
 - Local services
 - Process spawning
@@ -181,6 +182,7 @@ void main() async {
 ### Overview
 
 HTTP with Server-Sent Events for web-based communication. Best for:
+
 - Web applications
 - Remote services
 - Cloud deployments
@@ -373,6 +375,7 @@ void handleRequest(HttpRequest request) async {
 ### Overview
 
 In-process stream-based communication. Best for:
+
 - Unit testing
 - In-process communication
 - Isolate communication
