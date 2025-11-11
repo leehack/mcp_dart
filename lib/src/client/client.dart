@@ -26,13 +26,43 @@ class Client extends Protocol {
   final Implementation _clientInfo;
   String? _instructions;
 
+  /// Callback for handling elicitation requests from the server.
+  ///
+  /// This will be called when the server sends an `elicitation/create` request
+  /// to collect structured user input. The client should prompt the user
+  /// and return an [ElicitResult] with the action taken and content provided.
+  Future<ElicitResult> Function(ElicitRequestParams)? onElicitRequest;
+
   /// Initializes this client with its implementation details and options.
   ///
   /// - [clientInfo]: Information about this client's name and version.
   /// - [options]: Optional configuration settings including client capabilities.
   Client(this._clientInfo, {ClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
-        super(options);
+        super(options) {
+    // Register elicit handler if capability is present
+    if (_capabilities.elicitation != null) {
+      setRequestHandler<JsonRpcElicitRequest>(
+        "elicitation/create",
+        (request, extra) async {
+          if (onElicitRequest == null) {
+            throw McpError(
+              ErrorCode.methodNotFound.value,
+              "No elicit handler registered",
+            );
+          }
+          return await onElicitRequest!(request.elicitParams);
+        },
+        (id, params, meta) => JsonRpcElicitRequest.fromJson({
+          'id': id,
+          'method': 'elicitation/create',
+          'jsonrpc': '2.0',
+          if (params != null) 'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+    }
+  }
 
   /// Registers new capabilities for this client.
   ///
@@ -198,6 +228,13 @@ class Client extends Protocol {
         if (!(_capabilities.roots != null)) {
           throw StateError(
             "Client setup error: Cannot handle '$method' without 'roots' capability registered.",
+          );
+        }
+        break;
+      case "elicitation/create":
+        if (!(_capabilities.elicitation != null)) {
+          throw StateError(
+            "Client setup error: Cannot handle '$method' without 'elicitation' capability registered.",
           );
         }
         break;

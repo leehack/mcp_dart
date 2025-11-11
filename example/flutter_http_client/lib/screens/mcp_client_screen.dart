@@ -516,7 +516,7 @@ class McpClientScreenState extends State<McpClientScreen> {
                             labelText: 'Tool',
                             border: OutlineInputBorder(),
                           ),
-                          value: _selectedTool,
+                          initialValue: _selectedTool,
                           items: availableTools,
                           onChanged:
                               widget.mcpService.isConnected
@@ -565,7 +565,7 @@ class McpClientScreenState extends State<McpClientScreen> {
                           labelText: 'Prompt',
                           border: OutlineInputBorder(),
                         ),
-                        value:
+                        initialValue:
                             _selectedPrompt.isEmpty &&
                                     widget
                                         .mcpService

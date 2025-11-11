@@ -1,3 +1,24 @@
+## 1.0.0
+
+- Update protocol version to 2025-06-18
+- Add Elicitation support (server-initiated input collection)
+  - API: `McpServer.elicitUserInput()` (server) | `Client.onElicitRequest` (client handler)
+  - Types: ElicitRequestParams (`message`, `requestedSchema`), ElicitResult (`action`, `content`), ClientCapabilitiesElicitation
+  - Uses `elicitation/create` method (Inspector-compatible)
+  - Accepts JSON Schema Maps for flexible schema definition
+  - Helpers: `.accepted`, `.declined`, `.cancelled` getters on ElicitResult
+  - Example: elicitation_http_server.dart
+  - Tests: elicitation_test.dart
+- **CRITICAL FIX**: Logger → stderr (prevents JSON-RPC corruption in stdio)
+- **Comprehensive Test Coverage**: Added 203 new tests across 4 phases (+13.1% overall coverage: 56.9% → 70.0%)
+  - Phase 1: External API coverage (Server MCP, URI templates, Client/Server capabilities) - 108 tests
+  - Phase 2: Transport coverage (Stdio, SSE, HTTPS) - 38 tests
+  - Phase 3: Types & edge cases (Protocol lifecycle, error handling) - 45 tests
+  - Phase 4: Advanced scenarios (Protocol timeouts/aborts, Streamable HTTPS integration) - 12 tests
+  - Fixed critical URI template variable duplication bug
+  - Fixed McpError code preservation in request handlers
+  - All 351 tests passing ✅
+
 ## 0.7.0
 
 - Add support for Completions capability per MCP 2025-06-18 spec

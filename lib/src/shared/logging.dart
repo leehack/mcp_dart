@@ -1,3 +1,5 @@
+import 'dart:io';
+
 enum LogLevel { debug, info, warn, error }
 
 typedef LogHandler = void Function(
@@ -21,7 +23,7 @@ final class Logger {
     LogLevel level,
     String message,
   ) {
-    print("[${level.name.toUpperCase()}][$loggerName] $message");
+    stderr.writeln("[${level.name.toUpperCase()}][$loggerName] $message");
   }
 
   void log(LogLevel level, String message) {

@@ -805,6 +805,11 @@ abstract class Protocol {
         );
         return await handler(specificRequest, extra);
       } catch (e, s) {
+        // If the error is already an McpError from the handler, re-throw it as-is
+        if (e is McpError) {
+          rethrow;
+        }
+        // Otherwise, it's a parameter parsing error
         throw McpError(
           ErrorCode.invalidParams.value,
           "Failed to parse params for request $method",

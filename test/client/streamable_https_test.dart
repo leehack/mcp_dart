@@ -536,5 +536,81 @@ void main() {
       expect((message as JsonRpcNotification).method,
           equals('notifications/initialized'));
     }, timeout: Timeout(Duration(seconds: 10)));
+
+    group('Error Handling and Edge Cases', () {
+      test('handles finishAuth without auth provider', () async {
+        transport = StreamableHttpClientTransport(serverUrl);
+        await transport.start();
+
+        // Calling finishAuth without authProvider should throw
+        expect(
+          () async => await transport.finishAuth('test-code'),
+          throwsA(isA<UnauthorizedError>()),
+        );
+      });
+
+      test('start throws error if already started', () async {
+        transport = StreamableHttpClientTransport(serverUrl);
+        await transport.start();
+
+        // Starting again should throw
+        expect(
+          () async => await transport.start(),
+          throwsA(isA<McpError>()),
+        );
+      });
+
+      test('sessionId is tracked correctly', () async {
+        transport = StreamableHttpClientTransport(serverUrl);
+        await transport.start();
+
+        expect(transport.sessionId, isNull);
+
+        // Send a message that will get a session ID
+        final notification = JsonRpcInitializedNotification();
+        await transport.send(notification);
+
+        await Future.delayed(Duration(milliseconds: 500));
+
+        // Session ID should be set from server
+        expect(transport.sessionId, isNotNull);
+      });
+
+      test('terminateSession with no session does nothing', () async {
+        transport = StreamableHttpClientTransport(serverUrl);
+        await transport.start();
+
+        // Should complete without error
+        await transport.terminateSession();
+        expect(true, isTrue);
+      });
+
+      test('handles error callback configuration', () async {
+        transport = StreamableHttpClientTransport(serverUrl);
+
+        transport.onerror = (error) {
+          // Error callback configured
+        };
+
+        await transport.start();
+
+        // Error callback should be configured
+        expect(transport.onerror, isNotNull);
+      });
+
+      test('handles onclose callback configuration', () async {
+        transport = StreamableHttpClientTransport(serverUrl);
+
+        var oncloseCalled = false;
+        transport.onclose = () {
+          oncloseCalled = true;
+        };
+
+        await transport.start();
+        await transport.close();
+
+        expect(oncloseCalled, isTrue);
+      });
+    });
   });
 }

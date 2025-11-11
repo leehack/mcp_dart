@@ -474,6 +474,9 @@ void main() {
           equals('notifications/roots/list_changed'));
     });
   });
+
+  // Add critical path tests
+  _addCriticalPathTests();
 }
 
 class MockTransport extends Transport {
@@ -638,4 +641,402 @@ class MockTransport extends Transport {
   set onmessage(void Function(JsonRpcMessage message)? value) {
     _onmessage = value;
   }
+
+  /// Simulate receiving a message from the server
+  void receiveMessage(JsonRpcMessage message) {
+    if (_onmessage != null) {
+      _onmessage!(message);
+    }
+  }
+}
+
+// Additional tests for uncovered critical paths
+void _addCriticalPathTests() {
+  group('Client - Elicitation', () {
+    late Client client;
+    late MockTransport transport;
+
+    setUp(() {
+      // Create client WITH elicitation capability
+      client = Client(
+        Implementation(name: 'TestClient', version: '1.0.0'),
+        options: ClientOptions(
+          capabilities: const ClientCapabilities(
+            elicitation: ClientCapabilitiesElicitation(),
+          ),
+        ),
+      );
+      transport = MockTransport();
+    });
+
+    test('elicitation request fails when no handler registered', () async {
+      // Connect client (don't set onElicitRequest handler)
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      transport.clearSentMessages();
+
+      // Simulate server sending elicitation request
+      final elicitRequest = JsonRpcElicitRequest(
+        id: 100,
+        elicitParams: ElicitRequestParams(
+          message: 'Please provide input',
+          requestedSchema: {'type': 'string'},
+        ),
+      );
+
+      // Trigger the request handler
+      transport.receiveMessage(elicitRequest);
+      await Future.delayed(Duration(milliseconds: 10));
+
+      // Should have sent an error response
+      expect(transport.sentMessages.isNotEmpty, isTrue);
+      final errorResponse = transport.sentMessages.last;
+      expect(errorResponse, isA<JsonRpcError>());
+      final error = errorResponse as JsonRpcError;
+      expect(error.error.code, equals(ErrorCode.methodNotFound.value));
+      expect(error.error.message, contains('No elicit handler registered'));
+    });
+
+    test('elicitation request succeeds when handler is set', () async {
+      var handlerCalled = false;
+      ElicitRequestParams? receivedParams;
+
+      // Set the handler
+      client.onElicitRequest = (params) async {
+        handlerCalled = true;
+        receivedParams = params;
+        return const ElicitResult(
+          action: 'accept',
+          content: {'response': 'user input'},
+        );
+      };
+
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      final elicitRequest = JsonRpcElicitRequest(
+        id: 101,
+        elicitParams: ElicitRequestParams(
+          message: 'Enter your name',
+          requestedSchema: {
+            'type': 'object',
+            'properties': {
+              'name': {'type': 'string'}
+            }
+          },
+        ),
+      );
+
+      transport.receiveMessage(elicitRequest);
+      await Future.delayed(Duration(milliseconds: 10));
+
+      expect(handlerCalled, isTrue);
+      expect(receivedParams?.message, equals('Enter your name'));
+    });
+
+    test('elicitation request with metadata is handled correctly', () async {
+      client.onElicitRequest = (params) async {
+        return const ElicitResult(
+          action: 'accept',
+          content: {'data': 'test'},
+        );
+      };
+
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      // Create request with metadata
+      final elicitRequest = JsonRpcElicitRequest(
+        id: 102,
+        elicitParams: ElicitRequestParams(
+          message: 'Test',
+          requestedSchema: {'type': 'string'},
+        ),
+        meta: {'progressToken': 'token123'},
+      );
+
+      transport.receiveMessage(elicitRequest);
+      await Future.delayed(Duration(milliseconds: 10));
+
+      // Should handle without errors
+      expect(transport.sentMessages.isNotEmpty, isTrue);
+    });
+  });
+
+  group('Client - Capability Assertions for Requests', () {
+    late Client client;
+    late MockTransport transport;
+
+    setUp(() {
+      client = Client(Implementation(name: 'TestClient', version: '1.0.0'));
+      transport = MockTransport();
+    });
+
+    test('resources/read requires resources capability', () async {
+      // Connect with server that has NO resources capability
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(), // No resources
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertCapabilityForMethod('resources/read'),
+        throwsA(isA<McpError>()
+            .having((e) => e.message, 'message', contains('resources'))),
+      );
+    });
+
+    test('resources/list requires resources capability', () async {
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(), // No resources
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertCapabilityForMethod('resources/list'),
+        throwsA(isA<McpError>()
+            .having((e) => e.message, 'message', contains('resources'))),
+      );
+    });
+
+    test('resources/templates/list requires resources capability', () async {
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertCapabilityForMethod('resources/templates/list'),
+        throwsA(isA<McpError>()
+            .having((e) => e.message, 'message', contains('resources'))),
+      );
+    });
+
+    test('resources/subscribe requires subscribe capability', () async {
+      // Has resources but not subscribe
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(
+          resources: ServerCapabilitiesResources(), // No subscribe
+        ),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertCapabilityForMethod('resources/subscribe'),
+        throwsA(isA<McpError>().having(
+            (e) => e.message, 'message', contains('resources.subscribe'))),
+      );
+    });
+
+    test('resources/unsubscribe requires subscribe capability', () async {
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(
+          resources: ServerCapabilitiesResources(),
+        ),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertCapabilityForMethod('resources/unsubscribe'),
+        throwsA(isA<McpError>().having(
+            (e) => e.message, 'message', contains('resources.subscribe'))),
+      );
+    });
+
+    test('tools/call requires tools capability', () async {
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(), // No tools
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertCapabilityForMethod('tools/call'),
+        throwsA(isA<McpError>()
+            .having((e) => e.message, 'message', contains('tools'))),
+      );
+    });
+
+    test('tools/list requires tools capability', () async {
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertCapabilityForMethod('tools/list'),
+        throwsA(isA<McpError>()
+            .having((e) => e.message, 'message', contains('tools'))),
+      );
+    });
+
+    test('completion/complete requires completions capability', () async {
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(), // No completions
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertCapabilityForMethod('completion/complete'),
+        throwsA(isA<McpError>()
+            .having((e) => e.message, 'message', contains('completions'))),
+      );
+    });
+
+    test('custom method logs warning but does not throw', () async {
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      // Should not throw for custom methods
+      expect(
+        () => client.assertCapabilityForMethod('custom/method'),
+        returnsNormally,
+      );
+    });
+  });
+
+  group('Client - Request Handler Capability Validation', () {
+    test('roots/list handler requires roots capability', () {
+      final client = Client(
+        Implementation(name: 'TestClient', version: '1.0.0'),
+        // No roots capability
+      );
+
+      expect(
+        () => client.setRequestHandler<JsonRpcListRootsRequest>(
+          'roots/list',
+          (request, extra) async => ListRootsResult(roots: []),
+          (id, params, meta) => JsonRpcListRootsRequest.fromJson({
+            'id': id,
+            if (params != null) 'params': params,
+            if (meta != null) '_meta': meta,
+          }),
+        ),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('roots'))),
+      );
+    });
+
+    test('sampling/createMessage handler requires sampling capability', () {
+      final client = Client(
+        Implementation(name: 'TestClient', version: '1.0.0'),
+        // No sampling capability
+      );
+
+      expect(
+        () => client.setRequestHandler<JsonRpcCreateMessageRequest>(
+          'sampling/createMessage',
+          (request, extra) async => CreateMessageResult(
+            model: 'test',
+            role: SamplingMessageRole.assistant,
+            content: SamplingTextContent(text: 'response'),
+          ),
+          (id, params, meta) => JsonRpcCreateMessageRequest.fromJson({
+            'id': id,
+            'params': params ?? {},
+            if (meta != null) '_meta': meta,
+          }),
+        ),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('sampling'))),
+      );
+    });
+
+    test('elicitation/create handler requires elicitation capability', () {
+      final client = Client(
+        Implementation(name: 'TestClient', version: '1.0.0'),
+        // No elicitation capability
+      );
+
+      expect(
+        () => client.setRequestHandler<JsonRpcElicitRequest>(
+          'elicitation/create',
+          (request, extra) async => const ElicitResult(
+            action: 'accept',
+            content: {},
+          ),
+          (id, params, meta) => JsonRpcElicitRequest.fromJson({
+            'id': id,
+            'params': params ?? {},
+            if (meta != null) '_meta': meta,
+          }),
+        ),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('elicitation'))),
+      );
+    });
+
+    test('custom request handler logs info but does not throw', () {
+      final client = Client(
+        Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+
+      // Should not throw for custom methods
+      expect(
+        () => client.setRequestHandler<JsonRpcRequest>(
+          'custom/method',
+          (request, extra) async => const EmptyResult(),
+          (id, params, meta) => JsonRpcRequest(id: id, method: 'custom/method'),
+        ),
+        returnsNormally,
+      );
+    });
+  });
+
+  group('Client - Notification Capability Validation', () {
+    late Client client;
+    late MockTransport transport;
+
+    setUp(() {
+      client = Client(Implementation(name: 'TestClient', version: '1.0.0'));
+      transport = MockTransport();
+    });
+
+    test('custom notification logs warning but does not throw', () async {
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: const ServerCapabilities(),
+        serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      await client.connect(transport);
+
+      // Should not throw for custom notifications
+      expect(
+        () => client.assertNotificationCapability('notifications/custom'),
+        returnsNormally,
+      );
+    });
+  });
 }

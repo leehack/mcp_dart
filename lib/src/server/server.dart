@@ -128,6 +128,15 @@ class Server extends Protocol {
         }
         break;
 
+      case "elicitation/create":
+        if (!(_clientCapabilities?.elicitation != null)) {
+          throw McpError(
+            ErrorCode.invalidRequest.value,
+            "Client does not support elicitation (required for server to send $method)",
+          );
+        }
+        break;
+
       case "ping":
         break;
 

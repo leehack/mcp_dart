@@ -449,6 +449,9 @@ void main() {
       server.assertRequestHandlerCapability('completion/complete');
     });
   });
+
+  // Add critical path tests
+  _addCriticalPathTests();
 }
 
 // Helper function to initialize client with specific capabilities
@@ -457,10 +460,12 @@ Future<void> _initializeClient(
   Server server, {
   bool withSampling = false,
   bool withRoots = false,
+  bool withElicitation = false,
 }) async {
   final clientCapabilities = ClientCapabilities(
     sampling: withSampling ? {} : null,
     roots: withRoots ? ClientCapabilitiesRoots() : null,
+    elicitation: withElicitation ? const ClientCapabilitiesElicitation() : null,
   );
 
   final initParams = InitializeRequestParams(
@@ -482,4 +487,311 @@ Future<void> _initializeClient(
 
   // Wait for notification to be processed
   await Future.delayed(const Duration(milliseconds: 50));
+}
+
+// Additional tests for uncovered critical paths
+void _addCriticalPathTests() {
+  group('Server - Elicitation Capability', () {
+    late Server server;
+    late MockTransport transport;
+
+    setUp(() {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+      );
+      transport = MockTransport();
+    });
+
+    test('server cannot send elicitation without client capability', () async {
+      await server.connect(transport);
+      // Initialize WITHOUT elicitation capability
+      await _initializeClient(transport, server, withElicitation: false);
+
+      // Attempt to send elicitation request
+      expect(
+        () => server.assertCapabilityForMethod('elicitation/create'),
+        throwsA(isA<McpError>()
+            .having((e) => e.message, 'message', contains('elicitation'))),
+      );
+    });
+
+    test('server can send elicitation with client capability', () async {
+      await server.connect(transport);
+      // Initialize WITH elicitation capability
+      await _initializeClient(transport, server, withElicitation: true);
+
+      // Should not throw
+      expect(
+        () => server.assertCapabilityForMethod('elicitation/create'),
+        returnsNormally,
+      );
+    });
+  });
+
+  group('Server - Notification Capability Assertions', () {
+    late Server server;
+
+    test('notifications/message requires logging capability', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        // No logging capability
+      );
+
+      expect(
+        () => server.assertNotificationCapability('notifications/message'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('logging'))),
+      );
+    });
+
+    test('notifications/resources/updated requires subscribe capability',
+        () async {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: ServerCapabilities(
+            resources: ServerCapabilitiesResources(), // No subscribe
+          ),
+        ),
+      );
+
+      expect(
+        () => server
+            .assertNotificationCapability('notifications/resources/updated'),
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('resource subscription'))),
+      );
+    });
+
+    test('notifications/resources/updated succeeds with subscribe capability',
+        () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: const ServerCapabilities(
+            resources: ServerCapabilitiesResources(subscribe: true),
+          ),
+        ),
+      );
+
+      expect(
+        () => server
+            .assertNotificationCapability('notifications/resources/updated'),
+        returnsNormally,
+      );
+    });
+
+    test('notifications/resources/list_changed requires listChanged capability',
+        () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: ServerCapabilities(
+            resources: ServerCapabilitiesResources(), // No listChanged
+          ),
+        ),
+      );
+
+      expect(
+        () => server.assertNotificationCapability(
+            'notifications/resources/list_changed'),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('resource list changed notifications'))),
+      );
+    });
+
+    test('notifications/tools/list_changed requires tools.listChanged', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: const ServerCapabilities(
+            tools: ServerCapabilitiesTools(), // No listChanged
+          ),
+        ),
+      );
+
+      expect(
+        () => server
+            .assertNotificationCapability('notifications/tools/list_changed'),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('tool list changed notifications'))),
+      );
+    });
+
+    test('notifications/prompts/list_changed requires prompts.listChanged',
+        () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: const ServerCapabilities(
+            prompts: ServerCapabilitiesPrompts(), // No listChanged
+          ),
+        ),
+      );
+
+      expect(
+        () => server
+            .assertNotificationCapability('notifications/prompts/list_changed'),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('prompt list changed notifications'))),
+      );
+    });
+
+    test('notifications/cancelled and notifications/progress always allowed',
+        () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        // No special capabilities
+      );
+
+      expect(
+        () => server.assertNotificationCapability('notifications/cancelled'),
+        returnsNormally,
+      );
+      expect(
+        () => server.assertNotificationCapability('notifications/progress'),
+        returnsNormally,
+      );
+    });
+
+    test('custom notification logs warning but does not throw', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+      );
+
+      expect(
+        () => server.assertNotificationCapability('notifications/custom'),
+        returnsNormally,
+      );
+    });
+  });
+
+  group('Server - Request Handler Capability Validation', () {
+    late Server server;
+
+    test('logging/setLevel handler requires logging capability', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        // No logging capability
+      );
+
+      expect(
+        () => server.assertRequestHandlerCapability('logging/setLevel'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('logging'))),
+      );
+    });
+
+    test('prompts/get and prompts/list require prompts capability', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        // No prompts capability
+      );
+
+      expect(
+        () => server.assertRequestHandlerCapability('prompts/get'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('prompts'))),
+      );
+      expect(
+        () => server.assertRequestHandlerCapability('prompts/list'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('prompts'))),
+      );
+    });
+
+    test('resources/* handlers require resources capability', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        // No resources capability
+      );
+
+      expect(
+        () => server.assertRequestHandlerCapability('resources/list'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('resources'))),
+      );
+      expect(
+        () => server.assertRequestHandlerCapability('resources/templates/list'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('resources'))),
+      );
+      expect(
+        () => server.assertRequestHandlerCapability('resources/read'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('resources'))),
+      );
+    });
+
+    test('resources/subscribe requires resources.subscribe capability', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: ServerCapabilities(
+            resources: ServerCapabilitiesResources(), // No subscribe
+          ),
+        ),
+      );
+
+      expect(
+        () => server.assertRequestHandlerCapability('resources/subscribe'),
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('resources.subscribe'))),
+      );
+      expect(
+        () => server.assertRequestHandlerCapability('resources/unsubscribe'),
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('resources.subscribe'))),
+      );
+    });
+
+    test('tools/* handlers require tools capability', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        // No tools capability
+      );
+
+      expect(
+        () => server.assertRequestHandlerCapability('tools/call'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('tools'))),
+      );
+      expect(
+        () => server.assertRequestHandlerCapability('tools/list'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('tools'))),
+      );
+    });
+
+    test('initialize, ping, completion/complete always allowed', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        // No special capabilities
+      );
+
+      expect(
+        () => server.assertRequestHandlerCapability('initialize'),
+        returnsNormally,
+      );
+      expect(
+        () => server.assertRequestHandlerCapability('ping'),
+        returnsNormally,
+      );
+      expect(
+        () => server.assertRequestHandlerCapability('completion/complete'),
+        returnsNormally,
+      );
+    });
+
+    test('custom request handler logs info but does not throw', () {
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+      );
+
+      expect(
+        () => server.assertRequestHandlerCapability('custom/method'),
+        returnsNormally,
+      );
+    });
+  });
 }
