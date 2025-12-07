@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 /// The latest version of the Model Context Protocol supported.
-const latestProtocolVersion = "2025-06-18";
+const latestProtocolVersion = "2025-11-25";
 
 /// List of supported Model Context Protocol versions.
 const supportedProtocolVersions = [
   latestProtocolVersion,
+  "2025-06-18",
   "2025-03-26",
   "2024-11-05",
   "2024-10-07"
@@ -63,6 +64,10 @@ sealed class JsonRpcMessage {
             ),
           'completion/complete' => JsonRpcCompleteRequest.fromJson(json),
           'roots/list' => JsonRpcListRootsRequest.fromJson(json),
+          'tasks/list' => JsonRpcListTasksRequest.fromJson(json),
+          'tasks/cancel' => JsonRpcCancelTaskRequest.fromJson(json),
+          'tasks/get' => JsonRpcGetTaskRequest.fromJson(json),
+          'tasks/result' => JsonRpcGetTaskResultRequest.fromJson(json),
           _ => throw UnimplementedError(
               "fromJson for request method '$method' not implemented",
             ),
@@ -90,6 +95,8 @@ sealed class JsonRpcMessage {
             ),
           'notifications/roots/list_changed' =>
             JsonRpcRootsListChangedNotification.fromJson(json),
+          'notifications/tasks/status' =>
+            JsonRpcTaskStatusNotification.fromJson(json),
           _ => throw UnimplementedError(
               "fromJson for notification method '$method' not implemented",
             ),
@@ -197,6 +204,319 @@ class JsonRpcResponse extends JsonRpcMessage {
         'result': <String, dynamic>{...result, if (meta != null) '_meta': meta},
       };
 }
+// --- Tasks ---
+
+/// Task status enum
+enum TaskStatus {
+  working,
+  // ignore: constant_identifier_names
+  input_required,
+  completed,
+  failed,
+  cancelled,
+}
+
+/// Task data structure
+class Task {
+  final String taskId;
+  final TaskStatus status;
+  final String? statusMessage;
+  final String createdAt; // ISO 8601
+  final String lastUpdatedAt; // ISO 8601
+  final int? ttl;
+  final int? pollInterval;
+
+  const Task({
+    required this.taskId,
+    required this.status,
+    this.statusMessage,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+    this.ttl,
+    this.pollInterval,
+  });
+
+  factory Task.fromJson(Map<String, dynamic> json) {
+    return Task(
+      taskId: json['taskId'] as String,
+      status: TaskStatus.values.byName(json['status'] as String),
+      statusMessage: json['statusMessage'] as String?,
+      createdAt: json['createdAt'] as String,
+      lastUpdatedAt: json['lastUpdatedAt'] as String,
+      ttl: json['ttl'] as int?,
+      pollInterval: json['pollInterval'] as int?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'taskId': taskId,
+        'status': status.name,
+        if (statusMessage != null) 'statusMessage': statusMessage,
+        'createdAt': createdAt,
+        'lastUpdatedAt': lastUpdatedAt,
+        if (ttl != null) 'ttl': ttl,
+        if (pollInterval != null) 'pollInterval': pollInterval,
+      };
+}
+
+/// Parameters for `tasks/list`
+class ListTasksRequestParams {
+  final Cursor? cursor;
+
+  const ListTasksRequestParams({this.cursor});
+
+  factory ListTasksRequestParams.fromJson(Map<String, dynamic> json) {
+    return ListTasksRequestParams(cursor: json['cursor'] as String?);
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (cursor != null) 'cursor': cursor,
+      };
+}
+
+class JsonRpcListTasksRequest extends JsonRpcRequest {
+  final ListTasksRequestParams listParams;
+
+  JsonRpcListTasksRequest({
+    required super.id,
+    ListTasksRequestParams? params,
+    super.meta,
+  })  : listParams = params ?? const ListTasksRequestParams(),
+        super(method: "tasks/list", params: params?.toJson());
+
+  factory JsonRpcListTasksRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final meta = paramsMap?['_meta'] as Map<String, dynamic>?;
+    return JsonRpcListTasksRequest(
+      id: json['id'],
+      params:
+          paramsMap == null ? null : ListTasksRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+class ListTasksResult implements BaseResultData {
+  final List<Task> tasks;
+  final Cursor? nextCursor;
+
+  @override
+  final Map<String, dynamic>? meta;
+
+  const ListTasksResult({required this.tasks, this.nextCursor, this.meta});
+
+  factory ListTasksResult.fromJson(Map<String, dynamic> json) {
+    final meta = json['_meta'] as Map<String, dynamic>?;
+    return ListTasksResult(
+      tasks: (json['tasks'] as List<dynamic>?)
+              ?.map((t) => Task.fromJson(t as Map<String, dynamic>))
+              .toList() ??
+          [],
+      nextCursor: json['nextCursor'] as String?,
+      meta: meta,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'tasks': tasks.map((t) => t.toJson()).toList(),
+        if (nextCursor != null) 'nextCursor': nextCursor,
+      };
+}
+
+/// Parameters for `tasks/cancel`
+class CancelTaskRequestParams {
+  final String taskId;
+
+  const CancelTaskRequestParams({required this.taskId});
+
+  factory CancelTaskRequestParams.fromJson(Map<String, dynamic> json) {
+    return CancelTaskRequestParams(taskId: json['taskId'] as String);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'taskId': taskId,
+      };
+}
+
+class JsonRpcCancelTaskRequest extends JsonRpcRequest {
+  final CancelTaskRequestParams cancelParams;
+
+  JsonRpcCancelTaskRequest({
+    required super.id,
+    required this.cancelParams,
+    super.meta,
+  }) : super(method: "tasks/cancel", params: cancelParams.toJson());
+
+  factory JsonRpcCancelTaskRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for cancel task request");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcCancelTaskRequest(
+      id: json['id'],
+      cancelParams: CancelTaskRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+/// Result of `tasks/cancel` is a `Task` object.
+class CancelTaskResult implements BaseResultData {
+  final Task task;
+
+  @override
+  final Map<String, dynamic>? meta;
+
+  const CancelTaskResult({required this.task, this.meta});
+
+  factory CancelTaskResult.fromJson(Map<String, dynamic> json) {
+    final meta = json['_meta'] as Map<String, dynamic>?;
+    return CancelTaskResult(
+      task: Task.fromJson(json), // The result IS the task object
+      meta: meta,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => task.toJson();
+}
+
+/// Parameters for `tasks/get`
+class GetTaskRequestParams {
+  final String taskId;
+
+  const GetTaskRequestParams({required this.taskId});
+
+  factory GetTaskRequestParams.fromJson(Map<String, dynamic> json) {
+    return GetTaskRequestParams(taskId: json['taskId'] as String);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'taskId': taskId,
+      };
+}
+
+class JsonRpcGetTaskRequest extends JsonRpcRequest {
+  final GetTaskRequestParams getParams;
+
+  JsonRpcGetTaskRequest({
+    required super.id,
+    required this.getParams,
+    super.meta,
+  }) : super(method: "tasks/get", params: getParams.toJson());
+
+  factory JsonRpcGetTaskRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for get task request");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcGetTaskRequest(
+      id: json['id'],
+      getParams: GetTaskRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+/// Result of `tasks/get` is a `Task` object.
+class GetTaskResult implements BaseResultData {
+  final Task task;
+
+  @override
+  final Map<String, dynamic>? meta;
+
+  const GetTaskResult({required this.task, this.meta});
+
+  factory GetTaskResult.fromJson(Map<String, dynamic> json) {
+    final meta = json['_meta'] as Map<String, dynamic>?;
+    return GetTaskResult(
+      task: Task.fromJson(json),
+      meta: meta,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => task.toJson();
+}
+
+/// Parameters for `tasks/result`
+class GetTaskResultRequestParams {
+  final String taskId;
+
+  const GetTaskResultRequestParams({required this.taskId});
+
+  factory GetTaskResultRequestParams.fromJson(Map<String, dynamic> json) {
+    return GetTaskResultRequestParams(taskId: json['taskId'] as String);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'taskId': taskId,
+      };
+}
+
+class JsonRpcGetTaskResultRequest extends JsonRpcRequest {
+  final GetTaskResultRequestParams resultParams;
+
+  JsonRpcGetTaskResultRequest({
+    required super.id,
+    required this.resultParams,
+    super.meta,
+  }) : super(method: "tasks/result", params: resultParams.toJson());
+
+  factory JsonRpcGetTaskResultRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for get task result request");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcGetTaskResultRequest(
+      id: json['id'],
+      resultParams: GetTaskResultRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+/// Notification `notifications/tasks/status`
+class TaskStatusNotificationParams {
+  final Task task;
+
+  const TaskStatusNotificationParams({required this.task});
+
+  factory TaskStatusNotificationParams.fromJson(Map<String, dynamic> json) {
+    return TaskStatusNotificationParams(task: Task.fromJson(json));
+  }
+
+  Map<String, dynamic> toJson() => task.toJson();
+}
+
+class JsonRpcTaskStatusNotification extends JsonRpcNotification {
+  final TaskStatusNotificationParams statusParams;
+
+  JsonRpcTaskStatusNotification({
+    required this.statusParams,
+    super.meta,
+  }) : super(
+          method: "notifications/tasks/status",
+          params: statusParams.toJson(),
+        );
+
+  factory JsonRpcTaskStatusNotification.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for task status notification");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcTaskStatusNotification(
+      statusParams: TaskStatusNotificationParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
 // --- JSON-RPC Error ---
 
 /// Standard JSON-RPC error codes.
@@ -335,21 +655,27 @@ class Implementation {
   /// The version string of the implementation.
   final String version;
 
+  /// A description of the implementation.
+  final String? description;
+
   const Implementation({
     required this.name,
     required this.version,
+    this.description,
   });
 
   factory Implementation.fromJson(Map<String, dynamic> json) {
     return Implementation(
       name: json['name'] as String,
       version: json['version'] as String,
+      description: json['description'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'version': version,
+        if (description != null) 'description': description,
       };
 }
 
@@ -880,11 +1206,15 @@ class Resource {
   /// The MIME type, if known.
   final String? mimeType;
 
+  /// The icon for the resource.
+  final String? icon;
+
   const Resource({
     required this.uri,
     required this.name,
     this.description,
     this.mimeType,
+    this.icon,
   });
 
   /// Creates from JSON.
@@ -894,6 +1224,7 @@ class Resource {
       name: json['name'] as String,
       description: json['description'] as String?,
       mimeType: json['mimeType'] as String?,
+      icon: json['icon'] as String?,
     );
   }
 
@@ -903,6 +1234,7 @@ class Resource {
         'name': name,
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
+        if (icon != null) 'icon': icon,
       };
 }
 
@@ -920,12 +1252,16 @@ class ResourceTemplate {
   /// The MIME type for all resources matching this template, if consistent.
   final String? mimeType;
 
+  /// The icon for the resource template.
+  final String? icon;
+
   /// Creates a resource template description.
   const ResourceTemplate({
     required this.uriTemplate,
     required this.name,
     this.description,
     this.mimeType,
+    this.icon,
   });
 
   /// Creates from JSON.
@@ -935,6 +1271,7 @@ class ResourceTemplate {
       name: json['name'] as String,
       description: json['description'] as String?,
       mimeType: json['mimeType'] as String?,
+      icon: json['icon'] as String?,
     );
   }
 
@@ -944,6 +1281,7 @@ class ResourceTemplate {
         'name': name,
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
+        if (icon != null) 'icon': icon,
       };
 }
 
@@ -1344,10 +1682,14 @@ class Prompt {
   /// A list of arguments for templating the prompt.
   final List<PromptArgument>? arguments;
 
+  /// The icon for the prompt.
+  final String? icon;
+
   const Prompt({
     required this.name,
     this.description,
     this.arguments,
+    this.icon,
   });
 
   factory Prompt.fromJson(Map<String, dynamic> json) {
@@ -1357,6 +1699,7 @@ class Prompt {
       arguments: (json['arguments'] as List<dynamic>?)
           ?.map((a) => PromptArgument.fromJson(a as Map<String, dynamic>))
           .toList(),
+      icon: json['icon'] as String?,
     );
   }
 
@@ -1365,6 +1708,7 @@ class Prompt {
         if (description != null) 'description': description,
         if (arguments != null)
           'arguments': arguments!.map((a) => a.toJson()).toList(),
+        if (icon != null) 'icon': icon,
       };
 }
 
@@ -1808,12 +2152,16 @@ class Tool {
   /// Optional additional properties describing the tool.
   final ToolAnnotations? annotations;
 
+  /// The icon for the tool.
+  final String? icon;
+
   const Tool({
     required this.name,
     this.description,
     required this.inputSchema,
     this.outputSchema,
     this.annotations,
+    this.icon,
   });
 
   factory Tool.fromJson(Map<String, dynamic> json) {
@@ -1831,6 +2179,7 @@ class Tool {
       annotations: json['annotation'] != null
           ? ToolAnnotations.fromJson(json['annotation'] as Map<String, dynamic>)
           : null,
+      icon: json['icon'] as String?,
     );
   }
 
@@ -1840,6 +2189,7 @@ class Tool {
         'inputSchema': inputSchema.toJson(),
         if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
         if (annotations != null) 'annotation': annotations!.toJson(),
+        if (icon != null) 'icon': icon,
       };
 }
 
@@ -2347,6 +2697,12 @@ class CreateMessageRequestParams {
   /// Server's preferences for model selection.
   final ModelPreferences? modelPreferences;
 
+  /// Tools available to the LLM.
+  final List<Tool>? tools;
+
+  /// Tool choice parameter.
+  final Map<String, dynamic>? toolChoice;
+
   const CreateMessageRequestParams({
     required this.messages,
     this.systemPrompt,
@@ -2356,6 +2712,8 @@ class CreateMessageRequestParams {
     this.stopSequences,
     this.metadata,
     this.modelPreferences,
+    this.tools,
+    this.toolChoice,
   });
 
   factory CreateMessageRequestParams.fromJson(Map<String, dynamic> json) {
@@ -2377,6 +2735,10 @@ class CreateMessageRequestParams {
           : ModelPreferences.fromJson(
               json['modelPreferences'] as Map<String, dynamic>,
             ),
+      tools: (json['tools'] as List<dynamic>?)
+          ?.map((t) => Tool.fromJson(t as Map<String, dynamic>))
+          .toList(),
+      toolChoice: json['toolChoice'] as Map<String, dynamic>?,
     );
   }
 
@@ -2391,6 +2753,8 @@ class CreateMessageRequestParams {
         if (metadata != null) 'metadata': metadata,
         if (modelPreferences != null)
           'modelPreferences': modelPreferences!.toJson(),
+        if (tools != null) 'tools': tools!.map((t) => t.toJson()).toList(),
+        if (toolChoice != null) 'toolChoice': toolChoice,
       };
 }
 
@@ -2809,9 +3173,25 @@ class EnumInputSchema extends InputSchema {
   /// Default selected value
   final String? defaultValue;
 
+  /// Whether the enum is titled (visual presentation hint)
+  final bool? titled;
+
+  /// Whether the enum is untitled (visual presentation hint)
+  final bool? untitled;
+
+  /// Whether the enum allows single selection
+  final bool? singleSelect;
+
+  /// Whether the enum allows multiple selection
+  final bool? multiSelect;
+
   const EnumInputSchema({
     required this.enumValues,
     this.defaultValue,
+    this.titled,
+    this.untitled,
+    this.singleSelect,
+    this.multiSelect,
     super.description,
   }) : super(type: 'enum');
 
@@ -2820,6 +3200,10 @@ class EnumInputSchema extends InputSchema {
       enumValues: (json['enum'] as List<dynamic>).cast<String>(),
       defaultValue: json['defaultValue'] as String?,
       description: json['description'] as String?,
+      titled: json['titled'] as bool?,
+      untitled: json['untitled'] as bool?,
+      singleSelect: json['singleSelect'] as bool?,
+      multiSelect: json['multiSelect'] as bool?,
     );
   }
 
@@ -2829,6 +3213,10 @@ class EnumInputSchema extends InputSchema {
         if (description != null) 'description': description,
         'enum': enumValues,
         if (defaultValue != null) 'defaultValue': defaultValue,
+        if (titled != null) 'titled': titled,
+        if (untitled != null) 'untitled': untitled,
+        if (singleSelect != null) 'singleSelect': singleSelect,
+        if (multiSelect != null) 'multiSelect': multiSelect,
       };
 }
 
@@ -2912,23 +3300,29 @@ class ElicitRequestParams {
   final String message;
 
   /// The JSON Schema defining what type of input to collect
-  final Map<String, dynamic> requestedSchema;
+  final Map<String, dynamic>? requestedSchema;
+
+  /// Optional URL to start elicitation from (URL mode)
+  final String? url;
 
   const ElicitRequestParams({
     required this.message,
-    required this.requestedSchema,
+    this.requestedSchema,
+    this.url,
   });
 
   factory ElicitRequestParams.fromJson(Map<String, dynamic> json) {
     return ElicitRequestParams(
       message: json['message'] as String,
-      requestedSchema: json['requestedSchema'] as Map<String, dynamic>,
+      requestedSchema: json['requestedSchema'] as Map<String, dynamic>?,
+      url: json['url'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'message': message,
-        'requestedSchema': requestedSchema,
+        if (requestedSchema != null) 'requestedSchema': requestedSchema,
+        if (url != null) 'url': url,
       };
 }
 

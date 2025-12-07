@@ -60,12 +60,18 @@ class StreamableHTTPServerTransportOptions {
   /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
   final EventStore? eventStore;
 
+  /// List of allowed origins for CORS validation.
+  /// If provided, the transport will validate the `Origin` header against this list.
+  /// If the `Origin` header is missing or not in the list, the request will be rejected with 403 Forbidden.
+  final List<String>? allowedOrigins;
+
   /// Creates configuration options for StreamableHTTPServerTransport
   StreamableHTTPServerTransportOptions({
     this.sessionIdGenerator,
     this.onsessioninitialized,
     this.enableJsonResponse = false,
     this.eventStore,
+    this.allowedOrigins,
   });
 }
 
@@ -120,6 +126,7 @@ class StreamableHTTPServerTransport implements Transport {
   final String _standaloneSseStreamId = '_GET_stream';
   final EventStore? _eventStore;
   final void Function(String sessionId)? _onsessioninitialized;
+  final List<String>? _allowedOrigins;
 
   @override
   String? sessionId;
@@ -139,7 +146,8 @@ class StreamableHTTPServerTransport implements Transport {
   })  : _sessionIdGenerator = options.sessionIdGenerator,
         _enableJsonResponse = options.enableJsonResponse,
         _eventStore = options.eventStore,
-        _onsessioninitialized = options.onsessioninitialized;
+        _onsessioninitialized = options.onsessioninitialized,
+        _allowedOrigins = options.allowedOrigins;
 
   /// Starts the transport. This is required by the Transport interface but is a no-op
   /// for the Streamable HTTP transport as connections are managed per-request.
@@ -154,6 +162,12 @@ class StreamableHTTPServerTransport implements Transport {
   /// Handles an incoming HTTP request, whether GET or POST
   Future<void> handleRequest(HttpRequest req, [dynamic parsedBody]) async {
     req.response.bufferOutput = false;
+
+    // Validate Origin header if allowedOrigins is set
+    if (!_validateOrigin(req)) {
+      return;
+    }
+
     if (req.method == "POST") {
       await _handlePostRequest(req, parsedBody);
     } else if (req.method == "GET") {
@@ -163,6 +177,31 @@ class StreamableHTTPServerTransport implements Transport {
     } else {
       await _handleUnsupportedRequest(req.response);
     }
+  }
+
+  /// Validates the Origin header against the allowed origins.
+  /// Returns true if valid, false otherwise.
+  bool _validateOrigin(HttpRequest req) {
+    if (_allowedOrigins == null) {
+      return true;
+    }
+
+    final origin = req.headers.value("Origin");
+    if (origin == null || !_allowedOrigins.contains(origin)) {
+      req.response.statusCode = HttpStatus.forbidden;
+      req.response.write(jsonEncode({
+        "jsonrpc": "2.0",
+        "error": {
+          "code": -32000,
+          "message": "Forbidden: Invalid Origin header"
+        },
+        "id": null
+      }));
+      req.response.close();
+      return false;
+    }
+
+    return true;
   }
 
   /// Handles GET requests for SSE stream
