@@ -182,6 +182,19 @@ class Client extends Protocol {
         supported = serverCaps.completions != null;
         requiredCapability = 'completions';
         break;
+      case "tasks/list":
+        supported = serverCaps.tasks?.list ?? false;
+        requiredCapability = 'tasks.list';
+        break;
+      case "tasks/cancel":
+        supported = serverCaps.tasks?.cancel ?? false;
+        requiredCapability = 'tasks.cancel';
+        break;
+      case "tasks/get":
+      case "tasks/result":
+        supported = serverCaps.tasks != null;
+        requiredCapability = 'tasks';
+        break;
       default:
         _logger.warn(
           "assertCapabilityForMethod called for potentially custom client request: $method",
@@ -390,5 +403,58 @@ class Client extends Protocol {
   Future<void> sendRootsListChanged() {
     const notif = JsonRpcRootsListChangedNotification();
     return notification(notif);
+  }
+
+  /// Sends a `tasks/list` request to list available tasks on the server.
+  Future<ListTasksResult> listTasks({
+    ListTasksRequestParams? params,
+    RequestOptions? options,
+  }) {
+    final req = JsonRpcListTasksRequest(id: -1, params: params);
+    return request<ListTasksResult>(
+      req,
+      (json) => ListTasksResult.fromJson(json),
+      options,
+    );
+  }
+
+  /// Sends a `tasks/cancel` request to cancel a task on the server.
+  Future<CancelTaskResult> cancelTask(
+    CancelTaskRequestParams params, {
+    RequestOptions? options,
+  }) {
+    final req = JsonRpcCancelTaskRequest(id: -1, cancelParams: params);
+    return request<CancelTaskResult>(
+      req,
+      (json) => CancelTaskResult.fromJson(json),
+      options,
+    );
+  }
+
+  /// Sends a `tasks/get` request to get a task status.
+  Future<GetTaskResult> getTask(
+    GetTaskRequestParams params, {
+    RequestOptions? options,
+  }) {
+    final req = JsonRpcGetTaskRequest(id: -1, getParams: params);
+    return request<GetTaskResult>(
+      req,
+      (json) => GetTaskResult.fromJson(json),
+      options,
+    );
+  }
+
+  /// Sends a `tasks/result` request to get a task result.
+  /// The result type is generic as it depends on the task.
+  Future<Map<String, dynamic>> getTaskResult(
+    GetTaskResultRequestParams params, {
+    RequestOptions? options,
+  }) {
+    final req = JsonRpcGetTaskResultRequest(id: -1, resultParams: params);
+    return request<Map<String, dynamic>>(
+      req,
+      (json) => json, // Return raw JSON map for result
+      options,
+    );
   }
 }

@@ -699,6 +699,38 @@ class ClientCapabilitiesRoots {
       };
 }
 
+/// Describes capabilities related to tasks.
+class ClientCapabilitiesTasks {
+  /// Whether the client supports `tasks/list`.
+  final bool? list;
+
+  /// Whether the client supports `tasks/cancel`.
+  final bool? cancel;
+
+  /// Request types that support task augmentation.
+  final Map<String, dynamic>? requests;
+
+  const ClientCapabilitiesTasks({
+    this.list,
+    this.cancel,
+    this.requests,
+  });
+
+  factory ClientCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
+    return ClientCapabilitiesTasks(
+      list: json['list'] != null,
+      cancel: json['cancel'] != null,
+      requests: json['requests'] as Map<String, dynamic>?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (list == true) 'list': {},
+        if (cancel == true) 'cancel': {},
+        if (requests != null) 'requests': requests,
+      };
+}
+
 /// Describes capabilities related to elicitation (server-initiated user input).
 class ClientCapabilitiesElicitation {
   /// Empty object indicates support for elicitation
@@ -725,16 +757,21 @@ class ClientCapabilities {
   /// Present if the client supports elicitation (`elicitation/create`).
   final ClientCapabilitiesElicitation? elicitation;
 
+  /// Present if the client supports tasks.
+  final ClientCapabilitiesTasks? tasks;
+
   const ClientCapabilities({
     this.experimental,
     this.sampling,
     this.roots,
     this.elicitation,
+    this.tasks,
   });
 
   factory ClientCapabilities.fromJson(Map<String, dynamic> json) {
     final rootsMap = json['roots'] as Map<String, dynamic>?;
     final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
+    final tasksMap = json['tasks'] as Map<String, dynamic>?;
     return ClientCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
       sampling: json['sampling'] as Map<String, dynamic>?,
@@ -743,6 +780,8 @@ class ClientCapabilities {
       elicitation: elicitationMap == null
           ? null
           : ClientCapabilitiesElicitation.fromJson(elicitationMap),
+      tasks:
+          tasksMap == null ? null : ClientCapabilitiesTasks.fromJson(tasksMap),
     );
   }
 
@@ -751,6 +790,7 @@ class ClientCapabilities {
         if (sampling != null) 'sampling': sampling,
         if (roots != null) 'roots': roots!.toJson(),
         if (elicitation != null) 'elicitation': elicitation!.toJson(),
+        if (tasks != null) 'tasks': tasks!.toJson(),
       };
 }
 
@@ -900,6 +940,38 @@ class ServerCapabilitiesCompletions {
       };
 }
 
+/// Describes capabilities related to tasks.
+class ServerCapabilitiesTasks {
+  /// Whether the server supports `tasks/list`.
+  final bool? list;
+
+  /// Whether the server supports `tasks/cancel`.
+  final bool? cancel;
+
+  /// Request types that support task augmentation.
+  final Map<String, dynamic>? requests;
+
+  const ServerCapabilitiesTasks({
+    this.list,
+    this.cancel,
+    this.requests,
+  });
+
+  factory ServerCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
+    return ServerCapabilitiesTasks(
+      list: json['list'] != null,
+      cancel: json['cancel'] != null,
+      requests: json['requests'] as Map<String, dynamic>?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (list == true) 'list': {},
+        if (cancel == true) 'cancel': {},
+        if (requests != null) 'requests': requests,
+      };
+}
+
 /// Capabilities a server may support.
 class ServerCapabilities {
   /// Experimental, non-standard capabilities.
@@ -920,6 +992,9 @@ class ServerCapabilities {
   /// Present if the server offers completions (`completion/complete`).
   final ServerCapabilitiesCompletions? completions;
 
+  /// Present if the server supports tasks.
+  final ServerCapabilitiesTasks? tasks;
+
   const ServerCapabilities({
     this.experimental,
     this.logging,
@@ -927,6 +1002,7 @@ class ServerCapabilities {
     this.resources,
     this.tools,
     this.completions,
+    this.tasks,
   });
 
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
@@ -934,6 +1010,7 @@ class ServerCapabilities {
     final rMap = json['resources'] as Map<String, dynamic>?;
     final tMap = json['tools'] as Map<String, dynamic>?;
     final cMap = json['completions'] as Map<String, dynamic>?;
+    final tasksMap = json['tasks'] as Map<String, dynamic>?;
     return ServerCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
       logging: json['logging'] as Map<String, dynamic>?,
@@ -943,6 +1020,8 @@ class ServerCapabilities {
       tools: tMap == null ? null : ServerCapabilitiesTools.fromJson(tMap),
       completions:
           cMap == null ? null : ServerCapabilitiesCompletions.fromJson(cMap),
+      tasks:
+          tasksMap == null ? null : ServerCapabilitiesTasks.fromJson(tasksMap),
     );
   }
 
@@ -953,6 +1032,7 @@ class ServerCapabilities {
         if (resources != null) 'resources': resources!.toJson(),
         if (tools != null) 'tools': tools!.toJson(),
         if (completions != null) 'completions': completions!.toJson(),
+        if (tasks != null) 'tasks': tasks!.toJson(),
       };
 }
 

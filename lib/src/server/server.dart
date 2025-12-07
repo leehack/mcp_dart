@@ -190,6 +190,17 @@ class Server extends Protocol {
         }
         break;
 
+      case "notifications/tasks/status":
+        // Server can only send task status notifications if it supports tasks
+        // Spec: "Receivers MAY send notifications/tasks/status notifications"
+        // It doesn't explicitly require a capability flag for *notifications*, but it requires 'tasks' capability.
+        if (_capabilities.tasks == null) {
+          throw StateError(
+            "Server does not support tasks capability (required for sending $method)",
+          );
+        }
+        break;
+
       case "notifications/cancelled":
       case "notifications/progress":
         break;
@@ -250,6 +261,34 @@ class Server extends Protocol {
         if (!(_capabilities.tools != null)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'tools' capability",
+          );
+        }
+        break;
+
+      case "tasks/list":
+        if (!(_capabilities.tasks?.list ?? false)) {
+          throw StateError(
+            "Server setup error: Cannot handle '$method' without 'tasks.list' capability",
+          );
+        }
+        break;
+
+      case "tasks/cancel":
+        if (!(_capabilities.tasks?.cancel ?? false)) {
+          throw StateError(
+            "Server setup error: Cannot handle '$method' without 'tasks.cancel' capability",
+          );
+        }
+        break;
+
+      case "tasks/get":
+      case "tasks/result":
+        // These are basic task operations, implied if tasks are supported?
+        // Spec says: "capabilities.tasks.list controls if the tasks/list operation is supported... cancel controls cancel..."
+        // But get/result are core.
+        if (_capabilities.tasks == null) {
+          throw StateError(
+            "Server setup error: Cannot handle '$method' without 'tasks' capability",
           );
         }
         break;
@@ -320,6 +359,12 @@ class Server extends Protocol {
   /// Sends a `notifications/prompts/list_changed` notification to the client.
   Future<void> sendPromptListChanged() {
     const notif = JsonRpcPromptListChangedNotification();
+    return notification(notif);
+  }
+
+  /// Sends a `notifications/tasks/status` notification to the client.
+  Future<void> sendTaskStatusNotification(TaskStatusNotificationParams params) {
+    final notif = JsonRpcTaskStatusNotification(statusParams: params);
     return notification(notif);
   }
 }
