@@ -142,13 +142,15 @@ void main() {
       var requestAborted = false;
 
       // Send a request with abort signal
-      protocol.request<EmptyResult>(
+      protocol
+          .request<EmptyResult>(
         JsonRpcPingRequest(id: 0),
         (json) => EmptyResult(meta: json['_meta'] as Map<String, dynamic>?),
         RequestOptions(
           signal: controller.signal,
         ),
-      ).catchError((e) {
+      )
+          .catchError((e) {
         requestAborted = true;
         return EmptyResult();
       });

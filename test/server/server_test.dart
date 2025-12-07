@@ -618,8 +618,7 @@ void _addCriticalPathTests() {
       );
     });
 
-    test('notifications/prompts/list_changed requires prompts.listChanged',
-        () {
+    test('notifications/prompts/list_changed requires prompts.listChanged', () {
       server = Server(
         const Implementation(name: 'TestServer', version: '1.0.0'),
         options: ServerOptions(

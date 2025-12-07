@@ -246,7 +246,8 @@ void main() {
         id: 2,
         elicitParams: ElicitRequestParams(
           message: "Confirm action",
-          requestedSchema: const BooleanInputSchema(defaultValue: false).toJson(),
+          requestedSchema:
+              const BooleanInputSchema(defaultValue: false).toJson(),
         ),
       );
 
@@ -298,7 +299,8 @@ void main() {
         id: 3,
         elicitParams: ElicitRequestParams(
           message: "Enter age",
-          requestedSchema: const NumberInputSchema(minimum: 0, maximum: 120).toJson(),
+          requestedSchema:
+              const NumberInputSchema(minimum: 0, maximum: 120).toJson(),
         ),
       );
 
@@ -335,7 +337,7 @@ void main() {
         expect(schema, isA<EnumInputSchema>());
 
         final enumSchema = schema as EnumInputSchema;
-        expect(enumSchema.enumValues, equals(['small', 'medium', 'large']));
+        expect(enumSchema.values, equals(['small', 'medium', 'large']));
 
         return ElicitResult(
           action: 'accept',
@@ -350,7 +352,7 @@ void main() {
         elicitParams: ElicitRequestParams(
           message: "Choose size",
           requestedSchema: const EnumInputSchema(
-            enumValues: ['small', 'medium', 'large'],
+            values: ['small', 'medium', 'large'],
             defaultValue: 'medium',
           ).toJson(),
         ),

@@ -43,7 +43,8 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer = McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer =
+          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
       transport = MockTransport();
     });
 
@@ -187,8 +188,8 @@ void main() {
             );
           },
         ),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('already registered'))),
+        throwsA(isA<ArgumentError>().having(
+            (e) => e.message, 'message', contains('already registered'))),
       );
     });
 
@@ -223,7 +224,8 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer = McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer =
+          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
       transport = MockTransport();
     });
 
@@ -296,8 +298,8 @@ void main() {
             );
           },
         ),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('already registered'))),
+        throwsA(isA<ArgumentError>().having(
+            (e) => e.message, 'message', contains('already registered'))),
       );
     });
 
@@ -388,8 +390,8 @@ void main() {
             );
           },
         ),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('already registered'))),
+        throwsA(isA<ArgumentError>().having(
+            (e) => e.message, 'message', contains('already registered'))),
       );
     });
 
@@ -437,7 +439,8 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer = McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer =
+          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
       transport = MockTransport();
     });
 
@@ -679,8 +682,8 @@ void main() {
             );
           },
         ),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('already registered'))),
+        throwsA(isA<ArgumentError>().having(
+            (e) => e.message, 'message', contains('already registered'))),
       );
     });
   });
@@ -690,7 +693,8 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer = McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer =
+          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
       transport = MockTransport();
     });
 
@@ -801,7 +805,8 @@ void main() {
       expect(transport.sentMessages.isNotEmpty, isTrue);
     });
 
-    test('completion returns empty result when no completer registered', () async {
+    test('completion returns empty result when no completer registered',
+        () async {
       mcpServer.prompt(
         'no_completion_prompt',
         argsSchema: {

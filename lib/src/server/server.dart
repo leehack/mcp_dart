@@ -190,6 +190,14 @@ class Server extends Protocol {
         }
         break;
 
+      case "notifications/completions/list_changed":
+        if (!(_capabilities.completions?.listChanged ?? false)) {
+          throw StateError(
+            "Server does not support completion list changed notifications capability (required for sending $method)",
+          );
+        }
+        break;
+
       case "notifications/cancelled":
       case "notifications/progress":
         break;
@@ -250,6 +258,15 @@ class Server extends Protocol {
         if (!(_capabilities.tools != null)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'tools' capability",
+          );
+        }
+        break;
+
+      case "tasks/list":
+      case "tasks/cancel":
+        if (!(_capabilities.tasks != null)) {
+          throw StateError(
+            "Server setup error: Cannot handle '$method' without 'tasks' capability",
           );
         }
         break;
@@ -320,6 +337,12 @@ class Server extends Protocol {
   /// Sends a `notifications/prompts/list_changed` notification to the client.
   Future<void> sendPromptListChanged() {
     const notif = JsonRpcPromptListChangedNotification();
+    return notification(notif);
+  }
+
+  /// Sends a `notifications/completions/list_changed` notification to the client.
+  Future<void> sendCompletionListChanged() {
+    const notif = JsonRpcCompletionListChangedNotification();
     return notification(notif);
   }
 }

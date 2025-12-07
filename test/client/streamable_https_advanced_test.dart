@@ -177,11 +177,13 @@ void main() {
 
       // Send should timeout
       try {
-        await transport.send(JsonRpcRequest(
-          id: 1,
-          method: 'test/method',
-          params: {},
-        )).timeout(Duration(milliseconds: 500));
+        await transport
+            .send(JsonRpcRequest(
+              id: 1,
+              method: 'test/method',
+              params: {},
+            ))
+            .timeout(Duration(milliseconds: 500));
         fail('Should have timed out');
       } catch (e) {
         expect(e, isA<TimeoutException>());
@@ -224,7 +226,8 @@ void main() {
 
       final subscription = requestController!.stream.listen((request) async {
         if (request.uri.path == '/mcp' && request.method == 'GET') {
-          request.response.headers.contentType = ContentType('text', 'event-stream');
+          request.response.headers.contentType =
+              ContentType('text', 'event-stream');
           request.response.bufferOutput = false;
 
           // Send malformed SSE data

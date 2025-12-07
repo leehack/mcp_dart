@@ -67,6 +67,12 @@ typedef ReadResourceTemplateCallback = FutureOr<ReadResourceResult> Function(
 typedef CompleteResourceTemplateCallback = FutureOr<List<String>> Function(
     String currentValue);
 
+typedef ListTasksCallback = FutureOr<ListTasksResult> Function(
+    RequestHandlerExtra extra);
+
+typedef CancelTaskCallback = FutureOr<void> Function(
+    String taskId, RequestHandlerExtra extra);
+
 class ResourceTemplateRegistration {
   final UriTemplateExpander uriTemplate;
   final ListResourcesCallback? listCallback;
@@ -88,6 +94,7 @@ class _RegisteredTool {
   final ToolInputSchema? toolInputSchema;
   final ToolOutputSchema? toolOutputSchema;
   final ToolAnnotations? annotations;
+  final ImageContent? icon;
   final ToolCallback callback;
 
   const _RegisteredTool({
@@ -95,6 +102,7 @@ class _RegisteredTool {
     this.toolInputSchema,
     this.toolOutputSchema,
     this.annotations,
+    this.icon,
     required this.callback,
   });
 
@@ -106,6 +114,7 @@ class _RegisteredTool {
       // Do not include output schema in the payload if it isn't defined
       outputSchema: toolOutputSchema,
       annotations: annotations,
+      icon: icon,
     );
   }
 }
@@ -113,11 +122,13 @@ class _RegisteredTool {
 class _RegisteredPrompt<Args> {
   final String? description;
   final Map<String, PromptArgumentDefinition>? argsSchemaDefinition;
+  final ImageContent? icon;
   final PromptCallback? callback;
 
   const _RegisteredPrompt({
     this.description,
     this.argsSchemaDefinition,
+    this.icon,
     this.callback,
   });
 
@@ -129,18 +140,25 @@ class _RegisteredPrompt<Args> {
         required: entry.value.required,
       );
     }).toList();
-    return Prompt(name: name, description: description, arguments: promptArgs);
+    return Prompt(
+      name: name,
+      description: description,
+      arguments: promptArgs,
+      icon: icon,
+    );
   }
 }
 
 class _RegisteredResource {
   final String name;
   final ResourceMetadata? metadata;
+  final ImageContent? icon;
   final ReadResourceCallback readCallback;
 
   const _RegisteredResource({
     required this.name,
     this.metadata,
+    this.icon,
     required this.readCallback,
   });
 
@@ -150,6 +168,7 @@ class _RegisteredResource {
       name: name,
       description: metadata?.description,
       mimeType: metadata?.mimeType,
+      icon: icon,
     );
   }
 }
@@ -193,6 +212,10 @@ class McpServer {
   bool _toolHandlersInitialized = false;
   bool _promptHandlersInitialized = false;
   bool _completionHandlerInitialized = false;
+  bool _taskHandlersInitialized = false;
+
+  ListTasksCallback? _listTasksCallback;
+  CancelTaskCallback? _cancelTaskCallback;
 
   /// Creates an [McpServer] instance.
   McpServer(Implementation serverInfo, {ServerOptions? options}) {
@@ -207,6 +230,58 @@ class McpServer {
   /// Closes the server connection by closing the underlying transport.
   Future<void> close() async {
     await server.close();
+  }
+
+  void _ensureTaskHandlersInitialized() {
+    if (_taskHandlersInitialized) return;
+    server.assertCanSetRequestHandler("tasks/list");
+    server.assertCanSetRequestHandler("tasks/cancel");
+    server.registerCapabilities(
+      const ServerCapabilities(
+        tasks: {'listChanged': true},
+      ),
+    );
+
+    server.setRequestHandler<JsonRpcListTasksRequest>(
+      "tasks/list",
+      (request, extra) async {
+        if (_listTasksCallback == null) {
+          throw McpError(
+            ErrorCode.methodNotFound.value,
+            "Task listing not supported",
+          );
+        }
+        return await Future.value(_listTasksCallback!(extra));
+      },
+      (id, params, meta) => JsonRpcListTasksRequest.fromJson({
+        'id': id,
+        'params': params,
+        if (meta != null) '_meta': meta,
+      }),
+    );
+
+    server.setRequestHandler<JsonRpcCancelTaskRequest>(
+      "tasks/cancel",
+      (request, extra) async {
+        if (_cancelTaskCallback == null) {
+          throw McpError(
+            ErrorCode.methodNotFound.value,
+            "Task cancellation not supported",
+          );
+        }
+        await Future.value(
+          _cancelTaskCallback!(request.cancelParams.taskId, extra),
+        );
+        return const EmptyResult();
+      },
+      (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({
+        'id': id,
+        'params': params,
+        if (meta != null) '_meta': meta,
+      }),
+    );
+
+    _taskHandlersInitialized = true;
   }
 
   void _ensureToolHandlersInitialized() {
@@ -266,6 +341,11 @@ class McpServer {
   void _ensureCompletionHandlerInitialized() {
     if (_completionHandlerInitialized) return;
     server.assertCanSetRequestHandler("completion/complete");
+    server.registerCapabilities(
+      const ServerCapabilities(
+        completions: ServerCapabilitiesCompletions(listChanged: true),
+      ),
+    );
     server.setRequestHandler<JsonRpcCompleteRequest>(
       "completion/complete",
       (request, extra) async => switch (request.completeParams.ref) {
@@ -534,6 +614,7 @@ class McpServer {
     String uri,
     ReadResourceCallback readCallback, {
     ResourceMetadata? metadata,
+    ImageContent? icon,
   }) {
     if (_registeredResources.containsKey(uri)) {
       throw ArgumentError("Resource URI '$uri' already registered.");
@@ -541,6 +622,7 @@ class McpServer {
     _registeredResources[uri] = _RegisteredResource(
       name: name,
       metadata: metadata,
+      icon: icon,
       readCallback: readCallback,
     );
     _ensureResourceHandlersInitialized();
@@ -575,6 +657,7 @@ class McpServer {
     @Deprecated('Use toolOutputSchema instead')
     Map<String, dynamic>? outputSchemaProperties,
     ToolAnnotations? annotations,
+    ImageContent? icon,
     required ToolCallback callback,
   }) {
     if (_registeredTools.containsKey(name)) {
@@ -591,6 +674,7 @@ class McpServer {
               ? ToolOutputSchema(properties: outputSchemaProperties)
               : null),
       annotations: annotations,
+      icon: icon,
       callback: callback,
     );
     _ensureToolHandlersInitialized();
@@ -601,6 +685,7 @@ class McpServer {
     String name, {
     String? description,
     Map<String, PromptArgumentDefinition>? argsSchema,
+    ImageContent? icon,
     PromptCallback? callback,
   }) {
     if (_registeredPrompts.containsKey(name)) {
@@ -610,9 +695,23 @@ class McpServer {
     _registeredPrompts[name] = _RegisteredPrompt(
       description: description,
       argsSchemaDefinition: argsSchema,
+      icon: icon,
       callback: callback,
     );
     _ensurePromptHandlersInitialized();
+  }
+
+  /// Registers task handlers for the server.
+  void tasks({
+    required ListTasksCallback listCallback,
+    required CancelTaskCallback cancelCallback,
+  }) {
+    if (_listTasksCallback != null) {
+      throw StateError("Task handlers already registered");
+    }
+    _listTasksCallback = listCallback;
+    _cancelTaskCallback = cancelCallback;
+    _ensureTaskHandlersInitialized();
   }
 
   CompleteResult _createCompletionResult(List<String> suggestions) {
@@ -660,6 +759,7 @@ class McpServer {
   Future<ElicitResult> elicitUserInput(
     String message,
     Map<String, dynamic> requestedSchema, {
+    String? url,
     RequestOptions? options,
   }) async {
     server.assertCapabilityForMethod("elicitation/create");
@@ -669,6 +769,7 @@ class McpServer {
       elicitParams: ElicitRequestParams(
         message: message,
         requestedSchema: requestedSchema,
+        url: url,
       ),
     );
 

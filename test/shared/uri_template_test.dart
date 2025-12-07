@@ -25,7 +25,8 @@ void main() {
     test('multiple variables with reserved expansion', () {
       // Use reserved expansion {+path} to avoid encoding /
       final expander = UriTemplateExpander('https://{host}{+path}');
-      final result = expander.expand({'host': 'example.com', 'path': '/api/v1'});
+      final result =
+          expander.expand({'host': 'example.com', 'path': '/api/v1'});
       expect(result, equals('https://example.com/api/v1'));
     });
 
@@ -63,8 +64,7 @@ void main() {
 
     test('query operator with multiple parameters', () {
       final expander = UriTemplateExpander('/search{?q,lang,page}');
-      final result =
-          expander.expand({'q': 'dart', 'lang': 'en', 'page': '1'});
+      final result = expander.expand({'q': 'dart', 'lang': 'en', 'page': '1'});
       expect(result, equals('/search?q=dart&lang=en&page=1'));
     });
 

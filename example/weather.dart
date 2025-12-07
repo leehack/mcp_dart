@@ -62,6 +62,11 @@ void main() async {
       },
       required: ["state"],
     ),
+    icon: ImageContent(
+      data:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNiAAAABgDNjd8qAAAAAElFTkSuQmCC",
+      mimeType: "image/png",
+    ),
     callback: ({args, extra}) async {
       final state = (args?['state'] as String?)?.toUpperCase();
       if (state == null || state.length != 2) {

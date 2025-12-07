@@ -493,18 +493,18 @@ void main() {
 
     test('EnumInputSchema with options serialization', () {
       final schema = EnumInputSchema(
-        enumValues: ['small', 'medium', 'large'],
+        values: ['small', 'medium', 'large'],
         defaultValue: 'medium',
         description: "Size",
       );
 
       final json = schema.toJson();
       expect(json['type'], equals('enum'));
-      expect(json['enum'], equals(['small', 'medium', 'large']));
+      expect(json['values'], equals(['small', 'medium', 'large']));
       expect(json['defaultValue'], equals('medium'));
 
       final restored = InputSchema.fromJson(json) as EnumInputSchema;
-      expect(restored.enumValues, equals(['small', 'medium', 'large']));
+      expect(restored.values, equals(['small', 'medium', 'large']));
       expect(restored.defaultValue, equals('medium'));
     });
 
@@ -535,7 +535,7 @@ void main() {
         id: 42,
         elicitParams: ElicitRequestParams(
           message: "Choose option",
-          requestedSchema: EnumInputSchema(enumValues: ['yes', 'no']).toJson(),
+          requestedSchema: EnumInputSchema(values: ['yes', 'no']).toJson(),
         ),
       );
 
