@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 /// The latest version of the Model Context Protocol supported.
-const latestProtocolVersion = "2025-06-18";
+const latestProtocolVersion = "2025-11-25";
 
 /// List of supported Model Context Protocol versions.
 const supportedProtocolVersions = [
   latestProtocolVersion,
+  "2025-06-18",
   "2025-03-26",
   "2024-11-05",
   "2024-10-07"
@@ -63,6 +64,8 @@ sealed class JsonRpcMessage {
             ),
           'completion/complete' => JsonRpcCompleteRequest.fromJson(json),
           'roots/list' => JsonRpcListRootsRequest.fromJson(json),
+          'tasks/list' => JsonRpcListTasksRequest.fromJson(json),
+          'tasks/cancel' => JsonRpcCancelTaskRequest.fromJson(json),
           _ => throw UnimplementedError(
               "fromJson for request method '$method' not implemented",
             ),
@@ -85,6 +88,8 @@ sealed class JsonRpcMessage {
             JsonRpcPromptListChangedNotification.fromJson(json),
           'notifications/tools/list_changed' =>
             JsonRpcToolListChangedNotification.fromJson(json),
+          'notifications/completions/list_changed' =>
+            JsonRpcCompletionListChangedNotification.fromJson(json),
           'notifications/message' => JsonRpcLoggingMessageNotification.fromJson(
               json,
             ),
@@ -335,21 +340,27 @@ class Implementation {
   /// The version string of the implementation.
   final String version;
 
+  /// A description of the implementation.
+  final String? description;
+
   const Implementation({
     required this.name,
     required this.version,
+    this.description,
   });
 
   factory Implementation.fromJson(Map<String, dynamic> json) {
     return Implementation(
       name: json['name'] as String,
       version: json['version'] as String,
+      description: json['description'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'version': version,
+        if (description != null) 'description': description,
       };
 }
 
@@ -399,11 +410,15 @@ class ClientCapabilities {
   /// Present if the client supports elicitation (`elicitation/create`).
   final ClientCapabilitiesElicitation? elicitation;
 
+  /// Present if the client supports tasks (`tasks/list`, `tasks/requests`, etc).
+  final Map<String, dynamic>? tasks;
+
   const ClientCapabilities({
     this.experimental,
     this.sampling,
     this.roots,
     this.elicitation,
+    this.tasks,
   });
 
   factory ClientCapabilities.fromJson(Map<String, dynamic> json) {
@@ -417,6 +432,7 @@ class ClientCapabilities {
       elicitation: elicitationMap == null
           ? null
           : ClientCapabilitiesElicitation.fromJson(elicitationMap),
+      tasks: json['tasks'] as Map<String, dynamic>?,
     );
   }
 
@@ -425,6 +441,7 @@ class ClientCapabilities {
         if (sampling != null) 'sampling': sampling,
         if (roots != null) 'roots': roots!.toJson(),
         if (elicitation != null) 'elicitation': elicitation!.toJson(),
+        if (tasks != null) 'tasks': tasks,
       };
 }
 
@@ -594,6 +611,9 @@ class ServerCapabilities {
   /// Present if the server offers completions (`completion/complete`).
   final ServerCapabilitiesCompletions? completions;
 
+  /// Present if the server offers tasks (`tasks/list`, etc).
+  final Map<String, dynamic>? tasks;
+
   const ServerCapabilities({
     this.experimental,
     this.logging,
@@ -601,6 +621,7 @@ class ServerCapabilities {
     this.resources,
     this.tools,
     this.completions,
+    this.tasks,
   });
 
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
@@ -617,6 +638,7 @@ class ServerCapabilities {
       tools: tMap == null ? null : ServerCapabilitiesTools.fromJson(tMap),
       completions:
           cMap == null ? null : ServerCapabilitiesCompletions.fromJson(cMap),
+      tasks: json['tasks'] as Map<String, dynamic>?,
     );
   }
 
@@ -627,6 +649,7 @@ class ServerCapabilities {
         if (resources != null) 'resources': resources!.toJson(),
         if (tools != null) 'tools': tools!.toJson(),
         if (completions != null) 'completions': completions!.toJson(),
+        if (tasks != null) 'tasks': tasks,
       };
 }
 
@@ -880,11 +903,15 @@ class Resource {
   /// The MIME type, if known.
   final String? mimeType;
 
+  /// Optional icon for the resource.
+  final ImageContent? icon;
+
   const Resource({
     required this.uri,
     required this.name,
     this.description,
     this.mimeType,
+    this.icon,
   });
 
   /// Creates from JSON.
@@ -894,6 +921,9 @@ class Resource {
       name: json['name'] as String,
       description: json['description'] as String?,
       mimeType: json['mimeType'] as String?,
+      icon: json['icon'] != null
+          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -903,6 +933,7 @@ class Resource {
         'name': name,
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
+        if (icon != null) 'icon': icon!.toJson(),
       };
 }
 
@@ -920,12 +951,16 @@ class ResourceTemplate {
   /// The MIME type for all resources matching this template, if consistent.
   final String? mimeType;
 
+  /// Optional icon for the resource template.
+  final ImageContent? icon;
+
   /// Creates a resource template description.
   const ResourceTemplate({
     required this.uriTemplate,
     required this.name,
     this.description,
     this.mimeType,
+    this.icon,
   });
 
   /// Creates from JSON.
@@ -935,6 +970,9 @@ class ResourceTemplate {
       name: json['name'] as String,
       description: json['description'] as String?,
       mimeType: json['mimeType'] as String?,
+      icon: json['icon'] != null
+          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -944,6 +982,7 @@ class ResourceTemplate {
         'name': name,
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
+        if (icon != null) 'icon': icon!.toJson(),
       };
 }
 
@@ -1344,10 +1383,14 @@ class Prompt {
   /// A list of arguments for templating the prompt.
   final List<PromptArgument>? arguments;
 
+  /// Optional icon for the prompt.
+  final ImageContent? icon;
+
   const Prompt({
     required this.name,
     this.description,
     this.arguments,
+    this.icon,
   });
 
   factory Prompt.fromJson(Map<String, dynamic> json) {
@@ -1357,6 +1400,9 @@ class Prompt {
       arguments: (json['arguments'] as List<dynamic>?)
           ?.map((a) => PromptArgument.fromJson(a as Map<String, dynamic>))
           .toList(),
+      icon: json['icon'] != null
+          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -1365,6 +1411,7 @@ class Prompt {
         if (description != null) 'description': description,
         if (arguments != null)
           'arguments': arguments!.map((a) => a.toJson()).toList(),
+        if (icon != null) 'icon': icon!.toJson(),
       };
 }
 
@@ -1764,12 +1811,20 @@ class ToolAnnotations {
   /// Default: true
   final bool openWorldHint;
 
+  /// The priority of the tool (0.0 to 1.0).
+  final double? priority;
+
+  /// The intended audience for the tool (e.g., `["user", "assistant"]`).
+  final List<String>? audience;
+
   const ToolAnnotations({
     required this.title,
     this.readOnlyHint = false,
     this.destructiveHint = true,
     this.idempotentHint = false,
     this.openWorldHint = true,
+    this.priority,
+    this.audience,
   });
 
   factory ToolAnnotations.fromJson(Map<String, dynamic> json) {
@@ -1779,6 +1834,8 @@ class ToolAnnotations {
       destructiveHint: json['destructiveHint'] as bool? ?? true,
       idempotentHint: json['idempotentHint'] as bool? ?? false,
       openWorldHint: json['openWorldHint'] as bool? ?? true,
+      priority: (json['priority'] as num?)?.toDouble(),
+      audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
     );
   }
 
@@ -1788,6 +1845,8 @@ class ToolAnnotations {
         'destructiveHint': destructiveHint,
         'idempotentHint': idempotentHint,
         'openWorldHint': openWorldHint,
+        if (priority != null) 'priority': priority,
+        if (audience != null) 'audience': audience,
       };
 }
 
@@ -1808,12 +1867,16 @@ class Tool {
   /// Optional additional properties describing the tool.
   final ToolAnnotations? annotations;
 
+  /// Optional icon for the tool.
+  final ImageContent? icon;
+
   const Tool({
     required this.name,
     this.description,
     required this.inputSchema,
     this.outputSchema,
     this.annotations,
+    this.icon,
   });
 
   factory Tool.fromJson(Map<String, dynamic> json) {
@@ -1831,6 +1894,9 @@ class Tool {
       annotations: json['annotation'] != null
           ? ToolAnnotations.fromJson(json['annotation'] as Map<String, dynamic>)
           : null,
+      icon: json['icon'] != null
+          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -1840,6 +1906,7 @@ class Tool {
         'inputSchema': inputSchema.toJson(),
         if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
         if (annotations != null) 'annotation': annotations!.toJson(),
+        if (icon != null) 'icon': icon!.toJson(),
       };
 }
 
@@ -2055,6 +2122,17 @@ class JsonRpcToolListChangedNotification extends JsonRpcNotification {
     Map<String, dynamic> json,
   ) =>
       const JsonRpcToolListChangedNotification();
+}
+
+/// Notification from server indicating the list of available completions has changed.
+class JsonRpcCompletionListChangedNotification extends JsonRpcNotification {
+  const JsonRpcCompletionListChangedNotification()
+      : super(method: "notifications/completions/list_changed");
+
+  factory JsonRpcCompletionListChangedNotification.fromJson(
+    Map<String, dynamic> json,
+  ) =>
+      const JsonRpcCompletionListChangedNotification();
 }
 
 /// Severity levels for log messages (syslog levels).
@@ -2347,6 +2425,12 @@ class CreateMessageRequestParams {
   /// Server's preferences for model selection.
   final ModelPreferences? modelPreferences;
 
+  /// Optional tools to provide to the model during sampling.
+  final List<Tool>? tools;
+
+  /// Optional tool choice configuration.
+  final Map<String, dynamic>? toolChoice;
+
   const CreateMessageRequestParams({
     required this.messages,
     this.systemPrompt,
@@ -2356,6 +2440,8 @@ class CreateMessageRequestParams {
     this.stopSequences,
     this.metadata,
     this.modelPreferences,
+    this.tools,
+    this.toolChoice,
   });
 
   factory CreateMessageRequestParams.fromJson(Map<String, dynamic> json) {
@@ -2377,6 +2463,10 @@ class CreateMessageRequestParams {
           : ModelPreferences.fromJson(
               json['modelPreferences'] as Map<String, dynamic>,
             ),
+      tools: (json['tools'] as List<dynamic>?)
+          ?.map((t) => Tool.fromJson(t as Map<String, dynamic>))
+          .toList(),
+      toolChoice: json['toolChoice'] as Map<String, dynamic>?,
     );
   }
 
@@ -2391,6 +2481,8 @@ class CreateMessageRequestParams {
         if (metadata != null) 'metadata': metadata,
         if (modelPreferences != null)
           'modelPreferences': modelPreferences!.toJson(),
+        if (tools != null) 'tools': tools!.map((t) => t.toJson()).toList(),
+        if (toolChoice != null) 'toolChoice': toolChoice,
       };
 }
 
@@ -2801,23 +2893,23 @@ class NumberInputSchema extends InputSchema {
       };
 }
 
-/// Enum input schema for multiple choice selection
+/// Enum input schema for selection from a list of values
 class EnumInputSchema extends InputSchema {
-  /// Available options to choose from
-  final List<String> enumValues;
-
-  /// Default selected value
+  /// Default value for the enum input
   final String? defaultValue;
 
+  /// List of allowed values
+  final List<dynamic> values;
+
   const EnumInputSchema({
-    required this.enumValues,
+    required this.values,
     this.defaultValue,
     super.description,
   }) : super(type: 'enum');
 
   factory EnumInputSchema.fromJson(Map<String, dynamic> json) {
     return EnumInputSchema(
-      enumValues: (json['enum'] as List<dynamic>).cast<String>(),
+      values: json['values'] as List<dynamic>,
       defaultValue: json['defaultValue'] as String?,
       description: json['description'] as String?,
     );
@@ -2827,9 +2919,229 @@ class EnumInputSchema extends InputSchema {
   Map<String, dynamic> toJson() => {
         'type': type,
         if (description != null) 'description': description,
-        'enum': enumValues,
+        'values': values,
         if (defaultValue != null) 'defaultValue': defaultValue,
       };
+}
+
+// --- Tasks ---
+
+/// The current state of a task execution.
+enum TaskStatus {
+  working,
+  inputRequired,
+  completed,
+  failed,
+  cancelled,
+}
+
+/// A parsed specific task status string.
+typedef TaskStatusString = String;
+
+extension TaskStatusName on TaskStatus {
+  String get name {
+    switch (this) {
+      case TaskStatus.working:
+        return 'working';
+      case TaskStatus.inputRequired:
+        return 'input_required';
+      case TaskStatus.completed:
+        return 'completed';
+      case TaskStatus.failed:
+        return 'failed';
+      case TaskStatus.cancelled:
+        return 'cancelled';
+    }
+  }
+
+  static TaskStatus fromString(String status) {
+    switch (status) {
+      case 'working':
+        return TaskStatus.working;
+      case 'input_required':
+        return TaskStatus.inputRequired;
+      case 'completed':
+        return TaskStatus.completed;
+      case 'failed':
+        return TaskStatus.failed;
+      case 'cancelled':
+        return TaskStatus.cancelled;
+      default:
+        throw FormatException("Unknown task status: $status");
+    }
+  }
+}
+
+/// Represents a task in the system.
+class Task {
+  /// Unique identifier for the task.
+  final String taskId;
+
+  /// Current state of the task execution.
+  final TaskStatus status;
+
+  /// Optional human-readable message describing the current state.
+  final String? statusMessage;
+
+  /// Time in milliseconds from creation before task may be deleted.
+  final int? ttl;
+
+  /// Suggested time in milliseconds between status checks.
+  final int? pollInterval;
+
+  /// ISO 8601 timestamp when the task was created.
+  final String?
+      createdAt; // Spec implies defined, but check optionality. Schema usually defines required. Task definition: taskId, status (implied required). Others optional? "createdAt: ISO 8601 timestamp". "optional" not explicitly stated for createdAt, but likely required for accounting. I'll make it optional to be safe or required if I'm sure. I'll make it optional.
+
+  /// ISO 8601 timestamp when the task status was last updated.
+  final String? lastUpdatedAt;
+
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
+  const Task({
+    required this.taskId,
+    required this.status,
+    this.statusMessage,
+    this.ttl,
+    this.pollInterval,
+    this.createdAt,
+    this.lastUpdatedAt,
+    this.meta,
+  });
+
+  factory Task.fromJson(Map<String, dynamic> json) {
+    final meta = json['_meta'] as Map<String, dynamic>?;
+    return Task(
+      taskId: json['taskId'] as String,
+      status: TaskStatusName.fromString(json['status'] as String),
+      statusMessage: json['statusMessage'] as String?,
+      ttl: json['ttl'] as int?,
+      pollInterval: json['pollInterval'] as int?,
+      createdAt: json['createdAt'] as String?,
+      lastUpdatedAt: json['lastUpdatedAt'] as String?,
+      meta: meta,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'taskId': taskId,
+        'status': status.name,
+        if (statusMessage != null) 'statusMessage': statusMessage,
+        if (ttl != null) 'ttl': ttl,
+        if (pollInterval != null) 'pollInterval': pollInterval,
+        if (createdAt != null) 'createdAt': createdAt,
+        if (lastUpdatedAt != null) 'lastUpdatedAt': lastUpdatedAt,
+        if (meta != null) '_meta': meta,
+      };
+}
+
+/// Parameters for the `tasks/list` request. Includes pagination.
+class ListTasksRequestParams {
+  /// Opaque token for pagination.
+  final Cursor? cursor;
+
+  const ListTasksRequestParams({this.cursor});
+
+  factory ListTasksRequestParams.fromJson(Map<String, dynamic> json) =>
+      ListTasksRequestParams(cursor: json['cursor'] as String?);
+
+  Map<String, dynamic> toJson() => {if (cursor != null) 'cursor': cursor};
+}
+
+/// Request sent from client to list available tasks.
+class JsonRpcListTasksRequest extends JsonRpcRequest {
+  /// The list parameters (containing cursor).
+  final ListTasksRequestParams listParams;
+
+  JsonRpcListTasksRequest({
+    required super.id,
+    ListTasksRequestParams? params,
+    super.meta,
+  })  : listParams = params ?? const ListTasksRequestParams(),
+        super(method: "tasks/list", params: params?.toJson());
+
+  factory JsonRpcListTasksRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final meta = paramsMap?['_meta'] as Map<String, dynamic>?;
+    return JsonRpcListTasksRequest(
+      id: json['id'],
+      params:
+          paramsMap == null ? null : ListTasksRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+/// Result data for a successful `tasks/list` request.
+class ListTasksResult implements BaseResultData {
+  /// The list of tasks found.
+  final List<Task> tasks;
+
+  /// Opaque token for pagination.
+  final Cursor? nextCursor;
+
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const ListTasksResult({required this.tasks, this.nextCursor, this.meta});
+
+  factory ListTasksResult.fromJson(Map<String, dynamic> json) {
+    final meta = json['_meta'] as Map<String, dynamic>?;
+    return ListTasksResult(
+      tasks: (json['tasks'] as List<dynamic>?)
+              ?.map((e) => Task.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      nextCursor: json['nextCursor'] as String?,
+      meta: meta,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'tasks': tasks.map((t) => t.toJson()).toList(),
+        if (nextCursor != null) 'nextCursor': nextCursor,
+      };
+}
+
+/// Parameters for the `tasks/cancel` request.
+class CancelTaskRequestParams {
+  /// The ID of the task to cancel.
+  final String taskId;
+
+  const CancelTaskRequestParams({required this.taskId});
+
+  factory CancelTaskRequestParams.fromJson(Map<String, dynamic> json) =>
+      CancelTaskRequestParams(taskId: json['taskId'] as String);
+
+  Map<String, dynamic> toJson() => {'taskId': taskId};
+}
+
+/// Request sent from client to cancel a task.
+class JsonRpcCancelTaskRequest extends JsonRpcRequest {
+  /// The cancel parameters.
+  final CancelTaskRequestParams cancelParams;
+
+  JsonRpcCancelTaskRequest({
+    required super.id,
+    required this.cancelParams,
+    super.meta,
+  }) : super(method: "tasks/cancel", params: cancelParams.toJson());
+
+  factory JsonRpcCancelTaskRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for cancel task request");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcCancelTaskRequest(
+      id: json['id'],
+      cancelParams: CancelTaskRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
 }
 
 /// Represents a root directory or file the server can operate on.
@@ -2914,21 +3226,27 @@ class ElicitRequestParams {
   /// The JSON Schema defining what type of input to collect
   final Map<String, dynamic> requestedSchema;
 
+  /// Optional URL to separate the elicitation UI from the client.
+  final String? url;
+
   const ElicitRequestParams({
     required this.message,
     required this.requestedSchema,
+    this.url,
   });
 
   factory ElicitRequestParams.fromJson(Map<String, dynamic> json) {
     return ElicitRequestParams(
       message: json['message'] as String,
       requestedSchema: json['requestedSchema'] as Map<String, dynamic>,
+      url: json['url'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'message': message,
         'requestedSchema': requestedSchema,
+        if (url != null) 'url': url,
       };
 }
 

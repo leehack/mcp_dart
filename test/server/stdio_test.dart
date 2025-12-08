@@ -8,8 +8,7 @@ import 'package:test/test.dart';
 
 /// Mock stdin stream for testing
 class MockStdin extends Stream<List<int>> implements io.Stdin {
-  final StreamController<List<int>> _controller =
-      StreamController<List<int>>();
+  final StreamController<List<int>> _controller = StreamController<List<int>>();
 
   @override
   StreamSubscription<List<int>> listen(
@@ -63,8 +62,7 @@ class MockStdin extends Stream<List<int>> implements io.Stdin {
 
   @override
   String? readLineSync(
-          {Encoding encoding = utf8,
-          bool retainNewlines = false}) =>
+          {Encoding encoding = utf8, bool retainNewlines = false}) =>
       throw UnimplementedError();
 
   @override
@@ -163,9 +161,10 @@ void main() {
       await transport.start();
 
       // Should not throw - transport is now listening
-      expect(() => transport.start(),
-          throwsA(isA<StateError>().having((e) => e.message, 'message',
-              contains('already started'))));
+      expect(
+          () => transport.start(),
+          throwsA(isA<StateError>().having(
+              (e) => e.message, 'message', contains('already started'))));
     });
 
     test('throws StateError when starting twice', () async {

@@ -198,7 +198,8 @@ void main() {
       // Test passes if no exception is thrown
     });
 
-    test('fallback notification handler would be called if method parsed', () async {
+    test('fallback notification handler would be called if method parsed',
+        () async {
       // Note: This test documents that fallback handlers CAN'T be tested with
       // custom methods because JsonRpcMessage.fromJson throws UnimplementedError
       // for unknown notification methods. The fallback handler mechanism exists
@@ -243,10 +244,12 @@ void main() {
       final futures = <Future<EmptyResult>>[];
       for (var i = 0; i < 3; i++) {
         futures.add(
-          protocol.request<EmptyResult>(
+          protocol
+              .request<EmptyResult>(
             JsonRpcPingRequest(id: 0),
             (json) => EmptyResult(meta: json['_meta'] as Map<String, dynamic>?),
-          ).catchError((e) {
+          )
+              .catchError((e) {
             // Catch errors inline to prevent unhandled error zone warnings
             if (e is McpError && e.code == ErrorCode.connectionClosed.value) {
               return EmptyResult(); // Return dummy result
@@ -263,7 +266,8 @@ void main() {
       final results = await Future.wait(futures);
 
       // Verify all 3 completed (catchError returned EmptyResult for each)
-      expect(results.length, equals(3), reason: 'All 3 requests should complete');
+      expect(results.length, equals(3),
+          reason: 'All 3 requests should complete');
     });
 
     test('handles user onclose error gracefully', () async {
@@ -281,8 +285,8 @@ void main() {
       // Should handle the error without crashing
       expect(errors.length, greaterThan(0));
       expect(
-        errors.any((e) =>
-            e is StateError && e.message.contains('User onclose error')),
+        errors.any(
+            (e) => e is StateError && e.message.contains('User onclose error')),
         isTrue,
       );
     });
