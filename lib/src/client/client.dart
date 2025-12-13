@@ -33,6 +33,16 @@ class Client extends Protocol {
   /// and return an [ElicitResult] with the action taken and content provided.
   Future<ElicitResult> Function(ElicitRequestParams)? onElicitRequest;
 
+  /// Callback for handling task status notifications from the server.
+  FutureOr<void> Function(TaskStatusNotificationParams params)? onTaskStatus;
+
+  /// Callback for handling sampling requests from the server.
+  ///
+  /// This will be called when the server sends a `sampling/createMessage` request
+  /// to request an LLM completion from the client.
+  Future<CreateMessageResult> Function(CreateMessageRequestParams params)?
+      onSamplingRequest;
+
   /// Initializes this client with its implementation details and options.
   ///
   /// - [_clientInfo]: Information about this client's name and version.
@@ -58,6 +68,46 @@ class Client extends Protocol {
           'method': 'elicitation/create',
           'jsonrpc': '2.0',
           if (params != null) 'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+    }
+
+    // Register task status notification handler
+    if (_capabilities.tasks != null) {
+      setNotificationHandler<JsonRpcTaskStatusNotification>(
+        "notifications/tasks/status",
+        (notification) async {
+          await onTaskStatus?.call(notification.statusParams);
+        },
+        (params, meta) => JsonRpcTaskStatusNotification.fromJson({
+          'method': 'notifications/tasks/status',
+          'params': {
+            ...?params,
+            if (meta != null) '_meta': meta,
+          },
+        }),
+      );
+    }
+
+    // Register sampling request handler if capability is present
+    if (_capabilities.sampling != null) {
+      setRequestHandler<JsonRpcCreateMessageRequest>(
+        "sampling/createMessage",
+        (request, extra) async {
+          if (onSamplingRequest == null) {
+            throw McpError(
+              ErrorCode.methodNotFound.value,
+              "No sampling handler registered",
+            );
+          }
+          return await onSamplingRequest!(request.createParams);
+        },
+        (id, params, meta) => JsonRpcCreateMessageRequest.fromJson({
+          'id': id,
+          'method': 'sampling/createMessage',
+          'jsonrpc': '2.0',
+          'params': params,
           if (meta != null) '_meta': meta,
         }),
       );

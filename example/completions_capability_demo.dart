@@ -153,7 +153,7 @@ void main() async {
       },
       required: ['message'],
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       final message = args?['message'] ?? '';
       return CallToolResult.fromContent(
         content: [

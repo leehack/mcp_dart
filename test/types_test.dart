@@ -10,7 +10,7 @@ void main() {
           protocolVersion: latestProtocolVersion,
           capabilities: ClientCapabilities(
             experimental: {'featureX': true},
-            sampling: {'enabled': true},
+            sampling: const ClientCapabilitiesSampling(),
           ),
           clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
         ),
@@ -128,13 +128,13 @@ void main() {
     test('ClientCapabilities serialization and deserialization', () {
       final capabilities = ClientCapabilities(
         experimental: {'featureZ': true},
-        sampling: {'enabled': true},
+        sampling: const ClientCapabilitiesSampling(),
         roots: ClientCapabilitiesRoots(listChanged: true),
       );
 
       final json = capabilities.toJson();
       expect(json['experimental']['featureZ'], equals(true));
-      expect(json['sampling']['enabled'], equals(true));
+      expect(json['sampling'], isNotNull);
       expect(json['roots']['listChanged'], equals(true));
 
       final deserialized = ClientCapabilities.fromJson(json);
@@ -527,7 +527,7 @@ void main() {
 
       final restored = ElicitRequestParams.fromJson(json);
       expect(restored.message, equals("Enter your name"));
-      expect(restored.requestedSchema['type'], equals('string'));
+      expect(restored.requestedSchema!['type'], equals('string'));
     });
 
     test('JsonRpcElicitRequest serialization and deserialization', () {
@@ -548,7 +548,7 @@ void main() {
       final restored = JsonRpcElicitRequest.fromJson(json);
       expect(restored.id, equals(42));
       expect(restored.elicitParams.message, equals('Choose option'));
-      expect(restored.elicitParams.requestedSchema['type'], equals('enum'));
+      expect(restored.elicitParams.requestedSchema!['type'], equals('enum'));
     });
 
     test('ElicitResult serialization', () {
@@ -589,10 +589,34 @@ void main() {
       final capability = ClientCapabilitiesElicitation();
 
       final json = capability.toJson();
-      expect(json.isEmpty, isTrue);
+      // Default capability has supportsForm = true, so toJson() includes 'form'
+      expect(json.containsKey('form'), isTrue);
+      expect(json.containsKey('url'), isFalse);
 
       final restored = ClientCapabilitiesElicitation.fromJson(json);
       expect(restored, isNotNull);
+      expect(restored.supportsForm, isTrue);
+      expect(restored.supportsUrl, isFalse);
+    });
+
+    test('ClientCapabilitiesElicitation empty json for backwards compatibility',
+        () {
+      // Empty JSON should be interpreted as form-only for backwards compatibility
+      final restored = ClientCapabilitiesElicitation.fromJson({});
+      expect(restored.supportsForm, isTrue);
+      expect(restored.supportsUrl, isFalse);
+    });
+
+    test('ClientCapabilitiesElicitation all modes', () {
+      final capability = ClientCapabilitiesElicitation.all();
+
+      final json = capability.toJson();
+      expect(json.containsKey('form'), isTrue);
+      expect(json.containsKey('url'), isTrue);
+
+      final restored = ClientCapabilitiesElicitation.fromJson(json);
+      expect(restored.supportsForm, isTrue);
+      expect(restored.supportsUrl, isTrue);
     });
 
     test('ClientCapabilities includes elicitation', () {

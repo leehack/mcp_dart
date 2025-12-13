@@ -23,8 +23,9 @@ class CompletableField {
   const CompletableField({required this.def, this.underlyingType = String});
 }
 
-typedef ToolCallback = FutureOr<CallToolResult> Function({
+typedef ToolCallback = FutureOr<BaseResultData> Function({
   Map<String, dynamic>? args,
+  Map<String, dynamic>? meta,
   RequestHandlerExtra? extra,
 });
 
@@ -71,6 +72,12 @@ typedef ListTasksCallback = FutureOr<ListTasksResult> Function(
     RequestHandlerExtra extra);
 
 typedef CancelTaskCallback = FutureOr<void> Function(
+    String taskId, RequestHandlerExtra extra);
+
+typedef GetTaskCallback = FutureOr<Task> Function(
+    String taskId, RequestHandlerExtra extra);
+
+typedef TaskResultCallback = FutureOr<CallToolResult> Function(
     String taskId, RequestHandlerExtra extra);
 
 class ResourceTemplateRegistration {
@@ -216,6 +223,8 @@ class McpServer {
 
   ListTasksCallback? _listTasksCallback;
   CancelTaskCallback? _cancelTaskCallback;
+  GetTaskCallback? _getTaskCallback;
+  TaskResultCallback? _taskResultCallback;
 
   /// Creates an [McpServer] instance.
   McpServer(Implementation serverInfo, {ServerOptions? options}) {
@@ -232,13 +241,23 @@ class McpServer {
     await server.close();
   }
 
+  /// Sets the error handler for the server.
+  set onError(void Function(Error)? handler) {
+    server.onerror = handler;
+  }
+
+  /// Gets the error handler for the server.
+  void Function(Error)? get onError => server.onerror;
+
   void _ensureTaskHandlersInitialized() {
     if (_taskHandlersInitialized) return;
     server.assertCanSetRequestHandler("tasks/list");
     server.assertCanSetRequestHandler("tasks/cancel");
+    server.assertCanSetRequestHandler("tasks/get");
+    server.assertCanSetRequestHandler("tasks/result");
     server.registerCapabilities(
       const ServerCapabilities(
-        tasks: {'listChanged': true},
+        tasks: ServerCapabilitiesTasks(listChanged: true),
       ),
     );
 
@@ -281,6 +300,36 @@ class McpServer {
       }),
     );
 
+    if (_getTaskCallback != null) {
+      server.setRequestHandler<JsonRpcGetTaskRequest>(
+        "tasks/get",
+        (request, extra) async {
+          final taskId = request.getParams.taskId;
+          return await Future.value(_getTaskCallback!(taskId, extra));
+        },
+        (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+    }
+
+    if (_taskResultCallback != null) {
+      server.setRequestHandler<JsonRpcTaskResultRequest>(
+        "tasks/result",
+        (request, extra) async {
+          final taskId = request.resultParams.taskId;
+          return await Future.value(_taskResultCallback!(taskId, extra));
+        },
+        (id, params, meta) => JsonRpcTaskResultRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+    }
+
     _taskHandlersInitialized = true;
   }
 
@@ -318,8 +367,10 @@ class McpServer {
           );
         }
         try {
+          // Cast the result to BaseResultData
           return await Future.value(
-            registeredTool.callback(args: toolArgs, extra: extra),
+            registeredTool.callback(
+                args: toolArgs, meta: request.meta, extra: extra),
           );
         } catch (error) {
           _logger.warn("Error executing tool '$toolName': $error");
@@ -705,12 +756,16 @@ class McpServer {
   void tasks({
     required ListTasksCallback listCallback,
     required CancelTaskCallback cancelCallback,
+    GetTaskCallback? getCallback,
+    TaskResultCallback? resultCallback,
   }) {
     if (_listTasksCallback != null) {
       throw StateError("Task handlers already registered");
     }
     _listTasksCallback = listCallback;
     _cancelTaskCallback = cancelCallback;
+    _getTaskCallback = getCallback;
+    _taskResultCallback = resultCallback;
     _ensureTaskHandlersInitialized();
   }
 
@@ -729,12 +784,15 @@ class McpServer {
         completion: CompletionResultData(values: [], hasMore: false),
       );
 
-  /// Requests structured user input from the client.
+  /// Requests structured user input from the client using form mode.
   ///
   /// This sends an `elicitation/create` request to the client with the specified
   /// [message] text and [requestedSchema] defining the input structure.
   ///
-  /// The client must have the elicitation capability for this to work.
+  /// Form mode collects structured data directly through the MCP client,
+  /// where the data is visible to the client.
+  ///
+  /// The client must have the elicitation capability (with form support) for this to work.
   ///
   /// Returns an [ElicitResult] containing the action taken ('accept', 'decline',
   /// or 'cancel') and the submitted content when accepted.
@@ -759,18 +817,18 @@ class McpServer {
   Future<ElicitResult> elicitUserInput(
     String message,
     Map<String, dynamic> requestedSchema, {
-    String? url,
+    Map<String, dynamic>? meta,
     RequestOptions? options,
   }) async {
     server.assertCapabilityForMethod("elicitation/create");
 
     final request = JsonRpcElicitRequest(
       id: -1,
-      elicitParams: ElicitRequestParams(
+      elicitParams: ElicitRequestParams.form(
         message: message,
         requestedSchema: requestedSchema,
-        url: url,
       ),
+      meta: meta,
     );
 
     return await server.request<ElicitResult>(
@@ -778,5 +836,173 @@ class McpServer {
       (json) => ElicitResult.fromJson(json),
       options,
     );
+  }
+
+  /// Requests user interaction via URL mode elicitation.
+  ///
+  /// This sends an `elicitation/create` request to the client with the specified
+  /// [message] and [url] for the user to navigate to.
+  ///
+  /// URL mode directs users to external URLs for sensitive interactions where
+  /// the data should NOT be exposed to the MCP client. Use this for:
+  /// - OAuth/authentication flows
+  /// - Payment processing
+  /// - Sensitive data entry (passwords, credit cards)
+  ///
+  /// The [elicitationId] is a unique identifier that correlates the URL navigation
+  /// with subsequent completion notifications.
+  ///
+  /// The client must have the elicitation capability (with url support) for this to work.
+  ///
+  /// After the user completes the URL interaction, the server should send a
+  /// `notifications/elicitation/complete` notification using [notifyElicitationComplete].
+  ///
+  /// Example:
+  /// ```dart
+  /// final result = await server.elicitUserInputViaUrl(
+  ///   message: "Please authenticate with your provider",
+  ///   url: "https://oauth.example.com/authorize?client_id=xxx",
+  ///   elicitationId: "oauth-session-123",
+  /// );
+  ///
+  /// if (result.accepted) {
+  ///   // User acknowledged the URL - wait for callback or poll for completion
+  /// }
+  /// ```
+  Future<ElicitResult> elicitUserInputViaUrl({
+    required String message,
+    required String url,
+    required String elicitationId,
+    Map<String, dynamic>? meta,
+    RequestOptions? options,
+  }) async {
+    server.assertCapabilityForMethod("elicitation/create");
+
+    final request = JsonRpcElicitRequest(
+      id: -1,
+      elicitParams: ElicitRequestParams.url(
+        message: message,
+        url: url,
+        elicitationId: elicitationId,
+      ),
+      meta: meta,
+    );
+
+    return await server.request<ElicitResult>(
+      request,
+      (json) => ElicitResult.fromJson(json),
+      options,
+    );
+  }
+
+  /// Sends a notification that a URL mode elicitation has completed.
+  ///
+  /// This should be called after the out-of-band interaction started by
+  /// [elicitUserInputViaUrl] has been completed (e.g., OAuth callback received).
+  ///
+  /// Example:
+  /// ```dart
+  /// // After OAuth callback is received
+  /// await server.notifyElicitationComplete("oauth-session-123");
+  /// ```
+  Future<void> notifyElicitationComplete(String elicitationId) async {
+    await server.notification(
+      JsonRpcElicitationCompleteNotification(
+        completeParams: ElicitationCompleteParams(
+          elicitationId: elicitationId,
+        ),
+      ),
+    );
+  }
+
+  /// Requests the client to generate a message using sampling.
+  ///
+  /// This sends a `sampling/createMessage` request to the client with the specified
+  /// [messages] and [maxTokens] (and other optional parameters).
+  ///
+  /// The client must have the sampling capability for this to work.
+  ///
+  /// Example:
+  /// ```dart
+  /// final result = await server.createSamplingMessage(
+  ///   messages: [
+  ///     SamplingMessage(
+  ///       role: SamplingMessageRole.user,
+  ///       content: SamplingTextContent(text: "Write a haiku"),
+  ///     ),
+  ///   ],
+  ///   maxTokens: 50,
+  /// );
+  ///
+  /// if (result.content is SamplingTextContent) {
+  ///   print("Haiku: ${(result.content as SamplingTextContent).text}");
+  /// }
+  /// ```
+  Future<CreateMessageResult> createSamplingMessage({
+    required List<SamplingMessage> messages,
+    required int maxTokens,
+    String? systemPrompt,
+    double? temperature,
+    ModelPreferences? modelPreferences,
+    List<String>? stopSequences,
+    Map<String, dynamic>? metadata,
+    Map<String, dynamic>? meta,
+    RequestOptions? options,
+  }) async {
+    server.assertCapabilityForMethod("sampling/createMessage");
+
+    final request = JsonRpcCreateMessageRequest(
+      id: -1,
+      createParams: CreateMessageRequestParams(
+        messages: messages,
+        maxTokens: maxTokens,
+        systemPrompt: systemPrompt,
+        temperature: temperature,
+        modelPreferences: modelPreferences,
+        stopSequences: stopSequences,
+        metadata: metadata,
+      ),
+      meta: meta,
+    );
+
+    return await server.request<CreateMessageResult>(
+      request,
+      (json) => CreateMessageResult.fromJson(json),
+      options,
+    );
+  }
+
+  /// Sends a `notifications/tasks/status` notification to the client.
+  ///
+  /// This notifies the client of a change in a task's status.
+  ///
+  /// The server must have the task capability for this to work.
+  ///
+  /// Example:
+  /// ```dart
+  /// await server.notifyTaskStatus(
+  ///   taskId: "task-123",
+  ///   status: TaskStatus.running,
+  ///   statusMessage: "Processing...",
+  /// );
+  /// ```
+  Future<void> notifyTaskStatus({
+    required String taskId,
+    required TaskStatus status,
+    String? statusMessage,
+    Map<String, dynamic>? meta,
+  }) async {
+    server.assertNotificationCapability("notifications/tasks/status");
+
+    final notif = JsonRpcTaskStatusNotification(
+      statusParams: TaskStatusNotificationParams(
+        taskId: taskId,
+        status: status,
+        statusMessage: statusMessage,
+      ),
+      meta: meta,
+    );
+
+    return await server.notification(notif);
   }
 }

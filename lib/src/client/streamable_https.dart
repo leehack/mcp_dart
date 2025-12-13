@@ -555,6 +555,17 @@ class StreamableHttpClientTransport implements Transport {
         return;
       }
 
+      // Start SSE if this was the initialized notification, even if 200 OK
+      if (_isInitializedNotification(message)) {
+        _startOrAuthSse(const StartSseOptions()).catchError((err) {
+          if (err is Error) {
+            onerror?.call(err);
+          } else {
+            onerror?.call(McpError(0, err.toString()));
+          }
+        });
+      }
+
       // Check if the message is a request that expects a response
       final hasRequests = message is JsonRpcRequest && message.id != null;
 

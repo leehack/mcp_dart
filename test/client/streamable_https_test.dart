@@ -514,7 +514,7 @@ void main() {
           final data = jsonEncode(message);
           print('Sending SSE event with data: $data');
 
-          connection.write('event: message\r\n\r\n');
+          connection.write('event: message\r\n');
           connection.write('data: $data\r\n\r\n');
           await connection.flush();
           print('Sent SSE event');

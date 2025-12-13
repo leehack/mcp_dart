@@ -71,12 +71,13 @@ class Server extends Protocol {
         "Cannot register capabilities after connecting to transport",
       );
     }
-    _capabilities = ServerCapabilities.fromJson(
-      mergeCapabilities<Map<String, dynamic>>(
-        _capabilities.toJson(),
-        capabilities.toJson(),
-      ),
+
+    final merged = mergeCapabilities<Map<String, dynamic>>(
+      _capabilities.toJson(),
+      capabilities.toJson(),
     );
+
+    _capabilities = ServerCapabilities.fromJson(merged);
   }
 
   /// Handles the client's `initialize` request.
@@ -194,6 +195,14 @@ class Server extends Protocol {
         if (!(_capabilities.completions?.listChanged ?? false)) {
           throw StateError(
             "Server does not support completion list changed notifications capability (required for sending $method)",
+          );
+        }
+        break;
+
+      case "notifications/tasks/status":
+        if (!(_capabilities.tasks != null)) {
+          throw StateError(
+            "Server does not support task capability (required for sending $method)",
           );
         }
         break;

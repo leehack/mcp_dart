@@ -76,7 +76,7 @@ McpServer getServer() {
       },
       required: ['name'],
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       final name = args?['name'] as String? ?? 'world';
       return CallToolResult.fromContent(
         content: [
@@ -105,7 +105,7 @@ McpServer getServer() {
       readOnlyHint: true,
       openWorldHint: false,
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       final name = args?['name'] as String? ?? 'world';
 
       // Helper function for sleeping
@@ -188,7 +188,7 @@ McpServer getServer() {
         },
       },
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       final interval = args?['interval'] as num? ?? 100;
       final count = args?['count'] as num? ?? 50;
 

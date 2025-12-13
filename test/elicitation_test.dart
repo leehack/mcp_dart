@@ -174,7 +174,7 @@ void main() {
         receivedParams = params;
         expect(params.message, equals("Enter your name"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema);
+        final schema = InputSchema.fromJson(params.requestedSchema!);
         expect(schema, isA<StringInputSchema>());
 
         final stringSchema = schema as StringInputSchema;
@@ -231,7 +231,7 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Confirm action"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema);
+        final schema = InputSchema.fromJson(params.requestedSchema!);
         expect(schema, isA<BooleanInputSchema>());
 
         return ElicitResult(
@@ -280,7 +280,7 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Enter age"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema);
+        final schema = InputSchema.fromJson(params.requestedSchema!);
         expect(schema, isA<NumberInputSchema>());
 
         final numberSchema = schema as NumberInputSchema;
@@ -333,7 +333,7 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Choose size"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema);
+        final schema = InputSchema.fromJson(params.requestedSchema!);
         expect(schema, isA<EnumInputSchema>());
 
         final enumSchema = schema as EnumInputSchema;
@@ -430,6 +430,156 @@ void main() {
       // This should succeed - the handler field can be set
       // but the internal request handler won't be registered
       expect(client.onElicitRequest, isNotNull);
+    });
+  });
+
+  group('Elicitation Spec 2025-11-25 Features', () {
+    test('IntegerInputSchema serialization', () {
+      const schema = IntegerInputSchema(
+        minimum: 0,
+        maximum: 100,
+        defaultValue: 50,
+        title: 'Age',
+        description: 'Your age in years',
+      );
+
+      final json = schema.toJson();
+      expect(json['type'], equals('integer'));
+      expect(json['minimum'], equals(0));
+      expect(json['maximum'], equals(100));
+      expect(json['defaultValue'], equals(50));
+      expect(json['title'], equals('Age'));
+      expect(json['description'], equals('Your age in years'));
+
+      final parsed = InputSchema.fromJson(json);
+      expect(parsed, isA<IntegerInputSchema>());
+      final intSchema = parsed as IntegerInputSchema;
+      expect(intSchema.minimum, equals(0));
+      expect(intSchema.maximum, equals(100));
+    });
+
+    test('StringInputSchema with format field', () {
+      const schema = StringInputSchema(
+        format: 'email',
+        title: 'Email Address',
+        description: 'Your email',
+      );
+
+      final json = schema.toJson();
+      expect(json['type'], equals('string'));
+      expect(json['format'], equals('email'));
+      expect(json['title'], equals('Email Address'));
+
+      final parsed = InputSchema.fromJson(json);
+      expect(parsed, isA<StringInputSchema>());
+      final stringSchema = parsed as StringInputSchema;
+      expect(stringSchema.format, equals('email'));
+    });
+
+    test('ClientCapabilitiesElicitation form/url sub-objects', () {
+      // Default: form only
+      const defaultCaps = ClientCapabilitiesElicitation();
+      expect(defaultCaps.supportsForm, isTrue);
+      expect(defaultCaps.supportsUrl, isFalse);
+
+      final defaultJson = defaultCaps.toJson();
+      expect(defaultJson.containsKey('form'), isTrue);
+      expect(defaultJson.containsKey('url'), isFalse);
+
+      // Both form and URL
+      const allCaps = ClientCapabilitiesElicitation.all();
+      expect(allCaps.supportsForm, isTrue);
+      expect(allCaps.supportsUrl, isTrue);
+
+      final allJson = allCaps.toJson();
+      expect(allJson.containsKey('form'), isTrue);
+      expect(allJson.containsKey('url'), isTrue);
+
+      // URL only
+      const urlOnlyCaps = ClientCapabilitiesElicitation.urlOnly();
+      expect(urlOnlyCaps.supportsForm, isFalse);
+      expect(urlOnlyCaps.supportsUrl, isTrue);
+
+      // Parse from JSON with sub-objects
+      final parsedCaps = ClientCapabilitiesElicitation.fromJson({
+        'form': {},
+        'url': {},
+      });
+      expect(parsedCaps.supportsForm, isTrue);
+      expect(parsedCaps.supportsUrl, isTrue);
+    });
+
+    test('ElicitRequestParams URL mode', () {
+      const params = ElicitRequestParams.url(
+        message: 'Please authenticate',
+        url: 'https://oauth.example.com/authorize',
+        elicitationId: 'oauth-123',
+      );
+
+      expect(params.isUrlMode, isTrue);
+      expect(params.isFormMode, isFalse);
+      expect(params.mode, equals(ElicitationMode.url));
+      expect(params.url, equals('https://oauth.example.com/authorize'));
+      expect(params.elicitationId, equals('oauth-123'));
+      expect(params.requestedSchema, isNull);
+
+      final json = params.toJson();
+      expect(json['mode'], equals('url'));
+      expect(json['url'], equals('https://oauth.example.com/authorize'));
+      expect(json['elicitationId'], equals('oauth-123'));
+    });
+
+    test('ElicitRequestParams form mode', () {
+      final params = ElicitRequestParams.form(
+        message: 'Enter your name',
+        requestedSchema: const StringInputSchema(minLength: 1).toJson(),
+      );
+
+      expect(params.isFormMode, isTrue);
+      expect(params.isUrlMode, isFalse);
+      expect(params.mode, equals(ElicitationMode.form));
+      expect(params.requestedSchema, isNotNull);
+      expect(params.url, isNull);
+      expect(params.elicitationId, isNull);
+    });
+
+    test('JsonRpcElicitationCompleteNotification serialization', () {
+      final notification = JsonRpcElicitationCompleteNotification(
+        completeParams: const ElicitationCompleteParams(
+          elicitationId: 'oauth-123',
+        ),
+      );
+
+      final json = notification.toJson();
+      expect(json['method'], equals('notifications/elicitation/complete'));
+      expect(json['params']['elicitationId'], equals('oauth-123'));
+
+      final parsed = JsonRpcElicitationCompleteNotification.fromJson(json);
+      expect(parsed.completeParams.elicitationId, equals('oauth-123'));
+    });
+
+    test('URLElicitationRequiredError code', () {
+      expect(ErrorCode.urlElicitationRequired.value, equals(-32042));
+    });
+
+    test('EnumInputSchema with enumNames', () {
+      const schema = EnumInputSchema(
+        values: ['small', 'medium', 'large'],
+        enumNames: ['Small Size', 'Medium Size', 'Large Size'],
+        defaultValue: 'medium',
+        title: 'Size Selection',
+      );
+
+      final json = schema.toJson();
+      expect(json['enumNames'],
+          equals(['Small Size', 'Medium Size', 'Large Size']));
+      expect(json['title'], equals('Size Selection'));
+
+      final parsed = InputSchema.fromJson(json);
+      expect(parsed, isA<EnumInputSchema>());
+      final enumSchema = parsed as EnumInputSchema;
+      expect(enumSchema.enumNames,
+          equals(['Small Size', 'Medium Size', 'Large Size']));
     });
   });
 }

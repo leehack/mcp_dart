@@ -74,7 +74,7 @@ McpServer getServer() {
     'register_user',
     description: 'Register a new user account by collecting their information',
     toolInputSchema: ToolInputSchema(properties: {}),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       try {
         // Collect username
         final usernameResult = await server.elicitUserInput(
@@ -195,7 +195,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
     'create_event',
     description: 'Create a calendar event by collecting event details',
     toolInputSchema: ToolInputSchema(properties: {}),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       try {
         // Step 1: Collect basic event information
         final titleResult = await server.elicitUserInput(
@@ -344,7 +344,7 @@ Duration: $duration minutes''',
     'update_shipping_address',
     description: 'Update shipping address with validation',
     toolInputSchema: ToolInputSchema(properties: {}),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       try {
         // Collect name
         final nameResult = await server.elicitUserInput(

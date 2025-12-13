@@ -66,6 +66,8 @@ sealed class JsonRpcMessage {
           'roots/list' => JsonRpcListRootsRequest.fromJson(json),
           'tasks/list' => JsonRpcListTasksRequest.fromJson(json),
           'tasks/cancel' => JsonRpcCancelTaskRequest.fromJson(json),
+          'tasks/get' => JsonRpcGetTaskRequest.fromJson(json),
+          'tasks/result' => JsonRpcTaskResultRequest.fromJson(json),
           _ => throw UnimplementedError(
               "fromJson for request method '$method' not implemented",
             ),
@@ -95,6 +97,8 @@ sealed class JsonRpcMessage {
             ),
           'notifications/roots/list_changed' =>
             JsonRpcRootsListChangedNotification.fromJson(json),
+          'notifications/tasks/status' =>
+            JsonRpcTaskStatusNotification.fromJson(json),
           _ => throw UnimplementedError(
               "fromJson for notification method '$method' not implemented",
             ),
@@ -208,6 +212,11 @@ class JsonRpcResponse extends JsonRpcMessage {
 enum ErrorCode {
   connectionClosed(-32000),
   requestTimeout(-32001),
+
+  /// URL mode elicitation is required before the request can be processed.
+  /// The error data contains elicitations that must be completed.
+  urlElicitationRequired(-32042),
+
   parseError(-32700),
   invalidRequest(-32600),
   methodNotFound(-32601),
@@ -385,15 +394,205 @@ class ClientCapabilitiesRoots {
 }
 
 /// Describes capabilities related to elicitation (server-initiated user input).
+///
+/// Clients can declare support for specific elicitation modes:
+/// - **form**: In-band structured data collection with JSON Schema validation
+/// - **url**: Out-of-band interaction via URL navigation (data not exposed to client)
 class ClientCapabilitiesElicitation {
-  /// Empty object indicates support for elicitation
-  const ClientCapabilitiesElicitation();
+  /// Whether the client supports form mode elicitation.
+  /// Form mode collects structured data directly through the MCP client.
+  final bool supportsForm;
+
+  /// Whether the client supports URL mode elicitation.
+  /// URL mode directs users to external URLs for sensitive interactions.
+  final bool supportsUrl;
+
+  /// Creates elicitation capabilities.
+  /// By default, supports form mode only for backwards compatibility.
+  const ClientCapabilitiesElicitation({
+    this.supportsForm = true,
+    this.supportsUrl = false,
+  });
+
+  /// Creates capabilities supporting both form and URL modes.
+  const ClientCapabilitiesElicitation.all()
+      : supportsForm = true,
+        supportsUrl = true;
+
+  /// Creates capabilities supporting form mode only.
+  const ClientCapabilitiesElicitation.formOnly()
+      : supportsForm = true,
+        supportsUrl = false;
+
+  /// Creates capabilities supporting URL mode only.
+  const ClientCapabilitiesElicitation.urlOnly()
+      : supportsForm = false,
+        supportsUrl = true;
 
   factory ClientCapabilitiesElicitation.fromJson(Map<String, dynamic> json) {
+    // Check for new format with form/url sub-objects
+    final hasForm = json.containsKey('form');
+    final hasUrl = json.containsKey('url');
+
+    if (hasForm || hasUrl) {
+      return ClientCapabilitiesElicitation(
+        supportsForm: hasForm,
+        supportsUrl: hasUrl,
+      );
+    }
+
+    // Backwards compatibility: empty object means form support only
     return const ClientCapabilitiesElicitation();
   }
 
+  Map<String, dynamic> toJson() => {
+        if (supportsForm) 'form': <String, dynamic>{},
+        if (supportsUrl) 'url': <String, dynamic>{},
+      };
+}
+
+/// Capabilities related to sampling.
+class ClientCapabilitiesSampling {
+  const ClientCapabilitiesSampling();
+
+  factory ClientCapabilitiesSampling.fromJson(Map<String, dynamic> json) {
+    return const ClientCapabilitiesSampling();
+  }
+
   Map<String, dynamic> toJson() => {};
+}
+
+/// Capabilities related to tasks > elicitation.
+class ClientCapabilitiesTasksElicitationCreate {
+  const ClientCapabilitiesTasksElicitationCreate();
+
+  factory ClientCapabilitiesTasksElicitationCreate.fromJson(
+      Map<String, dynamic> json) {
+    return const ClientCapabilitiesTasksElicitationCreate();
+  }
+
+  Map<String, dynamic> toJson() => {};
+}
+
+class ClientCapabilitiesTasksElicitation {
+  final ClientCapabilitiesTasksElicitationCreate? create;
+
+  const ClientCapabilitiesTasksElicitation({this.create});
+
+  factory ClientCapabilitiesTasksElicitation.fromJson(
+      Map<String, dynamic> json) {
+    final createMap = json['create'] as Map<String, dynamic>?;
+    return ClientCapabilitiesTasksElicitation(
+      create: createMap != null
+          ? ClientCapabilitiesTasksElicitationCreate.fromJson(createMap)
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (create != null) 'create': create!.toJson(),
+      };
+}
+
+/// Capabilities related to tasks > sampling.
+class ClientCapabilitiesTasksSamplingCreateMessage {
+  const ClientCapabilitiesTasksSamplingCreateMessage();
+
+  factory ClientCapabilitiesTasksSamplingCreateMessage.fromJson(
+      Map<String, dynamic> json) {
+    return const ClientCapabilitiesTasksSamplingCreateMessage();
+  }
+
+  Map<String, dynamic> toJson() => {};
+}
+
+class ClientCapabilitiesTasksSampling {
+  final ClientCapabilitiesTasksSamplingCreateMessage? createMessage;
+
+  const ClientCapabilitiesTasksSampling({this.createMessage});
+
+  factory ClientCapabilitiesTasksSampling.fromJson(Map<String, dynamic> json) {
+    final createMessageMap = json['createMessage'] as Map<String, dynamic>?;
+    return ClientCapabilitiesTasksSampling(
+      createMessage: createMessageMap != null
+          ? ClientCapabilitiesTasksSamplingCreateMessage.fromJson(
+              createMessageMap)
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (createMessage != null) 'createMessage': createMessage!.toJson(),
+      };
+}
+
+/// Task capabilities derived from spec:
+/// specifies which request types can be augmented with tasks.
+class ClientCapabilitiesTasksRequests {
+  /// Task support for elicitation-related requests.
+  final ClientCapabilitiesTasksElicitation? elicitation;
+
+  /// Task support for sampling-related requests.
+  final ClientCapabilitiesTasksSampling? sampling;
+
+  const ClientCapabilitiesTasksRequests({
+    this.elicitation,
+    this.sampling,
+  });
+
+  factory ClientCapabilitiesTasksRequests.fromJson(Map<String, dynamic> json) {
+    final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
+    final samplingMap = json['sampling'] as Map<String, dynamic>?;
+
+    return ClientCapabilitiesTasksRequests(
+      elicitation: elicitationMap != null
+          ? ClientCapabilitiesTasksElicitation.fromJson(elicitationMap)
+          : null,
+      sampling: samplingMap != null
+          ? ClientCapabilitiesTasksSampling.fromJson(samplingMap)
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (elicitation != null) 'elicitation': elicitation!.toJson(),
+        if (sampling != null) 'sampling': sampling!.toJson(),
+      };
+}
+
+/// Describes capabilities related to tasks.
+class ClientCapabilitiesTasks {
+  /// Whether this client supports tasks/cancel.
+  final bool? cancel;
+
+  /// Whether this client supports tasks/list.
+  final bool? list;
+
+  /// Specifies which request types can be augmented with tasks.
+  final ClientCapabilitiesTasksRequests? requests;
+
+  const ClientCapabilitiesTasks({
+    this.cancel,
+    this.list,
+    this.requests,
+  });
+
+  factory ClientCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
+    final requestsMap = json['requests'] as Map<String, dynamic>?;
+    return ClientCapabilitiesTasks(
+      cancel: json['cancel'] as bool?,
+      list: json['list'] as bool?,
+      requests: requestsMap == null
+          ? null
+          : ClientCapabilitiesTasksRequests.fromJson(requestsMap),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (cancel != null) 'cancel': cancel,
+        if (list != null) 'list': list,
+        if (requests != null) 'requests': requests!.toJson(),
+      };
 }
 
 /// Capabilities a client may support.
@@ -402,7 +601,7 @@ class ClientCapabilities {
   final Map<String, dynamic>? experimental;
 
   /// Present if the client supports sampling (`sampling/createMessage`).
-  final Map<String, dynamic>? sampling;
+  final ClientCapabilitiesSampling? sampling;
 
   /// Present if the client supports listing roots (`roots/list`).
   final ClientCapabilitiesRoots? roots;
@@ -411,7 +610,7 @@ class ClientCapabilities {
   final ClientCapabilitiesElicitation? elicitation;
 
   /// Present if the client supports tasks (`tasks/list`, `tasks/requests`, etc).
-  final Map<String, dynamic>? tasks;
+  final ClientCapabilitiesTasks? tasks;
 
   const ClientCapabilities({
     this.experimental,
@@ -424,24 +623,30 @@ class ClientCapabilities {
   factory ClientCapabilities.fromJson(Map<String, dynamic> json) {
     final rootsMap = json['roots'] as Map<String, dynamic>?;
     final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
+    final tasksMap = json['tasks'] as Map<String, dynamic>?;
+    final samplingMap = json['sampling'] as Map<String, dynamic>?;
+
     return ClientCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
-      sampling: json['sampling'] as Map<String, dynamic>?,
+      sampling: samplingMap == null
+          ? null
+          : ClientCapabilitiesSampling.fromJson(samplingMap),
       roots:
           rootsMap == null ? null : ClientCapabilitiesRoots.fromJson(rootsMap),
       elicitation: elicitationMap == null
           ? null
           : ClientCapabilitiesElicitation.fromJson(elicitationMap),
-      tasks: json['tasks'] as Map<String, dynamic>?,
+      tasks:
+          tasksMap == null ? null : ClientCapabilitiesTasks.fromJson(tasksMap),
     );
   }
 
   Map<String, dynamic> toJson() => {
         if (experimental != null) 'experimental': experimental,
-        if (sampling != null) 'sampling': sampling,
+        if (sampling != null) 'sampling': sampling!.toJson(),
         if (roots != null) 'roots': roots!.toJson(),
         if (elicitation != null) 'elicitation': elicitation!.toJson(),
-        if (tasks != null) 'tasks': tasks,
+        if (tasks != null) 'tasks': tasks!.toJson(),
       };
 }
 
@@ -591,6 +796,26 @@ class ServerCapabilitiesCompletions {
       };
 }
 
+/// Describes capabilities related to tasks.
+class ServerCapabilitiesTasks {
+  /// Whether the server supports `notifications/tasks/list_changed`.
+  final bool? listChanged;
+
+  const ServerCapabilitiesTasks({
+    this.listChanged,
+  });
+
+  factory ServerCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
+    return ServerCapabilitiesTasks(
+      listChanged: json['listChanged'] as bool?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (listChanged != null) 'listChanged': listChanged,
+      };
+}
+
 /// Capabilities a server may support.
 class ServerCapabilities {
   /// Experimental, non-standard capabilities.
@@ -612,7 +837,7 @@ class ServerCapabilities {
   final ServerCapabilitiesCompletions? completions;
 
   /// Present if the server offers tasks (`tasks/list`, etc).
-  final Map<String, dynamic>? tasks;
+  final ServerCapabilitiesTasks? tasks;
 
   const ServerCapabilities({
     this.experimental,
@@ -627,8 +852,10 @@ class ServerCapabilities {
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
     final pMap = json['prompts'] as Map<String, dynamic>?;
     final rMap = json['resources'] as Map<String, dynamic>?;
-    final tMap = json['tools'] as Map<String, dynamic>?;
     final cMap = json['completions'] as Map<String, dynamic>?;
+    final tMap = json['tools'] as Map<String, dynamic>?;
+    final tasksMap = json['tasks'] as Map<String, dynamic>?;
+
     return ServerCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
       logging: json['logging'] as Map<String, dynamic>?,
@@ -638,7 +865,8 @@ class ServerCapabilities {
       tools: tMap == null ? null : ServerCapabilitiesTools.fromJson(tMap),
       completions:
           cMap == null ? null : ServerCapabilitiesCompletions.fromJson(cMap),
-      tasks: json['tasks'] as Map<String, dynamic>?,
+      tasks:
+          tasksMap == null ? null : ServerCapabilitiesTasks.fromJson(tasksMap),
     );
   }
 
@@ -649,7 +877,7 @@ class ServerCapabilities {
         if (resources != null) 'resources': resources!.toJson(),
         if (tools != null) 'tools': tools!.toJson(),
         if (completions != null) 'completions': completions!.toJson(),
-        if (tasks != null) 'tasks': tasks,
+        if (tasks != null) 'tasks': tasks!.toJson(),
       };
 }
 
@@ -2007,11 +2235,21 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
   /// The call parameters.
   final CallToolRequestParams callParams;
 
+  /// Optional task creation parameters for task-augmented requests.
+  final TaskCreationParams? taskParams;
+
   JsonRpcCallToolRequest({
     required super.id,
     required this.callParams,
+    this.taskParams,
     super.meta,
-  }) : super(method: "tools/call", params: callParams.toJson());
+  }) : super(
+          method: "tools/call",
+          params: {
+            ...callParams.toJson(),
+            if (taskParams != null) 'task': taskParams.toJson(),
+          },
+        );
 
   factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
@@ -2019,12 +2257,18 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
       throw FormatException("Missing params for call tool request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final taskMap = paramsMap['task'] as Map<String, dynamic>?;
+
     return JsonRpcCallToolRequest(
       id: json['id'],
       callParams: CallToolRequestParams.fromJson(paramsMap),
+      taskParams: taskMap != null ? TaskCreationParams.fromJson(taskMap) : null,
       meta: meta,
     );
   }
+
+  /// Whether this is a task-augmented request.
+  bool get isTaskAugmented => taskParams != null;
 }
 
 /// Result data for a successful `tools/call` request.
@@ -2767,10 +3011,13 @@ sealed class InputSchema {
   /// The type of input schema
   final String type;
 
+  /// Human-readable title/label for this input
+  final String? title;
+
   /// Description of what this input is for
   final String? description;
 
-  const InputSchema({required this.type, this.description});
+  const InputSchema({required this.type, this.title, this.description});
 
   /// Creates a specific InputSchema subclass from JSON
   factory InputSchema.fromJson(Map<String, dynamic> json) {
@@ -2779,6 +3026,7 @@ sealed class InputSchema {
       'boolean' => BooleanInputSchema.fromJson(json),
       'string' => StringInputSchema.fromJson(json),
       'number' => NumberInputSchema.fromJson(json),
+      'integer' => IntegerInputSchema.fromJson(json),
       'enum' => EnumInputSchema.fromJson(json),
       _ => throw FormatException('Unknown input schema type: $type'),
     };
@@ -2795,12 +3043,14 @@ class BooleanInputSchema extends InputSchema {
 
   const BooleanInputSchema({
     this.defaultValue,
+    super.title,
     super.description,
   }) : super(type: 'boolean');
 
   factory BooleanInputSchema.fromJson(Map<String, dynamic> json) {
     return BooleanInputSchema(
       defaultValue: json['defaultValue'] as bool?,
+      title: json['title'] as String?,
       description: json['description'] as String?,
     );
   }
@@ -2808,6 +3058,7 @@ class BooleanInputSchema extends InputSchema {
   @override
   Map<String, dynamic> toJson() => {
         'type': type,
+        if (title != null) 'title': title,
         if (description != null) 'description': description,
         if (defaultValue != null) 'defaultValue': defaultValue,
       };
@@ -2827,11 +3078,16 @@ class StringInputSchema extends InputSchema {
   /// Regular expression pattern for validation
   final String? pattern;
 
+  /// Semantic format hint (e.g., "date", "email", "uri", "date-time")
+  final String? format;
+
   const StringInputSchema({
     this.defaultValue,
     this.minLength,
     this.maxLength,
     this.pattern,
+    this.format,
+    super.title,
     super.description,
   }) : super(type: 'string');
 
@@ -2841,6 +3097,8 @@ class StringInputSchema extends InputSchema {
       minLength: json['minLength'] as int?,
       maxLength: json['maxLength'] as int?,
       pattern: json['pattern'] as String?,
+      format: json['format'] as String?,
+      title: json['title'] as String?,
       description: json['description'] as String?,
     );
   }
@@ -2848,15 +3106,17 @@ class StringInputSchema extends InputSchema {
   @override
   Map<String, dynamic> toJson() => {
         'type': type,
+        if (title != null) 'title': title,
         if (description != null) 'description': description,
         if (defaultValue != null) 'defaultValue': defaultValue,
         if (minLength != null) 'minLength': minLength,
         if (maxLength != null) 'maxLength': maxLength,
         if (pattern != null) 'pattern': pattern,
+        if (format != null) 'format': format,
       };
 }
 
-/// Number input schema for numeric input with range constraints
+/// Number input schema for numeric input with range constraints (allows decimals)
 class NumberInputSchema extends InputSchema {
   /// Default value for the number input
   final num? defaultValue;
@@ -2871,6 +3131,7 @@ class NumberInputSchema extends InputSchema {
     this.defaultValue,
     this.minimum,
     this.maximum,
+    super.title,
     super.description,
   }) : super(type: 'number');
 
@@ -2879,6 +3140,7 @@ class NumberInputSchema extends InputSchema {
       defaultValue: json['defaultValue'] as num?,
       minimum: json['minimum'] as num?,
       maximum: json['maximum'] as num?,
+      title: json['title'] as String?,
       description: json['description'] as String?,
     );
   }
@@ -2886,6 +3148,47 @@ class NumberInputSchema extends InputSchema {
   @override
   Map<String, dynamic> toJson() => {
         'type': type,
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (defaultValue != null) 'defaultValue': defaultValue,
+        if (minimum != null) 'minimum': minimum,
+        if (maximum != null) 'maximum': maximum,
+      };
+}
+
+/// Integer input schema for whole number input with range constraints
+class IntegerInputSchema extends InputSchema {
+  /// Default value for the integer input
+  final int? defaultValue;
+
+  /// Minimum value constraint
+  final int? minimum;
+
+  /// Maximum value constraint
+  final int? maximum;
+
+  const IntegerInputSchema({
+    this.defaultValue,
+    this.minimum,
+    this.maximum,
+    super.title,
+    super.description,
+  }) : super(type: 'integer');
+
+  factory IntegerInputSchema.fromJson(Map<String, dynamic> json) {
+    return IntegerInputSchema(
+      defaultValue: json['defaultValue'] as int?,
+      minimum: json['minimum'] as int?,
+      maximum: json['maximum'] as int?,
+      title: json['title'] as String?,
+      description: json['description'] as String?,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        if (title != null) 'title': title,
         if (description != null) 'description': description,
         if (defaultValue != null) 'defaultValue': defaultValue,
         if (minimum != null) 'minimum': minimum,
@@ -2901,9 +3204,14 @@ class EnumInputSchema extends InputSchema {
   /// List of allowed values
   final List<dynamic> values;
 
+  /// Optional human-readable labels for each enum value
+  final List<String>? enumNames;
+
   const EnumInputSchema({
     required this.values,
     this.defaultValue,
+    this.enumNames,
+    super.title,
     super.description,
   }) : super(type: 'enum');
 
@@ -2911,6 +3219,8 @@ class EnumInputSchema extends InputSchema {
     return EnumInputSchema(
       values: json['values'] as List<dynamic>,
       defaultValue: json['defaultValue'] as String?,
+      enumNames: (json['enumNames'] as List<dynamic>?)?.cast<String>(),
+      title: json['title'] as String?,
       description: json['description'] as String?,
     );
   }
@@ -2918,8 +3228,10 @@ class EnumInputSchema extends InputSchema {
   @override
   Map<String, dynamic> toJson() => {
         'type': type,
+        if (title != null) 'title': title,
         if (description != null) 'description': description,
         'values': values,
+        if (enumNames != null) 'enumNames': enumNames,
         if (defaultValue != null) 'defaultValue': defaultValue,
       };
 }
@@ -2970,10 +3282,16 @@ extension TaskStatusName on TaskStatus {
         throw FormatException("Unknown task status: $status");
     }
   }
+
+  /// Returns true if this status represents a terminal state (completed, failed, or cancelled).
+  bool get isTerminal =>
+      this == TaskStatus.completed ||
+      this == TaskStatus.failed ||
+      this == TaskStatus.cancelled;
 }
 
 /// Represents a task in the system.
-class Task {
+class Task implements BaseResultData {
   /// Unique identifier for the task.
   final String taskId;
 
@@ -2997,6 +3315,7 @@ class Task {
   final String? lastUpdatedAt;
 
   /// Optional metadata.
+  @override
   final Map<String, dynamic>? meta;
 
   const Task({
@@ -3024,12 +3343,13 @@ class Task {
     );
   }
 
+  @override
   Map<String, dynamic> toJson() => {
         'taskId': taskId,
         'status': status.name,
         if (statusMessage != null) 'statusMessage': statusMessage,
-        if (ttl != null) 'ttl': ttl,
-        if (pollInterval != null) 'pollInterval': pollInterval,
+        'ttl': ttl,
+        'pollInterval': pollInterval,
         if (createdAt != null) 'createdAt': createdAt,
         if (lastUpdatedAt != null) 'lastUpdatedAt': lastUpdatedAt,
         if (meta != null) '_meta': meta,
@@ -3144,6 +3464,227 @@ class JsonRpcCancelTaskRequest extends JsonRpcRequest {
   }
 }
 
+/// Parameters for the `tasks/get` request.
+class GetTaskRequestParams {
+  /// The ID of the task to get.
+  final String taskId;
+
+  const GetTaskRequestParams({required this.taskId});
+
+  factory GetTaskRequestParams.fromJson(Map<String, dynamic> json) =>
+      GetTaskRequestParams(taskId: json['taskId'] as String);
+
+  Map<String, dynamic> toJson() => {'taskId': taskId};
+}
+
+/// Request sent from client to get task status.
+class JsonRpcGetTaskRequest extends JsonRpcRequest {
+  /// The get task parameters.
+  final GetTaskRequestParams getParams;
+
+  JsonRpcGetTaskRequest({
+    required super.id,
+    required this.getParams,
+    super.meta,
+  }) : super(method: "tasks/get", params: getParams.toJson());
+
+  factory JsonRpcGetTaskRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for get task request");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcGetTaskRequest(
+      id: json['id'],
+      getParams: GetTaskRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+/// Parameters for the `tasks/result` request.
+class TaskResultRequestParams {
+  /// The ID of the task to get results for.
+  final String taskId;
+
+  const TaskResultRequestParams({required this.taskId});
+
+  factory TaskResultRequestParams.fromJson(Map<String, dynamic> json) =>
+      TaskResultRequestParams(taskId: json['taskId'] as String);
+
+  Map<String, dynamic> toJson() => {'taskId': taskId};
+}
+
+/// Request sent from client to retrieve task results.
+class JsonRpcTaskResultRequest extends JsonRpcRequest {
+  /// The task result parameters.
+  final TaskResultRequestParams resultParams;
+
+  JsonRpcTaskResultRequest({
+    required super.id,
+    required this.resultParams,
+    super.meta,
+  }) : super(method: "tasks/result", params: resultParams.toJson());
+
+  factory JsonRpcTaskResultRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for task result request");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcTaskResultRequest(
+      id: json['id'],
+      resultParams: TaskResultRequestParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+/// Parameters for task creation when augmenting requests.
+class TaskCreationParams {
+  /// Requested duration in milliseconds to retain task from creation.
+  final int? ttl;
+
+  const TaskCreationParams({this.ttl});
+
+  factory TaskCreationParams.fromJson(Map<String, dynamic> json) =>
+      TaskCreationParams(ttl: json['ttl'] as int?);
+
+  Map<String, dynamic> toJson() => {
+        if (ttl != null) 'ttl': ttl,
+      };
+}
+
+/// Result data for a task creation response.
+class CreateTaskResult implements BaseResultData {
+  /// The created task.
+  final Task task;
+
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const CreateTaskResult({required this.task, this.meta});
+
+  factory CreateTaskResult.fromJson(Map<String, dynamic> json) {
+    final meta = json['_meta'] as Map<String, dynamic>?;
+    return CreateTaskResult(
+      task: Task.fromJson(json['task'] as Map<String, dynamic>),
+      meta: meta,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'task': task.toJson(),
+      };
+}
+
+/// Message yielded by the task stream helper.
+sealed class TaskStreamMessage {
+  final String type;
+  const TaskStreamMessage(this.type);
+}
+
+class TaskCreatedMessage extends TaskStreamMessage {
+  final Task task;
+  const TaskCreatedMessage(this.task) : super('taskCreated');
+}
+
+class TaskStatusMessage extends TaskStreamMessage {
+  final Task task;
+  const TaskStatusMessage(this.task) : super('taskStatus');
+}
+
+class TaskResultMessage extends TaskStreamMessage {
+  final CallToolResult result;
+  const TaskResultMessage(this.result) : super('result');
+}
+
+class TaskErrorMessage extends TaskStreamMessage {
+  final Object error;
+  const TaskErrorMessage(this.error) : super('error');
+}
+
+/// Parameters for the `notifications/tasks/status` notification.
+class TaskStatusNotificationParams {
+  /// The ID of the task.
+  final String taskId;
+
+  /// Current state of the task execution.
+  final TaskStatus status;
+
+  /// Optional human-readable message describing the current state.
+  final String? statusMessage;
+
+  /// Time in milliseconds from creation before task may be deleted.
+  final int? ttl;
+
+  /// Suggested time in milliseconds between status checks.
+  final int? pollInterval;
+
+  /// ISO 8601 timestamp when the task was created.
+  final String? createdAt;
+
+  /// ISO 8601 timestamp when the task status was last updated.
+  final String? lastUpdatedAt;
+
+  const TaskStatusNotificationParams({
+    required this.taskId,
+    required this.status,
+    this.statusMessage,
+    this.ttl,
+    this.pollInterval,
+    this.createdAt,
+    this.lastUpdatedAt,
+  });
+
+  factory TaskStatusNotificationParams.fromJson(Map<String, dynamic> json) {
+    return TaskStatusNotificationParams(
+      taskId: json['taskId'] as String,
+      status: TaskStatusName.fromString(json['status'] as String),
+      statusMessage: json['statusMessage'] as String?,
+      ttl: json['ttl'] as int?,
+      pollInterval: json['pollInterval'] as int?,
+      createdAt: json['createdAt'] as String?,
+      lastUpdatedAt: json['lastUpdatedAt'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'taskId': taskId,
+        'status': status.name,
+        if (statusMessage != null) 'statusMessage': statusMessage,
+        if (ttl != null) 'ttl': ttl,
+        if (pollInterval != null) 'pollInterval': pollInterval,
+        if (createdAt != null) 'createdAt': createdAt,
+        if (lastUpdatedAt != null) 'lastUpdatedAt': lastUpdatedAt,
+      };
+}
+
+/// Notification from receiver indicating a task status has changed.
+class JsonRpcTaskStatusNotification extends JsonRpcNotification {
+  /// The task status parameters.
+  final TaskStatusNotificationParams statusParams;
+
+  JsonRpcTaskStatusNotification({required this.statusParams, super.meta})
+      : super(
+            method: "notifications/tasks/status",
+            params: statusParams.toJson());
+
+  factory JsonRpcTaskStatusNotification.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException("Missing params for task status notification");
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcTaskStatusNotification(
+      statusParams: TaskStatusNotificationParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
 /// Represents a root directory or file the server can operate on.
 class Root {
   /// URI identifying the root (must start with `file://`).
@@ -3218,36 +3759,93 @@ class JsonRpcRootsListChangedNotification extends JsonRpcNotification {
       const JsonRpcRootsListChangedNotification();
 }
 
-/// Parameters for the `elicitation/create` request
+/// Elicitation mode: 'form' for in-band structured data, 'url' for out-of-band interaction.
+enum ElicitationMode {
+  /// In-band structured data collection with optional schema validation.
+  /// Data is exposed to the client.
+  form,
+
+  /// Out-of-band interaction via URL navigation.
+  /// Data (other than the URL itself) is NOT exposed to the client.
+  url,
+}
+
+/// Parameters for the `elicitation/create` request.
+///
+/// Supports two modes:
+/// - **Form mode**: Collects structured data directly through the MCP client
+/// - **URL mode**: Directs users to external URLs for sensitive interactions
 class ElicitRequestParams {
-  /// The message to present to the user
+  /// The mode of elicitation. Defaults to 'form' if omitted (for backwards compatibility).
+  final ElicitationMode? mode;
+
+  /// A human-readable message explaining why the interaction is needed.
   final String message;
 
-  /// The JSON Schema defining what type of input to collect
-  final Map<String, dynamic> requestedSchema;
+  /// The JSON Schema defining what type of input to collect.
+  /// Required for form mode, not used for URL mode.
+  final Map<String, dynamic>? requestedSchema;
 
-  /// Optional URL to separate the elicitation UI from the client.
+  /// The URL that the user should navigate to.
+  /// Required for URL mode, not used for form mode.
   final String? url;
 
+  /// A unique identifier for the elicitation.
+  /// Required for URL mode to correlate with completion notifications.
+  final String? elicitationId;
+
   const ElicitRequestParams({
+    this.mode,
     required this.message,
-    required this.requestedSchema,
+    this.requestedSchema,
     this.url,
+    this.elicitationId,
   });
 
+  /// Creates form mode elicitation parameters.
+  const ElicitRequestParams.form({
+    required this.message,
+    required Map<String, dynamic> this.requestedSchema,
+  })  : mode = ElicitationMode.form,
+        url = null,
+        elicitationId = null;
+
+  /// Creates URL mode elicitation parameters.
+  const ElicitRequestParams.url({
+    required this.message,
+    required String this.url,
+    required String this.elicitationId,
+  })  : mode = ElicitationMode.url,
+        requestedSchema = null;
+
   factory ElicitRequestParams.fromJson(Map<String, dynamic> json) {
+    final modeStr = json['mode'] as String?;
+    ElicitationMode? mode;
+    if (modeStr != null) {
+      mode = ElicitationMode.values.byName(modeStr);
+    }
     return ElicitRequestParams(
+      mode: mode,
       message: json['message'] as String,
-      requestedSchema: json['requestedSchema'] as Map<String, dynamic>,
+      requestedSchema: json['requestedSchema'] as Map<String, dynamic>?,
       url: json['url'] as String?,
+      elicitationId: json['elicitationId'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
+        if (mode != null) 'mode': mode!.name,
         'message': message,
-        'requestedSchema': requestedSchema,
+        if (requestedSchema != null) 'requestedSchema': requestedSchema,
         if (url != null) 'url': url,
+        if (elicitationId != null) 'elicitationId': elicitationId,
       };
+
+  /// Whether this is a form mode elicitation.
+  bool get isFormMode => mode == null || mode == ElicitationMode.form;
+
+  /// Whether this is a URL mode elicitation.
+  bool get isUrlMode => mode == ElicitationMode.url;
 }
 
 /// Request sent from server to client to elicit user input
@@ -3316,6 +3914,83 @@ class ElicitResult implements BaseResultData {
 
   /// Helper to check if the user cancelled the input
   bool get cancelled => action == 'cancel';
+}
+
+/// Parameters for the `notifications/elicitation/complete` notification.
+///
+/// Sent by servers when an out-of-band interaction started by URL mode
+/// elicitation is completed.
+class ElicitationCompleteParams {
+  /// The unique identifier for the elicitation, matching the original request.
+  final String elicitationId;
+
+  const ElicitationCompleteParams({required this.elicitationId});
+
+  factory ElicitationCompleteParams.fromJson(Map<String, dynamic> json) {
+    return ElicitationCompleteParams(
+      elicitationId: json['elicitationId'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'elicitationId': elicitationId};
+}
+
+/// Notification sent from server to client when URL mode elicitation completes.
+///
+/// This allows clients to react programmatically when an out-of-band
+/// interaction (started via URL mode elicitation) is completed.
+class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
+  /// The notification parameters containing the elicitation ID.
+  final ElicitationCompleteParams completeParams;
+
+  JsonRpcElicitationCompleteNotification({
+    required this.completeParams,
+    super.meta,
+  }) : super(
+          method: "notifications/elicitation/complete",
+          params: completeParams.toJson(),
+        );
+
+  factory JsonRpcElicitationCompleteNotification.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw FormatException(
+        "Missing params for elicitation complete notification",
+      );
+    }
+    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    return JsonRpcElicitationCompleteNotification(
+      completeParams: ElicitationCompleteParams.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
+/// Data structure for URLElicitationRequiredError (-32042).
+///
+/// Contains a list of URL mode elicitations that must be completed
+/// before the original request can be retried.
+class URLElicitationRequiredErrorData {
+  /// List of elicitations that are required to complete.
+  /// All elicitations MUST be URL mode and have an elicitationId.
+  final List<ElicitRequestParams> elicitations;
+
+  const URLElicitationRequiredErrorData({required this.elicitations});
+
+  factory URLElicitationRequiredErrorData.fromJson(Map<String, dynamic> json) {
+    final elicitationsList = json['elicitations'] as List<dynamic>? ?? [];
+    return URLElicitationRequiredErrorData(
+      elicitations: elicitationsList
+          .map((e) => ElicitRequestParams.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'elicitations': elicitations.map((e) => e.toJson()).toList(),
+      };
 }
 
 /// Custom error class for MCP specific errors.

@@ -190,7 +190,7 @@ void main() {
       final capableClient = Client(clientInfo,
           options: ClientOptions(
               capabilities: ClientCapabilities(
-                  sampling: {'supported': true},
+                  sampling: const ClientCapabilitiesSampling(),
                   roots: ClientCapabilitiesRoots())));
 
       // Should not throw for supported capabilities

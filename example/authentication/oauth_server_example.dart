@@ -645,7 +645,7 @@ McpServer createOAuthMcpServer() {
       },
       required: ['name'],
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       final name = args?['name'] as String? ?? 'user';
       return CallToolResult.fromContent(
         content: [TextContent(text: 'Hello, $name!')],
@@ -660,7 +660,7 @@ McpServer createOAuthMcpServer() {
     toolInputSchema: ToolInputSchema(
       properties: {},
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       // In a real implementation, retrieve user info from request context
       // This is a simplified example
       return CallToolResult.fromContent(
@@ -686,7 +686,7 @@ McpServer createOAuthMcpServer() {
       },
       required: ['action'],
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       // Verify admin scope in production
       final action = args?['action'] as String? ?? 'none';
       return CallToolResult.fromContent(

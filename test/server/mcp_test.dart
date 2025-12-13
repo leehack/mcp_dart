@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/mcp.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
@@ -43,8 +44,14 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer =
-          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer = McpServer(
+        Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
       transport = MockTransport();
     });
 
@@ -60,7 +67,7 @@ void main() {
             'input': {'type': 'string'}
           },
         ),
-        callback: ({args, extra}) async {
+        callback: ({args, meta, extra}) async {
           callbackInvoked = true;
           receivedArgs = args ?? {};
           return CallToolResult.fromContent(
@@ -105,7 +112,7 @@ void main() {
 
       mcpServer.tool(
         'extra_test',
-        callback: ({args, extra}) async {
+        callback: ({args, meta, extra}) async {
           receivedExtra = extra;
           return CallToolResult.fromContent(
             content: [TextContent(text: 'ok')],
@@ -139,7 +146,7 @@ void main() {
     test('tool callback error returns CallToolResult with isError', () async {
       mcpServer.tool(
         'error_tool',
-        callback: ({args, extra}) async {
+        callback: ({args, meta, extra}) async {
           throw Exception('Tool execution failed');
         },
       );
@@ -172,7 +179,7 @@ void main() {
     test('cannot register duplicate tool names', () {
       mcpServer.tool(
         'duplicate',
-        callback: ({args, extra}) async {
+        callback: ({args, meta, extra}) async {
           return CallToolResult.fromContent(
             content: [TextContent(text: 'first')],
           );
@@ -182,7 +189,7 @@ void main() {
       expect(
         () => mcpServer.tool(
           'duplicate',
-          callback: ({args, extra}) async {
+          callback: ({args, meta, extra}) async {
             return CallToolResult.fromContent(
               content: [TextContent(text: 'second')],
             );
@@ -207,7 +214,7 @@ void main() {
             'result': {'type': 'string'}
           },
         ),
-        callback: ({args, extra}) async {
+        callback: ({args, meta, extra}) async {
           return CallToolResult.fromContent(
             content: [TextContent(text: 'result')],
           );
@@ -224,8 +231,14 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer =
-          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer = McpServer(
+        Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: ServerCapabilities(
+            resources: ServerCapabilitiesResources(),
+          ),
+        ),
+      );
       transport = MockTransport();
     });
 
@@ -439,8 +452,14 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer =
-          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer = McpServer(
+        Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: ServerCapabilities(
+            prompts: ServerCapabilitiesPrompts(),
+          ),
+        ),
+      );
       transport = MockTransport();
     });
 
@@ -693,8 +712,15 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer =
-          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer = McpServer(
+        Implementation(name: 'TestServer', version: '1.0.0'),
+        options: ServerOptions(
+          capabilities: ServerCapabilities(
+            prompts: ServerCapabilitiesPrompts(),
+            resources: ServerCapabilitiesResources(),
+          ),
+        ),
+      );
       transport = MockTransport();
     });
 

@@ -67,7 +67,7 @@ void main() async {
           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNiAAAABgDNjd8qAAAAAElFTkSuQmCC",
       mimeType: "image/png",
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       final state = (args?['state'] as String?)?.toUpperCase();
       if (state == null || state.length != 2) {
         return CallToolResult.fromContent(
@@ -119,7 +119,7 @@ void main() async {
       },
       required: ["latitude", "longitude"],
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       final latitude = args?['latitude'] as num?;
       final longitude = args?['longitude'] as num?;
 

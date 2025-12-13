@@ -149,17 +149,19 @@ void main() {
 
     test('Tasks Capabilities', () {
       final clientCaps = ClientCapabilities(
-        tasks: {
-          'requests': {
-            'sampling': {'createMessage': {}}
-          }
-        },
+        tasks: ClientCapabilitiesTasks(
+          requests: ClientCapabilitiesTasksRequests(
+            sampling: ClientCapabilitiesTasksSampling(
+              createMessage: ClientCapabilitiesTasksSamplingCreateMessage(),
+            ),
+          ),
+        ),
       );
       expect(clientCaps.tasks, isNotNull);
       expect(clientCaps.toJson()['tasks'], isNotNull);
 
       final serverCaps = ServerCapabilities(
-        tasks: {'list': {}, 'cancel': {}},
+        tasks: ServerCapabilitiesTasks(listChanged: true),
         completions: ServerCapabilitiesCompletions(listChanged: true),
       );
       expect(serverCaps.tasks, isNotNull);
@@ -212,6 +214,295 @@ void main() {
       expect(deserialized.tools, hasLength(1));
       expect(deserialized.tools!.first.name, 'calculator');
       expect(deserialized.toolChoice, {'type': 'auto'});
+    });
+
+    group('Tasks API Types', () {
+      test('GetTaskRequestParams serialization', () {
+        final params = GetTaskRequestParams(taskId: 'task-123');
+        expect(params.taskId, 'task-123');
+
+        final json = params.toJson();
+        expect(json['taskId'], 'task-123');
+
+        final deserialized = GetTaskRequestParams.fromJson(json);
+        expect(deserialized.taskId, 'task-123');
+      });
+
+      test('JsonRpcGetTaskRequest serialization', () {
+        final request = JsonRpcGetTaskRequest(
+          id: 1,
+          getParams: GetTaskRequestParams(taskId: 'task-456'),
+        );
+        expect(request.method, 'tasks/get');
+        expect(request.getParams.taskId, 'task-456');
+
+        final json = request.toJson();
+        expect(json['method'], 'tasks/get');
+        expect(json['params']['taskId'], 'task-456');
+
+        final deserialized = JsonRpcGetTaskRequest.fromJson(json);
+        expect(deserialized.id, 1);
+        expect(deserialized.getParams.taskId, 'task-456');
+      });
+
+      test('JsonRpcGetTaskRequest via JsonRpcMessage.fromJson', () {
+        final json = {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'tasks/get',
+          'params': {'taskId': 'task-789'}
+        };
+        final message = JsonRpcMessage.fromJson(json);
+        expect(message, isA<JsonRpcGetTaskRequest>());
+        final request = message as JsonRpcGetTaskRequest;
+        expect(request.getParams.taskId, 'task-789');
+      });
+
+      test('TaskResultRequestParams serialization', () {
+        final params = TaskResultRequestParams(taskId: 'task-result-123');
+        expect(params.taskId, 'task-result-123');
+
+        final json = params.toJson();
+        expect(json['taskId'], 'task-result-123');
+
+        final deserialized = TaskResultRequestParams.fromJson(json);
+        expect(deserialized.taskId, 'task-result-123');
+      });
+
+      test('JsonRpcTaskResultRequest serialization', () {
+        final request = JsonRpcTaskResultRequest(
+          id: 2,
+          resultParams: TaskResultRequestParams(taskId: 'task-result-456'),
+        );
+        expect(request.method, 'tasks/result');
+        expect(request.resultParams.taskId, 'task-result-456');
+
+        final json = request.toJson();
+        expect(json['method'], 'tasks/result');
+        expect(json['params']['taskId'], 'task-result-456');
+
+        final deserialized = JsonRpcTaskResultRequest.fromJson(json);
+        expect(deserialized.id, 2);
+        expect(deserialized.resultParams.taskId, 'task-result-456');
+      });
+
+      test('JsonRpcTaskResultRequest via JsonRpcMessage.fromJson', () {
+        final json = {
+          'jsonrpc': '2.0',
+          'id': 2,
+          'method': 'tasks/result',
+          'params': {'taskId': 'task-xyz'}
+        };
+        final message = JsonRpcMessage.fromJson(json);
+        expect(message, isA<JsonRpcTaskResultRequest>());
+        final request = message as JsonRpcTaskResultRequest;
+        expect(request.resultParams.taskId, 'task-xyz');
+      });
+
+      test('TaskCreationParams serialization', () {
+        final params = TaskCreationParams(ttl: 3600);
+        expect(params.ttl, 3600);
+
+        final json = params.toJson();
+        expect(json['ttl'], 3600);
+
+        final deserialized = TaskCreationParams.fromJson(json);
+        expect(deserialized.ttl, 3600);
+      });
+
+      test('TaskCreationParams without ttl', () {
+        final params = TaskCreationParams();
+        expect(params.ttl, isNull);
+
+        final json = params.toJson();
+        expect(json.containsKey('ttl'), isFalse);
+
+        final deserialized = TaskCreationParams.fromJson({});
+        expect(deserialized.ttl, isNull);
+      });
+
+      test('CreateTaskResult serialization', () {
+        final result = CreateTaskResult(
+          task: Task(
+            taskId: 'new-task-123',
+            status: TaskStatus.working,
+            statusMessage: 'Task started',
+            ttl: 7200,
+            pollInterval: 1000,
+            createdAt: '2025-01-15T10:00:00Z',
+          ),
+        );
+
+        expect(result.task.taskId, 'new-task-123');
+        expect(result.task.status, TaskStatus.working);
+
+        final json = result.toJson();
+        expect(json['task']['taskId'], 'new-task-123');
+        expect(json['task']['status'], 'working');
+
+        final deserialized = CreateTaskResult.fromJson(json);
+        expect(deserialized.task.taskId, 'new-task-123');
+        expect(deserialized.task.status, TaskStatus.working);
+        expect(deserialized.task.ttl, 7200);
+      });
+
+      test('TaskStatusNotificationParams serialization', () {
+        final params = TaskStatusNotificationParams(
+          taskId: 'task-notify-123',
+          status: TaskStatus.completed,
+          statusMessage: 'Task completed successfully',
+          ttl: 3600,
+          pollInterval: 500,
+          createdAt: '2025-01-15T10:00:00Z',
+          lastUpdatedAt: '2025-01-15T10:05:00Z',
+        );
+
+        expect(params.taskId, 'task-notify-123');
+        expect(params.status, TaskStatus.completed);
+        expect(params.statusMessage, 'Task completed successfully');
+
+        final json = params.toJson();
+        expect(json['taskId'], 'task-notify-123');
+        expect(json['status'], 'completed');
+        expect(json['lastUpdatedAt'], '2025-01-15T10:05:00Z');
+
+        final deserialized = TaskStatusNotificationParams.fromJson(json);
+        expect(deserialized.taskId, 'task-notify-123');
+        expect(deserialized.status, TaskStatus.completed);
+      });
+
+      test('JsonRpcTaskStatusNotification serialization', () {
+        final notification = JsonRpcTaskStatusNotification(
+          statusParams: TaskStatusNotificationParams(
+            taskId: 'task-status-456',
+            status: TaskStatus.failed,
+            statusMessage: 'Task failed due to error',
+          ),
+        );
+
+        expect(notification.method, 'notifications/tasks/status');
+        expect(notification.statusParams.taskId, 'task-status-456');
+        expect(notification.statusParams.status, TaskStatus.failed);
+
+        final json = notification.toJson();
+        expect(json['method'], 'notifications/tasks/status');
+        expect(json['params']['taskId'], 'task-status-456');
+        expect(json['params']['status'], 'failed');
+
+        final deserialized = JsonRpcTaskStatusNotification.fromJson(json);
+        expect(deserialized.statusParams.taskId, 'task-status-456');
+        expect(deserialized.statusParams.status, TaskStatus.failed);
+      });
+
+      test('JsonRpcTaskStatusNotification via JsonRpcMessage.fromJson', () {
+        final json = {
+          'jsonrpc': '2.0',
+          'method': 'notifications/tasks/status',
+          'params': {
+            'taskId': 'task-abc',
+            'status': 'input_required',
+            'statusMessage': 'Waiting for user input',
+          }
+        };
+        final message = JsonRpcMessage.fromJson(json);
+        expect(message, isA<JsonRpcTaskStatusNotification>());
+        final notification = message as JsonRpcTaskStatusNotification;
+        expect(notification.statusParams.taskId, 'task-abc');
+        expect(notification.statusParams.status, TaskStatus.inputRequired);
+        expect(
+            notification.statusParams.statusMessage, 'Waiting for user input');
+      });
+
+      test('JsonRpcCallToolRequest with taskParams', () {
+        final request = JsonRpcCallToolRequest(
+          id: 3,
+          callParams: CallToolRequestParams(
+            name: 'long-running-tool',
+            arguments: {'input': 'value'},
+          ),
+          taskParams: TaskCreationParams(ttl: 7200),
+        );
+
+        expect(request.isTaskAugmented, isTrue);
+        expect(request.taskParams?.ttl, 7200);
+        expect(request.callParams.name, 'long-running-tool');
+
+        final json = request.toJson();
+        expect(json['params']['name'], 'long-running-tool');
+        expect(json['params']['task']['ttl'], 7200);
+
+        final deserialized = JsonRpcCallToolRequest.fromJson(json);
+        expect(deserialized.isTaskAugmented, isTrue);
+        expect(deserialized.taskParams?.ttl, 7200);
+        expect(deserialized.callParams.name, 'long-running-tool');
+      });
+
+      test('JsonRpcCallToolRequest without taskParams', () {
+        final request = JsonRpcCallToolRequest(
+          id: 4,
+          callParams: CallToolRequestParams(name: 'simple-tool'),
+        );
+
+        expect(request.isTaskAugmented, isFalse);
+        expect(request.taskParams, isNull);
+
+        final json = request.toJson();
+        expect(json['params'].containsKey('task'), isFalse);
+
+        final deserialized = JsonRpcCallToolRequest.fromJson(json);
+        expect(deserialized.isTaskAugmented, isFalse);
+        expect(deserialized.taskParams, isNull);
+      });
+
+      test('TaskStatus enum all values', () {
+        expect(TaskStatusName.fromString('working'), TaskStatus.working);
+        expect(TaskStatusName.fromString('input_required'),
+            TaskStatus.inputRequired);
+        expect(TaskStatusName.fromString('completed'), TaskStatus.completed);
+        expect(TaskStatusName.fromString('failed'), TaskStatus.failed);
+        expect(TaskStatusName.fromString('cancelled'), TaskStatus.cancelled);
+
+        expect(TaskStatus.working.name, 'working');
+        expect(TaskStatus.inputRequired.name, 'input_required');
+        expect(TaskStatus.completed.name, 'completed');
+        expect(TaskStatus.failed.name, 'failed');
+        expect(TaskStatus.cancelled.name, 'cancelled');
+      });
+
+      test('TaskStatus fromString throws on invalid status', () {
+        expect(
+          () => TaskStatusName.fromString('invalid_status'),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('Task all fields serialization', () {
+        final task = Task(
+          taskId: 'full-task',
+          status: TaskStatus.working,
+          statusMessage: 'Processing data',
+          ttl: 3600,
+          pollInterval: 1000,
+          createdAt: '2025-01-15T10:00:00Z',
+          lastUpdatedAt: '2025-01-15T10:01:00Z',
+          meta: {'custom': 'value'},
+        );
+
+        final json = task.toJson();
+        expect(json['taskId'], 'full-task');
+        expect(json['status'], 'working');
+        expect(json['statusMessage'], 'Processing data');
+        expect(json['ttl'], 3600);
+        expect(json['pollInterval'], 1000);
+        expect(json['createdAt'], '2025-01-15T10:00:00Z');
+        expect(json['lastUpdatedAt'], '2025-01-15T10:01:00Z');
+        expect(json['_meta'], {'custom': 'value'});
+
+        final deserialized = Task.fromJson(json);
+        expect(deserialized.taskId, 'full-task');
+        expect(deserialized.statusMessage, 'Processing data');
+        expect(deserialized.meta, {'custom': 'value'});
+      });
     });
   });
 }

@@ -180,14 +180,14 @@ class StreamableHTTPServerTransport implements Transport {
           },
           "id": null
         }));
-      await req.response.close();
+      await _safeClose(req.response);
       return;
     }
 
     // If an Mcp-Session-Id is returned by the server during initialization,
     // clients using the Streamable HTTP transport MUST include it
     // in the Mcp-Session-Id header on all of their subsequent HTTP requests.
-    if (!_validateSession(req, req.response)) {
+    if (!await _validateSession(req, req.response)) {
       return;
     }
 
@@ -226,7 +226,7 @@ class StreamableHTTPServerTransport implements Transport {
           },
           "id": null
         }));
-      await req.response.close();
+      await _safeClose(req.response);
       return;
     }
 
@@ -273,9 +273,9 @@ class StreamableHTTPServerTransport implements Transport {
       final streamId = await _eventStore!.replayEventsAfter(
         lastEventId,
         send: (eventId, message) async {
-          if (!_writeSSEEvent(res, message, eventId)) {
+          if (!await _writeSSEEvent(res, message, eventId)) {
             onerror?.call(StateError("Failed to replay events"));
-            await res.close();
+            await _safeClose(res);
           }
           return Future.value();
         },
@@ -287,9 +287,18 @@ class StreamableHTTPServerTransport implements Transport {
     }
   }
 
+  /// Safely closes an HTTP response, ignoring errors if client disconnected
+  Future<void> _safeClose(HttpResponse res) async {
+    try {
+      await res.close();
+    } catch (e) {
+      // Ignore close errors - client may have already disconnected
+    }
+  }
+
   /// Writes an event to the SSE stream with proper formatting
-  bool _writeSSEEvent(HttpResponse res, JsonRpcMessage message,
-      [String? eventId]) {
+  Future<bool> _writeSSEEvent(HttpResponse res, JsonRpcMessage message,
+      [String? eventId]) async {
     var eventData = "event: message\n";
     // Include event ID if provided - this is important for resumability
     if (eventId != null) {
@@ -299,7 +308,7 @@ class StreamableHTTPServerTransport implements Transport {
 
     try {
       res.add(utf8.encode(eventData));
-      res.flush();
+      await res.flush();
       return true;
     } catch (e) {
       return false;
@@ -315,7 +324,7 @@ class StreamableHTTPServerTransport implements Transport {
       "error": {"code": -32000, "message": "Method not allowed."},
       "id": null
     }));
-    await res.close();
+    await _safeClose(res);
   }
 
   /// Handles POST requests containing JSON-RPC messages
@@ -337,7 +346,7 @@ class StreamableHTTPServerTransport implements Transport {
           },
           "id": null
         }));
-        await req.response.close();
+        await _safeClose(req.response);
         return;
       }
 
@@ -353,7 +362,7 @@ class StreamableHTTPServerTransport implements Transport {
           },
           "id": null
         }));
-        await req.response.close();
+        await _safeClose(req.response);
         return;
       }
 
@@ -385,7 +394,7 @@ class StreamableHTTPServerTransport implements Transport {
               },
               "id": null
             }));
-            await req.response.close();
+            await _safeClose(req.response);
             onerror?.call(e is Error ? e : StateError(e.toString()));
             return;
           }
@@ -404,7 +413,7 @@ class StreamableHTTPServerTransport implements Transport {
             },
             "id": null
           }));
-          await req.response.close();
+          await _safeClose(req.response);
           onerror?.call(e is Error ? e : StateError(e.toString()));
           return;
         }
@@ -426,7 +435,7 @@ class StreamableHTTPServerTransport implements Transport {
             },
             "id": null
           }));
-          await req.response.close();
+          await _safeClose(req.response);
           return;
         }
         if (messages.length > 1) {
@@ -440,7 +449,7 @@ class StreamableHTTPServerTransport implements Transport {
             },
             "id": null
           }));
-          await req.response.close();
+          await _safeClose(req.response);
           return;
         }
         sessionId = _sessionIdGenerator?.call();
@@ -456,7 +465,8 @@ class StreamableHTTPServerTransport implements Transport {
       // If an Mcp-Session-Id is returned by the server during initialization,
       // clients using the Streamable HTTP transport MUST include it
       // in the Mcp-Session-Id header on all of their subsequent HTTP requests.
-      if (!isInitializationRequest && !_validateSession(req, req.response)) {
+      if (!isInitializationRequest &&
+          !await _validateSession(req, req.response)) {
         return;
       }
 
@@ -465,13 +475,18 @@ class StreamableHTTPServerTransport implements Transport {
 
       if (!hasRequests) {
         // If it only contains notifications or responses, return 202
-        req.response.statusCode = HttpStatus.accepted;
-        await req.response.close();
-
-        // Handle each message
+        // Handle each message first to ensure processing
         for (final message in messages) {
-          onmessage?.call(message);
+          try {
+            onmessage?.call(message);
+          } catch (e) {
+            // Don't let handler errors affect the response - message was received successfully
+            onerror?.call(e is Error ? e : StateError(e.toString()));
+          }
         }
+
+        req.response.statusCode = HttpStatus.accepted;
+        await _safeClose(req.response);
       } else if (hasRequests) {
         // The default behavior is to use SSE streaming
         // but in some cases server will return JSON responses
@@ -498,8 +513,9 @@ class StreamableHTTPServerTransport implements Transport {
         // We need to track by request ID to maintain the connection
         for (final message in messages) {
           if (_isJsonRpcRequest(message)) {
+            final reqId = (message as JsonRpcRequest).id;
             _streamMapping[streamId] = req.response;
-            _requestToStreamMapping[(message as JsonRpcRequest).id] = streamId;
+            _requestToStreamMapping[reqId] = streamId;
           }
         }
 
@@ -510,7 +526,12 @@ class StreamableHTTPServerTransport implements Transport {
 
         // Handle each message
         for (final message in messages) {
-          onmessage?.call(message);
+          try {
+            onmessage?.call(message);
+          } catch (e) {
+            // Don't let handler errors affect the response - message was received successfully
+            onerror?.call(e is Error ? e : StateError(e.toString()));
+          }
         }
         // The server SHOULD NOT close the SSE stream before sending all JSON-RPC responses
         // This will be handled by the send() method when responses are ready
@@ -527,7 +548,7 @@ class StreamableHTTPServerTransport implements Transport {
         },
         "id": null
       }));
-      await req.response.close();
+      await _safeClose(req.response);
 
       if (error is Error) {
         onerror?.call(error);
@@ -554,17 +575,17 @@ class StreamableHTTPServerTransport implements Transport {
 
   /// Handles DELETE requests to terminate sessions
   Future<void> _handleDeleteRequest(HttpRequest req) async {
-    if (!_validateSession(req, req.response)) {
+    if (!await _validateSession(req, req.response)) {
       return;
     }
     await close();
     req.response.statusCode = HttpStatus.ok;
-    await req.response.close();
+    await _safeClose(req.response);
   }
 
   /// Validates session ID for non-initialization requests
   /// Returns true if the session is valid, false otherwise
-  bool _validateSession(HttpRequest req, HttpResponse res) {
+  Future<bool> _validateSession(HttpRequest req, HttpResponse res) async {
     if (!_initialized) {
       // If the server has not been initialized yet, reject all requests
       res.statusCode = HttpStatus.badRequest;
@@ -576,7 +597,7 @@ class StreamableHTTPServerTransport implements Transport {
         },
         "id": null
       }));
-      res.close();
+      await _safeClose(res);
       return false;
     }
 
@@ -599,7 +620,7 @@ class StreamableHTTPServerTransport implements Transport {
         },
         "id": null
       }));
-      res.close();
+      await _safeClose(res);
       return false;
     } else if (requestSessionId != sessionId) {
       // Reject requests with invalid session ID with 404 Not Found
@@ -609,7 +630,7 @@ class StreamableHTTPServerTransport implements Transport {
         "error": {"code": -32001, "message": "Session not found"},
         "id": null
       }));
-      res.close();
+      await _safeClose(res);
       return false;
     }
 
@@ -621,7 +642,7 @@ class StreamableHTTPServerTransport implements Transport {
     // Close all SSE connections - fix concurrent modification by creating a copy of the values first
     final responses = List<HttpResponse>.from(_streamMapping.values);
     for (final response in responses) {
-      await response.close();
+      await _safeClose(response);
     }
     _streamMapping.clear();
 
@@ -665,7 +686,7 @@ class StreamableHTTPServerTransport implements Transport {
       }
 
       // Send the message to the standalone SSE stream
-      _writeSSEEvent(standaloneSse, message, eventId);
+      await _writeSSEEvent(standaloneSse, message, eventId);
       return;
     }
 
@@ -687,7 +708,7 @@ class StreamableHTTPServerTransport implements Transport {
 
       if (response != null) {
         // Write the event to the response stream
-        _writeSSEEvent(response, message, eventId);
+        await _writeSSEEvent(response, message, eventId);
       }
     }
 
@@ -731,10 +752,10 @@ class StreamableHTTPServerTransport implements Transport {
             response
                 .write(jsonEncode(responses.map((r) => r.toJson()).toList()));
           }
-          await response.close();
+          await _safeClose(response);
         } else {
           // End the SSE stream
-          await response.close();
+          await _safeClose(response);
         }
 
         // Clean up

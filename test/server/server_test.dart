@@ -171,7 +171,7 @@ void main() {
 
       final clientCapabilities = ClientCapabilities(
         roots: ClientCapabilitiesRoots(),
-        sampling: {},
+        sampling: const ClientCapabilitiesSampling(),
       );
 
       final initParams = InitializeRequestParams(
@@ -463,7 +463,7 @@ Future<void> _initializeClient(
   bool withElicitation = false,
 }) async {
   final clientCapabilities = ClientCapabilities(
-    sampling: withSampling ? {} : null,
+    sampling: withSampling ? const ClientCapabilitiesSampling() : null,
     roots: withRoots ? ClientCapabilitiesRoots() : null,
     elicitation: withElicitation ? const ClientCapabilitiesElicitation() : null,
   );
