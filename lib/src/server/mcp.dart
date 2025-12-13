@@ -251,10 +251,10 @@ class McpServer {
 
   void _ensureTaskHandlersInitialized() {
     if (_taskHandlersInitialized) return;
-    server.assertCanSetRequestHandler("tasks/list");
-    server.assertCanSetRequestHandler("tasks/cancel");
-    server.assertCanSetRequestHandler("tasks/get");
-    server.assertCanSetRequestHandler("tasks/result");
+    server.assertCanSetRequestHandler(Method.tasksList);
+    server.assertCanSetRequestHandler(Method.tasksCancel);
+    server.assertCanSetRequestHandler(Method.tasksGet);
+    server.assertCanSetRequestHandler(Method.tasksResult);
     server.registerCapabilities(
       const ServerCapabilities(
         tasks: ServerCapabilitiesTasks(listChanged: true),
@@ -262,7 +262,7 @@ class McpServer {
     );
 
     server.setRequestHandler<JsonRpcListTasksRequest>(
-      "tasks/list",
+      Method.tasksList,
       (request, extra) async {
         if (_listTasksCallback == null) {
           throw McpError(
@@ -280,7 +280,7 @@ class McpServer {
     );
 
     server.setRequestHandler<JsonRpcCancelTaskRequest>(
-      "tasks/cancel",
+      Method.tasksCancel,
       (request, extra) async {
         if (_cancelTaskCallback == null) {
           throw McpError(
@@ -302,7 +302,7 @@ class McpServer {
 
     if (_getTaskCallback != null) {
       server.setRequestHandler<JsonRpcGetTaskRequest>(
-        "tasks/get",
+        Method.tasksGet,
         (request, extra) async {
           final taskId = request.getParams.taskId;
           return await Future.value(_getTaskCallback!(taskId, extra));
@@ -317,7 +317,7 @@ class McpServer {
 
     if (_taskResultCallback != null) {
       server.setRequestHandler<JsonRpcTaskResultRequest>(
-        "tasks/result",
+        Method.tasksResult,
         (request, extra) async {
           final taskId = request.resultParams.taskId;
           return await Future.value(_taskResultCallback!(taskId, extra));
@@ -335,14 +335,14 @@ class McpServer {
 
   void _ensureToolHandlersInitialized() {
     if (_toolHandlersInitialized) return;
-    server.assertCanSetRequestHandler("tools/list");
-    server.assertCanSetRequestHandler("tools/call");
+    server.assertCanSetRequestHandler(Method.toolsList);
+    server.assertCanSetRequestHandler(Method.toolsCall);
     server.registerCapabilities(
       const ServerCapabilities(tools: ServerCapabilitiesTools()),
     );
 
     server.setRequestHandler<JsonRpcListToolsRequest>(
-      "tools/list",
+      Method.toolsList,
       (request, extra) async => ListToolsResult(
         tools:
             _registeredTools.entries.map((e) => e.value.toTool(e.key)).toList(),
@@ -355,7 +355,7 @@ class McpServer {
     );
 
     server.setRequestHandler<JsonRpcCallToolRequest>(
-      "tools/call",
+      Method.toolsCall,
       (request, extra) async {
         final toolName = request.callParams.name;
         final toolArgs = request.callParams.arguments;
@@ -391,14 +391,14 @@ class McpServer {
 
   void _ensureCompletionHandlerInitialized() {
     if (_completionHandlerInitialized) return;
-    server.assertCanSetRequestHandler("completion/complete");
+    server.assertCanSetRequestHandler(Method.completionComplete);
     server.registerCapabilities(
       const ServerCapabilities(
         completions: ServerCapabilitiesCompletions(listChanged: true),
       ),
     );
     server.setRequestHandler<JsonRpcCompleteRequest>(
-      "completion/complete",
+      Method.completionComplete,
       (request, extra) async => switch (request.completeParams.ref) {
         ResourceReference r => _handleResourceCompletion(
             r,
@@ -462,15 +462,15 @@ class McpServer {
 
   void _ensureResourceHandlersInitialized() {
     if (_resourceHandlersInitialized) return;
-    server.assertCanSetRequestHandler("resources/list");
-    server.assertCanSetRequestHandler("resources/templates/list");
-    server.assertCanSetRequestHandler("resources/read");
+    server.assertCanSetRequestHandler(Method.resourcesList);
+    server.assertCanSetRequestHandler(Method.resourcesTemplatesList);
+    server.assertCanSetRequestHandler(Method.resourcesRead);
     server.registerCapabilities(
       const ServerCapabilities(resources: ServerCapabilitiesResources()),
     );
 
     server.setRequestHandler<JsonRpcListResourcesRequest>(
-      "resources/list",
+      Method.resourcesList,
       (request, extra) async {
         final fixed = _registeredResources.entries
             .map((e) => e.value.toResource(e.key))
@@ -509,7 +509,7 @@ class McpServer {
     );
 
     server.setRequestHandler<JsonRpcListResourceTemplatesRequest>(
-      "resources/templates/list",
+      Method.resourcesTemplatesList,
       (request, extra) async => ListResourceTemplatesResult(
         resourceTemplates: _registeredResourceTemplates.entries
             .map((e) => e.value.toResourceTemplate(e.key))
@@ -523,7 +523,7 @@ class McpServer {
     );
 
     server.setRequestHandler<JsonRpcReadResourceRequest>(
-      "resources/read",
+      Method.resourcesRead,
       (request, extra) async {
         final uriString = request.readParams.uri;
         Uri uri;
@@ -563,14 +563,14 @@ class McpServer {
 
   void _ensurePromptHandlersInitialized() {
     if (_promptHandlersInitialized) return;
-    server.assertCanSetRequestHandler("prompts/list");
-    server.assertCanSetRequestHandler("prompts/get");
+    server.assertCanSetRequestHandler(Method.promptsList);
+    server.assertCanSetRequestHandler(Method.promptsGet);
     server.registerCapabilities(
       const ServerCapabilities(prompts: ServerCapabilitiesPrompts()),
     );
 
     server.setRequestHandler<JsonRpcListPromptsRequest>(
-      "prompts/list",
+      Method.promptsList,
       (request, extra) async => ListPromptsResult(
         prompts: _registeredPrompts.entries
             .map((e) => e.value.toPrompt(e.key))
@@ -584,7 +584,7 @@ class McpServer {
     );
 
     server.setRequestHandler<JsonRpcGetPromptRequest>(
-      "prompts/get",
+      Method.promptsGet,
       (request, extra) async {
         final name = request.getParams.name;
         final args = request.getParams.arguments;
@@ -820,7 +820,7 @@ class McpServer {
     Map<String, dynamic>? meta,
     RequestOptions? options,
   }) async {
-    server.assertCapabilityForMethod("elicitation/create");
+    server.assertCapabilityForMethod(Method.elicitationCreate);
 
     final request = JsonRpcElicitRequest(
       id: -1,
@@ -876,7 +876,7 @@ class McpServer {
     Map<String, dynamic>? meta,
     RequestOptions? options,
   }) async {
-    server.assertCapabilityForMethod("elicitation/create");
+    server.assertCapabilityForMethod(Method.elicitationCreate);
 
     final request = JsonRpcElicitRequest(
       id: -1,
@@ -949,7 +949,7 @@ class McpServer {
     Map<String, dynamic>? meta,
     RequestOptions? options,
   }) async {
-    server.assertCapabilityForMethod("sampling/createMessage");
+    server.assertCapabilityForMethod(Method.samplingCreateMessage);
 
     final request = JsonRpcCreateMessageRequest(
       id: -1,
@@ -992,7 +992,7 @@ class McpServer {
     String? statusMessage,
     Map<String, dynamic>? meta,
   }) async {
-    server.assertNotificationCapability("notifications/tasks/status");
+    server.assertNotificationCapability(Method.notificationsTasksStatus);
 
     final notif = JsonRpcTaskStatusNotification(
       statusParams: TaskStatusNotificationParams(

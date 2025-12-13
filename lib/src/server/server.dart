@@ -43,7 +43,7 @@ class Server extends Protocol {
         _instructions = options?.instructions,
         super(options) {
     setRequestHandler<JsonRpcInitializeRequest>(
-      "initialize",
+      Method.initialize,
       (request, extra) async => _oninitialize(request.initParams),
       (id, params, meta) => JsonRpcInitializeRequest.fromJson({
         'id': id,
@@ -53,7 +53,7 @@ class Server extends Protocol {
     );
 
     setNotificationHandler<JsonRpcInitializedNotification>(
-      "notifications/initialized",
+      Method.notificationsInitialized,
       (notification) async => oninitialized?.call(),
       (params, meta) => JsonRpcInitializedNotification.fromJson({
         'params': params,
@@ -111,7 +111,7 @@ class Server extends Protocol {
   @override
   void assertCapabilityForMethod(String method) {
     switch (method) {
-      case "sampling/createMessage":
+      case Method.samplingCreateMessage:
         if (!(_clientCapabilities?.sampling != null)) {
           throw McpError(
             ErrorCode.invalidRequest.value,
@@ -120,7 +120,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "roots/list":
+      case Method.rootsList:
         if (!(_clientCapabilities?.roots != null)) {
           throw McpError(
             ErrorCode.invalidRequest.value,
@@ -129,7 +129,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "elicitation/create":
+      case Method.elicitationCreate:
         if (!(_clientCapabilities?.elicitation != null)) {
           throw McpError(
             ErrorCode.invalidRequest.value,
@@ -138,7 +138,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "ping":
+      case Method.ping:
         break;
 
       default:
@@ -151,7 +151,7 @@ class Server extends Protocol {
   @override
   void assertNotificationCapability(String method) {
     switch (method) {
-      case "notifications/message":
+      case Method.notificationsMessage:
         if (!(_capabilities.logging != null)) {
           throw StateError(
             "Server does not support logging capability (required for sending $method)",
@@ -159,7 +159,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "notifications/resources/updated":
+      case Method.notificationsResourcesUpdated:
         if (!(_capabilities.resources?.subscribe ?? false)) {
           throw StateError(
             "Server does not support resource subscription capability (required for sending $method)",
@@ -167,7 +167,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "notifications/resources/list_changed":
+      case Method.notificationsResourcesListChanged:
         if (!(_capabilities.resources?.listChanged ?? false)) {
           throw StateError(
             "Server does not support resource list changed notifications capability (required for sending $method)",
@@ -175,7 +175,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "notifications/tools/list_changed":
+      case Method.notificationsToolsListChanged:
         if (!(_capabilities.tools?.listChanged ?? false)) {
           throw StateError(
             "Server does not support tool list changed notifications capability (required for sending $method)",
@@ -183,7 +183,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "notifications/prompts/list_changed":
+      case Method.notificationsPromptsListChanged:
         if (!(_capabilities.prompts?.listChanged ?? false)) {
           throw StateError(
             "Server does not support prompt list changed notifications capability (required for sending $method)",
@@ -191,7 +191,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "notifications/completions/list_changed":
+      case Method.notificationsCompletionsListChanged:
         if (!(_capabilities.completions?.listChanged ?? false)) {
           throw StateError(
             "Server does not support completion list changed notifications capability (required for sending $method)",
@@ -199,7 +199,7 @@ class Server extends Protocol {
         }
         break;
 
-      case "notifications/tasks/status":
+      case Method.notificationsTasksStatus:
         if (!(_capabilities.tasks != null)) {
           throw StateError(
             "Server does not support task capability (required for sending $method)",
@@ -207,8 +207,8 @@ class Server extends Protocol {
         }
         break;
 
-      case "notifications/cancelled":
-      case "notifications/progress":
+      case Method.notificationsCancelled:
+      case Method.notificationsProgress:
         break;
 
       default:
@@ -221,12 +221,12 @@ class Server extends Protocol {
   @override
   void assertRequestHandlerCapability(String method) {
     switch (method) {
-      case "initialize":
-      case "ping":
-      case "completion/complete":
+      case Method.initialize:
+      case Method.ping:
+      case Method.completionComplete:
         break;
 
-      case "logging/setLevel":
+      case Method.loggingSetLevel:
         if (!(_capabilities.logging != null)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'logging' capability",
@@ -234,8 +234,8 @@ class Server extends Protocol {
         }
         break;
 
-      case "prompts/get":
-      case "prompts/list":
+      case Method.promptsGet:
+      case Method.promptsList:
         if (!(_capabilities.prompts != null)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'prompts' capability",
@@ -243,9 +243,9 @@ class Server extends Protocol {
         }
         break;
 
-      case "resources/list":
-      case "resources/templates/list":
-      case "resources/read":
+      case Method.resourcesList:
+      case Method.resourcesTemplatesList:
+      case Method.resourcesRead:
         if (!(_capabilities.resources != null)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'resources' capability",
@@ -253,8 +253,8 @@ class Server extends Protocol {
         }
         break;
 
-      case "resources/subscribe":
-      case "resources/unsubscribe":
+      case Method.resourcesSubscribe:
+      case Method.resourcesUnsubscribe:
         if (!(_capabilities.resources?.subscribe ?? false)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'resources.subscribe' capability",
@@ -262,8 +262,8 @@ class Server extends Protocol {
         }
         break;
 
-      case "tools/call":
-      case "tools/list":
+      case Method.toolsCall:
+      case Method.toolsList:
         if (!(_capabilities.tools != null)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'tools' capability",
@@ -271,8 +271,10 @@ class Server extends Protocol {
         }
         break;
 
-      case "tasks/list":
-      case "tasks/cancel":
+      case Method.tasksList:
+      case Method.tasksCancel:
+      case Method.tasksGet:
+      case Method.tasksResult:
         if (!(_capabilities.tasks != null)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'tasks' capability",

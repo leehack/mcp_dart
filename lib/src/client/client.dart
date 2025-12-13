@@ -53,7 +53,7 @@ class Client extends Protocol {
     // Register elicit handler if capability is present
     if (_capabilities.elicitation != null) {
       setRequestHandler<JsonRpcElicitRequest>(
-        "elicitation/create",
+        Method.elicitationCreate,
         (request, extra) async {
           if (onElicitRequest == null) {
             throw McpError(
@@ -65,7 +65,7 @@ class Client extends Protocol {
         },
         (id, params, meta) => JsonRpcElicitRequest.fromJson({
           'id': id,
-          'method': 'elicitation/create',
+          'method': Method.elicitationCreate,
           'jsonrpc': '2.0',
           if (params != null) 'params': params,
           if (meta != null) '_meta': meta,
@@ -76,12 +76,12 @@ class Client extends Protocol {
     // Register task status notification handler
     if (_capabilities.tasks != null) {
       setNotificationHandler<JsonRpcTaskStatusNotification>(
-        "notifications/tasks/status",
+        Method.notificationsTasksStatus,
         (notification) async {
           await onTaskStatus?.call(notification.statusParams);
         },
         (params, meta) => JsonRpcTaskStatusNotification.fromJson({
-          'method': 'notifications/tasks/status',
+          'method': Method.notificationsTasksStatus,
           'params': {
             ...?params,
             if (meta != null) '_meta': meta,
@@ -93,7 +93,7 @@ class Client extends Protocol {
     // Register sampling request handler if capability is present
     if (_capabilities.sampling != null) {
       setRequestHandler<JsonRpcCreateMessageRequest>(
-        "sampling/createMessage",
+        Method.samplingCreateMessage,
         (request, extra) async {
           if (onSamplingRequest == null) {
             throw McpError(
@@ -105,7 +105,7 @@ class Client extends Protocol {
         },
         (id, params, meta) => JsonRpcCreateMessageRequest.fromJson({
           'id': id,
-          'method': 'sampling/createMessage',
+          'method': Method.samplingCreateMessage,
           'jsonrpc': '2.0',
           'params': params,
           if (meta != null) '_meta': meta,
@@ -203,32 +203,32 @@ class Client extends Protocol {
     String? requiredCapability;
 
     switch (method) {
-      case "logging/setLevel":
+      case Method.loggingSetLevel:
         supported = serverCaps.logging != null;
         requiredCapability = 'logging';
         break;
-      case "prompts/get":
-      case "prompts/list":
+      case Method.promptsGet:
+      case Method.promptsList:
         supported = serverCaps.prompts != null;
         requiredCapability = 'prompts';
         break;
-      case "resources/list":
-      case "resources/templates/list":
-      case "resources/read":
+      case Method.resourcesList:
+      case Method.resourcesTemplatesList:
+      case Method.resourcesRead:
         supported = serverCaps.resources != null;
         requiredCapability = 'resources';
         break;
-      case "resources/subscribe":
-      case "resources/unsubscribe":
+      case Method.resourcesSubscribe:
+      case Method.resourcesUnsubscribe:
         supported = serverCaps.resources?.subscribe ?? false;
         requiredCapability = 'resources.subscribe';
         break;
-      case "tools/call":
-      case "tools/list":
+      case Method.toolsCall:
+      case Method.toolsList:
         supported = serverCaps.tools != null;
         requiredCapability = 'tools';
         break;
-      case "completion/complete":
+      case Method.completionComplete:
         supported = serverCaps.completions != null;
         requiredCapability = 'completions';
         break;
@@ -250,7 +250,7 @@ class Client extends Protocol {
   @override
   void assertNotificationCapability(String method) {
     switch (method) {
-      case "notifications/roots/list_changed":
+      case Method.notificationsRootsListChanged:
         if (!(_capabilities.roots?.listChanged ?? false)) {
           throw StateError(
             "Client does not support 'roots.listChanged' capability (required for sending $method)",
@@ -267,21 +267,21 @@ class Client extends Protocol {
   @override
   void assertRequestHandlerCapability(String method) {
     switch (method) {
-      case "sampling/createMessage":
+      case Method.samplingCreateMessage:
         if (!(_capabilities.sampling != null)) {
           throw StateError(
             "Client setup error: Cannot handle '$method' without 'sampling' capability registered.",
           );
         }
         break;
-      case "roots/list":
+      case Method.rootsList:
         if (!(_capabilities.roots != null)) {
           throw StateError(
             "Client setup error: Cannot handle '$method' without 'roots' capability registered.",
           );
         }
         break;
-      case "elicitation/create":
+      case Method.elicitationCreate:
         if (!(_capabilities.elicitation != null)) {
           throw StateError(
             "Client setup error: Cannot handle '$method' without 'elicitation' capability registered.",
