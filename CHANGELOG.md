@@ -1,3 +1,35 @@
+## 1.1.0
+
+### Breaking Changes
+
+- **Protocol Version Update**: Updated default protocol version to `2025-11-25`.
+- **Strict Capabilities Typing**: `ServerCapabilities` and `ClientCapabilities` fields (tasks, sampling, elicitation, etc.) are now strictly typed objects instead of `Map<String, dynamic>` or `bool`.
+  - Updated `ServerCapabilities` to use `ServerCapabilitiesTasks`, `ServerCapabilitiesTools`, etc.
+  - Updated `ClientCapabilities` to use `ClientCapabilitiesTasks`, `ClientCapabilitiesElicitation`, `ClientCapabilitiesSampling`, etc.
+  - **Migration**: Update capability declarations to use the new typed classes (e.g., `ServerCapabilities(tasks: ServerCapabilitiesTasks(listChanged: true))`).
+- **Task Management Refactor**: Task management classes have been refactored and moved to `lib/src/server/tasks/`.
+  - `TaskStore` is now an abstract interface with `InMemoryTaskStore` as the default implementation.
+  - `TaskMessageQueueWithResolvers` renamed to `TaskMessageQueue`.
+  - `TaskResultHandler` and `TaskSession` utilize strict typing.
+- **Tool Callback Update**: `ToolCallback` signature has been updated to include `RequestHandlerExtra? extra` as a named parameter.
+  - New Signature: `FutureOr<BaseResultData> Function({Map<String, dynamic>? args, Map<String, dynamic>? meta, RequestHandlerExtra? extra})`
+
+### Features
+
+- **McpServer Enhancements**:
+  - Added `McpServer` high-level support for tasks via `tasks(...)` method.
+  - Integrated `notifyTaskStatus` into `McpServer`.
+  - Added `McpServer` support for `sampling/createMessage`.
+  - Exposed `onError` handler setter/getter on `McpServer`.
+- **Client Enhancements**:
+  - Added `onTaskStatus` callback to `Client`.
+  - Simplified client request handlers for sampling and elicitation.
+
+### Fixes
+
+- Fixed `Task` serialization.
+- Fixed capabilities recognition in `McpServer`.
+
 ## 1.0.2
 
 - Fix pana analysis issues

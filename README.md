@@ -108,7 +108,7 @@ void main() async {
       },
       required: ['operation', 'a', 'b'],
     ),
-    callback: ({args, extra}) async {
+    callback: ({args, meta, extra}) async {
       final operation = args!['operation'];
       final a = args['a'];
       final b = args['b'];
