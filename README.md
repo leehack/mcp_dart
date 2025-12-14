@@ -39,7 +39,7 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 
 - ✅ **Build MCP Servers** - Create servers that expose tools, resources, and prompts to AI hosts
 - ✅ **Build MCP Clients** - Create AI applications that can connect to and use MCP servers
-- ✅ **Full MCP Protocol Support** - Complete [MCP specification 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18) implementation
+- ✅ **Full MCP Protocol Support** - Complete [MCP specification 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25) implementation
 - ✅ **Multiple Transport Options** - Stdio, StreamableHTTP, Stream, or custom transports
 - ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation, Tasks
 - ✅ **OAuth2 Support** - Complete authentication with PKCE
@@ -50,11 +50,11 @@ The goal is to make this SDK as similar as possible to the official SDKs availab
 
 ## Model Context Protocol Version
 
-The current version of the protocol is `2025-06-18`. This library is designed to be compatible with this version, and any future updates will be made to ensure continued compatibility.
+The current version of the protocol is `2025-11-25`. This library is designed to be compatible with this version, and any future updates will be made to ensure continued compatibility.
 
-It's also backward compatible with previous versions including `2025-03-26`, `2024-11-05`, and `2024-10-07`.
+It's also backward compatible with previous versions including `2025-06-18`, `2025-03-26`, `2024-11-05`, and `2024-10-07`.
 
-**New in 2025-06-18**: Elicitation support for server-initiated user input collection.
+**New in 2025-11-25**: Task management refactor, strict capabilities typing, and simplified Streamable HTTP server creation.
 
 ## Documentation
 
@@ -191,7 +191,7 @@ For additional examples including authentication, HTTP clients, and advanced fea
 
 - **Issues & Bug Reports**: [GitHub Issues](https://github.com/leehack/mcp_dart/issues)
 - **Package**: [pub.dev/packages/mcp_dart](https://pub.dev/packages/mcp_dart)
-- **Protocol Spec**: [MCP Specification](https://modelcontextprotocol.io/specification/2025-06-18)
+- **Protocol Spec**: [MCP Specification](https://modelcontextprotocol.io/specification/2025-11-25)
 
 ## Credits
 
