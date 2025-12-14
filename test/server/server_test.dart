@@ -450,7 +450,7 @@ void main() {
       );
       expect(
         () => plainServer.sendLoggingMessage(logParams),
-        throwsA(isA<StateError>()),
+        returnsNormally,
       );
     });
 

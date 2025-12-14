@@ -4,6 +4,7 @@
 /// with web-compatible alternatives.
 library;
 
+export 'json_schema_validator.dart'; // JSON Schema validator.
 export 'protocol.dart'; // MCP protocol utilities for message serialization/deserialization.
 export 'transport.dart'; // Transport layer for server-client communication.
 export 'uri_template.dart'; // URI template utilities.

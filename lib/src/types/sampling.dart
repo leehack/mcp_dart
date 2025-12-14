@@ -69,7 +69,7 @@ class ModelPreferences {
 
 /// Represents content parts within sampling messages.
 sealed class SamplingContent {
-  /// The type of the content ("text" or "image").
+  /// The type of the content ("text", "image", "tool_use", or "tool_result").
   final String type;
 
   const SamplingContent({required this.type});
@@ -80,6 +80,8 @@ sealed class SamplingContent {
     return switch (type) {
       'text' => SamplingTextContent.fromJson(json),
       'image' => SamplingImageContent.fromJson(json),
+      'tool_use' => SamplingToolUseContent.fromJson(json),
+      'tool_result' => SamplingToolResultContent.fromJson(json),
       _ => throw FormatException("Invalid sampling content type: $type"),
     };
   }
@@ -92,6 +94,16 @@ sealed class SamplingContent {
           final SamplingImageContent c => {
               'data': c.data,
               'mimeType': c.mimeType,
+            },
+          final SamplingToolUseContent c => {
+              'id': c.id,
+              'name': c.name,
+              'input': c.input,
+            },
+          final SamplingToolResultContent c => {
+              'toolUseId': c.toolUseId,
+              'content': c.content,
+              if (c.isError != null) 'isError': c.isError,
             },
         },
       };
@@ -126,6 +138,46 @@ class SamplingImageContent extends SamplingContent {
       );
 }
 
+/// Tool use content for sampling messages.
+class SamplingToolUseContent extends SamplingContent {
+  final String id;
+  final String name;
+  final Map<String, dynamic> input;
+
+  const SamplingToolUseContent({
+    required this.id,
+    required this.name,
+    required this.input,
+  }) : super(type: 'tool_use');
+
+  factory SamplingToolUseContent.fromJson(Map<String, dynamic> json) =>
+      SamplingToolUseContent(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        input: json['input'] as Map<String, dynamic>,
+      );
+}
+
+/// Tool result content for sampling messages.
+class SamplingToolResultContent extends SamplingContent {
+  final String toolUseId;
+  final dynamic content;
+  final bool? isError;
+
+  const SamplingToolResultContent({
+    required this.toolUseId,
+    required this.content,
+    this.isError,
+  }) : super(type: 'tool_result');
+
+  factory SamplingToolResultContent.fromJson(Map<String, dynamic> json) =>
+      SamplingToolResultContent(
+        toolUseId: json['toolUseId'] as String,
+        content: json['content'],
+        isError: json['isError'] as bool?,
+      );
+}
+
 /// Role in a sampling message exchange.
 enum SamplingMessageRole { user, assistant }
 
@@ -134,7 +186,7 @@ class SamplingMessage {
   /// The role of the message sender.
   final SamplingMessageRole role;
 
-  /// The content of the message (text or image).
+  /// The content of the message (text, image, tool_use, or tool_result).
   final SamplingContent content;
 
   const SamplingMessage({

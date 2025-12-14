@@ -112,13 +112,20 @@ class ClientCapabilitiesElicitation {
 
 /// Capabilities related to sampling.
 class ClientCapabilitiesSampling {
-  const ClientCapabilitiesSampling();
+  /// Whether the client supports sampling with tools.
+  final bool tools;
+
+  const ClientCapabilitiesSampling({this.tools = false});
 
   factory ClientCapabilitiesSampling.fromJson(Map<String, dynamic> json) {
-    return const ClientCapabilitiesSampling();
+    return ClientCapabilitiesSampling(
+      tools: json['tools'] as bool? ?? false,
+    );
   }
 
-  Map<String, dynamic> toJson() => {};
+  Map<String, dynamic> toJson() => {
+        if (tools) 'tools': tools,
+      };
 }
 
 /// Capabilities related to tasks > elicitation.
