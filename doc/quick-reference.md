@@ -38,6 +38,20 @@ final server = McpServer(
 );
 ```
 
+### Create Streamable Server
+
+```dart
+final server = StreamableMcpServer(
+  serverFactory: (sessionId) => McpServer(
+    Implementation(name: 'server', version: '1.0.0'),
+  ),
+  host: '0.0.0.0',
+  port: 3000,
+  path: '/mcp',
+);
+await server.start();
+```
+
 ### Register Tool
 
 ```dart
@@ -122,6 +136,17 @@ server.prompt(
       ],
     );
   },
+);
+```
+
+### Register Tasks
+
+```dart
+server.tasks(
+  listCallback: (extra) async => ListTasksResult(tasks: []),
+  cancelCallback: (taskId, extra) async { /* cancel */ },
+  getCallback: (taskId, extra) async { /* get */ },
+  resultCallback: (taskId, extra) async { /* result */ },
 );
 ```
 

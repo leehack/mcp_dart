@@ -188,6 +188,37 @@ HTTP with Server-Sent Events for web-based communication. Best for:
 - Cloud deployments
 - Flutter web apps
 
+### High-Level Streamable HTTP Server
+
+For a simplified setup, use the `StreamableMcpServer` class which handles the server creation, session management, and transport connection for you.
+
+```dart
+import 'package:mcp_dart/mcp_dart.dart';
+
+void main() async {
+  final server = StreamableMcpServer(
+    serverFactory: (sessionId) {
+      // Create a new McpServer instance for each session
+      return McpServer(
+        Implementation(name: 'my-server', version: '1.0.0'),
+      );
+    },
+    host: '0.0.0.0',
+    port: 3000,
+    path: '/mcp',
+  );
+
+  await server.start();
+  print('Server running on http://0.0.0.0:3000/mcp');
+}
+```
+
+This helper handles:
+- Creating an HTTP server
+- Managing sessions and event storage
+- Connecting the `McpServer` to the transport
+- Resumability support
+
 ### Server Setup (Streamable HTTP)
 
 ```dart

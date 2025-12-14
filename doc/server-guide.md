@@ -9,6 +9,7 @@ Complete guide to building MCP servers with the Dart SDK.
 - [Registering Tools](#registering-tools)
 - [Providing Resources](#providing-resources)
 - [Creating Prompts](#creating-prompts)
+- [Task Management](#task-management)
 - [Handling Client Requests](#handling-client-requests)
 - [Server Lifecycle](#server-lifecycle)
 - [Advanced Topics](#advanced-topics)
@@ -577,6 +578,75 @@ server.prompt(
       ],
     );
   },
+);
+```
+
+## Task Management
+
+Tasks allow servers to expose long-running operations that can be tracked, paused, and resumed by clients.
+
+### Enabling Tasks
+
+To enable tasks, use the `tasks` method on your `McpServer` instance. You must provide a `listCallback` to return the available tasks.
+
+```dart
+server.tasks(
+  listCallback: (extra) async {
+    return ListTasksResult(
+      tasks: [
+        Task(
+          taskId: 'task-1',
+          status: TaskStatus.working,
+          createdAt: DateTime.now().toIso8601String(),
+          name: 'Long Operation',
+          description: 'A task that takes a long time',
+        ),
+      ],
+    );
+  },
+  // Optional: Handle task cancellation
+  cancelCallback: (taskId, extra) async {
+    // Logic to cancel the task
+  },
+  // Optional: Handle getting a specific task
+  getCallback: (taskId, extra) async {
+    // Return the task details
+    return GetTaskResult(
+      task: Task(
+        taskId: taskId,
+        status: TaskStatus.working,
+        createdAt: DateTime.now().toIso8601String(),
+      ),
+    );
+  },
+  // Optional: Handle getting task results
+  resultCallback: (taskId, extra) async {
+     // Return the task result
+     return TaskResultResult(
+       result: CallToolResult.fromContent(
+         content: [TextContent(text: 'Result')],
+       ),
+       task: Task(
+         taskId: taskId,
+         status: TaskStatus.completed,
+         createdAt: DateTime.now().toIso8601String(),
+       ),
+     );
+  },
+);
+```
+
+### Notifying Task Status
+
+You can notify clients about task status updates using `notifyTaskStatus`:
+
+```dart
+await server.notifyTaskStatus(
+  status: TaskStatus.completed,
+  taskId: 'task-1',
+  result: CallToolResult.fromContent(
+    content: [TextContent(text: 'Task completed successfully')],
+  ),
 );
 ```
 

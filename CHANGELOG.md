@@ -21,6 +21,8 @@
   - Integrated `notifyTaskStatus` into `McpServer`.
   - Added `McpServer` support for `sampling/createMessage`.
   - Exposed `onError` handler setter/getter on `McpServer`.
+- **StreamableMcpServer**:
+  - Added `StreamableMcpServer` class for simplified Streamable HTTP server creation (handles `serverFactory`, event store, and connection management).
 - **Client Enhancements**:
   - Added `onTaskStatus` callback to `Client`.
   - Simplified client request handlers for sampling and elicitation.
@@ -29,6 +31,7 @@
 
 - Fixed `Task` serialization.
 - Fixed capabilities recognition in `McpServer`.
+- Added comprehensive tests for StreamableMcpServer and Task features.
 
 ## 1.0.2
 

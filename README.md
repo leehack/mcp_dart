@@ -41,7 +41,7 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 - ✅ **Build MCP Clients** - Create AI applications that can connect to and use MCP servers
 - ✅ **Full MCP Protocol Support** - Complete [MCP specification 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18) implementation
 - ✅ **Multiple Transport Options** - Stdio, StreamableHTTP, Stream, or custom transports
-- ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation
+- ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation, Tasks
 - ✅ **OAuth2 Support** - Complete authentication with PKCE
 - ✅ **Type-Safe** - Comprehensive type definitions with null safety
 - ✅ **Cross-Platform** - Works on VM, Web, and Flutter

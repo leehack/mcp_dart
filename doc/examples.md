@@ -88,6 +88,23 @@ dart run example/streamable_https/client.dart
 - Stateful and stateless modes
 - CORS support
 
+### High-Level Streamable Server
+
+**Location**: [`example/streamable_https/high_level_server.dart`](../example/streamable_https/high_level_server.dart)
+
+Simplified Streamable HTTP server setup using `StreamableMcpServer`:
+
+```bash
+dart run example/streamable_https/high_level_server.dart
+```
+
+**Features**:
+
+- Simplified server creation
+- built-in session management
+- built-in event store
+- Automatic transport handling
+
 ### In-Process Communication
 
 **Location**: [`example/iostream-client-server/`](../example/iostream-client-server/)
