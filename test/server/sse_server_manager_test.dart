@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:mcp_dart/src/server/mcp.dart';
+import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/sse_server_manager.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';

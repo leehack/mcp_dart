@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:mcp_dart/src/server/mcp.dart';
+import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';

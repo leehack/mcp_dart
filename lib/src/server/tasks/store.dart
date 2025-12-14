@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
-import 'package:mcp_dart/src/server/mcp.dart';
+import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'constants.dart';
 
 // ============================================================================
