@@ -7,15 +7,17 @@
   - Updated `ServerCapabilities` to use `ServerCapabilitiesTasks`, `ServerCapabilitiesTools`, etc.
   - Updated `ClientCapabilities` to use `ClientCapabilitiesTasks`, `ClientCapabilitiesElicitation`, `ClientCapabilitiesSampling`, etc.
   - **Migration**: Update capability declarations to use the new typed classes (e.g., `ServerCapabilities(tasks: ServerCapabilitiesTasks(listChanged: true))`).
-- **Task Management Refactor**: Task management classes have been refactored and moved to `lib/src/server/tasks/`.
-  - `TaskStore` is now an abstract interface with `InMemoryTaskStore` as the default implementation.
-  - `TaskMessageQueueWithResolvers` renamed to `TaskMessageQueue`.
-  - `TaskResultHandler` and `TaskSession` utilize strict typing.
+
 - **Tool Callback Update**: `ToolCallback` signature has been updated to include `RequestHandlerExtra? extra` as a named parameter.
   - New Signature: `FutureOr<BaseResultData> Function({Map<String, dynamic>? args, Map<String, dynamic>? meta, RequestHandlerExtra? extra})`
 
 ### Features
 
+- **Task Management System**:
+  - Implemented comprehensive Task support in `lib/src/server/tasks/`.
+  - Introduced `TaskStore` abstract interface with `InMemoryTaskStore` as the default implementation.
+  - Added strictly typed `TaskResultHandler` and `TaskSession`.
+  - Introduced `TaskMessageQueue` for handling task messages.
 - **McpServer Enhancements**:
   - Added `McpServer` high-level support for tasks via `tasks(...)` method.
   - Integrated `notifyTaskStatus` into `McpServer`.

@@ -6,7 +6,7 @@
 
 MCP Dart is the official Dart implementation of the Model Context Protocol, enabling seamless integration between AI applications and external data sources, tools, and services. Build production-ready MCP servers and clients for Dart VM, Flutter, and web platforms.
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Protocol**: MCP 2025-06-18 (backward compatible with 2025-03-26, 2024-11-05, 2024-10-07)
 **Repository**: https://github.com/leehack/mcp_dart
 **Package**: https://pub.dev/packages/mcp_dart
@@ -18,7 +18,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mcp_dart: ^1.0.0
+  mcp_dart: ^1.1.0
 ```
 
 Then run:
@@ -58,7 +58,8 @@ User → MCP Host (with Client) → MCP Protocol → Your Server → External Se
 - ✅ **Sampling**: Request LLM completions from clients
 - ✅ **Roots**: Expose filesystem roots for resource discovery
 - ✅ **Completions**: Autocomplete suggestions for arguments
-- ✅ **Elicitation**: Server-initiated user input collection (NEW in 1.0.0)
+- ✅ **Elicitation**: Server-initiated user input collection
+- ✅ **Task Management**: High-level SDK for managing agent tasks
 
 ### Transport Layers
 
@@ -388,6 +389,57 @@ server.tool(
       );
     }
   },
+);
+```
+
+### Task Management (SDK)
+
+NEW in 1.1.0: Refactored task management into a high-level SDK:
+
+```dart
+// Define an InMemoryTaskStore (or implement your own TaskStore interface)
+final taskStore = InMemoryTaskStore();
+
+// Create the task handler
+final taskHandler = TaskHandler(server, taskStore);
+
+// Register tools to listing and completing tasks
+taskHandler.registerTools();
+```
+
+### McpServer Enhancements
+
+NEW in 1.1.0: Enhanced `McpServer` capabilities:
+
+```dart
+// 1. Error Handler
+final server = McpServer(
+  implementation,
+  options: ServerOptions(
+    onError: (error) {
+      print('Server error: $error');
+    },
+  ),
+);
+
+// 2. Task Notifications
+// Simplify sending task status updates
+await server.notifyTaskStatus(
+  taskId,
+  status: TaskStatus.success,
+  message: 'Task completed successfully',
+);
+
+// 3. User Sampling
+// Create sampling messages easily
+await server.createSamplingMessage(
+  messages: [
+    SamplingMessage(
+      role: Role.user,
+      content: TextContent(text: 'Review this code'),
+    ),
+  ],
+  maxTokens: 100,
 );
 ```
 
@@ -838,7 +890,13 @@ enum ErrorCode
 
 ## Changelog
 
-### Version 1.0.0 (Latest)
+### Version 1.1.0 (Latest)
+- **Task Management SDK**: Refactored `simple_task_interactive_server.dart` logic into reusable SDK components (`TaskStore`, `TaskHandler`)
+- **McpServer**: Added `onError` callback, `notifyTaskStatus`, and `createSamplingMessage` helpers
+- **Breaking Change**: Strict typing for `ServerCapabilities` (e.g., `ServerCapabilitiesTasks`)
+- **Breaking Change**: `StreamableHTTPServerTransport` now requires `ServerOptions`
+
+### Version 1.0.0
 - Updated to MCP protocol 2025-06-18
 - Added Elicitation support for server-initiated user input
 - Critical fix: Logger output redirected to stderr (prevents JSON-RPC corruption)

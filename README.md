@@ -44,7 +44,7 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 - ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation, Tasks
 - ✅ **OAuth2 Support** - Complete authentication with PKCE
 - ✅ **Type-Safe** - Comprehensive type definitions with null safety
-- ✅ **Cross-Platform** - Works on VM, Web, and Flutter
+- ✅ **Cross-Platform** - Works on Linux, Windows, macOS, Web, and Flutter
 
 The goal is to make this SDK as similar as possible to the official SDKs available in other languages, ensuring a consistent developer experience across platforms.
 
@@ -53,8 +53,6 @@ The goal is to make this SDK as similar as possible to the official SDKs availab
 The current version of the protocol is `2025-11-25`. This library is designed to be compatible with this version, and any future updates will be made to ensure continued compatibility.
 
 It's also backward compatible with previous versions including `2025-06-18`, `2025-03-26`, `2024-11-05`, and `2024-10-07`.
-
-**New in 2025-11-25**: Task management refactor, strict capabilities typing, and simplified Streamable HTTP server creation.
 
 ## Documentation
 
@@ -174,7 +172,7 @@ This library supports OAuth2 authentication with PKCE for both clients and serve
 
 | Platform | Stdio | StreamableHTTP | Stream | Custom |
 |----------|-------|----------------|--------|--------|
-| **Dart VM** (CLI/Server) | ✅ | ✅ | ✅ | ✅ |
+| **Desktop** (CLI/Server) | ✅ | ✅ | ✅ | ✅ |
 | **Web** (Browser) | ❌ | ✅ | ✅ | ✅ |
 | **Flutter** (Mobile/Desktop) | ✅ | ✅ | ✅ | ✅ |
 
