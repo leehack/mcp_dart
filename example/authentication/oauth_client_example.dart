@@ -201,7 +201,8 @@ class OAuth2Provider implements OAuthClientProvider {
       final codeVerifier = await storage.getCodeVerifier();
       if (codeVerifier == null) {
         throw Exception(
-            'Code verifier not found. Complete authorization flow first.');
+          'Code verifier not found. Complete authorization flow first.',
+        );
       }
 
       final body = {
@@ -375,7 +376,7 @@ Future<void> main(List<String> args) async {
 
   // Create MCP client
   final client = Client(
-    Implementation(name: 'oauth-example-client', version: '1.0.0'),
+    const Implementation(name: 'oauth-example-client', version: '1.0.0'),
   );
 
   try {
@@ -405,7 +406,7 @@ Future<void> main(List<String> args) async {
     }
 
     // Keep the connection alive
-    await Future.delayed(Duration(seconds: 5));
+    await Future.delayed(const Duration(seconds: 5));
 
     await client.close();
   } catch (e) {

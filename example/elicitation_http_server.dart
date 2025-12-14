@@ -65,7 +65,7 @@ class InMemoryEventStore implements EventStore {
 // Create MCP server with elicitation tools
 McpServer getServer() {
   final server = McpServer(
-    Implementation(name: 'elicitation-example-server', version: '1.0.0'),
+    const Implementation(name: 'elicitation-example-server', version: '1.0.0'),
   );
 
   // Example 1: Simple user registration tool
@@ -73,7 +73,7 @@ McpServer getServer() {
   server.tool(
     'register_user',
     description: 'Register a new user account by collecting their information',
-    toolInputSchema: ToolInputSchema(properties: {}),
+    toolInputSchema: const ToolInputSchema(properties: {}),
     callback: ({args, meta, extra}) async {
       try {
         // Collect username
@@ -87,15 +87,17 @@ McpServer getServer() {
                 'minLength': 3,
                 'maxLength': 20,
                 'description': 'Your desired username',
-              }
+              },
             },
-            'required': ['username']
+            'required': ['username'],
           },
         );
 
         if (!usernameResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Registration cancelled by user.')],
+            content: [
+              const TextContent(text: 'Registration cancelled by user.'),
+            ],
           );
         }
 
@@ -111,15 +113,17 @@ McpServer getServer() {
                 'type': 'string',
                 'minLength': 3,
                 'description': 'Your email address',
-              }
+              },
             },
-            'required': ['email']
+            'required': ['email'],
           },
         );
 
         if (!emailResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Registration cancelled by user.')],
+            content: [
+              const TextContent(text: 'Registration cancelled by user.'),
+            ],
           );
         }
 
@@ -135,15 +139,17 @@ McpServer getServer() {
                 'type': 'string',
                 'minLength': 8,
                 'description': 'Your password',
-              }
+              },
             },
-            'required': ['password']
+            'required': ['password'],
           },
         );
 
         if (!passwordResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Registration cancelled by user.')],
+            content: [
+              const TextContent(text: 'Registration cancelled by user.'),
+            ],
           );
         }
 
@@ -157,8 +163,8 @@ McpServer getServer() {
                 'type': 'boolean',
                 'default': false,
                 'description': 'Receive updates via email',
-              }
-            }
+              },
+            },
           },
         );
 
@@ -194,7 +200,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
   server.tool(
     'create_event',
     description: 'Create a calendar event by collecting event details',
-    toolInputSchema: ToolInputSchema(properties: {}),
+    toolInputSchema: const ToolInputSchema(properties: {}),
     callback: ({args, meta, extra}) async {
       try {
         // Step 1: Collect basic event information
@@ -207,15 +213,15 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
                 'type': 'string',
                 'minLength': 1,
                 'description': 'Name of the event',
-              }
+              },
             },
-            'required': ['title']
+            'required': ['title'],
           },
         );
 
         if (!titleResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Event creation cancelled.')],
+            content: [const TextContent(text: 'Event creation cancelled.')],
           );
         }
 
@@ -230,8 +236,8 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
                 'type': 'string',
                 'minLength': 0,
                 'description': 'Event description',
-              }
-            }
+              },
+            },
           },
         );
 
@@ -252,15 +258,15 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
                 'type': 'string',
                 'pattern': r'^\d{4}-\d{2}-\d{2}$',
                 'description': 'Event date in YYYY-MM-DD format',
-              }
+              },
             },
-            'required': ['date']
+            'required': ['date'],
           },
         );
 
         if (!dateResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Event creation cancelled.')],
+            content: [const TextContent(text: 'Event creation cancelled.')],
           );
         }
 
@@ -275,15 +281,15 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
                 'type': 'string',
                 'pattern': r'^\d{2}:\d{2}$',
                 'description': 'Event start time in HH:MM format',
-              }
+              },
             },
-            'required': ['startTime']
+            'required': ['startTime'],
           },
         );
 
         if (!startTimeResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Event creation cancelled.')],
+            content: [const TextContent(text: 'Event creation cancelled.')],
           );
         }
 
@@ -300,14 +306,14 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
                 'maximum': 480,
                 'default': 60,
                 'description': 'Duration in minutes',
-              }
-            }
+              },
+            },
           },
         );
 
         if (!durationResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Event creation cancelled.')],
+            content: [const TextContent(text: 'Event creation cancelled.')],
           );
         }
 
@@ -343,7 +349,7 @@ Duration: $duration minutes''',
   server.tool(
     'update_shipping_address',
     description: 'Update shipping address with validation',
-    toolInputSchema: ToolInputSchema(properties: {}),
+    toolInputSchema: const ToolInputSchema(properties: {}),
     callback: ({args, meta, extra}) async {
       try {
         // Collect name
@@ -356,15 +362,17 @@ Duration: $duration minutes''',
                 'type': 'string',
                 'minLength': 1,
                 'description': 'Recipient name',
-              }
+              },
             },
-            'required': ['name']
+            'required': ['name'],
           },
         );
 
         if (!nameResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Address update cancelled by user.')],
+            content: [
+              const TextContent(text: 'Address update cancelled by user.'),
+            ],
           );
         }
 
@@ -380,15 +388,17 @@ Duration: $duration minutes''',
                 'type': 'string',
                 'minLength': 1,
                 'description': 'Street address',
-              }
+              },
             },
-            'required': ['street']
+            'required': ['street'],
           },
         );
 
         if (!streetResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Address update cancelled by user.')],
+            content: [
+              const TextContent(text: 'Address update cancelled by user.'),
+            ],
           );
         }
 
@@ -404,15 +414,17 @@ Duration: $duration minutes''',
                 'type': 'string',
                 'minLength': 1,
                 'description': 'City name',
-              }
+              },
             },
-            'required': ['city']
+            'required': ['city'],
           },
         );
 
         if (!cityResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Address update cancelled by user.')],
+            content: [
+              const TextContent(text: 'Address update cancelled by user.'),
+            ],
           );
         }
 
@@ -430,15 +442,17 @@ Duration: $duration minutes''',
                 'maxLength': 2,
                 'pattern': r'^[A-Z]{2}$',
                 'description': 'Two-letter state code (e.g., CA, NY)',
-              }
+              },
             },
-            'required': ['state']
+            'required': ['state'],
           },
         );
 
         if (!stateResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Address update cancelled by user.')],
+            content: [
+              const TextContent(text: 'Address update cancelled by user.'),
+            ],
           );
         }
 
@@ -455,15 +469,17 @@ Duration: $duration minutes''',
                 'minLength': 5,
                 'maxLength': 10,
                 'description': '5-digit ZIP code or postal code',
-              }
+              },
             },
-            'required': ['zip']
+            'required': ['zip'],
           },
         );
 
         if (!zipResult.accepted) {
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Address update cancelled by user.')],
+            content: [
+              const TextContent(text: 'Address update cancelled by user.'),
+            ],
           );
         }
 
@@ -479,8 +495,8 @@ Duration: $duration minutes''',
                 'type': 'string',
                 'minLength': 0,
                 'description': 'Contact phone number',
-              }
-            }
+              },
+            },
           },
         );
 
@@ -521,8 +537,10 @@ void setCorsHeaders(HttpResponse response) {
   response.headers.set('Access-Control-Allow-Origin', '*');
   response.headers
       .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers',
-      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization');
+  response.headers.set(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+  );
   response.headers.set('Access-Control-Allow-Credentials', 'true');
   response.headers.set('Access-Control-Max-Age', '86400');
   response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
@@ -645,14 +663,16 @@ Future<void> _handlePostRequest(
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       setCorsHeaders(request.response);
       request.response
-        ..write(jsonEncode({
-          'jsonrpc': '2.0',
-          'error': {
-            'code': -32000,
-            'message': 'Bad Request: No valid session ID provided',
-          },
-          'id': null,
-        }))
+        ..write(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'error': {
+              'code': -32000,
+              'message': 'Bad Request: No valid session ID provided',
+            },
+            'id': null,
+          }),
+        )
         ..close();
       return;
     }
@@ -669,14 +689,16 @@ Future<void> _handlePostRequest(
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       setCorsHeaders(request.response);
       request.response
-        ..write(jsonEncode({
-          'jsonrpc': '2.0',
-          'error': {
-            'code': -32603,
-            'message': 'Internal server error',
-          },
-          'id': null,
-        }))
+        ..write(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'error': {
+              'code': -32603,
+              'message': 'Internal server error',
+            },
+            'id': null,
+          }),
+        )
         ..close();
     }
   }

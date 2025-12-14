@@ -126,7 +126,8 @@ class ClientCapabilitiesTasksElicitationCreate {
   const ClientCapabilitiesTasksElicitationCreate();
 
   factory ClientCapabilitiesTasksElicitationCreate.fromJson(
-      Map<String, dynamic> json) {
+    Map<String, dynamic> json,
+  ) {
     return const ClientCapabilitiesTasksElicitationCreate();
   }
 
@@ -139,7 +140,8 @@ class ClientCapabilitiesTasksElicitation {
   const ClientCapabilitiesTasksElicitation({this.create});
 
   factory ClientCapabilitiesTasksElicitation.fromJson(
-      Map<String, dynamic> json) {
+    Map<String, dynamic> json,
+  ) {
     final createMap = json['create'] as Map<String, dynamic>?;
     return ClientCapabilitiesTasksElicitation(
       create: createMap != null
@@ -158,7 +160,8 @@ class ClientCapabilitiesTasksSamplingCreateMessage {
   const ClientCapabilitiesTasksSamplingCreateMessage();
 
   factory ClientCapabilitiesTasksSamplingCreateMessage.fromJson(
-      Map<String, dynamic> json) {
+    Map<String, dynamic> json,
+  ) {
     return const ClientCapabilitiesTasksSamplingCreateMessage();
   }
 
@@ -175,7 +178,8 @@ class ClientCapabilitiesTasksSampling {
     return ClientCapabilitiesTasksSampling(
       createMessage: createMessageMap != null
           ? ClientCapabilitiesTasksSamplingCreateMessage.fromJson(
-              createMessageMap)
+              createMessageMap,
+            )
           : null,
     );
   }
@@ -358,7 +362,7 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
   factory JsonRpcInitializeRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for initialize request");
+      throw const FormatException("Missing params for initialize request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcInitializeRequest(

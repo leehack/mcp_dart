@@ -37,7 +37,8 @@ class ModelPreferences {
     this.speedPriority,
     this.intelligencePriority,
   })  : assert(
-            costPriority == null || (costPriority >= 0 && costPriority <= 1)),
+          costPriority == null || (costPriority >= 0 && costPriority <= 1),
+        ),
         assert(
           speedPriority == null || (speedPriority >= 0 && speedPriority <= 1),
         ),
@@ -87,8 +88,11 @@ sealed class SamplingContent {
   Map<String, dynamic> toJson() => {
         'type': type,
         ...switch (this) {
-          SamplingTextContent c => {'text': c.text},
-          SamplingImageContent c => {'data': c.data, 'mimeType': c.mimeType},
+          final SamplingTextContent c => {'text': c.text},
+          final SamplingImageContent c => {
+              'data': c.data,
+              'mimeType': c.mimeType,
+            },
         },
       };
 }
@@ -254,13 +258,14 @@ class JsonRpcCreateMessageRequest extends JsonRpcRequest {
     required this.createParams,
     super.meta,
   }) : super(
-            method: Method.samplingCreateMessage,
-            params: createParams.toJson());
+          method: Method.samplingCreateMessage,
+          params: createParams.toJson(),
+        );
 
   factory JsonRpcCreateMessageRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for create message request");
+      throw const FormatException("Missing params for create message request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcCreateMessageRequest(

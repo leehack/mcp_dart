@@ -41,7 +41,7 @@ class JsonRpcSetLevelRequest extends JsonRpcRequest {
   factory JsonRpcSetLevelRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for set level request");
+      throw const FormatException("Missing params for set level request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcSetLevelRequest(
@@ -98,7 +98,9 @@ class JsonRpcLoggingMessageNotification extends JsonRpcNotification {
   ) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for logging message notification");
+      throw const FormatException(
+        "Missing params for logging message notification",
+      );
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcLoggingMessageNotification(

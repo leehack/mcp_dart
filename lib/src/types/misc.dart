@@ -40,13 +40,14 @@ class JsonRpcCancelledNotification extends JsonRpcNotification {
 
   JsonRpcCancelledNotification({required this.cancelParams, super.meta})
       : super(
-            method: Method.notificationsCancelled,
-            params: cancelParams.toJson());
+          method: Method.notificationsCancelled,
+          params: cancelParams.toJson(),
+        );
 
   factory JsonRpcCancelledNotification.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for cancelled notification");
+      throw const FormatException("Missing params for cancelled notification");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcCancelledNotification(
@@ -136,14 +137,15 @@ class JsonRpcProgressNotification extends JsonRpcNotification {
   /// Creates a progress notification.
   JsonRpcProgressNotification({required this.progressParams, super.meta})
       : super(
-            method: Method.notificationsProgress,
-            params: progressParams.toJson());
+          method: Method.notificationsProgress,
+          params: progressParams.toJson(),
+        );
 
   /// Creates from JSON.
   factory JsonRpcProgressNotification.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for progress notification");
+      throw const FormatException("Missing params for progress notification");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcProgressNotification(

@@ -20,8 +20,10 @@ class TestEventStore implements EventStore {
   }
 
   @override
-  Future<String> replayEventsAfter(String eventId,
-      {required Future<void> Function(String, JsonRpcMessage) send}) async {
+  Future<String> replayEventsAfter(
+    String eventId, {
+    required Future<void> Function(String, JsonRpcMessage) send,
+  }) async {
     String? sessionId;
     int? eventIndex;
 
@@ -191,7 +193,7 @@ void main() {
       transport.sessionId = "test-session-id";
 
       // Create a notification to send via the SSE stream
-      final notification = JsonRpcNotification(
+      final notification = const JsonRpcNotification(
         method: 'test/notification',
         params: {'message': 'hello'},
       );
@@ -206,51 +208,55 @@ void main() {
       await transport.close();
     });
 
-    test('POST request with JSON-RPC request triggers onmessage', () async {
-      // Create a transport with session management
-      final transport = StreamableHTTPServerTransport(
-        options: StreamableHTTPServerTransportOptions(
-          sessionIdGenerator: () => "test-session-id",
-        ),
-      );
-      await transport.start();
-      transports['/mcp'] = transport;
+    test(
+      'POST request with JSON-RPC request triggers onmessage',
+      () async {
+        // Create a transport with session management
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => "test-session-id",
+          ),
+        );
+        await transport.start();
+        transports['/mcp'] = transport;
 
-      transport.sessionId = "test-session-id";
+        transport.sessionId = "test-session-id";
 
-      // Set up message handler with completion tracker
-      final messageCompleter = Completer<JsonRpcMessage>();
-      transport.onmessage = (message) {
-        if (!messageCompleter.isCompleted) {
-          messageCompleter.complete(message);
-        }
-      };
+        // Set up message handler with completion tracker
+        final messageCompleter = Completer<JsonRpcMessage>();
+        transport.onmessage = (message) {
+          if (!messageCompleter.isCompleted) {
+            messageCompleter.complete(message);
+          }
+        };
 
-      // Create a test JSON-RPC request
-      final request = JsonRpcRequest(
-        id: 123,
-        method: 'test/method',
-        params: {'data': 'test-data'},
-      );
+        // Create a test JSON-RPC request
+        final request = const JsonRpcRequest(
+          id: 123,
+          method: 'test/method',
+          params: {'data': 'test-data'},
+        );
 
-      // Simulate message receipt
-      transport.onmessage?.call(request);
+        // Simulate message receipt
+        transport.onmessage?.call(request);
 
-      // Wait for message processing with timeout
-      final receivedMessage = await messageCompleter.future.timeout(
-        Duration(seconds: 3),
-        onTimeout: () =>
-            throw TimeoutException('No message received within timeout'),
-      );
+        // Wait for message processing with timeout
+        final receivedMessage = await messageCompleter.future.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () =>
+              throw TimeoutException('No message received within timeout'),
+        );
 
-      // Verify message content
-      expect(receivedMessage, isA<JsonRpcRequest>());
-      expect((receivedMessage as JsonRpcRequest).id, equals(123));
-      expect(receivedMessage.method, equals('test/method'));
-      expect(receivedMessage.params?['data'], equals('test-data'));
+        // Verify message content
+        expect(receivedMessage, isA<JsonRpcRequest>());
+        expect((receivedMessage as JsonRpcRequest).id, equals(123));
+        expect(receivedMessage.method, equals('test/method'));
+        expect(receivedMessage.params?['data'], equals('test-data'));
 
-      await transport.close();
-    }, timeout: Timeout(Duration(seconds: 5)));
+        await transport.close();
+      },
+      timeout: const Timeout(Duration(seconds: 5)),
+    );
 
     test('enableJsonResponse option is accepted', () async {
       // Create a transport with JSON response enabled
@@ -268,9 +274,11 @@ void main() {
       await transport.close();
 
       // If we reach here without exceptions, the test passes
-      expect(true, isTrue,
-          reason:
-              "Transport successfully created with enableJsonResponse=true");
+      expect(
+        true,
+        isTrue,
+        reason: "Transport successfully created with enableJsonResponse=true",
+      );
     });
 
     test('session validation works correctly', () async {
@@ -295,17 +303,17 @@ void main() {
       };
 
       // Create test message and headers
-      final validRequest = JsonRpcRequest(
+      final validRequest = const JsonRpcRequest(
         id: 1,
         method: 'test/method',
         params: {'data': 'test-data'},
       );
 
       final validHeaders = {
-        'mcp-session-id': ['correct-session-id']
+        'mcp-session-id': ['correct-session-id'],
       };
       final invalidHeaders = {
-        'mcp-session-id': ['wrong-session-id']
+        'mcp-session-id': ['wrong-session-id'],
       };
 
       // Test session validation
@@ -331,12 +339,12 @@ void main() {
 
       // Verify results with appropriate timeouts
       final receivedMessage = await validMessageCompleter.future.timeout(
-        Duration(seconds: 3),
+        const Duration(seconds: 3),
         onTimeout: () => throw TimeoutException('Valid message test timed out'),
       );
 
       final invalidResult = await invalidMessageCompleter.future.timeout(
-        Duration(seconds: 3),
+        const Duration(seconds: 3),
         onTimeout: () =>
             throw TimeoutException('Invalid message test timed out'),
       );
@@ -368,31 +376,31 @@ void main() {
 
       // Create sample test messages
       final messages = [
-        JsonRpcRequest(
+        const JsonRpcRequest(
           id: 1,
           method: 'initialize',
           params: {
             'protocolVersion': '2024-11-05',
             'clientInfo': {'name': 'test-client-1', 'version': '1.0.0'},
-            'capabilities': {}
+            'capabilities': {},
           },
         ),
-        JsonRpcRequest(
+        const JsonRpcRequest(
           id: 2,
           method: 'initialize',
           params: {
             'protocolVersion': '2024-11-05',
             'clientInfo': {'name': 'test-client-2', 'version': '1.0.0'},
-            'capabilities': {}
+            'capabilities': {},
           },
         ),
-        JsonRpcRequest(
+        const JsonRpcRequest(
           id: 3,
           method: 'initialize',
           params: {
             'protocolVersion': '2024-11-05',
             'clientInfo': {'name': 'test-client-3', 'version': '1.0.0'},
-            'capabilities': {}
+            'capabilities': {},
           },
         ),
       ];
@@ -406,8 +414,10 @@ void main() {
       }
 
       // Verify storage was successful
-      expect(eventStore.events[transport.sessionId!]!.length,
-          equals(messages.length));
+      expect(
+        eventStore.events[transport.sessionId!]!.length,
+        equals(messages.length),
+      );
 
       // Resume from the first event
       final lastEventId = storedEventIds.first;
@@ -433,7 +443,7 @@ void main() {
 
       // Wait for replay completion
       await replayCompleter.future.timeout(
-        Duration(seconds: 3),
+        const Duration(seconds: 3),
         onTimeout: () => throw TimeoutException('Event replay timed out'),
       );
 
@@ -447,10 +457,14 @@ void main() {
 
         expect(replayedMessage, isA<JsonRpcRequest>());
         expect(
-            (replayedMessage as JsonRpcRequest).method, equals('initialize'));
+          (replayedMessage as JsonRpcRequest).method,
+          equals('initialize'),
+        );
         expect(replayedMessage.id, equals(originalMessage.id));
-        expect(replayedMessage.params!['clientInfo']['name'],
-            equals(originalMessage.params!['clientInfo']['name']));
+        expect(
+          replayedMessage.params!['clientInfo']['name'],
+          equals(originalMessage.params!['clientInfo']['name']),
+        );
       }
 
       await transport.close();

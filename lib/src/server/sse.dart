@@ -175,7 +175,7 @@ class SseServerTransport implements Transport {
             await request.fold<BytesBuilder>(BytesBuilder(), (builder, chunk) {
           builder.add(chunk);
           if (builder.length > _maximumMessageSize) {
-            throw HttpException(
+            throw const HttpException(
               "Message size exceeds limit of $_maximumMessageSize bytes.",
             );
           }
@@ -189,7 +189,7 @@ class SseServerTransport implements Transport {
       }
 
       if (messageJson is! Map<String, dynamic>) {
-        throw FormatException(
+        throw const FormatException(
           "Invalid JSON message format: Expected a JSON object.",
         );
       }

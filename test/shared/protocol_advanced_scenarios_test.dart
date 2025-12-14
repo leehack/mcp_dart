@@ -92,15 +92,17 @@ void main() {
       protocol.onerror = (error) => errors.add(error);
 
       // Send progress notification with string progressToken (should be int)
-      transport.receiveMessage(JsonRpcProgressNotification(
-        progressParams: ProgressNotificationParams(
-          progressToken: 'invalid-token' as dynamic,
-          progress: 50,
-          total: 100,
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotificationParams(
+            progressToken: 'invalid-token' as dynamic,
+            progress: 50,
+            total: 100,
+          ),
         ),
-      ));
+      );
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // Should have received an error
       expect(errors.length, greaterThan(0));
@@ -111,12 +113,12 @@ void main() {
       await protocol.connect(transport);
 
       var timeoutCallbackCalled = false;
-      final timeoutDuration = Duration(milliseconds: 100);
+      final timeoutDuration = const Duration(milliseconds: 100);
 
       // Send a request with timeout - it will timeout since we never send a response
       try {
         await protocol.request<EmptyResult>(
-          JsonRpcPingRequest(id: 0),
+          const JsonRpcPingRequest(id: 0),
           (json) => EmptyResult(meta: json['_meta'] as Map<String, dynamic>?),
           RequestOptions(
             timeout: timeoutDuration,
@@ -144,7 +146,7 @@ void main() {
       // Send a request with abort signal
       protocol
           .request<EmptyResult>(
-        JsonRpcPingRequest(id: 0),
+        const JsonRpcPingRequest(id: 0),
         (json) => EmptyResult(meta: json['_meta'] as Map<String, dynamic>?),
         RequestOptions(
           signal: controller.signal,
@@ -152,15 +154,15 @@ void main() {
       )
           .catchError((e) {
         requestAborted = true;
-        return EmptyResult();
+        return const EmptyResult();
       });
 
       // Wait a moment, then abort
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
       controller.abort('Test abort');
 
       // Wait for the abortion to be processed
-      await Future.delayed(Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       // Should have been aborted
       expect(requestAborted, isTrue);

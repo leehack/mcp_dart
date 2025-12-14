@@ -59,7 +59,8 @@ Future<ElicitResult> elicitationCallback(ElicitRequestParams params) async {
 }
 
 Future<CreateMessageResult> samplingCallback(
-    CreateMessageRequestParams params) async {
+  CreateMessageRequestParams params,
+) async {
   // Give the polling loop a chance to print the status update
   await Future.delayed(const Duration(milliseconds: 200));
 
@@ -82,7 +83,7 @@ Softly on the quiet pond
 Spring whispers goodbye''';
 
   print('[Sampling] Responding with haiku');
-  return CreateMessageResult(
+  return const CreateMessageResult(
     model: 'mock-haiku-model',
     role: SamplingMessageRole.assistant,
     content: SamplingTextContent(text: haiku),
@@ -96,8 +97,11 @@ Future<void> run(String url) async {
 
   // Create client with elicitation and sampling capabilities
   final client = Client(
-    Implementation(name: 'simple-task-interactive-client', version: '1.0.0'),
-    options: ClientOptions(
+    const Implementation(
+      name: 'simple-task-interactive-client',
+      version: '1.0.0',
+    ),
+    options: const ClientOptions(
       capabilities: ClientCapabilities(
         elicitation: ClientCapabilitiesElicitation(),
         sampling: ClientCapabilitiesSampling(),
@@ -149,7 +153,7 @@ Future<void> run(String url) async {
     'confirm_delete',
     {'filename': 'important.txt'},
     meta: {
-      'task': {'ttl': 60000, 'pollInterval': 200}
+      'task': {'ttl': 60000, 'pollInterval': 200},
     },
   )) {
     if (message is TaskCreatedMessage) {
@@ -176,7 +180,7 @@ Future<void> run(String url) async {
     'write_haiku',
     {'topic': 'autumn leaves'},
     meta: {
-      'task': {'ttl': 60000}
+      'task': {'ttl': 60000},
     },
   )) {
     if (message is TaskCreatedMessage) {

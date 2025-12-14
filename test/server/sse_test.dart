@@ -138,7 +138,7 @@ void main() {
       );
 
       // Wait for the endpoint event or timeout
-      List<String> receivedLines = await completer.future;
+      final List<String> receivedLines = await completer.future;
 
       // Verify content
       expect(receivedLines, contains(startsWith('event: endpoint')));
@@ -194,7 +194,7 @@ void main() {
     serverTransport = activeTransports.values.first;
 
     // 2. Send message from server
-    final pingMsg = JsonRpcPingRequest(id: 1);
+    final pingMsg = const JsonRpcPingRequest(id: 1);
     await serverTransport.send(pingMsg);
 
     // 3. Wait for client to receive or timeout
@@ -235,7 +235,7 @@ void main() {
     };
 
     // 3. Send POST request
-    final postMsgJson = JsonRpcPingRequest(id: 99).toJson();
+    final postMsgJson = const JsonRpcPingRequest(id: 99).toJson();
     final postBody = utf8.encode(jsonEncode(postMsgJson));
     final postUrl = '$postUrlBase?sessionId=${serverTransport.sessionId}';
 
@@ -288,7 +288,7 @@ void main() {
     };
 
     // 3. Send POST request with WRONG session ID
-    final postMsgJson = JsonRpcPingRequest(id: 101).toJson();
+    final postMsgJson = const JsonRpcPingRequest(id: 101).toJson();
     final postBody = utf8.encode(jsonEncode(postMsgJson));
     final postUrl = '$postUrlBase?sessionId=INVALID_SESSION_ID'; // Wrong ID
 

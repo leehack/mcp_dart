@@ -23,7 +23,7 @@ void main() {
 
   group('JsonRpcErrorData Edge Cases', () {
     test('JsonRpcErrorData with null data field', () {
-      final errorData = JsonRpcErrorData(
+      final errorData = const JsonRpcErrorData(
         code: -32600,
         message: 'Test error',
         data: null,
@@ -36,7 +36,7 @@ void main() {
     });
 
     test('JsonRpcErrorData with complex nested data', () {
-      final errorData = JsonRpcErrorData(
+      final errorData = const JsonRpcErrorData(
         code: -32600,
         message: 'Complex error',
         data: {
@@ -64,17 +64,19 @@ void main() {
 
       expect(
         () => JsonRpcCancelledNotification.fromJson(json),
-        throwsA(isA<FormatException>().having(
-          (e) => e.message,
-          'message',
-          contains('Missing params'),
-        )),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('Missing params'),
+          ),
+        ),
       );
     });
 
     test('handles optional reason field correctly', () {
       // With reason
-      final withReason = CancelledNotificationParams(
+      final withReason = const CancelledNotificationParams(
         requestId: 123,
         reason: 'User cancelled',
       );
@@ -82,7 +84,7 @@ void main() {
       expect(json['reason'], equals('User cancelled'));
 
       // Without reason
-      final withoutReason = CancelledNotificationParams(requestId: 456);
+      final withoutReason = const CancelledNotificationParams(requestId: 456);
       json = withoutReason.toJson();
       expect(json.containsKey('reason'), isFalse);
     });
@@ -114,11 +116,13 @@ void main() {
 
       expect(
         () => JsonRpcInitializeRequest.fromJson(json),
-        throwsA(isA<FormatException>().having(
-          (e) => e.message,
-          'message',
-          contains('Missing params'),
-        )),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('Missing params'),
+          ),
+        ),
       );
     });
 
@@ -150,23 +154,25 @@ void main() {
 
       expect(
         () => JsonRpcProgressNotification.fromJson(json),
-        throwsA(isA<FormatException>().having(
-          (e) => e.message,
-          'message',
-          contains('Missing params'),
-        )),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('Missing params'),
+          ),
+        ),
       );
     });
 
     test('handles progress with optional total field', () {
       // With total
-      final withTotal = Progress(progress: 50, total: 100);
+      final withTotal = const Progress(progress: 50, total: 100);
       var json = withTotal.toJson();
       expect(json['progress'], equals(50));
       expect(json['total'], equals(100));
 
       // Without total
-      final withoutTotal = Progress(progress: 50);
+      final withoutTotal = const Progress(progress: 50);
       json = withoutTotal.toJson();
       expect(json['progress'], equals(50));
       expect(json.containsKey('total'), isFalse);
@@ -199,11 +205,13 @@ void main() {
 
       expect(
         () => JsonRpcMessage.fromJson(json),
-        throwsA(isA<UnimplementedError>().having(
-          (e) => e.message,
-          'message',
-          contains('notification method'),
-        )),
+        throwsA(
+          isA<UnimplementedError>().having(
+            (e) => e.message,
+            'message',
+            contains('notification method'),
+          ),
+        ),
       );
     });
 
@@ -238,7 +246,7 @@ void main() {
         'result': {
           'data': 'value',
           '_meta': {
-            'nested': {'key': 'value'}
+            'nested': {'key': 'value'},
           },
         },
       };
@@ -253,7 +261,7 @@ void main() {
 
   group('ClientCapabilities Edge Cases', () {
     test('handles all null optional fields', () {
-      final caps = ClientCapabilities();
+      final caps = const ClientCapabilities();
 
       final json = caps.toJson();
       expect(json.isEmpty, isTrue);
@@ -283,7 +291,7 @@ void main() {
 
   group('ServerCapabilities Edge Cases', () {
     test('handles all null optional fields', () {
-      final caps = ServerCapabilities();
+      final caps = const ServerCapabilities();
 
       final json = caps.toJson();
       expect(json.isEmpty, isTrue);
@@ -320,7 +328,7 @@ void main() {
   group('InitializeResult Edge Cases', () {
     test('handles optional instructions field', () {
       // With instructions
-      final withInstructions = InitializeResult(
+      final withInstructions = const InitializeResult(
         protocolVersion: latestProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test', version: '1.0'),
@@ -330,7 +338,7 @@ void main() {
       expect(json['instructions'], equals('How to use this server'));
 
       // Without instructions
-      final withoutInstructions = InitializeResult(
+      final withoutInstructions = const InitializeResult(
         protocolVersion: latestProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test', version: '1.0'),
@@ -354,20 +362,20 @@ void main() {
 
   group('EmptyResult Edge Cases', () {
     test('handles null meta field', () {
-      final result = EmptyResult();
+      final result = const EmptyResult();
       expect(result.meta, isNull);
       expect(result.toJson(), isEmpty);
     });
 
     test('includes meta when present', () {
-      final result = EmptyResult(meta: {'key': 'value'});
+      final result = const EmptyResult(meta: {'key': 'value'});
       expect(result.meta, equals({'key': 'value'}));
     });
   });
 
   group('ClientCapabilitiesRoots Edge Cases', () {
     test('handles null listChanged field', () {
-      final roots = ClientCapabilitiesRoots();
+      final roots = const ClientCapabilitiesRoots();
       final json = roots.toJson();
       expect(json.isEmpty, isTrue);
 
@@ -376,7 +384,7 @@ void main() {
     });
 
     test('includes listChanged when explicitly false', () {
-      final roots = ClientCapabilitiesRoots(listChanged: false);
+      final roots = const ClientCapabilitiesRoots(listChanged: false);
       final json = roots.toJson();
       expect(json['listChanged'], isFalse);
     });
@@ -384,28 +392,28 @@ void main() {
 
   group('ServerCapabilities Subtype Edge Cases', () {
     test('ServerCapabilitiesPrompts handles null listChanged', () {
-      final prompts = ServerCapabilitiesPrompts();
+      final prompts = const ServerCapabilitiesPrompts();
       expect(prompts.toJson().isEmpty, isTrue);
     });
 
     test('ServerCapabilitiesResources handles null fields', () {
-      final resources = ServerCapabilitiesResources();
+      final resources = const ServerCapabilitiesResources();
       expect(resources.toJson().isEmpty, isTrue);
 
       // Only subscribe set
-      final onlySubscribe = ServerCapabilitiesResources(subscribe: true);
+      final onlySubscribe = const ServerCapabilitiesResources(subscribe: true);
       final json = onlySubscribe.toJson();
       expect(json['subscribe'], isTrue);
       expect(json.containsKey('listChanged'), isFalse);
     });
 
     test('ServerCapabilitiesTools handles null listChanged', () {
-      final tools = ServerCapabilitiesTools();
+      final tools = const ServerCapabilitiesTools();
       expect(tools.toJson().isEmpty, isTrue);
     });
 
     test('ServerCapabilitiesCompletions handles null listChanged', () {
-      final completions = ServerCapabilitiesCompletions();
+      final completions = const ServerCapabilitiesCompletions();
       expect(completions.toJson().isEmpty, isTrue);
     });
   });

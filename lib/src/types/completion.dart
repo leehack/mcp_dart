@@ -21,8 +21,8 @@ sealed class Reference {
   Map<String, dynamic> toJson() => {
         'type': type,
         ...switch (this) {
-          ResourceReference r => {'uri': r.uri},
-          PromptReference p => {'name': p.name},
+          final ResourceReference r => {'uri': r.uri},
+          final PromptReference p => {'name': p.name},
         },
       };
 }
@@ -113,12 +113,14 @@ class JsonRpcCompleteRequest extends JsonRpcRequest {
     required this.completeParams,
     super.meta,
   }) : super(
-            method: Method.completionComplete, params: completeParams.toJson());
+          method: Method.completionComplete,
+          params: completeParams.toJson(),
+        );
 
   factory JsonRpcCompleteRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for complete request");
+      throw const FormatException("Missing params for complete request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcCompleteRequest(

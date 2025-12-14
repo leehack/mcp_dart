@@ -19,7 +19,7 @@ const supportedProtocolVersions = [
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
-  "2024-10-07"
+  "2024-10-07",
 ];
 
 /// JSON-RPC protocol version string.
@@ -215,7 +215,7 @@ class JsonRpcRequest extends JsonRpcMessage {
         if (params != null || meta != null)
           'params': <String, dynamic>{
             ...?params,
-            if (meta != null) '_meta': meta
+            if (meta != null) '_meta': meta,
           },
       };
 }
@@ -241,7 +241,7 @@ class JsonRpcNotification extends JsonRpcMessage {
         if (params != null || meta != null)
           'params': <String, dynamic>{
             ...?params,
-            if (meta != null) '_meta': meta
+            if (meta != null) '_meta': meta,
           },
       };
 }

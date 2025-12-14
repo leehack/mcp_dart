@@ -172,7 +172,8 @@ class OAuthServerConfig {
       requiredScopes: requiredScopes,
       serverUri: serverUri,
       authServerMetadataEndpoint: Uri.parse(
-          'https://accounts.google.com/.well-known/openid-configuration'),
+        'https://accounts.google.com/.well-known/openid-configuration',
+      ),
       allowedRedirectUris: allowedRedirectUris,
     );
   }
@@ -562,14 +563,16 @@ class OAuthServerTransport implements Transport {
         ..statusCode = HttpStatus.unauthorized
         ..headers.set('WWW-Authenticate', wwwAuth)
         ..headers.contentType = ContentType.json
-        ..write(jsonEncode({
-          'jsonrpc': '2.0',
-          'error': {
-            'code': -32001,
-            'message': 'Unauthorized: Valid OAuth token required',
-          },
-          'id': null,
-        }));
+        ..write(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'error': {
+              'code': -32001,
+              'message': 'Unauthorized: Valid OAuth token required',
+            },
+            'id': null,
+          }),
+        );
       await req.response.close();
       return;
     }
@@ -581,7 +584,8 @@ class OAuthServerTransport implements Transport {
     }
 
     print(
-        '✓ Authenticated request from ${tokenInfo.username} (${tokenInfo.userId})');
+      '✓ Authenticated request from ${tokenInfo.username} (${tokenInfo.userId})',
+    );
 
     // Forward to inner transport
     await _innerTransport.handleRequest(req, parsedBody);
@@ -629,14 +633,14 @@ class OAuthServerTransport implements Transport {
 /// Create MCP server with OAuth-protected tools
 McpServer createOAuthMcpServer() {
   final server = McpServer(
-    Implementation(name: 'oauth-protected-server', version: '1.0.0'),
+    const Implementation(name: 'oauth-protected-server', version: '1.0.0'),
   );
 
   // Public tool (accessible to all authenticated users)
   server.tool(
     'greet',
     description: 'A simple greeting tool',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         'name': {
           'type': 'string',
@@ -657,7 +661,7 @@ McpServer createOAuthMcpServer() {
   server.tool(
     'user-info',
     description: 'Get authenticated user information',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {},
     ),
     callback: ({args, meta, extra}) async {
@@ -665,7 +669,7 @@ McpServer createOAuthMcpServer() {
       // This is a simplified example
       return CallToolResult.fromContent(
         content: [
-          TextContent(
+          const TextContent(
             text: 'User info would be retrieved from OAuth token context',
           ),
         ],
@@ -677,7 +681,7 @@ McpServer createOAuthMcpServer() {
   server.tool(
     'admin-action',
     description: 'Perform admin action (requires admin scope)',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         'action': {
           'type': 'string',
@@ -847,7 +851,8 @@ Future<void> main(List<String> args) async {
       print('    -subj "/CN=localhost"');
       print('');
       print(
-          'For production, use a reverse proxy with proper TLS certificates.');
+        'For production, use a reverse proxy with proper TLS certificates.',
+      );
       print('Falling back to HTTP mode...');
       print('');
       httpServer = await HttpServer.bind(host, port);
@@ -866,13 +871,15 @@ Future<void> main(List<String> args) async {
   print('  ✅ Redirect URI validation');
   print('  ✅ OAuth metadata discovery');
   print(
-      '  ${useHttps ? "✅" : "⚠️ "} HTTPS ${useHttps ? "enabled" : "not enabled (use --https)"}');
+    '  ${useHttps ? "✅" : "⚠️ "} HTTPS ${useHttps ? "enabled" : "not enabled (use --https)"}',
+  );
   print('');
   print('Usage:');
   print('  1. Obtain OAuth access token from provider');
   print('  2. Make requests with: Authorization: Bearer <token>');
   print(
-      '  3. Access metadata: GET $serverUri/.well-known/oauth-authorization-server');
+    '  3. Access metadata: GET $serverUri/.well-known/oauth-authorization-server',
+  );
   print('');
   print('Server running. Press Ctrl+C to stop.\n');
 
@@ -881,8 +888,10 @@ Future<void> main(List<String> args) async {
     request.response.headers
       ..set('Access-Control-Allow-Origin', '*')
       ..set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-      ..set('Access-Control-Allow-Headers',
-          'Origin, Content-Type, Accept, Authorization, mcp-session-id, Last-Event-ID')
+      ..set(
+        'Access-Control-Allow-Headers',
+        'Origin, Content-Type, Accept, Authorization, mcp-session-id, Last-Event-ID',
+      )
       ..set('Access-Control-Allow-Credentials', 'true')
       ..set('Access-Control-Expose-Headers', 'mcp-session-id');
 

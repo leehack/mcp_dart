@@ -32,12 +32,18 @@ abstract class TaskStore {
   Future<bool> cancelTask(String taskId);
 
   /// Updates the status of a task.
-  Future<void> updateTaskStatus(String taskId, TaskStatus status,
-      [String? message]);
+  Future<void> updateTaskStatus(
+    String taskId,
+    TaskStatus status, [
+    String? message,
+  ]);
 
   /// Stores the result of a task and marks it as completed (or failed).
   Future<void> storeTaskResult(
-      String taskId, TaskStatus status, CallToolResult result);
+    String taskId,
+    TaskStatus status,
+    CallToolResult result,
+  );
 
   /// Retrieves the result of a completed task.
   FutureOr<CallToolResult?> getTaskResult(String taskId);
@@ -95,7 +101,10 @@ class InMemoryTaskStore implements TaskStore {
     if (task.status.isTerminal) return false;
 
     await updateTaskStatus(
-        taskId, TaskStatus.cancelled, "Task cancelled by client");
+      taskId,
+      TaskStatus.cancelled,
+      "Task cancelled by client",
+    );
     return true;
   }
 
@@ -139,8 +148,11 @@ class InMemoryTaskStore implements TaskStore {
   }
 
   @override
-  Future<void> updateTaskStatus(String taskId, TaskStatus status,
-      [String? message]) async {
+  Future<void> updateTaskStatus(
+    String taskId,
+    TaskStatus status, [
+    String? message,
+  ]) async {
     final task = _tasks[taskId];
     if (task != null) {
       _tasks[taskId] = Task(
@@ -159,7 +171,10 @@ class InMemoryTaskStore implements TaskStore {
 
   @override
   Future<void> storeTaskResult(
-      String taskId, TaskStatus status, CallToolResult result) async {
+    String taskId,
+    TaskStatus status,
+    CallToolResult result,
+  ) async {
     _results[taskId] = result;
     await updateTaskStatus(taskId, status);
   }

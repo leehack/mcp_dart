@@ -47,13 +47,14 @@ String formatAlert(Map<String, dynamic> feature) {
 }
 
 void main() async {
-  final server = McpServer(Implementation(name: "weather", version: "1.0.0"));
+  final server =
+      McpServer(const Implementation(name: "weather", version: "1.0.0"));
 
   // Register "get-alerts" tool
   server.tool(
     "get-alerts",
     description: "Get weather alerts for a state",
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         "state": {
           "type": "string",
@@ -62,7 +63,7 @@ void main() async {
       },
       required: ["state"],
     ),
-    icon: ImageContent(
+    icon: const ImageContent(
       data:
           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNiAAAABgDNjd8qAAAAAElFTkSuQmCC",
       mimeType: "image/png",
@@ -71,7 +72,7 @@ void main() async {
       final state = (args?['state'] as String?)?.toUpperCase();
       if (state == null || state.length != 2) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "Invalid state code provided.")],
+          content: [const TextContent(text: "Invalid state code provided.")],
           isError: true,
         );
       }
@@ -81,7 +82,7 @@ void main() async {
 
       if (alertsData == null) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "Failed to retrieve alerts data.")],
+          content: [const TextContent(text: "Failed to retrieve alerts data.")],
         );
       }
 
@@ -106,7 +107,7 @@ void main() async {
   server.tool(
     "get-forecast",
     description: "Get weather forecast for a location",
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         "latitude": {
           "type": "number",
@@ -125,7 +126,7 @@ void main() async {
 
       if (latitude == null || longitude == null) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "Invalid latitude or longitude.")],
+          content: [const TextContent(text: "Invalid latitude or longitude.")],
           isError: true,
         );
       }
@@ -149,7 +150,7 @@ void main() async {
       if (forecastUrl == null) {
         return CallToolResult.fromContent(
           content: [
-            TextContent(
+            const TextContent(
               text: "Failed to get forecast URL from grid point data.",
             ),
           ],
@@ -159,7 +160,9 @@ void main() async {
       final forecastData = await makeNWSRequest(forecastUrl);
       if (forecastData == null) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "Failed to retrieve forecast data.")],
+          content: [
+            const TextContent(text: "Failed to retrieve forecast data."),
+          ],
         );
       }
 
@@ -167,7 +170,7 @@ void main() async {
           forecastData['properties']?['periods'] as List<dynamic>? ?? [];
       if (periods.isEmpty) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "No forecast periods available.")],
+          content: [const TextContent(text: "No forecast periods available.")],
         );
       }
 

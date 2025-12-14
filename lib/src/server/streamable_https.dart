@@ -172,14 +172,16 @@ class StreamableHTTPServerTransport implements Transport {
     if (acceptHeader == null || !acceptHeader.contains("text/event-stream")) {
       req.response
         ..statusCode = HttpStatus.notAcceptable
-        ..write(jsonEncode({
-          "jsonrpc": "2.0",
-          "error": {
-            "code": -32000,
-            "message": "Not Acceptable: Client must accept text/event-stream"
-          },
-          "id": null
-        }));
+        ..write(
+          jsonEncode({
+            "jsonrpc": "2.0",
+            "error": {
+              "code": -32000,
+              "message": "Not Acceptable: Client must accept text/event-stream",
+            },
+            "id": null,
+          }),
+        );
       await _safeClose(req.response);
       return;
     }
@@ -218,14 +220,16 @@ class StreamableHTTPServerTransport implements Transport {
       // Only one GET SSE stream is allowed per session
       req.response
         ..statusCode = HttpStatus.conflict
-        ..write(jsonEncode({
-          "jsonrpc": "2.0",
-          "error": {
-            "code": -32000,
-            "message": "Conflict: Only one SSE stream is allowed per session"
-          },
-          "id": null
-        }));
+        ..write(
+          jsonEncode({
+            "jsonrpc": "2.0",
+            "error": {
+              "code": -32000,
+              "message": "Conflict: Only one SSE stream is allowed per session",
+            },
+            "id": null,
+          }),
+        );
       await _safeClose(req.response);
       return;
     }
@@ -297,8 +301,11 @@ class StreamableHTTPServerTransport implements Transport {
   }
 
   /// Writes an event to the SSE stream with proper formatting
-  Future<bool> _writeSSEEvent(HttpResponse res, JsonRpcMessage message,
-      [String? eventId]) async {
+  Future<bool> _writeSSEEvent(
+    HttpResponse res,
+    JsonRpcMessage message, [
+    String? eventId,
+  ]) async {
     var eventData = "event: message\n";
     // Include event ID if provided - this is important for resumability
     if (eventId != null) {
@@ -319,11 +326,13 @@ class StreamableHTTPServerTransport implements Transport {
   Future<void> _handleUnsupportedRequest(HttpResponse res) async {
     res.statusCode = HttpStatus.methodNotAllowed;
     res.headers.set(HttpHeaders.allowHeader, "GET, POST, DELETE");
-    res.write(jsonEncode({
-      "jsonrpc": "2.0",
-      "error": {"code": -32000, "message": "Method not allowed."},
-      "id": null
-    }));
+    res.write(
+      jsonEncode({
+        "jsonrpc": "2.0",
+        "error": {"code": -32000, "message": "Method not allowed."},
+        "id": null,
+      }),
+    );
     await _safeClose(res);
   }
 
@@ -337,15 +346,17 @@ class StreamableHTTPServerTransport implements Transport {
           !acceptHeader.contains("application/json") ||
           !acceptHeader.contains("text/event-stream")) {
         req.response.statusCode = HttpStatus.notAcceptable;
-        req.response.write(jsonEncode({
-          "jsonrpc": "2.0",
-          "error": {
-            "code": -32000,
-            "message":
-                "Not Acceptable: Client must accept both application/json and text/event-stream"
-          },
-          "id": null
-        }));
+        req.response.write(
+          jsonEncode({
+            "jsonrpc": "2.0",
+            "error": {
+              "code": -32000,
+              "message":
+                  "Not Acceptable: Client must accept both application/json and text/event-stream",
+            },
+            "id": null,
+          }),
+        );
         await _safeClose(req.response);
         return;
       }
@@ -353,15 +364,17 @@ class StreamableHTTPServerTransport implements Transport {
       final contentType = req.headers.contentType?.value;
       if (contentType == null || !contentType.contains("application/json")) {
         req.response.statusCode = HttpStatus.unsupportedMediaType;
-        req.response.write(jsonEncode({
-          "jsonrpc": "2.0",
-          "error": {
-            "code": -32000,
-            "message":
-                "Unsupported Media Type: Content-Type must be application/json"
-          },
-          "id": null
-        }));
+        req.response.write(
+          jsonEncode({
+            "jsonrpc": "2.0",
+            "error": {
+              "code": -32000,
+              "message":
+                  "Unsupported Media Type: Content-Type must be application/json",
+            },
+            "id": null,
+          }),
+        );
         await _safeClose(req.response);
         return;
       }
@@ -385,15 +398,17 @@ class StreamableHTTPServerTransport implements Transport {
             messages.add(JsonRpcMessage.fromJson(msg));
           } catch (e) {
             req.response.statusCode = HttpStatus.badRequest;
-            req.response.write(jsonEncode({
-              "jsonrpc": "2.0",
-              "error": {
-                "code": -32700,
-                "message": "Parse error",
-                "data": e.toString()
-              },
-              "id": null
-            }));
+            req.response.write(
+              jsonEncode({
+                "jsonrpc": "2.0",
+                "error": {
+                  "code": -32700,
+                  "message": "Parse error",
+                  "data": e.toString(),
+                },
+                "id": null,
+              }),
+            );
             await _safeClose(req.response);
             onerror?.call(e is Error ? e : StateError(e.toString()));
             return;
@@ -404,15 +419,17 @@ class StreamableHTTPServerTransport implements Transport {
           messages = [JsonRpcMessage.fromJson(rawMessage)];
         } catch (e) {
           req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(jsonEncode({
-            "jsonrpc": "2.0",
-            "error": {
-              "code": -32700,
-              "message": "Parse error",
-              "data": e.toString()
-            },
-            "id": null
-          }));
+          req.response.write(
+            jsonEncode({
+              "jsonrpc": "2.0",
+              "error": {
+                "code": -32700,
+                "message": "Parse error",
+                "data": e.toString(),
+              },
+              "id": null,
+            }),
+          );
           await _safeClose(req.response);
           onerror?.call(e is Error ? e : StateError(e.toString()));
           return;
@@ -427,28 +444,32 @@ class StreamableHTTPServerTransport implements Transport {
         // to avoid re-initialization.
         if (_initialized && sessionId != null) {
           req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(jsonEncode({
-            "jsonrpc": "2.0",
-            "error": {
-              "code": -32600,
-              "message": "Invalid Request: Server already initialized"
-            },
-            "id": null
-          }));
+          req.response.write(
+            jsonEncode({
+              "jsonrpc": "2.0",
+              "error": {
+                "code": -32600,
+                "message": "Invalid Request: Server already initialized",
+              },
+              "id": null,
+            }),
+          );
           await _safeClose(req.response);
           return;
         }
         if (messages.length > 1) {
           req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(jsonEncode({
-            "jsonrpc": "2.0",
-            "error": {
-              "code": -32600,
-              "message":
-                  "Invalid Request: Only one initialization request is allowed"
-            },
-            "id": null
-          }));
+          req.response.write(
+            jsonEncode({
+              "jsonrpc": "2.0",
+              "error": {
+                "code": -32600,
+                "message":
+                    "Invalid Request: Only one initialization request is allowed",
+              },
+              "id": null,
+            }),
+          );
           await _safeClose(req.response);
           return;
         }
@@ -539,15 +560,17 @@ class StreamableHTTPServerTransport implements Transport {
     } catch (error) {
       // Return JSON-RPC formatted error
       req.response.statusCode = HttpStatus.badRequest;
-      req.response.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32700,
-          "message": "Parse error",
-          "data": error.toString()
-        },
-        "id": null
-      }));
+      req.response.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {
+            "code": -32700,
+            "message": "Parse error",
+            "data": error.toString(),
+          },
+          "id": null,
+        }),
+      );
       await _safeClose(req.response);
 
       if (error is Error) {
@@ -589,14 +612,16 @@ class StreamableHTTPServerTransport implements Transport {
     if (!_initialized) {
       // If the server has not been initialized yet, reject all requests
       res.statusCode = HttpStatus.badRequest;
-      res.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32000,
-          "message": "Bad Request: Server not initialized"
-        },
-        "id": null
-      }));
+      res.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {
+            "code": -32000,
+            "message": "Bad Request: Server not initialized",
+          },
+          "id": null,
+        }),
+      );
       await _safeClose(res);
       return false;
     }
@@ -612,24 +637,28 @@ class StreamableHTTPServerTransport implements Transport {
     if (requestSessionId == null) {
       // Non-initialization requests without a session ID should return 400 Bad Request
       res.statusCode = HttpStatus.badRequest;
-      res.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32000,
-          "message": "Bad Request: Mcp-Session-Id header is required"
-        },
-        "id": null
-      }));
+      res.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {
+            "code": -32000,
+            "message": "Bad Request: Mcp-Session-Id header is required",
+          },
+          "id": null,
+        }),
+      );
       await _safeClose(res);
       return false;
     } else if (requestSessionId != sessionId) {
       // Reject requests with invalid session ID with 404 Not Found
       res.statusCode = HttpStatus.notFound;
-      res.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {"code": -32001, "message": "Session not found"},
-        "id": null
-      }));
+      res.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {"code": -32001, "message": "Session not found"},
+          "id": null,
+        }),
+      );
       await _safeClose(res);
       return false;
     }
@@ -726,7 +755,8 @@ class StreamableHTTPServerTransport implements Transport {
       if (allResponsesReady) {
         if (response == null) {
           throw StateError(
-              "No connection established for request ID: $requestId");
+            "No connection established for request ID: $requestId",
+          );
         }
 
         if (_enableJsonResponse) {

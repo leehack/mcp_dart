@@ -11,8 +11,8 @@ void main() {
     });
 
     test('storeEvent assigns increasing IDs', () async {
-      final msg1 = JsonRpcNotification(method: 'test');
-      final msg2 = JsonRpcNotification(method: 'test2');
+      final msg1 = const JsonRpcNotification(method: 'test');
+      final msg2 = const JsonRpcNotification(method: 'test2');
 
       final id1 = await store.storeEvent('stream1', msg1);
       final id2 = await store.storeEvent('stream1', msg2);
@@ -21,9 +21,9 @@ void main() {
     });
 
     test('replayEventsAfter replays events for correct stream', () async {
-      final msg1 = JsonRpcNotification(method: '1');
-      final msg2 = JsonRpcNotification(method: '2');
-      final msg3 = JsonRpcNotification(method: '3');
+      final msg1 = const JsonRpcNotification(method: '1');
+      final msg2 = const JsonRpcNotification(method: '2');
+      final msg3 = const JsonRpcNotification(method: '3');
 
       final id1 = await store.storeEvent('stream1', msg1);
       final id2 = await store.storeEvent('stream1', msg2);
@@ -53,9 +53,9 @@ void main() {
     });
 
     test('replayEventsAfter handles multiple streams', () async {
-      final msgA1 = JsonRpcNotification(method: 'A1');
-      final msgB1 = JsonRpcNotification(method: 'B1');
-      final msgA2 = JsonRpcNotification(method: 'A2');
+      final msgA1 = const JsonRpcNotification(method: 'A1');
+      final msgB1 = const JsonRpcNotification(method: 'B1');
+      final msgA2 = const JsonRpcNotification(method: 'A2');
 
       final idA1 = await store.storeEvent('streamA', msgA1);
       await store.storeEvent('streamB', msgB1);

@@ -64,17 +64,19 @@ class RequestHandlerExtra {
       sendNotification;
 
   final Future<T> Function<T extends BaseResultData>(
-      JsonRpcRequest request,
-      T Function(Map<String, dynamic> resultJson) resultFactory,
-      RequestOptions options) sendRequest;
+    JsonRpcRequest request,
+    T Function(Map<String, dynamic> resultJson) resultFactory,
+    RequestOptions options,
+  ) sendRequest;
 
   /// Creates extra data for request handlers.
-  const RequestHandlerExtra(
-      {required this.signal,
-      this.sessionId,
-      required this.requestId,
-      required this.sendNotification,
-      required this.sendRequest});
+  const RequestHandlerExtra({
+    required this.signal,
+    this.sessionId,
+    required this.requestId,
+    required this.sendNotification,
+    required this.sendRequest,
+  });
 }
 
 /// Internal class holding timeout state for a request.
@@ -187,7 +189,7 @@ abstract class Protocol {
 
     setRequestHandler<JsonRpcPingRequest>(
       "ping",
-      (request, extra) async => EmptyResult(),
+      (request, extra) async => const EmptyResult(),
       (id, params, meta) => JsonRpcPingRequest(id: id),
     );
   }
@@ -208,16 +210,16 @@ abstract class Protocol {
       try {
         final parsedMessage = JsonRpcMessage.fromJson(message.toJson());
         switch (parsedMessage) {
-          case JsonRpcResponse response:
+          case final JsonRpcResponse response:
             _onresponse(response);
             break;
-          case JsonRpcError error:
+          case final JsonRpcError error:
             _onresponse(error);
             break;
-          case JsonRpcRequest request:
+          case final JsonRpcRequest request:
             _onrequest(request);
             break;
-          case JsonRpcNotification notification:
+          case final JsonRpcNotification notification:
             _onnotification(notification);
             break;
         }
@@ -412,14 +414,17 @@ abstract class Protocol {
     _requestHandlerAbortControllers[request.id] = abortController;
 
     final extra = RequestHandlerExtra(
-        signal: abortController.signal,
-        sessionId: _transport?.sessionId,
-        requestId: request.id,
-        sendNotification: (notification) => this.notification(notification),
-        sendRequest: <T extends BaseResultData>(JsonRpcRequest request,
-                T Function(Map<String, dynamic>) resultFactory,
-                RequestOptions options) =>
-            this.request<T>(request, resultFactory, options));
+      signal: abortController.signal,
+      sessionId: _transport?.sessionId,
+      requestId: request.id,
+      sendNotification: (notification) => this.notification(notification),
+      sendRequest: <T extends BaseResultData>(
+        JsonRpcRequest request,
+        T Function(Map<String, dynamic>) resultFactory,
+        RequestOptions options,
+      ) =>
+          this.request<T>(request, resultFactory, options),
+    );
 
     Future.microtask(() => handler(request, extra)).then(
       (result) async {
@@ -526,10 +531,10 @@ abstract class Protocol {
     Error? errorPayload;
 
     switch (responseMessage) {
-      case JsonRpcResponse r:
+      case final JsonRpcResponse r:
         id = r.id;
         break;
-      case JsonRpcError e:
+      case final JsonRpcError e:
         id = e.id;
         errorPayload = McpError(e.error.code, e.error.message, e.error.data);
         break;
@@ -749,7 +754,8 @@ abstract class Protocol {
     return completer.future.then((response) {
       try {
         return resultFactory(
-            response.toJson()['result'] as Map<String, dynamic>);
+          response.toJson()['result'] as Map<String, dynamic>,
+        );
       } catch (e, s) {
         throw McpError(
           ErrorCode.internalError.value,

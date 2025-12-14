@@ -61,8 +61,10 @@ class MockStdin extends Stream<List<int>> implements io.Stdin {
   int readByteSync() => throw UnimplementedError();
 
   @override
-  String? readLineSync(
-          {Encoding encoding = utf8, bool retainNewlines = false}) =>
+  String? readLineSync({
+    Encoding encoding = utf8,
+    bool retainNewlines = false,
+  }) =>
       throw UnimplementedError();
 
   @override
@@ -162,9 +164,15 @@ void main() {
 
       // Should not throw - transport is now listening
       expect(
-          () => transport.start(),
-          throwsA(isA<StateError>().having(
-              (e) => e.message, 'message', contains('already started'))));
+        () => transport.start(),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('already started'),
+          ),
+        ),
+      );
     });
 
     test('throws StateError when starting twice', () async {
@@ -172,8 +180,10 @@ void main() {
 
       expect(
         () => transport.start(),
-        throwsA(isA<StateError>()
-            .having((e) => e.message, 'message', contains('already started'))),
+        throwsA(
+          isA<StateError>()
+              .having((e) => e.message, 'message', contains('already started')),
+        ),
       );
     });
 
@@ -223,9 +233,9 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
@@ -233,7 +243,7 @@ void main() {
       final jsonString = jsonEncode(initRequest.toJson());
       stdin.addString('$jsonString\n');
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       expect(receivedMessage, isNotNull);
       expect(receivedMessage, isA<JsonRpcInitializeRequest>());
@@ -248,13 +258,13 @@ void main() {
 
       await transport.start();
 
-      final message1 = JsonRpcPingRequest(id: 1);
-      final message2 = JsonRpcPingRequest(id: 2);
+      final message1 = const JsonRpcPingRequest(id: 1);
+      final message2 = const JsonRpcPingRequest(id: 2);
 
       stdin.addString('${jsonEncode(message1.toJson())}\n');
       stdin.addString('${jsonEncode(message2.toJson())}\n');
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       expect(receivedMessages.length, equals(2));
       expect((receivedMessages[0] as JsonRpcPingRequest).id, equals(1));
@@ -269,7 +279,7 @@ void main() {
 
       await transport.start();
 
-      final message = JsonRpcPingRequest(id: 1);
+      final message = const JsonRpcPingRequest(id: 1);
       final jsonString = jsonEncode(message.toJson());
       final fullMessage = '$jsonString\n';
 
@@ -278,10 +288,10 @@ void main() {
       final chunk2 = fullMessage.substring(fullMessage.length ~/ 2);
 
       stdin.addString(chunk1);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
       stdin.addString(chunk2);
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       expect(receivedMessage, isNotNull);
       expect(receivedMessage, isA<JsonRpcPingRequest>());
@@ -297,7 +307,7 @@ void main() {
 
       stdin.addString('invalid json\n');
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       expect(receivedError, isNotNull);
     });
@@ -312,7 +322,7 @@ void main() {
 
       stdin.closeStream();
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       expect(oncloseCalled, isTrue);
     });
@@ -327,7 +337,7 @@ void main() {
 
       stdin.addError(Exception('Stream error'));
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       expect(receivedError, isNotNull);
     });
@@ -353,9 +363,9 @@ void main() {
 
       final response = JsonRpcResponse(
         id: 1,
-        result: InitializeResult(
+        result: const InitializeResult(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ServerCapabilities(),
+          capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '1.0.0'),
         ).toJson(),
       );
@@ -370,8 +380,8 @@ void main() {
     test('sends multiple messages in sequence', () async {
       await transport.start();
 
-      final message1 = JsonRpcPingRequest(id: 1);
-      final message2 = JsonRpcPingRequest(id: 2);
+      final message1 = const JsonRpcPingRequest(id: 1);
+      final message2 = const JsonRpcPingRequest(id: 2);
 
       await transport.send(message1);
       await transport.send(message2);
@@ -380,7 +390,7 @@ void main() {
     });
 
     test('warns when sending before start', () async {
-      final response = JsonRpcPingRequest(id: 1);
+      final response = const JsonRpcPingRequest(id: 1);
 
       // Should not throw, but will log warning
       await transport.send(response);
@@ -417,10 +427,10 @@ void main() {
 
       await transport.start();
 
-      final message = JsonRpcPingRequest(id: 1);
+      final message = const JsonRpcPingRequest(id: 1);
       stdin.addString('${jsonEncode(message.toJson())}\n');
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       expect(receivedError, isNotNull);
     });
@@ -434,7 +444,7 @@ void main() {
 
       stdin.addString('invalid json\n');
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // Should not crash, just log warning
       expect(() => Future.value(), returnsNormally);

@@ -39,7 +39,9 @@ class TaskResultHandler {
       final task = await store.getTask(taskId);
       if (task == null) {
         throw McpError(
-            ErrorCode.invalidParams.value, "Task not found: $taskId");
+          ErrorCode.invalidParams.value,
+          "Task not found: $taskId",
+        );
       }
 
       // Deliver queued messages (requests from client to server logic?)
@@ -59,9 +61,11 @@ class TaskResultHandler {
       if (currentTask.status.isTerminal) {
         final result = await store.getTaskResult(taskId);
         if (result == null) {
-          return CallToolResult.fromContent(content: [
-            TextContent(text: "Task completed but no result found")
-          ]);
+          return CallToolResult.fromContent(
+            content: [
+              const TextContent(text: "Task completed but no result found"),
+            ],
+          );
         }
 
         // Add related task meta
@@ -134,19 +138,32 @@ class TaskResultHandler {
 
   // Helpers to call server methods but inject relatedTask meta
   Future<ElicitResult> _elicit(
-      McpServer server, ElicitRequestParams params, String taskId) async {
-    final req = JsonRpcElicitRequest(id: -1, elicitParams: params, meta: {
-      relatedTaskMetaKey: {'taskId': taskId}
-    });
+    McpServer server,
+    ElicitRequestParams params,
+    String taskId,
+  ) async {
+    final req = JsonRpcElicitRequest(
+      id: -1,
+      elicitParams: params,
+      meta: {
+        relatedTaskMetaKey: {'taskId': taskId},
+      },
+    );
     return server.server.request(req, (json) => ElicitResult.fromJson(json));
   }
 
-  Future<CreateMessageResult> _createMessage(McpServer server,
-      CreateMessageRequestParams params, String taskId) async {
-    final req =
-        JsonRpcCreateMessageRequest(id: -1, createParams: params, meta: {
-      relatedTaskMetaKey: {'taskId': taskId}
-    });
+  Future<CreateMessageResult> _createMessage(
+    McpServer server,
+    CreateMessageRequestParams params,
+    String taskId,
+  ) async {
+    final req = JsonRpcCreateMessageRequest(
+      id: -1,
+      createParams: params,
+      meta: {
+        relatedTaskMetaKey: {'taskId': taskId},
+      },
+    );
     return server.server
         .request(req, (json) => CreateMessageResult.fromJson(json));
   }

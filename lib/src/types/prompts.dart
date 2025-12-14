@@ -184,7 +184,7 @@ class JsonRpcGetPromptRequest extends JsonRpcRequest {
   factory JsonRpcGetPromptRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for get prompt request");
+      throw const FormatException("Missing params for get prompt request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcGetPromptRequest(

@@ -43,7 +43,7 @@ void main() {
 
     setUp(() {
       mcpServer =
-          McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+          McpServer(const Implementation(name: 'TestServer', version: '1.0.0'));
       transport = MockTransport();
     });
 
@@ -53,7 +53,7 @@ void main() {
       mcpServer.tasks(
         listCallback: (extra) async {
           listCallbackInvoked = true;
-          return ListTasksResult(
+          return const ListTasksResult(
             tasks: [
               Task(
                 taskId: 'task1',
@@ -71,18 +71,18 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final listRequest = JsonRpcListTasksRequest(id: 2);
       transport.receiveMessage(listRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(listCallbackInvoked, isTrue);
       final response = transport.sentMessages
@@ -97,7 +97,7 @@ void main() {
       var cancelledTaskId = '';
 
       mcpServer.tasks(
-        listCallback: (extra) async => ListTasksResult(tasks: []),
+        listCallback: (extra) async => const ListTasksResult(tasks: []),
         cancelCallback: (taskId, extra) async {
           cancelledTaskId = taskId;
         },
@@ -107,21 +107,21 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final cancelRequest = JsonRpcCancelTaskRequest(
         id: 2,
-        cancelParams: CancelTaskRequestParams(taskId: 'task123'),
+        cancelParams: const CancelTaskRequestParams(taskId: 'task123'),
       );
       transport.receiveMessage(cancelRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(cancelledTaskId, 'task123');
       final response = transport.sentMessages
@@ -138,19 +138,19 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Request list tasks
       final listRequest = JsonRpcListTasksRequest(id: 2);
       transport.receiveMessage(listRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final errorResponse = transport.sentMessages
           .whereType<JsonRpcError>()
@@ -160,13 +160,13 @@ void main() {
 
     test('prevents duplicate tasks registration', () {
       mcpServer.tasks(
-        listCallback: (extra) => ListTasksResult(tasks: []),
+        listCallback: (extra) => const ListTasksResult(tasks: []),
         cancelCallback: (taskId, extra) {},
       );
 
       expect(
         () => mcpServer.tasks(
-          listCallback: (extra) => ListTasksResult(tasks: []),
+          listCallback: (extra) => const ListTasksResult(tasks: []),
           cancelCallback: (taskId, extra) {},
         ),
         throwsA(isA<StateError>()),

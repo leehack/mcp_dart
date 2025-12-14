@@ -285,7 +285,7 @@ class JsonRpcReadResourceRequest extends JsonRpcRequest {
   factory JsonRpcReadResourceRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for read resource request");
+      throw const FormatException("Missing params for read resource request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcReadResourceRequest(
@@ -361,7 +361,7 @@ class JsonRpcSubscribeRequest extends JsonRpcRequest {
   factory JsonRpcSubscribeRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for subscribe request");
+      throw const FormatException("Missing params for subscribe request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcSubscribeRequest(
@@ -399,7 +399,7 @@ class JsonRpcUnsubscribeRequest extends JsonRpcRequest {
   factory JsonRpcUnsubscribeRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for unsubscribe request");
+      throw const FormatException("Missing params for unsubscribe request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcUnsubscribeRequest(
@@ -441,7 +441,9 @@ class JsonRpcResourceUpdatedNotification extends JsonRpcNotification {
   ) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for resource updated notification");
+      throw const FormatException(
+        "Missing params for resource updated notification",
+      );
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcResourceUpdatedNotification(

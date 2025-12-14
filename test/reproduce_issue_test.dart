@@ -19,10 +19,12 @@ class MockMcpServer extends McpServer {
 
 void main() {
   test('TaskStore instances should be isolated per server', () async {
-    final server1 = MockMcpServer(Implementation(name: 's1', version: '1'));
+    final server1 =
+        MockMcpServer(const Implementation(name: 's1', version: '1'));
     final store1 = InMemoryTaskStore(server1);
 
-    final server2 = MockMcpServer(Implementation(name: 's2', version: '1'));
+    final server2 =
+        MockMcpServer(const Implementation(name: 's2', version: '1'));
     final store2 = InMemoryTaskStore(server2);
 
     // Create task in store1

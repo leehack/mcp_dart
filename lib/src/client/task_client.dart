@@ -62,7 +62,10 @@ class TaskClient {
 
         // Poll for status updates while waiting for result
         await for (final msg in _monitorTaskWithResult(
-            taskResult.task.taskId, taskResult.task, resultFuture)) {
+          taskResult.task.taskId,
+          taskResult.task,
+          resultFuture,
+        )) {
           yield msg;
         }
       } else {
@@ -75,8 +78,11 @@ class TaskClient {
     }
   }
 
-  Stream<TaskStreamMessage> _monitorTaskWithResult(String taskId,
-      Task initialTask, Future<CallToolResult> resultFuture) async* {
+  Stream<TaskStreamMessage> _monitorTaskWithResult(
+    String taskId,
+    Task initialTask,
+    Future<CallToolResult> resultFuture,
+  ) async* {
     var currentTask = initialTask;
     var resultCompleted = false;
     CallToolResult? finalResult;

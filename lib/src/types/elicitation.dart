@@ -333,7 +333,7 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
   factory JsonRpcElicitRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for elicit request");
+      throw const FormatException("Missing params for elicit request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcElicitRequest(
@@ -427,7 +427,7 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
   ) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException(
+      throw const FormatException(
         "Missing params for elicitation complete notification",
       );
     }

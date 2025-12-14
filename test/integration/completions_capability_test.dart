@@ -5,8 +5,8 @@ void main() {
   group('Completions Capability Integration Tests', () {
     test('Server declares completions capability', () {
       final mcpServer = McpServer(
-        Implementation(name: "test-server", version: "1.0.0"),
-        options: ServerOptions(
+        const Implementation(name: "test-server", version: "1.0.0"),
+        options: const ServerOptions(
           capabilities: ServerCapabilities(
             completions: ServerCapabilitiesCompletions(),
           ),
@@ -20,8 +20,8 @@ void main() {
 
     test('Server declares completions capability with listChanged', () {
       final mcpServer = McpServer(
-        Implementation(name: "test-server", version: "1.0.0"),
-        options: ServerOptions(
+        const Implementation(name: "test-server", version: "1.0.0"),
+        options: const ServerOptions(
           capabilities: ServerCapabilities(
             completions: ServerCapabilitiesCompletions(listChanged: true),
           ),
@@ -35,8 +35,8 @@ void main() {
 
     test('Server without completions capability returns null', () {
       final mcpServer = McpServer(
-        Implementation(name: "test-server", version: "1.0.0"),
-        options: ServerOptions(
+        const Implementation(name: "test-server", version: "1.0.0"),
+        options: const ServerOptions(
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -50,8 +50,8 @@ void main() {
     test('Server with completions capability can be verified', () {
       // Create a server with completions capability
       final mcpServer = McpServer(
-        Implementation(name: "test-server", version: "1.0.0"),
-        options: ServerOptions(
+        const Implementation(name: "test-server", version: "1.0.0"),
+        options: const ServerOptions(
           capabilities: ServerCapabilities(
             completions: ServerCapabilitiesCompletions(),
           ),
@@ -66,8 +66,8 @@ void main() {
 
     test('Server with multiple capabilities including completions', () {
       final mcpServer = McpServer(
-        Implementation(name: "test-server", version: "1.0.0"),
-        options: ServerOptions(
+        const Implementation(name: "test-server", version: "1.0.0"),
+        options: const ServerOptions(
           capabilities: ServerCapabilities(
             completions: ServerCapabilitiesCompletions(listChanged: true),
             tools: ServerCapabilitiesTools(listChanged: true),
@@ -89,7 +89,7 @@ void main() {
     });
 
     test('Completions capability survives serialization round-trip', () {
-      final originalCaps = ServerCapabilities(
+      final originalCaps = const ServerCapabilities(
         completions: ServerCapabilitiesCompletions(listChanged: true),
         experimental: {'test': true},
       );

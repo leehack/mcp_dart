@@ -1,9 +1,9 @@
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
-  McpServer server = McpServer(
-    Implementation(name: "example_server", version: "1.0.0"),
-    options: ServerOptions(
+  final McpServer server = McpServer(
+    const Implementation(name: "example_server", version: "1.0.0"),
+    options: const ServerOptions(
       capabilities: ServerCapabilities(
         resources: ServerCapabilitiesResources(),
         tools: ServerCapabilitiesTools(),
@@ -15,7 +15,7 @@ void main() async {
   server.tool(
     'calculate',
     description: 'Perform basic arithmetic operations',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         'operation': {
           'type': 'string',
@@ -72,14 +72,14 @@ void main() async {
     'analyze-code',
     description: 'Analyze code for potential improvements',
     argsSchema: {
-      'language': PromptArgumentDefinition(
+      'language': const PromptArgumentDefinition(
         type: String,
         description: 'Programming language',
         required: true,
       ),
     },
     callback: (args, extra) async {
-      return GetPromptResult(
+      return const GetPromptResult(
         messages: [
           PromptMessage(
             role: PromptMessageRole.user,

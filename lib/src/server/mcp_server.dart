@@ -54,10 +54,13 @@ typedef ResourceMetadata = ({
 });
 
 typedef ListResourcesCallback = FutureOr<ListResourcesResult> Function(
-    RequestHandlerExtra extra);
+  RequestHandlerExtra extra,
+);
 
 typedef ReadResourceCallback = FutureOr<ReadResourceResult> Function(
-    Uri uri, RequestHandlerExtra extra);
+  Uri uri,
+  RequestHandlerExtra extra,
+);
 
 typedef ReadResourceTemplateCallback = FutureOr<ReadResourceResult> Function(
   Uri uri,
@@ -66,19 +69,27 @@ typedef ReadResourceTemplateCallback = FutureOr<ReadResourceResult> Function(
 );
 
 typedef CompleteResourceTemplateCallback = FutureOr<List<String>> Function(
-    String currentValue);
+  String currentValue,
+);
 
 typedef ListTasksCallback = FutureOr<ListTasksResult> Function(
-    RequestHandlerExtra extra);
+  RequestHandlerExtra extra,
+);
 
 typedef CancelTaskCallback = FutureOr<void> Function(
-    String taskId, RequestHandlerExtra extra);
+  String taskId,
+  RequestHandlerExtra extra,
+);
 
 typedef GetTaskCallback = FutureOr<Task> Function(
-    String taskId, RequestHandlerExtra extra);
+  String taskId,
+  RequestHandlerExtra extra,
+);
 
 typedef TaskResultCallback = FutureOr<CallToolResult> Function(
-    String taskId, RequestHandlerExtra extra);
+  String taskId,
+  RequestHandlerExtra extra,
+);
 
 class ResourceTemplateRegistration {
   final UriTemplateExpander uriTemplate;
@@ -117,7 +128,7 @@ class _RegisteredTool {
     return Tool(
       name: name,
       description: description,
-      inputSchema: toolInputSchema ?? ToolInputSchema(),
+      inputSchema: toolInputSchema ?? const ToolInputSchema(),
       // Do not include output schema in the payload if it isn't defined
       outputSchema: toolOutputSchema,
       annotations: annotations,
@@ -370,7 +381,10 @@ class McpServer {
           // Cast the result to BaseResultData
           return await Future.value(
             registeredTool.callback(
-                args: toolArgs, meta: request.meta, extra: extra),
+              args: toolArgs,
+              meta: request.meta,
+              extra: extra,
+            ),
           );
         } catch (error) {
           _logger.warn("Error executing tool '$toolName': $error");
@@ -400,11 +414,11 @@ class McpServer {
     server.setRequestHandler<JsonRpcCompleteRequest>(
       Method.completionComplete,
       (request, extra) async => switch (request.completeParams.ref) {
-        ResourceReference r => _handleResourceCompletion(
+        final ResourceReference r => _handleResourceCompletion(
             r,
             request.completeParams.argument,
           ),
-        PromptReference p => _handlePromptCompletion(
+        final PromptReference p => _handlePromptCompletion(
             p,
             request.completeParams.argument,
           ),
@@ -633,13 +647,13 @@ class McpServer {
     Map<String, PromptArgumentDefinition> schema,
   ) {
     final validatedArgs = <String, dynamic>{};
-    List<String> errors = [];
+    final List<String> errors = [];
     schema.forEach((name, def) {
       final value = rawArgs[name];
       if (value == null) {
         if (def.required) errors.add("Missing required '$name'");
       } else {
-        bool typeOk = (value.runtimeType == def.type ||
+        final bool typeOk = (value.runtimeType == def.type ||
             (def.type == num && value is num));
         if (!typeOk) {
           errors.add(

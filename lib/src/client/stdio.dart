@@ -308,7 +308,7 @@ class StdioClientTransport implements Transport {
         "StdioClientTransport: Terminating process (PID: ${processToKill.pid})...",
       );
       // Attempt graceful termination first
-      bool killed = processToKill.kill(io.ProcessSignal.sigterm);
+      final bool killed = processToKill.kill(io.ProcessSignal.sigterm);
       if (!killed) {
         _logger.debug(
           "StdioClientTransport: Failed to send SIGTERM or process already exited.",

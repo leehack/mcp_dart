@@ -43,8 +43,8 @@ class InteractiveServer {
     print('[Server] Creating new McpServer for session $sessionId');
 
     final server = McpServer(
-      Implementation(name: 'simple-task-interactive', version: '1.0.0'),
-      options: ServerOptions(
+      const Implementation(name: 'simple-task-interactive', version: '1.0.0'),
+      options: const ServerOptions(
         capabilities: ServerCapabilities(
           tools: ServerCapabilitiesTools(),
           tasks: ServerCapabilitiesTasks(listChanged: true),
@@ -98,8 +98,10 @@ class InteractiveServer {
         print('[Server] tasks/cancel called for task $taskId');
         final cancelled = await store.cancelTask(taskId);
         if (!cancelled) {
-          throw McpError(ErrorCode.invalidParams.value,
-              "Cannot cancel task: not found or already terminal");
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Cannot cancel task: not found or already terminal",
+          );
         }
       },
     );
@@ -109,24 +111,38 @@ class InteractiveServer {
       'confirm_delete',
       description:
           'Asks for confirmation before deleting (demonstrates elicitation)',
-      toolInputSchema: ToolInputSchema(properties: {
-        'filename': {'type': 'string'}
-      }),
+      toolInputSchema: const ToolInputSchema(
+        properties: {
+          'filename': {'type': 'string'},
+        },
+      ),
       callback: ({args, meta, extra}) async {
         return _createSimpleTask(
-            context, 'confirm_delete', args, meta, _runConfirmDelete);
+          context,
+          'confirm_delete',
+          args,
+          meta,
+          _runConfirmDelete,
+        );
       },
     );
 
     server.tool(
       'write_haiku',
       description: 'Asks LLM to write a haiku (demonstrates sampling)',
-      toolInputSchema: ToolInputSchema(properties: {
-        'topic': {'type': 'string'}
-      }),
+      toolInputSchema: const ToolInputSchema(
+        properties: {
+          'topic': {'type': 'string'},
+        },
+      ),
       callback: ({args, meta, extra}) async {
         return _createSimpleTask(
-            context, 'write_haiku', args, meta, _runWriteHaiku);
+          context,
+          'write_haiku',
+          args,
+          meta,
+          _runWriteHaiku,
+        );
       },
     );
   }
@@ -175,8 +191,11 @@ class InteractiveServer {
     return CreateTaskResult(task: task);
   }
 
-  void _runConfirmDelete(
-      SessionContext context, String taskId, Map<String, dynamic> args) async {
+  Future<void> _runConfirmDelete(
+    SessionContext context,
+    String taskId,
+    Map<String, dynamic> args,
+  ) async {
     _runTask(context, taskId, (session) async {
       final filename = args['filename'] ?? 'unknown.txt';
       print('[Server] confirm_delete: asking about $filename');
@@ -185,9 +204,9 @@ class InteractiveServer {
           await session.elicit("Are you sure you want to delete '$filename'?", {
         'type': 'object',
         'properties': {
-          'confirm': {'type': 'boolean'}
+          'confirm': {'type': 'boolean'},
         },
-        'required': ['confirm']
+        'required': ['confirm'],
       });
 
       String text;
@@ -198,22 +217,32 @@ class InteractiveServer {
         text = "Deletion cancelled";
       }
 
-      await context.store.storeTaskResult(taskId, TaskStatus.completed,
-          CallToolResult.fromContent(content: [TextContent(text: text)]));
+      await context.store.storeTaskResult(
+        taskId,
+        TaskStatus.completed,
+        CallToolResult.fromContent(content: [TextContent(text: text)]),
+      );
     });
   }
 
-  void _runWriteHaiku(
-      SessionContext context, String taskId, Map<String, dynamic> args) async {
+  Future<void> _runWriteHaiku(
+    SessionContext context,
+    String taskId,
+    Map<String, dynamic> args,
+  ) async {
     _runTask(context, taskId, (session) async {
       final topic = args['topic'] ?? 'nature';
       print('[Server] write_haiku: topic $topic');
 
-      final result = await session.createMessage([
-        SamplingMessage(
+      final result = await session.createMessage(
+        [
+          SamplingMessage(
             role: SamplingMessageRole.user,
-            content: SamplingTextContent(text: "Write a haiku about $topic"))
-      ], 50);
+            content: SamplingTextContent(text: "Write a haiku about $topic"),
+          ),
+        ],
+        50,
+      );
 
       String haiku = "No response";
       if (result.content is SamplingTextContent) {
@@ -221,15 +250,20 @@ class InteractiveServer {
       }
 
       await context.store.storeTaskResult(
-          taskId,
-          TaskStatus.completed,
-          CallToolResult.fromContent(
-              content: [TextContent(text: "Haiku:\n$haiku")]));
+        taskId,
+        TaskStatus.completed,
+        CallToolResult.fromContent(
+          content: [TextContent(text: "Haiku:\n$haiku")],
+        ),
+      );
     });
   }
 
-  void _runTask(SessionContext context, String taskId,
-      Future<void> Function(TaskSession) action) async {
+  Future<void> _runTask(
+    SessionContext context,
+    String taskId,
+    Future<void> Function(TaskSession) action,
+  ) async {
     final session =
         TaskSession(context.server, taskId, context.store, context.queue);
 
@@ -238,10 +272,13 @@ class InteractiveServer {
     } catch (e) {
       print('[Server] Task $taskId failed: $e');
       await context.store.storeTaskResult(
-          taskId,
-          TaskStatus.failed,
-          CallToolResult.fromContent(
-              content: [TextContent(text: "Error: $e")], isError: true));
+        taskId,
+        TaskStatus.failed,
+        CallToolResult.fromContent(
+          content: [TextContent(text: "Error: $e")],
+          isError: true,
+        ),
+      );
     }
   }
 

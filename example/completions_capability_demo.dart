@@ -12,8 +12,8 @@ import 'package:mcp_dart/mcp_dart.dart';
 void main() async {
   // Server declares completions support explicitly per 2025-06-18 spec
   final server = McpServer(
-    Implementation(name: "completions-demo", version: "1.0.0"),
-    options: ServerOptions(
+    const Implementation(name: "completions-demo", version: "1.0.0"),
+    options: const ServerOptions(
       capabilities: ServerCapabilities(
         completions: ServerCapabilitiesCompletions(),
         resources: ServerCapabilitiesResources(),
@@ -117,7 +117,7 @@ void main() async {
                 'concise',
                 'detailed',
                 'security-focused',
-                'performance-focused'
+                'performance-focused',
               ];
             },
           ),
@@ -147,7 +147,7 @@ void main() async {
   server.tool(
     'echo',
     description: 'Echo back the input message',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         'message': {'type': 'string', 'description': 'Message to echo'},
       },

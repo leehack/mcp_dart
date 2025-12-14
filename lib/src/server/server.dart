@@ -292,7 +292,7 @@ class Server extends Protocol {
   /// Sends a `ping` request to the client and awaits an empty response.
   Future<EmptyResult> ping([RequestOptions? options]) {
     return request<EmptyResult>(
-      JsonRpcPingRequest(id: -1),
+      const JsonRpcPingRequest(id: -1),
       (json) => const EmptyResult(),
       options,
     );
@@ -313,7 +313,7 @@ class Server extends Protocol {
 
   /// Sends a `roots/list` request to the client to ask for its root URIs.
   Future<ListRootsResult> listRoots({RequestOptions? options}) {
-    final req = JsonRpcListRootsRequest(id: -1);
+    final req = const JsonRpcListRootsRequest(id: -1);
     return request<ListRootsResult>(
       req,
       (json) => ListRootsResult.fromJson(json),

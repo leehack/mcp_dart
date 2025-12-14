@@ -40,8 +40,8 @@ sealed class ResourceContents {
         'uri': uri,
         if (mimeType != null) 'mimeType': mimeType,
         ...switch (this) {
-          TextResourceContents c => {'text': c.text},
-          BlobResourceContents c => {'blob': c.blob},
+          final TextResourceContents c => {'text': c.text},
+          final BlobResourceContents c => {'blob': c.blob},
           UnknownResourceContents _ => {},
         },
       };
@@ -102,10 +102,10 @@ sealed class Content {
   Map<String, dynamic> toJson() => {
         'type': type,
         ...switch (this) {
-          TextContent c => {'text': c.text},
-          ImageContent c => {'data': c.data, 'mimeType': c.mimeType},
-          AudioContent c => {'data': c.data, 'mimeType': c.mimeType},
-          EmbeddedResource c => {'resource': c.resource.toJson()},
+          final TextContent c => {'text': c.text},
+          final ImageContent c => {'data': c.data, 'mimeType': c.mimeType},
+          final AudioContent c => {'data': c.data, 'mimeType': c.mimeType},
+          final EmbeddedResource c => {'resource': c.resource.toJson()},
           UnknownContent _ => {},
         },
       };

@@ -23,7 +23,9 @@ class TaskSession {
 
   /// Requests input from the client (Elicitation).
   Future<ElicitResult> elicit(
-      String message, Map<String, dynamic> requestedSchema) async {
+    String message,
+    Map<String, dynamic> requestedSchema,
+  ) async {
     await store.updateTaskStatus(taskId, TaskStatus.inputRequired);
 
     final requestId = _nextRequestId();
@@ -36,14 +38,15 @@ class TaskSession {
     final completer = Completer<Map<String, dynamic>>();
 
     queue.enqueue(
-        taskId,
-        QueuedMessage(
-          type: 'request',
-          message: jsonRpcRequest,
-          timestamp: DateTime.now().millisecondsSinceEpoch,
-          resolver: completer,
-          originalRequestId: requestId,
-        ));
+      taskId,
+      QueuedMessage(
+        type: 'request',
+        message: jsonRpcRequest,
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        resolver: completer,
+        originalRequestId: requestId,
+      ),
+    );
 
     try {
       final json = await completer.future;
@@ -57,7 +60,9 @@ class TaskSession {
 
   /// Requests an LLM sampling message (Sampling).
   Future<CreateMessageResult> createMessage(
-      List<SamplingMessage> messages, int maxTokens) async {
+    List<SamplingMessage> messages,
+    int maxTokens,
+  ) async {
     await store.updateTaskStatus(taskId, TaskStatus.inputRequired);
 
     final requestId = _nextRequestId();
@@ -72,14 +77,15 @@ class TaskSession {
     final completer = Completer<Map<String, dynamic>>();
 
     queue.enqueue(
-        taskId,
-        QueuedMessage(
-          type: 'request',
-          message: jsonRpcRequest,
-          timestamp: DateTime.now().millisecondsSinceEpoch,
-          resolver: completer,
-          originalRequestId: requestId,
-        ));
+      taskId,
+      QueuedMessage(
+        type: 'request',
+        message: jsonRpcRequest,
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        resolver: completer,
+        originalRequestId: requestId,
+      ),
+    );
 
     try {
       final json = await completer.future;

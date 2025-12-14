@@ -120,8 +120,10 @@ class MockHttpResponse implements HttpResponse {
   Future<void> flush() async {}
 
   @override
-  Future<void> redirect(Uri location,
-          {int status = HttpStatus.movedTemporarily}) async =>
+  Future<void> redirect(
+    Uri location, {
+    int status = HttpStatus.movedTemporarily,
+  }) async =>
       throw UnimplementedError();
 
   @override
@@ -296,7 +298,7 @@ void main() {
 
     setUp(() {
       mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       manager = SseServerManager(mcpServer);
     });
@@ -319,8 +321,10 @@ void main() {
 
       // Should get bad request for empty sessionId
       expect(request.response.statusCode, equals(HttpStatus.badRequest));
-      expect(request.response.writtenData.any((d) => d.contains('Missing')),
-          isTrue);
+      expect(
+        request.response.writtenData.any((d) => d.contains('Missing')),
+        isTrue,
+      );
     });
 
     test('returns 404 for unknown paths', () async {
@@ -329,8 +333,10 @@ void main() {
       await manager.handleRequest(request);
 
       expect(request.response.statusCode, equals(HttpStatus.notFound));
-      expect(request.response.writtenData.any((d) => d.contains('Not Found')),
-          isTrue);
+      expect(
+        request.response.writtenData.any((d) => d.contains('Not Found')),
+        isTrue,
+      );
     });
 
     test('returns 405 for POST to /sse', () async {
@@ -340,9 +346,10 @@ void main() {
 
       expect(request.response.statusCode, equals(HttpStatus.methodNotAllowed));
       expect(
-          request.response.writtenData
-              .any((d) => d.contains('Method Not Allowed')),
-          isTrue);
+        request.response.writtenData
+            .any((d) => d.contains('Method Not Allowed')),
+        isTrue,
+      );
     });
 
     test('returns 405 for GET to /messages', () async {
@@ -364,8 +371,11 @@ void main() {
       await customManager.handleRequest(sseRequest);
       expect(customManager.activeSseTransports.length, equals(1));
 
-      final msgRequest = MockHttpRequest('POST', '/custom-messages',
-          queryParams: {'sessionId': ''});
+      final msgRequest = MockHttpRequest(
+        'POST',
+        '/custom-messages',
+        queryParams: {'sessionId': ''},
+      );
       await customManager.handleRequest(msgRequest);
       expect(msgRequest.response.statusCode, equals(HttpStatus.badRequest));
     });
@@ -374,7 +384,7 @@ void main() {
   group('SseServerManager - SSE Connection Management', () {
     test('creates new SSE transport on connection', () async {
       final mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       final manager = SseServerManager(mcpServer);
 
@@ -388,7 +398,7 @@ void main() {
 
     test('stores transport with session ID', () async {
       final mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       final manager = SseServerManager(mcpServer);
 
@@ -402,7 +412,7 @@ void main() {
 
     test('transport has onclose callback configured', () async {
       final mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       final manager = SseServerManager(mcpServer);
 
@@ -419,10 +429,10 @@ void main() {
     test('handles multiple simultaneous connections', () async {
       // Each connection needs its own McpServer since server can only connect once
       final mcpServer1 = McpServer(
-        Implementation(name: 'TestServer1', version: '1.0.0'),
+        const Implementation(name: 'TestServer1', version: '1.0.0'),
       );
       final mcpServer2 = McpServer(
-        Implementation(name: 'TestServer2', version: '1.0.0'),
+        const Implementation(name: 'TestServer2', version: '1.0.0'),
       );
 
       final manager1 = SseServerManager(mcpServer1);
@@ -449,7 +459,7 @@ void main() {
 
     setUp(() {
       mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       manager = SseServerManager(mcpServer);
     });
@@ -460,8 +470,10 @@ void main() {
       await manager.handleRequest(request);
 
       expect(request.response.statusCode, equals(HttpStatus.badRequest));
-      expect(request.response.writtenData.any((d) => d.contains('Missing')),
-          isTrue);
+      expect(
+        request.response.writtenData.any((d) => d.contains('Missing')),
+        isTrue,
+      );
     });
 
     test('returns 400 for empty sessionId', () async {
@@ -472,23 +484,30 @@ void main() {
 
       expect(request.response.statusCode, equals(HttpStatus.badRequest));
       expect(
-          request.response.writtenData.any((d) => d.contains('empty')), isTrue);
+        request.response.writtenData.any((d) => d.contains('empty')),
+        isTrue,
+      );
     });
 
     test('returns 404 for unknown sessionId', () async {
-      final request = MockHttpRequest('POST', '/messages',
-          queryParams: {'sessionId': 'unknown-session-id'});
+      final request = MockHttpRequest(
+        'POST',
+        '/messages',
+        queryParams: {'sessionId': 'unknown-session-id'},
+      );
 
       await manager.handleRequest(request);
 
       expect(request.response.statusCode, equals(HttpStatus.notFound));
-      expect(request.response.writtenData.any((d) => d.contains('No active')),
-          isTrue);
+      expect(
+        request.response.writtenData.any((d) => d.contains('No active')),
+        isTrue,
+      );
     });
 
     test('forwards message to correct transport', () async {
       final mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       final manager = SseServerManager(mcpServer);
 
@@ -499,8 +518,11 @@ void main() {
       final sessionId = manager.activeSseTransports.keys.first;
 
       // Then send a message to that session
-      final messageRequest = MockHttpRequest('POST', '/messages',
-          queryParams: {'sessionId': sessionId});
+      final messageRequest = MockHttpRequest(
+        'POST',
+        '/messages',
+        queryParams: {'sessionId': sessionId},
+      );
 
       // Add message body
       final messageData = '{"jsonrpc":"2.0","method":"ping","id":1}\n';
@@ -520,7 +542,7 @@ void main() {
 
     setUp(() {
       mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       manager = SseServerManager(mcpServer);
     });
@@ -539,7 +561,7 @@ void main() {
 
     test('configures error handler on transport', () async {
       final mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       final manager = SseServerManager(mcpServer);
 
@@ -552,8 +574,10 @@ void main() {
       expect(transport.onerror, isNotNull);
 
       // Trigger error should not throw
-      expect(() => transport.onerror?.call(StateError('Test error')),
-          returnsNormally);
+      expect(
+        () => transport.onerror?.call(StateError('Test error')),
+        returnsNormally,
+      );
     });
   });
 }

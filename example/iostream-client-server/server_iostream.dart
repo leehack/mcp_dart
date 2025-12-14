@@ -4,14 +4,17 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 Future<McpServer> getServer() async {
   final mcpServer = McpServer(
-    Implementation(name: "example-dart-iostream-server", version: "1.0.0"),
-    options: ServerOptions(capabilities: ServerCapabilities()),
+    const Implementation(
+      name: "example-dart-iostream-server",
+      version: "1.0.0",
+    ),
+    options: const ServerOptions(capabilities: ServerCapabilities()),
   );
 
   mcpServer.tool(
     "calculate",
     description: 'Perform basic arithmetic operations',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         'operation': {
           'type': 'string',

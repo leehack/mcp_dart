@@ -272,7 +272,8 @@ class StreamableHttpClientTransport implements Transport {
     // Check if we've exceeded maximum retry attempts
     if (maxRetries > 0 && attemptCount >= maxRetries) {
       onerror?.call(
-          McpError(0, "Maximum reconnection attempts ($maxRetries) exceeded."));
+        McpError(0, "Maximum reconnection attempts ($maxRetries) exceeded."),
+      );
       return;
     }
 
@@ -286,7 +287,8 @@ class StreamableHttpClientTransport implements Transport {
         final errorMessage =
             error is Error ? error.toString() : error.toString();
         onerror?.call(
-            McpError(0, "Failed to reconnect SSE stream: $errorMessage"));
+          McpError(0, "Failed to reconnect SSE stream: $errorMessage"),
+        );
 
         // Schedule another attempt if this one failed, incrementing the attempt counter
         _scheduleReconnection(options, attemptCount + 1);
@@ -325,9 +327,10 @@ class StreamableHttpClientTransport implements Transport {
           if (replayMessageId != null && message is JsonRpcResponse) {
             // Create a new response with the same data but different ID
             final newMessage = JsonRpcResponse(
-                id: replayMessageId,
-                result: message.result,
-                meta: message.meta);
+              id: replayMessageId,
+              result: message.result,
+              meta: message.meta,
+            );
             onmessage?.call(newMessage);
           } else {
             onmessage?.call(message);
@@ -352,11 +355,13 @@ class StreamableHttpClientTransport implements Transport {
       if (_abortController != null && !_abortController!.isClosed) {
         if (eventId != null) {
           try {
-            _scheduleReconnection(StartSseOptions(
-              resumptionToken: eventId,
-              onResumptionToken: onResumptionToken,
-              replayMessageId: replayMessageId,
-            ));
+            _scheduleReconnection(
+              StartSseOptions(
+                resumptionToken: eventId,
+                onResumptionToken: onResumptionToken,
+                replayMessageId: replayMessageId,
+              ),
+            );
           } catch (error) {
             final errorMessage =
                 error is Error ? error.toString() : error.toString();
@@ -446,8 +451,10 @@ class StreamableHttpClientTransport implements Transport {
   @override
   Future<void> start() async {
     if (_abortController != null) {
-      throw McpError(0,
-          "StreamableHttpClientTransport already started! If using Client class, note that connect() calls start() automatically.");
+      throw McpError(
+        0,
+        "StreamableHttpClientTransport already started! If using Client class, note that connect() calls start() automatically.",
+      );
     }
 
     _abortController = StreamController<bool>.broadcast();
@@ -461,8 +468,11 @@ class StreamableHttpClientTransport implements Transport {
       throw UnauthorizedError("No auth provider");
     }
 
-    final result = await auth(_authProvider!,
-        serverUrl: _url, authorizationCode: authorizationCode);
+    final result = await auth(
+      _authProvider!,
+      serverUrl: _url,
+      authorizationCode: authorizationCode,
+    );
     if (result != "AUTHORIZED") {
       throw UnauthorizedError("Failed to authorize");
     }
@@ -479,18 +489,22 @@ class StreamableHttpClientTransport implements Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message,
-      {String? resumptionToken,
-      void Function(String)? onResumptionToken}) async {
+  Future<void> send(
+    JsonRpcMessage message, {
+    String? resumptionToken,
+    void Function(String)? onResumptionToken,
+  }) async {
     try {
       if (resumptionToken != null) {
         // If we have a last event ID, we need to reconnect the SSE stream
         final replayId = message is JsonRpcRequest ? message.id : null;
-        _startOrAuthSse(StartSseOptions(
-          resumptionToken: resumptionToken,
-          replayMessageId: replayId,
-          onResumptionToken: onResumptionToken,
-        )).catchError((err) {
+        _startOrAuthSse(
+          StartSseOptions(
+            resumptionToken: resumptionToken,
+            replayMessageId: replayId,
+            onResumptionToken: onResumptionToken,
+          ),
+        ).catchError((err) {
           if (err is Error) {
             onerror?.call(err);
           } else {
@@ -534,8 +548,10 @@ class StreamableHttpClientTransport implements Transport {
         }
 
         final text = await response.stream.transform(utf8.decoder).join();
-        throw McpError(0,
-            "Error POSTing to endpoint (HTTP ${response.statusCode}): $text");
+        throw McpError(
+          0,
+          "Error POSTing to endpoint (HTTP ${response.statusCode}): $text",
+        );
       }
 
       // If the response is 202 Accepted, there's no body to process
@@ -576,7 +592,9 @@ class StreamableHttpClientTransport implements Transport {
         if (contentType?.contains('text/event-stream') ?? false) {
           // Handle SSE stream responses for requests
           _handleSseStream(
-              response, StartSseOptions(onResumptionToken: onResumptionToken));
+            response,
+            StartSseOptions(onResumptionToken: onResumptionToken),
+          );
         } else if (contentType?.contains('application/json') ?? false) {
           // For non-streaming servers, we might get direct JSON responses
           final jsonStr = await response.stream.transform(utf8.decoder).join();
@@ -634,8 +652,10 @@ class StreamableHttpClientTransport implements Transport {
       // meaning the server does not support explicit session termination
       if (response.statusCode < 200 ||
           response.statusCode >= 300 && response.statusCode != 405) {
-        throw StreamableHttpError(response.statusCode,
-            "Failed to terminate session: ${response.reasonPhrase}");
+        throw StreamableHttpError(
+          response.statusCode,
+          "Failed to terminate session: ${response.reasonPhrase}",
+        );
       }
 
       _sessionId = null;
@@ -686,8 +706,11 @@ class OAuthTokens {
 typedef AuthResult = String; // "AUTHORIZED" or other values
 
 /// Performs authentication with the provided OAuth client
-Future<AuthResult> auth(OAuthClientProvider provider,
-    {required Uri serverUrl, String? authorizationCode}) async {
+Future<AuthResult> auth(
+  OAuthClientProvider provider, {
+  required Uri serverUrl,
+  String? authorizationCode,
+}) async {
   // Simple implementation that would need to be expanded in a real implementation
   final tokens = await provider.tokens();
   if (tokens != null) {

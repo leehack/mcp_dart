@@ -16,7 +16,7 @@ void main() {
       server = StreamableMcpServer(
         serverFactory: (sessionId) {
           return McpServer(
-            Implementation(name: 'TestServer', version: '1.0.0'),
+            const Implementation(name: 'TestServer', version: '1.0.0'),
           );
         },
         host: host,
@@ -51,7 +51,7 @@ void main() {
       final initRequest = JsonRpcRequest(
         id: 1,
         method: 'initialize',
-        params: InitializeRequestParams(
+        params: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
@@ -77,14 +77,14 @@ void main() {
     });
 
     test('rejects POST without session ID for non-init request', () async {
-      final req = JsonRpcRequest(id: 1, method: 'ping');
+      final req = const JsonRpcRequest(id: 1, method: 'ping');
 
       final res = await http.post(
         Uri.parse(baseUrl),
         body: jsonEncode(req.toJson()),
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json, text/event-stream'
+          'Accept': 'application/json, text/event-stream',
         },
       );
 
@@ -101,7 +101,7 @@ void main() {
 
       server = StreamableMcpServer(
         serverFactory: (sid) =>
-            McpServer(Implementation(name: 'AuthServer', version: '1.0')),
+            McpServer(const Implementation(name: 'AuthServer', version: '1.0')),
         host: host,
         port: port,
         authenticator: (req) =>
@@ -117,22 +117,24 @@ void main() {
       expect(resFail.statusCode, HttpStatus.forbidden);
 
       // 2. Pass with auth
-      final resPass = await http.post(Uri.parse(baseUrl),
-          body: jsonEncode({
-            'method': 'initialize',
-            'id': 1,
-            'jsonrpc': '2.0',
-            'params': {
-              'protocolVersion': latestProtocolVersion,
-              'capabilities': {},
-              'clientInfo': {'name': 'test', 'version': '1.0'}
-            }
-          }),
-          headers: {
-            'Authorization': 'Bearer secret',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json, text/event-stream'
-          });
+      final resPass = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode({
+          'method': 'initialize',
+          'id': 1,
+          'jsonrpc': '2.0',
+          'params': {
+            'protocolVersion': latestProtocolVersion,
+            'capabilities': {},
+            'clientInfo': {'name': 'test', 'version': '1.0'},
+          },
+        }),
+        headers: {
+          'Authorization': 'Bearer secret',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+      );
       expect(resPass.statusCode, HttpStatus.ok);
     });
   });

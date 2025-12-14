@@ -60,14 +60,17 @@ class InMemoryEventStore implements EventStore {
 McpServer getServer() {
   // Create the McpServer with the implementation details and options
   final server = McpServer(
-    Implementation(name: 'simple-streamable-http-server', version: '1.0.0'),
+    const Implementation(
+      name: 'simple-streamable-http-server',
+      version: '1.0.0',
+    ),
   );
 
   // Register a simple tool that returns a greeting
   server.tool(
     'greet',
     description: 'A simple greeting tool',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         'name': {
           'type': 'string',
@@ -91,7 +94,7 @@ McpServer getServer() {
     'multi-greet',
     description:
         'A tool that sends different greetings with delays between them',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         'name': {
           'type': 'string',
@@ -100,7 +103,7 @@ McpServer getServer() {
       },
       required: [],
     ),
-    annotations: ToolAnnotations(
+    annotations: const ToolAnnotations(
       title: 'Multiple Greeting Tool',
       readOnlyHint: true,
       openWorldHint: false,
@@ -112,29 +115,38 @@ McpServer getServer() {
       Future<void> sleep(int ms) => Future.delayed(Duration(milliseconds: ms));
 
       // Send debug notification
-      await extra?.sendNotification(JsonRpcLoggingMessageNotification(
+      await extra?.sendNotification(
+        JsonRpcLoggingMessageNotification(
           logParams: LoggingMessageNotificationParams(
-        level: LoggingLevel.debug,
-        data: 'Starting multi-greet for $name',
-      )));
+            level: LoggingLevel.debug,
+            data: 'Starting multi-greet for $name',
+          ),
+        ),
+      );
 
       await sleep(1000); // Wait 1 second before first greeting
 
       // Send first info notification
-      await extra?.sendNotification(JsonRpcLoggingMessageNotification(
+      await extra?.sendNotification(
+        JsonRpcLoggingMessageNotification(
           logParams: LoggingMessageNotificationParams(
-        level: LoggingLevel.info,
-        data: 'Sending first greeting to $name',
-      )));
+            level: LoggingLevel.info,
+            data: 'Sending first greeting to $name',
+          ),
+        ),
+      );
 
       await sleep(1000); // Wait another second before second greeting
 
       // Send second info notification
-      await extra?.sendNotification(JsonRpcLoggingMessageNotification(
+      await extra?.sendNotification(
+        JsonRpcLoggingMessageNotification(
           logParams: LoggingMessageNotificationParams(
-        level: LoggingLevel.info,
-        data: 'Sending second greeting to $name',
-      )));
+            level: LoggingLevel.info,
+            data: 'Sending second greeting to $name',
+          ),
+        ),
+      );
 
       return CallToolResult.fromContent(
         content: [
@@ -149,7 +161,7 @@ McpServer getServer() {
     'greeting-template',
     description: 'A simple greeting prompt template',
     argsSchema: {
-      'name': PromptArgumentDefinition(
+      'name': const PromptArgumentDefinition(
         description: 'Name to include in greeting',
         required: true,
       ),
@@ -174,7 +186,7 @@ McpServer getServer() {
     'start-notification-stream',
     description:
         'Starts sending periodic notifications for testing resumability',
-    toolInputSchema: ToolInputSchema(
+    toolInputSchema: const ToolInputSchema(
       properties: {
         'interval': {
           'type': 'number',
@@ -200,12 +212,15 @@ McpServer getServer() {
       while (count == 0 || counter < count) {
         counter++;
         try {
-          await extra?.sendNotification(JsonRpcLoggingMessageNotification(
+          await extra?.sendNotification(
+            JsonRpcLoggingMessageNotification(
               logParams: LoggingMessageNotificationParams(
-            level: LoggingLevel.info,
-            data:
-                'Periodic notification #$counter at ${DateTime.now().toIso8601String()}',
-          )));
+                level: LoggingLevel.info,
+                data:
+                    'Periodic notification #$counter at ${DateTime.now().toIso8601String()}',
+              ),
+            ),
+          );
         } catch (error) {
           print('Error sending notification: $error');
         }
@@ -234,7 +249,7 @@ McpServer getServer() {
           ResourceContents.fromJson({
             'uri': 'https://example.com/greetings/default',
             'text': 'Hello, world!',
-            'mimeType': 'text/plain'
+            'mimeType': 'text/plain',
           }),
         ],
       );
@@ -249,8 +264,10 @@ void setCorsHeaders(HttpResponse response) {
   response.headers.set('Access-Control-Allow-Origin', '*'); // Allow any origin
   response.headers
       .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers',
-      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization');
+  response.headers.set(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+  );
   response.headers.set('Access-Control-Allow-Credentials', 'true');
   response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours
   response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
@@ -361,7 +378,8 @@ Future<void> handlePostRequest(
         final sid = transport!.sessionId;
         if (sid != null && transports.containsKey(sid)) {
           print(
-              'Transport closed for session $sid, removing from transports map');
+            'Transport closed for session $sid, removing from transports map',
+          );
           transports.remove(sid);
         }
       };
@@ -381,14 +399,16 @@ Future<void> handlePostRequest(
       // Apply CORS headers to this specific response
       setCorsHeaders(request.response);
       request.response
-        ..write(jsonEncode({
-          'jsonrpc': '2.0',
-          'error': {
-            'code': -32000,
-            'message': 'Bad Request: No valid session ID provided',
-          },
-          'id': null,
-        }))
+        ..write(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'error': {
+              'code': -32000,
+              'message': 'Bad Request: No valid session ID provided',
+            },
+            'id': null,
+          }),
+        )
         ..close();
       return;
     }
@@ -414,14 +434,16 @@ Future<void> handlePostRequest(
       // Apply CORS headers
       setCorsHeaders(request.response);
       request.response
-        ..write(jsonEncode({
-          'jsonrpc': '2.0',
-          'error': {
-            'code': -32603,
-            'message': 'Internal server error',
-          },
-          'id': null,
-        }))
+        ..write(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'error': {
+              'code': -32603,
+              'message': 'Internal server error',
+            },
+            'id': null,
+          }),
+        )
         ..close();
     }
   }

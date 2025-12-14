@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 void main() {
   group('Tool Schema Required Fields Tests', () {
     test('ToolInputSchema preserves required fields during serialization', () {
-      final schema = ToolInputSchema(
+      final schema = const ToolInputSchema(
         properties: {
           'operation': {'type': 'string'},
           'a': {'type': 'number'},
@@ -38,9 +38,9 @@ void main() {
     });
 
     test('ToolInputSchema handles empty required array', () {
-      final schema = ToolInputSchema(
+      final schema = const ToolInputSchema(
         properties: {
-          'optional': {'type': 'string'}
+          'optional': {'type': 'string'},
         },
         required: [],
       );
@@ -51,9 +51,9 @@ void main() {
     });
 
     test('ToolInputSchema handles null required field', () {
-      final schema = ToolInputSchema(
+      final schema = const ToolInputSchema(
         properties: {
-          'optional': {'type': 'string'}
+          'optional': {'type': 'string'},
         },
         required: null,
       );
@@ -63,7 +63,7 @@ void main() {
     });
 
     test('ToolOutputSchema preserves required fields during serialization', () {
-      final schema = ToolOutputSchema(
+      final schema = const ToolOutputSchema(
         properties: {
           'result': {'type': 'string'},
           'status': {'type': 'number'},
@@ -95,7 +95,7 @@ void main() {
     });
 
     test('Tool preserves input schema required fields end-to-end', () {
-      final tool = Tool(
+      final tool = const Tool(
         name: 'calculate',
         description: 'Performs mathematical calculations',
         inputSchema: ToolInputSchema(
@@ -118,7 +118,7 @@ void main() {
     });
 
     test('Tool preserves output schema required fields end-to-end', () {
-      final tool = Tool(
+      final tool = const Tool(
         name: 'calculate',
         inputSchema: ToolInputSchema(),
         outputSchema: ToolOutputSchema(
@@ -139,7 +139,7 @@ void main() {
 
     test('ListToolsResult preserves tool required fields', () {
       final tools = [
-        Tool(
+        const Tool(
           name: 'search',
           inputSchema: ToolInputSchema(
             properties: {
@@ -149,7 +149,7 @@ void main() {
             required: ['query'],
           ),
         ),
-        Tool(
+        const Tool(
           name: 'create',
           inputSchema: ToolInputSchema(
             properties: {
@@ -165,13 +165,17 @@ void main() {
       final json = result.toJson();
 
       expect(json['tools'][0]['inputSchema']['required'], equals(['query']));
-      expect(json['tools'][1]['inputSchema']['required'],
-          equals(['name', 'data']));
+      expect(
+        json['tools'][1]['inputSchema']['required'],
+        equals(['name', 'data']),
+      );
 
       final deserialized = ListToolsResult.fromJson(json);
       expect(deserialized.tools[0].inputSchema.required, equals(['query']));
       expect(
-          deserialized.tools[1].inputSchema.required, equals(['name', 'data']));
+        deserialized.tools[1].inputSchema.required,
+        equals(['name', 'data']),
+      );
     });
 
     test('Real-world MCP server tool schema example', () {
@@ -186,18 +190,18 @@ void main() {
               'properties': {
                 'query': {
                   'type': 'string',
-                  'description': 'Search query for spaces'
+                  'description': 'Search query for spaces',
                 },
                 'limit': {
                   'type': 'integer',
                   'description': 'Maximum number of results',
-                  'default': 10
-                }
+                  'default': 10,
+                },
               },
-              'required': ['query']
-            }
+              'required': ['query'],
+            },
           }
-        ]
+        ],
       };
 
       final result = ListToolsResult.fromJson(serverResponse);
@@ -211,17 +215,19 @@ void main() {
       // Verify round-trip maintains required fields
       final serialized = result.toJson();
       expect(
-          serialized['tools'][0]['inputSchema']['required'], equals(['query']));
+        serialized['tools'][0]['inputSchema']['required'],
+        equals(['query']),
+      );
     });
 
     test('Backward compatibility with existing code without required fields',
         () {
       // Existing code that doesn't specify required fields should still work
-      final tool = Tool(
+      final tool = const Tool(
         name: 'legacy-tool',
         inputSchema: ToolInputSchema(
           properties: {
-            'param': {'type': 'string'}
+            'param': {'type': 'string'},
           },
         ),
       );
@@ -242,7 +248,7 @@ void main() {
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'param': {'type': 'string'}
+            'param': {'type': 'string'},
           },
           // No 'required' field
         },
@@ -260,20 +266,20 @@ void main() {
 
   group('LLM Integration Tests', () {
     test('Tool schema is compatible with OpenAI function calling format', () {
-      final tool = Tool(
+      final tool = const Tool(
         name: 'get_weather',
         description: 'Get weather information for a location',
         inputSchema: ToolInputSchema(
           properties: {
             'location': {
               'type': 'string',
-              'description': 'The city and state, e.g. San Francisco, CA'
+              'description': 'The city and state, e.g. San Francisco, CA',
             },
             'unit': {
               'type': 'string',
               'enum': ['celsius', 'fahrenheit'],
-              'description': 'Temperature unit'
-            }
+              'description': 'Temperature unit',
+            },
           },
           required: ['location'],
         ),
@@ -286,7 +292,7 @@ void main() {
           'name': tool.name,
           'description': tool.description,
           'parameters': tool.inputSchema.toJson(),
-        }
+        },
       };
 
       final function = openaiFunction['function'] as Map<String, dynamic>;
@@ -301,7 +307,7 @@ void main() {
     });
 
     test('Tool schema is compatible with Anthropic Claude format', () {
-      final tool = Tool(
+      final tool = const Tool(
         name: 'analyze_code',
         description: 'Analyze code for potential issues',
         inputSchema: ToolInputSchema(
@@ -309,13 +315,13 @@ void main() {
             'code': {'type': 'string', 'description': 'The code to analyze'},
             'language': {
               'type': 'string',
-              'description': 'Programming language'
+              'description': 'Programming language',
             },
             'strict': {
               'type': 'boolean',
               'description': 'Enable strict mode',
-              'default': false
-            }
+              'default': false,
+            },
           },
           required: ['code', 'language'],
         ),

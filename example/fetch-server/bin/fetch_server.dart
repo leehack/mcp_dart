@@ -5,11 +5,11 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 void main(List<String> arguments) async {
   final server = Server(
-    Implementation(
+    const Implementation(
       name: 'fetch',
       version: '0.1.0',
     ),
-    options: ServerOptions(
+    options: const ServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -19,7 +19,7 @@ void main(List<String> arguments) async {
   server.setRequestHandler<JsonRpcListToolsRequest>(
     'tools/list',
     (request, _) async {
-      return ListToolsResult(
+      return const ListToolsResult(
         tools: [
           Tool(
             name: 'fetch',
@@ -32,7 +32,7 @@ void main(List<String> arguments) async {
                   'format': 'uri',
                   'minLength': 1,
                   'title': 'Url',
-                  'type': 'string'
+                  'type': 'string',
                 },
                 'max_length': {
                   'default': 5000,
@@ -40,7 +40,7 @@ void main(List<String> arguments) async {
                   'exclusiveMaximum': 1000000,
                   'exclusiveMinimum': 0,
                   'title': 'Max Length',
-                  'type': 'integer'
+                  'type': 'integer',
                 },
                 'start_index': {
                   'default': 0,
@@ -48,15 +48,15 @@ void main(List<String> arguments) async {
                       'On return output starting at this character index, useful if a previous fetch was truncated and more context is required.',
                   'minimum': 0,
                   'title': 'Start Index',
-                  'type': 'integer'
+                  'type': 'integer',
                 },
                 'raw': {
                   'default': false,
                   'description':
                       'Get the actual HTML content of the requested page, without simplification.',
                   'title': 'Raw',
-                  'type': 'boolean'
-                }
+                  'type': 'boolean',
+                },
               },
             ),
           ),
@@ -87,8 +87,10 @@ void main(List<String> arguments) async {
       final raw = args['raw'] as bool? ?? false;
 
       if (url == null || url is! String || url.isEmpty) {
-        throw McpError(ErrorCode.invalidParams.value,
-            'Missing or invalid "url" argument.');
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          'Missing or invalid "url" argument.',
+        );
       }
 
       try {

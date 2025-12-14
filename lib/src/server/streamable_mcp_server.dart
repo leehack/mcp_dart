@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
+import 'package:mcp_dart/src/shared/logging.dart';
 
 /// A high-level server implementation that manages multiple MCP sessions over Streamable HTTP.
 ///
@@ -29,6 +30,8 @@ import 'package:mcp_dart/src/shared/uuid.dart';
 /// await server.start();
 /// ```
 class StreamableMcpServer {
+  static final Logger _logger = Logger('StreamableMcpServer');
+
   /// Factory to create a new MCP server instance for a given session.
   final McpServer Function(String sessionId) _serverFactory;
 
@@ -69,7 +72,9 @@ class StreamableMcpServer {
     }
 
     _httpServer = await HttpServer.bind(host, port);
-    print('MCP Streamable HTTP Server listening on http://$host:$port$path');
+    _logger.info(
+      'MCP Streamable HTTP Server listening on http://$host:$port$path',
+    );
 
     _httpServer!.listen(_handleRequest);
   }
@@ -109,7 +114,7 @@ class StreamableMcpServer {
       try {
         allowed = await authenticator!(request);
       } catch (e) {
-        print('Authentication error: $e');
+        _logger.error('Authentication error: $e');
         request.response
           ..statusCode = HttpStatus.internalServerError
           ..write('Authentication Error')
@@ -141,7 +146,7 @@ class StreamableMcpServer {
           ..close();
       }
     } catch (e, stack) {
-      print('Error handling request: $e\n$stack');
+      _logger.error('Error handling request: $e\n$stack');
       if (!request.response.headers.contentType
           .toString()
           .startsWith('text/event-stream')) {
@@ -172,11 +177,13 @@ class StreamableMcpServer {
     } catch (e) {
       request.response
         ..statusCode = HttpStatus.badRequest
-        ..write(jsonEncode({
-          'jsonrpc': '2.0',
-          'error': {'code': -32700, 'message': 'Parse error'},
-          'id': null,
-        }))
+        ..write(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'error': {'code': -32700, 'message': 'Parse error'},
+            'id': null,
+          }),
+        )
         ..close();
       return;
     }
@@ -196,15 +203,17 @@ class StreamableMcpServer {
     } else {
       request.response
         ..statusCode = HttpStatus.badRequest
-        ..write(jsonEncode({
-          'jsonrpc': '2.0',
-          'error': {
-            'code': -32000,
-            'message':
-                'Bad Request: No valid session ID provided or not an initialization request',
-          },
-          'id': null,
-        }))
+        ..write(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'error': {
+              'code': -32000,
+              'message':
+                  'Bad Request: No valid session ID provided or not an initialization request',
+            },
+            'id': null,
+          }),
+        )
         ..close();
       return;
     }
@@ -249,7 +258,7 @@ class StreamableMcpServer {
         sessionIdGenerator: () => generateUUID(),
         eventStore: eventStore,
         onsessioninitialized: (sid) {
-          print('Session initialized: $sid');
+          _logger.info('Session initialized: $sid');
           _transports[sid] = transport;
 
           // Create and connect the MCP server
@@ -267,7 +276,7 @@ class StreamableMcpServer {
           // StreamableHTTPServerTransport calls onsessioninitialized BEFORE processing messages.
           // So we should connect here.
           server.connect(transport).catchError((e) {
-            print('Error connecting server to transport: $e');
+            _logger.error('Error connecting server to transport: $e');
             _transports.remove(sid);
             _servers.remove(sid);
           });
@@ -280,7 +289,7 @@ class StreamableMcpServer {
       if (sid != null) {
         _transports.remove(sid);
         _servers.remove(sid); // This will be GC'd
-        print('Session closed: $sid');
+        _logger.info('Session closed: $sid');
       }
     };
 
@@ -324,8 +333,10 @@ class StreamableMcpServer {
     response.headers.set('Access-Control-Allow-Origin', '*');
     response.headers
         .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers',
-        'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization');
+    response.headers.set(
+      'Access-Control-Allow-Headers',
+      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+    );
     response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Max-Age', '86400');
     response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');

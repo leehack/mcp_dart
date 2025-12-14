@@ -23,8 +23,10 @@ class MockClient implements Client {
 
   @override
   Future<T> request<T extends BaseResultData>(
-      JsonRpcRequest request, T Function(Map<String, dynamic> json) parser,
-      [RequestOptions? options]) async {
+    JsonRpcRequest request,
+    T Function(Map<String, dynamic> json) parser, [
+    RequestOptions? options,
+  ]) async {
     requests.add(request);
 
     // sequential check first
@@ -44,7 +46,7 @@ class MockClient implements Client {
       final response = _responses[request.method];
       if (request.method == 'tasks/result') {
         // Delay response to allow polling to happen
-        await Future.delayed(Duration(milliseconds: 50));
+        await Future.delayed(const Duration(milliseconds: 50));
       }
       return parser(Map<String, dynamic>.from(response));
     }
@@ -75,8 +77,8 @@ void main() {
         () async {
       mockClient.mockResponse('tools/call', {
         'content': [
-          {'type': 'text', 'text': 'Success'}
-        ]
+          {'type': 'text', 'text': 'Success'},
+        ],
       });
 
       final stream = taskClient.callToolStream('simple-tool', {});
@@ -97,8 +99,8 @@ void main() {
           'taskId': taskId,
           'status': 'working',
           'name': 'Long Task',
-          'total': 100
-        }
+          'total': 100,
+        },
       });
 
       // 2. Poll responses
@@ -109,14 +111,14 @@ void main() {
           'status': 'working',
           'name': 'Long Task',
           'progress': 50,
-          'pollInterval': 10
+          'pollInterval': 10,
         },
         // Poll 2: completed (logic inside TaskClient stops polling when result promise completes)
         {
           'taskId': taskId,
           'status': 'completed',
           'name': 'Long Task',
-          'progress': 100
+          'progress': 100,
         }
       ]);
 
@@ -132,8 +134,8 @@ void main() {
       // We need to ensure `tasks/result` is requested.
       mockClient.mockResponse('tasks/result', {
         'content': [
-          {'type': 'text', 'text': 'Task Done'}
-        ]
+          {'type': 'text', 'text': 'Task Done'},
+        ],
       });
 
       final stream = taskClient.callToolStream('long-tool', {});
@@ -158,19 +160,20 @@ void main() {
       // Verify final result
       expect(events.last, isA<TaskResultMessage>());
       expect(
-          ((events.last as TaskResultMessage).result.content.first
-                  as TextContent)
-              .text,
-          'Task Done');
+        ((events.last as TaskResultMessage).result.content.first as TextContent)
+            .text,
+        'Task Done',
+      );
 
       // Verify requests made
       expect(
-          mockClient.requests.map((r) => r.method),
-          containsAll([
-            'tools/call',
-            'tasks/result',
-            'tasks/get',
-          ]));
+        mockClient.requests.map((r) => r.method),
+        containsAll([
+          'tools/call',
+          'tasks/result',
+          'tasks/get',
+        ]),
+      );
     });
 
     test('listTasks returns list of tasks', () async {
@@ -178,7 +181,7 @@ void main() {
         'tasks': [
           {'taskId': '1', 'status': 'working', 'name': 'Task 1'},
           {'taskId': '2', 'status': 'working', 'name': 'Task 2'},
-        ]
+        ],
       });
 
       final tasks = await taskClient.listTasks();
@@ -195,10 +198,11 @@ void main() {
 
       expect(mockClient.requests.last.method, 'tasks/cancel');
       expect(
-          (mockClient.requests.last as JsonRpcCancelTaskRequest)
-              .cancelParams
-              .taskId,
-          'task-123');
+        (mockClient.requests.last as JsonRpcCancelTaskRequest)
+            .cancelParams
+            .taskId,
+        'task-123',
+      );
     });
 
     test('callToolStream yields error if initial call fails', () async {

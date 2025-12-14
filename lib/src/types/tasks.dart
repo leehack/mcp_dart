@@ -215,7 +215,7 @@ class JsonRpcCancelTaskRequest extends JsonRpcRequest {
   factory JsonRpcCancelTaskRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for cancel task request");
+      throw const FormatException("Missing params for cancel task request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcCancelTaskRequest(
@@ -253,7 +253,7 @@ class JsonRpcGetTaskRequest extends JsonRpcRequest {
   factory JsonRpcGetTaskRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for get task request");
+      throw const FormatException("Missing params for get task request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcGetTaskRequest(
@@ -291,7 +291,7 @@ class JsonRpcTaskResultRequest extends JsonRpcRequest {
   factory JsonRpcTaskResultRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for task result request");
+      throw const FormatException("Missing params for task result request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcTaskResultRequest(
@@ -431,13 +431,16 @@ class JsonRpcTaskStatusNotification extends JsonRpcNotification {
 
   JsonRpcTaskStatusNotification({required this.statusParams, super.meta})
       : super(
-            method: Method.notificationsTasksStatus,
-            params: statusParams.toJson());
+          method: Method.notificationsTasksStatus,
+          params: statusParams.toJson(),
+        );
 
   factory JsonRpcTaskStatusNotification.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for task status notification");
+      throw const FormatException(
+        "Missing params for task status notification",
+      );
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcTaskStatusNotification(

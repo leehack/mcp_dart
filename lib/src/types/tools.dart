@@ -311,7 +311,7 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
   factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
     if (paramsMap == null) {
-      throw FormatException("Missing params for call tool request");
+      throw const FormatException("Missing params for call tool request");
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     final taskMap = paramsMap['task'] as Map<String, dynamic>?;
@@ -344,18 +344,19 @@ class CallToolResult implements BaseResultData {
   final Map<String, dynamic>? meta;
 
   @Deprecated(
-      'This constructor is replaced by the fromContent factory constructor and may be removed in a future version.')
+    'This constructor is replaced by the fromContent factory constructor and may be removed in a future version.',
+  )
   CallToolResult({required this.content, this.isError, this.meta})
       : structuredContent = {};
 
   CallToolResult.fromContent({required this.content, this.isError, this.meta})
       : structuredContent = {};
 
-  CallToolResult.fromStructuredContent(
-      {required this.structuredContent,
-      List<Content>? unstructuredFallback,
-      this.meta})
-      : content = unstructuredFallback ?? [],
+  CallToolResult.fromStructuredContent({
+    required this.structuredContent,
+    List<Content>? unstructuredFallback,
+    this.meta,
+  })  : content = unstructuredFallback ?? [],
         isError = null;
 
   factory CallToolResult.fromJson(Map<String, dynamic> json) {
@@ -363,11 +364,14 @@ class CallToolResult implements BaseResultData {
     if (json.containsKey('toolResult')) {
       final toolResult = json['toolResult'];
       final bool isErr = json['isError'] as bool? ?? false;
-      List<Content> mappedContent = (toolResult is String)
+      final List<Content> mappedContent = (toolResult is String)
           ? [TextContent(text: toolResult)]
           : [TextContent(text: jsonEncode(toolResult))];
       return CallToolResult.fromContent(
-          content: mappedContent, isError: isErr, meta: meta);
+        content: mappedContent,
+        isError: isErr,
+        meta: meta,
+      );
     } else {
       // Structured?
       if (json.containsKey('structuredContent')) {

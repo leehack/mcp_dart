@@ -6,11 +6,11 @@ void main() {
     test('JsonRpcInitializeRequest serialization and deserialization', () {
       final request = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
           capabilities: ClientCapabilities(
             experimental: {'featureX': true},
-            sampling: const ClientCapabilitiesSampling(),
+            sampling: ClientCapabilitiesSampling(),
           ),
           clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
         ),
@@ -23,12 +23,14 @@ void main() {
 
       final deserialized = JsonRpcInitializeRequest.fromJson(json);
       expect(deserialized.id, equals(request.id));
-      expect(deserialized.initParams.protocolVersion,
-          equals(latestProtocolVersion));
+      expect(
+        deserialized.initParams.protocolVersion,
+        equals(latestProtocolVersion),
+      );
     });
 
     test('JsonRpcResponse serialization', () {
-      final response = JsonRpcResponse(
+      final response = const JsonRpcResponse(
         id: 1,
         result: {'key': 'value'},
         meta: {'metaKey': 'metaValue'},
@@ -56,20 +58,25 @@ void main() {
       expect(json['error']['code'], equals(ErrorCode.invalidRequest.value));
       expect(json['error']['message'], equals('Invalid request'));
       expect(
-          json['error']['data']['details'], equals('Missing required field'));
+        json['error']['data']['details'],
+        equals('Missing required field'),
+      );
 
       final deserialized = JsonRpcError.fromJson(json);
       expect(deserialized.id, equals(error.id));
       expect(deserialized.error.code, equals(ErrorCode.invalidRequest.value));
       expect(deserialized.error.message, equals('Invalid request'));
       expect(
-          deserialized.error.data['details'], equals('Missing required field'));
+        deserialized.error.data['details'],
+        equals('Missing required field'),
+      );
     });
   });
 
   group('Capabilities Tests', () {
     test('ServerCapabilitiesCompletions serialization and deserialization', () {
-      final completions = ServerCapabilitiesCompletions(listChanged: true);
+      final completions =
+          const ServerCapabilitiesCompletions(listChanged: true);
 
       final json = completions.toJson();
       expect(json['listChanged'], equals(true));
@@ -79,7 +86,7 @@ void main() {
     });
 
     test('ServerCapabilities includes completions', () {
-      final capabilities = ServerCapabilities(
+      final capabilities = const ServerCapabilities(
         experimental: {'featureY': true},
         logging: {'enabled': true},
         prompts: ServerCapabilitiesPrompts(listChanged: true),
@@ -104,7 +111,7 @@ void main() {
     });
 
     test('ServerCapabilities serialization and deserialization', () {
-      final capabilities = ServerCapabilities(
+      final capabilities = const ServerCapabilities(
         experimental: {'featureY': true},
         logging: {'enabled': true},
         prompts: ServerCapabilitiesPrompts(listChanged: true),
@@ -126,9 +133,9 @@ void main() {
     });
 
     test('ClientCapabilities serialization and deserialization', () {
-      final capabilities = ClientCapabilities(
+      final capabilities = const ClientCapabilities(
         experimental: {'featureZ': true},
-        sampling: const ClientCapabilitiesSampling(),
+        sampling: ClientCapabilitiesSampling(),
         roots: ClientCapabilitiesRoots(listChanged: true),
       );
 
@@ -144,7 +151,7 @@ void main() {
 
   group('Content Tests', () {
     test('TextContent serialization and deserialization', () {
-      final content = TextContent(text: 'Hello, world!');
+      final content = const TextContent(text: 'Hello, world!');
       final json = content.toJson();
       expect(json['type'], equals('text'));
       expect(json['text'], equals('Hello, world!'));
@@ -154,7 +161,8 @@ void main() {
     });
 
     test('ImageContent serialization and deserialization', () {
-      final content = ImageContent(data: 'base64data', mimeType: 'image/png');
+      final content =
+          const ImageContent(data: 'base64data', mimeType: 'image/png');
       final json = content.toJson();
       expect(json['type'], equals('image'));
       expect(json['data'], equals('base64data'));
@@ -166,7 +174,8 @@ void main() {
     });
 
     test('AudioContent serialization and deserialization', () {
-      final content = AudioContent(data: 'base64data', mimeType: 'audio/wav');
+      final content =
+          const AudioContent(data: 'base64data', mimeType: 'audio/wav');
       final json = content.toJson();
       expect(json['type'], equals('audio'));
       expect(json['data'], equals('base64data'));
@@ -178,18 +187,18 @@ void main() {
     });
 
     test('UnknownContent serialization and deserialization', () {
-      final content = UnknownContent(type: 'unknown');
+      final content = const UnknownContent(type: 'unknown');
       final json = content.toJson();
       expect(json['type'], equals('unknown'));
 
-      final deserialized = UnknownContent(type: 'unknown');
+      final deserialized = const UnknownContent(type: 'unknown');
       expect(deserialized.type, equals('unknown'));
     });
   });
 
   group('Resource Tests', () {
     test('Resource serialization and deserialization', () {
-      final resource = Resource(
+      final resource = const Resource(
         uri: 'file://example.txt',
         name: 'Example File',
         description: 'A sample file',
@@ -208,7 +217,7 @@ void main() {
     });
 
     test('ResourceContents serialization and deserialization', () {
-      final contents = TextResourceContents(
+      final contents = const TextResourceContents(
         uri: 'file://example.txt',
         text: 'Sample text content',
         mimeType: 'text/plain',
@@ -226,7 +235,7 @@ void main() {
     });
 
     test('BlobResourceContents serialization and deserialization', () {
-      final contents = BlobResourceContents(
+      final contents = const BlobResourceContents(
         uri: 'file://example.bin',
         blob: 'base64data',
         mimeType: 'application/octet-stream',
@@ -246,12 +255,15 @@ void main() {
 
   group('Prompt Tests', () {
     test('Prompt serialization and deserialization', () {
-      final prompt = Prompt(
+      final prompt = const Prompt(
         name: 'example-prompt',
         description: 'A sample prompt',
         arguments: [
           PromptArgument(
-              name: 'arg1', description: 'Argument 1', required: true),
+            name: 'arg1',
+            description: 'Argument 1',
+            required: true,
+          ),
         ],
       );
 
@@ -266,7 +278,7 @@ void main() {
     });
 
     test('PromptArgument serialization and deserialization', () {
-      final argument = PromptArgument(
+      final argument = const PromptArgument(
         name: 'arg1',
         description: 'Argument 1',
         required: true,
@@ -285,7 +297,7 @@ void main() {
   });
   group('CreateMessageResult Tests', () {
     test('CreateMessageResult serialization and deserialization', () {
-      final result = CreateMessageResult(
+      final result = const CreateMessageResult(
         model: 'gpt-4',
         stopReason: StopReason.maxTokens,
         role: SamplingMessageRole.assistant,
@@ -313,13 +325,15 @@ void main() {
       expect(deserialized.stopReason, equals(StopReason.maxTokens));
       expect(deserialized.role, equals(SamplingMessageRole.assistant));
       expect(deserialized.content, isA<SamplingTextContent>());
-      expect((deserialized.content as SamplingTextContent).text,
-          equals('Hello, world!'));
+      expect(
+        (deserialized.content as SamplingTextContent).text,
+        equals('Hello, world!'),
+      );
       expect(deserialized.meta, equals({'key': 'value'}));
     });
 
     test('CreateMessageResult handles custom stopReason', () {
-      final result = CreateMessageResult(
+      final result = const CreateMessageResult(
         model: 'gpt-4',
         stopReason: 'customReason',
         role: SamplingMessageRole.assistant,
@@ -378,7 +392,7 @@ void main() {
         'id': 1,
         'result': {
           'key': 'value',
-          '_meta': {'metaKey': 'metaValue'}
+          '_meta': {'metaKey': 'metaValue'},
         },
       };
       final message = JsonRpcMessage.fromJson(json);
@@ -432,7 +446,7 @@ void main() {
 
   group('InputSchema Tests', () {
     test('BooleanInputSchema serialization and deserialization', () {
-      final schema = BooleanInputSchema(
+      final schema = const BooleanInputSchema(
         defaultValue: true,
         description: "Confirm action",
       );
@@ -449,7 +463,7 @@ void main() {
     });
 
     test('StringInputSchema with constraints serialization', () {
-      final schema = StringInputSchema(
+      final schema = const StringInputSchema(
         minLength: 3,
         maxLength: 50,
         pattern: r'^[a-z]+$',
@@ -472,7 +486,7 @@ void main() {
     });
 
     test('NumberInputSchema with range serialization', () {
-      final schema = NumberInputSchema(
+      final schema = const NumberInputSchema(
         minimum: 0,
         maximum: 100,
         defaultValue: 50,
@@ -492,7 +506,7 @@ void main() {
     });
 
     test('EnumInputSchema with options serialization', () {
-      final schema = EnumInputSchema(
+      final schema = const EnumInputSchema(
         values: ['small', 'medium', 'large'],
         defaultValue: 'medium',
         description: "Size",
@@ -518,7 +532,7 @@ void main() {
     test('ElicitRequestParams serialization', () {
       final params = ElicitRequestParams(
         message: "Enter your name",
-        requestedSchema: StringInputSchema(minLength: 1).toJson(),
+        requestedSchema: const StringInputSchema(minLength: 1).toJson(),
       );
 
       final json = params.toJson();
@@ -535,7 +549,8 @@ void main() {
         id: 42,
         elicitParams: ElicitRequestParams(
           message: "Choose option",
-          requestedSchema: EnumInputSchema(values: ['yes', 'no']).toJson(),
+          requestedSchema:
+              const EnumInputSchema(values: ['yes', 'no']).toJson(),
         ),
       );
 
@@ -552,7 +567,7 @@ void main() {
     });
 
     test('ElicitResult serialization', () {
-      final result = ElicitResult(
+      final result = const ElicitResult(
         action: 'accept',
         content: {'name': 'John Doe'},
       );
@@ -568,7 +583,7 @@ void main() {
     });
 
     test('ElicitResult with rejected input', () {
-      final result = ElicitResult(
+      final result = const ElicitResult(
         action: 'decline',
       );
 
@@ -586,7 +601,7 @@ void main() {
 
   group('ClientCapabilitiesElicitation Tests', () {
     test('ClientCapabilitiesElicitation serialization', () {
-      final capability = ClientCapabilitiesElicitation();
+      final capability = const ClientCapabilitiesElicitation();
 
       final json = capability.toJson();
       // Default capability has supportsForm = true, so toJson() includes 'form'
@@ -608,7 +623,7 @@ void main() {
     });
 
     test('ClientCapabilitiesElicitation all modes', () {
-      final capability = ClientCapabilitiesElicitation.all();
+      final capability = const ClientCapabilitiesElicitation.all();
 
       final json = capability.toJson();
       expect(json.containsKey('form'), isTrue);
@@ -620,7 +635,7 @@ void main() {
     });
 
     test('ClientCapabilities includes elicitation', () {
-      final caps = ClientCapabilities(
+      final caps = const ClientCapabilities(
         elicitation: ClientCapabilitiesElicitation(),
         roots: ClientCapabilitiesRoots(),
       );

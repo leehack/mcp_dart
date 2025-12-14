@@ -2,7 +2,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 void main() {
   // Create a tool with required fields - this simulates what an MCP server would send
-  final calculatorTool = Tool(
+  final calculatorTool = const Tool(
     name: 'calculate',
     description: 'Performs mathematical calculations',
     inputSchema: ToolInputSchema(
@@ -10,15 +10,15 @@ void main() {
         'operation': {
           'type': 'string',
           'enum': ['add', 'subtract', 'multiply', 'divide'],
-          'description': 'The mathematical operation to perform'
+          'description': 'The mathematical operation to perform',
         },
         'a': {'type': 'number', 'description': 'First number'},
         'b': {'type': 'number', 'description': 'Second number'},
         'precision': {
           'type': 'integer',
           'description': 'Number of decimal places (optional)',
-          'default': 2
-        }
+          'default': 2,
+        },
       },
       required: ['operation', 'a', 'b'], // ← This is now preserved!
     ),
@@ -27,8 +27,8 @@ void main() {
         'result': {'type': 'number', 'description': 'The calculation result'},
         'equation': {
           'type': 'string',
-          'description': 'The equation that was calculated'
-        }
+          'description': 'The equation that was calculated',
+        },
       },
       required: ['result'], // ← Output required fields also preserved!
     ),
@@ -57,7 +57,8 @@ void main() {
   print('Original required: ${calculatorTool.inputSchema.required}');
   print('Deserialized required: ${deserializedTool.inputSchema.required}');
   print(
-      'Match: ${_listsEqual(calculatorTool.inputSchema.required, deserializedTool.inputSchema.required)}');
+    'Match: ${_listsEqual(calculatorTool.inputSchema.required, deserializedTool.inputSchema.required)}',
+  );
 
   // Convert to OpenAI function calling format
   print('\n=== OpenAI Function Format ===');
@@ -67,7 +68,7 @@ void main() {
       'name': calculatorTool.name,
       'description': calculatorTool.description,
       'parameters': calculatorTool.inputSchema.toJson(),
-    }
+    },
   };
 
   final functionObj = openaiFunction['function'] as Map<String, dynamic>;
