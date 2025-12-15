@@ -240,10 +240,12 @@ class StreamableHTTPServerTransport implements Transport {
     headers.forEach((key, value) {
       req.response.headers.set(key, value);
     });
-    await req.response.flush();
 
-    // Assign the response to the standalone SSE stream
+    // Assign the response to the standalone SSE stream before flushing
+    // to ensure it's available if a task tries to send a message immediately
     _streamMapping[_standaloneSseStreamId] = req.response;
+
+    await req.response.flush();
 
     // Set up close handler for client disconnects
     req.response.done.then((_) {

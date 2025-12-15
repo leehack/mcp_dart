@@ -164,7 +164,7 @@ class StdioServerTransport implements Transport {
   /// written to the output stream buffer. Use `await _stdout.flush()` if
   /// immediate sending is required.
   @override
-  Future<void> send(JsonRpcMessage message) {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) {
     if (!_started) {
       _logger.warn(
         "Attempted to send message on stopped StdioServerTransport.",

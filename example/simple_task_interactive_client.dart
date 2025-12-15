@@ -164,7 +164,7 @@ Future<void> run(String url) async {
         lastStatus1 = message.task.status.name;
       }
     } else if (message is TaskResultMessage) {
-      print('Result: ${getTextContent(message.result)}');
+      print('Result: ${getTextContent(message.result as CallToolResult)}');
     } else if (message is TaskErrorMessage) {
       print('Error: ${message.error}');
     }
@@ -191,7 +191,7 @@ Future<void> run(String url) async {
         lastStatus2 = message.task.status.name;
       }
     } else if (message is TaskResultMessage) {
-      print('Result:\n${getTextContent(message.result)}');
+      print('Result:\n${getTextContent(message.result as CallToolResult)}');
     } else if (message is TaskErrorMessage) {
       print('Error: ${message.error}');
     }

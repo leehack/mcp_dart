@@ -177,7 +177,7 @@ class IOStreamTransport implements Transport {
   ///
   /// Throws [StateError] if the transport is not started.
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (!_started || _closed) {
       throw StateError(
         "Cannot send message: IOStreamTransport is not running or is closed.",

@@ -1,69 +1,22 @@
 import 'dart:async';
 
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
-import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'constants.dart';
 
 // ============================================================================
-// Task Store Interface & Implementation
+// Task Store Implementation
 // ============================================================================
-
-/// Interface for storing and managing tasks.
-///
-/// Users can implement this to back tasks with a database or other persistent storage.
-abstract class TaskStore {
-  /// Returns all tasks.
-  FutureOr<List<Task>> getAllTasks();
-
-  /// Retrieves a specific task by ID.
-  FutureOr<Task?> getTask(String taskId);
-
-  /// Creates a new task.
-  Future<Task> createTask(
-    int? ttl,
-    int? pollInterval,
-    RequestId? requestId,
-    String name,
-    Map<String, dynamic> input,
-  );
-
-  /// Cancels a task. Returns true if cancelled, false if not found or already terminal.
-  Future<bool> cancelTask(String taskId);
-
-  /// Updates the status of a task.
-  Future<void> updateTaskStatus(
-    String taskId,
-    TaskStatus status, [
-    String? message,
-  ]);
-
-  /// Stores the result of a task and marks it as completed (or failed).
-  Future<void> storeTaskResult(
-    String taskId,
-    TaskStatus status,
-    CallToolResult result,
-  );
-
-  /// Retrieves the result of a completed task.
-  FutureOr<CallToolResult?> getTaskResult(String taskId);
-
-  /// Returns a future that completes when the specified task is updated.
-  Future<void> waitForUpdate(String taskId);
-
-  /// Cleans up resources.
-  void dispose();
-}
 
 /// An in-memory implementation of [TaskStore].
 class InMemoryTaskStore implements TaskStore {
-  final McpServer server;
   final Map<String, Task> _tasks = {};
-  final Map<String, CallToolResult> _results = {};
+  final Map<String, BaseResultData> _results = {};
   final Map<String, List<Completer<void>>> _updateResolvers = {};
   Timer? _ttlCleanupTimer;
 
-  InMemoryTaskStore(this.server) {
+  InMemoryTaskStore() {
     _startTtlCleanup();
   }
 
@@ -84,17 +37,17 @@ class InMemoryTaskStore implements TaskStore {
       for (final id in expiredIds) {
         _tasks.remove(id);
         _results.remove(id);
-        _notifyUpdate(id); // Notify waiters that task is gone (or changed)
+        _notifyUpdate(id);
       }
     });
   }
 
   @override
-  List<Task> getAllTasks() {
-    return _tasks.values.toList();
+  Future<ListTasksResult> listTasks(String? cursor, [String? sessionId]) async {
+    return ListTasksResult(tasks: _tasks.values.toList());
   }
 
-  @override
+  /// Cancels a task. Returns true if cancelled, false if not found or already terminal.
   Future<bool> cancelTask(String taskId) async {
     final task = _tasks[taskId];
     if (task == null) return false;
@@ -110,26 +63,39 @@ class InMemoryTaskStore implements TaskStore {
 
   @override
   Future<Task> createTask(
-    int? ttl,
-    int? pollInterval,
-    RequestId? requestId,
-    String name,
-    Map<String, dynamic> input,
+    TaskCreationParams taskParams,
+    RequestId requestId,
+    Map<String, dynamic> requestData,
+    String? sessionId,
   ) async {
     final taskId = generateUUID().replaceAll('-', '');
     final now = DateTime.now().toIso8601String();
+
+    String? name;
+    Map<String, dynamic>? input;
+
+    if (requestData['method'] == 'tools/call') {
+      final params = requestData['params'] as Map<String, dynamic>?;
+      name = params?['name'] as String?;
+      input = params?['arguments'] as Map<String, dynamic>?;
+    } else if (requestData['name'] != null) {
+      // Fallback if requestData is not method/params but direct data
+      name = requestData['name'] as String?;
+      input = requestData['input'] as Map<String, dynamic>?;
+    }
+
     final task = Task(
       taskId: taskId,
       status: TaskStatus.working,
       statusMessage: "Task started",
-      ttl: ttl,
-      pollInterval: pollInterval,
+      ttl: taskParams.ttl,
+      pollInterval: 1000,
       createdAt: now,
       lastUpdatedAt: now,
       meta: {
-        if (requestId != null) 'createdFromRequestId': requestId,
-        taskNameKey: name,
-        taskInputKey: input,
+        'createdFromRequestId': requestId,
+        if (name != null) taskNameKey: name,
+        if (input != null) taskInputKey: input,
       },
     );
     _tasks[taskId] = task;
@@ -138,13 +104,20 @@ class InMemoryTaskStore implements TaskStore {
   }
 
   @override
-  Task? getTask(String taskId) {
+  Future<Task?> getTask(String taskId, [String? sessionId]) async {
     return _tasks[taskId];
   }
 
   @override
-  CallToolResult? getTaskResult(String taskId) {
-    return _results[taskId];
+  Future<BaseResultData> getTaskResult(
+    String taskId, [
+    String? sessionId,
+  ]) async {
+    final result = _results[taskId];
+    if (result == null) {
+      throw McpError(ErrorCode.invalidParams.value, 'Result not available');
+    }
+    return result;
   }
 
   @override
@@ -152,6 +125,7 @@ class InMemoryTaskStore implements TaskStore {
     String taskId,
     TaskStatus status, [
     String? message,
+    String? sessionId,
   ]) async {
     final task = _tasks[taskId];
     if (task != null) {
@@ -173,13 +147,14 @@ class InMemoryTaskStore implements TaskStore {
   Future<void> storeTaskResult(
     String taskId,
     TaskStatus status,
-    CallToolResult result,
-  ) async {
+    BaseResultData result, [
+    String? sessionId,
+  ]) async {
     _results[taskId] = result;
-    await updateTaskStatus(taskId, status);
+    await updateTaskStatus(taskId, status, null, sessionId);
   }
 
-  @override
+  /// Returns a future that completes when the specified task is updated.
   Future<void> waitForUpdate(String taskId) {
     final completer = Completer<void>();
     _updateResolvers.putIfAbsent(taskId, () => []).add(completer);
@@ -195,30 +170,10 @@ class InMemoryTaskStore implements TaskStore {
         }
       }
     }
-
-    // Send task status notification to the server
-    final task = _tasks[taskId];
-    if (task != null) {
-      server.server
-          .notification(
-        JsonRpcTaskStatusNotification(
-          statusParams: TaskStatusNotificationParams(
-            taskId: taskId,
-            status: task.status,
-            statusMessage: task.statusMessage,
-          ),
-        ),
-      )
-          .catchError((e) {
-        // Ignore errors broadcasting
-      });
-    }
   }
 
-  @override
   void dispose() {
     _ttlCleanupTimer?.cancel();
-    // Clear waiters
     for (var waiters in _updateResolvers.values) {
       for (var completer in waiters) {
         if (!completer.isCompleted) {

@@ -80,7 +80,7 @@ class MockTransport implements Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (_closed) {
       throw StateError('Transport is closed');
     }
@@ -151,6 +151,16 @@ class TestProtocol extends Protocol {
   @override
   void assertRequestHandlerCapability(String method) {
     // For this test implementation, assume any method can be handled
+  }
+
+  @override
+  void assertTaskCapability(String method) {
+    // Mock implementation
+  }
+
+  @override
+  void assertTaskHandlerCapability(String method) {
+    // Mock implementation
   }
 }
 

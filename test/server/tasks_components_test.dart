@@ -8,28 +8,15 @@ class MockTransport extends Transport {
   final List<JsonRpcMessage> sentMessages = [];
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
+
+    // Simulate generic client response for requests
     if (message is JsonRpcRequest) {
       if (message.method == 'elicitation/create') {
-        // Echo back success
-        onmessage?.call(
-          JsonRpcResponse(
-            id: message.id,
-            result: const ElicitResult(action: 'accept', content: {}).toJson(),
-          ),
-        );
-      } else if (message.method == 'sampling/createMessage') {
-        onmessage?.call(
-          JsonRpcResponse(
-            id: message.id,
-            result: const CreateMessageResult(
-              model: 'test',
-              role: SamplingMessageRole.assistant,
-              content: SamplingTextContent(text: 'mock response'),
-            ).toJson(),
-          ),
-        );
+        // Auto-reply for test
+        // In real flow, this goes to client, client replies.
+        // Here we just intercept.
       }
     }
   }
@@ -42,90 +29,29 @@ class MockTransport extends Transport {
   String? get sessionId => 'mock-session';
 }
 
-// Mock TaskStore
-class MockTaskStore implements TaskStore {
-  final Map<String, Task> _tasks = {};
-  final Map<String, CallToolResult> _results = {};
-  final _updateControllers = <String, StreamController<void>>{};
-
-  @override
-  Future<Task?> getTask(String taskId) async => _tasks[taskId];
-
-  @override
-  Future<CallToolResult?> getTaskResult(String taskId) async =>
-      _results[taskId];
-
-  @override
-  Future<void> updateTaskStatus(
-    String taskId,
-    TaskStatus status, [
-    String? message,
-  ]) async {
-    final task = _tasks[taskId];
-    if (task != null) {
-      _tasks[taskId] = Task(
-        taskId: taskId,
-        status: status,
-        statusMessage: message ?? task.statusMessage,
-        createdAt: task.createdAt,
-      );
-      _notifyUpdate(taskId);
-    }
-  }
-
-  void addTask(Task task) {
-    _tasks[task.taskId] = task;
-  }
-
-  void completeTask(String taskId, CallToolResult result) {
-    _results[taskId] = result;
-    updateTaskStatus(taskId, TaskStatus.completed);
-  }
-
-  @override
-  Future<void> waitForUpdate(String taskId) {
-    // Return a future that completes when update happens
-    // For testing, we can just return a delayed future or use a controller
-    final controller = _updateControllers.putIfAbsent(
-      taskId,
-      () => StreamController<void>.broadcast(),
-    );
-    return controller.stream.first;
-  }
-
-  void _notifyUpdate(String taskId) {
-    if (_updateControllers.containsKey(taskId)) {
-      _updateControllers[taskId]!.add(null);
-    }
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 void main() {
-  group('TaskMessageQueue', () {
-    late TaskMessageQueue queue;
+  group('InMemoryTaskMessageQueue', () {
+    late InMemoryTaskMessageQueue queue;
 
     setUp(() {
-      queue = TaskMessageQueue();
+      queue = InMemoryTaskMessageQueue();
     });
 
     tearDown(() {
       queue.dispose();
     });
 
-    test('enqueue and dequeue', () {
+    test('enqueue and dequeue', () async {
       final msg = QueuedMessage(
         type: 'test',
         message: const JsonRpcNotification(method: 'test'),
         timestamp: 0,
       );
-      queue.enqueue('task1', msg);
+      await queue.enqueue('task1', msg, null);
 
-      final dequeued = queue.dequeue('task1');
+      final dequeued = await queue.dequeue('task1');
       expect(dequeued, equals(msg));
-      expect(queue.dequeue('task1'), isNull);
+      expect(await queue.dequeue('task1'), isNull);
     });
 
     test('waitForMessage completes when message enqueued', () async {
@@ -136,7 +62,7 @@ void main() {
       );
 
       final future = queue.waitForMessage('task1');
-      queue.enqueue('task1', msg);
+      await queue.enqueue('task1', msg, null);
 
       await expectLater(future, completes);
     });
@@ -147,7 +73,7 @@ void main() {
         message: const JsonRpcNotification(method: 'test'),
         timestamp: 0,
       );
-      queue.enqueue('task1', msg);
+      await queue.enqueue('task1', msg, null);
 
       await expectLater(queue.waitForMessage('task1'), completes);
     });
@@ -157,25 +83,25 @@ void main() {
     late McpServer server;
     late MockTransport transport;
     late TaskSession session;
-    late MockTaskStore store;
-    late TaskMessageQueue queue;
+    late InMemoryTaskStore store;
+    late InMemoryTaskMessageQueue queue;
 
     setUp(() async {
       server = McpServer(const Implementation(name: 'test', version: '1.0'));
       transport = MockTransport();
-      await server.connect(transport); // Helper to connect
+      await server.connect(transport);
 
-      store = MockTaskStore();
-      queue = TaskMessageQueue();
-      store.addTask(
-        const Task(
-          taskId: 'task1',
-          status: TaskStatus.working,
-          createdAt: 'now',
-        ),
+      store = InMemoryTaskStore();
+      queue = InMemoryTaskMessageQueue();
+
+      final task = await store.createTask(
+        const TaskCreationParams(),
+        123,
+        {'name': 'test_tool'},
+        'session1',
       );
 
-      session = TaskSession(server, 'task1', store, queue);
+      session = TaskSession(server, task.taskId, store, queue);
     });
 
     test('elicit enqueues request and waits', () async {
@@ -185,23 +111,25 @@ void main() {
       await Future.delayed(Duration.zero);
 
       // Check queue
-      final msg = queue.dequeue('task1');
+      final msg = await queue.dequeue(session.taskId);
       expect(msg, isNotNull);
       expect(msg!.type, 'request');
-      expect(msg.resolver, isNotNull);
+      expect(msg, isA<ServerQueuedMessage>());
+      final serverMsg = msg as ServerQueuedMessage;
+      expect(serverMsg.resolver, isNotNull);
 
       // Check status update
-      final task = await store.getTask('task1');
+      final task = await store.getTask(session.taskId);
       expect(task?.status, TaskStatus.inputRequired);
 
       // Resolve
-      msg.resolver!
+      serverMsg.resolver!
           .complete(const ElicitResult(action: 'accept', content: {}).toJson());
 
       await expectLater(future, completes);
 
       // Check status update back
-      final taskAfter = await store.getTask('task1');
+      final taskAfter = await store.getTask(session.taskId);
       expect(taskAfter?.status, TaskStatus.working);
     });
 
@@ -211,11 +139,12 @@ void main() {
       // Allow async code to run
       await Future.delayed(Duration.zero);
 
-      final msg = queue.dequeue('task1');
+      final msg = await queue.dequeue(session.taskId);
       expect(msg, isNotNull);
       expect(msg!.type, 'request');
+      final serverMsg = msg as ServerQueuedMessage;
 
-      msg.resolver!.complete(
+      serverMsg.resolver!.complete(
         const CreateMessageResult(
           model: 'test',
           role: SamplingMessageRole.assistant,
@@ -230,8 +159,8 @@ void main() {
   group('TaskResultHandler', () {
     late McpServer server;
     late MockTransport transport;
-    late MockTaskStore store;
-    late TaskMessageQueue queue;
+    late InMemoryTaskStore store;
+    late InMemoryTaskMessageQueue queue;
     late TaskResultHandler handler;
 
     setUp(() async {
@@ -239,33 +168,34 @@ void main() {
       transport = MockTransport();
       await server.connect(transport);
 
-      store = MockTaskStore();
-      queue = TaskMessageQueue();
+      store = InMemoryTaskStore();
+      queue = InMemoryTaskMessageQueue();
       handler = TaskResultHandler(store, queue, server);
     });
 
     tearDown(() {
       handler.dispose();
       queue.dispose();
+      store.dispose();
     });
 
     test('handle waits for task completion and returns result', () async {
-      store.addTask(
-        const Task(
-          taskId: 'task1',
-          status: TaskStatus.working,
-          createdAt: 'now',
-        ),
+      final task = await store.createTask(
+        const TaskCreationParams(),
+        123,
+        {'name': 'test_tool'},
+        'session1',
       );
 
-      final future = handler.handle('task1');
+      final future = handler.handle(task.taskId);
 
       // Verify it's waiting
       await Future.delayed(const Duration(milliseconds: 10));
 
       // Complete task
-      store.completeTask(
-        'task1',
+      await store.storeTaskResult(
+        task.taskId,
+        TaskStatus.completed,
         CallToolResult.fromContent(content: [const TextContent(text: 'Done')]),
       );
 
@@ -275,21 +205,20 @@ void main() {
     });
 
     test('handle processes queued requests (elicit)', () async {
-      store.addTask(
-        const Task(
-          taskId: 'task1',
-          status: TaskStatus.working,
-          createdAt: 'now',
-        ),
+      final task = await store.createTask(
+        const TaskCreationParams(),
+        123,
+        {'name': 'test_tool'},
+        'session1',
       );
 
-      final future = handler.handle('task1');
+      final future = handler.handle(task.taskId);
 
       // Enqueue a request (simulating task asking for input)
       final completer = Completer<Map<String, dynamic>>();
-      queue.enqueue(
-        'task1',
-        QueuedMessage(
+      await queue.enqueue(
+        task.taskId,
+        ServerQueuedMessage(
           type: 'request',
           message: JsonRpcRequest(
             id: 1,
@@ -300,20 +229,62 @@ void main() {
           ),
           timestamp: 0,
           resolver: completer,
-          originalRequestId: 1,
+          originalRequestId: '1',
         ),
+        null,
       );
 
-      // The handler should pick this up, call server.request (which goes to mock transport),
-      // and complete the resolver.
+      // Since we need the server to actually handle the request (via experimental.elicitForTask),
+      // we need to mock that response.
+      // But `elicitForTask` sends a request over transport. `MockTransport` stores it.
+      // We need `MockTransport` to reply if we want full loop.
+      // Or we can rely on `server.request` logic.
+      // `server.request` returns a Future. MockTransport needs to simulate response.
+      // But `TaskResultHandler` calls `server.experimental.elicitForTask`.
+      // `elicitForTask` calls `server.server.request`.
+      // `server.server.request` sends message and waits for response.
+      // Our `MockTransport` doesn't automatically reply.
+      // So `completer` will wait forever unless we make `MockTransport` reply or mock `elicitForTask`.
+
+      // Let's stub `server.experimental.elicitForTask` if possible? No it's an extension wrapper.
+      // We can intercept at transport level.
+      // But `MockTransport` needs to know ID to reply to.
+      // We can check `sentMessages`.
+
+      // We'll run a loop to check sent messages and reply.
+      Future<void> autoReply() async {
+        while (!completer.isCompleted) {
+          await Future.delayed(const Duration(milliseconds: 10));
+          final reqs =
+              transport.sentMessages.whereType<JsonRpcRequest>().toList();
+          for (final req in reqs) {
+            // If it's the elicit request
+            if (req.method == 'elicitation/create') {
+              // Fake reply coming back from client
+              server.server.transport?.onmessage?.call(
+                JsonRpcResponse(
+                  id: req.id,
+                  result: const ElicitResult(action: 'accept', content: {})
+                      .toJson(),
+                ),
+              );
+              // Clear it so we don't reply again
+              transport.sentMessages.remove(req);
+            }
+          }
+        }
+      }
+
+      autoReply();
 
       final response = await completer.future;
       expect(response, isNotNull);
       expect(ElicitResult.fromJson(response).action, 'accept');
 
       // Complete task to finish handler
-      store.completeTask(
-        'task1',
+      await store.storeTaskResult(
+        task.taskId,
+        TaskStatus.completed,
         CallToolResult.fromContent(content: [const TextContent(text: 'Done')]),
       );
       await future;

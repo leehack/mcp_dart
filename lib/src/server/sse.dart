@@ -237,7 +237,7 @@ class SseServerTransport implements Transport {
   ///
   /// Serializes the message to JSON and formats it as an SSE 'message' event.
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (_closeController.isClosed) {
       throw StateError("Cannot send message: SSE connection is not active.");
     }

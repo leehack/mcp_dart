@@ -14,8 +14,8 @@ void main() async {
 
 class SessionContext {
   final McpServer server;
-  final TaskStore store;
-  final TaskMessageQueue queue;
+  final InMemoryTaskStore store;
+  final InMemoryTaskMessageQueue queue;
   final TaskResultHandler taskResultHandler;
 
   SessionContext({
@@ -54,8 +54,8 @@ class InteractiveServer {
 
     server.onError = (error) => print('[Server Protocol Error] $error');
 
-    final store = InMemoryTaskStore(server);
-    final queue = TaskMessageQueue();
+    final store = InMemoryTaskStore();
+    final queue = InMemoryTaskMessageQueue();
     final handler = TaskResultHandler(store, queue, server);
 
     final context = SessionContext(
@@ -78,9 +78,7 @@ class InteractiveServer {
 
     // Register Task Handlers
     server.experimental.onListTasks((extra) async {
-      final tasks = await store.getAllTasks();
-      // Only log periodically or for specific events to avoid spamming
-      return ListTasksResult(tasks: tasks);
+      return await store.listTasks(null);
     });
 
     server.experimental.onGetTask((taskId, extra) async {
@@ -178,7 +176,7 @@ class InteractiveServer {
       });
 
       String text;
-      if (result.action == 'accept' && result.content != null) {
+      if (result.content != null) {
         final confirmed = result.content!['confirm'] == true;
         text = confirmed ? "Deleted '$filename'" : "Deletion cancelled";
       } else {
@@ -332,11 +330,10 @@ class SimpleToolTaskHandler implements ToolTaskHandler {
     RequestHandlerExtra? extra,
   ) async {
     final task = await context.store.createTask(
-      null, // ttl
-      1000, // pollInterval
-      null, // requestId
-      toolName,
-      args ?? {},
+      const TaskCreationParams(), // ttl
+      extra?.requestId ?? -1,
+      {'name': toolName, 'input': args ?? {}},
+      extra?.sessionId,
     );
     print('\n[Server] $toolName called, task created: ${task.taskId}');
 
@@ -366,9 +363,9 @@ class SimpleToolTaskHandler implements ToolTaskHandler {
     RequestHandlerExtra? extra,
   ) async {
     final result = await context.store.getTaskResult(taskId);
-    if (result == null) {
-      throw McpError(ErrorCode.invalidParams.value, 'Result not available');
+    if (result is CallToolResult) {
+      return result;
     }
-    return result;
+    throw McpError(ErrorCode.internalError.value, 'Unexpected result type');
   }
 }

@@ -13,13 +13,36 @@ import 'store.dart';
 class TaskSession {
   final McpServer server;
   final String taskId;
-  final TaskStore store;
-  final TaskMessageQueue queue;
+  final InMemoryTaskStore store;
+  final InMemoryTaskMessageQueue queue;
   int _requestCounter = 0;
 
   TaskSession(this.server, this.taskId, this.store, this.queue);
 
   String _nextRequestId() => 'task-$taskId-${++_requestCounter}';
+
+  Future<void> _sendTaskStatusNotification() async {
+    final task = await store.getTask(taskId);
+    if (task != null) {
+      server.server
+          .notification(
+        JsonRpcTaskStatusNotification(
+          statusParams: TaskStatusNotificationParams(
+            taskId: taskId,
+            status: task.status,
+            statusMessage: task.statusMessage,
+            ttl: task.ttl,
+            pollInterval: task.pollInterval,
+            createdAt: task.createdAt,
+            lastUpdatedAt: task.lastUpdatedAt,
+          ),
+        ),
+      )
+          .catchError((e) {
+        // Ignore errors broadcasting
+      });
+    }
+  }
 
   /// Requests input from the client (Elicitation).
   Future<ElicitResult> elicit(
@@ -27,6 +50,7 @@ class TaskSession {
     Map<String, dynamic> requestedSchema,
   ) async {
     await store.updateTaskStatus(taskId, TaskStatus.inputRequired);
+    await _sendTaskStatusNotification();
 
     final requestId = _nextRequestId();
     final params =
@@ -37,23 +61,26 @@ class TaskSession {
 
     final completer = Completer<Map<String, dynamic>>();
 
-    queue.enqueue(
+    await queue.enqueue(
       taskId,
-      QueuedMessage(
+      ServerQueuedMessage(
         type: 'request',
         message: jsonRpcRequest,
         timestamp: DateTime.now().millisecondsSinceEpoch,
         resolver: completer,
         originalRequestId: requestId,
       ),
+      null,
     );
 
     try {
       final json = await completer.future;
       await store.updateTaskStatus(taskId, TaskStatus.working);
+      await _sendTaskStatusNotification();
       return ElicitResult.fromJson(json);
     } catch (e) {
       await store.updateTaskStatus(taskId, TaskStatus.working);
+      await _sendTaskStatusNotification();
       rethrow;
     }
   }
@@ -64,6 +91,7 @@ class TaskSession {
     int maxTokens,
   ) async {
     await store.updateTaskStatus(taskId, TaskStatus.inputRequired);
+    await _sendTaskStatusNotification();
 
     final requestId = _nextRequestId();
     final params = CreateMessageRequestParams(
@@ -76,23 +104,26 @@ class TaskSession {
 
     final completer = Completer<Map<String, dynamic>>();
 
-    queue.enqueue(
+    await queue.enqueue(
       taskId,
-      QueuedMessage(
+      ServerQueuedMessage(
         type: 'request',
         message: jsonRpcRequest,
         timestamp: DateTime.now().millisecondsSinceEpoch,
         resolver: completer,
         originalRequestId: requestId,
       ),
+      null,
     );
 
     try {
       final json = await completer.future;
       await store.updateTaskStatus(taskId, TaskStatus.working);
+      await _sendTaskStatusNotification();
       return CreateMessageResult.fromJson(json);
     } catch (e) {
       await store.updateTaskStatus(taskId, TaskStatus.working);
+      await _sendTaskStatusNotification();
       rethrow;
     }
   }

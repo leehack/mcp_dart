@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/types.dart';
-import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'constants.dart';
 import 'queue.dart';
 import 'store.dart';
@@ -37,8 +37,8 @@ abstract class ToolTaskHandler {
 
 /// Handles execution and result retrieval for tasks, managing the queue loop.
 class TaskResultHandler {
-  final TaskStore store;
-  final TaskMessageQueue queue;
+  final InMemoryTaskStore store;
+  final InMemoryTaskMessageQueue queue;
   final McpServer server;
   final Map<dynamic, Completer<Map<String, dynamic>>> pendingRequests = {};
   Timer? _cleanupTimer;
@@ -70,10 +70,6 @@ class TaskResultHandler {
       }
 
       // Deliver queued messages (requests from client to server logic?)
-      // Actually, this delivers messages FROM the task execution context (if it was external)
-      // In the current architecture:
-      // Client -> [elicitation/submit] -> Server (TaskSession) -> Queue
-      // TaskResultHandler (execution loop) <- Queue
       await _deliverQueuedMessages(taskId);
 
       // Refresh task because _deliverQueuedMessages might have unblocked execution that updated it
@@ -85,29 +81,34 @@ class TaskResultHandler {
       // Check if terminal
       if (currentTask.status.isTerminal) {
         final result = await store.getTaskResult(taskId);
-        if (result == null) {
-          return CallToolResult.fromContent(
-            content: [
-              const TextContent(text: "Task completed but no result found"),
-            ],
+
+        CallToolResult toolResult;
+        if (result is CallToolResult) {
+          toolResult = result;
+        } else {
+          // If we ever support other result types, handle them here.
+          // For now, assume CallToolResult as that's what we store.
+          throw McpError(
+            ErrorCode.internalError.value,
+            "Unexpected result type: ${result.runtimeType}",
           );
         }
 
         // Add related task meta
-        final meta = Map<String, dynamic>.from(result.meta ?? {});
+        final meta = Map<String, dynamic>.from(toolResult.meta ?? {});
         meta[relatedTaskMetaKey] = {'taskId': taskId};
 
         // Return structured or unstructured result based on what was stored
-        if (result.structuredContent.isNotEmpty) {
+        if (toolResult.structuredContent.isNotEmpty) {
           return CallToolResult.fromStructuredContent(
-            structuredContent: result.structuredContent,
-            unstructuredFallback: result.content,
+            structuredContent: toolResult.structuredContent,
+            unstructuredFallback: toolResult.content,
             meta: meta,
           );
         } else {
           return CallToolResult.fromContent(
-            content: result.content,
-            isError: result.isError,
+            content: toolResult.content,
+            isError: toolResult.isError,
             meta: meta,
           );
         }
@@ -123,12 +124,20 @@ class TaskResultHandler {
 
   Future<void> _deliverQueuedMessages(String taskId) async {
     while (true) {
-      final message = queue.dequeue(taskId);
+      final message = await queue.dequeue(taskId);
       if (message == null) break;
 
       if (message.type == 'request') {
-        if (message.resolver != null && message.originalRequestId != null) {
-          pendingRequests[message.originalRequestId] = message.resolver!;
+        Completer<Map<String, dynamic>>? resolver;
+        String? originalRequestId;
+
+        if (message is ServerQueuedMessage) {
+          resolver = message.resolver;
+          originalRequestId = message.originalRequestId;
+        }
+
+        if (resolver != null && originalRequestId != null) {
+          pendingRequests[originalRequestId] = resolver;
         }
 
         try {
@@ -146,16 +155,16 @@ class TaskResultHandler {
             throw Exception("Unknown request method: ${request.method}");
           }
 
-          if (message.resolver != null && !message.resolver!.isCompleted) {
-            message.resolver!.complete(response.toJson());
+          if (resolver != null && !resolver.isCompleted) {
+            resolver.complete(response.toJson());
           }
         } catch (e) {
-          if (message.resolver != null && !message.resolver!.isCompleted) {
-            message.resolver!.completeError(e);
+          if (resolver != null && !resolver.isCompleted) {
+            resolver.completeError(e);
           }
         } finally {
-          if (message.originalRequestId != null) {
-            pendingRequests.remove(message.originalRequestId);
+          if (originalRequestId != null) {
+            pendingRequests.remove(originalRequestId);
           }
         }
       }

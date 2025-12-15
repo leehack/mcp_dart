@@ -1,65 +1,69 @@
 import 'dart:async';
 
-import 'package:mcp_dart/src/types.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 
 // ============================================================================
 // Task Queue
 // ============================================================================
 
-/// A message in the task queue, waiting to be processed.
-class QueuedMessage {
-  /// The type of message: 'request' | 'notification' | 'response' | 'error'.
-  final String type;
-
-  /// The underlying JSON-RPC message.
-  final JsonRpcMessage message;
-
-  /// The timestamp when the message was enqueued (milliseconds since epoch).
-  final int timestamp;
-
+/// A message in the task queue, with server-specific extensions.
+class ServerQueuedMessage extends QueuedMessage {
   /// Completer to resolve when the message is processed (optional).
   final Completer<Map<String, dynamic>>? resolver;
 
   /// The original request ID associated with this message (if any).
-  final RequestId? originalRequestId;
+  final String? originalRequestId;
 
-  QueuedMessage({
-    required this.type,
-    required this.message,
-    required this.timestamp,
+  ServerQueuedMessage({
+    required super.type,
+    required super.message,
+    required super.timestamp,
     this.resolver,
     this.originalRequestId,
   });
 }
 
 /// A queue for managing task-related messages, supporting waiters.
-class TaskMessageQueue {
+class InMemoryTaskMessageQueue implements TaskMessageQueue {
   final Map<String, List<QueuedMessage>> _queues = {};
   final Map<String, List<Completer<void>>> _waitResolvers = {};
 
-  List<QueuedMessage> _getQueue(String taskId) {
-    return _queues.putIfAbsent(taskId, () => []);
-  }
-
-  /// Enqueues a message for a specific task and notifies any waiters.
-  void enqueue(String taskId, QueuedMessage message) {
-    final queue = _getQueue(taskId);
+  @override
+  Future<void> enqueue(
+    String taskId,
+    QueuedMessage message,
+    String? sessionId, [
+    int? maxSize,
+  ]) async {
+    final queue = _queues.putIfAbsent(taskId, () => []);
     queue.add(message);
+    if (maxSize != null && queue.length > maxSize) {
+      queue.removeAt(0);
+    }
     _notifyWaiters(taskId);
   }
 
-  /// Dequeues the next message for a task, returning null if empty.
-  QueuedMessage? dequeue(String taskId) {
-    final queue = _getQueue(taskId);
-    if (queue.isEmpty) return null;
+  @override
+  Future<QueuedMessage?> dequeue(String taskId, [String? sessionId]) async {
+    final queue = _queues[taskId];
+    if (queue == null || queue.isEmpty) return null;
     return queue.removeAt(0);
+  }
+
+  @override
+  Future<List<QueuedMessage>> dequeueAll(
+    String taskId, [
+    String? sessionId,
+  ]) async {
+    final queue = _queues.remove(taskId);
+    return queue ?? [];
   }
 
   /// Returns a Future that completes when a message is available for the task.
   /// If a message is already available, returns a completed Future immediately.
   Future<void> waitForMessage(String taskId) {
-    final queue = _getQueue(taskId);
-    if (queue.isNotEmpty) return Future.value();
+    final queue = _queues[taskId];
+    if (queue != null && queue.isNotEmpty) return Future.value();
 
     final completer = Completer<void>();
     _waitResolvers.putIfAbsent(taskId, () => []).add(completer);
@@ -83,7 +87,6 @@ class TaskMessageQueue {
     for (var waiters in _waitResolvers.values) {
       for (var completer in waiters) {
         if (!completer.isCompleted) {
-          // completer.completeError(StateError('Queue disposed')); // Optional: could error instead
           completer.complete();
         }
       }

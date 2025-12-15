@@ -25,7 +25,7 @@ class MockTransport extends Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (isClosed) {
       throw StateError('Cannot send message on closed transport');
     }

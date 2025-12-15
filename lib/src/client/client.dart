@@ -359,6 +359,25 @@ class Client extends Protocol {
     }
   }
 
+  @override
+  void assertTaskCapability(String method) {
+    if (_serverCapabilities?.tasks == null) {
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        "Server does not support tasks capability (required for task-based '$method')",
+      );
+    }
+  }
+
+  @override
+  void assertTaskHandlerCapability(String method) {
+    if (_capabilities.tasks == null) {
+      throw StateError(
+        "Client setup error: Cannot handle task-based '$method' without 'tasks' capability registered.",
+      );
+    }
+  }
+
   /// Sends a `ping` request to the server and awaits an empty response.
   Future<EmptyResult> ping([RequestOptions? options]) {
     return request<EmptyResult>(

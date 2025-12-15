@@ -26,6 +26,7 @@ class MockClient implements Client {
     JsonRpcRequest request,
     T Function(Map<String, dynamic> json) parser, [
     RequestOptions? options,
+    int? relatedRequestId,
   ]) async {
     requests.add(request);
 
@@ -87,7 +88,11 @@ void main() {
       expect(events.length, 1);
       expect(events.first, isA<TaskResultMessage>());
       final resultMsg = events.first as TaskResultMessage;
-      expect((resultMsg.result.content.first as TextContent).text, 'Success');
+      expect(
+        ((resultMsg.result as CallToolResult).content.first as TextContent)
+            .text,
+        'Success',
+      );
     });
 
     test('callToolStream handles long-running task workflow', () async {
@@ -160,7 +165,9 @@ void main() {
       // Verify final result
       expect(events.last, isA<TaskResultMessage>());
       expect(
-        ((events.last as TaskResultMessage).result.content.first as TextContent)
+        (((events.last as TaskResultMessage).result as CallToolResult)
+                .content
+                .first as TextContent)
             .text,
         'Task Done',
       );

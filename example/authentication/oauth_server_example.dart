@@ -624,7 +624,8 @@ class OAuthServerTransport implements Transport {
   Future<void> close() => _innerTransport.close();
 
   @override
-  Future<void> send(JsonRpcMessage message) => _innerTransport.send(message);
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) =>
+      _innerTransport.send(message, relatedRequestId: relatedRequestId);
 
   @override
   Future<void> start() => _innerTransport.start();

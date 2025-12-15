@@ -16,7 +16,7 @@ class MockTransport extends Transport {
   Future<void> start() async {}
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
 
     // Handle initialize request

@@ -22,7 +22,7 @@ class MockTransport extends Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
     if (message is JsonRpcRequest) {
       if (message.method == 'ping') {
@@ -254,8 +254,11 @@ void main() {
         ),
         isTrue,
       );
-      final notification =
-          transport.sentMessages.last as JsonRpcElicitationCompleteNotification;
+      final rawNotification =
+          transport.sentMessages.last as JsonRpcNotification;
+      final notification = JsonRpcElicitationCompleteNotification.fromJson(
+        rawNotification.toJson(),
+      );
       expect(notification.completeParams.elicitationId, equals(elicitationId));
     });
   });

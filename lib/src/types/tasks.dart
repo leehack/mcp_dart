@@ -359,7 +359,7 @@ class TaskStatusMessage extends TaskStreamMessage {
 }
 
 class TaskResultMessage extends TaskStreamMessage {
-  final CallToolResult result;
+  final BaseResultData result;
   const TaskResultMessage(this.result) : super('result');
 }
 

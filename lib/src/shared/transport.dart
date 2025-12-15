@@ -8,7 +8,7 @@ abstract class Transport {
   Future<void> start();
 
   /// Sends a JSON-RPC message (request, response, or notification).
-  Future<void> send(JsonRpcMessage message);
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId});
 
   /// Closes the connection.
   Future<void> close();
