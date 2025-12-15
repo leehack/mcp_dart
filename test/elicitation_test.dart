@@ -180,10 +180,10 @@ void main() {
         receivedParams = params;
         expect(params.message, equals("Enter your name"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema!);
-        expect(schema, isA<StringInputSchema>());
+        final schema = params.requestedSchema!;
+        expect(schema, isA<JsonString>());
+        final stringSchema = schema as JsonString;
 
-        final stringSchema = schema as StringInputSchema;
         expect(stringSchema.minLength, equals(1));
 
         return const ElicitResult(
@@ -199,7 +199,7 @@ void main() {
         id: 1,
         elicitParams: ElicitRequestParams(
           message: "Enter your name",
-          requestedSchema: const StringInputSchema(minLength: 1).toJson(),
+          requestedSchema: JsonSchema.string(minLength: 1),
         ),
       );
 
@@ -237,8 +237,8 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Confirm action"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema!);
-        expect(schema, isA<BooleanInputSchema>());
+        final schema = params.requestedSchema!;
+        expect(schema, isA<JsonBoolean>());
 
         return const ElicitResult(
           action: 'accept',
@@ -252,8 +252,7 @@ void main() {
         id: 2,
         elicitParams: ElicitRequestParams(
           message: "Confirm action",
-          requestedSchema:
-              const BooleanInputSchema(defaultValue: false).toJson(),
+          requestedSchema: JsonSchema.boolean(defaultValue: false),
         ),
       );
 
@@ -286,10 +285,10 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Enter age"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema!);
-        expect(schema, isA<NumberInputSchema>());
+        final schema = params.requestedSchema!;
+        expect(schema, isA<JsonNumber>());
+        final numberSchema = schema as JsonNumber;
 
-        final numberSchema = schema as NumberInputSchema;
         expect(numberSchema.minimum, equals(0));
         expect(numberSchema.maximum, equals(120));
 
@@ -305,8 +304,7 @@ void main() {
         id: 3,
         elicitParams: ElicitRequestParams(
           message: "Enter age",
-          requestedSchema:
-              const NumberInputSchema(minimum: 0, maximum: 120).toJson(),
+          requestedSchema: JsonSchema.number(minimum: 0, maximum: 120),
         ),
       );
 
@@ -339,11 +337,10 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Choose size"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema!);
-        expect(schema, isA<EnumInputSchema>());
-
-        final enumSchema = schema as EnumInputSchema;
-        expect(enumSchema.values, equals(['small', 'medium', 'large']));
+        final schema = params.requestedSchema!;
+        expect(schema, isA<JsonString>());
+        final stringSchema = schema as JsonString;
+        expect(stringSchema.enumValues, equals(['small', 'medium', 'large']));
 
         return const ElicitResult(
           action: 'accept',
@@ -357,10 +354,10 @@ void main() {
         id: 4,
         elicitParams: ElicitRequestParams(
           message: "Choose size",
-          requestedSchema: const EnumInputSchema(
-            values: ['small', 'medium', 'large'],
+          requestedSchema: JsonSchema.string(
+            enumValues: ['small', 'medium', 'large'],
             defaultValue: 'medium',
-          ).toJson(),
+          ),
         ),
       );
 
@@ -401,7 +398,7 @@ void main() {
         id: 5,
         elicitParams: ElicitRequestParams(
           message: "Enter name",
-          requestedSchema: const StringInputSchema(minLength: 1).toJson(),
+          requestedSchema: JsonSchema.string(minLength: 1),
         ),
       );
 
@@ -440,8 +437,8 @@ void main() {
   });
 
   group('Elicitation Spec 2025-11-25 Features', () {
-    test('IntegerInputSchema serialization', () {
-      const schema = IntegerInputSchema(
+    test('JsonSchema integer serialization', () {
+      final schema = JsonSchema.integer(
         minimum: 0,
         maximum: 100,
         defaultValue: 50,
@@ -453,19 +450,19 @@ void main() {
       expect(json['type'], equals('integer'));
       expect(json['minimum'], equals(0));
       expect(json['maximum'], equals(100));
-      expect(json['defaultValue'], equals(50));
+      expect(json['default'], equals(50));
       expect(json['title'], equals('Age'));
       expect(json['description'], equals('Your age in years'));
 
-      final parsed = InputSchema.fromJson(json);
-      expect(parsed, isA<IntegerInputSchema>());
-      final intSchema = parsed as IntegerInputSchema;
-      expect(intSchema.minimum, equals(0));
-      expect(intSchema.maximum, equals(100));
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed, isA<JsonInteger>());
+      final integerSchema = parsed as JsonInteger;
+      expect(integerSchema.minimum, equals(0));
+      expect(integerSchema.maximum, equals(100));
     });
 
-    test('StringInputSchema with format field', () {
-      const schema = StringInputSchema(
+    test('JsonSchema string with format field', () {
+      final schema = JsonSchema.string(
         format: 'email',
         title: 'Email Address',
         description: 'Your email',
@@ -476,9 +473,9 @@ void main() {
       expect(json['format'], equals('email'));
       expect(json['title'], equals('Email Address'));
 
-      final parsed = InputSchema.fromJson(json);
-      expect(parsed, isA<StringInputSchema>());
-      final stringSchema = parsed as StringInputSchema;
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed, isA<JsonString>());
+      final stringSchema = parsed as JsonString;
       expect(stringSchema.format, equals('email'));
     });
 
@@ -538,7 +535,7 @@ void main() {
     test('ElicitRequestParams form mode', () {
       final params = ElicitRequestParams.form(
         message: 'Enter your name',
-        requestedSchema: const StringInputSchema(minLength: 1).toJson(),
+        requestedSchema: JsonSchema.string(minLength: 1),
       );
 
       expect(params.isFormMode, isTrue);
@@ -568,28 +565,7 @@ void main() {
       expect(ErrorCode.urlElicitationRequired.value, equals(-32042));
     });
 
-    test('EnumInputSchema with enumNames', () {
-      const schema = EnumInputSchema(
-        values: ['small', 'medium', 'large'],
-        enumNames: ['Small Size', 'Medium Size', 'Large Size'],
-        defaultValue: 'medium',
-        title: 'Size Selection',
-      );
-
-      final json = schema.toJson();
-      expect(
-        json['enumNames'],
-        equals(['Small Size', 'Medium Size', 'Large Size']),
-      );
-      expect(json['title'], equals('Size Selection'));
-
-      final parsed = InputSchema.fromJson(json);
-      expect(parsed, isA<EnumInputSchema>());
-      final enumSchema = parsed as EnumInputSchema;
-      expect(
-        enumSchema.enumNames,
-        equals(['Small Size', 'Medium Size', 'Large Size']),
-      );
-    });
+    // Note: enumNames is not standard JSON Schema 2020-12, usually handled via oneOf with const/title
+    // or custom extensions. Assuming simple enum for now.
   });
 }

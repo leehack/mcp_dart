@@ -27,7 +27,7 @@ void main() {
 
       final tool = Tool(
         name: 'test-tool',
-        inputSchema: const ToolInputSchema(),
+        inputSchema: const JsonObject(),
         icon: icon,
       );
       expect(tool.icon?.data, 'base64');
@@ -60,7 +60,7 @@ void main() {
     test('Elicitation with URL', () {
       final params = const ElicitRequestParams(
         message: 'test',
-        requestedSchema: {},
+        requestedSchema: JsonObject(),
         url: 'https://example.com/ui',
       );
 
@@ -73,9 +73,9 @@ void main() {
       expect(deserialized.url, 'https://example.com/ui');
     });
 
-    test('EnumInputSchema SEP-1330', () {
-      final schema = const EnumInputSchema(
-        values: [
+    test('JsonEnum SEP-1330', () {
+      final schema = const JsonEnum(
+        [
           'simple',
           {'value': 'complex', 'title': 'Complex Option'},
         ],
@@ -88,7 +88,7 @@ void main() {
       final json = schema.toJson();
       expect(json['values'], hasLength(2));
 
-      final deserialized = EnumInputSchema.fromJson(json);
+      final deserialized = JsonEnum.fromJson(json);
       expect(deserialized.values[0], 'simple');
       expect((deserialized.values[1] as Map)['value'], 'complex');
     });
@@ -190,16 +190,16 @@ void main() {
     });
 
     test('Sampling with Tools', () {
-      final params = const CreateMessageRequestParams(
+      final params = CreateMessageRequestParams(
         messages: [],
         maxTokens: 100,
         tools: [
           Tool(
             name: 'calculator',
             description: 'A calculator',
-            inputSchema: ToolInputSchema(
+            inputSchema: JsonObject(
               properties: {
-                'expr': {'type': 'string'},
+                'expr': JsonSchema.string(),
               },
             ),
           ),
@@ -418,13 +418,14 @@ void main() {
       });
 
       test('JsonRpcCallToolRequest with taskParams', () {
+        final callRequest = const CallToolRequest(
+          name: 'long-running-tool',
+          arguments: {'input': 'value'},
+        );
         final request = JsonRpcCallToolRequest(
           id: 3,
-          callParams: const CallToolRequestParams(
-            name: 'long-running-tool',
-            arguments: {'input': 'value'},
-          ),
-          taskParams: const TaskCreationParams(ttl: 7200),
+          params: callRequest.toJson(),
+          meta: {'task': const TaskCreationParams(ttl: 7200).toJson()},
         );
 
         expect(request.isTaskAugmented, isTrue);
@@ -433,7 +434,7 @@ void main() {
 
         final json = request.toJson();
         expect(json['params']['name'], 'long-running-tool');
-        expect(json['params']['task']['ttl'], 7200);
+        expect(json['params']['_meta']['task']['ttl'], 7200);
 
         final deserialized = JsonRpcCallToolRequest.fromJson(json);
         expect(deserialized.isTaskAugmented, isTrue);
@@ -442,9 +443,10 @@ void main() {
       });
 
       test('JsonRpcCallToolRequest without taskParams', () {
+        final callRequest = const CallToolRequest(name: 'simple-tool');
         final request = JsonRpcCallToolRequest(
           id: 4,
-          callParams: const CallToolRequestParams(name: 'simple-tool'),
+          params: callRequest.toJson(),
         );
 
         expect(request.isTaskAugmented, isFalse);

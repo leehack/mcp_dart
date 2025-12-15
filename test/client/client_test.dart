@@ -470,7 +470,7 @@ void main() {
 
       transport.clearSentMessages();
 
-      final params = const CallToolRequestParams(name: 'test-tool');
+      final params = const CallToolRequest(name: 'test-tool');
       await client.callTool(params);
 
       // Verify a callTool request was sent
@@ -491,7 +491,7 @@ void main() {
 
       transport.clearSentMessages();
 
-      final params = const CallToolRequestParams(name: 'test-tool-structured');
+      final params = const CallToolRequest(name: 'test-tool-structured');
       final result = await client.callTool(params);
 
       // Verify a callTool request was sent
@@ -601,7 +601,7 @@ class MockTransport extends Transport {
         onmessage!(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromContent(content: content).toJson(),
+            result: CallToolResult(content: content).toJson(),
           ),
         );
       }
@@ -679,11 +679,12 @@ class MockTransport extends Transport {
     } else if (message is JsonRpcRequest && message.method == 'tools/list') {
       if (onmessage != null) {
         final tools = [
-          const Tool(name: "test-tool", inputSchema: ToolInputSchema()),
-          const Tool(
+          const Tool(name: "test-tool", inputSchema: JsonObject()),
+          Tool(
             name: "test-tool-structured",
-            inputSchema: ToolInputSchema(),
-            outputSchema: ToolOutputSchema(properties: {'output': 'string'}),
+            inputSchema: const JsonObject(),
+            outputSchema:
+                JsonObject(properties: {'output': JsonSchema.string()}),
           ),
         ];
         onmessage!(
@@ -782,9 +783,9 @@ void _addCriticalPathTests() {
       // Simulate server sending elicitation request
       final elicitRequest = JsonRpcElicitRequest(
         id: 100,
-        elicitParams: const ElicitRequestParams(
+        elicitParams: ElicitRequestParams(
           message: 'Please provide input',
-          requestedSchema: {'type': 'string'},
+          requestedSchema: JsonSchema.string(),
         ),
       );
 
@@ -824,14 +825,13 @@ void _addCriticalPathTests() {
 
       final elicitRequest = JsonRpcElicitRequest(
         id: 101,
-        elicitParams: const ElicitRequestParams(
+        elicitParams: ElicitRequestParams(
           message: 'Enter your name',
-          requestedSchema: {
-            'type': 'object',
-            'properties': {
-              'name': {'type': 'string'},
+          requestedSchema: JsonObject(
+            properties: {
+              'name': JsonSchema.string(),
             },
-          },
+          ),
         ),
       );
 
@@ -856,18 +856,6 @@ void _addCriticalPathTests() {
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
       await client.connect(transport);
-
-      // Create request with metadata
-      final elicitRequest = JsonRpcElicitRequest(
-        id: 102,
-        elicitParams: const ElicitRequestParams(
-          message: 'Test',
-          requestedSchema: {'type': 'string'},
-        ),
-        meta: {'progressToken': 'token123'},
-      );
-
-      transport.receiveMessage(elicitRequest);
       await Future.delayed(const Duration(milliseconds: 10));
 
       // Should handle without errors

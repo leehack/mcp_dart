@@ -40,3 +40,10 @@ dart test
 
 *   **Main Entry:** `lib/mcp_dart.dart`
 *   **Documentation:** `doc/` contains detailed guides for Server, Client, and Transports.
+
+## Agent Guidelines
+
+As an agent working on this project, please adhere to the following guidelines:
+
+*   **Code Quality:** Regularly run linting (`dart analyze`), formatting (`dart format .`), and apply fixes (`dart fix --apply`) to maintain code quality and consistency. **When generating new code, always ensure it adheres to the project's established lint rules and conventions.**
+*   **Test Integrity:** Before proposing any changes, ensure that all existing tests pass (`dart test`). Do not introduce changes that break current tests.

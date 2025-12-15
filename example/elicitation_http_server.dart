@@ -73,31 +73,29 @@ McpServer getServer() {
   server.registerTool(
     'register_user',
     description: 'Register a new user account by collecting their information',
-    inputSchema: const ToolInputSchema(properties: {}),
+    inputSchema: JsonSchema.object(properties: {}),
     callback: (args, extra) async {
       try {
         // Collect username
         final usernameResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter your username (3-20 characters)',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'username': {
-                  'type': 'string',
-                  'minLength': 3,
-                  'maxLength': 20,
-                  'description': 'Your desired username',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'username': JsonSchema.string(
+                  minLength: 3,
+                  maxLength: 20,
+                  description: 'Your desired username',
+                ),
               },
-              'required': ['username'],
-            },
+              required: ['username'],
+            ),
           ),
         );
 
         if (!usernameResult.accepted) {
           return CallToolResult.fromContent(
-            content: [
+            [
               const TextContent(text: 'Registration cancelled by user.'),
             ],
           );
@@ -107,25 +105,23 @@ McpServer getServer() {
 
         // Collect email
         final emailResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter your email address',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'email': {
-                  'type': 'string',
-                  'minLength': 3,
-                  'description': 'Your email address',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'email': JsonSchema.string(
+                  minLength: 3,
+                  description: 'Your email address',
+                ),
               },
-              'required': ['email'],
-            },
+              required: ['email'],
+            ),
           ),
         );
 
         if (!emailResult.accepted) {
           return CallToolResult.fromContent(
-            content: [
+            [
               const TextContent(text: 'Registration cancelled by user.'),
             ],
           );
@@ -135,25 +131,23 @@ McpServer getServer() {
 
         // Collect password
         final passwordResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter your password (min 8 characters)',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'password': {
-                  'type': 'string',
-                  'minLength': 8,
-                  'description': 'Your password',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'password': JsonSchema.string(
+                  minLength: 8,
+                  description: 'Your password',
+                ),
               },
-              'required': ['password'],
-            },
+              required: ['password'],
+            ),
           ),
         );
 
         if (!passwordResult.accepted) {
           return CallToolResult.fromContent(
-            content: [
+            [
               const TextContent(text: 'Registration cancelled by user.'),
             ],
           );
@@ -161,18 +155,16 @@ McpServer getServer() {
 
         // Collect newsletter preference
         final newsletterResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Subscribe to newsletter?',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'newsletter': {
-                  'type': 'boolean',
-                  'default': false,
-                  'description': 'Receive updates via email',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'newsletter': JsonSchema.boolean(
+                  defaultValue: false,
+                  description: 'Receive updates via email',
+                ),
               },
-            },
+            ),
           ),
         );
 
@@ -182,7 +174,7 @@ McpServer getServer() {
 
         // Return success response
         return CallToolResult.fromContent(
-          content: [
+          [
             TextContent(
               text: '''Registration successful!
 
@@ -193,7 +185,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
           ],
         );
       } catch (error) {
-        return CallToolResult.fromContent(
+        return CallToolResult(
           content: [
             TextContent(text: 'Registration failed: $error'),
           ],
@@ -208,48 +200,44 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
   server.registerTool(
     'create_event',
     description: 'Create a calendar event by collecting event details',
-    inputSchema: const ToolInputSchema(properties: {}),
+    inputSchema: JsonSchema.object(properties: {}),
     callback: (args, extra) async {
       try {
         // Step 1: Collect basic event information
         final titleResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Step 1: Enter event title',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'title': {
-                  'type': 'string',
-                  'minLength': 1,
-                  'description': 'Name of the event',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'title': JsonSchema.string(
+                  minLength: 1,
+                  description: 'Name of the event',
+                ),
               },
-              'required': ['title'],
-            },
+              required: ['title'],
+            ),
           ),
         );
 
         if (!titleResult.accepted) {
           return CallToolResult.fromContent(
-            content: [const TextContent(text: 'Event creation cancelled.')],
+            [const TextContent(text: 'Event creation cancelled.')],
           );
         }
 
         final title = titleResult.content?['title'] as String;
 
         final descriptionResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter event description (optional, or type "skip")',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'description': {
-                  'type': 'string',
-                  'minLength': 0,
-                  'description': 'Event description',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'description': JsonSchema.string(
+                  minLength: 0,
+                  description: 'Event description',
+                ),
               },
-            },
+            ),
           ),
         );
 
@@ -262,76 +250,70 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
 
         // Step 2: Collect date and time
         final dateResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Step 2: Enter event date (YYYY-MM-DD)',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'date': {
-                  'type': 'string',
-                  'pattern': r'^\d{4}-\d{2}-\d{2}$',
-                  'description': 'Event date in YYYY-MM-DD format',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'date': JsonSchema.string(
+                  pattern: r'^\d{4}-\d{2}-\d{2}$',
+                  description: 'Event date in YYYY-MM-DD format',
+                ),
               },
-              'required': ['date'],
-            },
+              required: ['date'],
+            ),
           ),
         );
 
         if (!dateResult.accepted) {
           return CallToolResult.fromContent(
-            content: [const TextContent(text: 'Event creation cancelled.')],
+            [const TextContent(text: 'Event creation cancelled.')],
           );
         }
 
         final date = dateResult.content?['date'] as String;
 
         final startTimeResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter start time (HH:MM)',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'startTime': {
-                  'type': 'string',
-                  'pattern': r'^\d{2}:\d{2}$',
-                  'description': 'Event start time in HH:MM format',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'startTime': JsonSchema.string(
+                  pattern: r'^\d{2}:\d{2}$',
+                  description: 'Event start time in HH:MM format',
+                ),
               },
-              'required': ['startTime'],
-            },
+              required: ['startTime'],
+            ),
           ),
         );
 
         if (!startTimeResult.accepted) {
           return CallToolResult.fromContent(
-            content: [const TextContent(text: 'Event creation cancelled.')],
+            [const TextContent(text: 'Event creation cancelled.')],
           );
         }
 
         final startTime = startTimeResult.content?['startTime'] as String;
 
         final durationResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter duration in minutes (15-480)',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'duration': {
-                  'type': 'number',
-                  'minimum': 15,
-                  'maximum': 480,
-                  'default': 60,
-                  'description': 'Duration in minutes',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'duration': JsonSchema.number(
+                  minimum: 15,
+                  maximum: 480,
+                  defaultValue: 60,
+                  description: 'Duration in minutes',
+                ),
               },
-            },
+            ),
           ),
         );
 
         if (!durationResult.accepted) {
           return CallToolResult.fromContent(
-            content: [const TextContent(text: 'Event creation cancelled.')],
+            [const TextContent(text: 'Event creation cancelled.')],
           );
         }
 
@@ -339,7 +321,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
 
         // Return success response
         return CallToolResult.fromContent(
-          content: [
+          [
             TextContent(
               text: '''Event created successfully!
 
@@ -352,7 +334,7 @@ Duration: $duration minutes''',
           ],
         );
       } catch (error) {
-        return CallToolResult.fromContent(
+        return CallToolResult(
           content: [
             TextContent(text: 'Event creation failed: $error'),
           ],
@@ -367,30 +349,28 @@ Duration: $duration minutes''',
   server.registerTool(
     'update_shipping_address',
     description: 'Update shipping address with validation',
-    inputSchema: const ToolInputSchema(properties: {}),
+    inputSchema: JsonSchema.object(properties: {}),
     callback: (args, extra) async {
       try {
         // Collect name
         final nameResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter recipient full name',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'name': {
-                  'type': 'string',
-                  'minLength': 1,
-                  'description': 'Recipient name',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'name': JsonSchema.string(
+                  minLength: 1,
+                  description: 'Recipient name',
+                ),
               },
-              'required': ['name'],
-            },
+              required: ['name'],
+            ),
           ),
         );
 
         if (!nameResult.accepted) {
           return CallToolResult.fromContent(
-            content: [
+            [
               const TextContent(text: 'Address update cancelled by user.'),
             ],
           );
@@ -400,25 +380,23 @@ Duration: $duration minutes''',
 
         // Collect street address
         final streetResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter street address',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'street': {
-                  'type': 'string',
-                  'minLength': 1,
-                  'description': 'Street address',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'street': JsonSchema.string(
+                  minLength: 1,
+                  description: 'Street address',
+                ),
               },
-              'required': ['street'],
-            },
+              required: ['street'],
+            ),
           ),
         );
 
         if (!streetResult.accepted) {
           return CallToolResult.fromContent(
-            content: [
+            [
               const TextContent(text: 'Address update cancelled by user.'),
             ],
           );
@@ -428,25 +406,23 @@ Duration: $duration minutes''',
 
         // Collect city
         final cityResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter city',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'city': {
-                  'type': 'string',
-                  'minLength': 1,
-                  'description': 'City name',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'city': JsonSchema.string(
+                  minLength: 1,
+                  description: 'City name',
+                ),
               },
-              'required': ['city'],
-            },
+              required: ['city'],
+            ),
           ),
         );
 
         if (!cityResult.accepted) {
           return CallToolResult.fromContent(
-            content: [
+            [
               const TextContent(text: 'Address update cancelled by user.'),
             ],
           );
@@ -456,27 +432,25 @@ Duration: $duration minutes''',
 
         // Collect state (2 letters)
         final stateResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter state/province (2 letters)',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'state': {
-                  'type': 'string',
-                  'minLength': 2,
-                  'maxLength': 2,
-                  'pattern': r'^[A-Z]{2}$',
-                  'description': 'Two-letter state code (e.g., CA, NY)',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'state': JsonSchema.string(
+                  minLength: 2,
+                  maxLength: 2,
+                  pattern: r'^[A-Z]{2}$',
+                  description: 'Two-letter state code (e.g., CA, NY)',
+                ),
               },
-              'required': ['state'],
-            },
+              required: ['state'],
+            ),
           ),
         );
 
         if (!stateResult.accepted) {
           return CallToolResult.fromContent(
-            content: [
+            [
               const TextContent(text: 'Address update cancelled by user.'),
             ],
           );
@@ -486,26 +460,24 @@ Duration: $duration minutes''',
 
         // Collect ZIP code
         final zipResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter ZIP/Postal code',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'zip': {
-                  'type': 'string',
-                  'minLength': 5,
-                  'maxLength': 10,
-                  'description': '5-digit ZIP code or postal code',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'zip': JsonSchema.string(
+                  minLength: 5,
+                  maxLength: 10,
+                  description: '5-digit ZIP code or postal code',
+                ),
               },
-              'required': ['zip'],
-            },
+              required: ['zip'],
+            ),
           ),
         );
 
         if (!zipResult.accepted) {
           return CallToolResult.fromContent(
-            content: [
+            [
               const TextContent(text: 'Address update cancelled by user.'),
             ],
           );
@@ -515,18 +487,16 @@ Duration: $duration minutes''',
 
         // Collect optional phone number
         final phoneResult = await server.elicitInput(
-          const ElicitRequestParams.form(
+          ElicitRequestParams.form(
             message: 'Enter phone number (optional, or type "skip")',
-            requestedSchema: {
-              'type': 'object',
-              'properties': {
-                'phone': {
-                  'type': 'string',
-                  'minLength': 0,
-                  'description': 'Contact phone number',
-                },
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'phone': JsonSchema.string(
+                  minLength: 0,
+                  description: 'Contact phone number',
+                ),
               },
-            },
+            ),
           ),
         );
 
@@ -539,7 +509,7 @@ Duration: $duration minutes''',
 
         // Return success response
         return CallToolResult.fromContent(
-          content: [
+          [
             TextContent(
               text: '''Address updated successfully!
 
@@ -550,7 +520,7 @@ $city, $state $zipCode${phone.isNotEmpty ? '\nPhone: $phone' : ''}''',
           ],
         );
       } catch (error) {
-        return CallToolResult.fromContent(
+        return CallToolResult(
           content: [
             TextContent(text: 'Address update failed: $error'),
           ],
@@ -691,19 +661,19 @@ Future<void> _handlePostRequest(
       request.response
         ..statusCode = HttpStatus.badRequest
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-      setCorsHeaders(request.response);
-      request.response
-        ..write(
-          jsonEncode({
-            'jsonrpc': '2.0',
-            'error': {
-              'code': -32000,
-              'message': 'Bad Request: No valid session ID provided',
-            },
-            'id': null,
-          }),
-        )
-        ..close();
+      request.response.write(
+        jsonEncode(
+          JsonRpcError(
+            id: null,
+            error: JsonRpcErrorData(
+              code: ErrorCode.connectionClosed.value,
+              message:
+                  'Bad Request: No valid session ID provided or not an initialization request',
+            ),
+          ).toJson(),
+        ),
+      );
+      request.response.close();
       return;
     }
 
@@ -717,19 +687,18 @@ Future<void> _handlePostRequest(
       request.response
         ..statusCode = HttpStatus.internalServerError
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-      setCorsHeaders(request.response);
-      request.response
-        ..write(
-          jsonEncode({
-            'jsonrpc': '2.0',
-            'error': {
-              'code': -32603,
-              'message': 'Internal server error',
-            },
-            'id': null,
-          }),
-        )
-        ..close();
+      request.response.write(
+        jsonEncode(
+          JsonRpcError(
+            id: null,
+            error: JsonRpcErrorData(
+              code: ErrorCode.internalError.value,
+              message: 'Internal server error',
+            ),
+          ).toJson(),
+        ),
+      );
+      request.response.close();
     }
   }
 }

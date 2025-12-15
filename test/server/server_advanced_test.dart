@@ -87,9 +87,9 @@ void main() {
       await Future.delayed(Duration.zero);
       transport.receiveMessage(const JsonRpcInitializedNotification());
 
-      final params = const ElicitRequestParams.form(
+      final params = ElicitRequestParams.form(
         message: "Please fill this",
-        requestedSchema: {"type": "object"},
+        requestedSchema: JsonSchema.object(properties: {}),
       );
 
       final result = await server.elicitInput(params);
@@ -206,7 +206,7 @@ void main() {
       transport.receiveMessage(
         JsonRpcCallToolRequest(
           id: 2,
-          callParams: const CallToolRequestParams(name: 'tool'),
+          params: const CallToolRequest(name: 'tool').toJson(),
         ),
       );
 

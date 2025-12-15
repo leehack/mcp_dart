@@ -79,7 +79,7 @@ class AnthropicMcpClient {
         finalText.add(content.text);
       } else if (content case ToolUseBlock()) {
         final result = await mcp.callTool(
-          mcp_dart.CallToolRequestParams(
+          mcp_dart.CallToolRequest(
             name: content.name,
             arguments: content.input,
           ),

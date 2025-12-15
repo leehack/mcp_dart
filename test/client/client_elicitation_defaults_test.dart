@@ -83,22 +83,20 @@ void main() {
       // Simulate server sending an elicitation request with a schema and defaults
       final elicitRequest = JsonRpcElicitRequest(
         id: 1,
-        elicitParams: const ElicitRequestParams.form(
+        elicitParams: ElicitRequestParams.form(
           message: 'Please provide details',
-          requestedSchema: {
-            'type': 'object',
-            'properties': {
-              'name': {'type': 'string', 'default': 'John Doe'},
-              'age': {'type': 'integer', 'default': 30},
-              'address': {
-                'type': 'object',
-                'default': {},
-                'properties': {
-                  'street': {'type': 'string', 'default': 'Main St'},
+          requestedSchema: JsonSchema.object(
+            properties: {
+              'name': JsonSchema.string(defaultValue: 'John Doe'),
+              'age': JsonSchema.integer(defaultValue: 30),
+              'address': JsonSchema.object(
+                defaultValue: const <String, dynamic>{},
+                properties: {
+                  'street': JsonSchema.string(defaultValue: 'Main St'),
                 },
-              },
+              ),
             },
-          },
+          ),
         ),
       );
 
@@ -129,15 +127,14 @@ void main() {
 
       final elicitRequest = JsonRpcElicitRequest(
         id: 1,
-        elicitParams: const ElicitRequestParams.form(
+        elicitParams: ElicitRequestParams.form(
           message: 'Please provide details',
-          requestedSchema: {
-            'type': 'object',
-            'properties': {
-              'name': {'type': 'string', 'default': 'John Doe'},
-              'age': {'type': 'integer', 'default': 30},
+          requestedSchema: JsonSchema.object(
+            properties: {
+              'name': JsonSchema.string(defaultValue: 'John Doe'),
+              'age': JsonSchema.integer(defaultValue: 30),
             },
-          },
+          ),
         ),
       );
 
@@ -177,14 +174,13 @@ void main() {
 
       final elicitRequest = JsonRpcElicitRequest(
         id: 1,
-        elicitParams: const ElicitRequestParams.form(
+        elicitParams: ElicitRequestParams.form(
           message: 'Please provide details',
-          requestedSchema: {
-            'type': 'object',
-            'properties': {
-              'name': {'type': 'string', 'default': 'John Doe'},
+          requestedSchema: JsonSchema.object(
+            properties: {
+              'name': JsonSchema.string(defaultValue: 'John Doe'),
             },
-          },
+          ),
         ),
       );
 

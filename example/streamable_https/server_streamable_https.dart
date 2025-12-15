@@ -4,11 +4,6 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
-// Add a custom extension to access the server from the RequestHandlerExtra
-extension McpRequestHandlerExtra on RequestHandlerExtra {
-  Server? get mcpServer => null;
-}
-
 // Simple in-memory event store for resumability
 class InMemoryEventStore implements EventStore {
   final Map<String, List<({EventId id, JsonRpcMessage message})>> _events = {};
@@ -70,19 +65,18 @@ McpServer getServer() {
   server.registerTool(
     'greet',
     description: 'A simple greeting tool',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'name': {
-          'type': 'string',
-          'description': 'Name to greet',
-        },
+        'name': JsonSchema.string(
+          description: 'Name to greet',
+        ),
       },
       required: ['name'],
     ),
     callback: (args, extra) async {
       final name = args['name'] as String? ?? 'world';
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(text: 'Hello, $name!'),
         ],
       );
@@ -94,12 +88,11 @@ McpServer getServer() {
     'multi-greet',
     description:
         'A tool that sends different greetings with delays between them',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'name': {
-          'type': 'string',
-          'description': 'Name to greet',
-        },
+        'name': JsonSchema.string(
+          description: 'Name to greet',
+        ),
       },
       required: [],
     ),
@@ -149,7 +142,7 @@ McpServer getServer() {
       );
 
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(text: 'Good morning, $name!'),
         ],
       );
@@ -186,19 +179,18 @@ McpServer getServer() {
     'start-notification-stream',
     description:
         'Starts sending periodic notifications for testing resumability',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'interval': {
-          'type': 'number',
-          'description': 'Interval in milliseconds between notifications',
-          'default': 100,
-        },
-        'count': {
-          'type': 'number',
-          'description': 'Number of notifications to send (0 for 100)',
-          'default': 50,
-        },
+        'interval': JsonSchema.number(
+          description: 'Interval in milliseconds between notifications',
+          defaultValue: 100,
+        ),
+        'count': JsonSchema.number(
+          description: 'Number of notifications to send (0 for 100)',
+          defaultValue: 50,
+        ),
       },
+      required: [],
     ),
     callback: (args, extra) async {
       final interval = args['interval'] as num? ?? 100;
@@ -230,7 +222,7 @@ McpServer getServer() {
       }
 
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(
             text: 'Started sending periodic notifications every ${interval}ms',
           ),
@@ -398,18 +390,19 @@ Future<void> handlePostRequest(
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       // Apply CORS headers to this specific response
       setCorsHeaders(request.response);
-      request.response
-        ..write(
-          jsonEncode({
-            'jsonrpc': '2.0',
-            'error': {
-              'code': -32000,
-              'message': 'Bad Request: No valid session ID provided',
-            },
-            'id': null,
-          }),
-        )
-        ..close();
+      request.response.write(
+        jsonEncode(
+          JsonRpcError(
+            id: null,
+            error: JsonRpcErrorData(
+              code: ErrorCode.connectionClosed.value,
+              message:
+                  'Bad Request: No valid session ID provided or not an initialization request',
+            ),
+          ).toJson(),
+        ),
+      );
+      request.response.close();
       return;
     }
 
@@ -433,18 +426,18 @@ Future<void> handlePostRequest(
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       // Apply CORS headers
       setCorsHeaders(request.response);
-      request.response
-        ..write(
-          jsonEncode({
-            'jsonrpc': '2.0',
-            'error': {
-              'code': -32603,
-              'message': 'Internal server error',
-            },
-            'id': null,
-          }),
-        )
-        ..close();
+      request.response.write(
+        jsonEncode(
+          JsonRpcError(
+            id: null,
+            error: JsonRpcErrorData(
+              code: ErrorCode.internalError.value,
+              message: 'Internal Server Error',
+            ),
+          ).toJson(),
+        ),
+      );
+      request.response.close();
     }
   }
 }

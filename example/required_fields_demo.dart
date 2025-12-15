@@ -2,33 +2,30 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 void main() {
   // Create a tool with required fields - this simulates what an MCP server would send
-  final calculatorTool = const Tool(
+  final calculatorTool = Tool(
     name: 'calculate',
     description: 'Performs mathematical calculations',
-    inputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'operation': {
-          'type': 'string',
-          'enum': ['add', 'subtract', 'multiply', 'divide'],
-          'description': 'The mathematical operation to perform',
-        },
-        'a': {'type': 'number', 'description': 'First number'},
-        'b': {'type': 'number', 'description': 'Second number'},
-        'precision': {
-          'type': 'integer',
-          'description': 'Number of decimal places (optional)',
-          'default': 2,
-        },
+        'operation': JsonSchema.string(
+          enumValues: ['add', 'subtract', 'multiply', 'divide'],
+          description: 'The mathematical operation to perform',
+        ),
+        'a': JsonSchema.number(description: 'First number'),
+        'b': JsonSchema.number(description: 'Second number'),
+        'precision': JsonSchema.integer(
+          description: 'Number of decimal places (optional)',
+          defaultValue: 2,
+        ),
       },
-      required: ['operation', 'a', 'b'], // ← This is now preserved!
+      required: ['operation', 'a', 'b'],
     ),
-    outputSchema: ToolOutputSchema(
+    outputSchema: JsonSchema.object(
       properties: {
-        'result': {'type': 'number', 'description': 'The calculation result'},
-        'equation': {
-          'type': 'string',
-          'description': 'The equation that was calculated',
-        },
+        'result': JsonSchema.number(description: 'The calculation result'),
+        'equation': JsonSchema.string(
+          description: 'The equation that was calculated',
+        ),
       },
       required: ['result'], // ← Output required fields also preserved!
     ),
@@ -54,10 +51,14 @@ void main() {
   // Deserialize back from JSON (roundtrip test)
   final deserializedTool = Tool.fromJson(toolJson);
   print('\n=== Roundtrip Test ===');
-  print('Original required: ${calculatorTool.inputSchema.required}');
-  print('Deserialized required: ${deserializedTool.inputSchema.required}');
   print(
-    'Match: ${_listsEqual(calculatorTool.inputSchema.required, deserializedTool.inputSchema.required)}',
+    'Original required: ${(calculatorTool.inputSchema as JsonObject).required}',
+  );
+  print(
+    'Deserialized required: ${(deserializedTool.inputSchema as JsonObject).required}',
+  );
+  print(
+    'Match: ${_listsEqual((calculatorTool.inputSchema as JsonObject).required, (deserializedTool.inputSchema as JsonObject).required)}',
   );
 
   // Convert to OpenAI function calling format

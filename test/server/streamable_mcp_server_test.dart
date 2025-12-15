@@ -112,23 +112,29 @@ void main() {
       // 1. Fail without auth
       final resFail = await http.post(
         Uri.parse(baseUrl),
-        body: jsonEncode({'method': 'initialize', 'id': 1, 'jsonrpc': '2.0'}),
+        body: jsonEncode(
+          const JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+          ).toJson(),
+        ),
       );
       expect(resFail.statusCode, HttpStatus.forbidden);
 
       // 2. Pass with auth
       final resPass = await http.post(
         Uri.parse(baseUrl),
-        body: jsonEncode({
-          'method': 'initialize',
-          'id': 1,
-          'jsonrpc': '2.0',
-          'params': {
-            'protocolVersion': latestProtocolVersion,
-            'capabilities': {},
-            'clientInfo': {'name': 'test', 'version': '1.0'},
-          },
-        }),
+        body: jsonEncode(
+          JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+            params: const InitializeRequestParams(
+              protocolVersion: latestProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'test', version: '1.0'),
+            ).toJson(),
+          ).toJson(),
+        ),
         headers: {
           'Authorization': 'Bearer secret',
           'Content-Type': 'application/json',

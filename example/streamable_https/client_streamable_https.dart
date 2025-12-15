@@ -345,7 +345,7 @@ Future<void> callTool(String name, Map<String, dynamic> args) async {
   }
 
   try {
-    final params = CallToolRequestParams(
+    final params = CallToolRequest(
       name: name,
       arguments: args,
     );

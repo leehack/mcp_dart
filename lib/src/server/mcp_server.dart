@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 
-import 'package:mcp_dart/src/shared/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/tool_name_validation.dart';
@@ -13,50 +13,73 @@ import 'tasks.dart';
 
 final _logger = Logger("mcp_dart.server.mcp");
 
+/// Callback capable of providing completions for a partial value.
 typedef CompleteCallback = FutureOr<List<String>> Function(String value);
 
+/// Definition for a completable argument.
 class CompletableDef {
+  /// The callback to invoke to get completion suggestions.
   final CompleteCallback complete;
+
   const CompletableDef({required this.complete});
 }
 
+/// A field that supports auto-completion.
 class CompletableField {
+  /// The completion definition.
   final CompletableDef def;
+
+  /// The underlying type of the field (defaults to String).
   final Type underlyingType;
+
   const CompletableField({required this.def, this.underlyingType = String});
 }
 
+/// Function signature for a tool implementation.
 typedef ToolFunction = FutureOr<CallToolResult> Function(
   Map<String, dynamic> args,
   RequestHandlerExtra extra,
 );
 
+/// Legacy callback signature for tools (deprecated style).
 typedef LegacyToolCallback = FutureOr<CallToolResult> Function({
   Map<String, dynamic>? args,
   RequestHandlerExtra? extra,
 });
 
+/// Base class for tool callbacks.
 sealed class ToolCallback {}
 
+/// A tool callback implemented as a simple function.
 final class FunctionToolCallback extends ToolCallback {
   final ToolFunction function;
   FunctionToolCallback(this.function);
 }
 
+/// A tool callback implemented via a [ToolTaskHandler] interface.
 final class InterfaceToolCallback extends ToolCallback {
   final ToolTaskHandler handler;
   InterfaceToolCallback(this.handler);
 }
 
+/// Callback signature for prompts.
 typedef PromptCallback = FutureOr<GetPromptResult> Function(
   Map<String, dynamic>? args,
   RequestHandlerExtra? extra,
 );
 
+/// Definition of an argument for a prompt.
 class PromptArgumentDefinition {
+  /// Description of what the argument is for.
   final String? description;
+
+  /// Whether the argument is required.
   final bool required;
+
+  /// The expected type of the argument.
   final Type type;
+
+  /// Configuration for auto-completion on this argument.
   final CompletableField? completable;
 
   const PromptArgumentDefinition({
@@ -67,52 +90,67 @@ class PromptArgumentDefinition {
   });
 }
 
+/// Metadata for a resource.
 typedef ResourceMetadata = ({
   String? description,
   String? mimeType,
 });
 
+/// Callback to list available resources.
 typedef ListResourcesCallback = FutureOr<ListResourcesResult> Function(
   RequestHandlerExtra extra,
 );
 
+/// Callback to read a specific resource.
 typedef ReadResourceCallback = FutureOr<ReadResourceResult> Function(
   Uri uri,
   RequestHandlerExtra extra,
 );
 
+/// Callback to read a resource template.
 typedef ReadResourceTemplateCallback = FutureOr<ReadResourceResult> Function(
   Uri uri,
   TemplateVariables variables,
   RequestHandlerExtra extra,
 );
 
+/// Callback to complete a value within a resource template.
 typedef CompleteResourceTemplateCallback = FutureOr<List<String>> Function(
   String currentValue,
 );
 
+/// Callback to list available tasks.
 typedef ListTasksCallback = FutureOr<ListTasksResult> Function(
   RequestHandlerExtra extra,
 );
 
+/// Callback to cancel a running task.
 typedef CancelTaskCallback = FutureOr<void> Function(
   String taskId,
   RequestHandlerExtra extra,
 );
 
+/// Callback to get the status of a task.
 typedef GetTaskCallback = FutureOr<Task> Function(
   String taskId,
   RequestHandlerExtra extra,
 );
 
+/// Callback to get the result of a completed task.
 typedef TaskResultCallback = FutureOr<CallToolResult> Function(
   String taskId,
   RequestHandlerExtra extra,
 );
 
+/// Registration details for a resource template.
 class ResourceTemplateRegistration {
+  /// The URI template expander.
   final UriTemplateExpander uriTemplate;
+
+  /// The callback to list resources matching this template.
   final ListResourcesCallback? listCallback;
+
+  /// Callbacks to complete variables within the template.
   final Map<String, CompleteResourceTemplateCallback>? completeCallbacks;
 
   ResourceTemplateRegistration(
@@ -121,22 +159,40 @@ class ResourceTemplateRegistration {
     this.completeCallbacks,
   }) : uriTemplate = UriTemplateExpander(templateString);
 
+  /// Gets the completion callback for a specific variable.
   CompleteResourceTemplateCallback? getCompletionCallback(String variableName) {
     return completeCallbacks?[variableName];
   }
 }
 
 /// Abstract interface for a registered resource.
+/// Abstract interface for a registered resource.
 abstract class RegisteredResource {
+  /// The name of the resource.
   String get name;
+
+  /// The title of the resource.
   String? get title;
+
+  /// Metadata associated with the resource.
   ResourceMetadata? get metadata;
+
+  /// The callback used to read the resource content.
   ReadResourceCallback get readCallback;
+
+  /// Whether the resource is currently enabled.
   bool get enabled;
 
+  /// Enables the resource.
   void enable();
+
+  /// Disables the resource.
   void disable();
+
+  /// Removes the resource from the server.
   void remove();
+
+  /// Updates the resource configuration.
   void update({
     String? name,
     String? title,
@@ -218,16 +274,33 @@ class _RegisteredResourceImpl implements RegisteredResource {
   }
 }
 
+/// Abstract interface for a registered resource template.
 abstract class RegisteredResourceTemplate {
+  /// The template registration details.
   ResourceTemplateRegistration get resourceTemplate;
+
+  /// The title of the template.
   String? get title;
+
+  /// Metadata associated with the template.
   ResourceMetadata? get metadata;
+
+  /// The callback to read resources matching this template.
   ReadResourceTemplateCallback get readCallback;
+
+  /// Whether the template is currently enabled.
   bool get enabled;
 
+  /// Enables the template.
   void enable();
+
+  /// Disables the template.
   void disable();
+
+  /// Removes the template from the server.
   void remove();
+
+  /// Updates the template configuration.
   void update({
     String? name,
     String? title,
@@ -305,20 +378,45 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
   }
 }
 
+/// Abstract interface for a registered tool.
 abstract class RegisteredTool {
+  /// The name of the tool.
   String get name;
+
+  /// The title of the tool.
   String? get title;
+
+  /// The description of the tool.
   String? get description;
+
+  /// The input schema for the tool.
   ToolInputSchema? get inputSchema;
+
+  /// The output schema for the tool.
   ToolOutputSchema? get outputSchema;
+
+  /// Annotations for the tool.
   ToolAnnotations? get annotations;
+
+  /// Execution configuration for the tool.
   ToolExecution? get execution;
+
+  /// The processing callback for the tool.
   ToolCallback? get callback;
+
+  /// Whether the tool is currently enabled.
   bool get enabled;
 
+  /// Enables the tool.
   void enable();
+
+  /// Disables the tool.
   void disable();
+
+  /// Removes the tool from the server.
   void remove();
+
+  /// Updates the tool configuration.
   void update({
     String? name,
     String? title,
@@ -429,16 +527,33 @@ class _RegisteredToolImpl implements RegisteredTool {
   }
 }
 
+/// Abstract interface for a registered prompt.
 abstract class RegisteredPrompt {
+  /// The name of the prompt.
   String get name;
+
+  /// The title of the prompt.
   String? get title;
+
+  /// The description of the prompt.
   String? get description;
+
+  /// The arguments definition for the prompt.
   Map<String, PromptArgumentDefinition>? get argsSchemaDefinition;
+
+  /// Whether the prompt is currently enabled.
   bool get enabled;
 
+  /// Enables the prompt.
   void enable();
+
+  /// Disables the prompt.
   void disable();
+
+  /// Removes the prompt from the server.
   void remove();
+
+  /// Updates the prompt configuration.
   void update({
     String? name,
     String? title,
@@ -526,6 +641,7 @@ class _RegisteredPromptImpl implements RegisteredPrompt {
   }
 }
 
+/// Experimental task-related functionality for the server.
 class ExperimentalMcpServerTasks {
   final McpServer _server;
 
@@ -606,21 +722,25 @@ class ExperimentalMcpServerTasks {
     );
   }
 
+  /// Registers a callback for listing tasks.
   void onListTasks(ListTasksCallback callback) {
     _server._listTasksCallback = callback;
     _server._ensureTaskHandlersInitialized();
   }
 
+  /// Registers a callback for cancelling a task.
   void onCancelTask(CancelTaskCallback callback) {
     _server._cancelTaskCallback = callback;
     _server._ensureTaskHandlersInitialized();
   }
 
+  /// Registers a callback for getting task details.
   void onGetTask(GetTaskCallback callback) {
     _server._getTaskCallback = callback;
     _server._ensureTaskHandlersInitialized();
   }
 
+  /// Registers a callback for retrieving task results.
   void onTaskResult(TaskResultCallback callback) {
     _server._taskResultCallback = callback;
     _server._ensureTaskHandlersInitialized();
@@ -628,7 +748,11 @@ class ExperimentalMcpServerTasks {
 }
 
 /// High-level Model Context Protocol (MCP) server API.
+///
+/// This class provides a set of high-level methods to register resources, tools,
+/// and prompts, and to handle server lifecycle events.
 class McpServer {
+  // ignore: deprecated_member_use_from_same_package
   late final Server server;
 
   final Map<String, _RegisteredResourceImpl> _registeredResources = {};
@@ -649,13 +773,14 @@ class McpServer {
   TaskResultCallback? _taskResultCallback;
 
   ExperimentalMcpServerTasks? _experimental;
+
+  /// Experimental features related to tasks.
   ExperimentalMcpServerTasks get experimental =>
       _experimental ??= ExperimentalMcpServerTasks(this);
 
-  static const _validator = BasicJsonSchemaValidator();
-
   /// Creates an [McpServer] instance.
   McpServer(Implementation serverInfo, {ServerOptions? options}) {
+    // ignore: deprecated_member_use_from_same_package
     server = Server(serverInfo, options: options);
   }
 
@@ -712,12 +837,14 @@ class McpServer {
     }
   }
 
+  /// Notifies clients that the list of available tools has changed.
   void sendToolListChanged() {
     if (server.transport != null) {
       server.sendToolListChanged();
     }
   }
 
+  /// Notifies clients that the list of available prompts has changed.
   void sendPromptListChanged() {
     if (server.transport != null) {
       server.sendPromptListChanged();
@@ -855,10 +982,7 @@ class McpServer {
         // Validate arguments against schema
         if (registeredTool.inputSchema != null) {
           try {
-            _validator.validate(
-              registeredTool.inputSchema!.toJson(),
-              toolArgs ?? {},
-            );
+            registeredTool.inputSchema!.validate(toolArgs);
           } catch (e) {
             throw McpError(
               ErrorCode.invalidParams.value,
@@ -919,7 +1043,7 @@ class McpServer {
             final FunctionToolCallback toolCallback =
                 registeredTool.callback as FunctionToolCallback;
             result = await toolCallback.function(
-              toolArgs ?? {},
+              toolArgs,
               extra,
             );
           }
@@ -927,8 +1051,7 @@ class McpServer {
           if (registeredTool.outputSchema != null && result is CallToolResult) {
             if (result.isError != true) {
               try {
-                _validator.validate(
-                  registeredTool.outputSchema!.toJson(),
+                registeredTool.outputSchema!.validate(
                   result.structuredContent,
                 );
               } catch (e) {
@@ -946,7 +1069,7 @@ class McpServer {
           if (error is McpError) {
             rethrow; // Pass through McpErrors (like methodNotFound)
           }
-          return CallToolResult.fromContent(
+          return CallToolResult(
             content: [TextContent(text: error.toString())],
             isError: true,
           );
@@ -1261,6 +1384,11 @@ class McpServer {
   // --- Registration Methods ---
 
   /// Registers a resource.
+  ///
+  /// [name] is the human-readable name of the resource.
+  /// [uri] is the unique URI for the resource.
+  /// [metadata] provides optional description and MIME type.
+  /// [readCallback] is the function called when the resource is read.
   RegisteredResource registerResource(
     String name,
     String uri,
@@ -1284,6 +1412,11 @@ class McpServer {
   }
 
   /// Registers a resource template.
+  ///
+  /// [name] is the unique name for this template registration.
+  /// [template] defines the URI pattern and completion behavior.
+  /// [metadata] provides optional description and MIME type for resources matching this template.
+  /// [readCallback] is the function called when a matching resource is read.
   RegisteredResourceTemplate registerResourceTemplate(
     String name,
     ResourceTemplateRegistration template,
@@ -1309,6 +1442,14 @@ class McpServer {
   }
 
   /// Registers a tool.
+  ///
+  /// [name] is the unique name of the tool.
+  /// [title] is a human-readable title.
+  /// [description] explains what the tool does.
+  /// [inputSchema] defines the expected arguments.
+  /// [outputSchema] defines the expected result structure.
+  /// [annotations] provides additional metadata.
+  /// [callback] is the function executed when the tool is called.
   RegisteredTool registerTool(
     String name, {
     String? title,
@@ -1367,6 +1508,12 @@ class McpServer {
   }
 
   /// Registers a prompt.
+  ///
+  /// [name] is the unique name of the prompt.
+  /// [title] is a human-readable title.
+  /// [description] explains what the prompt generates.
+  /// [argsSchema] defines the arguments acceptable by this prompt.
+  /// [callback] is the function to generate the prompt content.
   RegisteredPrompt registerPrompt(
     String name, {
     String? title,
@@ -1465,11 +1612,19 @@ class McpServer {
       description: description,
       inputSchema: toolInputSchema ??
           (inputSchemaProperties != null
-              ? ToolInputSchema(properties: inputSchemaProperties)
+              ? ToolInputSchema(
+                  properties: inputSchemaProperties.map(
+                    (key, value) => MapEntry(key, JsonSchema.fromJson(value)),
+                  ),
+                )
               : null),
       outputSchema: toolOutputSchema ??
           (outputSchemaProperties != null
-              ? ToolOutputSchema(properties: outputSchemaProperties)
+              ? ToolOutputSchema(
+                  properties: outputSchemaProperties.map(
+                    (key, value) => MapEntry(key, JsonSchema.fromJson(value)),
+                  ),
+                )
               : null),
       annotations: annotations,
       icon: null,

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:mcp_dart/src/shared/json_schema_validator.dart';
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
@@ -12,53 +12,53 @@ class ClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
-  /// Optional JSON Schema validator for tool output validation.
-  ///
-  /// If not provided, a [BasicJsonSchemaValidator] will be used.
-  final JsonSchemaValidator? jsonSchemaValidator;
-
-  /// Creates client options.
   const ClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
-    this.jsonSchemaValidator,
   });
 }
 
 /// Recursively applies default values from a JSON Schema to a data object.
-void _applyElicitationDefaults(Map<String, dynamic>? schema, dynamic data) {
-  if (schema == null || data == null || data is! Map) return;
+/// Recursively applies default values from a JSON Schema to a data object.
+// Recursively applies default values from a JSON Schema to a data object.
+void _applyElicitationDefaults(JsonSchema schema, Map<String, dynamic> data) {
+  if (schema is! JsonObject) return;
 
-  final properties = schema['properties'] as Map<String, dynamic>?;
+  final properties = schema.properties;
   if (properties != null) {
     for (final entry in properties.entries) {
       final key = entry.key;
-      final propSchema = entry.value as Map<String, dynamic>?;
-
-      if (propSchema == null) continue;
+      final propSchema = entry.value;
 
       // Apply default if data doesn't have the key and schema has a default
-      if (!data.containsKey(key) && propSchema.containsKey('default')) {
-        final defaultValue = propSchema['default'];
-        if (defaultValue is Map) {
-          data[key] = Map<String, dynamic>.from(defaultValue);
-        } else if (defaultValue is List) {
-          data[key] = List<dynamic>.from(defaultValue);
-        } else {
-          data[key] = defaultValue;
-        }
+      if (!data.containsKey(key) && propSchema.defaultValue != null) {
+        data[key] = _deepCopy(propSchema.defaultValue);
       }
 
-      // Recurse into existing nested objects/arrays
-      if (data[key] is Map || data[key] is List) {
-        _applyElicitationDefaults(propSchema, data[key]);
+      // Recurse into existing nested objects (but not arrays)
+      if (data[key] is Map) {
+        _applyElicitationDefaults(
+          propSchema,
+          data[key] as Map<String, dynamic>,
+        );
       }
     }
   }
-
-  // No explicit handling for anyOf/oneOf/allOf for defaults for now,
-  // as it can get complex and is usually handled by higher-level schema libs.
 }
+
+dynamic _deepCopy(dynamic value) {
+  if (value is Map) {
+    return value.map<String, dynamic>(
+      (key, val) => MapEntry(key.toString(), _deepCopy(val)),
+    );
+  } else if (value is List) {
+    return value.map((val) => _deepCopy(val)).toList();
+  } else {
+    return value;
+  }
+}
+
+// Unused _applyDefaultsFromMap removed
 
 /// An MCP client implementation built on top of a pluggable [Transport].
 ///
@@ -70,9 +70,8 @@ class Client extends Protocol {
   ClientCapabilities _capabilities;
   final Implementation _clientInfo;
   String? _instructions;
-  final JsonSchemaValidator _jsonSchemaValidator;
 
-  final Map<String, ToolOutputSchema> _cachedToolOutputSchemas = {};
+  final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
   final Set<String> _cachedRequiredTaskTools = {};
 
   /// Callback for handling elicitation requests from the server.
@@ -98,8 +97,6 @@ class Client extends Protocol {
   /// - [options]: Optional configuration settings including client capabilities.
   Client(this._clientInfo, {ClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
-        _jsonSchemaValidator =
-            options?.jsonSchemaValidator ?? const BasicJsonSchemaValidator(),
         super(options) {
     // Register elicit handler if capability is present
     if (_capabilities.elicitation?.form != null) {
@@ -121,19 +118,17 @@ class Client extends Protocol {
               request.elicitParams.requestedSchema != null &&
               _capabilities.elicitation?.form?.applyDefaults == true) {
             _applyElicitationDefaults(
-              request.elicitParams.requestedSchema,
-              result.content,
+              request.elicitParams.requestedSchema!,
+              result.content!,
             );
           }
           return result;
         },
-        (id, params, meta) => JsonRpcElicitRequest.fromJson({
-          'id': id,
-          'method': Method.elicitationCreate,
-          'jsonrpc': '2.0',
-          if (params != null) 'params': params,
-          if (meta != null) '_meta': meta,
-        }),
+        (id, params, meta) => JsonRpcElicitRequest(
+          id: id,
+          elicitParams: ElicitRequestParams.fromJson(params ?? {}),
+          meta: meta,
+        ),
       );
     }
 
@@ -144,13 +139,10 @@ class Client extends Protocol {
         (notification) async {
           await onTaskStatus?.call(notification.statusParams);
         },
-        (params, meta) => JsonRpcTaskStatusNotification.fromJson({
-          'method': Method.notificationsTasksStatus,
-          'params': {
-            ...?params,
-            if (meta != null) '_meta': meta,
-          },
-        }),
+        (params, meta) => JsonRpcTaskStatusNotification(
+          statusParams: TaskStatusNotificationParams.fromJson(params ?? {}),
+          meta: meta,
+        ),
       );
     }
 
@@ -167,13 +159,11 @@ class Client extends Protocol {
           }
           return await onSamplingRequest!(request.createParams);
         },
-        (id, params, meta) => JsonRpcCreateMessageRequest.fromJson({
-          'id': id,
-          'method': Method.samplingCreateMessage,
-          'jsonrpc': '2.0',
-          'params': params,
-          if (meta != null) '_meta': meta,
-        }),
+        (id, params, meta) => JsonRpcCreateMessageRequest(
+          id: id,
+          createParams: CreateMessageRequestParams.fromJson(params ?? {}),
+          meta: meta,
+        ),
       );
     }
   }
@@ -495,7 +485,7 @@ class Client extends Protocol {
 
   /// Sends a `tools/call` request to invoke a tool on the server.
   Future<CallToolResult> callTool(
-    CallToolRequestParams params, {
+    CallToolRequest params, {
     RequestOptions? options,
   }) async {
     if (_cachedRequiredTaskTools.contains(params.name)) {
@@ -505,7 +495,7 @@ class Client extends Protocol {
       );
     }
 
-    final req = JsonRpcCallToolRequest(id: -1, callParams: params);
+    final req = JsonRpcCallToolRequest(id: -1, params: params.toJson());
     final result = await request<CallToolResult>(
       req,
       (json) => CallToolResult.fromJson(json),
@@ -524,10 +514,7 @@ class Client extends Protocol {
 
       if (result.structuredContent.isNotEmpty) {
         try {
-          _jsonSchemaValidator.validate(
-            outputSchema.toJson(),
-            result.structuredContent,
-          );
+          outputSchema.validate(result.structuredContent);
         } catch (e) {
           throw McpError(
             ErrorCode.invalidParams.value,
@@ -542,10 +529,10 @@ class Client extends Protocol {
 
   /// Sends a `tools/list` request to list available tools on the server.
   Future<ListToolsResult> listTools({
-    ListToolsRequestParams? params,
+    ListToolsRequest? params,
     RequestOptions? options,
   }) async {
-    final req = JsonRpcListToolsRequest(id: -1, params: params);
+    final req = JsonRpcListToolsRequest(id: -1, params: params?.toJson());
     final result = await request<ListToolsResult>(
       req,
       (json) => ListToolsResult.fromJson(json),

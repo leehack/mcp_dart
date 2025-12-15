@@ -564,14 +564,15 @@ class OAuthServerTransport implements Transport {
         ..headers.set('WWW-Authenticate', wwwAuth)
         ..headers.contentType = ContentType.json
         ..write(
-          jsonEncode({
-            'jsonrpc': '2.0',
-            'error': {
-              'code': -32001,
-              'message': 'Unauthorized: Valid OAuth token required',
-            },
-            'id': null,
-          }),
+          jsonEncode(
+            JsonRpcError(
+              id: null,
+              error: JsonRpcErrorData(
+                code: ErrorCode.connectionClosed.value,
+                message: 'Unauthorized: Valid OAuth token required',
+              ),
+            ).toJson(),
+          ),
         );
       await req.response.close();
       return;
@@ -641,19 +642,18 @@ McpServer createOAuthMcpServer() {
   server.registerTool(
     'greet',
     description: 'A simple greeting tool',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'name': {
-          'type': 'string',
-          'description': 'Name to greet',
-        },
+        'name': JsonSchema.string(
+          description: 'Name to greet',
+        ),
       },
       required: ['name'],
     ),
     callback: (args, extra) async {
       final name = args['name'] as String? ?? 'user';
       return CallToolResult.fromContent(
-        content: [TextContent(text: 'Hello, $name!')],
+        [TextContent(text: 'Hello, $name!')],
       );
     },
   );
@@ -662,14 +662,14 @@ McpServer createOAuthMcpServer() {
   server.registerTool(
     'user-info',
     description: 'Get authenticated user information',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {},
     ),
     callback: (args, extra) async {
       // In a real implementation, retrieve user info from request context
       // This is a simplified example
       return CallToolResult.fromContent(
-        content: [
+        [
           const TextContent(
             text: 'User info would be retrieved from OAuth token context',
           ),
@@ -682,12 +682,11 @@ McpServer createOAuthMcpServer() {
   server.registerTool(
     'admin-action',
     description: 'Perform admin action (requires admin scope)',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'action': {
-          'type': 'string',
-          'description': 'Admin action to perform',
-        },
+        'action': JsonSchema.string(
+          description: 'Admin action to perform',
+        ),
       },
       required: ['action'],
     ),
@@ -695,7 +694,7 @@ McpServer createOAuthMcpServer() {
       // Verify admin scope in production
       final action = args['action'] as String? ?? 'none';
       return CallToolResult.fromContent(
-        content: [TextContent(text: 'Admin action executed: $action')],
+        [TextContent(text: 'Admin action executed: $action')],
       );
     },
   );

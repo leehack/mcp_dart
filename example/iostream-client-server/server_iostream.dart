@@ -14,14 +14,13 @@ Future<McpServer> getServer() async {
   mcpServer.registerTool(
     "calculate",
     description: 'Perform basic arithmetic operations',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'operation': {
-          'type': 'string',
-          'enum': ['add', 'subtract', 'multiply', 'divide'],
-        },
-        'a': {'type': 'number'},
-        'b': {'type': 'number'},
+        'operation': JsonSchema.string(
+          enumValues: ['add', 'subtract', 'multiply', 'divide'],
+        ),
+        'a': JsonSchema.number(),
+        'b': JsonSchema.number(),
       },
       required: ['operation', 'a', 'b'],
     ),
@@ -30,7 +29,7 @@ Future<McpServer> getServer() async {
       final a = args['a'];
       final b = args['b'];
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(
             text: switch (operation) {
               'add' => 'Result: ${a + b}',

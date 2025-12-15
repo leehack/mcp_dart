@@ -1,5 +1,5 @@
-import 'package:mcp_dart/src/shared/json_schema.dart';
-import 'package:mcp_dart/src/shared/json_schema_validator.dart';
+import 'package:mcp_dart/src/shared/json_schema/json_schema.dart';
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -149,16 +149,13 @@ void main() {
     });
   });
 
-  group('JsonSchema Integration with BasicJsonSchemaValidator', () {
-    const validator = BasicJsonSchemaValidator();
-
+  group('JsonSchema Validation Integration', () {
     test('validates string schema', () {
       final schema = JsonSchema.string(minLength: 3);
-      final jsonSchema = schema.toJson();
 
-      expect(validator.validate(jsonSchema, 'abc'), isTrue);
+      schema.validate('abc'); // Should pass
       expect(
-        () => validator.validate(jsonSchema, 'ab'),
+        () => schema.validate('ab'),
         throwsA(isA<JsonSchemaValidationException>()),
       );
     });
@@ -171,19 +168,16 @@ void main() {
         },
         required: ['name'],
       );
-      final jsonSchema = schema.toJson();
+
+      schema.validate({'name': 'Alice', 'age': 30}); // Pass
+      schema.validate({'name': 'Bob'}); // Pass
 
       expect(
-        validator.validate(jsonSchema, {'name': 'Alice', 'age': 30}),
-        isTrue,
-      );
-      expect(validator.validate(jsonSchema, {'name': 'Bob'}), isTrue);
-      expect(
-        () => validator.validate(jsonSchema, {'age': 30}),
+        () => schema.validate({'age': 30}),
         throwsA(isA<JsonSchemaValidationException>()),
       );
       expect(
-        () => validator.validate(jsonSchema, {'name': 'Alice', 'age': -1}),
+        () => schema.validate({'name': 'Alice', 'age': -1}),
         throwsA(isA<JsonSchemaValidationException>()),
       );
     });

@@ -159,13 +159,12 @@ void main() {
       transport.emitMessage(const JsonRpcInitializedNotification());
       await Future.delayed(Duration.zero);
 
-      final schema = {
-        'type': 'object',
-        'required': ['foo'],
-        'properties': {
-          'foo': {'type': 'string'},
+      final schema = JsonSchema.object(
+        properties: {
+          'foo': JsonSchema.string(),
         },
-      };
+        required: ['foo'],
+      );
 
       final params = ElicitRequestParams.form(
         message: 'test',

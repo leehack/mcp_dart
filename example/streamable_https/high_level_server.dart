@@ -2,11 +2,6 @@ import 'dart:async';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
-// Extension to access server from extra (optional, but good practice)
-extension McpRequestHandlerExtra on RequestHandlerExtra {
-  Server? get mcpServer => null;
-}
-
 void main() async {
   final server = StreamableMcpServer(
     serverFactory: (sessionId) {
@@ -37,19 +32,18 @@ McpServer getServer() {
   server.registerTool(
     'greet',
     description: 'A simple greeting tool',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'name': {
-          'type': 'string',
-          'description': 'Name to greet',
-        },
+        'name': JsonSchema.string(
+          description: 'Name to greet',
+        ),
       },
       required: ['name'],
     ),
     callback: (args, extra) async {
       final name = args['name'] as String? ?? 'world';
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(text: 'Hello, $name!'),
         ],
       );
@@ -61,14 +55,12 @@ McpServer getServer() {
     'multi-greet',
     description:
         'A tool that sends different greetings with delays between them',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'name': {
-          'type': 'string',
-          'description': 'Name to greet',
-        },
+        'name': JsonSchema.string(
+          description: 'Name to greet',
+        ),
       },
-      required: [],
     ),
     annotations: const ToolAnnotations(
       title: 'Multiple Greeting Tool',
@@ -116,7 +108,7 @@ McpServer getServer() {
       );
 
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(text: 'Good morning, $name!'),
         ],
       );
@@ -153,18 +145,16 @@ McpServer getServer() {
     'start-notification-stream',
     description:
         'Starts sending periodic notifications for testing resumability',
-    inputSchema: const ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'interval': {
-          'type': 'number',
-          'description': 'Interval in milliseconds between notifications',
-          'default': 100,
-        },
-        'count': {
-          'type': 'number',
-          'description': 'Number of notifications to send (0 for 100)',
-          'default': 50,
-        },
+        'interval': JsonSchema.number(
+          description: 'Interval in milliseconds between notifications',
+          defaultValue: 100,
+        ),
+        'count': JsonSchema.number(
+          description: 'Number of notifications to send (0 for 100)',
+          defaultValue: 50,
+        ),
       },
     ),
     callback: (args, extra) async {
@@ -197,7 +187,7 @@ McpServer getServer() {
       }
 
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(
             text: 'Started sending periodic notifications every ${interval}ms',
           ),

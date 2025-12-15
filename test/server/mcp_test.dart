@@ -62,15 +62,15 @@ void main() {
       mcpServer.registerTool(
         'test_tool',
         description: 'A test tool',
-        inputSchema: const ToolInputSchema(
+        inputSchema: JsonObject(
           properties: {
-            'input': {'type': 'string'},
+            'input': JsonSchema.string(),
           },
         ),
         callback: (args, extra) async {
           callbackInvoked = true;
           receivedArgs = args;
-          return CallToolResult.fromContent(
+          return CallToolResult(
             content: [TextContent(text: 'Tool executed: ${args['input']}')],
           );
         },
@@ -94,10 +94,10 @@ void main() {
       // Now simulate tools/call request
       final callRequest = JsonRpcCallToolRequest(
         id: 3,
-        callParams: const CallToolRequestParams(
+        params: const CallToolRequest(
           name: 'test_tool',
           arguments: {'input': 'test value'},
-        ),
+        ).toJson(),
       );
 
       transport.receiveMessage(callRequest);
@@ -114,8 +114,8 @@ void main() {
         'extra_test',
         callback: (args, extra) async {
           receivedExtra = extra;
-          return CallToolResult.fromContent(
-            content: [const TextContent(text: 'ok')],
+          return const CallToolResult(
+            content: [TextContent(text: 'ok')],
           );
         },
       );
@@ -135,7 +135,7 @@ void main() {
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
-        callParams: const CallToolRequestParams(name: 'extra_test'),
+        params: const CallToolRequest(name: 'extra_test').toJson(),
       );
       transport.receiveMessage(callRequest);
       await Future.delayed(const Duration(milliseconds: 10));
@@ -166,7 +166,7 @@ void main() {
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
-        callParams: const CallToolRequestParams(name: 'error_tool'),
+        params: const CallToolRequest(name: 'error_tool').toJson(),
       );
 
       transport.receiveMessage(callRequest);
@@ -180,8 +180,8 @@ void main() {
       mcpServer.registerTool(
         'duplicate',
         callback: (args, extra) async {
-          return CallToolResult.fromContent(
-            content: [const TextContent(text: 'first')],
+          return const CallToolResult(
+            content: [TextContent(text: 'first')],
           );
         },
       );
@@ -190,8 +190,8 @@ void main() {
         () => mcpServer.registerTool(
           'duplicate',
           callback: (args, extra) async {
-            return CallToolResult.fromContent(
-              content: [const TextContent(text: 'second')],
+            return const CallToolResult(
+              content: [TextContent(text: 'second')],
             );
           },
         ),
@@ -209,19 +209,19 @@ void main() {
       mcpServer.registerTool(
         'schema_tool',
         description: 'Tool with schemas',
-        inputSchema: const ToolInputSchema(
+        inputSchema: JsonObject(
           properties: {
-            'query': {'type': 'string'},
+            'query': JsonSchema.string(),
           },
         ),
-        outputSchema: const ToolOutputSchema(
+        outputSchema: JsonObject(
           properties: {
-            'result': {'type': 'string'},
+            'result': JsonSchema.string(),
           },
         ),
         callback: (args, extra) async {
-          return CallToolResult.fromContent(
-            content: [const TextContent(text: 'result')],
+          return const CallToolResult(
+            content: [TextContent(text: 'result')],
           );
         },
       );

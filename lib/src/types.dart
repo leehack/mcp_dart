@@ -11,3 +11,4 @@ export 'types/sampling.dart';
 export 'types/completion.dart';
 export 'types/roots.dart';
 export 'types/elicitation.dart';
+export 'shared/json_schema/json_schema.dart';

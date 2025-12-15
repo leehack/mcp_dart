@@ -67,7 +67,7 @@ Future<void> main() async {
 
     print('Calling a tool...');
     final toolResult = await client.callTool(
-      const CallToolRequestParams(
+      const CallToolRequest(
         name: 'calculate',
         arguments: {'operation': 'add', 'a': 5, 'b': 10},
       ),

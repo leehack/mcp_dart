@@ -7,6 +7,7 @@ import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
+import 'package:mcp_dart/src/types.dart';
 
 /// A high-level server implementation that manages multiple MCP sessions over Streamable HTTP.
 ///
@@ -178,11 +179,15 @@ class StreamableMcpServer {
       request.response
         ..statusCode = HttpStatus.badRequest
         ..write(
-          jsonEncode({
-            'jsonrpc': '2.0',
-            'error': {'code': -32700, 'message': 'Parse error'},
-            'id': null,
-          }),
+          jsonEncode(
+            JsonRpcError(
+              id: null,
+              error: JsonRpcErrorData(
+                code: ErrorCode.parseError.value,
+                message: 'Parse error',
+              ),
+            ).toJson(),
+          ),
         )
         ..close();
       return;
@@ -204,15 +209,16 @@ class StreamableMcpServer {
       request.response
         ..statusCode = HttpStatus.badRequest
         ..write(
-          jsonEncode({
-            'jsonrpc': '2.0',
-            'error': {
-              'code': -32000,
-              'message':
-                  'Bad Request: No valid session ID provided or not an initialization request',
-            },
-            'id': null,
-          }),
+          jsonEncode(
+            JsonRpcError(
+              id: null,
+              error: JsonRpcErrorData(
+                code: ErrorCode.connectionClosed.value,
+                message:
+                    'Bad Request: No valid session ID provided or not an initialization request',
+              ),
+            ).toJson(),
+          ),
         )
         ..close();
       return;

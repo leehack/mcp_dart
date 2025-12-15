@@ -40,23 +40,11 @@ class TaskClient {
       // 1. Call the tool using generic request to capture 'task' field if present.
       // We cannot use client.callTool() because it forces CallToolResult return type
       // which ignores the 'task' field.
-      final callParams =
-          CallToolRequestParams(name: name, arguments: arguments);
-
-      TaskCreationParams? taskParams;
-      if (meta != null && meta.containsKey('task')) {
-        final taskVal = meta['task'];
-        if (taskVal is bool && taskVal) {
-          taskParams = const TaskCreationParams();
-        } else if (taskVal is Map<String, dynamic>) {
-          taskParams = TaskCreationParams.fromJson(taskVal);
-        }
-      }
+      final callParams = CallToolRequest(name: name, arguments: arguments);
 
       final req = JsonRpcCallToolRequest(
         id: -1,
-        callParams: callParams,
-        taskParams: taskParams,
+        params: callParams.toJson(),
         meta: meta,
       );
 

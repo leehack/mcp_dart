@@ -103,16 +103,15 @@ void main() {
             } else if (requestData['id'] != null) {
               // For requests, return a response
               final id = requestData['id'];
-              final response = {
-                'jsonrpc': '2.0',
-                'id': id,
-                'result': {'success': true, 'echo': requestData['params']},
-              };
+              final response = JsonRpcResponse(
+                id: id,
+                result: {'success': true, 'echo': requestData['params']},
+              );
 
               request.response.headers.contentType = ContentType.json;
               request.response.statusCode = HttpStatus.ok;
               request.response.headers.set('mcp-session-id', testSessionId);
-              request.response.write(jsonEncode(response));
+              request.response.write(jsonEncode(response.toJson()));
               await request.response.close();
             } else {
               // For other notifications
@@ -357,12 +356,11 @@ void main() {
         for (final connection
             in List<HttpResponse>.from(currentSseConnections)) {
           try {
-            final message = {
-              'jsonrpc': '2.0',
-              'method': 'notifications/initialized',
-            };
+            final message = const JsonRpcNotification(
+              method: 'notifications/initialized',
+            );
 
-            final data = jsonEncode(message);
+            final data = jsonEncode(message.toJson());
             print('Sending SSE event with data: $data');
 
             // Send data with proper SSE format in a single write operation
@@ -532,12 +530,11 @@ void main() {
         for (final connection
             in List<HttpResponse>.from(currentSseConnections)) {
           try {
-            final message = {
-              'jsonrpc': '2.0',
-              'method': 'notifications/initialized',
-            };
+            final message = const JsonRpcNotification(
+              method: 'notifications/initialized',
+            );
 
-            final data = jsonEncode(message);
+            final data = jsonEncode(message.toJson());
             print('Sending SSE event with data: $data');
 
             connection.write('event: message\r\n');

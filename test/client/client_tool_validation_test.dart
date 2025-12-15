@@ -35,29 +35,29 @@ class MockTransport extends Transport {
       _respond(
         JsonRpcResponse(
           id: message.id,
-          result: const ListToolsResult(
+          result: ListToolsResult(
             tools: [
               Tool(
                 name: 'validated_tool',
-                inputSchema: ToolInputSchema(),
+                inputSchema: JsonSchema.object(properties: {}),
                 outputSchema: ToolOutputSchema(
                   properties: {
-                    'result': {'type': 'string'},
+                    'result': JsonSchema.string(),
                   },
                   required: ['result'],
                 ),
               ),
               Tool(
                 name: 'broken_tool', // Tool that returns invalid data
-                inputSchema: ToolInputSchema(),
+                inputSchema: const ToolInputSchema(),
                 outputSchema: ToolOutputSchema(
                   properties: {
-                    'result': {'type': 'string'},
+                    'result': JsonSchema.string(),
                   },
                   required: ['result'],
                 ),
               ),
-              Tool(
+              const Tool(
                 name: 'task_required_tool',
                 inputSchema: ToolInputSchema(),
                 execution: ToolExecution(taskSupport: 'required'),
@@ -73,9 +73,8 @@ class MockTransport extends Transport {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredContent(
-              structuredContent: {'result': 'success'},
-            ).toJson(),
+            result: CallToolResult.fromStructuredContent({'result': 'success'})
+                .toJson(),
           ),
         );
       } else if (name == 'broken_tool') {
@@ -83,9 +82,8 @@ class MockTransport extends Transport {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredContent(
-              structuredContent: {'wrong': 'field'},
-            ).toJson(),
+            result: CallToolResult.fromStructuredContent({'wrong': 'field'})
+                .toJson(),
           ),
         );
       }
@@ -119,7 +117,7 @@ void main() {
       await client.listTools();
 
       final result = await client.callTool(
-        const CallToolRequestParams(name: 'validated_tool'),
+        const CallToolRequest(name: 'validated_tool'),
       );
 
       expect(result.structuredContent['result'], equals('success'));
@@ -131,7 +129,7 @@ void main() {
 
       expect(
         () => client.callTool(
-          const CallToolRequestParams(name: 'broken_tool'),
+          const CallToolRequest(name: 'broken_tool'),
         ),
         throwsA(
           isA<McpError>().having(
@@ -149,7 +147,7 @@ void main() {
 
       expect(
         () => client.callTool(
-          const CallToolRequestParams(name: 'task_required_tool'),
+          const CallToolRequest(name: 'task_required_tool'),
         ),
         throwsA(
           isA<McpError>().having(

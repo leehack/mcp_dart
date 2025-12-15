@@ -105,7 +105,7 @@ void main() {
     });
 
     test('elicit enqueues request and waits', () async {
-      final future = session.elicit('message', {'type': 'string'});
+      final future = session.elicit('message', JsonSchema.string());
 
       // Allow async code to run
       await Future.delayed(Duration.zero);
@@ -196,7 +196,7 @@ void main() {
       await store.storeTaskResult(
         task.taskId,
         TaskStatus.completed,
-        CallToolResult.fromContent(content: [const TextContent(text: 'Done')]),
+        CallToolResult.fromContent([const TextContent(text: 'Done')]),
       );
 
       final result = await future;
@@ -223,9 +223,10 @@ void main() {
           message: JsonRpcRequest(
             id: 1,
             method: 'elicitation/create',
-            params:
-                const ElicitRequestParams(message: 'Hi', requestedSchema: {})
-                    .toJson(),
+            params: ElicitRequestParams(
+              message: 'Hi',
+              requestedSchema: JsonSchema.object(properties: {}),
+            ).toJson(),
           ),
           timestamp: 0,
           resolver: completer,
@@ -285,7 +286,7 @@ void main() {
       await store.storeTaskResult(
         task.taskId,
         TaskStatus.completed,
-        CallToolResult.fromContent(content: [const TextContent(text: 'Done')]),
+        CallToolResult.fromContent([const TextContent(text: 'Done')]),
       );
       await future;
     });

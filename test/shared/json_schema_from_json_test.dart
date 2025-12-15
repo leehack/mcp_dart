@@ -1,4 +1,4 @@
-import 'package:mcp_dart/src/shared/json_schema.dart';
+import 'package:mcp_dart/src/shared/json_schema/json_schema.dart';
 import 'package:test/test.dart';
 
 void main() {

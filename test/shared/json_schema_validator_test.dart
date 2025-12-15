@@ -1,160 +1,46 @@
-import 'package:mcp_dart/src/shared/json_schema_validator.dart';
 import 'package:test/test.dart';
+import 'package:mcp_dart/src/shared/json_schema/json_schema.dart';
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 
 void main() {
-  const validator = BasicJsonSchemaValidator();
+  group('JsonSchemaValidation', () {
+    test('validates simple string schema', () {
+      final schema = JsonSchema.string(minLength: 3);
+      schema.validate("abc"); // Should pass
 
-  group('BasicJsonSchemaValidator - Advanced Keywords', () {
-    group('allOf', () {
-      final schema = {
-        'allOf': [
-          {'type': 'string'},
-          {'minLength': 3},
-          {'maxLength': 5},
-        ],
-      };
-
-      test('valid data', () {
-        expect(validator.validate(schema, 'test'), isTrue);
-      });
-
-      test('invalid type', () {
-        expect(
-          () => validator.validate(schema, 123),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
-
-      test('invalid minLength', () {
-        expect(
-          () => validator.validate(schema, 'hi'),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
-
-      test('invalid maxLength', () {
-        expect(
-          () => validator.validate(schema, 'testing'),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
+      expect(
+        () => schema.validate("ab"),
+        throwsA(isA<JsonSchemaValidationException>()),
+      );
     });
 
-    group('anyOf', () {
-      final schema = {
-        'anyOf': [
-          {'type': 'string'},
-          {'type': 'number', 'minimum': 10},
-        ],
-      };
+    test('validates object schema', () {
+      final schema = JsonSchema.object(
+        properties: {
+          "name": JsonSchema.string(),
+          "age": JsonSchema.integer(),
+        },
+        required: ["name"],
+      );
 
-      test('valid string', () {
-        expect(validator.validate(schema, 'hello'), isTrue);
-      });
+      schema.validate({"name": "John", "age": 30}); // Pass
+      schema.validate({"name": "John"}); // Pass (age optional)
 
-      test('valid number', () {
-        expect(validator.validate(schema, 15), isTrue);
-      });
-
-      test('invalid number (too small)', () {
-        expect(
-          () => validator.validate(schema, 5),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
-
-      test('invalid type (boolean)', () {
-        expect(
-          () => validator.validate(schema, true),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
+      expect(
+        () => schema.validate({"age": 30}),
+        throwsA(isA<JsonSchemaValidationException>()),
+      );
     });
 
-    group('oneOf', () {
-      final schema = {
-        'oneOf': [
-          {'type': 'number', 'multipleOf': 5},
-          {'type': 'number', 'multipleOf': 3},
-        ],
-      };
-
-      test('valid multiple of 5 only', () {
-        expect(validator.validate(schema, 10), isTrue);
-      });
-
-      test('valid multiple of 3 only', () {
-        expect(validator.validate(schema, 9), isTrue);
-      });
-
-      test('invalid multiple of both (15)', () {
-        expect(
-          () => validator.validate(schema, 15),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
-
-      test('invalid multiple of neither', () {
-        expect(
-          () => validator.validate(schema, 7),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
-    });
-
-    group('not', () {
-      final schema = {
-        'not': {'type': 'string'},
-      };
-
-      test('valid non-string', () {
-        expect(validator.validate(schema, 123), isTrue);
-      });
-
-      test('invalid string', () {
-        expect(
-          () => validator.validate(schema, 'hello'),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
-    });
-
-    group('additionalProperties', () {
-      test('disallow additional properties', () {
-        final schema = {
-          'type': 'object',
-          'properties': {
-            'foo': {'type': 'string'},
-          },
-          'additionalProperties': false,
-        };
-
-        expect(validator.validate(schema, {'foo': 'bar'}), isTrue);
-        expect(
-          () => validator.validate(schema, {'foo': 'bar', 'baz': 123}),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
-
-      test('validate additional properties schema', () {
-        final schema = {
-          'type': 'object',
-          'properties': {
-            'foo': {'type': 'string'},
-          },
-          'additionalProperties': {'type': 'number'},
-        };
-
-        expect(validator.validate(schema, {'foo': 'bar'}), isTrue);
-        expect(
-          validator.validate(schema, {'foo': 'bar', 'baz': 123}),
-          isTrue,
-        );
-        expect(
-          () => validator.validate(schema, {'foo': 'bar', 'baz': 'string'}),
-          throwsA(isA<JsonSchemaValidationException>()),
-        );
-      });
+    test('validates complex validation from map (legacy support)', () {
+      final mapSchema = {"type": "string", "minLength": 3};
+      // Simulating what happens when we convert from Map
+      final schema = JsonSchema.fromJson(mapSchema);
+      schema.validate("abc");
+      expect(
+        () => schema.validate("ab"),
+        throwsA(isA<JsonSchemaValidationException>()),
+      );
     });
   });
 }

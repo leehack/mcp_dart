@@ -110,9 +110,9 @@ class InteractiveServer {
       'confirm_delete',
       description:
           'Asks for confirmation before deleting (demonstrates elicitation)',
-      inputSchema: const ToolInputSchema(
+      inputSchema: JsonSchema.object(
         properties: {
-          'filename': {'type': 'string'},
+          'filename': JsonSchema.string(),
         },
       ),
       execution: const ToolExecution(taskSupport: 'optional'),
@@ -126,9 +126,9 @@ class InteractiveServer {
     server.experimental.registerToolTask(
       'write_haiku',
       description: 'Asks LLM to write a haiku (demonstrates sampling)',
-      inputSchema: const ToolInputSchema(
+      inputSchema: JsonSchema.object(
         properties: {
-          'topic': {'type': 'string'},
+          'topic': JsonSchema.string(),
         },
       ),
       execution: const ToolExecution(taskSupport: 'optional'),
@@ -166,14 +166,15 @@ class InteractiveServer {
       final filename = args['filename'] ?? 'unknown.txt';
       print('[Server] confirm_delete: asking about $filename');
 
-      final result =
-          await session.elicit("Are you sure you want to delete '$filename'?", {
-        'type': 'object',
-        'properties': {
-          'confirm': {'type': 'boolean'},
-        },
-        'required': ['confirm'],
-      });
+      final result = await session.elicit(
+        "Are you sure you want to delete '$filename'?",
+        JsonSchema.object(
+          properties: {
+            'confirm': JsonSchema.boolean(),
+          },
+          required: ['confirm'],
+        ),
+      );
 
       String text;
       if (result.content != null) {
@@ -186,7 +187,7 @@ class InteractiveServer {
       await context.store.storeTaskResult(
         taskId,
         TaskStatus.completed,
-        CallToolResult.fromContent(content: [TextContent(text: text)]),
+        CallToolResult.fromContent([TextContent(text: text)]),
       );
     });
   }
@@ -219,7 +220,7 @@ class InteractiveServer {
         taskId,
         TaskStatus.completed,
         CallToolResult.fromContent(
-          content: [TextContent(text: "Haiku:\n$haiku")],
+          [TextContent(text: "Haiku:\n$haiku")],
         ),
       );
     });
@@ -240,7 +241,7 @@ class InteractiveServer {
       await context.store.storeTaskResult(
         taskId,
         TaskStatus.failed,
-        CallToolResult.fromContent(
+        CallToolResult(
           content: [TextContent(text: "Error: $e")],
           isError: true,
         ),

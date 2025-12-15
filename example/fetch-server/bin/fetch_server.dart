@@ -4,83 +4,48 @@ import 'package:http/http.dart' as http;
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main(List<String> arguments) async {
-  final server = Server(
+  final server = McpServer(
     const Implementation(
       name: 'fetch',
       version: '0.1.0',
     ),
-    options: const ServerOptions(
-      capabilities: ServerCapabilities(
-        tools: ServerCapabilitiesTools(),
-      ),
+  );
+
+  server.registerTool(
+    'fetch',
+    description:
+        'Fetches a URL from the internet and optionally extracts its contents as markdown.',
+    inputSchema: ToolInputSchema(
+      properties: {
+        'url': JsonSchema.string(
+          description: 'URL to fetch',
+          format: 'uri',
+          minLength: 1,
+          title: 'Url',
+        ),
+        'max_length': JsonSchema.integer(
+          defaultValue: 5000,
+          description: 'Maximum number of characters to return.',
+          exclusiveMaximum: 1000000,
+          exclusiveMinimum: 0,
+          title: 'Max Length',
+        ),
+        'start_index': JsonSchema.integer(
+          defaultValue: 0,
+          description:
+              'On return output starting at this character index, useful if a previous fetch was truncated and more context is required.',
+          minimum: 0,
+          title: 'Start Index',
+        ),
+        'raw': JsonSchema.boolean(
+          defaultValue: false,
+          description:
+              'Get the actual HTML content of the requested page, without simplification.',
+          title: 'Raw',
+        ),
+      },
     ),
-  );
-
-  server.setRequestHandler<JsonRpcListToolsRequest>(
-    'tools/list',
-    (request, _) async {
-      return const ListToolsResult(
-        tools: [
-          Tool(
-            name: 'fetch',
-            description:
-                'Fetches a URL from the internet and optionally extracts its contents as markdown.',
-            inputSchema: ToolInputSchema(
-              properties: {
-                'url': {
-                  'description': 'URL to fetch',
-                  'format': 'uri',
-                  'minLength': 1,
-                  'title': 'Url',
-                  'type': 'string',
-                },
-                'max_length': {
-                  'default': 5000,
-                  'description': 'Maximum number of characters to return.',
-                  'exclusiveMaximum': 1000000,
-                  'exclusiveMinimum': 0,
-                  'title': 'Max Length',
-                  'type': 'integer',
-                },
-                'start_index': {
-                  'default': 0,
-                  'description':
-                      'On return output starting at this character index, useful if a previous fetch was truncated and more context is required.',
-                  'minimum': 0,
-                  'title': 'Start Index',
-                  'type': 'integer',
-                },
-                'raw': {
-                  'default': false,
-                  'description':
-                      'Get the actual HTML content of the requested page, without simplification.',
-                  'title': 'Raw',
-                  'type': 'boolean',
-                },
-              },
-            ),
-          ),
-        ],
-      );
-    },
-    (id, params, meta) => JsonRpcListToolsRequest.fromJson({
-      'id': id,
-      'params': params,
-      if (meta != null) '_meta': meta,
-    }),
-  );
-
-  server.setRequestHandler<JsonRpcCallToolRequest>(
-    'tools/call',
-    (request, _) async {
-      if (request.callParams.name != 'fetch') {
-        throw McpError(
-          ErrorCode.methodNotFound.value,
-          'Unknown tool: ${request.callParams.name}',
-        );
-      }
-
-      final args = request.callParams.arguments ?? {};
+    callback: (args, _) async {
       final url = args['url'];
       final maxLength = (args['max_length'] as num?)?.toInt() ?? 5000;
       final startIndex = (args['start_index'] as num?)?.toInt() ?? 0;
@@ -97,7 +62,7 @@ void main(List<String> arguments) async {
         final response = await http.get(Uri.parse(url));
 
         if (response.statusCode != 200) {
-          return CallToolResult.fromContent(
+          return CallToolResult(
             content: [
               TextContent(
                 text:
@@ -123,14 +88,14 @@ void main(List<String> arguments) async {
         content = content.substring(effectiveStartIndex, effectiveEndIndex);
 
         return CallToolResult.fromContent(
-          content: [
+          [
             TextContent(
               text: content,
             ),
           ],
         );
       } catch (e) {
-        return CallToolResult.fromContent(
+        return CallToolResult(
           content: [
             TextContent(
               text: 'Fetch error: ${e.toString()}',
@@ -140,11 +105,6 @@ void main(List<String> arguments) async {
         );
       }
     },
-    (id, params, meta) => JsonRpcCallToolRequest.fromJson({
-      'id': id,
-      'params': params,
-      if (meta != null) '_meta': meta,
-    }),
   );
 
   final transport = StdioServerTransport();

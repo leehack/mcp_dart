@@ -98,20 +98,12 @@ class TaskResultHandler {
         final meta = Map<String, dynamic>.from(toolResult.meta ?? {});
         meta[relatedTaskMetaKey] = {'taskId': taskId};
 
-        // Return structured or unstructured result based on what was stored
-        if (toolResult.structuredContent.isNotEmpty) {
-          return CallToolResult.fromStructuredContent(
-            structuredContent: toolResult.structuredContent,
-            unstructuredFallback: toolResult.content,
-            meta: meta,
-          );
-        } else {
-          return CallToolResult.fromContent(
-            content: toolResult.content,
-            isError: toolResult.isError,
-            meta: meta,
-          );
-        }
+        return CallToolResult(
+          content: toolResult.content,
+          isError: toolResult.isError,
+          meta: meta,
+          extra: toolResult.extra,
+        );
       }
 
       // Wait for update or new message

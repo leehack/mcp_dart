@@ -365,3 +365,60 @@ class McpError extends Error {
   String toString() =>
       'McpError $code: $message ${data != null ? '(data: $data)' : ''}';
 }
+
+/// JSON-RPC request to list tools.
+class JsonRpcListToolsRequest extends JsonRpcRequest {
+  const JsonRpcListToolsRequest({
+    required super.id,
+    super.params,
+    super.meta,
+  }) : super(method: Method.toolsList);
+
+  factory JsonRpcListToolsRequest.fromJson(Map<String, dynamic> json) {
+    return JsonRpcListToolsRequest(
+      id: json['id'],
+      params: json['params'] as Map<String, dynamic>?,
+      meta: json['_meta'] as Map<String, dynamic>?,
+    );
+  }
+
+  ListToolsRequest get listParams => params != null
+      ? ListToolsRequest.fromJson(params!)
+      : const ListToolsRequest();
+}
+
+/// JSON-RPC request to call a tool.
+class JsonRpcCallToolRequest extends JsonRpcRequest {
+  const JsonRpcCallToolRequest({
+    required super.id,
+    required Map<String, dynamic> params,
+    super.meta,
+  }) : super(method: Method.toolsCall, params: params);
+
+  factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
+    return JsonRpcCallToolRequest(
+      id: json['id'],
+      params: json['params'] as Map<String, dynamic>? ?? {},
+      meta: json['_meta'] as Map<String, dynamic>? ??
+          (json['params'] as Map<String, dynamic>?)?['_meta']
+              as Map<String, dynamic>?,
+    );
+  }
+
+  CallToolRequest get callParams => CallToolRequest.fromJson(params!);
+
+  bool get isTaskAugmented {
+    // Check for task augmentation in meta or params as per convention
+    // Usually handled by side-channel or specific params
+    return meta?.containsKey('task') == true ||
+        params?.containsKey('task') == true;
+  }
+
+  TaskCreationParams? get taskParams {
+    final taskMap = meta?['task'] ?? params?['task'];
+    if (taskMap is Map<String, dynamic>) {
+      return TaskCreationParams.fromJson(taskMap);
+    }
+    return null;
+  }
+}

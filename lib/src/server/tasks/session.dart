@@ -47,14 +47,16 @@ class TaskSession {
   /// Requests input from the client (Elicitation).
   Future<ElicitResult> elicit(
     String message,
-    Map<String, dynamic> requestedSchema,
+    ElicitationInputSchema requestedSchema,
   ) async {
     await store.updateTaskStatus(taskId, TaskStatus.inputRequired);
     await _sendTaskStatusNotification();
 
     final requestId = _nextRequestId();
-    final params =
-        ElicitRequestParams(message: message, requestedSchema: requestedSchema);
+    final params = ElicitRequestParams.form(
+      message: message,
+      requestedSchema: requestedSchema,
+    );
 
     final jsonRpcRequest =
         JsonRpcElicitRequest(id: requestId, elicitParams: params);

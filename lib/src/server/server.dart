@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:mcp_dart/src/shared/json_schema_validator.dart';
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
 
 final _logger = Logger("mcp_dart.server");
 
-/// Options for configuring the MCP [Server].
+/// Options for configuring the MCP server.
 class ServerOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this server.
   final ServerCapabilities? capabilities;
@@ -15,17 +15,10 @@ class ServerOptions extends ProtocolOptions {
   /// Optional instructions describing how to use the server and its features.
   final String? instructions;
 
-  /// Optional JSON Schema validator for validating elicitation results.
-  ///
-  /// If not provided, a [BasicJsonSchemaValidator] will be used.
-  final JsonSchemaValidator? jsonSchemaValidator;
-
-  /// Creates server options.
   const ServerOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
     this.instructions,
-    this.jsonSchemaValidator,
   });
 }
 
@@ -34,13 +27,15 @@ class ServerOptions extends ProtocolOptions {
 /// This server automatically handles the initialization flow initiated by the client.
 /// It extends the base [Protocol] class, providing server-specific logic and
 /// capability handling.
+@Deprecated(
+  'Use McpServer instead unless you need to create a custom protocol implementation',
+)
 class Server extends Protocol {
   ClientCapabilities? _clientCapabilities;
   Implementation? _clientVersion;
   ServerCapabilities _capabilities;
   final String? _instructions;
   final Implementation _serverInfo;
-  final JsonSchemaValidator _jsonSchemaValidator;
 
   /// Map of session IDs to their configured logging level.
   final Map<String?, LoggingLevel> _loggingLevels = {};
@@ -64,8 +59,6 @@ class Server extends Protocol {
   Server(this._serverInfo, {ServerOptions? options})
       : _capabilities = options?.capabilities ?? const ServerCapabilities(),
         _instructions = options?.instructions,
-        _jsonSchemaValidator =
-            options?.jsonSchemaValidator ?? const BasicJsonSchemaValidator(),
         super(options) {
     setRequestHandler<JsonRpcInitializeRequest>(
       Method.initialize,
@@ -535,10 +528,7 @@ class Server extends Protocol {
         result.content != null &&
         params.requestedSchema != null) {
       try {
-        _jsonSchemaValidator.validate(
-          params.requestedSchema!,
-          result.content,
-        );
+        params.requestedSchema!.validate(result.content);
       } catch (e) {
         if (e is JsonSchemaValidationException) {
           throw McpError(

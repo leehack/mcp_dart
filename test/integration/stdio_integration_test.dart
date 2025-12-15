@@ -121,7 +121,7 @@ void main() {
         ];
 
         for (final op in operations) {
-          final params = CallToolRequestParams(
+          final params = CallToolRequest(
             name: 'calculate',
             arguments: {
               'operation': op['operation'],

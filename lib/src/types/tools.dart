@@ -1,65 +1,13 @@
-import 'dart:convert';
-import '../types.dart';
+import '../shared/json_schema/json_schema.dart';
 
-/// Describes the input schema for a tool, based on JSON Schema.
-class ToolInputSchema {
-  /// Must be "object".
-  final String type = "object";
+import 'content.dart';
+import 'json_rpc.dart';
 
-  /// JSON Schema properties definition.
-  final Map<String, dynamic>? properties;
+/// Legacy alias for [JsonObject] used as tool input schema.
+typedef ToolInputSchema = JsonObject;
 
-  /// List of required property names.
-  final List<String>? required;
-
-  const ToolInputSchema({
-    this.properties,
-    this.required,
-  });
-
-  factory ToolInputSchema.fromJson(Map<String, dynamic> json) {
-    return ToolInputSchema(
-      properties: json['properties'] as Map<String, dynamic>?,
-      required: (json['required'] as List<dynamic>?)?.cast<String>(),
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'type': type,
-        if (properties != null) 'properties': properties,
-        if (required != null && required!.isNotEmpty) 'required': required,
-      };
-}
-
-/// Describes the output schema for a tool, based on JSON Schema.
-class ToolOutputSchema {
-  /// Must be "object".
-  final String type = "object";
-
-  /// JSON Schema properties definition.
-  final Map<String, dynamic>? properties;
-
-  /// List of required property names.
-  final List<String>? required;
-
-  const ToolOutputSchema({
-    this.properties,
-    this.required,
-  });
-
-  factory ToolOutputSchema.fromJson(Map<String, dynamic> json) {
-    return ToolOutputSchema(
-      properties: json['properties'] as Map<String, dynamic>?,
-      required: (json['required'] as List<dynamic>?)?.cast<String>(),
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'type': type,
-        if (properties != null) 'properties': properties,
-        if (required != null && required!.isNotEmpty) 'required': required,
-      };
-}
+/// Legacy alias for [JsonObject] used as tool output schema.
+typedef ToolOutputSchema = JsonObject;
 
 /// Additional properties describing a Tool to clients.
 ///
@@ -157,7 +105,7 @@ class ToolExecution {
       };
 }
 
-/// Definition for a tool offered by the server.
+/// Definition for a tool that the client can call.
 class Tool {
   /// The name of the tool.
   final String name;
@@ -166,19 +114,22 @@ class Tool {
   final String? description;
 
   /// JSON Schema defining the tool's input parameters.
-  final ToolInputSchema inputSchema;
+  final JsonSchema inputSchema;
 
   /// JSON Schema defining the tool's output parameters.
-  final ToolOutputSchema? outputSchema;
+  final JsonSchema? outputSchema;
 
   /// Optional additional properties describing the tool.
   final ToolAnnotations? annotations;
 
-  /// Optional icon for the tool.
-  final ImageContent? icon;
+  /// Optional metadata for the tool.
+  final Map<String, dynamic>? meta;
 
-  /// Optional properties describing how the tool should be executed.
+  /// Optional tool execution configuration.
   final ToolExecution? execution;
+
+  /// Optional icon content.
+  final ImageContent? icon;
 
   const Tool({
     required this.name,
@@ -186,30 +137,32 @@ class Tool {
     required this.inputSchema,
     this.outputSchema,
     this.annotations,
-    this.icon,
+    this.meta,
     this.execution,
+    this.icon,
   });
 
   factory Tool.fromJson(Map<String, dynamic> json) {
     return Tool(
       name: json['name'] as String,
       description: json['description'] as String?,
-      inputSchema: ToolInputSchema.fromJson(
+      inputSchema: JsonSchema.fromJson(
         json['inputSchema'] as Map<String, dynamic>,
       ),
       outputSchema: json['outputSchema'] != null
-          ? ToolOutputSchema.fromJson(
-              json['outputSchema'] as Map<String, dynamic>,
+          ? JsonSchema.fromJson(json['outputSchema'] as Map<String, dynamic>)
+          : null,
+      annotations: json['annotations'] != null
+          ? ToolAnnotations.fromJson(
+              json['annotations'] as Map<String, dynamic>,
             )
           : null,
-      annotations: json['annotation'] != null
-          ? ToolAnnotations.fromJson(json['annotation'] as Map<String, dynamic>)
+      meta: json['_meta'] as Map<String, dynamic>?,
+      execution: json['execution'] != null
+          ? ToolExecution.fromJson(json['execution'] as Map<String, dynamic>)
           : null,
       icon: json['icon'] != null
           ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
-          : null,
-      execution: json['execution'] != null
-          ? ToolExecution.fromJson(json['execution'] as Map<String, dynamic>)
           : null,
     );
   }
@@ -219,233 +172,153 @@ class Tool {
         if (description != null) 'description': description,
         'inputSchema': inputSchema.toJson(),
         if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
-        if (annotations != null) 'annotation': annotations!.toJson(),
-        if (icon != null) 'icon': icon!.toJson(),
+        if (annotations != null) 'annotations': annotations!.toJson(),
+        if (meta != null) '_meta': meta,
         if (execution != null) 'execution': execution!.toJson(),
+        if (icon != null) 'icon': icon!.toJson(),
       };
 }
 
-/// Parameters for the `tools/list` request. Includes pagination.
-class ListToolsRequestParams {
-  /// Opaque token for pagination.
-  final Cursor? cursor;
+/// A request to list available tools.
+class ListToolsRequest {
+  /// An opaque token for pagination.
+  final String? cursor;
 
-  const ListToolsRequestParams({this.cursor});
+  const ListToolsRequest({this.cursor});
 
-  factory ListToolsRequestParams.fromJson(Map<String, dynamic> json) =>
-      ListToolsRequestParams(cursor: json['cursor'] as String?);
-
-  Map<String, dynamic> toJson() => {if (cursor != null) 'cursor': cursor};
-}
-
-/// Request sent from client to list available tools.
-class JsonRpcListToolsRequest extends JsonRpcRequest {
-  /// The list parameters (containing cursor).
-  final ListToolsRequestParams listParams;
-
-  JsonRpcListToolsRequest({
-    required super.id,
-    ListToolsRequestParams? params,
-    super.meta,
-  })  : listParams = params ?? const ListToolsRequestParams(),
-        super(method: Method.toolsList, params: params?.toJson());
-
-  factory JsonRpcListToolsRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    final meta = paramsMap?['_meta'] as Map<String, dynamic>?;
-    return JsonRpcListToolsRequest(
-      id: json['id'],
-      params:
-          paramsMap == null ? null : ListToolsRequestParams.fromJson(paramsMap),
-      meta: meta,
+  factory ListToolsRequest.fromJson(Map<String, dynamic> json) {
+    return ListToolsRequest(
+      cursor: json['cursor'] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        if (cursor != null) 'cursor': cursor,
+      };
 }
 
-/// Result data for a successful `tools/list` request.
+/// The server's response to a [ListToolsRequest].
 class ListToolsResult implements BaseResultData {
-  /// The list of tools found.
+  /// A list of tools.
   final List<Tool> tools;
 
-  /// Opaque token for pagination.
-  final Cursor? nextCursor;
+  /// An opaque token for pagination.
+  final String? nextCursor;
 
   /// Optional metadata.
   @override
   final Map<String, dynamic>? meta;
 
-  const ListToolsResult({required this.tools, this.nextCursor, this.meta});
+  const ListToolsResult({
+    required this.tools,
+    this.nextCursor,
+    this.meta,
+  });
 
   factory ListToolsResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
     return ListToolsResult(
-      tools: (json['tools'] as List<dynamic>?)
-              ?.map((t) => Tool.fromJson(t as Map<String, dynamic>))
-              .toList() ??
-          [],
+      tools: (json['tools'] as List<dynamic>)
+          .map((e) => Tool.fromJson(e as Map<String, dynamic>))
+          .toList(),
       nextCursor: json['nextCursor'] as String?,
-      meta: meta,
+      meta: json['_meta'] as Map<String, dynamic>?,
     );
   }
 
   @override
   Map<String, dynamic> toJson() => {
-        'tools': tools.map((t) => t.toJson()).toList(),
+        'tools': tools.map((e) => e.toJson()).toList(),
         if (nextCursor != null) 'nextCursor': nextCursor,
+        if (meta != null) '_meta': meta,
       };
 }
 
-/// Parameters for the `tools/call` request.
-class CallToolRequestParams {
+/// A request to call a tool.
+class CallToolRequest {
   /// The name of the tool to call.
   final String name;
 
-  /// The arguments for the tool call, matching its `inputSchema`.
-  final Map<String, dynamic>? arguments;
+  /// The arguments to pass to the tool.
+  final Map<String, dynamic> arguments;
 
-  const CallToolRequestParams({required this.name, this.arguments});
+  const CallToolRequest({
+    required this.name,
+    this.arguments = const {},
+  });
 
-  factory CallToolRequestParams.fromJson(Map<String, dynamic> json) =>
-      CallToolRequestParams(
-        name: json['name'] as String,
-        arguments: json['arguments'] as Map<String, dynamic>?,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        if (arguments != null) 'arguments': arguments,
-      };
-}
-
-/// Request sent from client to invoke a tool provided by the server.
-class JsonRpcCallToolRequest extends JsonRpcRequest {
-  /// The call parameters.
-  final CallToolRequestParams callParams;
-
-  /// Optional task creation parameters for task-augmented requests.
-  final TaskCreationParams? taskParams;
-
-  JsonRpcCallToolRequest({
-    required super.id,
-    required this.callParams,
-    this.taskParams,
-    super.meta,
-  }) : super(
-          method: Method.toolsCall,
-          params: {
-            ...callParams.toJson(),
-            if (taskParams != null) 'task': taskParams.toJson(),
-          },
-        );
-
-  factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException("Missing params for call tool request");
-    }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
-    final taskMap = paramsMap['task'] as Map<String, dynamic>?;
-
-    return JsonRpcCallToolRequest(
-      id: json['id'],
-      callParams: CallToolRequestParams.fromJson(paramsMap),
-      taskParams: taskMap != null ? TaskCreationParams.fromJson(taskMap) : null,
-      meta: meta,
+  factory CallToolRequest.fromJson(Map<String, dynamic> json) {
+    return CallToolRequest(
+      name: json['name'] as String,
+      arguments: json['arguments'] as Map<String, dynamic>? ?? const {},
     );
   }
 
-  /// Whether this is a task-augmented request.
-  bool get isTaskAugmented => taskParams != null;
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'arguments': arguments,
+      };
 }
 
-/// Result data for a successful `tools/call` request.
+/// The server's response to a [CallToolRequest].
 class CallToolResult implements BaseResultData {
-  /// The content returned by the tool.
+  /// The content of the result.
   final List<Content> content;
 
-  /// The structured content returned by the tool.
-  final Map<String, dynamic> structuredContent;
-
-  /// Indicates if the tool call resulted in an error condition. Defaults to false.
-  final bool? isError;
+  /// Whether the tool call returned an error.
+  final bool isError;
 
   /// Optional metadata.
   @override
   final Map<String, dynamic>? meta;
 
-  @Deprecated(
-    'This constructor is replaced by the fromContent factory constructor and may be removed in a future version.',
-  )
-  CallToolResult({required this.content, this.isError, this.meta})
-      : structuredContent = {};
+  /// Additional properties merged into the result object.
+  final Map<String, dynamic>? extra;
 
-  CallToolResult.fromContent({required this.content, this.isError, this.meta})
-      : structuredContent = {};
-
-  CallToolResult.fromStructuredContent({
-    required this.structuredContent,
-    List<Content>? unstructuredFallback,
+  const CallToolResult({
+    required this.content,
+    this.isError = false,
     this.meta,
-  })  : content = unstructuredFallback ?? [],
-        isError = null;
+    this.extra,
+  });
+
+  /// Creates a result from a list of content items.
+  factory CallToolResult.fromContent(List<Content> content) {
+    return CallToolResult(content: content);
+  }
+
+  /// Creates a result from arbitrary structured data.
+  factory CallToolResult.fromStructuredContent(Map<String, dynamic> content) {
+    return CallToolResult(
+      content: [],
+      extra: content,
+    );
+  }
 
   factory CallToolResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
-    if (json.containsKey('toolResult')) {
-      final toolResult = json['toolResult'];
-      final bool isErr = json['isError'] as bool? ?? false;
-      final List<Content> mappedContent = (toolResult is String)
-          ? [TextContent(text: toolResult)]
-          : [TextContent(text: jsonEncode(toolResult))];
-      return CallToolResult.fromContent(
-        content: mappedContent,
-        isError: isErr,
-        meta: meta,
-      );
-    } else {
-      // Structured?
-      if (json.containsKey('structuredContent')) {
-        return CallToolResult.fromStructuredContent(
-          structuredContent: json['structuredContent'] as Map<String, dynamic>,
-          unstructuredFallback: (json['content'] as List<dynamic>?)
-              ?.map((c) => Content.fromJson(c as Map<String, dynamic>))
-              .toList(),
-          meta: meta,
-        );
-      } else {
-        // Unstructured
-        return CallToolResult.fromContent(
-          content: (json['content'] as List<dynamic>?)
-                  ?.map((c) => Content.fromJson(c as Map<String, dynamic>))
-                  .toList() ??
-              [],
-          isError: json['isError'] as bool? ?? false,
-          meta: meta,
-        );
-      }
-    }
+    final knownKeys = {'content', 'isError', '_meta'};
+    final extra = Map<String, dynamic>.from(json)
+      ..removeWhere((key, value) => knownKeys.contains(key));
+
+    return CallToolResult(
+      content: (json['content'] as List<dynamic>?)
+              ?.map((e) => Content.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      isError: json['isError'] as bool? ?? false,
+      meta: json['_meta'] as Map<String, dynamic>?,
+      extra: extra.isEmpty ? null : extra,
+    );
   }
 
   @override
-  Map<String, dynamic> toJson() {
-    // Create the map to return
-    final Map<String, dynamic> result = {};
+  Map<String, dynamic> toJson() => {
+        'content': content.map((e) => e.toJson()).toList(),
+        if (isError) 'isError': isError,
+        if (meta != null) '_meta': meta,
+        ...?extra,
+      };
 
-    // Content may optionally be included even if structured based on the unstructuredCompatibility flag.
-    result['content'] = content.map((c) => c.toJson()).toList();
-    result['meta'] = meta;
-
-    // Structured or unstructured?
-    // Error can only be included if unstructured.
-    if (structuredContent.isNotEmpty) {
-      // Structured?
-      result['structuredContent'] = structuredContent;
-    } else {
-      // Unstructured
-      if (isError == true) result['isError'] = true;
-    }
-    return result;
-  }
+  Map<String, dynamic> get structuredContent => toJson();
 }
 
 /// Notification from server indicating the list of available tools has changed.
