@@ -42,8 +42,23 @@ class TaskClient {
       // which ignores the 'task' field.
       final callParams =
           CallToolRequestParams(name: name, arguments: arguments);
-      final req =
-          JsonRpcCallToolRequest(id: -1, callParams: callParams, meta: meta);
+
+      TaskCreationParams? taskParams;
+      if (meta != null && meta.containsKey('task')) {
+        final taskVal = meta['task'];
+        if (taskVal is bool && taskVal) {
+          taskParams = const TaskCreationParams();
+        } else if (taskVal is Map<String, dynamic>) {
+          taskParams = TaskCreationParams.fromJson(taskVal);
+        }
+      }
+
+      final req = JsonRpcCallToolRequest(
+        id: -1,
+        callParams: callParams,
+        taskParams: taskParams,
+        meta: meta,
+      );
 
       final response = await client.request<_RawResult>(
         req,

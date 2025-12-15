@@ -352,6 +352,12 @@ class ElicitResult implements BaseResultData {
   /// The submitted form data (only present when action is 'accept')
   final Map<String, dynamic>? content;
 
+  /// The URL that the user should navigate to (only present when action is 'accept' in URL mode)
+  final String? url;
+
+  /// A unique identifier for the elicitation (only present when action is 'accept' in URL mode)
+  final String? elicitationId;
+
   /// Optional metadata
   @override
   final Map<String, dynamic>? meta;
@@ -359,6 +365,8 @@ class ElicitResult implements BaseResultData {
   const ElicitResult({
     required this.action,
     this.content,
+    this.url,
+    this.elicitationId,
     this.meta,
   });
 
@@ -367,6 +375,8 @@ class ElicitResult implements BaseResultData {
     return ElicitResult(
       action: json['action'] as String,
       content: json['content'] as Map<String, dynamic>?,
+      url: json['url'] as String?,
+      elicitationId: json['elicitationId'] as String?,
       meta: meta,
     );
   }
@@ -375,6 +385,8 @@ class ElicitResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'action': action,
         if (content != null) 'content': content,
+        if (url != null) 'url': url,
+        if (elicitationId != null) 'elicitationId': elicitationId,
       };
 
   /// Helper to check if the user accepted the input

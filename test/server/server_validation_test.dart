@@ -48,10 +48,7 @@ void main() {
           protocolVersion: '2024-11-05',
           capabilities: ClientCapabilities(
             sampling: ClientCapabilitiesSampling(tools: true), // Corrected
-            elicitation: ClientCapabilitiesElicitation(
-              supportsForm: true,
-              supportsUrl: true,
-            ), // Corrected
+            elicitation: ClientElicitation.all(), // Corrected
           ),
           clientInfo: Implementation(name: 'client', version: '1.0'),
         ),
@@ -152,8 +149,7 @@ void main() {
         initParams: const InitializeRequestParams(
           protocolVersion: '2024-11-05',
           capabilities: ClientCapabilities(
-            elicitation:
-                ClientCapabilitiesElicitation(supportsForm: true), // Corrected
+            elicitation: ClientElicitation.formOnly(), // Corrected
           ),
           clientInfo: Implementation(name: 'client', version: '1.0'),
         ),

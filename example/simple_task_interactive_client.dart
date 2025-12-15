@@ -103,7 +103,7 @@ Future<void> run(String url) async {
     ),
     options: const ClientOptions(
       capabilities: ClientCapabilities(
-        elicitation: ClientCapabilitiesElicitation(),
+        elicitation: ClientElicitation.formOnly(),
         sampling: ClientCapabilitiesSampling(),
         tasks: ClientCapabilitiesTasks(
           requests: ClientCapabilitiesTasksRequests(

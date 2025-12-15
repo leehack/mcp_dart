@@ -52,61 +52,90 @@ class ClientCapabilitiesRoots {
       };
 }
 
+/// Describes capabilities related to elicitation > form mode.
+class ClientElicitationForm {
+  /// Whether the client supports applying default values from the requested schema
+  /// to the submitted content of an elicitation response.
+  final bool? applyDefaults;
+
+  const ClientElicitationForm({this.applyDefaults});
+
+  factory ClientElicitationForm.fromJson(Map<String, dynamic> json) {
+    return ClientElicitationForm(
+      applyDefaults: json['applyDefaults'] as bool?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (applyDefaults != null) 'applyDefaults': applyDefaults,
+      };
+}
+
+/// Describes capabilities related to elicitation > URL mode.
+class ClientElicitationUrl {
+  const ClientElicitationUrl();
+
+  factory ClientElicitationUrl.fromJson(Map<String, dynamic> json) {
+    return const ClientElicitationUrl();
+  }
+
+  Map<String, dynamic> toJson() => {};
+}
+
 /// Describes capabilities related to elicitation (server-initiated user input).
 ///
 /// Clients can declare support for specific elicitation modes:
 /// - **form**: In-band structured data collection with JSON Schema validation
 /// - **url**: Out-of-band interaction via URL navigation (data not exposed to client)
-class ClientCapabilitiesElicitation {
-  /// Whether the client supports form mode elicitation.
+class ClientElicitation {
+  /// Present if the client supports form mode elicitation.
   /// Form mode collects structured data directly through the MCP client.
-  final bool supportsForm;
+  final ClientElicitationForm? form;
 
-  /// Whether the client supports URL mode elicitation.
+  /// Present if the client supports URL mode elicitation.
   /// URL mode directs users to external URLs for sensitive interactions.
-  final bool supportsUrl;
+  final ClientElicitationUrl? url;
 
   /// Creates elicitation capabilities.
   /// By default, supports form mode only for backwards compatibility.
-  const ClientCapabilitiesElicitation({
-    this.supportsForm = true,
-    this.supportsUrl = false,
+  const ClientElicitation({
+    this.form,
+    this.url,
   });
 
   /// Creates capabilities supporting both form and URL modes.
-  const ClientCapabilitiesElicitation.all()
-      : supportsForm = true,
-        supportsUrl = true;
+  const ClientElicitation.all()
+      : form = const ClientElicitationForm(),
+        url = const ClientElicitationUrl();
 
   /// Creates capabilities supporting form mode only.
-  const ClientCapabilitiesElicitation.formOnly()
-      : supportsForm = true,
-        supportsUrl = false;
+  const ClientElicitation.formOnly()
+      : form = const ClientElicitationForm(),
+        url = null;
 
   /// Creates capabilities supporting URL mode only.
-  const ClientCapabilitiesElicitation.urlOnly()
-      : supportsForm = false,
-        supportsUrl = true;
+  const ClientElicitation.urlOnly()
+      : form = null,
+        url = const ClientElicitationUrl();
 
-  factory ClientCapabilitiesElicitation.fromJson(Map<String, dynamic> json) {
-    // Check for new format with form/url sub-objects
-    final hasForm = json.containsKey('form');
-    final hasUrl = json.containsKey('url');
-
-    if (hasForm || hasUrl) {
-      return ClientCapabilitiesElicitation(
-        supportsForm: hasForm,
-        supportsUrl: hasUrl,
-      );
+  factory ClientElicitation.fromJson(Map<String, dynamic> json) {
+    // Backwards compatibility: empty JSON implies form mode support.
+    if (json.isEmpty) {
+      return const ClientElicitation.formOnly();
     }
 
-    // Backwards compatibility: empty object means form support only
-    return const ClientCapabilitiesElicitation();
+    final formMap = (json['form'] as Map?)?.cast<String, dynamic>();
+    final urlMap = (json['url'] as Map?)?.cast<String, dynamic>();
+
+    return ClientElicitation(
+      form: formMap == null ? null : ClientElicitationForm.fromJson(formMap),
+      url: urlMap == null ? null : ClientElicitationUrl.fromJson(urlMap),
+    );
   }
 
   Map<String, dynamic> toJson() => {
-        if (supportsForm) 'form': <String, dynamic>{},
-        if (supportsUrl) 'url': <String, dynamic>{},
+        if (form != null) 'form': form!.toJson(),
+        if (url != null) 'url': url!.toJson(),
       };
 }
 
@@ -277,7 +306,7 @@ class ClientCapabilities {
   final ClientCapabilitiesRoots? roots;
 
   /// Present if the client supports elicitation (`elicitation/create`).
-  final ClientCapabilitiesElicitation? elicitation;
+  final ClientElicitation? elicitation;
 
   /// Present if the client supports tasks (`tasks/list`, `tasks/requests`, etc).
   final ClientCapabilitiesTasks? tasks;
@@ -305,7 +334,7 @@ class ClientCapabilities {
           rootsMap == null ? null : ClientCapabilitiesRoots.fromJson(rootsMap),
       elicitation: elicitationMap == null
           ? null
-          : ClientCapabilitiesElicitation.fromJson(elicitationMap),
+          : ClientElicitation.fromJson(elicitationMap),
       tasks:
           tasksMap == null ? null : ClientCapabilitiesTasks.fromJson(tasksMap),
     );
@@ -378,6 +407,72 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
       meta: meta,
     );
   }
+}
+
+/// Describes capabilities related to elicitation > form mode for the server.
+class ServerElicitationForm {
+  const ServerElicitationForm();
+
+  factory ServerElicitationForm.fromJson(Map<String, dynamic> json) {
+    return const ServerElicitationForm();
+  }
+
+  Map<String, dynamic> toJson() => {};
+}
+
+/// Describes capabilities related to elicitation > URL mode for the server.
+class ServerElicitationUrl {
+  const ServerElicitationUrl();
+
+  factory ServerElicitationUrl.fromJson(Map<String, dynamic> json) {
+    return const ServerElicitationUrl();
+  }
+
+  Map<String, dynamic> toJson() => {};
+}
+
+/// Describes capabilities related to elicitation (server-initiated user input).
+class ServerCapabilitiesElicitation {
+  /// Present if the server supports form mode elicitation.
+  final ServerElicitationForm? form;
+
+  /// Present if the server supports URL mode elicitation.
+  final ServerElicitationUrl? url;
+
+  const ServerCapabilitiesElicitation({
+    this.form,
+    this.url,
+  });
+
+  /// Creates capabilities supporting both form and URL modes.
+  const ServerCapabilitiesElicitation.all()
+      : form = const ServerElicitationForm(),
+        url = const ServerElicitationUrl();
+
+  /// Creates capabilities supporting form mode only.
+  const ServerCapabilitiesElicitation.formOnly()
+      : form = const ServerElicitationForm(),
+        url = null;
+
+  /// Creates capabilities supporting URL mode only.
+  const ServerCapabilitiesElicitation.urlOnly()
+      : form = null,
+        url = const ServerElicitationUrl();
+
+  factory ServerCapabilitiesElicitation.fromJson(Map<String, dynamic> json) {
+    final formMap = json['form'] as Map<String, dynamic>?;
+    final urlMap = json['url'] as Map<String, dynamic>?;
+
+    return ServerCapabilitiesElicitation(
+      form: formMap == null ? null : ServerElicitationForm.fromJson(formMap),
+      url: urlMap == null ? null : ServerElicitationUrl.fromJson(urlMap),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (form != null) 'form': form!.toJson(),
+        if (url != null) 'url': url!.toJson(),
+      };
 }
 
 /// Describes capabilities related to prompts.
@@ -509,6 +604,9 @@ class ServerCapabilities {
   /// Present if the server offers tasks (`tasks/list`, etc).
   final ServerCapabilitiesTasks? tasks;
 
+  /// Present if the server offers elicitation (`elicitation/create`).
+  final ServerCapabilitiesElicitation? elicitation;
+
   const ServerCapabilities({
     this.experimental,
     this.logging,
@@ -517,6 +615,7 @@ class ServerCapabilities {
     this.tools,
     this.completions,
     this.tasks,
+    this.elicitation,
   });
 
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
@@ -525,6 +624,7 @@ class ServerCapabilities {
     final cMap = json['completions'] as Map<String, dynamic>?;
     final tMap = json['tools'] as Map<String, dynamic>?;
     final tasksMap = json['tasks'] as Map<String, dynamic>?;
+    final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
 
     return ServerCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
@@ -537,6 +637,9 @@ class ServerCapabilities {
           cMap == null ? null : ServerCapabilitiesCompletions.fromJson(cMap),
       tasks:
           tasksMap == null ? null : ServerCapabilitiesTasks.fromJson(tasksMap),
+      elicitation: elicitationMap == null
+          ? null
+          : ServerCapabilitiesElicitation.fromJson(elicitationMap),
     );
   }
 
@@ -548,6 +651,7 @@ class ServerCapabilities {
         if (tools != null) 'tools': tools!.toJson(),
         if (completions != null) 'completions': completions!.toJson(),
         if (tasks != null) 'tasks': tasks!.toJson(),
+        if (elicitation != null) 'elicitation': elicitation!.toJson(),
       };
 }
 

@@ -761,7 +761,7 @@ void _addCriticalPathTests() {
         const Implementation(name: 'TestClient', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );

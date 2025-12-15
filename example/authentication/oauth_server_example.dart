@@ -637,10 +637,10 @@ McpServer createOAuthMcpServer() {
   );
 
   // Public tool (accessible to all authenticated users)
-  server.tool(
+  server.registerTool(
     'greet',
     description: 'A simple greeting tool',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         'name': {
           'type': 'string',
@@ -649,8 +649,8 @@ McpServer createOAuthMcpServer() {
       },
       required: ['name'],
     ),
-    callback: ({args, meta, extra}) async {
-      final name = args?['name'] as String? ?? 'user';
+    callback: (args, extra) async {
+      final name = args['name'] as String? ?? 'user';
       return CallToolResult.fromContent(
         content: [TextContent(text: 'Hello, $name!')],
       );
@@ -658,13 +658,13 @@ McpServer createOAuthMcpServer() {
   );
 
   // Protected tool (demonstrates scope-based access)
-  server.tool(
+  server.registerTool(
     'user-info',
     description: 'Get authenticated user information',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {},
     ),
-    callback: ({args, meta, extra}) async {
+    callback: (args, extra) async {
       // In a real implementation, retrieve user info from request context
       // This is a simplified example
       return CallToolResult.fromContent(
@@ -678,10 +678,10 @@ McpServer createOAuthMcpServer() {
   );
 
   // Admin tool (requires specific scope)
-  server.tool(
+  server.registerTool(
     'admin-action',
     description: 'Perform admin action (requires admin scope)',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         'action': {
           'type': 'string',
@@ -690,9 +690,9 @@ McpServer createOAuthMcpServer() {
       },
       required: ['action'],
     ),
-    callback: ({args, meta, extra}) async {
+    callback: (args, extra) async {
       // Verify admin scope in production
-      final action = args?['action'] as String? ?? 'none';
+      final action = args['action'] as String? ?? 'none';
       return CallToolResult.fromContent(
         content: [TextContent(text: 'Admin action executed: $action')],
       );

@@ -67,10 +67,10 @@ McpServer getServer() {
   );
 
   // Register a simple tool that returns a greeting
-  server.tool(
+  server.registerTool(
     'greet',
     description: 'A simple greeting tool',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         'name': {
           'type': 'string',
@@ -79,8 +79,8 @@ McpServer getServer() {
       },
       required: ['name'],
     ),
-    callback: ({args, meta, extra}) async {
-      final name = args?['name'] as String? ?? 'world';
+    callback: (args, extra) async {
+      final name = args['name'] as String? ?? 'world';
       return CallToolResult.fromContent(
         content: [
           TextContent(text: 'Hello, $name!'),
@@ -90,11 +90,11 @@ McpServer getServer() {
   );
 
   // Register a tool that sends multiple greetings with notifications
-  server.tool(
+  server.registerTool(
     'multi-greet',
     description:
         'A tool that sends different greetings with delays between them',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         'name': {
           'type': 'string',
@@ -108,14 +108,14 @@ McpServer getServer() {
       readOnlyHint: true,
       openWorldHint: false,
     ),
-    callback: ({args, meta, extra}) async {
-      final name = args?['name'] as String? ?? 'world';
+    callback: (args, extra) async {
+      final name = args['name'] as String? ?? 'world';
 
       // Helper function for sleeping
       Future<void> sleep(int ms) => Future.delayed(Duration(milliseconds: ms));
 
       // Send debug notification
-      await extra?.sendNotification(
+      await extra.sendNotification(
         JsonRpcLoggingMessageNotification(
           logParams: LoggingMessageNotificationParams(
             level: LoggingLevel.debug,
@@ -127,7 +127,7 @@ McpServer getServer() {
       await sleep(1000); // Wait 1 second before first greeting
 
       // Send first info notification
-      await extra?.sendNotification(
+      await extra.sendNotification(
         JsonRpcLoggingMessageNotification(
           logParams: LoggingMessageNotificationParams(
             level: LoggingLevel.info,
@@ -139,7 +139,7 @@ McpServer getServer() {
       await sleep(1000); // Wait another second before second greeting
 
       // Send second info notification
-      await extra?.sendNotification(
+      await extra.sendNotification(
         JsonRpcLoggingMessageNotification(
           logParams: LoggingMessageNotificationParams(
             level: LoggingLevel.info,
@@ -157,7 +157,7 @@ McpServer getServer() {
   );
 
   // Register a simple prompt
-  server.prompt(
+  server.registerPrompt(
     'greeting-template',
     description: 'A simple greeting prompt template',
     argsSchema: {
@@ -167,7 +167,7 @@ McpServer getServer() {
       ),
     },
     callback: (args, extra) async {
-      final name = args!['name'] as String;
+      final name = args?['name'] as String;
       return GetPromptResult(
         messages: [
           PromptMessage(
@@ -182,11 +182,11 @@ McpServer getServer() {
   );
 
   // Register a tool specifically for testing resumability
-  server.tool(
+  server.registerTool(
     'start-notification-stream',
     description:
         'Starts sending periodic notifications for testing resumability',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         'interval': {
           'type': 'number',
@@ -200,9 +200,9 @@ McpServer getServer() {
         },
       },
     ),
-    callback: ({args, meta, extra}) async {
-      final interval = args?['interval'] as num? ?? 100;
-      final count = args?['count'] as num? ?? 50;
+    callback: (args, extra) async {
+      final interval = args['interval'] as num? ?? 100;
+      final count = args['count'] as num? ?? 50;
 
       // Helper function for sleeping
       Future<void> sleep(int ms) => Future.delayed(Duration(milliseconds: ms));
@@ -212,7 +212,7 @@ McpServer getServer() {
       while (count == 0 || counter < count) {
         counter++;
         try {
-          await extra?.sendNotification(
+          await extra.sendNotification(
             JsonRpcLoggingMessageNotification(
               logParams: LoggingMessageNotificationParams(
                 level: LoggingLevel.info,
@@ -240,9 +240,10 @@ McpServer getServer() {
   );
 
   // Create a simple resource at a fixed URI
-  server.resource(
+  server.registerResource(
     'greeting-resource',
     'https://example.com/greetings/default',
+    (mimeType: 'text/plain', description: null),
     (uri, extra) async {
       return ReadResourceResult(
         contents: [
@@ -254,7 +255,6 @@ McpServer getServer() {
         ],
       );
     },
-    metadata: (mimeType: 'text/plain', description: null),
   );
 
   return server;

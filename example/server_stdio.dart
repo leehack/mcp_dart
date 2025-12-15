@@ -12,10 +12,10 @@ void main() async {
     ),
   );
 
-  server.tool(
+  server.registerTool(
     'calculate',
     description: 'Perform basic arithmetic operations',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         'operation': {
           'type': 'string',
@@ -26,8 +26,8 @@ void main() async {
       },
       required: ['operation', 'a', 'b'],
     ),
-    callback: ({args, meta, extra}) async {
-      final operation = args!['operation'];
+    callback: (args, extra) async {
+      final operation = args['operation'];
       final a = args['a'];
       final b = args['b'];
       return CallToolResult.fromContent(
@@ -46,7 +46,8 @@ void main() async {
     },
   );
 
-  server.resource("Application Logs", 'file:///logs', (uri, extra) async {
+  server.registerResource("Application Logs", 'file:///logs', null,
+      (uri, extra) async {
     if (uri.scheme != 'file') {
       throw Exception('Invalid URI scheme: ${uri.scheme}');
     }
@@ -68,7 +69,7 @@ void main() async {
     );
   });
 
-  server.prompt(
+  server.registerPrompt(
     'analyze-code',
     description: 'Analyze code for potential improvements',
     argsSchema: {

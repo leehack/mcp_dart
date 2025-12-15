@@ -105,7 +105,7 @@ void main() {
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -134,7 +134,7 @@ void main() {
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -169,7 +169,7 @@ void main() {
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -227,7 +227,7 @@ void main() {
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -276,7 +276,7 @@ void main() {
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -329,7 +329,7 @@ void main() {
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -383,7 +383,7 @@ void main() {
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -482,37 +482,37 @@ void main() {
       expect(stringSchema.format, equals('email'));
     });
 
-    test('ClientCapabilitiesElicitation form/url sub-objects', () {
+    test('ClientElicitation form/url sub-objects', () {
       // Default: form only
-      const defaultCaps = ClientCapabilitiesElicitation();
-      expect(defaultCaps.supportsForm, isTrue);
-      expect(defaultCaps.supportsUrl, isFalse);
+      const defaultCaps = ClientElicitation.formOnly();
+      expect(defaultCaps.form != null, isTrue);
+      expect(defaultCaps.url != null, isFalse);
 
       final defaultJson = defaultCaps.toJson();
       expect(defaultJson.containsKey('form'), isTrue);
       expect(defaultJson.containsKey('url'), isFalse);
 
       // Both form and URL
-      const allCaps = ClientCapabilitiesElicitation.all();
-      expect(allCaps.supportsForm, isTrue);
-      expect(allCaps.supportsUrl, isTrue);
+      const allCaps = ClientElicitation.all();
+      expect(allCaps.form != null, isTrue);
+      expect(allCaps.url != null, isTrue);
 
       final allJson = allCaps.toJson();
       expect(allJson.containsKey('form'), isTrue);
       expect(allJson.containsKey('url'), isTrue);
 
       // URL only
-      const urlOnlyCaps = ClientCapabilitiesElicitation.urlOnly();
-      expect(urlOnlyCaps.supportsForm, isFalse);
-      expect(urlOnlyCaps.supportsUrl, isTrue);
+      const urlOnlyCaps = ClientElicitation.urlOnly();
+      expect(urlOnlyCaps.form != null, isFalse);
+      expect(urlOnlyCaps.url != null, isTrue);
 
       // Parse from JSON with sub-objects
-      final parsedCaps = ClientCapabilitiesElicitation.fromJson({
+      final parsedCaps = ClientElicitation.fromJson({
         'form': {},
         'url': {},
       });
-      expect(parsedCaps.supportsForm, isTrue);
-      expect(parsedCaps.supportsUrl, isTrue);
+      expect(parsedCaps.form != null, isTrue);
+      expect(parsedCaps.url != null, isTrue);
     });
 
     test('ElicitRequestParams URL mode', () {

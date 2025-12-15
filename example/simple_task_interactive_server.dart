@@ -77,73 +77,68 @@ class InteractiveServer {
     final handler = context.taskResultHandler;
 
     // Register Task Handlers
-    server.tasks(
-      listCallback: (extra) async {
-        final tasks = await store.getAllTasks();
-        // Only log periodically or for specific events to avoid spamming
-        return ListTasksResult(tasks: tasks);
-      },
-      getCallback: (taskId, extra) async {
-        final task = await store.getTask(taskId);
-        if (task == null) {
-          throw McpError(ErrorCode.invalidParams.value, "Task not found");
-        }
-        return task;
-      },
-      resultCallback: (taskId, extra) async {
-        print('[Server] tasks/result called for task $taskId');
-        return await handler.handle(taskId);
-      },
-      cancelCallback: (taskId, extra) async {
-        print('[Server] tasks/cancel called for task $taskId');
-        final cancelled = await store.cancelTask(taskId);
-        if (!cancelled) {
-          throw McpError(
-            ErrorCode.invalidParams.value,
-            "Cannot cancel task: not found or already terminal",
-          );
-        }
-      },
-    );
+    server.experimental.onListTasks((extra) async {
+      final tasks = await store.getAllTasks();
+      // Only log periodically or for specific events to avoid spamming
+      return ListTasksResult(tasks: tasks);
+    });
+
+    server.experimental.onGetTask((taskId, extra) async {
+      final task = await store.getTask(taskId);
+      if (task == null) {
+        throw McpError(ErrorCode.invalidParams.value, "Task not found");
+      }
+      return task;
+    });
+
+    server.experimental.onTaskResult((taskId, extra) async {
+      print('[Server] tasks/result called for task $taskId');
+      return await handler.handle(taskId);
+    });
+
+    server.experimental.onCancelTask((taskId, extra) async {
+      print('[Server] tasks/cancel called for task $taskId');
+      final cancelled = await store.cancelTask(taskId);
+      if (!cancelled) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          "Cannot cancel task: not found or already terminal",
+        );
+      }
+    });
 
     // Register Tools
-    server.tool(
+    server.experimental.registerToolTask(
       'confirm_delete',
       description:
           'Asks for confirmation before deleting (demonstrates elicitation)',
-      toolInputSchema: const ToolInputSchema(
+      inputSchema: const ToolInputSchema(
         properties: {
           'filename': {'type': 'string'},
         },
       ),
-      callback: ({args, meta, extra}) async {
-        return _createSimpleTask(
-          context,
-          'confirm_delete',
-          args,
-          meta,
-          _runConfirmDelete,
-        );
-      },
+      execution: const ToolExecution(taskSupport: 'optional'),
+      handler: SimpleToolTaskHandler(
+        context,
+        'confirm_delete',
+        _runConfirmDelete,
+      ),
     );
 
-    server.tool(
+    server.experimental.registerToolTask(
       'write_haiku',
       description: 'Asks LLM to write a haiku (demonstrates sampling)',
-      toolInputSchema: const ToolInputSchema(
+      inputSchema: const ToolInputSchema(
         properties: {
           'topic': {'type': 'string'},
         },
       ),
-      callback: ({args, meta, extra}) async {
-        return _createSimpleTask(
-          context,
-          'write_haiku',
-          args,
-          meta,
-          _runWriteHaiku,
-        );
-      },
+      execution: const ToolExecution(taskSupport: 'optional'),
+      handler: SimpleToolTaskHandler(
+        context,
+        'write_haiku',
+        _runWriteHaiku,
+      ),
     );
   }
 
@@ -162,33 +157,6 @@ class InteractiveServer {
         httpRequest.response.close();
       }
     }
-  }
-
-  Future<CreateTaskResult> _createSimpleTask(
-    SessionContext context,
-    String toolName,
-    Map<String, dynamic>? args,
-    Map<String, dynamic>? meta,
-    void Function(SessionContext, String, Map<String, dynamic>) runner,
-  ) async {
-    final taskMeta = meta?['task'] as Map<String, dynamic>? ?? {};
-    final ttl = taskMeta['ttl'] as int?;
-    final pollInterval = taskMeta['pollInterval'] as int?;
-    final requestId = meta?['id'] as RequestId?;
-
-    final task = await context.store.createTask(
-      ttl,
-      pollInterval ?? 1000,
-      requestId,
-      toolName,
-      args ?? {},
-    );
-    print('\n[Server] $toolName called, task created: ${task.taskId}');
-
-    // Start background execution
-    runner(context, task.taskId, args ?? {});
-
-    return CreateTaskResult(task: task);
   }
 
   Future<void> _runConfirmDelete(
@@ -347,5 +315,60 @@ class InteractiveServer {
       req.response.write("Invalid Session ID");
       req.response.close();
     }
+  }
+}
+
+class SimpleToolTaskHandler implements ToolTaskHandler {
+  final SessionContext context;
+  final String toolName;
+  final Future<void> Function(SessionContext, String, Map<String, dynamic>)
+      runner;
+
+  SimpleToolTaskHandler(this.context, this.toolName, this.runner);
+
+  @override
+  Future<CreateTaskResult> createTask(
+    Map<String, dynamic>? args,
+    RequestHandlerExtra? extra,
+  ) async {
+    final task = await context.store.createTask(
+      null, // ttl
+      1000, // pollInterval
+      null, // requestId
+      toolName,
+      args ?? {},
+    );
+    print('\n[Server] $toolName called, task created: ${task.taskId}');
+
+    // Start background execution
+    runner(context, task.taskId, args ?? {});
+
+    return CreateTaskResult(task: task);
+  }
+
+  @override
+  Future<Task> getTask(String taskId, RequestHandlerExtra? extra) async {
+    final task = await context.store.getTask(taskId);
+    if (task == null) {
+      throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+    }
+    return task;
+  }
+
+  @override
+  Future<void> cancelTask(String taskId, RequestHandlerExtra? extra) async {
+    await context.store.cancelTask(taskId);
+  }
+
+  @override
+  Future<CallToolResult> getTaskResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) async {
+    final result = await context.store.getTaskResult(taskId);
+    if (result == null) {
+      throw McpError(ErrorCode.invalidParams.value, 'Result not available');
+    }
+    return result;
   }
 }

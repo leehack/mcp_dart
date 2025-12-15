@@ -50,22 +50,20 @@ void main() {
     test('registers tasks handlers and handles list request', () async {
       var listCallbackInvoked = false;
 
-      mcpServer.tasks(
-        listCallback: (extra) async {
-          listCallbackInvoked = true;
-          return const ListTasksResult(
-            tasks: [
-              Task(
-                taskId: 'task1',
-                status: TaskStatus.working,
-                statusMessage: 'Processing...',
-                ttl: 3600,
-              ),
-            ],
-          );
-        },
-        cancelCallback: (taskId, extra) async {},
-      );
+      mcpServer.experimental.onListTasks((extra) async {
+        listCallbackInvoked = true;
+        return const ListTasksResult(
+          tasks: [
+            Task(
+              taskId: 'task1',
+              status: TaskStatus.working,
+              statusMessage: 'Processing...',
+              ttl: 3600,
+            ),
+          ],
+        );
+      });
+      mcpServer.experimental.onCancelTask((taskId, extra) async {});
 
       await mcpServer.connect(transport);
 
@@ -96,12 +94,11 @@ void main() {
     test('handles cancel task request', () async {
       var cancelledTaskId = '';
 
-      mcpServer.tasks(
-        listCallback: (extra) async => const ListTasksResult(tasks: []),
-        cancelCallback: (taskId, extra) async {
-          cancelledTaskId = taskId;
-        },
-      );
+      mcpServer.experimental
+          .onListTasks((extra) async => const ListTasksResult(tasks: []));
+      mcpServer.experimental.onCancelTask((taskId, extra) async {
+        cancelledTaskId = taskId;
+      });
 
       await mcpServer.connect(transport);
 
@@ -156,21 +153,6 @@ void main() {
           .whereType<JsonRpcError>()
           .firstWhere((r) => r.id == 2);
       expect(errorResponse.error.code, equals(ErrorCode.methodNotFound.value));
-    });
-
-    test('prevents duplicate tasks registration', () {
-      mcpServer.tasks(
-        listCallback: (extra) => const ListTasksResult(tasks: []),
-        cancelCallback: (taskId, extra) {},
-      );
-
-      expect(
-        () => mcpServer.tasks(
-          listCallback: (extra) => const ListTasksResult(tasks: []),
-          cancelCallback: (taskId, extra) {},
-        ),
-        throwsA(isA<StateError>()),
-      );
     });
   });
 }

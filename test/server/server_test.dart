@@ -502,7 +502,7 @@ Future<void> _initializeClient(
   final clientCapabilities = ClientCapabilities(
     sampling: withSampling ? const ClientCapabilitiesSampling() : null,
     roots: withRoots ? const ClientCapabilitiesRoots() : null,
-    elicitation: withElicitation ? const ClientCapabilitiesElicitation() : null,
+    elicitation: withElicitation ? const ClientElicitation.formOnly() : null,
   );
 
   final initParams = InitializeRequestParams(

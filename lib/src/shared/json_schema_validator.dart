@@ -61,6 +61,60 @@ class BasicJsonSchemaValidator implements JsonSchemaValidator {
       }
     }
 
+    if (schema.containsKey('allOf')) {
+      final allOf = schema['allOf'] as List;
+      for (var i = 0; i < allOf.length; i++) {
+        _validate(allOf[i] as Map<String, dynamic>, data, path);
+      }
+    }
+
+    if (schema.containsKey('anyOf')) {
+      final anyOf = schema['anyOf'] as List;
+      bool isValid = false;
+      for (final subSchema in anyOf) {
+        try {
+          _validate(subSchema as Map<String, dynamic>, data, path);
+          isValid = true;
+          break;
+        } catch (_) {}
+      }
+      if (!isValid) {
+        throw JsonSchemaValidationException(
+          'Value does not match anyOf schemas',
+          path,
+        );
+      }
+    }
+
+    if (schema.containsKey('oneOf')) {
+      final oneOf = schema['oneOf'] as List;
+      int validCount = 0;
+      for (final subSchema in oneOf) {
+        try {
+          _validate(subSchema as Map<String, dynamic>, data, path);
+          validCount++;
+        } catch (_) {}
+      }
+      if (validCount != 1) {
+        throw JsonSchemaValidationException(
+          'Value matches $validCount schemas, expected exactly 1 for oneOf',
+          path,
+        );
+      }
+    }
+
+    if (schema.containsKey('not')) {
+      try {
+        _validate(schema['not'] as Map<String, dynamic>, data, path);
+      } catch (_) {
+        return; // Validation failed, which means 'not' passed
+      }
+      throw JsonSchemaValidationException(
+        'Value matches not schema',
+        path,
+      );
+    }
+
     // Numeric validation
     if (data is num) {
       if (schema.containsKey('multipleOf')) {
@@ -224,6 +278,28 @@ class BasicJsonSchemaValidator implements JsonSchemaValidator {
               'Missing required property: $key',
               path,
             );
+          }
+        }
+      }
+
+      if (schema.containsKey('additionalProperties')) {
+        final additionalProperties = schema['additionalProperties'];
+        final properties = schema['properties'] as Map<String, dynamic>? ?? {};
+        final definedKeys = properties.keys.toSet();
+        final dataKeys = data.keys.cast<String>().toSet();
+        final extraKeys = dataKeys.difference(definedKeys);
+
+        if (additionalProperties is bool) {
+          if (!additionalProperties && extraKeys.isNotEmpty) {
+            throw JsonSchemaValidationException(
+              'Additional properties not allowed: ${extraKeys.join(', ')}',
+              path,
+            );
+          }
+        } else if (additionalProperties is Map) {
+          final extraSchema = additionalProperties as Map<String, dynamic>;
+          for (final key in extraKeys) {
+            _validate(extraSchema, data[key], [...path, key]);
           }
         }
       }

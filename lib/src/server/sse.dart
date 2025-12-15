@@ -80,15 +80,14 @@ class SseServerTransport implements Transport {
     }
 
     try {
-      final socket = await _sseResponse.detachSocket(writeHeaders: false);
+      _sseResponse.headers.chunkedTransferEncoding = false;
+      _sseResponse.headers.contentType =
+          ContentType('text', 'event-stream', charset: 'utf-8');
+      _sseResponse.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+      _sseResponse.headers.set(HttpHeaders.connectionHeader, 'keep-alive');
+
+      final socket = await _sseResponse.detachSocket(writeHeaders: true);
       _sink = utf8.encoder.startChunkedConversion(socket);
-      _sink!.add(
-        'HTTP/1.1 200 OK\r\n'
-        'Content-Type: text/event-stream\r\n'
-        'Cache-Control: no-cache\r\n'
-        'Connection: keep-alive\r\n'
-        '\r\n\r\n',
-      );
       final endpointUrl =
           '$_messageEndpointPath?sessionId=${Uri.encodeComponent(sessionId)}';
       await _sendSseEvent(name: 'endpoint', data: endpointUrl);
@@ -106,6 +105,10 @@ class SseServerTransport implements Transport {
           );
         },
       );
+    } on UnimplementedError catch (e) {
+      _logger.error('UnimplementedError during SSE transport setup: $e');
+      onerror?.call(e);
+      rethrow;
     } catch (error) {
       _logger.error('Error starting SSE transport: $error');
     }

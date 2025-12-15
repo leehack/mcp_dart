@@ -110,8 +110,9 @@ class MockHttpResponse implements HttpResponse {
   List<Cookie> get cookies => [];
 
   @override
-  Future<Socket> detachSocket({bool writeHeaders = true}) =>
-      throw UnimplementedError();
+  Future<Socket> detachSocket({bool writeHeaders = true}) async {
+    return MockSocket();
+  }
 
   @override
   HttpHeaders get headers => MockHttpHeaders();
@@ -188,6 +189,85 @@ class MockHttpResponse implements HttpResponse {
 
   @override
   set bufferOutput(bool bufferOutput) {}
+}
+
+class MockSocket extends Stream<Uint8List> implements Socket {
+  final StreamController<Uint8List> _controller = StreamController<Uint8List>();
+
+  @override
+  Encoding get encoding => utf8;
+
+  @override
+  set encoding(Encoding value) {}
+
+  @override
+  void write(Object? object) {}
+
+  @override
+  void writeAll(Iterable objects, [String separator = ""]) {}
+
+  @override
+  void writeln([Object? object = ""]) {}
+
+  @override
+  void writeCharCode(int charCode) {}
+
+  @override
+  void add(List<int> data) {}
+
+  @override
+  void addError(Object error, [StackTrace? stackTrace]) {}
+
+  @override
+  Future addStream(Stream<List<int>> stream) async {}
+
+  @override
+  Future flush() async {}
+
+  @override
+  Future close() async {}
+
+  @override
+  Future get done => Future.value();
+
+  @override
+  void destroy() {}
+
+  @override
+  bool setOption(SocketOption option, bool enabled) => true;
+
+  @override
+  InternetAddress get remoteAddress => InternetAddress.loopbackIPv4;
+
+  @override
+  int get remotePort => 0;
+
+  @override
+  InternetAddress get address => InternetAddress.loopbackIPv4;
+
+  @override
+  int get port => 0;
+
+  @override
+  StreamSubscription<Uint8List> listen(
+    void Function(Uint8List event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return _controller.stream.listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    );
+  }
+
+  @override
+  void setRawOption(RawSocketOption option) {}
+
+  @override
+  Uint8List getRawOption(RawSocketOption option) => Uint8List(0);
 }
 
 /// Mock HttpHeaders for testing

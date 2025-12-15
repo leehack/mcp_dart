@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/types.dart';
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'constants.dart';
 import 'queue.dart';
@@ -9,6 +10,30 @@ import 'store.dart';
 // ============================================================================
 // Task Result Handler
 // ============================================================================
+
+/// A handler for a tool that creates and manages tasks.
+///
+/// This interface defines the contract for tools that can initiate long-running
+/// operations and report their status and results asynchronously.
+abstract class ToolTaskHandler {
+  /// Creates a new task and returns its initial state.
+  Future<CreateTaskResult> createTask(
+    Map<String, dynamic>? args,
+    RequestHandlerExtra? extra,
+  );
+
+  /// Retrieves the current status of a task.
+  Future<Task> getTask(String taskId, RequestHandlerExtra? extra);
+
+  /// Cancels a running task.
+  Future<void> cancelTask(String taskId, RequestHandlerExtra? extra);
+
+  /// Retrieves the final result of a completed task.
+  Future<CallToolResult> getTaskResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  );
+}
 
 /// Handles execution and result retrieval for tasks, managing the queue loop.
 class TaskResultHandler {
@@ -112,10 +137,11 @@ class TaskResultHandler {
 
           if (request.method == 'elicitation/create') {
             final params = ElicitRequestParams.fromJson(request.params!);
-            response = await _elicit(server, params, taskId);
+            response = await server.experimental.elicitForTask(taskId, params);
           } else if (request.method == 'sampling/createMessage') {
             final params = CreateMessageRequestParams.fromJson(request.params!);
-            response = await _createMessage(server, params, taskId);
+            response =
+                await server.experimental.createMessageForTask(taskId, params);
           } else {
             throw Exception("Unknown request method: ${request.method}");
           }
@@ -134,38 +160,6 @@ class TaskResultHandler {
         }
       }
     }
-  }
-
-  // Helpers to call server methods but inject relatedTask meta
-  Future<ElicitResult> _elicit(
-    McpServer server,
-    ElicitRequestParams params,
-    String taskId,
-  ) async {
-    final req = JsonRpcElicitRequest(
-      id: -1,
-      elicitParams: params,
-      meta: {
-        relatedTaskMetaKey: {'taskId': taskId},
-      },
-    );
-    return server.server.request(req, (json) => ElicitResult.fromJson(json));
-  }
-
-  Future<CreateMessageResult> _createMessage(
-    McpServer server,
-    CreateMessageRequestParams params,
-    String taskId,
-  ) async {
-    final req = JsonRpcCreateMessageRequest(
-      id: -1,
-      createParams: params,
-      meta: {
-        relatedTaskMetaKey: {'taskId': taskId},
-      },
-    );
-    return server.server
-        .request(req, (json) => CreateMessageResult.fromJson(json));
   }
 
   void dispose() {

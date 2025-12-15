@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:mcp_dart/src/shared/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
@@ -11,8 +12,52 @@ class ClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
+  /// Optional JSON Schema validator for tool output validation.
+  ///
+  /// If not provided, a [BasicJsonSchemaValidator] will be used.
+  final JsonSchemaValidator? jsonSchemaValidator;
+
   /// Creates client options.
-  const ClientOptions({super.enforceStrictCapabilities, this.capabilities});
+  const ClientOptions({
+    super.enforceStrictCapabilities,
+    this.capabilities,
+    this.jsonSchemaValidator,
+  });
+}
+
+/// Recursively applies default values from a JSON Schema to a data object.
+void _applyElicitationDefaults(Map<String, dynamic>? schema, dynamic data) {
+  if (schema == null || data == null || data is! Map) return;
+
+  final properties = schema['properties'] as Map<String, dynamic>?;
+  if (properties != null) {
+    for (final entry in properties.entries) {
+      final key = entry.key;
+      final propSchema = entry.value as Map<String, dynamic>?;
+
+      if (propSchema == null) continue;
+
+      // Apply default if data doesn't have the key and schema has a default
+      if (!data.containsKey(key) && propSchema.containsKey('default')) {
+        final defaultValue = propSchema['default'];
+        if (defaultValue is Map) {
+          data[key] = Map<String, dynamic>.from(defaultValue);
+        } else if (defaultValue is List) {
+          data[key] = List<dynamic>.from(defaultValue);
+        } else {
+          data[key] = defaultValue;
+        }
+      }
+
+      // Recurse into existing nested objects/arrays
+      if (data[key] is Map || data[key] is List) {
+        _applyElicitationDefaults(propSchema, data[key]);
+      }
+    }
+  }
+
+  // No explicit handling for anyOf/oneOf/allOf for defaults for now,
+  // as it can get complex and is usually handled by higher-level schema libs.
 }
 
 /// An MCP client implementation built on top of a pluggable [Transport].
@@ -25,6 +70,10 @@ class Client extends Protocol {
   ClientCapabilities _capabilities;
   final Implementation _clientInfo;
   String? _instructions;
+  final JsonSchemaValidator _jsonSchemaValidator;
+
+  final Map<String, ToolOutputSchema> _cachedToolOutputSchemas = {};
+  final Set<String> _cachedRequiredTaskTools = {};
 
   /// Callback for handling elicitation requests from the server.
   ///
@@ -49,9 +98,11 @@ class Client extends Protocol {
   /// - [options]: Optional configuration settings including client capabilities.
   Client(this._clientInfo, {ClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
+        _jsonSchemaValidator =
+            options?.jsonSchemaValidator ?? const BasicJsonSchemaValidator(),
         super(options) {
     // Register elicit handler if capability is present
-    if (_capabilities.elicitation != null) {
+    if (_capabilities.elicitation?.form != null) {
       setRequestHandler<JsonRpcElicitRequest>(
         Method.elicitationCreate,
         (request, extra) async {
@@ -61,7 +112,20 @@ class Client extends Protocol {
               "No elicit handler registered",
             );
           }
-          return await onElicitRequest!(request.elicitParams);
+          final result = await onElicitRequest!(request.elicitParams);
+
+          // Apply defaults if client supports it and it's a form elicitation
+          if (request.elicitParams.mode == ElicitationMode.form &&
+              result.action == 'accept' &&
+              result.content is Map &&
+              request.elicitParams.requestedSchema != null &&
+              _capabilities.elicitation?.form?.applyDefaults == true) {
+            _applyElicitationDefaults(
+              request.elicitParams.requestedSchema,
+              result.content,
+            );
+          }
+          return result;
         },
         (id, params, meta) => JsonRpcElicitRequest.fromJson({
           'id': id,
@@ -414,26 +478,79 @@ class Client extends Protocol {
   Future<CallToolResult> callTool(
     CallToolRequestParams params, {
     RequestOptions? options,
-  }) {
+  }) async {
+    if (_cachedRequiredTaskTools.contains(params.name)) {
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        'Tool "${params.name}" requires task-based execution.',
+      );
+    }
+
     final req = JsonRpcCallToolRequest(id: -1, callParams: params);
-    return request<CallToolResult>(
+    final result = await request<CallToolResult>(
       req,
       (json) => CallToolResult.fromJson(json),
       options,
     );
+
+    final outputSchema = _cachedToolOutputSchemas[params.name];
+    if (outputSchema != null) {
+      // If tool has outputSchema, it MUST return structuredContent (unless it's an error)
+      if (result.structuredContent.isEmpty && result.isError != true) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          "Tool '${params.name}' has an output schema but did not return structured content",
+        );
+      }
+
+      if (result.structuredContent.isNotEmpty) {
+        try {
+          _jsonSchemaValidator.validate(
+            outputSchema.toJson(),
+            result.structuredContent,
+          );
+        } catch (e) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Structured content does not match the tool's output schema: $e",
+          );
+        }
+      }
+    }
+
+    return result;
   }
 
   /// Sends a `tools/list` request to list available tools on the server.
   Future<ListToolsResult> listTools({
     ListToolsRequestParams? params,
     RequestOptions? options,
-  }) {
+  }) async {
     final req = JsonRpcListToolsRequest(id: -1, params: params);
-    return request<ListToolsResult>(
+    final result = await request<ListToolsResult>(
       req,
       (json) => ListToolsResult.fromJson(json),
       options,
     );
+
+    _cacheToolMetadata(result.tools);
+
+    return result;
+  }
+
+  void _cacheToolMetadata(List<Tool> tools) {
+    _cachedToolOutputSchemas.clear();
+    _cachedRequiredTaskTools.clear();
+
+    for (final tool in tools) {
+      if (tool.outputSchema != null) {
+        _cachedToolOutputSchemas[tool.name] = tool.outputSchema!;
+      }
+
+      if (tool.execution?.taskSupport == 'required') {
+        _cachedRequiredTaskTools.add(tool.name);
+      }
+    }
   }
 
   /// Sends a `notifications/roots/list_changed` notification to the server.

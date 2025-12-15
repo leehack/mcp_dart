@@ -599,44 +599,43 @@ void main() {
     });
   });
 
-  group('ClientCapabilitiesElicitation Tests', () {
-    test('ClientCapabilitiesElicitation serialization', () {
-      final capability = const ClientCapabilitiesElicitation();
+  group('ClientElicitation Tests', () {
+    test('ClientElicitation serialization', () {
+      final capability = const ClientElicitation.formOnly();
 
       final json = capability.toJson();
       // Default capability has supportsForm = true, so toJson() includes 'form'
       expect(json.containsKey('form'), isTrue);
       expect(json.containsKey('url'), isFalse);
 
-      final restored = ClientCapabilitiesElicitation.fromJson(json);
+      final restored = ClientElicitation.fromJson(json);
       expect(restored, isNotNull);
-      expect(restored.supportsForm, isTrue);
-      expect(restored.supportsUrl, isFalse);
+      expect(restored.form != null, isTrue);
+      expect(restored.url != null, isFalse);
     });
 
-    test('ClientCapabilitiesElicitation empty json for backwards compatibility',
-        () {
+    test('ClientElicitation empty json for backwards compatibility', () {
       // Empty JSON should be interpreted as form-only for backwards compatibility
-      final restored = ClientCapabilitiesElicitation.fromJson({});
-      expect(restored.supportsForm, isTrue);
-      expect(restored.supportsUrl, isFalse);
+      final restored = ClientElicitation.fromJson({});
+      expect(restored.form != null, isTrue);
+      expect(restored.url != null, isFalse);
     });
 
-    test('ClientCapabilitiesElicitation all modes', () {
-      final capability = const ClientCapabilitiesElicitation.all();
+    test('ClientElicitation all modes', () {
+      final capability = const ClientElicitation.all();
 
       final json = capability.toJson();
       expect(json.containsKey('form'), isTrue);
       expect(json.containsKey('url'), isTrue);
 
-      final restored = ClientCapabilitiesElicitation.fromJson(json);
-      expect(restored.supportsForm, isTrue);
-      expect(restored.supportsUrl, isTrue);
+      final restored = ClientElicitation.fromJson(json);
+      expect(restored.form != null, isTrue);
+      expect(restored.url != null, isTrue);
     });
 
     test('ClientCapabilities includes elicitation', () {
       final caps = const ClientCapabilities(
-        elicitation: ClientCapabilitiesElicitation(),
+        elicitation: ClientElicitation.formOnly(),
         roots: ClientCapabilitiesRoots(),
       );
 

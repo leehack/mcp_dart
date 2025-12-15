@@ -199,15 +199,19 @@ class InMemoryTaskStore implements TaskStore {
     // Send task status notification to the server
     final task = _tasks[taskId];
     if (task != null) {
-      try {
-        server.notifyTaskStatus(
-          taskId: taskId,
-          status: task.status,
-          statusMessage: task.statusMessage,
-        );
-      } catch (e) {
+      server.server
+          .notification(
+        JsonRpcTaskStatusNotification(
+          statusParams: TaskStatusNotificationParams(
+            taskId: taskId,
+            status: task.status,
+            statusMessage: task.statusMessage,
+          ),
+        ),
+      )
+          .catchError((e) {
         // Ignore errors broadcasting
-      }
+      });
     }
   }
 

@@ -135,6 +135,28 @@ class ToolAnnotations {
       };
 }
 
+/// Describes how the tool should be executed.
+class ToolExecution {
+  /// Describes how the tool supports task augmentation.
+  ///
+  /// * `forbidden`: The tool does not support tasks.
+  /// * `optional`: The tool supports tasks, but can also be called directly.
+  /// * `required`: The tool must be called as a task.
+  final String taskSupport;
+
+  const ToolExecution({this.taskSupport = 'forbidden'});
+
+  factory ToolExecution.fromJson(Map<String, dynamic> json) {
+    return ToolExecution(
+      taskSupport: json['taskSupport'] as String? ?? 'forbidden',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'taskSupport': taskSupport,
+      };
+}
+
 /// Definition for a tool offered by the server.
 class Tool {
   /// The name of the tool.
@@ -155,6 +177,9 @@ class Tool {
   /// Optional icon for the tool.
   final ImageContent? icon;
 
+  /// Optional properties describing how the tool should be executed.
+  final ToolExecution? execution;
+
   const Tool({
     required this.name,
     this.description,
@@ -162,6 +187,7 @@ class Tool {
     this.outputSchema,
     this.annotations,
     this.icon,
+    this.execution,
   });
 
   factory Tool.fromJson(Map<String, dynamic> json) {
@@ -182,6 +208,9 @@ class Tool {
       icon: json['icon'] != null
           ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
           : null,
+      execution: json['execution'] != null
+          ? ToolExecution.fromJson(json['execution'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -192,6 +221,7 @@ class Tool {
         if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
         if (annotations != null) 'annotation': annotations!.toJson(),
         if (icon != null) 'icon': icon!.toJson(),
+        if (execution != null) 'execution': execution!.toJson(),
       };
 }
 

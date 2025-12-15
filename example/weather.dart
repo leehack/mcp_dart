@@ -51,10 +51,10 @@ void main() async {
       McpServer(const Implementation(name: "weather", version: "1.0.0"));
 
   // Register "get-alerts" tool
-  server.tool(
+  server.registerTool(
     "get-alerts",
     description: "Get weather alerts for a state",
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         "state": {
           "type": "string",
@@ -63,13 +63,8 @@ void main() async {
       },
       required: ["state"],
     ),
-    icon: const ImageContent(
-      data:
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNiAAAABgDNjd8qAAAAAElFTkSuQmCC",
-      mimeType: "image/png",
-    ),
-    callback: ({args, meta, extra}) async {
-      final state = (args?['state'] as String?)?.toUpperCase();
+    callback: (args, extra) async {
+      final state = (args['state'] as String?)?.toUpperCase();
       if (state == null || state.length != 2) {
         return CallToolResult.fromContent(
           content: [const TextContent(text: "Invalid state code provided.")],
@@ -104,10 +99,10 @@ void main() async {
   );
 
   // Register "get-forecast" tool
-  server.tool(
+  server.registerTool(
     "get-forecast",
     description: "Get weather forecast for a location",
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         "latitude": {
           "type": "number",
@@ -120,9 +115,9 @@ void main() async {
       },
       required: ["latitude", "longitude"],
     ),
-    callback: ({args, meta, extra}) async {
-      final latitude = args?['latitude'] as num?;
-      final longitude = args?['longitude'] as num?;
+    callback: (args, extra) async {
+      final latitude = args['latitude'] as num?;
+      final longitude = args['longitude'] as num?;
 
       if (latitude == null || longitude == null) {
         return CallToolResult.fromContent(

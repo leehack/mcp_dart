@@ -70,27 +70,29 @@ McpServer getServer() {
 
   // Example 1: Simple user registration tool
   // Collects username, email, and password from the user
-  server.tool(
+  server.registerTool(
     'register_user',
     description: 'Register a new user account by collecting their information',
-    toolInputSchema: const ToolInputSchema(properties: {}),
-    callback: ({args, meta, extra}) async {
+    inputSchema: const ToolInputSchema(properties: {}),
+    callback: (args, extra) async {
       try {
         // Collect username
-        final usernameResult = await server.elicitUserInput(
-          'Enter your username (3-20 characters)',
-          {
-            'type': 'object',
-            'properties': {
-              'username': {
-                'type': 'string',
-                'minLength': 3,
-                'maxLength': 20,
-                'description': 'Your desired username',
+        final usernameResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter your username (3-20 characters)',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'username': {
+                  'type': 'string',
+                  'minLength': 3,
+                  'maxLength': 20,
+                  'description': 'Your desired username',
+                },
               },
+              'required': ['username'],
             },
-            'required': ['username'],
-          },
+          ),
         );
 
         if (!usernameResult.accepted) {
@@ -104,19 +106,21 @@ McpServer getServer() {
         final username = usernameResult.content?['username'] as String;
 
         // Collect email
-        final emailResult = await server.elicitUserInput(
-          'Enter your email address',
-          {
-            'type': 'object',
-            'properties': {
-              'email': {
-                'type': 'string',
-                'minLength': 3,
-                'description': 'Your email address',
+        final emailResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter your email address',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'email': {
+                  'type': 'string',
+                  'minLength': 3,
+                  'description': 'Your email address',
+                },
               },
+              'required': ['email'],
             },
-            'required': ['email'],
-          },
+          ),
         );
 
         if (!emailResult.accepted) {
@@ -130,19 +134,21 @@ McpServer getServer() {
         final email = emailResult.content?['email'] as String;
 
         // Collect password
-        final passwordResult = await server.elicitUserInput(
-          'Enter your password (min 8 characters)',
-          {
-            'type': 'object',
-            'properties': {
-              'password': {
-                'type': 'string',
-                'minLength': 8,
-                'description': 'Your password',
+        final passwordResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter your password (min 8 characters)',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'password': {
+                  'type': 'string',
+                  'minLength': 8,
+                  'description': 'Your password',
+                },
               },
+              'required': ['password'],
             },
-            'required': ['password'],
-          },
+          ),
         );
 
         if (!passwordResult.accepted) {
@@ -154,18 +160,20 @@ McpServer getServer() {
         }
 
         // Collect newsletter preference
-        final newsletterResult = await server.elicitUserInput(
-          'Subscribe to newsletter?',
-          {
-            'type': 'object',
-            'properties': {
-              'newsletter': {
-                'type': 'boolean',
-                'default': false,
-                'description': 'Receive updates via email',
+        final newsletterResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Subscribe to newsletter?',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'newsletter': {
+                  'type': 'boolean',
+                  'default': false,
+                  'description': 'Receive updates via email',
+                },
               },
             },
-          },
+          ),
         );
 
         final newsletter = newsletterResult.accepted
@@ -197,26 +205,28 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
 
   // Example 2: Multi-step workflow with multiple elicitation requests
   // Demonstrates how to collect information in multiple steps
-  server.tool(
+  server.registerTool(
     'create_event',
     description: 'Create a calendar event by collecting event details',
-    toolInputSchema: const ToolInputSchema(properties: {}),
-    callback: ({args, meta, extra}) async {
+    inputSchema: const ToolInputSchema(properties: {}),
+    callback: (args, extra) async {
       try {
         // Step 1: Collect basic event information
-        final titleResult = await server.elicitUserInput(
-          'Step 1: Enter event title',
-          {
-            'type': 'object',
-            'properties': {
-              'title': {
-                'type': 'string',
-                'minLength': 1,
-                'description': 'Name of the event',
+        final titleResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Step 1: Enter event title',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'title': {
+                  'type': 'string',
+                  'minLength': 1,
+                  'description': 'Name of the event',
+                },
               },
+              'required': ['title'],
             },
-            'required': ['title'],
-          },
+          ),
         );
 
         if (!titleResult.accepted) {
@@ -227,18 +237,20 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
 
         final title = titleResult.content?['title'] as String;
 
-        final descriptionResult = await server.elicitUserInput(
-          'Enter event description (optional, or type "skip")',
-          {
-            'type': 'object',
-            'properties': {
-              'description': {
-                'type': 'string',
-                'minLength': 0,
-                'description': 'Event description',
+        final descriptionResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter event description (optional, or type "skip")',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'description': {
+                  'type': 'string',
+                  'minLength': 0,
+                  'description': 'Event description',
+                },
               },
             },
-          },
+          ),
         );
 
         final description = descriptionResult.accepted &&
@@ -249,19 +261,21 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
             : '';
 
         // Step 2: Collect date and time
-        final dateResult = await server.elicitUserInput(
-          'Step 2: Enter event date (YYYY-MM-DD)',
-          {
-            'type': 'object',
-            'properties': {
-              'date': {
-                'type': 'string',
-                'pattern': r'^\d{4}-\d{2}-\d{2}$',
-                'description': 'Event date in YYYY-MM-DD format',
+        final dateResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Step 2: Enter event date (YYYY-MM-DD)',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'date': {
+                  'type': 'string',
+                  'pattern': r'^\d{4}-\d{2}-\d{2}$',
+                  'description': 'Event date in YYYY-MM-DD format',
+                },
               },
+              'required': ['date'],
             },
-            'required': ['date'],
-          },
+          ),
         );
 
         if (!dateResult.accepted) {
@@ -272,19 +286,21 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
 
         final date = dateResult.content?['date'] as String;
 
-        final startTimeResult = await server.elicitUserInput(
-          'Enter start time (HH:MM)',
-          {
-            'type': 'object',
-            'properties': {
-              'startTime': {
-                'type': 'string',
-                'pattern': r'^\d{2}:\d{2}$',
-                'description': 'Event start time in HH:MM format',
+        final startTimeResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter start time (HH:MM)',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'startTime': {
+                  'type': 'string',
+                  'pattern': r'^\d{2}:\d{2}$',
+                  'description': 'Event start time in HH:MM format',
+                },
               },
+              'required': ['startTime'],
             },
-            'required': ['startTime'],
-          },
+          ),
         );
 
         if (!startTimeResult.accepted) {
@@ -295,20 +311,22 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
 
         final startTime = startTimeResult.content?['startTime'] as String;
 
-        final durationResult = await server.elicitUserInput(
-          'Enter duration in minutes (15-480)',
-          {
-            'type': 'object',
-            'properties': {
-              'duration': {
-                'type': 'number',
-                'minimum': 15,
-                'maximum': 480,
-                'default': 60,
-                'description': 'Duration in minutes',
+        final durationResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter duration in minutes (15-480)',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'duration': {
+                  'type': 'number',
+                  'minimum': 15,
+                  'maximum': 480,
+                  'default': 60,
+                  'description': 'Duration in minutes',
+                },
               },
             },
-          },
+          ),
         );
 
         if (!durationResult.accepted) {
@@ -346,26 +364,28 @@ Duration: $duration minutes''',
 
   // Example 3: Collecting address information
   // Demonstrates validation with patterns and optional fields
-  server.tool(
+  server.registerTool(
     'update_shipping_address',
     description: 'Update shipping address with validation',
-    toolInputSchema: const ToolInputSchema(properties: {}),
-    callback: ({args, meta, extra}) async {
+    inputSchema: const ToolInputSchema(properties: {}),
+    callback: (args, extra) async {
       try {
         // Collect name
-        final nameResult = await server.elicitUserInput(
-          'Enter recipient full name',
-          {
-            'type': 'object',
-            'properties': {
-              'name': {
-                'type': 'string',
-                'minLength': 1,
-                'description': 'Recipient name',
+        final nameResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter recipient full name',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'name': {
+                  'type': 'string',
+                  'minLength': 1,
+                  'description': 'Recipient name',
+                },
               },
+              'required': ['name'],
             },
-            'required': ['name'],
-          },
+          ),
         );
 
         if (!nameResult.accepted) {
@@ -379,19 +399,21 @@ Duration: $duration minutes''',
         final name = nameResult.content?['name'] as String;
 
         // Collect street address
-        final streetResult = await server.elicitUserInput(
-          'Enter street address',
-          {
-            'type': 'object',
-            'properties': {
-              'street': {
-                'type': 'string',
-                'minLength': 1,
-                'description': 'Street address',
+        final streetResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter street address',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'street': {
+                  'type': 'string',
+                  'minLength': 1,
+                  'description': 'Street address',
+                },
               },
+              'required': ['street'],
             },
-            'required': ['street'],
-          },
+          ),
         );
 
         if (!streetResult.accepted) {
@@ -405,19 +427,21 @@ Duration: $duration minutes''',
         final street = streetResult.content?['street'] as String;
 
         // Collect city
-        final cityResult = await server.elicitUserInput(
-          'Enter city',
-          {
-            'type': 'object',
-            'properties': {
-              'city': {
-                'type': 'string',
-                'minLength': 1,
-                'description': 'City name',
+        final cityResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter city',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'city': {
+                  'type': 'string',
+                  'minLength': 1,
+                  'description': 'City name',
+                },
               },
+              'required': ['city'],
             },
-            'required': ['city'],
-          },
+          ),
         );
 
         if (!cityResult.accepted) {
@@ -431,21 +455,23 @@ Duration: $duration minutes''',
         final city = cityResult.content?['city'] as String;
 
         // Collect state (2 letters)
-        final stateResult = await server.elicitUserInput(
-          'Enter state/province (2 letters)',
-          {
-            'type': 'object',
-            'properties': {
-              'state': {
-                'type': 'string',
-                'minLength': 2,
-                'maxLength': 2,
-                'pattern': r'^[A-Z]{2}$',
-                'description': 'Two-letter state code (e.g., CA, NY)',
+        final stateResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter state/province (2 letters)',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'state': {
+                  'type': 'string',
+                  'minLength': 2,
+                  'maxLength': 2,
+                  'pattern': r'^[A-Z]{2}$',
+                  'description': 'Two-letter state code (e.g., CA, NY)',
+                },
               },
+              'required': ['state'],
             },
-            'required': ['state'],
-          },
+          ),
         );
 
         if (!stateResult.accepted) {
@@ -459,20 +485,22 @@ Duration: $duration minutes''',
         final state = stateResult.content?['state'] as String;
 
         // Collect ZIP code
-        final zipResult = await server.elicitUserInput(
-          'Enter ZIP/Postal code',
-          {
-            'type': 'object',
-            'properties': {
-              'zip': {
-                'type': 'string',
-                'minLength': 5,
-                'maxLength': 10,
-                'description': '5-digit ZIP code or postal code',
+        final zipResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter ZIP/Postal code',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'zip': {
+                  'type': 'string',
+                  'minLength': 5,
+                  'maxLength': 10,
+                  'description': '5-digit ZIP code or postal code',
+                },
               },
+              'required': ['zip'],
             },
-            'required': ['zip'],
-          },
+          ),
         );
 
         if (!zipResult.accepted) {
@@ -486,18 +514,20 @@ Duration: $duration minutes''',
         final zipCode = zipResult.content?['zip'] as String;
 
         // Collect optional phone number
-        final phoneResult = await server.elicitUserInput(
-          'Enter phone number (optional, or type "skip")',
-          {
-            'type': 'object',
-            'properties': {
-              'phone': {
-                'type': 'string',
-                'minLength': 0,
-                'description': 'Contact phone number',
+        final phoneResult = await server.elicitInput(
+          const ElicitRequestParams.form(
+            message: 'Enter phone number (optional, or type "skip")',
+            requestedSchema: {
+              'type': 'object',
+              'properties': {
+                'phone': {
+                  'type': 'string',
+                  'minLength': 0,
+                  'description': 'Contact phone number',
+                },
               },
             },
-          },
+          ),
         );
 
         final phone = phoneResult.accepted &&

@@ -8,10 +8,10 @@ Future<void> main() async {
     options: const ServerOptions(capabilities: ServerCapabilities()),
   );
 
-  mcpServer.tool(
+  mcpServer.registerTool(
     "calculate",
     description: 'Perform basic arithmetic operations',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         'operation': {
           'type': 'string',
@@ -22,8 +22,8 @@ Future<void> main() async {
       },
       required: ['operation', 'a', 'b'],
     ),
-    callback: ({args, meta, extra}) async {
-      final operation = args!['operation'];
+    callback: (args, extra) async {
+      final operation = args['operation'];
       final a = args['a'];
       final b = args['b'];
       return CallToolResult.fromContent(

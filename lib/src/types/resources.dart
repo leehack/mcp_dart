@@ -1,5 +1,37 @@
 import '../types.dart';
 
+/// Additional properties describing a Resource to clients.
+class ResourceAnnotations {
+  /// A human-readable title for the resource.
+  final String? title;
+
+  /// The intended audience for the resource (e.g., `["user", "assistant"]`).
+  final List<String>? audience;
+
+  /// The priority of the resource (0.0 to 1.0).
+  final double? priority;
+
+  const ResourceAnnotations({
+    this.title,
+    this.audience,
+    this.priority,
+  });
+
+  factory ResourceAnnotations.fromJson(Map<String, dynamic> json) {
+    return ResourceAnnotations(
+      title: json['title'] as String?,
+      audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
+      priority: (json['priority'] as num?)?.toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (title != null) 'title': title,
+        if (audience != null) 'audience': audience,
+        if (priority != null) 'priority': priority,
+      };
+}
+
 /// A known resource offered by the server.
 class Resource {
   /// The URI identifying this resource.
@@ -17,12 +49,16 @@ class Resource {
   /// Optional icon for the resource.
   final ImageContent? icon;
 
+  /// Optional additional properties describing the resource.
+  final ResourceAnnotations? annotations;
+
   const Resource({
     required this.uri,
     required this.name,
     this.description,
     this.mimeType,
     this.icon,
+    this.annotations,
   });
 
   /// Creates from JSON.
@@ -35,6 +71,11 @@ class Resource {
       icon: json['icon'] != null
           ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
           : null,
+      annotations: json['annotations'] != null
+          ? ResourceAnnotations.fromJson(
+              json['annotations'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 
@@ -45,6 +86,7 @@ class Resource {
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
         if (icon != null) 'icon': icon!.toJson(),
+        if (annotations != null) 'annotations': annotations!.toJson(),
       };
 }
 
@@ -65,6 +107,9 @@ class ResourceTemplate {
   /// Optional icon for the resource template.
   final ImageContent? icon;
 
+  /// Optional additional properties describing the resource template.
+  final ResourceAnnotations? annotations;
+
   /// Creates a resource template description.
   const ResourceTemplate({
     required this.uriTemplate,
@@ -72,6 +117,7 @@ class ResourceTemplate {
     this.description,
     this.mimeType,
     this.icon,
+    this.annotations,
   });
 
   /// Creates from JSON.
@@ -84,6 +130,11 @@ class ResourceTemplate {
       icon: json['icon'] != null
           ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
           : null,
+      annotations: json['annotations'] != null
+          ? ResourceAnnotations.fromJson(
+              json['annotations'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 
@@ -94,6 +145,7 @@ class ResourceTemplate {
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
         if (icon != null) 'icon': icon!.toJson(),
+        if (annotations != null) 'annotations': annotations!.toJson(),
       };
 }
 

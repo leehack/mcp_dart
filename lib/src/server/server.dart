@@ -299,7 +299,7 @@ class Server extends Protocol {
         break;
 
       case Method.notificationsElicitationComplete:
-        if (!(_clientCapabilities?.elicitation?.supportsUrl ?? false)) {
+        if (!(_clientCapabilities?.elicitation?.url != null)) {
           throw StateError(
             "Client does not support URL elicitation (required for sending $method)",
           );
@@ -485,7 +485,7 @@ class Server extends Protocol {
 
     switch (mode) {
       case ElicitationMode.url:
-        if (!(_clientCapabilities?.elicitation?.supportsUrl ?? false)) {
+        if (!(_clientCapabilities?.elicitation?.url != null)) {
           throw McpError(
             ErrorCode.invalidRequest.value,
             "Client does not support url elicitation.",
@@ -493,7 +493,7 @@ class Server extends Protocol {
         }
         break;
       case ElicitationMode.form:
-        if (!(_clientCapabilities?.elicitation?.supportsForm ?? false)) {
+        if (!(_clientCapabilities?.elicitation?.form != null)) {
           throw McpError(
             ErrorCode.invalidRequest.value,
             "Client does not support form elicitation.",
@@ -542,7 +542,7 @@ class Server extends Protocol {
   Future<void> Function() createElicitationCompletionNotifier(
     String elicitationId,
   ) {
-    if (!(_clientCapabilities?.elicitation?.supportsUrl ?? false)) {
+    if (!(_clientCapabilities?.elicitation?.url != null)) {
       throw StateError(
         "Client does not support URL elicitation (required for notifications/elicitation/complete)",
       );

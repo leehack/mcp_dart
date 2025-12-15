@@ -59,19 +59,19 @@ void main() {
       var callbackInvoked = false;
       var receivedArgs = <String, dynamic>{};
 
-      mcpServer.tool(
+      mcpServer.registerTool(
         'test_tool',
         description: 'A test tool',
-        toolInputSchema: const ToolInputSchema(
+        inputSchema: const ToolInputSchema(
           properties: {
             'input': {'type': 'string'},
           },
         ),
-        callback: ({args, meta, extra}) async {
+        callback: (args, extra) async {
           callbackInvoked = true;
-          receivedArgs = args ?? {};
+          receivedArgs = args;
           return CallToolResult.fromContent(
-            content: [TextContent(text: 'Tool executed: ${args?['input']}')],
+            content: [TextContent(text: 'Tool executed: ${args['input']}')],
           );
         },
       );
@@ -110,9 +110,9 @@ void main() {
     test('tool callback receives RequestHandlerExtra', () async {
       RequestHandlerExtra? receivedExtra;
 
-      mcpServer.tool(
+      mcpServer.registerTool(
         'extra_test',
-        callback: ({args, meta, extra}) async {
+        callback: (args, extra) async {
           receivedExtra = extra;
           return CallToolResult.fromContent(
             content: [const TextContent(text: 'ok')],
@@ -144,9 +144,9 @@ void main() {
     });
 
     test('tool callback error returns CallToolResult with isError', () async {
-      mcpServer.tool(
+      mcpServer.registerTool(
         'error_tool',
-        callback: ({args, meta, extra}) async {
+        callback: (args, extra) async {
           throw Exception('Tool execution failed');
         },
       );
@@ -177,9 +177,9 @@ void main() {
     });
 
     test('cannot register duplicate tool names', () {
-      mcpServer.tool(
+      mcpServer.registerTool(
         'duplicate',
-        callback: ({args, meta, extra}) async {
+        callback: (args, extra) async {
           return CallToolResult.fromContent(
             content: [const TextContent(text: 'first')],
           );
@@ -187,9 +187,9 @@ void main() {
       );
 
       expect(
-        () => mcpServer.tool(
+        () => mcpServer.registerTool(
           'duplicate',
-          callback: ({args, meta, extra}) async {
+          callback: (args, extra) async {
             return CallToolResult.fromContent(
               content: [const TextContent(text: 'second')],
             );
@@ -206,20 +206,20 @@ void main() {
     });
 
     test('tool with output schema is registered correctly', () {
-      mcpServer.tool(
+      mcpServer.registerTool(
         'schema_tool',
         description: 'Tool with schemas',
-        toolInputSchema: const ToolInputSchema(
+        inputSchema: const ToolInputSchema(
           properties: {
             'query': {'type': 'string'},
           },
         ),
-        toolOutputSchema: const ToolOutputSchema(
+        outputSchema: const ToolOutputSchema(
           properties: {
             'result': {'type': 'string'},
           },
         ),
-        callback: ({args, meta, extra}) async {
+        callback: (args, extra) async {
           return CallToolResult.fromContent(
             content: [const TextContent(text: 'result')],
           );

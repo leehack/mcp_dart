@@ -74,7 +74,7 @@ void main() {
 
       // Initialize with elicitation capability
       final clientCaps = const ClientCapabilities(
-        elicitation: ClientCapabilitiesElicitation(supportsForm: true),
+        elicitation: ClientElicitation.formOnly(),
       );
       final initParams = InitializeRequestParams(
         protocolVersion: latestProtocolVersion,
@@ -227,7 +227,7 @@ void main() {
 
       // Initialize with URL elicitation capability
       final clientCaps = const ClientCapabilities(
-        elicitation: ClientCapabilitiesElicitation(supportsUrl: true),
+        elicitation: ClientElicitation.all(),
       );
       final initParams = InitializeRequestParams(
         protocolVersion: latestProtocolVersion,

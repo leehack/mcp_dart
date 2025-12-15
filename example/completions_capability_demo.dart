@@ -24,7 +24,7 @@ void main() async {
 
   // Add a resource template with argument completion
   // Clients can request completion for the {path} argument
-  server.resourceTemplate(
+  server.registerResourceTemplate(
     "file-reader",
     ResourceTemplateRegistration(
       "file:///{path}",
@@ -51,6 +51,10 @@ void main() async {
         },
       },
     ),
+    (
+      description: "Read files with auto-completion support",
+      mimeType: "text/plain"
+    ),
     (uri, variables, extra) async {
       final path = variables['path'] ?? 'unknown';
       return ReadResourceResult(
@@ -64,14 +68,10 @@ void main() async {
         ],
       );
     },
-    metadata: (
-      description: "Read files with auto-completion support",
-      mimeType: "text/plain"
-    ),
   );
 
   // Add a prompt with argument completion
-  server.prompt(
+  server.registerPrompt(
     'code-review',
     description: 'Generate code review for a specific file type',
     argsSchema: {
@@ -144,17 +144,17 @@ void main() async {
   );
 
   // Add a simple tool (no completion - just for demonstration)
-  server.tool(
+  server.registerTool(
     'echo',
     description: 'Echo back the input message',
-    toolInputSchema: const ToolInputSchema(
+    inputSchema: const ToolInputSchema(
       properties: {
         'message': {'type': 'string', 'description': 'Message to echo'},
       },
       required: ['message'],
     ),
-    callback: ({args, meta, extra}) async {
-      final message = args?['message'] ?? '';
+    callback: (args, extra) async {
+      final message = args['message'] ?? '';
       return CallToolResult.fromContent(
         content: [
           TextContent(text: 'Echo: $message'),

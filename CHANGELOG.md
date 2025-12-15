@@ -7,9 +7,12 @@
   - Updated `ServerCapabilities` to use `ServerCapabilitiesTasks`, `ServerCapabilitiesTools`, etc.
   - Updated `ClientCapabilities` to use `ClientCapabilitiesTasks`, `ClientCapabilitiesElicitation`, `ClientCapabilitiesSampling`, etc.
   - **Migration**: Update capability declarations to use the new typed classes (e.g., `ServerCapabilities(tasks: ServerCapabilitiesTasks(listChanged: true))`).
-
-- **Tool Callback Update**: `ToolCallback` signature has been updated to include `RequestHandlerExtra? extra` as a named parameter.
-  - New Signature: `FutureOr<BaseResultData> Function({Map<String, dynamic>? args, Map<String, dynamic>? meta, RequestHandlerExtra? extra})`
+- **File Removal**: `lib/src/server/mcp.dart` has been removed. Use `lib/src/server/mcp_server.dart` (exported via `lib/src/server/module.dart`) instead.
+- **Client Validation**: `Client.callTool` now strictly validates tool outputs against their defined JSON schema (if present). Mismatches will throw an `McpError(ErrorCode.invalidParams)`.
+- **API Refactoring**:
+  - `McpServer.tool`, `resource`, and `prompt` are **deprecated**. Use `registerTool`, `registerResource`, and `registerPrompt` instead.
+  - `McpServer.registerTool` uses a new callback signature: `FutureOr<CallToolResult> Function(Map<String, dynamic> args, RequestHandlerExtra extra)`.
+  - The deprecated `McpServer.tool` retains the old named-parameter signature for backward compatibility.
 
 ### Features
 

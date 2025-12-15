@@ -1,16 +1,19 @@
 import 'dart:async';
 
+import 'package:mcp_dart/src/shared/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/tool_name_validation.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/shared/uri_template.dart';
 import 'package:mcp_dart/src/types.dart';
 
 import 'server.dart';
+import 'tasks.dart';
 
 final _logger = Logger("mcp_dart.server.mcp");
 
-typedef CompleteCallback = Future<List<String>> Function(String value);
+typedef CompleteCallback = FutureOr<List<String>> Function(String value);
 
 class CompletableDef {
   final CompleteCallback complete;
@@ -23,11 +26,27 @@ class CompletableField {
   const CompletableField({required this.def, this.underlyingType = String});
 }
 
-typedef ToolCallback = FutureOr<BaseResultData> Function({
+typedef ToolFunction = FutureOr<CallToolResult> Function(
+  Map<String, dynamic> args,
+  RequestHandlerExtra extra,
+);
+
+typedef LegacyToolCallback = FutureOr<CallToolResult> Function({
   Map<String, dynamic>? args,
-  Map<String, dynamic>? meta,
   RequestHandlerExtra? extra,
 });
+
+sealed class ToolCallback {}
+
+final class FunctionToolCallback extends ToolCallback {
+  final ToolFunction function;
+  FunctionToolCallback(this.function);
+}
+
+final class InterfaceToolCallback extends ToolCallback {
+  final ToolTaskHandler handler;
+  InterfaceToolCallback(this.handler);
+}
 
 typedef PromptCallback = FutureOr<GetPromptResult> Function(
   Map<String, dynamic>? args,
@@ -107,50 +126,356 @@ class ResourceTemplateRegistration {
   }
 }
 
-class _RegisteredTool {
-  final String? description;
-  final ToolInputSchema? toolInputSchema;
-  final ToolOutputSchema? toolOutputSchema;
-  final ToolAnnotations? annotations;
-  final ImageContent? icon;
-  final ToolCallback callback;
+/// Abstract interface for a registered resource.
+abstract class RegisteredResource {
+  String get name;
+  String? get title;
+  ResourceMetadata? get metadata;
+  ReadResourceCallback get readCallback;
+  bool get enabled;
 
-  const _RegisteredTool({
-    this.description,
-    this.toolInputSchema,
-    this.toolOutputSchema,
-    this.annotations,
+  void enable();
+  void disable();
+  void remove();
+  void update({
+    String? name,
+    String? title,
+    String? uri,
+    ResourceMetadata? metadata,
+    ReadResourceCallback? callback,
+    bool? enabled,
+  });
+}
+
+class _RegisteredResourceImpl implements RegisteredResource {
+  @override
+  String name;
+  @override
+  String? title;
+  final String uri;
+  @override
+  ResourceMetadata? metadata;
+  final ImageContent? icon; // Kept for legacy compatibility
+  @override
+  ReadResourceCallback readCallback;
+  @override
+  bool enabled = true;
+
+  final McpServer _server;
+
+  _RegisteredResourceImpl(
+    this._server, {
+    required this.name,
+    required this.uri,
+    this.metadata,
     this.icon,
-    required this.callback,
+    required this.readCallback,
   });
 
-  Tool toTool(String name) {
-    return Tool(
+  Resource toResource() {
+    return Resource(
+      uri: uri,
       name: name,
-      description: description,
-      inputSchema: toolInputSchema ?? const ToolInputSchema(),
-      // Do not include output schema in the payload if it isn't defined
-      outputSchema: toolOutputSchema,
-      annotations: annotations,
+      description: metadata?.description,
+      mimeType: metadata?.mimeType,
       icon: icon,
+      annotations: title != null ? ResourceAnnotations(title: title) : null,
     );
+  }
+
+  @override
+  void enable() => update(enabled: true);
+
+  @override
+  void disable() => update(enabled: false);
+
+  @override
+  void remove() => update(uri: null);
+
+  @override
+  void update({
+    String? name,
+    String? title,
+    String? uri,
+    ResourceMetadata? metadata,
+    ReadResourceCallback? callback,
+    bool? enabled,
+  }) {
+    if (uri != null && uri != this.uri) {
+      _server._registeredResources.remove(this.uri);
+    }
+
+    if (name != null) this.name = name;
+    if (title != null) this.title = title;
+    if (metadata != null) this.metadata = metadata;
+    if (callback != null) readCallback = callback;
+    if (enabled != null) this.enabled = enabled;
+
+    if (uri != null && uri != this.uri) {
+      _server._updateResourceUri(this.uri, uri, this);
+    }
+    _server.sendResourceListChanged();
   }
 }
 
-class _RegisteredPrompt<Args> {
-  final String? description;
-  final Map<String, PromptArgumentDefinition>? argsSchemaDefinition;
-  final ImageContent? icon;
-  final PromptCallback? callback;
+abstract class RegisteredResourceTemplate {
+  ResourceTemplateRegistration get resourceTemplate;
+  String? get title;
+  ResourceMetadata? get metadata;
+  ReadResourceTemplateCallback get readCallback;
+  bool get enabled;
 
-  const _RegisteredPrompt({
+  void enable();
+  void disable();
+  void remove();
+  void update({
+    String? name,
+    String? title,
+    ResourceTemplateRegistration? template,
+    ResourceMetadata? metadata,
+    ReadResourceTemplateCallback? callback,
+    bool? enabled,
+  });
+}
+
+class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
+  final String name;
+  @override
+  ResourceTemplateRegistration resourceTemplate;
+  @override
+  String? title;
+  @override
+  ResourceMetadata? metadata;
+  @override
+  ReadResourceTemplateCallback readCallback;
+  @override
+  bool enabled = true;
+
+  final McpServer _server;
+
+  _RegisteredResourceTemplateImpl(
+    this._server, {
+    required this.name,
+    required this.resourceTemplate,
+    this.metadata,
+    required this.readCallback,
+  });
+
+  ResourceTemplate toResourceTemplate() {
+    return ResourceTemplate(
+      uriTemplate: resourceTemplate.uriTemplate.toString(),
+      name: name,
+      description: metadata?.description,
+      mimeType: metadata?.mimeType,
+      annotations: title != null ? ResourceAnnotations(title: title) : null,
+    );
+  }
+
+  @override
+  void enable() => update(enabled: true);
+
+  @override
+  void disable() => update(enabled: false);
+
+  @override
+  void remove() => update(name: null);
+
+  @override
+  void update({
+    String? name,
+    String? title,
+    ResourceTemplateRegistration? template,
+    ResourceMetadata? metadata,
+    ReadResourceTemplateCallback? callback,
+    bool? enabled,
+  }) {
+    if (name != null && name != this.name) {
+      _server._registeredResourceTemplates.remove(this.name);
+    }
+    if (title != null) this.title = title;
+    if (template != null) resourceTemplate = template;
+    if (metadata != null) this.metadata = metadata;
+    if (callback != null) readCallback = callback;
+    if (enabled != null) this.enabled = enabled;
+
+    if (name != null && name != this.name) {
+      _server._updateResourceTemplateName(this.name, name, this);
+    }
+    _server.sendResourceListChanged();
+  }
+}
+
+abstract class RegisteredTool {
+  String get name;
+  String? get title;
+  String? get description;
+  ToolInputSchema? get inputSchema;
+  ToolOutputSchema? get outputSchema;
+  ToolAnnotations? get annotations;
+  ToolExecution? get execution;
+  ToolCallback? get callback;
+  bool get enabled;
+
+  void enable();
+  void disable();
+  void remove();
+  void update({
+    String? name,
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    ToolOutputSchema? outputSchema,
+    ToolAnnotations? annotations,
+    ToolExecution? execution,
+    ToolCallback? callback,
+    bool? enabled,
+  });
+}
+
+class _RegisteredToolImpl implements RegisteredTool {
+  @override
+  String name;
+  @override
+  String? title;
+  @override
+  String? description;
+  @override
+  ToolInputSchema? inputSchema;
+  @override
+  ToolOutputSchema? outputSchema;
+  @override
+  ToolAnnotations? annotations;
+  final ImageContent? icon;
+  final Map<String, dynamic>? meta;
+  @override
+  ToolExecution? execution;
+  @override
+  ToolCallback? callback;
+  @override
+  bool enabled = true;
+
+  final McpServer _server;
+
+  _RegisteredToolImpl(
+    this._server, {
+    required this.name,
+    this.title,
+    this.description,
+    this.inputSchema,
+    this.outputSchema,
+    this.annotations,
+    this.icon,
+    this.meta,
+    this.execution,
+    required this.callback,
+  }) {
+    _server._registeredTools[name] = this;
+  }
+
+  Tool toTool() {
+    return Tool(
+      name: name,
+      description: description,
+      inputSchema: inputSchema ?? const ToolInputSchema(),
+      outputSchema: outputSchema,
+      annotations: annotations,
+      icon: icon,
+      execution: execution,
+    );
+  }
+
+  @override
+  void enable() => update(enabled: true);
+
+  @override
+  void disable() => update(enabled: false);
+
+  @override
+  void remove() => update(name: null);
+
+  @override
+  void update({
+    String? name,
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    ToolOutputSchema? outputSchema,
+    ToolAnnotations? annotations,
+    ToolExecution? execution,
+    ToolCallback? callback,
+    bool? enabled,
+  }) {
+    if (name != null && name != this.name) {
+      _server._registeredTools.remove(this.name);
+    }
+
+    if (name != null) {
+      validateAndWarnToolName(name);
+      this.name = name;
+    }
+    if (title != null) this.title = title;
+    if (description != null) this.description = description;
+    if (inputSchema != null) this.inputSchema = inputSchema;
+    if (outputSchema != null) this.outputSchema = outputSchema;
+    if (annotations != null) this.annotations = annotations;
+    if (execution != null) this.execution = execution;
+    if (callback != null) this.callback = callback;
+    if (enabled != null) this.enabled = enabled;
+
+    if (name != null) {
+      _server._registeredTools[name] = this;
+    }
+    _server.sendToolListChanged();
+  }
+}
+
+abstract class RegisteredPrompt {
+  String get name;
+  String? get title;
+  String? get description;
+  Map<String, PromptArgumentDefinition>? get argsSchemaDefinition;
+  bool get enabled;
+
+  void enable();
+  void disable();
+  void remove();
+  void update({
+    String? name,
+    String? title,
+    String? description,
+    Map<String, PromptArgumentDefinition>? argsSchema,
+    PromptCallback? callback,
+    bool? enabled,
+  });
+}
+
+class _RegisteredPromptImpl implements RegisteredPrompt {
+  @override
+  String name;
+  @override
+  String? title;
+  @override
+  String? description;
+  @override
+  Map<String, PromptArgumentDefinition>? argsSchemaDefinition;
+  final ImageContent? icon;
+  PromptCallback? callback;
+  @override
+  bool enabled = true;
+
+  final McpServer _server;
+
+  _RegisteredPromptImpl(
+    this._server, {
+    required this.name,
+    this.title,
     this.description,
     this.argsSchemaDefinition,
     this.icon,
     this.callback,
   });
 
-  Prompt toPrompt(String name) {
+  Prompt toPrompt() {
     final promptArgs = argsSchemaDefinition?.entries.map((entry) {
       return PromptArgument(
         name: entry.key,
@@ -165,66 +490,152 @@ class _RegisteredPrompt<Args> {
       icon: icon,
     );
   }
-}
 
-class _RegisteredResource {
-  final String name;
-  final ResourceMetadata? metadata;
-  final ImageContent? icon;
-  final ReadResourceCallback readCallback;
+  @override
+  void enable() => update(enabled: true);
 
-  const _RegisteredResource({
-    required this.name,
-    this.metadata,
-    this.icon,
-    required this.readCallback,
-  });
+  @override
+  void disable() => update(enabled: false);
 
-  Resource toResource(String uri) {
-    return Resource(
-      uri: uri,
-      name: name,
-      description: metadata?.description,
-      mimeType: metadata?.mimeType,
-      icon: icon,
-    );
+  @override
+  void remove() => update(name: null);
+
+  @override
+  void update({
+    String? name,
+    String? title,
+    String? description,
+    Map<String, PromptArgumentDefinition>? argsSchema,
+    PromptCallback? callback,
+    bool? enabled,
+  }) {
+    if (name != null && name != this.name) {
+      _server._registeredPrompts.remove(this.name);
+    }
+    if (name != null) this.name = name;
+    if (title != null) this.title = title;
+    if (description != null) this.description = description;
+    if (argsSchema != null) argsSchemaDefinition = argsSchema;
+    if (callback != null) this.callback = callback;
+    if (enabled != null) this.enabled = enabled;
+
+    if (name != null) {
+      _server._registeredPrompts[name] = this;
+    }
+    _server.sendPromptListChanged();
   }
 }
 
-class _RegisteredResourceTemplate {
-  final ResourceTemplateRegistration resourceTemplate;
-  final ResourceMetadata? metadata;
-  final ReadResourceTemplateCallback readCallback;
+class ExperimentalMcpServerTasks {
+  final McpServer _server;
 
-  const _RegisteredResourceTemplate({
-    required this.resourceTemplate,
-    this.metadata,
-    required this.readCallback,
-  });
+  ExperimentalMcpServerTasks(this._server);
 
-  ResourceTemplate toResourceTemplate(String name) {
-    return ResourceTemplate(
-      uriTemplate: resourceTemplate.uriTemplate.toString(),
-      name: name,
-      description: metadata?.description,
-      mimeType: metadata?.mimeType,
+  /// Registers a task-based tool with a config object and handler.
+  RegisteredTool registerToolTask(
+    String name, {
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    ToolOutputSchema? outputSchema,
+    ToolAnnotations? annotations,
+    Map<String, dynamic>? meta,
+    ToolExecution? execution,
+    required ToolTaskHandler handler,
+  }) {
+    // Validate that taskSupport is not 'forbidden' for task-based tools
+    final effectiveExecution = ToolExecution(
+      taskSupport: execution?.taskSupport ?? 'required',
     );
+    if (effectiveExecution.taskSupport == 'forbidden') {
+      throw ArgumentError(
+        "Cannot register task-based tool '$name' with taskSupport 'forbidden'. Use registerTool() instead.",
+      );
+    }
+
+    return _server._registerTool(
+      name,
+      title: title,
+      description: description,
+      inputSchema: inputSchema,
+      outputSchema: outputSchema,
+      annotations: annotations,
+      meta: meta,
+      execution: effectiveExecution,
+      callback: InterfaceToolCallback(handler),
+    );
+  }
+
+  /// Sends an `elicitation/create` request associated with a specific task.
+  Future<ElicitResult> elicitForTask(
+    String taskId,
+    ElicitRequestParams params, [
+    RequestOptions? options,
+  ]) {
+    final req = JsonRpcElicitRequest(
+      id: -1,
+      elicitParams: params,
+      meta: {
+        relatedTaskMetaKey: {'taskId': taskId},
+      },
+    );
+    return _server.server.request<ElicitResult>(
+      req,
+      (json) => ElicitResult.fromJson(json),
+      options,
+    );
+  }
+
+  /// Sends a `sampling/createMessage` request associated with a specific task.
+  Future<CreateMessageResult> createMessageForTask(
+    String taskId,
+    CreateMessageRequestParams params, [
+    RequestOptions? options,
+  ]) {
+    final req = JsonRpcCreateMessageRequest(
+      id: -1,
+      createParams: params,
+      meta: {
+        relatedTaskMetaKey: {'taskId': taskId},
+      },
+    );
+    return _server.server.request<CreateMessageResult>(
+      req,
+      (json) => CreateMessageResult.fromJson(json),
+      options,
+    );
+  }
+
+  void onListTasks(ListTasksCallback callback) {
+    _server._listTasksCallback = callback;
+    _server._ensureTaskHandlersInitialized();
+  }
+
+  void onCancelTask(CancelTaskCallback callback) {
+    _server._cancelTaskCallback = callback;
+    _server._ensureTaskHandlersInitialized();
+  }
+
+  void onGetTask(GetTaskCallback callback) {
+    _server._getTaskCallback = callback;
+    _server._ensureTaskHandlersInitialized();
+  }
+
+  void onTaskResult(TaskResultCallback callback) {
+    _server._taskResultCallback = callback;
+    _server._ensureTaskHandlersInitialized();
   }
 }
 
 /// High-level Model Context Protocol (MCP) server API.
-///
-/// Simplifies the registration of resources, tools, and prompts by providing
-/// helper methods (`resource`, `tool`, `prompt`) that configure the necessary
-/// request handlers on an underlying [Server] instance.
 class McpServer {
   late final Server server;
 
-  final Map<String, _RegisteredResource> _registeredResources = {};
-  final Map<String, _RegisteredResourceTemplate> _registeredResourceTemplates =
-      {};
-  final Map<String, _RegisteredTool> _registeredTools = {};
-  final Map<String, _RegisteredPrompt> _registeredPrompts = {};
+  final Map<String, _RegisteredResourceImpl> _registeredResources = {};
+  final Map<String, _RegisteredResourceTemplateImpl>
+      _registeredResourceTemplates = {};
+  final Map<String, _RegisteredToolImpl> _registeredTools = {};
+  final Map<String, _RegisteredPromptImpl> _registeredPrompts = {};
 
   bool _resourceHandlersInitialized = false;
   bool _toolHandlersInitialized = false;
@@ -237,6 +648,12 @@ class McpServer {
   GetTaskCallback? _getTaskCallback;
   TaskResultCallback? _taskResultCallback;
 
+  ExperimentalMcpServerTasks? _experimental;
+  ExperimentalMcpServerTasks get experimental =>
+      _experimental ??= ExperimentalMcpServerTasks(this);
+
+  static const _validator = BasicJsonSchemaValidator();
+
   /// Creates an [McpServer] instance.
   McpServer(Implementation serverInfo, {ServerOptions? options}) {
     server = Server(serverInfo, options: options);
@@ -247,9 +664,20 @@ class McpServer {
     return await server.connect(transport);
   }
 
-  /// Closes the server connection by closing the underlying transport.
+  /// Closes the server connection.
   Future<void> close() async {
     await server.close();
+  }
+
+  /// Checks if the server is connected to a transport.
+  bool get isConnected => server.transport != null;
+
+  /// Sends a logging message to the client, if connected.
+  Future<void> sendLoggingMessage(
+    LoggingMessageNotificationParams params, {
+    String? sessionId,
+  }) async {
+    return server.sendLoggingMessage(params, sessionId: sessionId);
   }
 
   /// Sets the error handler for the server.
@@ -260,17 +688,57 @@ class McpServer {
   /// Gets the error handler for the server.
   void Function(Error)? get onError => server.onerror;
 
+  void _updateResourceUri(
+    String oldUri,
+    String newUri,
+    _RegisteredResourceImpl resource,
+  ) {
+    _registeredResources.remove(oldUri);
+    _registeredResources[newUri] = resource;
+  }
+
+  void _updateResourceTemplateName(
+    String oldName,
+    String newName,
+    _RegisteredResourceTemplateImpl template,
+  ) {
+    _registeredResourceTemplates.remove(oldName);
+    _registeredResourceTemplates[newName] = template;
+  }
+
+  void sendResourceListChanged() {
+    if (server.transport != null) {
+      server.sendResourceListChanged();
+    }
+  }
+
+  void sendToolListChanged() {
+    if (server.transport != null) {
+      server.sendToolListChanged();
+    }
+  }
+
+  void sendPromptListChanged() {
+    if (server.transport != null) {
+      server.sendPromptListChanged();
+    }
+  }
+
+  // --- Handlers ---
+
   void _ensureTaskHandlersInitialized() {
-    if (_taskHandlersInitialized) return;
-    server.assertCanSetRequestHandler(Method.tasksList);
-    server.assertCanSetRequestHandler(Method.tasksCancel);
-    server.assertCanSetRequestHandler(Method.tasksGet);
-    server.assertCanSetRequestHandler(Method.tasksResult);
-    server.registerCapabilities(
-      const ServerCapabilities(
-        tasks: ServerCapabilitiesTasks(listChanged: true),
-      ),
-    );
+    if (!_taskHandlersInitialized) {
+      server.assertCanSetRequestHandler(Method.tasksList);
+      server.assertCanSetRequestHandler(Method.tasksCancel);
+      server.assertCanSetRequestHandler(Method.tasksGet);
+      server.assertCanSetRequestHandler(Method.tasksResult);
+      server.registerCapabilities(
+        const ServerCapabilities(
+          tasks: ServerCapabilitiesTasks(listChanged: true),
+        ),
+      );
+      _taskHandlersInitialized = true;
+    }
 
     server.setRequestHandler<JsonRpcListTasksRequest>(
       Method.tasksList,
@@ -340,8 +808,6 @@ class McpServer {
         }),
       );
     }
-
-    _taskHandlersInitialized = true;
   }
 
   void _ensureToolHandlersInitialized() {
@@ -355,8 +821,10 @@ class McpServer {
     server.setRequestHandler<JsonRpcListToolsRequest>(
       Method.toolsList,
       (request, extra) async => ListToolsResult(
-        tools:
-            _registeredTools.entries.map((e) => e.value.toTool(e.key)).toList(),
+        tools: _registeredTools.values
+            .where((t) => t.enabled)
+            .map((e) => e.toTool())
+            .toList(),
       ),
       (id, params, meta) => JsonRpcListToolsRequest.fromJson({
         'id': id,
@@ -373,21 +841,111 @@ class McpServer {
         final registeredTool = _registeredTools[toolName];
         if (registeredTool == null) {
           throw McpError(
-            ErrorCode.methodNotFound.value,
+            ErrorCode.invalidParams.value,
             "Tool '$toolName' not found",
           );
         }
-        try {
-          // Cast the result to BaseResultData
-          return await Future.value(
-            registeredTool.callback(
-              args: toolArgs,
-              meta: request.meta,
-              extra: extra,
-            ),
+        if (!registeredTool.enabled) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Tool '$toolName' is disabled",
           );
+        }
+
+        // Validate arguments against schema
+        if (registeredTool.inputSchema != null) {
+          try {
+            _validator.validate(
+              registeredTool.inputSchema!.toJson(),
+              toolArgs ?? {},
+            );
+          } catch (e) {
+            throw McpError(
+              ErrorCode.invalidParams.value,
+              "Invalid arguments for tool '$toolName': $e",
+            );
+          }
+        }
+
+        try {
+          final isTaskRequest = request.isTaskAugmented;
+          final taskSupport =
+              registeredTool.execution?.taskSupport ?? 'forbidden';
+
+          final isTaskHandler =
+              registeredTool.callback is InterfaceToolCallback;
+
+          // Validate task hint configuration
+          if ((taskSupport == 'required' || taskSupport == 'optional') &&
+              !isTaskHandler) {
+            throw McpError(
+              ErrorCode.internalError.value,
+              "Tool '$toolName' has taskSupport '$taskSupport' but was not registered with registerToolTask",
+            );
+          }
+
+          dynamic result;
+          if (taskSupport == 'required') {
+            if (!isTaskRequest) {
+              throw McpError(
+                ErrorCode.methodNotFound.value,
+                "Tool '$toolName' requires task augmentation (taskSupport: 'required')",
+              );
+            }
+            final InterfaceToolCallback taskHandler =
+                registeredTool.callback as InterfaceToolCallback;
+            result = await taskHandler.handler.createTask(toolArgs, extra);
+          } else if (taskSupport == 'optional') {
+            if (!isTaskRequest) {
+              // Ensure we have a task handler for automatic polling (checked above, but safe cast)
+              result = await _handleAutomaticTaskPolling(
+                registeredTool,
+                toolArgs,
+                extra,
+              );
+            } else {
+              final InterfaceToolCallback taskHandler =
+                  registeredTool.callback as InterfaceToolCallback;
+              result = await taskHandler.handler.createTask(toolArgs, extra);
+            }
+          } else {
+            // taskSupport is 'forbidden' or not specified
+            if (isTaskRequest) {
+              throw McpError(
+                ErrorCode.invalidParams.value,
+                "Tool '$toolName' does not support task augmentation (taskSupport: 'forbidden')",
+              );
+            }
+            final FunctionToolCallback toolCallback =
+                registeredTool.callback as FunctionToolCallback;
+            result = await toolCallback.function(
+              toolArgs ?? {},
+              extra,
+            );
+          }
+
+          if (registeredTool.outputSchema != null && result is CallToolResult) {
+            if (result.isError != true) {
+              try {
+                _validator.validate(
+                  registeredTool.outputSchema!.toJson(),
+                  result.structuredContent,
+                );
+              } catch (e) {
+                throw McpError(
+                  ErrorCode.invalidParams.value,
+                  "Output validation error: Invalid structured content for tool '$toolName': $e",
+                );
+              }
+            }
+          }
+
+          return result;
         } catch (error) {
           _logger.warn("Error executing tool '$toolName': $error");
+          if (error is McpError) {
+            rethrow; // Pass through McpErrors (like methodNotFound)
+          }
           return CallToolResult.fromContent(
             content: [TextContent(text: error.toString())],
             isError: true,
@@ -436,8 +994,10 @@ class McpServer {
     PromptReference ref,
     ArgumentCompletionInfo argInfo,
   ) async {
-    final argDef =
-        _registeredPrompts[ref.name]?.argsSchemaDefinition?[argInfo.name];
+    final prompt = _registeredPrompts[ref.name];
+    if (prompt == null || !prompt.enabled) return _emptyCompletionResult();
+
+    final argDef = prompt.argsSchemaDefinition?[argInfo.name];
     final completer = argDef?.completable?.def.complete;
     if (completer == null) return _emptyCompletionResult();
     try {
@@ -461,6 +1021,8 @@ class McpServer {
         "Resource template URI '${ref.uri}' not found for completion",
       ),
     );
+    if (!templateEntry.value.enabled) return _emptyCompletionResult();
+
     final completer = templateEntry.value.resourceTemplate
         .getCompletionCallback(argInfo.name);
     if (completer == null) return _emptyCompletionResult();
@@ -486,11 +1048,12 @@ class McpServer {
     server.setRequestHandler<JsonRpcListResourcesRequest>(
       Method.resourcesList,
       (request, extra) async {
-        final fixed = _registeredResources.entries
-            .map((e) => e.value.toResource(e.key))
+        final fixed = _registeredResources.values
+            .where((r) => r.enabled)
+            .map((e) => e.toResource())
             .toList();
         final templateFutures = _registeredResourceTemplates.values
-            .where((t) => t.resourceTemplate.listCallback != null)
+            .where((t) => t.resourceTemplate.listCallback != null && t.enabled)
             .map((t) async {
           try {
             final result = await Future.value(
@@ -526,7 +1089,8 @@ class McpServer {
       Method.resourcesTemplatesList,
       (request, extra) async => ListResourceTemplatesResult(
         resourceTemplates: _registeredResourceTemplates.entries
-            .map((e) => e.value.toResourceTemplate(e.key))
+            .where((e) => e.value.enabled)
+            .map((e) => e.value.toResourceTemplate())
             .toList(),
       ),
       (id, params, meta) => JsonRpcListResourceTemplatesRequest.fromJson({
@@ -551,9 +1115,16 @@ class McpServer {
         }
         final fixed = _registeredResources[uriString];
         if (fixed != null) {
+          if (!fixed.enabled) {
+            throw McpError(
+              ErrorCode.invalidParams.value,
+              "Resource disabled: $uriString",
+            );
+          }
           return await Future.value(fixed.readCallback(uri, extra));
         }
         for (final entry in _registeredResourceTemplates.values) {
+          if (!entry.enabled) continue;
           final vars = entry.resourceTemplate.uriTemplate.match(uriString);
           if (vars != null) {
             return await Future.value(entry.readCallback(uri, vars, extra));
@@ -586,8 +1157,9 @@ class McpServer {
     server.setRequestHandler<JsonRpcListPromptsRequest>(
       Method.promptsList,
       (request, extra) async => ListPromptsResult(
-        prompts: _registeredPrompts.entries
-            .map((e) => e.value.toPrompt(e.key))
+        prompts: _registeredPrompts.values
+            .where((p) => p.enabled)
+            .map((p) => p.toPrompt())
             .toList(),
       ),
       (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
@@ -609,6 +1181,13 @@ class McpServer {
             "Prompt '$name' not found",
           );
         }
+        if (!registered.enabled) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Prompt '$name' is disabled",
+          );
+        }
+
         try {
           dynamic parsedArgs = args ?? {};
           if (registered.argsSchemaDefinition != null) {
@@ -627,7 +1206,7 @@ class McpServer {
           if (error is McpError) rethrow;
           throw McpError(
             ErrorCode.internalError.value,
-            "Failed to generate prompt '$name'",
+            "Failed to generate prompt '$name': $error",
           );
         }
       },
@@ -653,8 +1232,14 @@ class McpServer {
       if (value == null) {
         if (def.required) errors.add("Missing required '$name'");
       } else {
-        final bool typeOk = (value.runtimeType == def.type ||
-            (def.type == num && value is num));
+        // Basic type checking
+        bool typeOk = false;
+        if (def.type == String) typeOk = value is String;
+        if (def.type == int) typeOk = value is int;
+        if (def.type == double) typeOk = value is num;
+        if (def.type == num) typeOk = value is num;
+        if (def.type == bool) typeOk = value is bool;
+
         if (!typeOk) {
           errors.add(
             "Invalid type for '$name'. Expected ${def.type}, got ${value.runtimeType}",
@@ -673,8 +1258,144 @@ class McpServer {
     return validatedArgs;
   }
 
+  // --- Registration Methods ---
+
+  /// Registers a resource.
+  RegisteredResource registerResource(
+    String name,
+    String uri,
+    ResourceMetadata? metadata,
+    ReadResourceCallback readCallback,
+  ) {
+    if (_registeredResources.containsKey(uri)) {
+      throw ArgumentError("Resource URI '$uri' already registered.");
+    }
+    final resource = _RegisteredResourceImpl(
+      this,
+      name: name,
+      uri: uri,
+      metadata: metadata,
+      readCallback: readCallback,
+    );
+    _registeredResources[uri] = resource;
+    _ensureResourceHandlersInitialized();
+    sendResourceListChanged();
+    return resource;
+  }
+
+  /// Registers a resource template.
+  RegisteredResourceTemplate registerResourceTemplate(
+    String name,
+    ResourceTemplateRegistration template,
+    ResourceMetadata? metadata,
+    ReadResourceTemplateCallback readCallback,
+  ) {
+    if (_registeredResourceTemplates.containsKey(name)) {
+      throw ArgumentError(
+        "Resource template name '$name' already registered.",
+      );
+    }
+    final resourceTemplate = _RegisteredResourceTemplateImpl(
+      this,
+      name: name,
+      resourceTemplate: template,
+      metadata: metadata,
+      readCallback: readCallback,
+    );
+    _registeredResourceTemplates[name] = resourceTemplate;
+    _ensureResourceHandlersInitialized();
+    sendResourceListChanged();
+    return resourceTemplate;
+  }
+
+  /// Registers a tool.
+  RegisteredTool registerTool(
+    String name, {
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    ToolOutputSchema? outputSchema,
+    ToolAnnotations? annotations,
+    Map<String, dynamic>? meta,
+    required ToolFunction callback,
+  }) {
+    return _registerTool(
+      name,
+      title: title,
+      description: description,
+      inputSchema: inputSchema,
+      outputSchema: outputSchema,
+      annotations: annotations,
+      meta: meta,
+      execution: const ToolExecution(taskSupport: 'forbidden'),
+      callback: FunctionToolCallback(callback),
+    );
+  }
+
+  /// Internal registration method.
+  RegisteredTool _registerTool(
+    String name, {
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    ToolOutputSchema? outputSchema,
+    ToolAnnotations? annotations,
+    Map<String, dynamic>? meta,
+    ToolExecution? execution,
+    required ToolCallback callback,
+  }) {
+    if (_registeredTools.containsKey(name)) {
+      throw ArgumentError("Tool name '$name' already registered.");
+    }
+    validateAndWarnToolName(name);
+    final tool = _RegisteredToolImpl(
+      this,
+      name: name,
+      title: title,
+      description: description,
+      inputSchema: inputSchema,
+      outputSchema: outputSchema,
+      annotations: annotations,
+      meta: meta,
+      execution: execution,
+      callback: callback,
+    );
+    _registeredTools[name] = tool;
+    _ensureToolHandlersInitialized();
+    sendToolListChanged();
+    return tool;
+  }
+
+  /// Registers a prompt.
+  RegisteredPrompt registerPrompt(
+    String name, {
+    String? title,
+    String? description,
+    Map<String, PromptArgumentDefinition>? argsSchema,
+    required PromptCallback callback,
+  }) {
+    if (_registeredPrompts.containsKey(name)) {
+      throw ArgumentError("Prompt name '$name' already registered.");
+    }
+    final prompt = _RegisteredPromptImpl(
+      this,
+      name: name,
+      title: title,
+      description: description,
+      argsSchemaDefinition: argsSchema,
+      callback: callback,
+    );
+    _registeredPrompts[name] = prompt;
+    _ensurePromptHandlersInitialized();
+    sendPromptListChanged();
+    return prompt;
+  }
+
+  // --- Legacy Methods (Wrappers) ---
+
   /// Registers a resource with a fixed, non-template [uri].
-  void resource(
+  @Deprecated('Use registerResource instead')
+  RegisteredResource resource(
     String name,
     String uri,
     ReadResourceCallback readCallback, {
@@ -684,35 +1405,40 @@ class McpServer {
     if (_registeredResources.containsKey(uri)) {
       throw ArgumentError("Resource URI '$uri' already registered.");
     }
-    _registeredResources[uri] = _RegisteredResource(
+    final resource = _RegisteredResourceImpl(
+      this,
       name: name,
+      uri: uri,
       metadata: metadata,
       icon: icon,
       readCallback: readCallback,
     );
+    _registeredResources[uri] = resource;
     _ensureResourceHandlersInitialized();
+    sendResourceListChanged();
+    return resource;
   }
 
   /// Registers resources based on a [templateRegistration] defining a URI pattern.
-  void resourceTemplate(
+  @Deprecated('Use registerResourceTemplate instead')
+  RegisteredResourceTemplate resourceTemplate(
     String name,
     ResourceTemplateRegistration templateRegistration,
     ReadResourceTemplateCallback readCallback, {
     ResourceMetadata? metadata,
   }) {
-    if (_registeredResourceTemplates.containsKey(name)) {
-      throw ArgumentError("Resource template name '$name' already registered.");
-    }
-    _registeredResourceTemplates[name] = _RegisteredResourceTemplate(
-      resourceTemplate: templateRegistration,
-      metadata: metadata,
-      readCallback: readCallback,
+    return registerResourceTemplate(
+      name,
+      templateRegistration,
+      metadata,
+      readCallback,
     );
-    _ensureResourceHandlersInitialized();
   }
 
   /// Registers a tool the client can invoke.
-  void tool(
+  /// Registers a tool the client can invoke.
+  @Deprecated('Use registerTool instead')
+  RegisteredTool tool(
     String name, {
     String? description,
     ToolInputSchema? toolInputSchema,
@@ -722,31 +1448,43 @@ class McpServer {
     @Deprecated('Use toolOutputSchema instead')
     Map<String, dynamic>? outputSchemaProperties,
     ToolAnnotations? annotations,
-    ImageContent? icon,
-    required ToolCallback callback,
+    required LegacyToolCallback callback,
   }) {
     if (_registeredTools.containsKey(name)) {
       throw ArgumentError("Tool name '$name' already registered.");
     }
-    _registeredTools[name] = _RegisteredTool(
+    validateAndWarnToolName(name);
+
+    final toolCallback = FunctionToolCallback(
+      (args, extra) => callback(args: args, extra: extra),
+    );
+
+    final tool = _RegisteredToolImpl(
+      this,
+      name: name,
       description: description,
-      toolInputSchema: toolInputSchema ??
+      inputSchema: toolInputSchema ??
           (inputSchemaProperties != null
               ? ToolInputSchema(properties: inputSchemaProperties)
               : null),
-      toolOutputSchema: toolOutputSchema ??
+      outputSchema: toolOutputSchema ??
           (outputSchemaProperties != null
               ? ToolOutputSchema(properties: outputSchemaProperties)
               : null),
       annotations: annotations,
-      icon: icon,
-      callback: callback,
+      icon: null,
+      execution: const ToolExecution(taskSupport: 'forbidden'),
+      callback: toolCallback,
     );
+    _registeredTools[name] = tool;
     _ensureToolHandlersInitialized();
+    sendToolListChanged();
+    return tool;
   }
 
   /// Registers a prompt or prompt template.
-  void prompt(
+  @Deprecated('Use registerPrompt instead')
+  RegisteredPrompt prompt(
     String name, {
     String? description,
     Map<String, PromptArgumentDefinition>? argsSchema,
@@ -757,30 +1495,18 @@ class McpServer {
       throw ArgumentError("Prompt name '$name' already registered.");
     }
 
-    _registeredPrompts[name] = _RegisteredPrompt(
+    final prompt = _RegisteredPromptImpl(
+      this,
+      name: name,
       description: description,
       argsSchemaDefinition: argsSchema,
       icon: icon,
       callback: callback,
     );
+    _registeredPrompts[name] = prompt;
     _ensurePromptHandlersInitialized();
-  }
-
-  /// Registers task handlers for the server.
-  void tasks({
-    required ListTasksCallback listCallback,
-    required CancelTaskCallback cancelCallback,
-    GetTaskCallback? getCallback,
-    TaskResultCallback? resultCallback,
-  }) {
-    if (_listTasksCallback != null) {
-      throw StateError("Task handlers already registered");
-    }
-    _listTasksCallback = listCallback;
-    _cancelTaskCallback = cancelCallback;
-    _getTaskCallback = getCallback;
-    _taskResultCallback = resultCallback;
-    _ensureTaskHandlersInitialized();
+    sendPromptListChanged();
+    return prompt;
   }
 
   CompleteResult _createCompletionResult(List<String> suggestions) {
@@ -798,225 +1524,41 @@ class McpServer {
         completion: CompletionResultData(values: [], hasMore: false),
       );
 
+  /// Handles automatic task polling for tools with taskSupport 'optional'.
+  Future<CallToolResult> _handleAutomaticTaskPolling(
+    _RegisteredToolImpl tool,
+    Map<String, dynamic>? args,
+    RequestHandlerExtra? extra,
+  ) async {
+    final InterfaceToolCallback taskHandler =
+        tool.callback as InterfaceToolCallback;
+
+    // Create task using the tool's task handler
+    final CreateTaskResult createTaskResult =
+        await taskHandler.handler.createTask(args, extra);
+    final String taskId = createTaskResult.task.taskId;
+    Task task = createTaskResult.task;
+    final int pollInterval =
+        task.pollInterval ?? 5000; // Default to 5000ms if not specified
+
+    // Poll until completion
+    while (task.status != TaskStatus.completed &&
+        task.status != TaskStatus.failed &&
+        task.status != TaskStatus.cancelled) {
+      await Future.delayed(Duration(milliseconds: pollInterval));
+      final updatedTask = await taskHandler.handler.getTask(taskId, extra);
+      task = updatedTask;
+    }
+
+    // Return the final result
+    return await taskHandler.handler.getTaskResult(taskId, extra);
+  }
+
   /// Requests structured user input from the client using form mode.
-  ///
-  /// This sends an `elicitation/create` request to the client with the specified
-  /// [message] text and [requestedSchema] defining the input structure.
-  ///
-  /// Form mode collects structured data directly through the MCP client,
-  /// where the data is visible to the client.
-  ///
-  /// The client must have the elicitation capability (with form support) for this to work.
-  ///
-  /// Returns an [ElicitResult] containing the action taken ('accept', 'decline',
-  /// or 'cancel') and the submitted content when accepted.
-  ///
-  /// Example:
-  /// ```dart
-  /// final result = await server.elicitUserInput(
-  ///   "Enter your name",
-  ///   {
-  ///     'type': 'object',
-  ///     'properties': {
-  ///       'name': {'type': 'string', 'minLength': 1}
-  ///     },
-  ///     'required': ['name']
-  ///   },
-  /// );
-  ///
-  /// if (result.accepted) {
-  ///   print("User entered: ${result.content}");
-  /// }
-  /// ```
-  Future<ElicitResult> elicitUserInput(
-    String message,
-    Map<String, dynamic> requestedSchema, {
-    Map<String, dynamic>? meta,
+  Future<ElicitResult> elicitInput(
+    ElicitRequestParams params, [
     RequestOptions? options,
-  }) async {
-    server.assertCapabilityForMethod(Method.elicitationCreate);
-
-    final request = JsonRpcElicitRequest(
-      id: -1,
-      elicitParams: ElicitRequestParams.form(
-        message: message,
-        requestedSchema: requestedSchema,
-      ),
-      meta: meta,
-    );
-
-    return await server.request<ElicitResult>(
-      request,
-      (json) => ElicitResult.fromJson(json),
-      options,
-    );
-  }
-
-  /// Requests user interaction via URL mode elicitation.
-  ///
-  /// This sends an `elicitation/create` request to the client with the specified
-  /// [message] and [url] for the user to navigate to.
-  ///
-  /// URL mode directs users to external URLs for sensitive interactions where
-  /// the data should NOT be exposed to the MCP client. Use this for:
-  /// - OAuth/authentication flows
-  /// - Payment processing
-  /// - Sensitive data entry (passwords, credit cards)
-  ///
-  /// The [elicitationId] is a unique identifier that correlates the URL navigation
-  /// with subsequent completion notifications.
-  ///
-  /// The client must have the elicitation capability (with url support) for this to work.
-  ///
-  /// After the user completes the URL interaction, the server should send a
-  /// `notifications/elicitation/complete` notification using [notifyElicitationComplete].
-  ///
-  /// Example:
-  /// ```dart
-  /// final result = await server.elicitUserInputViaUrl(
-  ///   message: "Please authenticate with your provider",
-  ///   url: "https://oauth.example.com/authorize?client_id=xxx",
-  ///   elicitationId: "oauth-session-123",
-  /// );
-  ///
-  /// if (result.accepted) {
-  ///   // User acknowledged the URL - wait for callback or poll for completion
-  /// }
-  /// ```
-  Future<ElicitResult> elicitUserInputViaUrl({
-    required String message,
-    required String url,
-    required String elicitationId,
-    Map<String, dynamic>? meta,
-    RequestOptions? options,
-  }) async {
-    server.assertCapabilityForMethod(Method.elicitationCreate);
-
-    final request = JsonRpcElicitRequest(
-      id: -1,
-      elicitParams: ElicitRequestParams.url(
-        message: message,
-        url: url,
-        elicitationId: elicitationId,
-      ),
-      meta: meta,
-    );
-
-    return await server.request<ElicitResult>(
-      request,
-      (json) => ElicitResult.fromJson(json),
-      options,
-    );
-  }
-
-  /// Sends a notification that a URL mode elicitation has completed.
-  ///
-  /// This should be called after the out-of-band interaction started by
-  /// [elicitUserInputViaUrl] has been completed (e.g., OAuth callback received).
-  ///
-  /// Example:
-  /// ```dart
-  /// // After OAuth callback is received
-  /// await server.notifyElicitationComplete("oauth-session-123");
-  /// ```
-  Future<void> notifyElicitationComplete(String elicitationId) async {
-    await server.notification(
-      JsonRpcElicitationCompleteNotification(
-        completeParams: ElicitationCompleteParams(
-          elicitationId: elicitationId,
-        ),
-      ),
-    );
-  }
-
-  /// Requests the client to generate a message using sampling.
-  ///
-  /// This sends a `sampling/createMessage` request to the client with the specified
-  /// [messages] and [maxTokens] (and other optional parameters).
-  ///
-  /// The client must have the sampling capability for this to work.
-  ///
-  /// Example:
-  /// ```dart
-  /// final result = await server.createSamplingMessage(
-  ///   messages: [
-  ///     SamplingMessage(
-  ///       role: SamplingMessageRole.user,
-  ///       content: SamplingTextContent(text: "Write a haiku"),
-  ///     ),
-  ///   ],
-  ///   maxTokens: 50,
-  /// );
-  ///
-  /// if (result.content is SamplingTextContent) {
-  ///   print("Haiku: ${(result.content as SamplingTextContent).text}");
-  /// }
-  /// ```
-  Future<CreateMessageResult> createSamplingMessage({
-    required List<SamplingMessage> messages,
-    required int maxTokens,
-    String? systemPrompt,
-    double? temperature,
-    ModelPreferences? modelPreferences,
-    List<String>? stopSequences,
-    Map<String, dynamic>? metadata,
-    Map<String, dynamic>? meta,
-    RequestOptions? options,
-  }) async {
-    server.assertCapabilityForMethod(Method.samplingCreateMessage);
-
-    final request = JsonRpcCreateMessageRequest(
-      id: -1,
-      createParams: CreateMessageRequestParams(
-        messages: messages,
-        maxTokens: maxTokens,
-        systemPrompt: systemPrompt,
-        temperature: temperature,
-        modelPreferences: modelPreferences,
-        stopSequences: stopSequences,
-        metadata: metadata,
-      ),
-      meta: meta,
-    );
-
-    return await server.request<CreateMessageResult>(
-      request,
-      (json) => CreateMessageResult.fromJson(json),
-      options,
-    );
-  }
-
-  /// Sends a `notifications/tasks/status` notification to the client.
-  ///
-  /// This notifies the client of a change in a task's status.
-  ///
-  /// The server must have the task capability for this to work.
-  ///
-  /// Example:
-  /// ```dart
-  /// await server.notifyTaskStatus(
-  ///   taskId: "task-123",
-  ///   status: TaskStatus.running,
-  ///   statusMessage: "Processing...",
-  /// );
-  /// ```
-  Future<void> notifyTaskStatus({
-    required String taskId,
-    required TaskStatus status,
-    String? statusMessage,
-    Map<String, dynamic>? meta,
-  }) async {
-    server.assertNotificationCapability(Method.notificationsTasksStatus);
-
-    final notif = JsonRpcTaskStatusNotification(
-      statusParams: TaskStatusNotificationParams(
-        taskId: taskId,
-        status: status,
-        statusMessage: statusMessage,
-      ),
-      meta: meta,
-    );
-
-    return await server.notification(notif);
+  ]) async {
+    return server.elicitInput(params, options);
   }
 }
