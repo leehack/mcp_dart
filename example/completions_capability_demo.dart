@@ -12,8 +12,8 @@ import 'package:mcp_dart/mcp_dart.dart';
 void main() async {
   // Server declares completions support explicitly per 2025-06-18 spec
   final server = McpServer(
-    Implementation(name: "completions-demo", version: "1.0.0"),
-    options: ServerOptions(
+    const Implementation(name: "completions-demo", version: "1.0.0"),
+    options: const ServerOptions(
       capabilities: ServerCapabilities(
         completions: ServerCapabilitiesCompletions(),
         resources: ServerCapabilitiesResources(),
@@ -24,7 +24,7 @@ void main() async {
 
   // Add a resource template with argument completion
   // Clients can request completion for the {path} argument
-  server.resourceTemplate(
+  server.registerResourceTemplate(
     "file-reader",
     ResourceTemplateRegistration(
       "file:///{path}",
@@ -51,6 +51,10 @@ void main() async {
         },
       },
     ),
+    (
+      description: "Read files with auto-completion support",
+      mimeType: "text/plain"
+    ),
     (uri, variables, extra) async {
       final path = variables['path'] ?? 'unknown';
       return ReadResourceResult(
@@ -64,14 +68,10 @@ void main() async {
         ],
       );
     },
-    metadata: (
-      description: "Read files with auto-completion support",
-      mimeType: "text/plain"
-    ),
   );
 
   // Add a prompt with argument completion
-  server.prompt(
+  server.registerPrompt(
     'code-review',
     description: 'Generate code review for a specific file type',
     argsSchema: {
@@ -117,7 +117,7 @@ void main() async {
                 'concise',
                 'detailed',
                 'security-focused',
-                'performance-focused'
+                'performance-focused',
               ];
             },
           ),
@@ -144,19 +144,19 @@ void main() async {
   );
 
   // Add a simple tool (no completion - just for demonstration)
-  server.tool(
+  server.registerTool(
     'echo',
     description: 'Echo back the input message',
-    toolInputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'message': {'type': 'string', 'description': 'Message to echo'},
+        'message': JsonSchema.string(description: 'Message to echo'),
       },
       required: ['message'],
     ),
-    callback: ({args, extra}) async {
-      final message = args?['message'] ?? '';
+    callback: (args, extra) async {
+      final message = args['message'] ?? '';
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(text: 'Echo: $message'),
         ],
       );

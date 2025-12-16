@@ -33,7 +33,7 @@ class AdvancedScenarioMockTransport implements Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (_closed) throw StateError('Transport is closed');
     sentMessages.add(message);
   }
@@ -61,6 +61,16 @@ class AdvancedScenarioTestProtocol extends Protocol {
   @override
   void assertRequestHandlerCapability(String method) {
     // Allow all request handlers
+  }
+
+  @override
+  void assertTaskCapability(String method) {
+    // Mock implementation
+  }
+
+  @override
+  void assertTaskHandlerCapability(String method) {
+    // Mock implementation
   }
 }
 
@@ -92,15 +102,17 @@ void main() {
       protocol.onerror = (error) => errors.add(error);
 
       // Send progress notification with string progressToken (should be int)
-      transport.receiveMessage(JsonRpcProgressNotification(
-        progressParams: ProgressNotificationParams(
-          progressToken: 'invalid-token' as dynamic,
-          progress: 50,
-          total: 100,
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotificationParams(
+            progressToken: 'invalid-token' as dynamic,
+            progress: 50,
+            total: 100,
+          ),
         ),
-      ));
+      );
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // Should have received an error
       expect(errors.length, greaterThan(0));
@@ -111,12 +123,12 @@ void main() {
       await protocol.connect(transport);
 
       var timeoutCallbackCalled = false;
-      final timeoutDuration = Duration(milliseconds: 100);
+      final timeoutDuration = const Duration(milliseconds: 100);
 
       // Send a request with timeout - it will timeout since we never send a response
       try {
         await protocol.request<EmptyResult>(
-          JsonRpcPingRequest(id: 0),
+          const JsonRpcPingRequest(id: 0),
           (json) => EmptyResult(meta: json['_meta'] as Map<String, dynamic>?),
           RequestOptions(
             timeout: timeoutDuration,
@@ -142,23 +154,25 @@ void main() {
       var requestAborted = false;
 
       // Send a request with abort signal
-      protocol.request<EmptyResult>(
-        JsonRpcPingRequest(id: 0),
+      protocol
+          .request<EmptyResult>(
+        const JsonRpcPingRequest(id: 0),
         (json) => EmptyResult(meta: json['_meta'] as Map<String, dynamic>?),
         RequestOptions(
           signal: controller.signal,
         ),
-      ).catchError((e) {
+      )
+          .catchError((e) {
         requestAborted = true;
-        return EmptyResult();
+        return const EmptyResult();
       });
 
       // Wait a moment, then abort
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
       controller.abort('Test abort');
 
       // Wait for the abortion to be processed
-      await Future.delayed(Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       // Should have been aborted
       expect(requestAborted, isTrue);

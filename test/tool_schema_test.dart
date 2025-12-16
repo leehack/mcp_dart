@@ -4,11 +4,11 @@ import 'package:test/test.dart';
 void main() {
   group('Tool Schema Required Fields Tests', () {
     test('ToolInputSchema preserves required fields during serialization', () {
-      final schema = ToolInputSchema(
+      final schema = JsonObject(
         properties: {
-          'operation': {'type': 'string'},
-          'a': {'type': 'number'},
-          'b': {'type': 'number'},
+          'operation': JsonSchema.string(),
+          'a': JsonSchema.number(),
+          'b': JsonSchema.number(),
         },
         required: ['operation', 'a'],
       );
@@ -32,15 +32,15 @@ void main() {
       };
 
       final schema = ToolInputSchema.fromJson(json);
-      expect(schema.type, equals('object'));
-      expect(schema.properties, equals(json['properties']));
-      expect(schema.required, equals(['operation', 'a']));
+      expect(schema.toJson()['type'], equals('object'));
+      expect(schema.toJson()['properties'], equals(json['properties']));
+      expect(schema.toJson()['required'], equals(['operation', 'a']));
     });
 
     test('ToolInputSchema handles empty required array', () {
-      final schema = ToolInputSchema(
+      final schema = JsonObject(
         properties: {
-          'optional': {'type': 'string'}
+          'optional': JsonSchema.string(),
         },
         required: [],
       );
@@ -51,9 +51,9 @@ void main() {
     });
 
     test('ToolInputSchema handles null required field', () {
-      final schema = ToolInputSchema(
+      final schema = JsonObject(
         properties: {
-          'optional': {'type': 'string'}
+          'optional': JsonSchema.string(),
         },
         required: null,
       );
@@ -63,10 +63,10 @@ void main() {
     });
 
     test('ToolOutputSchema preserves required fields during serialization', () {
-      final schema = ToolOutputSchema(
+      final schema = JsonObject(
         properties: {
-          'result': {'type': 'string'},
-          'status': {'type': 'number'},
+          'result': JsonSchema.string(),
+          'status': JsonSchema.number(),
         },
         required: ['result'],
       );
@@ -89,20 +89,20 @@ void main() {
       };
 
       final schema = ToolOutputSchema.fromJson(json);
-      expect(schema.type, equals('object'));
-      expect(schema.properties, equals(json['properties']));
-      expect(schema.required, equals(['result']));
+      expect(schema.toJson()['type'], equals('object'));
+      expect(schema.toJson()['properties'], equals(json['properties']));
+      expect(schema.toJson()['required'], equals(['result']));
     });
 
     test('Tool preserves input schema required fields end-to-end', () {
       final tool = Tool(
         name: 'calculate',
         description: 'Performs mathematical calculations',
-        inputSchema: ToolInputSchema(
+        inputSchema: JsonObject(
           properties: {
-            'operation': {'type': 'string'},
-            'a': {'type': 'number'},
-            'b': {'type': 'number'},
+            'operation': JsonSchema.string(),
+            'a': JsonSchema.number(),
+            'b': JsonSchema.number(),
           },
           required: ['operation', 'a'],
         ),
@@ -114,17 +114,20 @@ void main() {
 
       final deserialized = Tool.fromJson(json);
       expect(deserialized.name, equals('calculate'));
-      expect(deserialized.inputSchema.required, equals(['operation', 'a']));
+      expect(
+        (deserialized.inputSchema as JsonObject).required,
+        equals(['operation', 'a']),
+      );
     });
 
     test('Tool preserves output schema required fields end-to-end', () {
       final tool = Tool(
         name: 'calculate',
-        inputSchema: ToolInputSchema(),
-        outputSchema: ToolOutputSchema(
+        inputSchema: const JsonObject(),
+        outputSchema: JsonObject(
           properties: {
-            'result': {'type': 'number'},
-            'equation': {'type': 'string'},
+            'result': JsonSchema.number(),
+            'equation': JsonSchema.string(),
           },
           required: ['result'],
         ),
@@ -134,27 +137,30 @@ void main() {
       expect(json['outputSchema']['required'], equals(['result']));
 
       final deserialized = Tool.fromJson(json);
-      expect(deserialized.outputSchema?.required, equals(['result']));
+      expect(
+        (deserialized.outputSchema as JsonObject?)?.required,
+        equals(['result']),
+      );
     });
 
     test('ListToolsResult preserves tool required fields', () {
       final tools = [
         Tool(
           name: 'search',
-          inputSchema: ToolInputSchema(
+          inputSchema: JsonObject(
             properties: {
-              'query': {'type': 'string'},
-              'limit': {'type': 'number'},
+              'query': JsonSchema.string(),
+              'limit': JsonSchema.number(),
             },
             required: ['query'],
           ),
         ),
         Tool(
           name: 'create',
-          inputSchema: ToolInputSchema(
+          inputSchema: JsonObject(
             properties: {
-              'name': {'type': 'string'},
-              'data': {'type': 'object'},
+              'name': JsonSchema.string(),
+              'data': JsonSchema.object(),
             },
             required: ['name', 'data'],
           ),
@@ -165,13 +171,20 @@ void main() {
       final json = result.toJson();
 
       expect(json['tools'][0]['inputSchema']['required'], equals(['query']));
-      expect(json['tools'][1]['inputSchema']['required'],
-          equals(['name', 'data']));
+      expect(
+        json['tools'][1]['inputSchema']['required'],
+        equals(['name', 'data']),
+      );
 
       final deserialized = ListToolsResult.fromJson(json);
-      expect(deserialized.tools[0].inputSchema.required, equals(['query']));
       expect(
-          deserialized.tools[1].inputSchema.required, equals(['name', 'data']));
+        (deserialized.tools[0].inputSchema as JsonObject).required,
+        equals(['query']),
+      );
+      expect(
+        (deserialized.tools[1].inputSchema as JsonObject).required,
+        equals(['name', 'data']),
+      );
     });
 
     test('Real-world MCP server tool schema example', () {
@@ -186,32 +199,40 @@ void main() {
               'properties': {
                 'query': {
                   'type': 'string',
-                  'description': 'Search query for spaces'
+                  'description': 'Search query for spaces',
                 },
                 'limit': {
                   'type': 'integer',
                   'description': 'Maximum number of results',
-                  'default': 10
-                }
+                  'default': 10,
+                },
               },
-              'required': ['query']
-            }
+              'required': ['query'],
+            },
           }
-        ]
+        ],
       };
 
       final result = ListToolsResult.fromJson(serverResponse);
       final tool = result.tools.first;
 
       expect(tool.name, equals('space_search'));
-      expect(tool.inputSchema.required, equals(['query']));
-      expect(tool.inputSchema.properties?['query']?['type'], equals('string'));
-      expect(tool.inputSchema.properties?['limit']?['default'], equals(10));
+      expect((tool.inputSchema as JsonObject).required, equals(['query']));
+      expect(
+        (tool.inputSchema as JsonObject).properties?['query']?.toJson()['type'],
+        equals('string'),
+      );
+      expect(
+        (tool.inputSchema as JsonObject).properties?['limit']?.defaultValue,
+        equals(10),
+      );
 
       // Verify round-trip maintains required fields
       final serialized = result.toJson();
       expect(
-          serialized['tools'][0]['inputSchema']['required'], equals(['query']));
+        serialized['tools'][0]['inputSchema']['required'],
+        equals(['query']),
+      );
     });
 
     test('Backward compatibility with existing code without required fields',
@@ -219,9 +240,9 @@ void main() {
       // Existing code that doesn't specify required fields should still work
       final tool = Tool(
         name: 'legacy-tool',
-        inputSchema: ToolInputSchema(
+        inputSchema: JsonObject(
           properties: {
-            'param': {'type': 'string'}
+            'param': JsonSchema.string(),
           },
         ),
       );
@@ -232,7 +253,7 @@ void main() {
 
       final deserialized = Tool.fromJson(json);
       expect(deserialized.name, equals('legacy-tool'));
-      expect(deserialized.inputSchema.required, isNull);
+      expect((deserialized.inputSchema as JsonObject).required, isNull);
     });
 
     test('JSON Schema from external server without required fields', () {
@@ -242,7 +263,7 @@ void main() {
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'param': {'type': 'string'}
+            'param': {'type': 'string'},
           },
           // No 'required' field
         },
@@ -250,7 +271,7 @@ void main() {
 
       final tool = Tool.fromJson(externalToolJson);
       expect(tool.name, equals('external-tool'));
-      expect(tool.inputSchema.required, isNull);
+      expect((tool.inputSchema as JsonObject).required, isNull);
 
       // Should still serialize correctly
       final serialized = tool.toJson();
@@ -263,17 +284,15 @@ void main() {
       final tool = Tool(
         name: 'get_weather',
         description: 'Get weather information for a location',
-        inputSchema: ToolInputSchema(
+        inputSchema: JsonObject(
           properties: {
-            'location': {
-              'type': 'string',
-              'description': 'The city and state, e.g. San Francisco, CA'
-            },
-            'unit': {
-              'type': 'string',
-              'enum': ['celsius', 'fahrenheit'],
-              'description': 'Temperature unit'
-            }
+            'location': JsonSchema.string(
+              description: 'The city and state, e.g. San Francisco, CA',
+            ),
+            'unit': JsonSchema.string(
+              enumValues: ['celsius', 'fahrenheit'],
+              description: 'Temperature unit',
+            ),
           },
           required: ['location'],
         ),
@@ -286,7 +305,7 @@ void main() {
           'name': tool.name,
           'description': tool.description,
           'parameters': tool.inputSchema.toJson(),
-        }
+        },
       };
 
       final function = openaiFunction['function'] as Map<String, dynamic>;
@@ -304,18 +323,16 @@ void main() {
       final tool = Tool(
         name: 'analyze_code',
         description: 'Analyze code for potential issues',
-        inputSchema: ToolInputSchema(
+        inputSchema: JsonObject(
           properties: {
-            'code': {'type': 'string', 'description': 'The code to analyze'},
-            'language': {
-              'type': 'string',
-              'description': 'Programming language'
-            },
-            'strict': {
-              'type': 'boolean',
-              'description': 'Enable strict mode',
-              'default': false
-            }
+            'code': JsonSchema.string(description: 'The code to analyze'),
+            'language': JsonSchema.string(
+              description: 'Programming language',
+            ),
+            'strict': JsonSchema.boolean(
+              description: 'Enable strict mode',
+              defaultValue: false,
+            ),
           },
           required: ['code', 'language'],
         ),

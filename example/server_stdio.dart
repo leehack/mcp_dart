@@ -1,9 +1,9 @@
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
-  McpServer server = McpServer(
-    Implementation(name: "example_server", version: "1.0.0"),
-    options: ServerOptions(
+  final McpServer server = McpServer(
+    const Implementation(name: "example_server", version: "1.0.0"),
+    options: const ServerOptions(
       capabilities: ServerCapabilities(
         resources: ServerCapabilitiesResources(),
         tools: ServerCapabilitiesTools(),
@@ -12,26 +12,25 @@ void main() async {
     ),
   );
 
-  server.tool(
+  server.registerTool(
     'calculate',
     description: 'Perform basic arithmetic operations',
-    toolInputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        'operation': {
-          'type': 'string',
-          'enum': ['add', 'subtract', 'multiply', 'divide'],
-        },
-        'a': {'type': 'number'},
-        'b': {'type': 'number'},
+        'operation': JsonSchema.string(
+          enumValues: ['add', 'subtract', 'multiply', 'divide'],
+        ),
+        'a': JsonSchema.number(),
+        'b': JsonSchema.number(),
       },
       required: ['operation', 'a', 'b'],
     ),
-    callback: ({args, extra}) async {
-      final operation = args!['operation'];
+    callback: (args, extra) async {
+      final operation = args['operation'];
       final a = args['a'];
       final b = args['b'];
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(
             text: switch (operation) {
               'add' => 'Result: ${a + b}',
@@ -46,7 +45,8 @@ void main() async {
     },
   );
 
-  server.resource("Application Logs", 'file:///logs', (uri, extra) async {
+  server.registerResource("Application Logs", 'file:///logs', null,
+      (uri, extra) async {
     if (uri.scheme != 'file') {
       throw Exception('Invalid URI scheme: ${uri.scheme}');
     }
@@ -68,18 +68,18 @@ void main() async {
     );
   });
 
-  server.prompt(
+  server.registerPrompt(
     'analyze-code',
     description: 'Analyze code for potential improvements',
     argsSchema: {
-      'language': PromptArgumentDefinition(
+      'language': const PromptArgumentDefinition(
         type: String,
         description: 'Programming language',
         required: true,
       ),
     },
     callback: (args, extra) async {
-      return GetPromptResult(
+      return const GetPromptResult(
         messages: [
           PromptMessage(
             role: PromptMessageRole.user,

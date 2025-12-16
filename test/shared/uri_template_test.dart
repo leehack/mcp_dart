@@ -25,7 +25,8 @@ void main() {
     test('multiple variables with reserved expansion', () {
       // Use reserved expansion {+path} to avoid encoding /
       final expander = UriTemplateExpander('https://{host}{+path}');
-      final result = expander.expand({'host': 'example.com', 'path': '/api/v1'});
+      final result =
+          expander.expand({'host': 'example.com', 'path': '/api/v1'});
       expect(result, equals('https://example.com/api/v1'));
     });
 
@@ -63,8 +64,7 @@ void main() {
 
     test('query operator with multiple parameters', () {
       final expander = UriTemplateExpander('/search{?q,lang,page}');
-      final result =
-          expander.expand({'q': 'dart', 'lang': 'en', 'page': '1'});
+      final result = expander.expand({'q': 'dart', 'lang': 'en', 'page': '1'});
       expect(result, equals('/search?q=dart&lang=en&page=1'));
     });
 
@@ -124,7 +124,7 @@ void main() {
     test('list with explode modifier', () {
       final expander = UriTemplateExpander('/items{?list*}');
       final result = expander.expand({
-        'list': ['a', 'b', 'c']
+        'list': ['a', 'b', 'c'],
       });
       expect(result, equals('/items?list=a&list=b&list=c'));
     });
@@ -132,7 +132,7 @@ void main() {
     test('list without explode modifier', () {
       final expander = UriTemplateExpander('/items{?list}');
       final result = expander.expand({
-        'list': ['a', 'b', 'c']
+        'list': ['a', 'b', 'c'],
       });
       expect(result, equals('/items?list=a,b,c'));
     });
@@ -146,7 +146,7 @@ void main() {
     test('list with null values are filtered', () {
       final expander = UriTemplateExpander('/items{?list}');
       final result = expander.expand({
-        'list': ['a', null, 'b']
+        'list': ['a', null, 'b'],
       });
       expect(result, equals('/items?list=a,b'));
     });
@@ -156,7 +156,7 @@ void main() {
     test('map with explode modifier', () {
       final expander = UriTemplateExpander('/data{?params*}');
       final result = expander.expand({
-        'params': {'x': '1', 'y': '2'}
+        'params': {'x': '1', 'y': '2'},
       });
       // Map iteration order may vary
       expect(result, anyOf(equals('/data?x=1&y=2'), equals('/data?y=2&x=1')));
@@ -165,7 +165,7 @@ void main() {
     test('map without explode modifier', () {
       final expander = UriTemplateExpander('/data{?params}');
       final result = expander.expand({
-        'params': {'x': '1', 'y': '2'}
+        'params': {'x': '1', 'y': '2'},
       });
       // Key-value pairs in comma-separated format
       expect(result, contains('/data?params='));
@@ -182,7 +182,7 @@ void main() {
     test('map with null values are filtered', () {
       final expander = UriTemplateExpander('/data{?params}');
       final result = expander.expand({
-        'params': {'x': '1', 'y': null}
+        'params': {'x': '1', 'y': null},
       });
       expect(result, equals('/data?params=x,1'));
     });
@@ -266,16 +266,20 @@ void main() {
     test('throws on unclosed expression', () {
       expect(
         () => UriTemplateExpander('/path/{unclosed'),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('Unclosed'))),
+        throwsA(
+          isA<ArgumentError>()
+              .having((e) => e.message, 'message', contains('Unclosed')),
+        ),
       );
     });
 
     test('throws on empty expression', () {
       expect(
         () => UriTemplateExpander('/path/{}'),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('Empty'))),
+        throwsA(
+          isA<ArgumentError>()
+              .having((e) => e.message, 'message', contains('Empty')),
+        ),
       );
     });
 
@@ -283,8 +287,13 @@ void main() {
       final longTemplate = 'a' * (maxTemplateLength + 1);
       expect(
         () => UriTemplateExpander(longTemplate),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message, 'message', contains('exceeds maximum length'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('exceeds maximum length'),
+          ),
+        ),
       );
     });
 
@@ -292,8 +301,13 @@ void main() {
       final longVar = 'x' * (maxVariableLength + 1);
       expect(
         () => UriTemplateExpander('/path/{$longVar}'),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message, 'message', contains('exceeds maximum length'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('exceeds maximum length'),
+          ),
+        ),
       );
     });
 
@@ -302,8 +316,13 @@ void main() {
           List.generate(maxTemplateExpressions + 1, (i) => '{x$i}').join('/');
       expect(
         () => UriTemplateExpander(manyExpressions),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message, 'message', contains('too many expressions'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('too many expressions'),
+          ),
+        ),
       );
     });
 
@@ -312,8 +331,13 @@ void main() {
       final longValue = 'x' * (maxVariableLength + 1);
       expect(
         () => expander.expand({'var': longValue}),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message, 'message', contains('exceeds maximum length'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('exceeds maximum length'),
+          ),
+        ),
       );
     });
   });

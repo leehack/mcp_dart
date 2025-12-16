@@ -80,7 +80,7 @@ class MockTransport implements Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (_closed) {
       throw StateError('Transport is closed');
     }
@@ -121,7 +121,7 @@ class TestProtocol extends Protocol {
       'test/notification': true,
       'notifications/cancelled': true,
       'notifications/progress': true,
-    }
+    },
   };
 
   /// Constructs a TestProtocol with optional configuration
@@ -151,6 +151,16 @@ class TestProtocol extends Protocol {
   @override
   void assertRequestHandlerCapability(String method) {
     // For this test implementation, assume any method can be handled
+  }
+
+  @override
+  void assertTaskCapability(String method) {
+    // Mock implementation
+  }
+
+  @override
+  void assertTaskHandlerCapability(String method) {
+    // Mock implementation
   }
 }
 
@@ -221,7 +231,7 @@ void main() {
       };
 
       await transport.close();
-      await completer.future.timeout(Duration(seconds: 5));
+      await completer.future.timeout(const Duration(seconds: 5));
       expect(completer.isCompleted, isTrue);
       expect(protocol.transport, isNull);
     });
@@ -232,14 +242,14 @@ void main() {
       // Start a request
       final requestFuture = protocol
           .request<TestResult>(
-            JsonRpcRequest(
+            const JsonRpcRequest(
               id: 0, // Will be replaced by internal ID
               method: 'test/method',
               params: {'param': 'value'},
             ),
             (json) => TestResult(value: json['value'] as String),
           )
-          .timeout(Duration(seconds: 5));
+          .timeout(const Duration(seconds: 5));
 
       // Verify message was sent
       expect(transport.sentMessages.length, equals(1));
@@ -249,10 +259,12 @@ void main() {
       expect(sentMessage.params?['param'], equals('value'));
 
       // Simulate response
-      transport.receiveMessage(JsonRpcResponse(
-        id: sentMessage.id,
-        result: {'value': 'response-data'},
-      ));
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: sentMessage.id,
+          result: {'value': 'response-data'},
+        ),
+      );
 
       // Verify the response was processed
       final result = await requestFuture;
@@ -266,27 +278,29 @@ void main() {
       // Start a request
       final requestFuture = protocol
           .request<TestResult>(
-            JsonRpcRequest(
+            const JsonRpcRequest(
               id: 0,
               method: 'test/method',
               params: {'param': 'value'},
             ),
             (json) => TestResult(value: json['value'] as String),
           )
-          .timeout(Duration(seconds: 5));
+          .timeout(const Duration(seconds: 5));
 
       // Get the sent message ID
       expect(transport.sentMessages.length, equals(1));
       final sentId = (transport.sentMessages.first as JsonRpcRequest).id;
 
       // Simulate error response
-      transport.receiveMessage(JsonRpcError(
-        id: sentId,
-        error: JsonRpcErrorData(
-          code: ErrorCode.internalError.value,
-          message: 'Test error message',
+      transport.receiveMessage(
+        JsonRpcError(
+          id: sentId,
+          error: JsonRpcErrorData(
+            code: ErrorCode.internalError.value,
+            message: 'Test error message',
+          ),
         ),
-      ));
+      );
 
       // Verify the error was processed
       try {
@@ -304,14 +318,14 @@ void main() {
       // Use a very short timeout to make the test run quickly
       await protocol.connect(transport);
 
-      final shortTimeout = Duration(milliseconds: 50);
+      final shortTimeout = const Duration(milliseconds: 50);
       final requestFuture = protocol
           .request<TestResult>(
-            JsonRpcRequest(id: 0, method: 'test/method'),
+            const JsonRpcRequest(id: 0, method: 'test/method'),
             (json) => TestResult(value: json['value'] as String),
             RequestOptions(timeout: shortTimeout),
           )
-          .timeout(Duration(seconds: 5));
+          .timeout(const Duration(seconds: 5));
 
       try {
         await requestFuture;
@@ -333,11 +347,11 @@ void main() {
       // Start a request that can be cancelled
       final requestFuture = protocol
           .request<TestResult>(
-            JsonRpcRequest(id: 0, method: 'test/method'),
+            const JsonRpcRequest(id: 0, method: 'test/method'),
             (json) => TestResult(value: json['value'] as String),
             requestOptions,
           )
-          .timeout(Duration(seconds: 5));
+          .timeout(const Duration(seconds: 5));
 
       // Cancel the request right away
       controller.abort('User cancelled');
@@ -359,8 +373,11 @@ void main() {
             break;
           }
         }
-        expect(foundCancellation, isTrue,
-            reason: 'Should have sent a cancellation notification');
+        expect(
+          foundCancellation,
+          isTrue,
+          reason: 'Should have sent a cancellation notification',
+        );
       }
     });
 
@@ -371,12 +388,19 @@ void main() {
       );
 
       // Test that the capability checking works directly
-      expect(() => strictProtocol.assertCapabilityForMethod('test/method'),
-          returnsNormally);
+      expect(
+        () => strictProtocol.assertCapabilityForMethod('test/method'),
+        returnsNormally,
+      );
       expect(
         () => strictProtocol.assertCapabilityForMethod('unsupported/method'),
-        throwsA(isA<McpError>().having((error) => error.code, 'error code',
-            equals(ErrorCode.methodNotFound.value))),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'error code',
+            equals(ErrorCode.methodNotFound.value),
+          ),
+        ),
       );
     });
   });

@@ -33,8 +33,11 @@ class PipeTransport {
 Future<void> main() async {
   // Create a client
   final client = Client(
-    Implementation(name: "example-dart-iostream-client", version: "1.0.0"),
-    options: ClientOptions(capabilities: ClientCapabilities()),
+    const Implementation(
+      name: "example-dart-iostream-client",
+      version: "1.0.0",
+    ),
+    options: const ClientOptions(capabilities: ClientCapabilities()),
   );
 
   final server = await getServer();

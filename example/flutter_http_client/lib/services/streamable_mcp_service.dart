@@ -355,7 +355,7 @@ class StreamableMcpService extends ChangeNotifier {
       throw Exception('Not connected to server.');
     }
 
-    final params = CallToolRequestParams(name: name, arguments: args);
+    final params = CallToolRequest(name: name, arguments: args);
 
     return await _client!.callTool(
       params,

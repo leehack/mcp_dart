@@ -121,7 +121,10 @@ class UriTemplateExpander {
 
         for (final spec in varSpecs) {
           _validateLength(
-              spec.name, maxVariableLength, "Variable name '${spec.name}'");
+            spec.name,
+            maxVariableLength,
+            "Variable name '${spec.name}'",
+          );
         }
 
         parts.add(_ExpressionPart(operator, varSpecs));
@@ -185,9 +188,9 @@ class UriTemplateExpander {
     final unreserved = RegExp(r'^[a-zA-Z0-9\-\._~]*$');
     final reserved = RegExp(r"[:/?#[\]@!$&'()*+,;=]");
 
-    StringBuffer result = StringBuffer();
+    final StringBuffer result = StringBuffer();
     for (int i = 0; i < value.length; i++) {
-      String char = value[i];
+      final String char = value[i];
       bool shouldEncode = true;
 
       if (unreserved.hasMatch(char)) {
@@ -219,7 +222,7 @@ class UriTemplateExpander {
     final varSpecs = part.varSpecs;
 
     final result = StringBuffer();
-    String separator = switch (part.operator) {
+    final String separator = switch (part.operator) {
       '+' => ',',
       '#' => ',',
       '.' => '.',
@@ -229,13 +232,13 @@ class UriTemplateExpander {
       '&' => '&',
       _ => ',',
     };
-    String prefix = switch (part.operator) {
+    final String prefix = switch (part.operator) {
       '+' => '',
       '#' => '#',
       _ => part.operator,
     };
     bool firstValue = true;
-    bool useName =
+    final bool useName =
         part.operator == ';' || part.operator == '?' || part.operator == '&';
 
     for (final spec in varSpecs) {
@@ -365,7 +368,7 @@ class UriTemplateExpander {
   TemplateVariables? match(String uri) {
     const String valuePattern = r'([^/]+?)';
 
-    StringBuffer pattern = StringBuffer('^');
+    final StringBuffer pattern = StringBuffer('^');
     final List<String> varNames = [];
 
     for (final part in _parts) {

@@ -1,3 +1,48 @@
+## 1.1.0
+
+### Breaking Changes
+
+- **Protocol Version Update**: Updated default protocol version to `2025-11-25`.
+- **Strict Capabilities Typing**: `ServerCapabilities` and `ClientCapabilities` fields (tasks, sampling, elicitation, etc.) are now strictly typed objects instead of `Map<String, dynamic>` or `bool`.
+  - Updated `ServerCapabilities` to use `ServerCapabilitiesTasks`, `ServerCapabilitiesTools`, etc.
+  - Updated `ClientCapabilities` to use `ClientCapabilitiesTasks`, `ClientCapabilitiesElicitation`, `ClientCapabilitiesSampling`, etc.
+  - **Migration**: Update capability declarations to use the new typed classes (e.g., `ServerCapabilities(tasks: ServerCapabilitiesTasks(listChanged: true))`).
+- **File Removal**: `lib/src/server/mcp.dart` has been removed. Use `lib/src/server/mcp_server.dart` (exported via `lib/src/server/module.dart`) instead.
+- **Transport Interface Change**: `Transport.send` now accepts an optional named parameter `relatedRequestId`. Custom transports must update their method signature.
+- **Client Validation**: `Client.callTool` now strictly validates tool outputs against their defined JSON schema (if present). Mismatches will throw an `McpError(ErrorCode.invalidParams)`.
+- **API Refactoring**:
+  - `McpServer.tool`, `resource`, and `prompt` are **deprecated**. Use `registerTool`, `registerResource`, and `registerPrompt` instead.
+  - `McpServer.registerTool` uses a new callback signature: `FutureOr<CallToolResult> Function(Map<String, dynamic> args, RequestHandlerExtra extra)`.
+  - The deprecated `McpServer.tool` retains the old named-parameter signature for backward compatibility.
+- **Tool Schema Definitions**: `ToolInputSchema` (aka `JsonObject`) now requires properties to be defined using `JsonSchema` objects (e.g., `JsonSchema.string()`) instead of raw Maps.
+- **Tool Listing Types**: `ListToolsRequestParams` has been replaced by `ListToolsRequest` (update any code passing `params:` to `Client.listTools` or constructing `JsonRpcListToolsRequest`).
+- **Tool Result Structured Content**: `CallToolResult` no longer uses a dedicated `structuredContent` field in its API; structured results are represented as additional top-level fields (`CallToolResult.extra`). `CallToolResult.fromStructuredContent` now takes a single `Map<String, dynamic>` argument.
+- **RequestHandlerExtra Signature Changes**: `RequestHandlerExtra.sendNotification` and `RequestHandlerExtra.sendRequest` have updated signatures (added task-related metadata/options). Update any server callbacks that call these helpers directly.
+
+### Features
+
+- **Task Management System**:
+  - Implemented comprehensive Task support in `lib/src/server/tasks/`.
+  - Introduced `TaskStore` abstract interface with `InMemoryTaskStore` as the default implementation.
+  - Added strictly typed `TaskResultHandler` and `TaskSession`.
+  - Introduced `TaskMessageQueue` for handling task messages.
+- **McpServer Enhancements**:
+  - Added `McpServer` high-level support for tasks via `tasks(...)` method.
+  - Integrated `notifyTaskStatus` into `McpServer`.
+  - Added `McpServer` support for `sampling/createMessage`.
+  - Exposed `onError` handler setter/getter on `McpServer`.
+- **StreamableMcpServer**:
+  - Added `StreamableMcpServer` class for simplified Streamable HTTP server creation (handles `serverFactory`, event store, and connection management).
+- **Client Enhancements**:
+  - Added `onTaskStatus` callback to `Client`.
+  - Simplified client request handlers for sampling and elicitation.
+
+### Fixes
+
+- Fixed `Task` serialization.
+- Fixed capabilities recognition in `McpServer`.
+- Added comprehensive tests for StreamableMcpServer and Task features.
+
 ## 1.0.2
 
 - Fix pana analysis issues

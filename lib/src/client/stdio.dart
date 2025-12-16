@@ -308,7 +308,7 @@ class StdioClientTransport implements Transport {
         "StdioClientTransport: Terminating process (PID: ${processToKill.pid})...",
       );
       // Attempt graceful termination first
-      bool killed = processToKill.kill(io.ProcessSignal.sigterm);
+      final bool killed = processToKill.kill(io.ProcessSignal.sigterm);
       if (!killed) {
         _logger.debug(
           "StdioClientTransport: Failed to send SIGTERM or process already exited.",
@@ -354,7 +354,7 @@ class StdioClientTransport implements Transport {
   /// process's stdin stream. Throws [StateError] if the transport is not started
   /// or the process is not running.
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     final currentProcess = _process; // Capture locally
     if (!_started || currentProcess == null) {
       throw StateError(

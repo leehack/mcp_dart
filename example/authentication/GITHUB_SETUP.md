@@ -193,7 +193,7 @@ Once connected, you can use the GitHub MCP server:
 ```dart
 // Search for repositories
 final searchResult = await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'search_repositories',
     arguments: {'query': 'mcp server'},
   ),
@@ -201,7 +201,7 @@ final searchResult = await client.callTool(
 
 // Get file contents
 final fileResult = await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'get_file_contents',
     arguments: {
       'owner': 'github',
@@ -213,7 +213,7 @@ final fileResult = await client.callTool(
 
 // Create or update file
 final updateResult = await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'create_or_update_file',
     arguments: {
       'owner': 'your-username',

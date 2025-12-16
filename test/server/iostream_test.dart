@@ -91,7 +91,9 @@ void main() {
 
     // Helper to send a properly formatted message directly to a stream controller
     void sendRawJsonMessage(
-        StreamController<List<int>> controller, JsonRpcMessage message) {
+      StreamController<List<int>> controller,
+      JsonRpcMessage message,
+    ) {
       final jsonString = "${jsonEncode(message.toJson())}\n";
       controller.add(utf8.encode(jsonString));
     }
@@ -121,7 +123,7 @@ void main() {
       };
 
       // Send a message via the raw controller (bypassing transport.send())
-      final pingMessage = JsonRpcPingRequest(id: 1);
+      final pingMessage = const JsonRpcPingRequest(id: 1);
       sendRawJsonMessage(clientToServerController, pingMessage);
 
       // Wait for the message to be received
@@ -150,7 +152,7 @@ void main() {
       };
 
       // Send a message from server to client
-      final pingMessage = JsonRpcPingRequest(id: 2);
+      final pingMessage = const JsonRpcPingRequest(id: 2);
       sendRawJsonMessage(serverToClientController, pingMessage);
 
       // Wait for the message to be received
@@ -188,10 +190,16 @@ void main() {
       };
 
       // Send client -> server
-      sendRawJsonMessage(clientToServerController, JsonRpcPingRequest(id: 3));
+      sendRawJsonMessage(
+        clientToServerController,
+        const JsonRpcPingRequest(id: 3),
+      );
 
       // Send server -> client
-      sendRawJsonMessage(serverToClientController, JsonRpcPingRequest(id: 4));
+      sendRawJsonMessage(
+        serverToClientController,
+        const JsonRpcPingRequest(id: 4),
+      );
 
       // Wait for both messages to be received
       final serverMsg =
@@ -284,7 +292,10 @@ void main() {
       };
 
       // Send a valid message
-      sendRawJsonMessage(clientToServerController, JsonRpcPingRequest(id: 7));
+      sendRawJsonMessage(
+        clientToServerController,
+        const JsonRpcPingRequest(id: 7),
+      );
 
       // Wait for valid message to be received
       final validMessage = await validMessageReceived.future.timeout(
@@ -311,7 +322,7 @@ void main() {
 
       // Attempt to send message from closed transport should throw
       expect(
-        () => serverTransport.send(JsonRpcPingRequest(id: 8)),
+        () => serverTransport.send(const JsonRpcPingRequest(id: 8)),
         throwsA(isA<StateError>()),
       );
     });
@@ -329,7 +340,7 @@ void main() {
       };
 
       // Create a message and encode it
-      final message = JsonRpcPingRequest(id: 9);
+      final message = const JsonRpcPingRequest(id: 9);
       final jsonString = "${jsonEncode(message.toJson())}\n";
       final bytes = utf8.encode(jsonString);
 
@@ -374,7 +385,10 @@ void main() {
       };
 
       // Send a message to trigger the error
-      sendRawJsonMessage(clientToServerController, JsonRpcPingRequest(id: 10));
+      sendRawJsonMessage(
+        clientToServerController,
+        const JsonRpcPingRequest(id: 10),
+      );
 
       // Wait for the error to be reported
       final reportedError = await errorReported.future.timeout(
@@ -417,7 +431,10 @@ void main() {
       };
 
       // Send a valid message
-      sendRawJsonMessage(clientToServerController, JsonRpcPingRequest(id: 11));
+      sendRawJsonMessage(
+        clientToServerController,
+        const JsonRpcPingRequest(id: 11),
+      );
 
       // Wait for valid message to be received, showing transport still works
       final validMessage = await validMessageReceived.future.timeout(
@@ -435,7 +452,7 @@ void main() {
       await serverTransport.start();
 
       // Create a message but don't add the newline terminator
-      final message = JsonRpcPingRequest(id: 12);
+      final message = const JsonRpcPingRequest(id: 12);
       final jsonString = jsonEncode(message.toJson()); // No newline at the end
 
       // Send the incomplete message

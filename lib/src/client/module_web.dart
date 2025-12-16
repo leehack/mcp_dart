@@ -7,3 +7,4 @@ library;
 
 export './client.dart'; // Client-side implementation for MCP protocol.
 export './streamable_https.dart'; // Streamable HTTPS implementation.
+export './task_client.dart'; // Task client helper.

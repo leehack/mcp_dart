@@ -16,7 +16,7 @@ class MockTransport extends Transport {
   Future<void> start() async {}
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
 
     // Handle initialize request
@@ -24,13 +24,15 @@ class MockTransport extends Transport {
         message.method == 'initialize' &&
         mockInitializeResponse != null) {
       if (onmessage != null) {
-        onmessage!(JsonRpcResponse(
-          id: message.id,
-          result: mockInitializeResponse!.toJson(),
-        ));
+        onmessage!(
+          JsonRpcResponse(
+            id: message.id,
+            result: mockInitializeResponse!.toJson(),
+          ),
+        );
       }
       // Send initialized notification
-      Future.delayed(Duration(milliseconds: 10), () {
+      Future.delayed(const Duration(milliseconds: 10), () {
         if (onmessage != null) {
           onmessage!(const JsonRpcInitializedNotification());
         }
@@ -39,19 +41,23 @@ class MockTransport extends Transport {
     // Handle elicit request from server
     else if (message is JsonRpcElicitRequest && mockElicitResult != null) {
       if (onmessage != null) {
-        onmessage!(JsonRpcResponse(
-          id: message.id,
-          result: mockElicitResult!.toJson(),
-        ));
+        onmessage!(
+          JsonRpcResponse(
+            id: message.id,
+            result: mockElicitResult!.toJson(),
+          ),
+        );
       }
     }
     // Handle generic requests
     else if (message is JsonRpcRequest) {
       if (onmessage != null) {
-        onmessage!(JsonRpcResponse(
-          id: message.id,
-          result: const EmptyResult().toJson(),
-        ));
+        onmessage!(
+          JsonRpcResponse(
+            id: message.id,
+            result: const EmptyResult().toJson(),
+          ),
+        );
       }
     }
   }
@@ -96,17 +102,17 @@ void main() {
   group('Client Elicitation Handler Tests', () {
     test('Client registers elicit handler when capability is present', () {
       final client = Client(
-        Implementation(name: 'test-client', version: '1.0.0'),
+        const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
 
       // Verify capability is registered by checking we can set handler
       client.onElicitRequest = (params) async {
-        return ElicitResult(
+        return const ElicitResult(
           action: 'accept',
           content: {'value': 'test'},
         );
@@ -118,17 +124,17 @@ void main() {
 
     test('Client handler validation works correctly', () async {
       final transport = MockTransport();
-      transport.mockInitializeResponse = InitializeResult(
+      transport.mockInitializeResponse = const InitializeResult(
         protocolVersion: latestProtocolVersion,
-        capabilities: const ServerCapabilities(),
+        capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
 
       final client = Client(
-        Implementation(name: 'test-client', version: '1.0.0'),
+        const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -140,7 +146,7 @@ void main() {
 
       // After setting it, handler is available
       client.onElicitRequest = (params) async {
-        return ElicitResult(
+        return const ElicitResult(
           action: 'accept',
           content: {'value': 'test'},
         );
@@ -153,17 +159,17 @@ void main() {
     test('Client successfully handles elicit request with string input',
         () async {
       final transport = MockTransport();
-      transport.mockInitializeResponse = InitializeResult(
+      transport.mockInitializeResponse = const InitializeResult(
         protocolVersion: latestProtocolVersion,
-        capabilities: const ServerCapabilities(),
+        capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
 
       final client = Client(
-        Implementation(name: 'test-client', version: '1.0.0'),
+        const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -174,13 +180,13 @@ void main() {
         receivedParams = params;
         expect(params.message, equals("Enter your name"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema);
-        expect(schema, isA<StringInputSchema>());
+        final schema = params.requestedSchema!;
+        expect(schema, isA<JsonString>());
+        final stringSchema = schema as JsonString;
 
-        final stringSchema = schema as StringInputSchema;
         expect(stringSchema.minLength, equals(1));
 
-        return ElicitResult(
+        return const ElicitResult(
           action: 'accept',
           content: {'name': 'John Doe'},
         );
@@ -193,7 +199,7 @@ void main() {
         id: 1,
         elicitParams: ElicitRequestParams(
           message: "Enter your name",
-          requestedSchema: StringInputSchema(minLength: 1).toJson(),
+          requestedSchema: JsonSchema.string(minLength: 1),
         ),
       );
 
@@ -211,17 +217,17 @@ void main() {
 
     test('Client handles elicit request with boolean input', () async {
       final transport = MockTransport();
-      transport.mockInitializeResponse = InitializeResult(
+      transport.mockInitializeResponse = const InitializeResult(
         protocolVersion: latestProtocolVersion,
-        capabilities: const ServerCapabilities(),
+        capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
 
       final client = Client(
-        Implementation(name: 'test-client', version: '1.0.0'),
+        const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -231,10 +237,10 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Confirm action"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema);
-        expect(schema, isA<BooleanInputSchema>());
+        final schema = params.requestedSchema!;
+        expect(schema, isA<JsonBoolean>());
 
-        return ElicitResult(
+        return const ElicitResult(
           action: 'accept',
           content: {'confirmed': true},
         );
@@ -246,7 +252,7 @@ void main() {
         id: 2,
         elicitParams: ElicitRequestParams(
           message: "Confirm action",
-          requestedSchema: const BooleanInputSchema(defaultValue: false).toJson(),
+          requestedSchema: JsonSchema.boolean(defaultValue: false),
         ),
       );
 
@@ -259,17 +265,17 @@ void main() {
 
     test('Client handles elicit request with number input', () async {
       final transport = MockTransport();
-      transport.mockInitializeResponse = InitializeResult(
+      transport.mockInitializeResponse = const InitializeResult(
         protocolVersion: latestProtocolVersion,
-        capabilities: const ServerCapabilities(),
+        capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
 
       final client = Client(
-        Implementation(name: 'test-client', version: '1.0.0'),
+        const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -279,14 +285,14 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Enter age"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema);
-        expect(schema, isA<NumberInputSchema>());
+        final schema = params.requestedSchema!;
+        expect(schema, isA<JsonNumber>());
+        final numberSchema = schema as JsonNumber;
 
-        final numberSchema = schema as NumberInputSchema;
         expect(numberSchema.minimum, equals(0));
         expect(numberSchema.maximum, equals(120));
 
-        return ElicitResult(
+        return const ElicitResult(
           action: 'accept',
           content: {'age': 25},
         );
@@ -298,7 +304,7 @@ void main() {
         id: 3,
         elicitParams: ElicitRequestParams(
           message: "Enter age",
-          requestedSchema: const NumberInputSchema(minimum: 0, maximum: 120).toJson(),
+          requestedSchema: JsonSchema.number(minimum: 0, maximum: 120),
         ),
       );
 
@@ -311,17 +317,17 @@ void main() {
 
     test('Client handles elicit request with enum input', () async {
       final transport = MockTransport();
-      transport.mockInitializeResponse = InitializeResult(
+      transport.mockInitializeResponse = const InitializeResult(
         protocolVersion: latestProtocolVersion,
-        capabilities: const ServerCapabilities(),
+        capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
 
       final client = Client(
-        Implementation(name: 'test-client', version: '1.0.0'),
+        const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -331,13 +337,12 @@ void main() {
         handlerCalled = true;
         expect(params.message, equals("Choose size"));
 
-        final schema = InputSchema.fromJson(params.requestedSchema);
-        expect(schema, isA<EnumInputSchema>());
+        final schema = params.requestedSchema!;
+        expect(schema, isA<JsonString>());
+        final stringSchema = schema as JsonString;
+        expect(stringSchema.enumValues, equals(['small', 'medium', 'large']));
 
-        final enumSchema = schema as EnumInputSchema;
-        expect(enumSchema.enumValues, equals(['small', 'medium', 'large']));
-
-        return ElicitResult(
+        return const ElicitResult(
           action: 'accept',
           content: {'size': 'medium'},
         );
@@ -349,10 +354,10 @@ void main() {
         id: 4,
         elicitParams: ElicitRequestParams(
           message: "Choose size",
-          requestedSchema: const EnumInputSchema(
+          requestedSchema: JsonSchema.string(
             enumValues: ['small', 'medium', 'large'],
             defaultValue: 'medium',
-          ).toJson(),
+          ),
         ),
       );
 
@@ -365,17 +370,17 @@ void main() {
 
     test('Client handles rejected elicit request', () async {
       final transport = MockTransport();
-      transport.mockInitializeResponse = InitializeResult(
+      transport.mockInitializeResponse = const InitializeResult(
         protocolVersion: latestProtocolVersion,
-        capabilities: const ServerCapabilities(),
+        capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
 
       final client = Client(
-        Implementation(name: 'test-client', version: '1.0.0'),
+        const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientCapabilitiesElicitation(),
+            elicitation: ClientElicitation.formOnly(),
           ),
         ),
       );
@@ -393,7 +398,7 @@ void main() {
         id: 5,
         elicitParams: ElicitRequestParams(
           message: "Enter name",
-          requestedSchema: StringInputSchema(minLength: 1).toJson(),
+          requestedSchema: JsonSchema.string(minLength: 1),
         ),
       );
 
@@ -410,7 +415,7 @@ void main() {
 
     test('Client without elicitation capability does not register handler', () {
       final client = Client(
-        Implementation(name: 'test-client', version: '1.0.0'),
+        const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(),
         ),
@@ -419,7 +424,7 @@ void main() {
       // Attempting to set handler on client without capability
       // The handler can be set, but won't be registered internally
       client.onElicitRequest = (params) async {
-        return ElicitResult(
+        return const ElicitResult(
           action: 'accept',
           content: {'value': 'test'},
         );
@@ -429,5 +434,138 @@ void main() {
       // but the internal request handler won't be registered
       expect(client.onElicitRequest, isNotNull);
     });
+  });
+
+  group('Elicitation Spec 2025-11-25 Features', () {
+    test('JsonSchema integer serialization', () {
+      final schema = JsonSchema.integer(
+        minimum: 0,
+        maximum: 100,
+        defaultValue: 50,
+        title: 'Age',
+        description: 'Your age in years',
+      );
+
+      final json = schema.toJson();
+      expect(json['type'], equals('integer'));
+      expect(json['minimum'], equals(0));
+      expect(json['maximum'], equals(100));
+      expect(json['default'], equals(50));
+      expect(json['title'], equals('Age'));
+      expect(json['description'], equals('Your age in years'));
+
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed, isA<JsonInteger>());
+      final integerSchema = parsed as JsonInteger;
+      expect(integerSchema.minimum, equals(0));
+      expect(integerSchema.maximum, equals(100));
+    });
+
+    test('JsonSchema string with format field', () {
+      final schema = JsonSchema.string(
+        format: 'email',
+        title: 'Email Address',
+        description: 'Your email',
+      );
+
+      final json = schema.toJson();
+      expect(json['type'], equals('string'));
+      expect(json['format'], equals('email'));
+      expect(json['title'], equals('Email Address'));
+
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed, isA<JsonString>());
+      final stringSchema = parsed as JsonString;
+      expect(stringSchema.format, equals('email'));
+    });
+
+    test('ClientElicitation form/url sub-objects', () {
+      // Default: form only
+      const defaultCaps = ClientElicitation.formOnly();
+      expect(defaultCaps.form != null, isTrue);
+      expect(defaultCaps.url != null, isFalse);
+
+      final defaultJson = defaultCaps.toJson();
+      expect(defaultJson.containsKey('form'), isTrue);
+      expect(defaultJson.containsKey('url'), isFalse);
+
+      // Both form and URL
+      const allCaps = ClientElicitation.all();
+      expect(allCaps.form != null, isTrue);
+      expect(allCaps.url != null, isTrue);
+
+      final allJson = allCaps.toJson();
+      expect(allJson.containsKey('form'), isTrue);
+      expect(allJson.containsKey('url'), isTrue);
+
+      // URL only
+      const urlOnlyCaps = ClientElicitation.urlOnly();
+      expect(urlOnlyCaps.form != null, isFalse);
+      expect(urlOnlyCaps.url != null, isTrue);
+
+      // Parse from JSON with sub-objects
+      final parsedCaps = ClientElicitation.fromJson({
+        'form': {},
+        'url': {},
+      });
+      expect(parsedCaps.form != null, isTrue);
+      expect(parsedCaps.url != null, isTrue);
+    });
+
+    test('ElicitRequestParams URL mode', () {
+      const params = ElicitRequestParams.url(
+        message: 'Please authenticate',
+        url: 'https://oauth.example.com/authorize',
+        elicitationId: 'oauth-123',
+      );
+
+      expect(params.isUrlMode, isTrue);
+      expect(params.isFormMode, isFalse);
+      expect(params.mode, equals(ElicitationMode.url));
+      expect(params.url, equals('https://oauth.example.com/authorize'));
+      expect(params.elicitationId, equals('oauth-123'));
+      expect(params.requestedSchema, isNull);
+
+      final json = params.toJson();
+      expect(json['mode'], equals('url'));
+      expect(json['url'], equals('https://oauth.example.com/authorize'));
+      expect(json['elicitationId'], equals('oauth-123'));
+    });
+
+    test('ElicitRequestParams form mode', () {
+      final params = ElicitRequestParams.form(
+        message: 'Enter your name',
+        requestedSchema: JsonSchema.string(minLength: 1),
+      );
+
+      expect(params.isFormMode, isTrue);
+      expect(params.isUrlMode, isFalse);
+      expect(params.mode, equals(ElicitationMode.form));
+      expect(params.requestedSchema, isNotNull);
+      expect(params.url, isNull);
+      expect(params.elicitationId, isNull);
+    });
+
+    test('JsonRpcElicitationCompleteNotification serialization', () {
+      final notification = JsonRpcElicitationCompleteNotification(
+        completeParams: const ElicitationCompleteParams(
+          elicitationId: 'oauth-123',
+        ),
+      );
+
+      final json = notification.toJson();
+      expect(json['method'], equals('notifications/elicitation/complete'));
+      expect(json['params']['elicitationId'], equals('oauth-123'));
+
+      final parsed = JsonRpcElicitationCompleteNotification.fromJson(json);
+      expect(parsed.completeParams.elicitationId, equals('oauth-123'));
+    });
+
+    test('URLElicitationRequiredError code', () {
+      expect(ErrorCode.urlElicitationRequired.value, equals(-32042));
+    });
+
+    // Note: enumNames is not standard JSON Schema 2020-12, usually handled via oneOf with const/title
+    // or custom extensions. Assuming simple enum for now.
   });
 }

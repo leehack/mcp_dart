@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:mcp_dart/src/shared/logging.dart';
 
-import 'mcp.dart';
+import 'mcp_server.dart';
 import 'sse.dart';
 
 final _logger = Logger("mcp_dart.server.sse.manager");

@@ -189,10 +189,10 @@ final config = OAuthServerConfig.github(
 Implement tool-level scope checks:
 
 ```dart
-server.tool(
+server.registerTool(
   'admin-action',
   description: 'Admin tool requiring special scope',
-  callback: ({args, extra}) async {
+  callback: (args, extra) async {
     // Get token info from request context
     final tokenInfo = getTokenForSession(sessionId);
 
@@ -205,7 +205,7 @@ server.tool(
     }
 
     // Execute admin action
-    return CallToolResult.fromContent(...);
+    return CallToolResult(content: [...]);
   },
 );
 ```
@@ -447,12 +447,12 @@ extension UserContext on RequestHandlerExtra {
 }
 
 // Use in tool
-server.tool(
+server.registerTool(
   'get-user-data',
-  callback: ({args, extra}) async {
-    final user = extra?.getUserInfo();
+  callback: (args, extra) async {
+    final user = extra.getUserInfo();
 
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [
         TextContent(
           text: 'User: ${user?.username ?? "unknown"}',

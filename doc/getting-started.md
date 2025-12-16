@@ -40,10 +40,10 @@ Functions that AI can call to perform actions:
 
 ```dart
 // Server provides a tool
-server.tool(
-  name: 'search',
+server.registerTool(
+  'search',
   description: 'Search for information',
-  callback: ({args, extra}) async {
+  callback: (args, extra) async {
     // Perform search
     return CallToolResult(content: [TextContent(text: results)]);
   },
@@ -51,7 +51,7 @@ server.tool(
 
 // Client calls the tool
 await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'search',
     arguments: {'query': 'Dart programming'},
   ),
@@ -64,11 +64,11 @@ Data and context that AI can access:
 
 ```dart
 // Server provides a resource
-server.resource(
-  uri: 'file:///docs/readme.md',
-  name: 'README',
-  description: 'Project documentation',
-  callback: (uri, extra) async => ReadResourceResult(
+server.registerResource(
+  'README',
+  'file:///docs/readme.md',
+  null,
+  (uri, extra) async => ReadResourceResult(
     contents: [TextResourceContents(
       uri: 'file:///docs/readme.md',
       text: readmeContent,
@@ -90,20 +90,20 @@ Reusable prompt templates with arguments:
 
 ```dart
 // Server provides a prompt
-server.prompt(
-  name: 'code-review',
+server.registerPrompt(
+  'code-review',
   description: 'Review code for issues',
-  arguments: [
-    PromptArgument(
-      name: 'language',
+  argsSchema: {
+    'language': PromptArgumentDefinition(
+      type: String,
       description: 'Programming language',
       required: true,
     ),
-  ],
+  },
   callback: (args, extra) async => GetPromptResult(
     messages: [
       PromptMessage(
-        role: Role.user,
+        role: PromptMessageRole.user,
         content: TextContent(
           text: 'Review this ${args['language']} code...',
         ),
@@ -152,20 +152,17 @@ void main() async {
   );
 
   // Add a simple tool
-  server.tool(
+  server.registerTool(
     'greet',
     description: 'Greet someone by name',
-    toolInputSchema: ToolInputSchema(
+    inputSchema: ToolInputSchema(
       properties: {
-        'name': {
-          'type': 'string',
-          'description': 'Name of person to greet',
-        },
+        'name': JsonSchema.string(description: 'Name of person to greet'),
       },
       required: ['name'],
     ),
-    callback: ({args, extra}) async {
-      final name = args!['name'] as String;
+    callback: (args, extra) async {
+      final name = args['name'] as String;
       return CallToolResult.fromContent(
         content: [
           TextContent(text: 'Hello, $name! Welcome to MCP!'),
@@ -175,9 +172,10 @@ void main() async {
   );
 
   // Add a resource
-  server.resource(
+  server.registerResource(
     'Server Info',
     'info://server',
+    null,
     (uri, extra) async => ReadResourceResult(
       contents: [
         TextResourceContents(
@@ -238,7 +236,7 @@ void main() async {
   // Call a tool
   print('\nCalling greet tool...');
   final result = await client.callTool(
-    CallToolRequestParams(
+    CallToolRequest(
       name: 'greet',
       arguments: {'name': 'Alice'},
     ),
@@ -317,7 +315,7 @@ Done!
 ```dart
 try {
   final result = await client.callTool(
-    CallToolRequestParams(
+    CallToolRequest(
       name: 'unknown-tool',
       arguments: {},
     ),
@@ -334,23 +332,21 @@ try {
 ### Type-Safe Tool Inputs
 
 ```dart
-server.tool(
-  name: 'calculate',
+server.registerTool(
+  'calculate',
   description: 'Perform calculation',
-  inputSchema: {
-    'type': 'object',
-    'properties': {
-      'operation': {
-        'type': 'string',
-        'enum': ['add', 'subtract', 'multiply', 'divide'],
-      },
-      'a': {'type': 'number'},
-      'b': {'type': 'number'},
+  inputSchema: ToolInputSchema(
+    properties: {
+      'operation': JsonSchema.string(
+        enumValues: ['add', 'subtract', 'multiply', 'divide'],
+      ),
+      'a': JsonSchema.number(),
+      'b': JsonSchema.number(),
     },
-    'required': ['operation', 'a', 'b'],
-  },
-  callback: ({args, extra}) async {
-    final op = args!['operation'] as String;
+    required: ['operation', 'a', 'b'],
+  ),
+  callback: (args, extra) async {
+    final op = args['operation'] as String;
     final a = args['a'] as num;
     final b = args['b'] as num;
 
@@ -375,12 +371,15 @@ server.tool(
 ### Resource with URI Template
 
 ```dart
-server.resourceTemplate(
-  uriTemplate: 'user://{username}/profile',
-  name: 'User Profile',
-  description: 'Get user profile by username',
-  callback: (uri, extra) async {
-    final username = uri.pathSegments.first;
+server.registerResourceTemplate(
+  'User Profile',
+  ResourceTemplateRegistration(
+    'user://{username}/profile',
+    listCallback: null,
+  ),
+  ResourceMetadata(description: 'Get user profile by username'),
+  (uri, vars, extra) async {
+    final username = vars['username'];
     final profile = await fetchUserProfile(username);
 
     return ReadResourceResult(
@@ -420,17 +419,16 @@ Ensure your input matches the schema:
 
 ```dart
 // Schema requires 'name' as string
-inputSchema: {
-  'type': 'object',
-  'properties': {
-    'name': {'type': 'string'},
+inputSchema: ToolInputSchema(
+  properties: {
+    'name': JsonSchema.string(),
   },
-  'required': ['name'],
-}
+  required: ['name'],
+)
 
 // Correct call
 await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'greet',
     arguments: {'name': 'Alice'},  // ✅ Valid
   ),
@@ -438,7 +436,7 @@ await client.callTool(
 
 // Incorrect call
 await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'greet',
     arguments: {'name': 123},  // ❌ Wrong type
   ),

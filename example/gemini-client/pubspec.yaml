@@ -1,14 +1,15 @@
 name: gemini_client
 description: A sample command-line application.
 version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+publish_to: none
 
 environment:
   sdk: ^3.7.2
 
 # Add regular dependencies here.
 dependencies:
-  mcp_dart: ^0.3.2
+  mcp_dart:
+    path: ../..
   google_generative_ai: ^0.4.6
   # path: ^1.8.0
 

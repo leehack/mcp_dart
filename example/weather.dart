@@ -47,25 +47,25 @@ String formatAlert(Map<String, dynamic> feature) {
 }
 
 void main() async {
-  final server = McpServer(Implementation(name: "weather", version: "1.0.0"));
+  final server =
+      McpServer(const Implementation(name: "weather", version: "1.0.0"));
 
   // Register "get-alerts" tool
-  server.tool(
+  server.registerTool(
     "get-alerts",
     description: "Get weather alerts for a state",
-    toolInputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        "state": {
-          "type": "string",
-          "description": "Two-letter state code (e.g. CA, NY)",
-        },
+        "state": JsonSchema.string(
+          description: "Two-letter state code (e.g. CA, NY)",
+        ),
       },
       required: ["state"],
     ),
-    callback: ({args, extra}) async {
-      final state = (args?['state'] as String?)?.toUpperCase();
+    callback: (args, extra) async {
+      final state = (args['state'] as String?)?.toUpperCase();
       if (state == null || state.length != 2) {
-        return CallToolResult.fromContent(
+        return const CallToolResult(
           content: [TextContent(text: "Invalid state code provided.")],
           isError: true,
         );
@@ -76,14 +76,14 @@ void main() async {
 
       if (alertsData == null) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "Failed to retrieve alerts data.")],
+          [const TextContent(text: "Failed to retrieve alerts data.")],
         );
       }
 
       final features = alertsData['features'] as List<dynamic>? ?? [];
       if (features.isEmpty) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "No active alerts for $state.")],
+          [TextContent(text: "No active alerts for $state.")],
         );
       }
 
@@ -92,34 +92,32 @@ void main() async {
       final alertsText = "Active alerts for $state:\n\n$formattedAlerts";
 
       return CallToolResult.fromContent(
-        content: [TextContent(text: alertsText)],
+        [TextContent(text: alertsText)],
       );
     },
   );
 
   // Register "get-forecast" tool
-  server.tool(
+  server.registerTool(
     "get-forecast",
     description: "Get weather forecast for a location",
-    toolInputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
-        "latitude": {
-          "type": "number",
-          "description": "Latitude of the location",
-        },
-        "longitude": {
-          "type": "number",
-          "description": "Longitude of the location",
-        },
+        "latitude": JsonSchema.number(
+          description: "Latitude of the location",
+        ),
+        "longitude": JsonSchema.number(
+          description: "Longitude of the location",
+        ),
       },
       required: ["latitude", "longitude"],
     ),
-    callback: ({args, extra}) async {
-      final latitude = args?['latitude'] as num?;
-      final longitude = args?['longitude'] as num?;
+    callback: (args, extra) async {
+      final latitude = args['latitude'] as num?;
+      final longitude = args['longitude'] as num?;
 
       if (latitude == null || longitude == null) {
-        return CallToolResult.fromContent(
+        return const CallToolResult(
           content: [TextContent(text: "Invalid latitude or longitude.")],
           isError: true,
         );
@@ -131,7 +129,7 @@ void main() async {
 
       if (pointsData == null) {
         return CallToolResult.fromContent(
-          content: [
+          [
             TextContent(
               text:
                   "Failed to retrieve grid point data for coordinates: $latitude, $longitude. This location may not be supported by the NWS API (only US locations are supported).",
@@ -143,8 +141,8 @@ void main() async {
       final forecastUrl = pointsData['properties']?['forecast'] as String?;
       if (forecastUrl == null) {
         return CallToolResult.fromContent(
-          content: [
-            TextContent(
+          [
+            const TextContent(
               text: "Failed to get forecast URL from grid point data.",
             ),
           ],
@@ -154,7 +152,9 @@ void main() async {
       final forecastData = await makeNWSRequest(forecastUrl);
       if (forecastData == null) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "Failed to retrieve forecast data.")],
+          [
+            const TextContent(text: "Failed to retrieve forecast data."),
+          ],
         );
       }
 
@@ -162,7 +162,7 @@ void main() async {
           forecastData['properties']?['periods'] as List<dynamic>? ?? [];
       if (periods.isEmpty) {
         return CallToolResult.fromContent(
-          content: [TextContent(text: "No forecast periods available.")],
+          [const TextContent(text: "No forecast periods available.")],
         );
       }
 
@@ -181,7 +181,7 @@ void main() async {
           "Forecast for $latitude, $longitude:\n\n$formattedForecast";
 
       return CallToolResult.fromContent(
-        content: [TextContent(text: forecastText)],
+        [TextContent(text: forecastText)],
       );
     },
   );

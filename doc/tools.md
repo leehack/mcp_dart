@@ -9,16 +9,15 @@ Tools are functions that AI can call to perform actions. They are the primary wa
 ## Basic Tool Registration
 
 ```dart
-server.tool(
-  name: 'tool-name',
+server.registerTool(
+  'tool-name',
   description: 'What the tool does',
-  inputSchema: {
-    'type': 'object',
-    'properties': {
-      'param': {'type': 'string'},
+  inputSchema: ToolInputSchema(
+    properties: {
+      'param': JsonSchema.string(),
     },
-  },
-  callback: ({args, extra}) async {
+  ),
+  callback: (args, extra) async {
     // Process request
     return CallToolResult(
       content: [TextContent(text: 'result')],
@@ -33,90 +32,73 @@ server.tool(
 
 ```dart
 // String
-'param': {
-  'type': 'string',
-  'description': 'A text parameter',
-}
+'param': JsonSchema.string(
+  description: 'A text parameter',
+)
 
 // Number
-'count': {
-  'type': 'number',
-  'description': 'A numeric value',
-}
+'count': JsonSchema.number(
+  description: 'A numeric value',
+)
 
 // Integer
-'age': {
-  'type': 'integer',
-  'minimum': 0,
-  'maximum': 150,
-}
+'age': JsonSchema.integer(
+  minimum: 0,
+  maximum: 150,
+)
 
 // Boolean
-'enabled': {
-  'type': 'boolean',
-  'description': 'Enable feature',
-}
+'enabled': JsonSchema.boolean(
+  description: 'Enable feature',
+)
 
 // Array
-'tags': {
-  'type': 'array',
-  'items': {'type': 'string'},
-  'minItems': 1,
-  'maxItems': 10,
-}
+'tags': JsonSchema.array(
+  items: JsonSchema.string(),
+  minItems: 1,
+  maxItems: 10,
+)
 
 // Object
-'config': {
-  'type': 'object',
-  'properties': {
-    'key': {'type': 'string'},
-    'value': {'type': 'number'},
+'config': JsonSchema.object(
+  properties: {
+    'key': JsonSchema.string(),
+    'value': JsonSchema.number(),
   },
-}
+)
 ```
 
 ### Advanced Validation
 
 ```dart
-server.tool(
-  name: 'create-user',
-  inputSchema: {
-    'type': 'object',
-    'properties': {
-      'username': {
-        'type': 'string',
-        'minLength': 3,
-        'maxLength': 20,
-        'pattern': r'^[a-zA-Z0-9_]+$',
-      },
-      'email': {
-        'type': 'string',
-        'format': 'email',
-      },
-      'age': {
-        'type': 'integer',
-        'minimum': 13,
-      },
-      'role': {
-        'type': 'string',
-        'enum': ['user', 'admin', 'moderator'],
-      },
-      'preferences': {
-        'type': 'object',
-        'properties': {
-          'notifications': {'type': 'boolean'},
-          'theme': {
-            'type': 'string',
-            'enum': ['light', 'dark'],
-            'default': 'light',
-          },
+server.registerTool(
+  'create-user',
+  inputSchema: ToolInputSchema(
+    properties: {
+      'username': JsonSchema.string(
+        minLength: 3,
+        maxLength: 20,
+        pattern: r'^[a-zA-Z0-9_]+$',
+      ),
+      'email': JsonSchema.string(format: 'email'),
+      'age': JsonSchema.integer(minimum: 13),
+      'role': JsonSchema.string(
+        enumValues: ['user', 'admin', 'moderator'],
+      ),
+      'preferences': JsonSchema.object(
+        properties: {
+          'notifications': JsonSchema.boolean(),
+          'theme': JsonSchema.string(
+            enumValues: ['light', 'dark'],
+            defaultValue: 'light',
+          ),
         },
-      },
+      ),
     },
-    'required': ['username', 'email'],
-  },
-  callback: ({args, extra}) async {
-    final username = args!['username'] as String;
+    required: ['username', 'email'],
+  ),
+  callback: (args, extra) async {
+    final username = args['username'] as String;
     final email = args['email'] as String;
     final age = args['age'] as int?;
     final role = args['role'] as String? ?? 'user';
@@ -136,12 +118,12 @@ Provide behavioral hints to clients:
 ### Read-Only Tools
 
 ```dart
-server.tool(
-  name: 'get-user-stats',
+server.registerTool(
+  'get-user-stats',
   description: 'Get user statistics',
-  readOnlyHint: true,  // No side effects
-  inputSchema: {...},
-  callback: (args) async {
+  annotations: ToolAnnotations(readOnly: true), // No side effects
+  inputSchema: ToolInputSchema(properties: {...}),
+  callback: (args, extra) async {
     final stats = await database.getUserStats();
     return CallToolResult(
       content: [TextContent(text: jsonEncode(stats))],
@@ -153,21 +135,20 @@ server.tool(
 ### Destructive Tools
 
 ```dart
-server.tool(
-  name: 'delete-all-data',
+server.registerTool(
+  'delete-all-data',
   description: 'Permanently delete all data',
-  destructiveHint: true,  // Warn users!
-  inputSchema: {
-    'type': 'object',
-    'properties': {
-      'confirmation': {
-        'type': 'string',
-        'const': 'DELETE',
-      },
+  annotations: ToolAnnotations(
+    readOnly: false,
+    destructive: true, // Warn users!
+  ),
+  inputSchema: ToolInputSchema(
+    properties: {
+      'confirmation': JsonSchema.string(constValue: 'DELETE'),
     },
-    'required': ['confirmation'],
-  },
-  callback: (args) async {
+    required: ['confirmation'],
+  ),
+  callback: (args, extra) async {
     await database.deleteAll();
     return CallToolResult(
       content: [TextContent(text: 'All data deleted')],
@@ -179,12 +160,12 @@ server.tool(
 ### Idempotent Tools
 
 ```dart
-server.tool(
-  name: 'update-cache',
+server.registerTool(
+  'update-cache',
   description: 'Update cache entry',
-  idempotentHint: true,  // Safe to retry
-  inputSchema: {...},
-  callback: (args) async {
+  annotations: ToolAnnotations(idempotent: true), // Safe to retry
+  inputSchema: ToolInputSchema(properties: {...}),
+  callback: (args, extra) async {
     await cache.set(args['key'], args['value']);
     return CallToolResult(
       content: [TextContent(text: 'Cache updated')],
@@ -196,12 +177,12 @@ server.tool(
 ### Open World Tools
 
 ```dart
-server.tool(
-  name: 'search-web',
+server.registerTool(
+  'search-web',
   description: 'Search the internet',
-  openWorldHint: true,  // Results vary over time
-  inputSchema: {...},
-  callback: (args) async {
+  annotations: ToolAnnotations(openWorld: true), // Results vary over time
+  inputSchema: ToolInputSchema(properties: {...}),
+  callback: (args, extra) async {
     final results = await webSearch(args['query']);
     return CallToolResult(
       content: [TextContent(text: jsonEncode(results))],
@@ -271,10 +252,10 @@ return CallToolResult(
 ### Return Error Results
 
 ```dart
-server.tool(
-  name: 'divide',
-  inputSchema: {...},
-  callback: (args) async {
+server.registerTool(
+  'divide',
+  inputSchema: ToolInputSchema(properties: {...}),
+  callback: (args, extra) async {
     final a = args['a'] as num;
     final b = args['b'] as num;
 
@@ -295,10 +276,10 @@ server.tool(
 ### Throw MCP Errors
 
 ```dart
-server.tool(
-  name: 'admin-action',
-  inputSchema: {...},
-  callback: (args) async {
+server.registerTool(
+  'admin-action',
+  inputSchema: ToolInputSchema(properties: {...}),
+  callback: (args, extra) async {
     if (!await isAdmin(args['userId'])) {
       throw McpError(
         ErrorCode.unauthorized,
@@ -307,7 +288,7 @@ server.tool(
     }
 
     // Perform admin action...
-    return CallToolResult(...);
+    return CallToolResult(content: []);
   },
 );
 ```
@@ -337,11 +318,11 @@ server.tool(
 ### Progress Notifications
 
 ```dart
-server.tool(
-  name: 'process-large-file',
-  inputSchema: {...},
-  callback: (args) async {
-    final progressToken = args['\$meta']?['progressToken'];
+server.registerTool(
+  'process-large-file',
+  inputSchema: ToolInputSchema(properties: {...}),
+  callback: (args, extra) async {
+    final progressToken = extra.progressToken;
     final file = args['file'] as String;
 
     if (progressToken != null) {
@@ -378,15 +359,15 @@ server.tool(
 ### Cancellation Support
 
 ```dart
-server.tool(
-  name: 'cancelable-task',
-  inputSchema: {...},
-  callback: (args) async {
-    final progressToken = args['\$meta']?['progressToken'];
+server.registerTool(
+  'cancelable-task',
+  inputSchema: ToolInputSchema(properties: {...}),
+  callback: (args, extra) async {
+    final progressToken = extra.progressToken;
 
     for (var i = 0; i < 1000; i++) {
       // Check for cancellation
-      if (await isCancelled(progressToken)) {
+      if (progressToken != null && await isCancelled(progressToken)) {
         return CallToolResult(
           isError: true,
           content: [TextContent(text: 'Task cancelled')],
@@ -405,7 +386,7 @@ server.tool(
       }
     }
 
-    return CallToolResult(...);
+    return CallToolResult(content: []);
   },
 );
 ```
@@ -415,25 +396,20 @@ server.tool(
 ### API Integration
 
 ```dart
-server.tool(
-  name: 'get-weather',
+server.registerTool(
+  'get-weather',
   description: 'Get current weather for a city',
-  inputSchema: {
-    'type': 'object',
-    'properties': {
-      'city': {
-        'type': 'string',
-        'description': 'City name',
-      },
-      'units': {
-        'type': 'string',
-        'enum': ['metric', 'imperial'],
-        'default': 'metric',
-      },
+  inputSchema: ToolInputSchema(
+    properties: {
+      'city': JsonSchema.string(description: 'City name'),
+      'units': JsonSchema.string(
+        enumValues: ['metric', 'imperial'],
+        defaultValue: 'metric',
+      ),
     },
-    'required': ['city'],
-  },
-  callback: (args) async {
+    required: ['city'],
+  ),
+  callback: (args, extra) async {
     final city = args['city'] as String;
     final units = args['units'] as String? ?? 'metric';
 
@@ -458,29 +434,26 @@ server.tool(
 ### Database Query
 
 ```dart
-server.tool(
-  name: 'query-users',
+server.registerTool(
+  'query-users',
   description: 'Query user database',
-  inputSchema: {
-    'type': 'object',
-    'properties': {
-      'filters': {
-        'type': 'object',
-        'properties': {
-          'age_min': {'type': 'integer'},
-          'age_max': {'type': 'integer'},
-          'role': {'type': 'string'},
+  inputSchema: ToolInputSchema(
+    properties: {
+      'filters': JsonSchema.object(
+        properties: {
+          'age_min': JsonSchema.integer(),
+          'age_max': JsonSchema.integer(),
+          'role': JsonSchema.string(),
         },
-      },
-      'limit': {
-        'type': 'integer',
-        'minimum': 1,
-        'maximum': 100,
-        'default': 10,
-      },
+      ),
+      'limit': JsonSchema.integer(
+        minimum: 1,
+        maximum: 100,
+        defaultValue: 10,
+      ),
     },
-  },
-  callback: (args) async {
+  ),
+  callback: (args, extra) async {
     final filters = args['filters'] as Map<String, dynamic>?;
     final limit = args['limit'] as int? ?? 10;
 
@@ -506,26 +479,21 @@ server.tool(
 ### File Operations
 
 ```dart
-server.tool(
-  name: 'read-file',
+server.registerTool(
+  'read-file',
   description: 'Read file contents',
-  readOnlyHint: true,
-  inputSchema: {
-    'type': 'object',
-    'properties': {
-      'path': {
-        'type': 'string',
-        'description': 'File path',
-      },
-      'encoding': {
-        'type': 'string',
-        'enum': ['utf8', 'latin1', 'ascii'],
-        'default': 'utf8',
-      },
+  annotations: ToolAnnotations(readOnly: true),
+  inputSchema: ToolInputSchema(
+    properties: {
+      'path': JsonSchema.string(description: 'File path'),
+      'encoding': JsonSchema.string(
+        enumValues: ['utf8', 'latin1', 'ascii'],
+        defaultValue: 'utf8',
+      ),
     },
-    'required': ['path'],
-  },
-  callback: (args) async {
+    required: ['path'],
+  ),
+  callback: (args, extra) async {
     final path = args['path'] as String;
     final encoding = args['encoding'] as String? ?? 'utf8';
 
@@ -559,8 +527,8 @@ server.tool(
 
 ```dart
 // ✅ Good
-server.tool(
-  name: 'search',
+server.registerTool(
+  'search',
   description: 'Search the knowledge base using keywords. '
                'Returns up to 10 most relevant results ranked '
                'by relevance score.',
@@ -568,8 +536,8 @@ server.tool(
 );
 
 // ❌ Bad
-server.tool(
-  name: 'search',
+server.registerTool(
+  'search',
   description: 'Searches',
   ...
 );
@@ -579,26 +547,23 @@ server.tool(
 
 ```dart
 // ✅ Good - descriptive, with validation
-inputSchema: {
-  'type': 'object',
-  'properties': {
-    'query': {
-      'type': 'string',
-      'description': 'Search query (keywords)',
-      'minLength': 1,
-      'maxLength': 200,
-    },
+inputSchema: ToolInputSchema(
+  properties: {
+    'query': JsonSchema.string(
+      description: 'Search query (keywords)',
+      minLength: 1,
+      maxLength: 200,
+    ),
   },
-  'required': ['query'],
-}
+  required: ['query'],
+)
 
 // ❌ Bad - minimal, no validation
-inputSchema: {
-  'type': 'object',
-  'properties': {
-    'query': {'type': 'string'},
+inputSchema: ToolInputSchema(
+  properties: {
+    'query': JsonSchema.string(),
   },
-}
+)
 ```
 
 ### 3. Type Safety
@@ -695,16 +660,15 @@ void main() {
       Implementation(name: 'test', version: '1.0.0'),
     );
 
-    server.tool(
-      name: 'add',
-      inputSchema: {
-        'type': 'object',
-        'properties': {
-          'a': {'type': 'number'},
-          'b': {'type': 'number'},
+    server.registerTool(
+      'add',
+      inputSchema: ToolInputSchema(
+        properties: {
+          'a': JsonSchema.number(),
+          'b': JsonSchema.number(),
         },
-      },
-      callback: (args) async {
+      ),
+      callback: (args, extra) async {
         final sum = (args['a'] as num) + (args['b'] as num);
         return CallToolResult(
           content: [TextContent(text: '$sum')],

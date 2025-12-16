@@ -44,7 +44,7 @@ void main() async {
   );
 
   // Register capabilities
-  server.tool(name: 'example', ...);
+  server.registerTool('example', ...);
 
   // Connect stdio transport
   final transport = StdioServerTransport();
@@ -187,6 +187,37 @@ HTTP with Server-Sent Events for web-based communication. Best for:
 - Remote services
 - Cloud deployments
 - Flutter web apps
+
+### High-Level Streamable HTTP Server
+
+For a simplified setup, use the `StreamableMcpServer` class which handles the server creation, session management, and transport connection for you.
+
+```dart
+import 'package:mcp_dart/mcp_dart.dart';
+
+void main() async {
+  final server = StreamableMcpServer(
+    serverFactory: (sessionId) {
+      // Create a new McpServer instance for each session
+      return McpServer(
+        Implementation(name: 'my-server', version: '1.0.0'),
+      );
+    },
+    host: '0.0.0.0',
+    port: 3000,
+    path: '/mcp',
+  );
+
+  await server.start();
+  print('Server running on http://0.0.0.0:3000/mcp');
+}
+```
+
+This helper handles:
+- Creating an HTTP server
+- Managing sessions and event storage
+- Connecting the `McpServer` to the transport
+- Resumability support
 
 ### Server Setup (Streamable HTTP)
 
@@ -396,7 +427,7 @@ void main() async {
   final server = McpServer(
     Implementation(name: 'server', version: '1.0.0'),
   );
-  server.tool(name: 'example', ...);
+  server.registerTool('example', ...);
 
   final serverTransport = IOStreamTransport(
     inputStream: clientToServer.stream,
@@ -417,7 +448,7 @@ void main() async {
 
   // Use client and server
   final result = await client.callTool(
-    CallToolRequestParams(
+    CallToolRequest(
       name: 'example',
       arguments: {},
     ),
@@ -447,17 +478,16 @@ void main() {
       Implementation(name: 'test-server', version: '1.0.0'),
     );
 
-    server.tool(
-      name: 'add',
+    server.registerTool(
+      'add',
       description: 'Add numbers',
-      inputSchema: {
-        'type': 'object',
-        'properties': {
-          'a': {'type': 'number'},
-          'b': {'type': 'number'},
+      inputSchema: ToolInputSchema(
+        properties: {
+          'a': JsonSchema.number(),
+          'b': JsonSchema.number(),
         },
-      },
-      callback: (args) async {
+      ),
+      callback: (args, extra) async {
         final result = (args['a'] as num) + (args['b'] as num);
         return CallToolResult(
           content: [TextContent(text: '$result')],
@@ -482,7 +512,7 @@ void main() {
 
     // Test
     final result = await client.callTool(
-      CallToolRequestParams(
+      CallToolRequest(
         name: 'add',
         arguments: {'a': 5, 'b': 3},
       ),

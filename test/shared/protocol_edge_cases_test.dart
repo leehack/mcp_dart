@@ -33,7 +33,7 @@ class EdgeCaseMockTransport implements Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (_closed) throw StateError('Transport is closed');
     sentMessages.add(message);
   }
@@ -65,6 +65,16 @@ class EdgeCaseTestProtocol extends Protocol {
   @override
   void assertRequestHandlerCapability(String method) {
     // Allow all request handlers
+  }
+
+  @override
+  void assertTaskCapability(String method) {
+    // Mock implementation
+  }
+
+  @override
+  void assertTaskHandlerCapability(String method) {
+    // Mock implementation
   }
 }
 
@@ -109,11 +119,13 @@ void main() {
       final anotherTransport = EdgeCaseMockTransport();
       expect(
         () => protocol.connect(anotherTransport),
-        throwsA(isA<StateError>().having(
-          (e) => e.message,
-          'message',
-          contains('already connected'),
-        )),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('already connected'),
+          ),
+        ),
       );
 
       await anotherTransport.close();
@@ -124,15 +136,17 @@ void main() {
 
       // Just verify that the cancelled notification handler is registered
       // by sending a cancellation for a non-existent request (should be silently ignored)
-      transport.receiveMessage(JsonRpcCancelledNotification(
-        cancelParams: CancelledNotificationParams(
-          requestId: 999,
-          reason: 'Test cancellation',
+      transport.receiveMessage(
+        JsonRpcCancelledNotification(
+          cancelParams: const CancelledNotificationParams(
+            requestId: 999,
+            reason: 'Test cancellation',
+          ),
         ),
-      ));
+      );
 
       // Wait for async operations
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // Test passes if no exception is thrown
       expect(true, isTrue);
@@ -143,16 +157,18 @@ void main() {
 
       // Just verify the progress notification handler is registered
       // Send a progress notification for a non-existent request (should be silently ignored)
-      transport.receiveMessage(JsonRpcProgressNotification(
-        progressParams: ProgressNotificationParams(
-          progressToken: 999,
-          progress: 50,
-          total: 100,
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotificationParams(
+            progressToken: 999,
+            progress: 50,
+            total: 100,
+          ),
         ),
-      ));
+      );
 
       // Wait for async operations
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // Test passes if no exception is thrown
       expect(true, isTrue);
@@ -165,7 +181,7 @@ void main() {
       protocol.onerror = (error) => errors.add(error);
 
       // Create a custom message that will fail parsing
-      final badMessage = JsonRpcResponse(
+      final badMessage = const JsonRpcResponse(
         id: 999,
         result: {'invalid': 'structure'},
       );
@@ -188,17 +204,20 @@ void main() {
       await protocol.connect(transport);
 
       // Send notification with no registered handler
-      transport.receiveMessage(JsonRpcNotification(
-        method: 'unhandled/notification',
-        params: {},
-      ));
+      transport.receiveMessage(
+        const JsonRpcNotification(
+          method: 'unhandled/notification',
+          params: {},
+        ),
+      );
 
       // Should not throw, just silently ignore
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
       // Test passes if no exception is thrown
     });
 
-    test('fallback notification handler would be called if method parsed', () async {
+    test('fallback notification handler would be called if method parsed',
+        () async {
       // Note: This test documents that fallback handlers CAN'T be tested with
       // custom methods because JsonRpcMessage.fromJson throws UnimplementedError
       // for unknown notification methods. The fallback handler mechanism exists
@@ -243,13 +262,15 @@ void main() {
       final futures = <Future<EmptyResult>>[];
       for (var i = 0; i < 3; i++) {
         futures.add(
-          protocol.request<EmptyResult>(
-            JsonRpcPingRequest(id: 0),
+          protocol
+              .request<EmptyResult>(
+            const JsonRpcPingRequest(id: 0),
             (json) => EmptyResult(meta: json['_meta'] as Map<String, dynamic>?),
-          ).catchError((e) {
+          )
+              .catchError((e) {
             // Catch errors inline to prevent unhandled error zone warnings
             if (e is McpError && e.code == ErrorCode.connectionClosed.value) {
-              return EmptyResult(); // Return dummy result
+              return const EmptyResult(); // Return dummy result
             }
             throw e; // Rethrow unexpected errors
           }),
@@ -263,7 +284,11 @@ void main() {
       final results = await Future.wait(futures);
 
       // Verify all 3 completed (catchError returned EmptyResult for each)
-      expect(results.length, equals(3), reason: 'All 3 requests should complete');
+      expect(
+        results.length,
+        equals(3),
+        reason: 'All 3 requests should complete',
+      );
     });
 
     test('handles user onclose error gracefully', () async {
@@ -281,8 +306,9 @@ void main() {
       // Should handle the error without crashing
       expect(errors.length, greaterThan(0));
       expect(
-        errors.any((e) =>
-            e is StateError && e.message.contains('User onclose error')),
+        errors.any(
+          (e) => e is StateError && e.message.contains('User onclose error'),
+        ),
         isTrue,
       );
     });
@@ -298,7 +324,7 @@ void main() {
       transport.simulateError(StateError('Test error'));
 
       // Should not crash, error is logged
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
       // Test passes if no unhandled exception occurs
     });
 
@@ -338,16 +364,16 @@ void main() {
       final options = RequestOptions(
         onprogress: progressCallback,
         signal: controller.signal,
-        timeout: Duration(seconds: 30),
+        timeout: const Duration(seconds: 30),
         resetTimeoutOnProgress: true,
-        maxTotalTimeout: Duration(minutes: 5),
+        maxTotalTimeout: const Duration(minutes: 5),
       );
 
       expect(options.onprogress, equals(progressCallback));
       expect(options.signal, equals(controller.signal));
-      expect(options.timeout, equals(Duration(seconds: 30)));
+      expect(options.timeout, equals(const Duration(seconds: 30)));
       expect(options.resetTimeoutOnProgress, isTrue);
-      expect(options.maxTotalTimeout, equals(Duration(minutes: 5)));
+      expect(options.maxTotalTimeout, equals(const Duration(minutes: 5)));
     });
   });
 

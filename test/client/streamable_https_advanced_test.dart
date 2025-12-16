@@ -62,7 +62,7 @@ void main() {
     test('reconnection delay calculation follows exponential backoff', () {
       transport = StreamableHttpClientTransport(
         serverUrl,
-        opts: StreamableHttpClientTransportOptions(
+        opts: const StreamableHttpClientTransportOptions(
           reconnectionOptions: StreamableHttpReconnectionOptions(
             initialReconnectionDelay: 100,
             reconnectionDelayGrowFactor: 2.0,
@@ -93,7 +93,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         serverUrl,
-        opts: StreamableHttpClientTransportOptions(
+        opts: const StreamableHttpClientTransportOptions(
           reconnectionOptions: StreamableHttpReconnectionOptions(
             initialReconnectionDelay: 50,
             reconnectionDelayGrowFactor: 1.1,
@@ -112,13 +112,13 @@ void main() {
 
       // Send initialization to trigger SSE connection
       try {
-        await transport.send(JsonRpcInitializedNotification());
+        await transport.send(const JsonRpcInitializedNotification());
       } catch (_) {
         // May fail, that's OK
       }
 
       // Wait for reconnection attempts to exhaust
-      await Future.delayed(Duration(seconds: 1));
+      await Future.delayed(const Duration(seconds: 1));
 
       await subscription.cancel();
 
@@ -140,11 +140,13 @@ void main() {
 
       // Send should handle failure
       try {
-        await transport.send(JsonRpcRequest(
-          id: 1,
-          method: 'test/method',
-          params: {},
-        ));
+        await transport.send(
+          const JsonRpcRequest(
+            id: 1,
+            method: 'test/method',
+            params: {},
+          ),
+        );
         fail('Should have thrown an error');
       } catch (e) {
         expect(e, isA<McpError>());
@@ -158,7 +160,7 @@ void main() {
       final subscription = requestController!.stream.listen((request) async {
         if (request.uri.path == '/mcp' && request.method == 'POST') {
           // Delay longer than reasonable timeout
-          await Future.delayed(Duration(seconds: 10));
+          await Future.delayed(const Duration(seconds: 10));
           request.response.statusCode = HttpStatus.ok;
           await request.response.close();
         }
@@ -166,7 +168,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         serverUrl,
-        opts: StreamableHttpClientTransportOptions(
+        opts: const StreamableHttpClientTransportOptions(
           requestInit: {
             'timeout': Duration(milliseconds: 100), // Short timeout
           },
@@ -177,11 +179,15 @@ void main() {
 
       // Send should timeout
       try {
-        await transport.send(JsonRpcRequest(
-          id: 1,
-          method: 'test/method',
-          params: {},
-        )).timeout(Duration(milliseconds: 500));
+        await transport
+            .send(
+              const JsonRpcRequest(
+                id: 1,
+                method: 'test/method',
+                params: {},
+              ),
+            )
+            .timeout(const Duration(milliseconds: 500));
         fail('Should have timed out');
       } catch (e) {
         expect(e, isA<TimeoutException>());
@@ -224,7 +230,8 @@ void main() {
 
       final subscription = requestController!.stream.listen((request) async {
         if (request.uri.path == '/mcp' && request.method == 'GET') {
-          request.response.headers.contentType = ContentType('text', 'event-stream');
+          request.response.headers.contentType =
+              ContentType('text', 'event-stream');
           request.response.bufferOutput = false;
 
           // Send malformed SSE data
@@ -232,7 +239,7 @@ void main() {
           await request.response.flush();
 
           // Keep connection open briefly
-          await Future.delayed(Duration(milliseconds: 100));
+          await Future.delayed(const Duration(milliseconds: 100));
           await request.response.close();
         } else if (request.uri.path == '/mcp' && request.method == 'POST') {
           request.response.statusCode = HttpStatus.accepted;
@@ -245,10 +252,10 @@ void main() {
       transport.onerror = (error) => receivedErrors.add(error);
 
       await transport.start();
-      await transport.send(JsonRpcInitializedNotification());
+      await transport.send(const JsonRpcInitializedNotification());
 
       // Wait for SSE connection and error processing
-      await Future.delayed(Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 500));
 
       await subscription.cancel();
 
@@ -257,7 +264,7 @@ void main() {
     });
 
     test('custom reconnection options are respected', () {
-      final customOptions = StreamableHttpReconnectionOptions(
+      final customOptions = const StreamableHttpReconnectionOptions(
         initialReconnectionDelay: 500,
         maxReconnectionDelay: 5000,
         reconnectionDelayGrowFactor: 2.5,
@@ -288,11 +295,13 @@ void main() {
 
       // Send should throw McpError for 401 response without authProvider
       try {
-        await transport.send(JsonRpcRequest(
-          id: 1,
-          method: 'test/method',
-          params: {},
-        ));
+        await transport.send(
+          const JsonRpcRequest(
+            id: 1,
+            method: 'test/method',
+            params: {},
+          ),
+        );
         fail('Should have thrown McpError');
       } catch (e) {
         expect(e, isA<McpError>());

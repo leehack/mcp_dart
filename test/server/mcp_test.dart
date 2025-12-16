@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:mcp_dart/src/server/mcp.dart';
+import 'package:mcp_dart/src/server/server.dart';
+import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
@@ -22,7 +23,7 @@ class MockTransport extends Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
   }
 
@@ -43,7 +44,14 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer = McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const ServerOptions(
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
       transport = MockTransport();
     });
 
@@ -51,19 +59,19 @@ void main() {
       var callbackInvoked = false;
       var receivedArgs = <String, dynamic>{};
 
-      mcpServer.tool(
+      mcpServer.registerTool(
         'test_tool',
         description: 'A test tool',
-        toolInputSchema: ToolInputSchema(
+        inputSchema: JsonObject(
           properties: {
-            'input': {'type': 'string'}
+            'input': JsonSchema.string(),
           },
         ),
-        callback: ({args, extra}) async {
+        callback: (args, extra) async {
           callbackInvoked = true;
-          receivedArgs = args ?? {};
-          return CallToolResult.fromContent(
-            content: [TextContent(text: 'Tool executed: ${args?['input']}')],
+          receivedArgs = args;
+          return CallToolResult(
+            content: [TextContent(text: 'Tool executed: ${args['input']}')],
           );
         },
       );
@@ -73,27 +81,27 @@ void main() {
       // Simulate client sending initialize request
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
 
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Now simulate tools/call request
       final callRequest = JsonRpcCallToolRequest(
         id: 3,
-        callParams: CallToolRequestParams(
+        params: const CallToolRequest(
           name: 'test_tool',
           arguments: {'input': 'test value'},
-        ),
+        ).toJson(),
       );
 
       transport.receiveMessage(callRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(callbackInvoked, isTrue);
       expect(receivedArgs['input'], equals('test value'));
@@ -102,11 +110,11 @@ void main() {
     test('tool callback receives RequestHandlerExtra', () async {
       RequestHandlerExtra? receivedExtra;
 
-      mcpServer.tool(
+      mcpServer.registerTool(
         'extra_test',
-        callback: ({args, extra}) async {
+        callback: (args, extra) async {
           receivedExtra = extra;
-          return CallToolResult.fromContent(
+          return const CallToolResult(
             content: [TextContent(text: 'ok')],
           );
         },
@@ -116,29 +124,29 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
-        callParams: CallToolRequestParams(name: 'extra_test'),
+        params: const CallToolRequest(name: 'extra_test').toJson(),
       );
       transport.receiveMessage(callRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(receivedExtra, isNotNull);
     });
 
     test('tool callback error returns CallToolResult with isError', () async {
-      mcpServer.tool(
+      mcpServer.registerTool(
         'error_tool',
-        callback: ({args, extra}) async {
+        callback: (args, extra) async {
           throw Exception('Tool execution failed');
         },
       );
@@ -147,67 +155,72 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
-        callParams: CallToolRequestParams(name: 'error_tool'),
+        params: const CallToolRequest(name: 'error_tool').toJson(),
       );
 
       transport.receiveMessage(callRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Should handle gracefully with error result
       expect(transport.sentMessages.isNotEmpty, isTrue);
     });
 
     test('cannot register duplicate tool names', () {
-      mcpServer.tool(
+      mcpServer.registerTool(
         'duplicate',
-        callback: ({args, extra}) async {
-          return CallToolResult.fromContent(
+        callback: (args, extra) async {
+          return const CallToolResult(
             content: [TextContent(text: 'first')],
           );
         },
       );
 
       expect(
-        () => mcpServer.tool(
+        () => mcpServer.registerTool(
           'duplicate',
-          callback: ({args, extra}) async {
-            return CallToolResult.fromContent(
+          callback: (args, extra) async {
+            return const CallToolResult(
               content: [TextContent(text: 'second')],
             );
           },
         ),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('already registered'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('already registered'),
+          ),
+        ),
       );
     });
 
     test('tool with output schema is registered correctly', () {
-      mcpServer.tool(
+      mcpServer.registerTool(
         'schema_tool',
         description: 'Tool with schemas',
-        toolInputSchema: ToolInputSchema(
+        inputSchema: JsonObject(
           properties: {
-            'query': {'type': 'string'}
+            'query': JsonSchema.string(),
           },
         ),
-        toolOutputSchema: ToolOutputSchema(
+        outputSchema: JsonObject(
           properties: {
-            'result': {'type': 'string'}
+            'result': JsonSchema.string(),
           },
         ),
-        callback: ({args, extra}) async {
-          return CallToolResult.fromContent(
+        callback: (args, extra) async {
+          return const CallToolResult(
             content: [TextContent(text: 'result')],
           );
         },
@@ -223,7 +236,14 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer = McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const ServerOptions(
+          capabilities: ServerCapabilities(
+            resources: ServerCapabilitiesResources(),
+          ),
+        ),
+      );
       transport = MockTransport();
     });
 
@@ -251,22 +271,22 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Test resources/read
       final readRequest = JsonRpcReadResourceRequest(
         id: 3,
-        readParams: ReadResourceRequestParams(uri: 'file:///test.txt'),
+        readParams: const ReadResourceRequestParams(uri: 'file:///test.txt'),
       );
       transport.receiveMessage(readRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(readCallbackInvoked, isTrue);
     });
@@ -296,8 +316,13 @@ void main() {
             );
           },
         ),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('already registered'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('already registered'),
+          ),
+        ),
       );
     });
 
@@ -307,7 +332,7 @@ void main() {
         ResourceTemplateRegistration(
           'file:///{path}',
           listCallback: (extra) async {
-            return ListResourcesResult(
+            return const ListResourcesResult(
               resources: [
                 Resource(
                   uri: 'file:///file1.txt',
@@ -345,14 +370,14 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(transport.sentMessages.isNotEmpty, isTrue);
     });
@@ -362,7 +387,8 @@ void main() {
         'duplicate_template',
         ResourceTemplateRegistration(
           'file:///{path}',
-          listCallback: (extra) async => ListResourcesResult(resources: []),
+          listCallback: (extra) async =>
+              const ListResourcesResult(resources: []),
         ),
         (uri, variables, extra) async {
           return ReadResourceResult(
@@ -378,7 +404,8 @@ void main() {
           'duplicate_template',
           ResourceTemplateRegistration(
             'http://{host}/{path}',
-            listCallback: (extra) async => ListResourcesResult(resources: []),
+            listCallback: (extra) async =>
+                const ListResourcesResult(resources: []),
           ),
           (uri, variables, extra) async {
             return ReadResourceResult(
@@ -388,8 +415,13 @@ void main() {
             );
           },
         ),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('already registered'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('already registered'),
+          ),
+        ),
       );
     });
 
@@ -410,22 +442,22 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final readRequest = JsonRpcReadResourceRequest(
         id: 2,
-        readParams: ReadResourceRequestParams(uri: 'invalid:::uri'),
+        readParams: const ReadResourceRequestParams(uri: 'invalid:::uri'),
       );
 
       transport.receiveMessage(readRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Server should send error response
       expect(transport.sentMessages.isNotEmpty, isTrue);
@@ -437,7 +469,14 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer = McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const ServerOptions(
+          capabilities: ServerCapabilities(
+            prompts: ServerCapabilitiesPrompts(),
+          ),
+        ),
+      );
       transport = MockTransport();
     });
 
@@ -449,7 +488,7 @@ void main() {
         'test_prompt',
         description: 'A test prompt',
         argsSchema: {
-          'topic': PromptArgumentDefinition(
+          'topic': const PromptArgumentDefinition(
             description: 'Topic to discuss',
             required: true,
           ),
@@ -472,25 +511,25 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Test prompts/get
       final getRequest = JsonRpcGetPromptRequest(
         id: 3,
-        getParams: GetPromptRequestParams(
+        getParams: const GetPromptRequestParams(
           name: 'test_prompt',
           arguments: {'topic': 'AI'},
         ),
       );
       transport.receiveMessage(getRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(callbackInvoked, isTrue);
       expect(receivedArgs['topic'], equals('AI'));
@@ -531,25 +570,25 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Test completion/complete for prompt argument
       final completeRequest = JsonRpcCompleteRequest(
         id: 2,
-        completeParams: CompleteRequestParams(
+        completeParams: const CompleteRequestParams(
           ref: PromptReference(name: 'autocomplete_prompt'),
           argument: ArgumentCompletionInfo(name: 'category', value: 'te'),
         ),
       );
       transport.receiveMessage(completeRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(transport.sentMessages.isNotEmpty, isTrue);
     });
@@ -558,12 +597,12 @@ void main() {
       mcpServer.prompt(
         'strict_prompt',
         argsSchema: {
-          'required_arg': PromptArgumentDefinition(
+          'required_arg': const PromptArgumentDefinition(
             required: true,
           ),
         },
         callback: (args, extra) async {
-          return GetPromptResult(
+          return const GetPromptResult(
             messages: [
               PromptMessage(
                 role: PromptMessageRole.user,
@@ -578,25 +617,25 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Call prompt without required argument
       final getRequest = JsonRpcGetPromptRequest(
         id: 2,
-        getParams: GetPromptRequestParams(
+        getParams: const GetPromptRequestParams(
           name: 'strict_prompt',
           arguments: {}, // Missing required_arg
         ),
       );
       transport.receiveMessage(getRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Should send error response
       expect(transport.sentMessages.isNotEmpty, isTrue);
@@ -606,12 +645,12 @@ void main() {
       mcpServer.prompt(
         'typed_prompt',
         argsSchema: {
-          'count': PromptArgumentDefinition(
+          'count': const PromptArgumentDefinition(
             required: true,
           ),
         },
         callback: (args, extra) async {
-          return GetPromptResult(
+          return const GetPromptResult(
             messages: [
               PromptMessage(
                 role: PromptMessageRole.user,
@@ -626,25 +665,25 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Call prompt with wrong type
       final getRequest = JsonRpcGetPromptRequest(
         id: 2,
-        getParams: GetPromptRequestParams(
+        getParams: const GetPromptRequestParams(
           name: 'typed_prompt',
           arguments: {'count': 'not_a_number'}, // Wrong type
         ),
       );
       transport.receiveMessage(getRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Should send error response
       expect(transport.sentMessages.isNotEmpty, isTrue);
@@ -654,7 +693,7 @@ void main() {
       mcpServer.prompt(
         'duplicate_prompt',
         callback: (args, extra) async {
-          return GetPromptResult(
+          return const GetPromptResult(
             messages: [
               PromptMessage(
                 role: PromptMessageRole.user,
@@ -669,7 +708,7 @@ void main() {
         () => mcpServer.prompt(
           'duplicate_prompt',
           callback: (args, extra) async {
-            return GetPromptResult(
+            return const GetPromptResult(
               messages: [
                 PromptMessage(
                   role: PromptMessageRole.user,
@@ -679,8 +718,13 @@ void main() {
             );
           },
         ),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('already registered'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('already registered'),
+          ),
+        ),
       );
     });
   });
@@ -690,7 +734,15 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      mcpServer = McpServer(Implementation(name: 'TestServer', version: '1.0.0'));
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const ServerOptions(
+          capabilities: ServerCapabilities(
+            prompts: ServerCapabilitiesPrompts(),
+            resources: ServerCapabilitiesResources(),
+          ),
+        ),
+      );
       transport = MockTransport();
     });
 
@@ -699,13 +751,14 @@ void main() {
         'completion_template',
         ResourceTemplateRegistration(
           'file:///{path}',
-          listCallback: (extra) async => ListResourcesResult(resources: []),
+          listCallback: (extra) async =>
+              const ListResourcesResult(resources: []),
           completeCallbacks: {
             'path': (currentValue) async {
               return [
                 'documents/file1.txt',
                 'documents/file2.txt',
-                'downloads/file3.txt'
+                'downloads/file3.txt',
               ].where((p) => p.contains(currentValue)).toList();
             },
           },
@@ -723,18 +776,18 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final completeRequest = JsonRpcCompleteRequest(
         id: 2,
-        completeParams: CompleteRequestParams(
+        completeParams: const CompleteRequestParams(
           ref: ResourceReference(
             uri: 'file:///{path}',
           ),
@@ -742,7 +795,7 @@ void main() {
         ),
       );
       transport.receiveMessage(completeRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       expect(transport.sentMessages.isNotEmpty, isTrue);
     });
@@ -763,7 +816,7 @@ void main() {
           ),
         },
         callback: (args, extra) async {
-          return GetPromptResult(
+          return const GetPromptResult(
             messages: [
               PromptMessage(
                 role: PromptMessageRole.user,
@@ -778,40 +831,41 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final completeRequest = JsonRpcCompleteRequest(
         id: 2,
-        completeParams: CompleteRequestParams(
+        completeParams: const CompleteRequestParams(
           ref: PromptReference(name: 'large_completion_prompt'),
           argument: ArgumentCompletionInfo(name: 'item', value: 'item'),
         ),
       );
       transport.receiveMessage(completeRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Should limit to 100 and set hasMore=true
       expect(transport.sentMessages.isNotEmpty, isTrue);
     });
 
-    test('completion returns empty result when no completer registered', () async {
+    test('completion returns empty result when no completer registered',
+        () async {
       mcpServer.prompt(
         'no_completion_prompt',
         argsSchema: {
-          'arg': PromptArgumentDefinition(
+          'arg': const PromptArgumentDefinition(
             // No completable field
             required: false,
           ),
         },
         callback: (args, extra) async {
-          return GetPromptResult(
+          return const GetPromptResult(
             messages: [
               PromptMessage(
                 role: PromptMessageRole.user,
@@ -826,24 +880,24 @@ void main() {
 
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequestParams(
+        initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
-          capabilities: const ClientCapabilities(),
+          capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
       );
       transport.receiveMessage(initRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       final completeRequest = JsonRpcCompleteRequest(
         id: 2,
-        completeParams: CompleteRequestParams(
+        completeParams: const CompleteRequestParams(
           ref: PromptReference(name: 'no_completion_prompt'),
           argument: ArgumentCompletionInfo(name: 'arg', value: 'test'),
         ),
       );
       transport.receiveMessage(completeRequest);
-      await Future.delayed(Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Should return empty completion result
       expect(transport.sentMessages.isNotEmpty, isTrue);
@@ -853,7 +907,7 @@ void main() {
   group('McpServer - Connection Lifecycle', () {
     test('connect and close work correctly', () async {
       final mcpServer = McpServer(
-        Implementation(name: 'TestServer', version: '1.0.0'),
+        const Implementation(name: 'TestServer', version: '1.0.0'),
       );
       final transport = MockTransport();
 

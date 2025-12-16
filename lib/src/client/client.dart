@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
@@ -11,9 +12,53 @@ class ClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
-  /// Creates client options.
-  const ClientOptions({super.enforceStrictCapabilities, this.capabilities});
+  const ClientOptions({
+    super.enforceStrictCapabilities,
+    this.capabilities,
+  });
 }
+
+/// Recursively applies default values from a JSON Schema to a data object.
+/// Recursively applies default values from a JSON Schema to a data object.
+// Recursively applies default values from a JSON Schema to a data object.
+void _applyElicitationDefaults(JsonSchema schema, Map<String, dynamic> data) {
+  if (schema is! JsonObject) return;
+
+  final properties = schema.properties;
+  if (properties != null) {
+    for (final entry in properties.entries) {
+      final key = entry.key;
+      final propSchema = entry.value;
+
+      // Apply default if data doesn't have the key and schema has a default
+      if (!data.containsKey(key) && propSchema.defaultValue != null) {
+        data[key] = _deepCopy(propSchema.defaultValue);
+      }
+
+      // Recurse into existing nested objects (but not arrays)
+      if (data[key] is Map) {
+        _applyElicitationDefaults(
+          propSchema,
+          data[key] as Map<String, dynamic>,
+        );
+      }
+    }
+  }
+}
+
+dynamic _deepCopy(dynamic value) {
+  if (value is Map) {
+    return value.map<String, dynamic>(
+      (key, val) => MapEntry(key.toString(), _deepCopy(val)),
+    );
+  } else if (value is List) {
+    return value.map((val) => _deepCopy(val)).toList();
+  } else {
+    return value;
+  }
+}
+
+// Unused _applyDefaultsFromMap removed
 
 /// An MCP client implementation built on top of a pluggable [Transport].
 ///
@@ -26,12 +71,25 @@ class Client extends Protocol {
   final Implementation _clientInfo;
   String? _instructions;
 
+  final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
+  final Set<String> _cachedRequiredTaskTools = {};
+
   /// Callback for handling elicitation requests from the server.
   ///
   /// This will be called when the server sends an `elicitation/create` request
   /// to collect structured user input. The client should prompt the user
   /// and return an [ElicitResult] with the action taken and content provided.
   Future<ElicitResult> Function(ElicitRequestParams)? onElicitRequest;
+
+  /// Callback for handling task status notifications from the server.
+  FutureOr<void> Function(TaskStatusNotificationParams params)? onTaskStatus;
+
+  /// Callback for handling sampling requests from the server.
+  ///
+  /// This will be called when the server sends a `sampling/createMessage` request
+  /// to request an LLM completion from the client.
+  Future<CreateMessageResult> Function(CreateMessageRequestParams params)?
+      onSamplingRequest;
 
   /// Initializes this client with its implementation details and options.
   ///
@@ -41,9 +99,9 @@ class Client extends Protocol {
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         super(options) {
     // Register elicit handler if capability is present
-    if (_capabilities.elicitation != null) {
+    if (_capabilities.elicitation?.form != null) {
       setRequestHandler<JsonRpcElicitRequest>(
-        "elicitation/create",
+        Method.elicitationCreate,
         (request, extra) async {
           if (onElicitRequest == null) {
             throw McpError(
@@ -51,15 +109,61 @@ class Client extends Protocol {
               "No elicit handler registered",
             );
           }
-          return await onElicitRequest!(request.elicitParams);
+          final result = await onElicitRequest!(request.elicitParams);
+
+          // Apply defaults if client supports it and it's a form elicitation
+          if (request.elicitParams.mode == ElicitationMode.form &&
+              result.action == 'accept' &&
+              result.content is Map &&
+              request.elicitParams.requestedSchema != null &&
+              _capabilities.elicitation?.form?.applyDefaults == true) {
+            _applyElicitationDefaults(
+              request.elicitParams.requestedSchema!,
+              result.content!,
+            );
+          }
+          return result;
         },
-        (id, params, meta) => JsonRpcElicitRequest.fromJson({
-          'id': id,
-          'method': 'elicitation/create',
-          'jsonrpc': '2.0',
-          if (params != null) 'params': params,
-          if (meta != null) '_meta': meta,
-        }),
+        (id, params, meta) => JsonRpcElicitRequest(
+          id: id,
+          elicitParams: ElicitRequestParams.fromJson(params ?? {}),
+          meta: meta,
+        ),
+      );
+    }
+
+    // Register task status notification handler
+    if (_capabilities.tasks != null) {
+      setNotificationHandler<JsonRpcTaskStatusNotification>(
+        Method.notificationsTasksStatus,
+        (notification) async {
+          await onTaskStatus?.call(notification.statusParams);
+        },
+        (params, meta) => JsonRpcTaskStatusNotification(
+          statusParams: TaskStatusNotificationParams.fromJson(params ?? {}),
+          meta: meta,
+        ),
+      );
+    }
+
+    // Register sampling request handler if capability is present
+    if (_capabilities.sampling != null) {
+      setRequestHandler<JsonRpcCreateMessageRequest>(
+        Method.samplingCreateMessage,
+        (request, extra) async {
+          if (onSamplingRequest == null) {
+            throw McpError(
+              ErrorCode.methodNotFound.value,
+              "No sampling handler registered",
+            );
+          }
+          return await onSamplingRequest!(request.createParams);
+        },
+        (id, params, meta) => JsonRpcCreateMessageRequest(
+          id: id,
+          createParams: CreateMessageRequestParams.fromJson(params ?? {}),
+          meta: meta,
+        ),
       );
     }
   }
@@ -153,32 +257,32 @@ class Client extends Protocol {
     String? requiredCapability;
 
     switch (method) {
-      case "logging/setLevel":
+      case Method.loggingSetLevel:
         supported = serverCaps.logging != null;
         requiredCapability = 'logging';
         break;
-      case "prompts/get":
-      case "prompts/list":
+      case Method.promptsGet:
+      case Method.promptsList:
         supported = serverCaps.prompts != null;
         requiredCapability = 'prompts';
         break;
-      case "resources/list":
-      case "resources/templates/list":
-      case "resources/read":
+      case Method.resourcesList:
+      case Method.resourcesTemplatesList:
+      case Method.resourcesRead:
         supported = serverCaps.resources != null;
         requiredCapability = 'resources';
         break;
-      case "resources/subscribe":
-      case "resources/unsubscribe":
+      case Method.resourcesSubscribe:
+      case Method.resourcesUnsubscribe:
         supported = serverCaps.resources?.subscribe ?? false;
         requiredCapability = 'resources.subscribe';
         break;
-      case "tools/call":
-      case "tools/list":
+      case Method.toolsCall:
+      case Method.toolsList:
         supported = serverCaps.tools != null;
         requiredCapability = 'tools';
         break;
-      case "completion/complete":
+      case Method.completionComplete:
         supported = serverCaps.completions != null;
         requiredCapability = 'completions';
         break;
@@ -200,7 +304,7 @@ class Client extends Protocol {
   @override
   void assertNotificationCapability(String method) {
     switch (method) {
-      case "notifications/roots/list_changed":
+      case Method.notificationsRootsListChanged:
         if (!(_capabilities.roots?.listChanged ?? false)) {
           throw StateError(
             "Client does not support 'roots.listChanged' capability (required for sending $method)",
@@ -217,21 +321,21 @@ class Client extends Protocol {
   @override
   void assertRequestHandlerCapability(String method) {
     switch (method) {
-      case "sampling/createMessage":
+      case Method.samplingCreateMessage:
         if (!(_capabilities.sampling != null)) {
           throw StateError(
             "Client setup error: Cannot handle '$method' without 'sampling' capability registered.",
           );
         }
         break;
-      case "roots/list":
+      case Method.rootsList:
         if (!(_capabilities.roots != null)) {
           throw StateError(
             "Client setup error: Cannot handle '$method' without 'roots' capability registered.",
           );
         }
         break;
-      case "elicitation/create":
+      case Method.elicitationCreate:
         if (!(_capabilities.elicitation != null)) {
           throw StateError(
             "Client setup error: Cannot handle '$method' without 'elicitation' capability registered.",
@@ -242,6 +346,25 @@ class Client extends Protocol {
         _logger.info(
           "Setting request handler for potentially custom method '$method'. Ensure client capabilities match.",
         );
+    }
+  }
+
+  @override
+  void assertTaskCapability(String method) {
+    if (_serverCapabilities?.tasks == null) {
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        "Server does not support tasks capability (required for task-based '$method')",
+      );
+    }
+  }
+
+  @override
+  void assertTaskHandlerCapability(String method) {
+    if (_capabilities.tasks == null) {
+      throw StateError(
+        "Client setup error: Cannot handle task-based '$method' without 'tasks' capability registered.",
+      );
     }
   }
 
@@ -362,28 +485,78 @@ class Client extends Protocol {
 
   /// Sends a `tools/call` request to invoke a tool on the server.
   Future<CallToolResult> callTool(
-    CallToolRequestParams params, {
+    CallToolRequest params, {
     RequestOptions? options,
-  }) {
-    final req = JsonRpcCallToolRequest(id: -1, callParams: params);
-    return request<CallToolResult>(
+  }) async {
+    if (_cachedRequiredTaskTools.contains(params.name)) {
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        'Tool "${params.name}" requires task-based execution.',
+      );
+    }
+
+    final req = JsonRpcCallToolRequest(id: -1, params: params.toJson());
+    final result = await request<CallToolResult>(
       req,
       (json) => CallToolResult.fromJson(json),
       options,
     );
+
+    final outputSchema = _cachedToolOutputSchemas[params.name];
+    if (outputSchema != null) {
+      // If tool has outputSchema, it MUST return structuredContent (unless it's an error)
+      if (result.structuredContent.isEmpty && result.isError != true) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          "Tool '${params.name}' has an output schema but did not return structured content",
+        );
+      }
+
+      if (result.structuredContent.isNotEmpty) {
+        try {
+          outputSchema.validate(result.structuredContent);
+        } catch (e) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Structured content does not match the tool's output schema: $e",
+          );
+        }
+      }
+    }
+
+    return result;
   }
 
   /// Sends a `tools/list` request to list available tools on the server.
   Future<ListToolsResult> listTools({
-    ListToolsRequestParams? params,
+    ListToolsRequest? params,
     RequestOptions? options,
-  }) {
-    final req = JsonRpcListToolsRequest(id: -1, params: params);
-    return request<ListToolsResult>(
+  }) async {
+    final req = JsonRpcListToolsRequest(id: -1, params: params?.toJson());
+    final result = await request<ListToolsResult>(
       req,
       (json) => ListToolsResult.fromJson(json),
       options,
     );
+
+    _cacheToolMetadata(result.tools);
+
+    return result;
+  }
+
+  void _cacheToolMetadata(List<Tool> tools) {
+    _cachedToolOutputSchemas.clear();
+    _cachedRequiredTaskTools.clear();
+
+    for (final tool in tools) {
+      if (tool.outputSchema != null) {
+        _cachedToolOutputSchemas[tool.name] = tool.outputSchema!;
+      }
+
+      if (tool.execution?.taskSupport == 'required') {
+        _cachedRequiredTaskTools.add(tool.name);
+      }
+    }
   }
 
   /// Sends a `notifications/roots/list_changed` notification to the server.
