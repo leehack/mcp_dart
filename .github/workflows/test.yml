@@ -19,6 +19,15 @@ jobs:
         with:
           sdk: stable
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install TS Interop dependencies
+        working-directory: test/interop/ts
+        run: npm ci
+
       - name: Install dependencies
         run: dart pub get
 
