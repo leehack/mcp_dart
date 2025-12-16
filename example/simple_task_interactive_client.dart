@@ -152,9 +152,7 @@ Future<void> run(String url) async {
   await for (final message in taskClient.callToolStream(
     'confirm_delete',
     {'filename': 'important.txt'},
-    meta: {
-      'task': {'ttl': 60000, 'pollInterval': 200},
-    },
+    task: {'ttl': 60000, 'pollInterval': 200},
   )) {
     if (message is TaskCreatedMessage) {
       print('Task created: ${message.task.taskId}');
@@ -179,9 +177,7 @@ Future<void> run(String url) async {
   await for (final message in taskClient.callToolStream(
     'write_haiku',
     {'topic': 'autumn leaves'},
-    meta: {
-      'task': {'ttl': 60000},
-    },
+    task: {'ttl': 60000},
   )) {
     if (message is TaskCreatedMessage) {
       print('Task created: ${message.task.taskId}');

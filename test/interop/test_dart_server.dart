@@ -79,7 +79,168 @@ McpServer createServer() {
     },
   );
 
+  final taskHandler = TestTaskHandler();
+
+  // Task-based Tool
+  server.experimental.registerToolTask(
+    'delayed_echo',
+    description: 'Echoes a message after a delay',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'message': JsonSchema.string(description: 'Message to echo'),
+        'delay': JsonSchema.number(description: 'Delay in milliseconds'),
+      },
+      required: ['message'],
+    ),
+    handler: taskHandler,
+  );
+
+  // Register Task Capabilities (Global)
+  server.experimental.onListTasks((extra) async {
+    return ListTasksResult(tasks: await taskHandler.listTasks());
+  });
+
+  server.experimental.onCancelTask((taskId, extra) async {
+    await taskHandler.cancelTask(taskId, extra);
+  });
+
+  server.experimental.onGetTask((taskId, extra) async {
+    // Determine which tool manages this task or simple lookup
+    return await taskHandler.getTask(taskId, extra);
+  });
+
+  server.experimental.onTaskResult((taskId, extra) async {
+    // Determine which tool manages this task or simple lookup
+    return await taskHandler.getTaskResult(taskId, extra);
+  });
+
   return server;
+}
+
+class TestTaskHandler implements ToolTaskHandler {
+  final Map<String, _TaskState> _tasks = {};
+  int _counter = 0;
+
+  Future<List<Task>> listTasks() async {
+    return _tasks.values.map((s) => s.task).toList();
+  }
+
+  @override
+  Future<CreateTaskResult> createTask(
+    Map<String, dynamic>? args,
+    RequestHandlerExtra? extra,
+  ) async {
+    print('DEBUG: createTask called with $args');
+    try {
+      final taskId = 'task-${++_counter}';
+      final message = args?['message'] as String? ?? '';
+      final delay = args?['delay'] as num? ?? 100;
+
+      final task = Task(
+        taskId: taskId,
+        status: TaskStatus.working,
+        statusMessage: 'Starting...',
+        createdAt: DateTime.now().toIso8601String(),
+        lastUpdatedAt: DateTime.now().toIso8601String(),
+        meta: {'message': message}, // Store message in metadata
+        pollInterval: 100,
+      );
+
+      _tasks[taskId] = _TaskState(task, message, delay.toInt());
+
+      // Start processing in background
+      _processTask(taskId);
+
+      return CreateTaskResult(task: task);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> _processTask(String taskId) async {
+    final state = _tasks[taskId];
+    if (state == null) return;
+
+    // Simulate progress
+    await Future.delayed(Duration(milliseconds: state.delay ~/ 2));
+    if (!_tasks.containsKey(taskId)) return; // Cancelled?
+
+    // Manual copyWith for progress
+    state.task = Task(
+      taskId: state.task.taskId,
+      status: TaskStatus.working,
+      statusMessage: 'Halfway there...',
+      createdAt: state.task.createdAt,
+      lastUpdatedAt: DateTime.now().toIso8601String(),
+      pollInterval: 100,
+      // meta: state.task.meta, // Optional to keep meta
+    );
+
+    await Future.delayed(Duration(milliseconds: state.delay ~/ 2));
+    if (!_tasks.containsKey(taskId)) return;
+
+    state.task = Task(
+      taskId: state.task.taskId,
+      status: TaskStatus.completed,
+      statusMessage: 'Done!',
+      createdAt: state.task.createdAt,
+      lastUpdatedAt: DateTime.now().toIso8601String(),
+      pollInterval: 100,
+      // meta: state.task.meta,
+    );
+  }
+
+  @override
+  Future<Task> getTask(String taskId, RequestHandlerExtra? extra) async {
+    final state = _tasks[taskId];
+    if (state == null) {
+      throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+    }
+    return state.task;
+  }
+
+  @override
+  Future<void> cancelTask(String taskId, RequestHandlerExtra? extra) async {
+    final state = _tasks[taskId];
+    if (state != null) {
+      state.task = Task(
+        taskId: state.task.taskId,
+        status: TaskStatus.cancelled,
+        statusMessage: 'Cancelled',
+        meta: state.task.meta,
+        createdAt: state.task.createdAt,
+        lastUpdatedAt: DateTime.now().toIso8601String(),
+      );
+      // Keep it for a bit or remove? Usually keep for history.
+      // But for this simple test, we just mark it cancelled.
+    }
+  }
+
+  @override
+  Future<CallToolResult> getTaskResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) async {
+    final state = _tasks[taskId];
+    if (state == null) {
+      throw McpError(ErrorCode.invalidParams.value, "Task not found");
+    }
+    if (!state.task.status.isTerminal) {
+      throw McpError(ErrorCode.invalidParams.value, "Task not complete");
+    }
+
+    return CallToolResult(
+      content: [TextContent(text: state.message)],
+    );
+  }
+}
+
+class _TaskState {
+  Task task;
+  final String message;
+  final int delay;
+
+  _TaskState(this.task, this.message, this.delay);
 }
 
 void main(List<String> args) async {

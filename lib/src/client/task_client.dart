@@ -30,22 +30,31 @@ class TaskClient {
   /// This handles both immediate results (yielding a single [TaskResultMessage])
   /// and long-running tasks (yielding [TaskCreatedMessage], multiple
   /// [TaskStatusMessage]s, and finally [TaskResultMessage]).
+  ///
+  /// The [task] parameter is used for task augmentation. Pass task creation
+  /// parameters (e.g., `{'ttl': 60000, 'pollInterval': 50}`) to request
+  /// task-based execution from tools that support it.
   Stream<TaskStreamMessage> callToolStream(
     String name,
     Map<String, dynamic> arguments, {
-    Map<String, dynamic>? meta,
+    Map<String, dynamic>? task,
   }) async* {
     try {
       // 1. Call the tool using generic request to capture 'task' field if present.
-      // 1. Call the tool using generic request to capture 'task' field if present.
       // We cannot use client.callTool() because it forces CallToolResult return type
       // which ignores the 'task' field.
-      final callParams = CallToolRequest(name: name, arguments: arguments);
+      final callParamsJson =
+          CallToolRequest(name: name, arguments: arguments).toJson();
+
+      // Add task augmentation params directly to params (per MCP spec)
+      final paramsWithTask = <String, dynamic>{
+        ...callParamsJson,
+        if (task != null) 'task': task,
+      };
 
       final req = JsonRpcCallToolRequest(
         id: -1,
-        params: callParams.toJson(),
-        meta: meta,
+        params: paramsWithTask,
       );
 
       final response = await client.request<_RawResult>(
@@ -60,14 +69,10 @@ class TaskClient {
         final taskResult = CreateTaskResult.fromJson(data);
         yield TaskCreatedMessage(taskResult.task);
 
-        // Start the result promise (this triggers the task processing on server if needed)
-        final resultFuture = _getTaskResult(taskResult.task.taskId);
-
-        // Poll for status updates while waiting for result
-        await for (final msg in _monitorTaskWithResult(
+        // Poll for status updates until terminal, then fetch result
+        await for (final msg in _monitorTask(
           taskResult.task.taskId,
           taskResult.task,
-          resultFuture,
         )) {
           yield msg;
         }
@@ -81,49 +86,59 @@ class TaskClient {
     }
   }
 
-  Stream<TaskStreamMessage> _monitorTaskWithResult(
+  Stream<TaskStreamMessage> _monitorTask(
     String taskId,
     Task initialTask,
-    Future<CallToolResult> resultFuture,
   ) async* {
     var currentTask = initialTask;
-    var resultCompleted = false;
-    CallToolResult? finalResult;
-    Object? finalError;
 
-    // Hook up completion
-    resultFuture.then((r) {
-      resultCompleted = true;
-      finalResult = r;
-    }).catchError((e) {
-      resultCompleted = true;
-      finalError = e;
-    });
+    // Poll until task reaches terminal state
+    while (!currentTask.status.isTerminal) {
+      // Wait before next poll
+      final interval = currentTask.pollInterval ?? 1000;
+      await Future.delayed(Duration(milliseconds: interval));
 
-    while (!resultCompleted) {
-      // Poll task status immediately
+      // Poll task status
       try {
         currentTask = await _getTask(taskId);
         yield TaskStatusMessage(currentTask);
       } catch (e) {
-        // Only yield error if not just a momentary glitch?
-        // For now, assume critical error if polling fails repeatedly or at all
         yield TaskErrorMessage(e);
-        break;
+        return;
       }
 
-      // If result finished during poll
-      if (resultCompleted) break;
-
-      // Wait before next poll
-      final interval = currentTask.pollInterval ?? 1000;
-      await Future.delayed(Duration(milliseconds: interval));
+      // When input_required, call tasks/result to deliver queued messages
+      // (elicitation, sampling) via SSE and block until terminal.
+      // The server will send elicitation/sampling requests as side-channel
+      // messages, and the Client's request handlers will process them.
+      if (currentTask.status == TaskStatus.inputRequired) {
+        try {
+          final result = await _getTaskResult(taskId);
+          yield TaskResultMessage(result);
+          return; // tasks/result blocks until terminal, so we're done
+        } catch (e) {
+          yield TaskErrorMessage(e);
+          return;
+        }
+      }
     }
 
-    if (finalError != null) {
-      yield TaskErrorMessage(finalError!);
-    } else if (finalResult != null) {
-      yield TaskResultMessage(finalResult!);
+    // Task is terminal - fetch the result
+    if (currentTask.status == TaskStatus.completed) {
+      try {
+        final result = await _getTaskResult(taskId);
+        yield TaskResultMessage(result);
+      } catch (e) {
+        yield TaskErrorMessage(e);
+      }
+    } else if (currentTask.status == TaskStatus.failed) {
+      yield TaskErrorMessage(
+        Exception(
+          'Task failed: ${currentTask.statusMessage ?? "Unknown error"}',
+        ),
+      );
+    } else if (currentTask.status == TaskStatus.cancelled) {
+      yield TaskErrorMessage(Exception('Task was cancelled'));
     }
   }
 
