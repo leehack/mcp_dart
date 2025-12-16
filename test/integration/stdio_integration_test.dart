@@ -31,7 +31,7 @@ void main() {
       );
       transport = StdioClientTransport(
         StdioServerParameters(
-          command: 'dart',
+          command: Platform.resolvedExecutable,
           args: [serverFilePath],
           stderrMode: ProcessStartMode.normal, // Pipe stderr for debugging
         ),

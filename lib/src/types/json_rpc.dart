@@ -374,6 +374,21 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
     super.meta,
   }) : super(method: Method.toolsList);
 
+  @Deprecated(
+    'Use JsonRpcListToolsRequest(id: ..., params: params?.toJson(), meta: meta) instead.',
+  )
+  factory JsonRpcListToolsRequest.fromListParams({
+    required RequestId id,
+    ListToolsRequestParams? params,
+    Map<String, dynamic>? meta,
+  }) {
+    return JsonRpcListToolsRequest(
+      id: id,
+      params: params?.toJson(),
+      meta: meta,
+    );
+  }
+
   factory JsonRpcListToolsRequest.fromJson(Map<String, dynamic> json) {
     return JsonRpcListToolsRequest(
       id: json['id'],

@@ -8,12 +8,16 @@
   - Updated `ClientCapabilities` to use `ClientCapabilitiesTasks`, `ClientCapabilitiesElicitation`, `ClientCapabilitiesSampling`, etc.
   - **Migration**: Update capability declarations to use the new typed classes (e.g., `ServerCapabilities(tasks: ServerCapabilitiesTasks(listChanged: true))`).
 - **File Removal**: `lib/src/server/mcp.dart` has been removed. Use `lib/src/server/mcp_server.dart` (exported via `lib/src/server/module.dart`) instead.
+- **Transport Interface Change**: `Transport.send` now accepts an optional named parameter `relatedRequestId`. Custom transports must update their method signature.
 - **Client Validation**: `Client.callTool` now strictly validates tool outputs against their defined JSON schema (if present). Mismatches will throw an `McpError(ErrorCode.invalidParams)`.
 - **API Refactoring**:
   - `McpServer.tool`, `resource`, and `prompt` are **deprecated**. Use `registerTool`, `registerResource`, and `registerPrompt` instead.
   - `McpServer.registerTool` uses a new callback signature: `FutureOr<CallToolResult> Function(Map<String, dynamic> args, RequestHandlerExtra extra)`.
   - The deprecated `McpServer.tool` retains the old named-parameter signature for backward compatibility.
 - **Tool Schema Definitions**: `ToolInputSchema` (aka `JsonObject`) now requires properties to be defined using `JsonSchema` objects (e.g., `JsonSchema.string()`) instead of raw Maps.
+- **Tool Listing Types**: `ListToolsRequestParams` has been replaced by `ListToolsRequest` (update any code passing `params:` to `Client.listTools` or constructing `JsonRpcListToolsRequest`).
+- **Tool Result Structured Content**: `CallToolResult` no longer uses a dedicated `structuredContent` field in its API; structured results are represented as additional top-level fields (`CallToolResult.extra`). `CallToolResult.fromStructuredContent` now takes a single `Map<String, dynamic>` argument.
+- **RequestHandlerExtra Signature Changes**: `RequestHandlerExtra.sendNotification` and `RequestHandlerExtra.sendRequest` have updated signatures (added task-related metadata/options). Update any server callbacks that call these helpers directly.
 
 ### Features
 

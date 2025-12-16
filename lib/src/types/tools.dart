@@ -197,6 +197,9 @@ class ListToolsRequest {
       };
 }
 
+@Deprecated('Use [ListToolsRequest] instead.')
+typedef ListToolsRequestParams = ListToolsRequest;
+
 /// The server's response to a [ListToolsRequest].
 class ListToolsResult implements BaseResultData {
   /// A list of tools.
