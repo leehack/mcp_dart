@@ -55,16 +55,16 @@ await server.start();
 ### Register Tool
 
 ```dart
-server.tool(
+server.registerTool(
   'tool-name',
   description: 'What it does',
-  toolInputSchema: ToolInputSchema(
+  inputSchema: ToolInputSchema(
     properties: {
-      'param': {'type': 'string'},
+      'param': JsonSchema.string(),
     },
     required: ['param'],
   ),
-  callback: ({args, extra}) async {
+  callback: (args, extra) async {
     return CallToolResult.fromContent(
       content: [TextContent(text: 'result')],
     );
@@ -75,9 +75,10 @@ server.tool(
 ### Register Resource
 
 ```dart
-server.resource(
+server.registerResource(
   'Resource Name',
   'resource://example',
+  null,
   (uri, extra) async {
     return ReadResourceResult(
       contents: [
@@ -95,11 +96,15 @@ server.resource(
 ### Register Resource Template
 
 ```dart
-server.resourceTemplate(
+server.registerResourceTemplate(
   'User Profile',
-  'users://{userId}/profile',
-  (uri, extra) async {
-    final userId = uri.pathSegments.first;
+  ResourceTemplateRegistration(
+    'users://{userId}/profile',
+    listCallback: null,
+  ),
+  null,
+  (uri, vars, extra) async {
+    final userId = vars['userId'];
     return ReadResourceResult(
       contents: [
         TextResourceContents(
@@ -116,7 +121,7 @@ server.resourceTemplate(
 ### Register Prompt
 
 ```dart
-server.prompt(
+server.registerPrompt(
   'prompt-name',
   description: 'Prompt description',
   argsSchema: {
@@ -219,7 +224,7 @@ for (final tool in result.tools) {
 
 ```dart
 final result = await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'tool-name',
     arguments: {'param': 'value'},
   ),
@@ -280,13 +285,14 @@ await client.close();
 ### Simple Tool
 
 ```dart
-server.tool(
-  name: 'echo',
-  inputSchema: {
-    'type': 'object',
-    'properties': {'message': {'type': 'string'}},
-  },
-  callback: (args) async => CallToolResult(
+server.registerTool(
+  'echo',
+  inputSchema: ToolInputSchema(
+    properties: {
+      'message': JsonSchema.string(),
+    },
+  ),
+  callback: (args, extra) async => CallToolResult(
     content: [TextContent(text: args['message'] as String)],
   ),
 );
@@ -295,16 +301,15 @@ server.tool(
 ### Tool with Validation
 
 ```dart
-server.tool(
-  name: 'divide',
-  inputSchema: {
-    'type': 'object',
-    'properties': {
-      'a': {'type': 'number'},
-      'b': {'type': 'number'},
+server.registerTool(
+  'divide',
+  inputSchema: ToolInputSchema(
+    properties: {
+      'a': JsonSchema.number(),
+      'b': JsonSchema.number(),
     },
-  },
-  callback: (args) async {
+  ),
+  callback: (args, extra) async {
     final a = args['a'] as num;
     final b = args['b'] as num;
 
@@ -325,11 +330,11 @@ server.tool(
 ### Tool with Progress
 
 ```dart
-server.tool(
-  name: 'long-task',
-  inputSchema: {...},
-  callback: (args) async {
-    final token = args['\$meta']?['progressToken'];
+server.registerTool(
+  'long-task',
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
+    final token = extra.progressToken;
 
     for (var i = 0; i <= 100; i += 10) {
       await processStep(i);
@@ -354,32 +359,22 @@ server.tool(
 
 ```dart
 // Read-only
-server.tool(
-  name: 'get-data',
-  readOnlyHint: true,
-  ...
+// Read-only
+server.registerTool(
+  'get-data',
+  inputSchema: ToolInputSchema(properties: {}),
+  annotations: ToolAnnotations(readOnly: true), // Updated for annotations
+  callback: (args, extra) async => CallToolResult(content: []),
 );
 
 // Destructive
-server.tool(
-  name: 'delete-all',
-  destructiveHint: true,
-  ...
+server.registerTool(
+  'delete-all',
+  inputSchema: ToolInputSchema(properties: {}),
+  description: 'Delete all data', // hints deprecated?
+  callback: (args, extra) async => CallToolResult(content: []),
 );
-
-// Idempotent
-server.tool(
-  name: 'update',
-  idempotentHint: true,
-  ...
-);
-
-// Open world
-server.tool(
-  name: 'search-web',
-  openWorldHint: true,
-  ...
-);
+// Note: hints were part of deprecated signature. Use ToolAnnotations!
 ```
 
 ## Content Types
@@ -471,72 +466,64 @@ try {
 ### String
 
 ```dart
-'name': {
-  'type': 'string',
-  'minLength': 1,
-  'maxLength': 100,
-  'pattern': r'^[a-zA-Z]+$',
-}
+'name': JsonSchema.string(
+  minLength: 1,
+  maxLength: 100,
+  pattern: r'^[a-zA-Z]+$',
+)
 ```
 
 ### Number
 
 ```dart
-'age': {
-  'type': 'number',
-  'minimum': 0,
-  'maximum': 150,
-}
+'age': JsonSchema.number(
+  minimum: 0,
+  maximum: 150,
+)
 ```
 
 ### Integer
 
 ```dart
-'count': {
-  'type': 'integer',
-  'minimum': 1,
-}
+'count': JsonSchema.integer(
+  minimum: 1,
+)
 ```
 
 ### Boolean
 
 ```dart
-'enabled': {
-  'type': 'boolean',
-}
+'enabled': JsonSchema.boolean()
 ```
 
 ### Enum
 
 ```dart
-'status': {
-  'type': 'string',
-  'enum': ['active', 'inactive', 'pending'],
-}
+'status': JsonSchema.string(
+  enumValues: ['active', 'inactive', 'pending'],
+)
 ```
 
 ### Array
 
 ```dart
-'tags': {
-  'type': 'array',
-  'items': {'type': 'string'},
-  'minItems': 1,
-  'maxItems': 10,
-}
+'tags': JsonSchema.array(
+  items: JsonSchema.string(),
+  minItems: 1,
+  maxItems: 10,
+)
 ```
 
 ### Object
 
 ```dart
-'config': {
-  'type': 'object',
-  'properties': {
-    'key': {'type': 'string'},
-    'value': {'type': 'number'},
+'config': JsonSchema.object(
+  properties: {
+    'key': JsonSchema.string(),
+    'value': JsonSchema.number(),
   },
-  'required': ['key'],
-}
+  required: ['key'],
+)
 ```
 
 ## Notifications
@@ -596,13 +583,10 @@ final server = McpServer(
 final client = Client(
   Implementation(name: 'client', version: '1.0.0'),
   capabilities: ClientCapabilities(
-    sampling: {},
-    roots: RootsCapability(listChanged: true),
-    elicitation: ElicitationCapability(
-      inputSchemas: [
-        ElicitationInputSchemaType.stringSchema,
-        ElicitationInputSchemaType.booleanSchema,
-      ],
+    sampling: ClientCapabilitiesSampling(tools: true),
+    roots: ClientCapabilitiesRoots(listChanged: true),
+    elicitation: ClientElicitation(
+      form: ClientElicitationForm(applyDefaults: true),
     ),
   ),
 );

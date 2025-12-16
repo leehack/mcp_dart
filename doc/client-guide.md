@@ -94,7 +94,7 @@ for (final tool in response.tools) {
 ```dart
 // Simple tool call
 final result = await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'greet',
     arguments: {'name': 'Alice'},
   ),
@@ -115,7 +115,7 @@ for (final content in result.content) {
 ```dart
 try {
   final result = await client.callTool(
-    CallToolRequestParams(
+    CallToolRequest(
       name: 'divide',
       arguments: {'a': 10, 'b': 0},
     ),
@@ -139,15 +139,14 @@ try {
 
 ```dart
 // Request progress notifications
+// Note: Meta support for progress tokens requires custom request handling currently
 final result = await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'process-large-file',
     arguments: {'file': 'large.dat'},
   ),
-  // Progress token for tracking
-  _meta: {
-    'progressToken': 'progress-123',
-  },
+  // Progress token for tracking is currently not supported in CallToolRequest
+  // You would need to construct a custom JsonRpcRequest with meta
 );
 
 // Listen for progress (set up before calling tool)
@@ -164,10 +163,10 @@ client.onProgress = (notification) {
 final progressToken = 'cancel-me-123';
 
 // Start long-running tool
-final future = client.callTool(CallToolRequestParams(
+final future = client.callTool(CallToolRequest(
   name: 'long-operation',
   arguments: {},
-  _meta: {'progressToken': progressToken},
+  // _meta: {'progressToken': progressToken}, // Not supported in CallToolRequest
 ));
 
 // Cancel after 5 seconds
@@ -615,7 +614,7 @@ Future<CallToolResult?> callToolSafely(
 ) async {
   try {
     return await client.callTool(
-      CallToolRequestParams(
+      CallToolRequest(
         name: toolName,
         arguments: args,
       ),
@@ -688,7 +687,7 @@ void setupNotifications(Client client) {
 try {
   final result = await client
       .callTool(
-        CallToolRequestParams(
+        CallToolRequest(
           name: 'slow-tool',
           arguments: {},
         ),
@@ -775,16 +774,16 @@ client.onProgress = (notification) {
 };
 
 await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'long-task',
     arguments: {},
-    _meta: {'progressToken': progressToken},
+    // _meta: {'progressToken': progressToken}, // Meta not supported currently
   ),
 );
 
 // ❌ Bad - no feedback for user
 await client.callTool(
-  CallToolRequestParams(
+  CallToolRequest(
     name: 'long-task',
     arguments: {},
   ),

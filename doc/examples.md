@@ -318,12 +318,18 @@ flutter run
 
 ```dart
 // From weather.dart
-server.tool(
-  name: 'get-weather',
-  callback: ({args, extra}) async {
+server.registerTool(
+  'get-weather',
+  inputSchema: ToolInputSchema(
+    properties: {
+      'city': JsonSchema.string(),
+    },
+    required: ['city'],
+  ),
+  callback: (args, extra) async {
     try {
       final weather = await weatherApi.getCurrent(
-        city: args!['city'] as String,
+        city: args['city'] as String,
       );
 
       return CallToolResult(
@@ -348,10 +354,11 @@ server.tool(
 
 ```dart
 // From server_stdio.dart
-server.tool(
-  name: 'longRunningOperation',
-  callback: ({args, extra}) async {
-    final progressToken = extra?['progressToken'];
+server.registerTool(
+  'longRunningOperation',
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
+    final progressToken = extra.progressToken;
 
     for (var i = 0; i <= 100; i += 10) {
       await Future.delayed(Duration(milliseconds: 100));
@@ -376,11 +383,16 @@ server.tool(
 
 ```dart
 // URI template for dynamic resources
-server.resourceTemplate(
-  uriTemplate: 'user://{userId}/profile',
-  name: 'User Profile',
-  callback: (uri, extra) async {
-    final userId = uri.pathSegments.first;
+// URI template for dynamic resources
+server.registerResourceTemplate(
+  'User Profile',
+  ResourceTemplateRegistration(
+    'user://{userId}/profile',
+    listCallback: null,
+  ),
+  null,
+  (uri, vars, extra) async {
+    final userId = vars['userId'];
     final profile = await database.getUser(userId);
 
     return ReadResourceResult(
@@ -461,11 +473,17 @@ test('tool execution', () async {
     Implementation(name: 'test', version: '1.0.0'),
   );
 
-  server.tool(
+  server.registerTool(
     'add',
-    toolInputSchema: ToolInputSchema(properties: {...}),
-    callback: ({args, extra}) async {
-      final sum = (args!['a'] as num) + (args['b'] as num);
+    inputSchema: ToolInputSchema(
+      properties: {
+        'a': JsonSchema.number(),
+        'b': JsonSchema.number(),
+      },
+      required: ['a', 'b'],
+    ),
+    callback: (args, extra) async {
+      final sum = (args['a'] as num) + (args['b'] as num);
       return CallToolResult.fromContent(
         content: [TextContent(text: '$sum')],
       );

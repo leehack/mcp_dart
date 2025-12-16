@@ -92,22 +92,21 @@ void main() async {
     ),
   );
 
-  server.tool(
+  server.registerTool(
     "calculate",
     description: 'Perform basic arithmetic operations',
-    toolInputSchema: ToolInputSchema(
+    inputSchema: ToolInputSchema(
       properties: {
-        'operation': {
-          'type': 'string',
-          'enum': ['add', 'subtract', 'multiply', 'divide'],
-        },
-        'a': {'type': 'number'},
-        'b': {'type': 'number'},
+        'operation': JsonSchema.string(
+          enumValues: ['add', 'subtract', 'multiply', 'divide'],
+        ),
+        'a': JsonSchema.number(),
+        'b': JsonSchema.number(),
       },
       required: ['operation', 'a', 'b'],
     ),
-    callback: ({args, meta, extra}) async {
-      final operation = args!['operation'];
+    callback: (args, extra) async {
+      final operation = args['operation'];
       final a = args['a'];
       final b = args['b'];
       return CallToolResult.fromContent(

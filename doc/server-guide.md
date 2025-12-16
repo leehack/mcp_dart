@@ -114,17 +114,17 @@ Tools allow clients to execute actions through your server.
 ### Simple Tool
 
 ```dart
-server.tool(
+server.registerTool(
   'echo',
   description: 'Echo back a message',
-  toolInputSchema: ToolInputSchema(
+  inputSchema: ToolInputSchema(
     properties: {
-      'message': {'type': 'string'},
+      'message': JsonSchema.string(),
     },
     required: ['message'],
   ),
-  callback: ({args, extra}) async {
-    final message = args!['message'] as String;
+  callback: (args, extra) async {
+    final message = args['message'] as String;
     return CallToolResult.fromContent(
       content: [TextContent(text: message)],
     );
@@ -135,34 +135,29 @@ server.tool(
 ### Tool with Complex Schema
 
 ```dart
-server.tool(
+server.registerTool(
   'search-database',
   description: 'Search database with filters',
-  toolInputSchema: ToolInputSchema(
+  inputSchema: ToolInputSchema(
     properties: {
-      'query': {
-        'type': 'string',
-        'description': 'Search query',
-      },
-      'filters': {
-        'type': 'object',
-        'properties': {
-          'category': {'type': 'string'},
-          'minPrice': {'type': 'number'},
-          'maxPrice': {'type': 'number'},
+      'query': JsonSchema.string(description: 'Search query'),
+      'filters': JsonSchema.object(
+        properties: {
+          'category': JsonSchema.string(),
+          'minPrice': JsonSchema.number(),
+          'maxPrice': JsonSchema.number(),
         },
-      },
-      'limit': {
-        'type': 'integer',
-        'minimum': 1,
-        'maximum': 100,
-        'default': 10,
-      },
+      ),
+      'limit': JsonSchema.integer(
+        minimum: 1,
+        maximum: 100,
+        defaultValue: 10,
+      ),
     },
     required: ['query'],
   ),
-  callback: ({args, extra}) async {
-    final query = args!['query'] as String;
+  callback: (args, extra) async {
+    final query = args['query'] as String;
     final filters = args['filters'] as Map<String, dynamic>?;
     final limit = args['limit'] as int? ?? 10;
 
@@ -188,11 +183,11 @@ server.tool(
 Provide hints about tool behavior:
 
 ```dart
-server.tool(
+server.registerTool(
   'delete-user',
   description: 'Permanently delete a user account',
-  toolInputSchema: ToolInputSchema(properties: {}),
-  callback: ({args, extra}) async {
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
     // Delete logic
     return CallToolResult.fromContent(
       content: [TextContent(text: 'User deleted')],
@@ -200,11 +195,11 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   'get-user-info',
   description: 'Get user information',
-  toolInputSchema: ToolInputSchema(properties: {}),
-  callback: ({args, extra}) async {
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
     // Get logic
     return CallToolResult.fromContent(
       content: [TextContent(text: 'User info')],
@@ -212,11 +207,11 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   'update-cache',
   description: 'Update cache entry',
-  toolInputSchema: ToolInputSchema(properties: {}),
-  callback: ({args, extra}) async {
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
     // Update logic
     return CallToolResult.fromContent(
       content: [TextContent(text: 'Cache updated')],
@@ -224,11 +219,11 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   'search-web',
   description: 'Search the web',
-  toolInputSchema: ToolInputSchema(properties: {}),
-  callback: ({args, extra}) async {
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
     // Search logic
     return CallToolResult.fromContent(
       content: [TextContent(text: 'Results')],
@@ -240,11 +235,11 @@ server.tool(
 ### Tool with Multiple Content Types
 
 ```dart
-server.tool(
+server.registerTool(
   'generate-report',
   description: 'Generate a report with chart',
-  toolInputSchema: ToolInputSchema(properties: {}),
-  callback: ({args, extra}) async {
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
     final report = await generateReport(args);
     final chart = await generateChart(report);
 
@@ -264,18 +259,18 @@ server.tool(
 ### Error Handling in Tools
 
 ```dart
-server.tool(
+server.registerTool(
   'divide',
   description: 'Divide two numbers',
-  toolInputSchema: ToolInputSchema(
+  inputSchema: ToolInputSchema(
     properties: {
-      'a': {'type': 'number'},
-      'b': {'type': 'number'},
+      'a': JsonSchema.number(),
+      'b': JsonSchema.number(),
     },
     required: ['a', 'b'],
   ),
-  callback: ({args, extra}) async {
-    final a = args!['a'] as num;
+  callback: (args, extra) async {
+    final a = args['a'] as num;
     final b = args['b'] as num;
 
     if (b == 0) {
@@ -302,9 +297,10 @@ Resources provide data and context to clients.
 ### Simple Resource
 
 ```dart
-server.resource(
+server.registerResource(
   'README',
   'file:///docs/readme.md',
+  null,
   (uri, extra) async {
     final content = await File('README.md').readAsString();
     return ReadResourceResult(
@@ -325,12 +321,16 @@ server.resource(
 Use URI templates for dynamic resources:
 
 ```dart
-server.resourceTemplate(
+server.registerResourceTemplate(
   'User Profile',
-  'users://{userId}/profile',
-  (uri, extra) async {
-    // Extract userId from URI
-    final userId = uri.pathSegments[0];
+  ResourceTemplateRegistration(
+    'users://{userId}/profile',
+    listCallback: null,
+  ),
+  null,
+  (uri, vars, extra) async {
+    // Extract userId from variables
+    final userId = vars['userId'];
     final profile = await database.getUserProfile(userId);
 
     return ReadResourceResult(
@@ -349,14 +349,17 @@ server.resourceTemplate(
 ### Multiple URI Template Variables
 
 ```dart
-server.resourceTemplate(
+server.registerResourceTemplate(
   'Project File',
-  'projects://{orgId}/{projectId}/files/{filePath}',
-  (uri, extra) async {
-    final segments = uri.pathSegments;
-    final orgId = segments[0];
-    final projectId = segments[1];
-    final filePath = segments.sublist(2).join('/');
+  ResourceTemplateRegistration(
+    'projects://{orgId}/{projectId}/files/{filePath}',
+    listCallback: null,
+  ),
+  null,
+  (uri, vars, extra) async {
+    final orgId = vars['orgId'];
+    final projectId = vars['projectId'];
+    final filePath = vars['filePath'];
 
     final fileContent = await storage.getFile(
       orgId: orgId,
@@ -379,9 +382,10 @@ server.resourceTemplate(
 ### Binary Resources
 
 ```dart
-server.resource(
+server.registerResource(
   'Company Logo',
   'file:///images/logo.png',
+  null,
   (uri, extra) async {
     final bytes = await File('logo.png').readAsBytes();
     return ReadResourceResult(
@@ -403,9 +407,10 @@ Notify clients when resources change:
 
 ```dart
 // Register resource with change notifications
-server.resource(
+server.registerResource(
   'Metrics',
   'file:///data/metrics.json',
+  null,
   (uri, extra) async {
     final content = await File('metrics.json').readAsString();
     return ReadResourceResult(
@@ -434,8 +439,8 @@ Prompts are reusable templates with arguments.
 ### Simple Prompt
 
 ```dart
-server.prompt(
-  name: 'review-code',
+server.registerPrompt(
+  'review-code',
   description: 'Generate code review prompt',
   callback: (args, extra) async {
     return GetPromptResult(
@@ -460,8 +465,8 @@ server.prompt(
 ### Prompt with Arguments
 
 ```dart
-server.prompt(
-  name: 'translate',
+server.registerPrompt(
+  'translate',
   description: 'Generate translation prompt',
   argsSchema: {
     'target_language': PromptArgumentDefinition(
@@ -498,8 +503,8 @@ server.prompt(
 ### Multi-Message Prompts
 
 ```dart
-server.prompt(
-  name: 'brainstorm',
+server.registerPrompt(
+  'brainstorm',
   description: 'Brainstorming session prompt',
   argsSchema: {
     'topic': PromptArgumentDefinition(
@@ -542,8 +547,8 @@ server.prompt(
 ### Prompt with Embedded Resources
 
 ```dart
-server.prompt(
-  name: 'analyze-file',
+server.registerPrompt(
+  'analyze-file',
   description: 'Analyze a file',
   argsSchema: {
     'file_uri': PromptArgumentDefinition(
@@ -665,13 +670,13 @@ await server.notifyTaskStatus(
 For long-running operations:
 
 ```dart
-server.tool(
+server.registerTool(
   'process-large-file',
   description: 'Process a large file',
-  toolInputSchema: ToolInputSchema(properties: {}),
-  callback: ({args, extra}) async {
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
     // Get progress token from extra
-    final progressToken = extra?['progressToken'];
+    final progressToken = extra.progressToken; // extra type changed?
 
     if (progressToken != null) {
       // Send progress updates
@@ -833,11 +838,11 @@ server.tool(
 final server = McpServer(Implementation(...), options: ...);
 
 // Initial tools
-server.tool(name: 'tool1', ...);
+server.registerTool('tool1', ...);
 
 // Later, add more tools dynamically
 void addNewTool() {
-  server.tool(name: 'tool2', ...);
+  server.registerTool('tool2', ...);
 
   // Notify clients of the change
   server.sendToolListChanged();
@@ -885,31 +890,27 @@ server.tool(
 
 ```dart
 // ✅ Good
-inputSchema: {
-  'type': 'object',
-  'properties': {
-    'query': {
-      'type': 'string',
-      'description': 'Search keywords',
-      'minLength': 1,
-      'maxLength': 200,
-    },
-    'filters': {
-      'type': 'array',
-      'items': {'type': 'string'},
-      'description': 'Optional category filters',
-    },
+inputSchema: ToolInputSchema(
+  properties: {
+    'query': JsonSchema.string(
+      description: 'Search keywords',
+      minLength: 1,
+      maxLength: 200,
+    ),
+    'filters': JsonSchema.array(
+      items: JsonSchema.string(),
+      description: 'Optional category filters',
+    ),
   },
-  'required': ['query'],
-}
+  required: ['query'],
+)
 
 // ❌ Bad
-inputSchema: {
-  'type': 'object',
-  'properties': {
-    'query': {'type': 'string'},
+inputSchema: ToolInputSchema(
+  properties: {
+    'query': JsonSchema.string(),
   },
-}
+)
 ```
 
 ### 3. Proper Error Handling

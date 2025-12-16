@@ -326,7 +326,7 @@ final authenticatedTransport = OAuthServerTransport(
 );
 
 // 4. Create server and handle requests
-final server = Server(
+final server = McpServer(
   Implementation(name: 'secure-server', version: '1.0.0'),
 );
 

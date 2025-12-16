@@ -233,6 +233,9 @@ class ListToolsResult implements BaseResultData {
       };
 }
 
+@Deprecated('Use [CallToolRequest] instead.')
+typedef CallToolRequestParams = CallToolRequest;
+
 /// A request to call a tool.
 class CallToolRequest {
   /// The name of the tool to call.

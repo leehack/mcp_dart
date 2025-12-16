@@ -122,7 +122,7 @@ class GoogleMcpClient {
         finalText.add(part.text);
       } else if (part is FunctionCall) {
         final result = await mcp.callTool(
-          mcp_dart.CallToolRequestParams(name: part.name, arguments: part.args),
+          mcp_dart.CallToolRequest(name: part.name, arguments: part.args),
         );
         finalText.add(
           "[Calling tool ${part.name} with args ${jsonEncode(part.args)}]",

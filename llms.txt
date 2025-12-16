@@ -104,22 +104,21 @@ void main() async {
   );
 
   // Register a tool
-  server.tool(
+  server.registerTool(
     'calculate',
     description: 'Perform arithmetic operations',
-    toolInputSchema: ToolInputSchema(
+    inputSchema: ToolInputSchema(
       properties: {
-        'operation': {
-          'type': 'string',
-          'enum': ['add', 'subtract', 'multiply', 'divide'],
-        },
-        'a': {'type': 'number'},
-        'b': {'type': 'number'},
+        'operation': JsonSchema.string(
+          enumValues: ['add', 'subtract', 'multiply', 'divide'],
+        ),
+        'a': JsonSchema.number(),
+        'b': JsonSchema.number(),
       },
       required: ['operation', 'a', 'b'],
     ),
-    callback: ({args, extra}) async {
-      final op = args!['operation'];
+    callback: (args, extra) async {
+      final op = args['operation'];
       final a = args['a'] as num;
       final b = args['b'] as num;
 
@@ -131,16 +130,17 @@ void main() async {
         _ => throw Exception('Invalid operation'),
       };
 
-      return CallToolResult.fromContent(
+      return CallToolResult(
         content: [TextContent(text: 'Result: $result')],
       );
     },
   );
 
   // Register a resource
-  server.resource(
-    'Server Status',
+  server.registerResource(
+    'server-status',
     'status://server',
+    ResourceMetadata(name: 'Server Status'),
     (uri, extra) async => ReadResourceResult(
       contents: [
         TextResourceContents(
@@ -153,16 +153,16 @@ void main() async {
   );
 
   // Register a prompt
-  server.prompt(
+  server.registerPrompt(
     'code-review',
     description: 'Generate code review prompt',
-    argsSchema: {
-      'language': PromptArgumentDefinition(
-        type: String,
+    arguments: [
+      PromptArgument(
+        name: 'language',
         description: 'Programming language',
         required: true,
       ),
-    },
+    ],
     callback: (args, extra) async => GetPromptResult(
       messages: [
         PromptMessage(
@@ -206,7 +206,7 @@ void main() async {
 
   // Call a tool
   final result = await client.callTool(
-    CallToolRequestParams(
+    CallToolRequest(
       name: 'calculate',
       arguments: {'operation': 'add', 'a': 5, 'b': 3},
     ),
@@ -215,7 +215,7 @@ void main() async {
 
   // Read a resource
   final resource = await client.readResource(
-    ReadResourceRequestParams(uri: 'status://server'),
+    ReadResourceRequestParams(uri: Uri.parse('status://server')),
   );
   print('Resource: ${resource.contents.first.text}');
 
@@ -245,24 +245,24 @@ void main() async {
 Tools are callable functions that AI can execute to perform actions:
 
 ```dart
-server.tool(
+server.registerTool(
   'search-files',
   description: 'Search files by pattern',
-  toolInputSchema: ToolInputSchema(
+  inputSchema: ToolInputSchema(
     properties: {
-      'pattern': {'type': 'string', 'description': 'Search pattern'},
-      'path': {'type': 'string', 'description': 'Directory path'},
+      'pattern': JsonSchema.string(description: 'Search pattern'),
+      'path': JsonSchema.string(description: 'Directory path'),
     },
     required: ['pattern'],
   ),
-  callback: ({args, extra}) async {
-    final pattern = args!['pattern'] as String;
+  callback: (args, extra) async {
+    final pattern = args['pattern'] as String;
     final path = args['path'] as String? ?? '.';
 
     // Perform search
     final results = await searchFiles(pattern, path);
 
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: jsonEncode(results))],
     );
   },
@@ -275,9 +275,10 @@ Resources provide contextual data to AI:
 
 ```dart
 // Static resource
-server.resource(
-  'Project README',
+server.registerResource(
+  'readme',
   'file:///readme.md',
+  ResourceMetadata(name: 'Project README'),
   (uri, extra) async => ReadResourceResult(
     contents: [
       TextResourceContents(
@@ -290,11 +291,12 @@ server.resource(
 );
 
 // Dynamic resource with URI template
-server.resourceTemplate(
-  'user://{userId}/profile',
-  'User Profile',
-  (uri, extra) async {
-    final userId = uri.pathSegments.first;
+server.registerResourceTemplate(
+  'user-profile',
+  ResourceTemplateRegistration(uriTemplate: 'user://{userId}/profile'),
+  ResourceMetadata(name: 'User Profile'),
+  (uri, vars, extra) async {
+    final userId = vars['userId'];
     final profile = await database.getUser(userId);
 
     return ReadResourceResult(
@@ -315,26 +317,26 @@ server.resourceTemplate(
 Prompts are reusable templates with arguments:
 
 ```dart
-server.prompt(
+server.registerPrompt(
   'translate',
   description: 'Translate text between languages',
-  argsSchema: {
-    'text': PromptArgumentDefinition(
-      type: String,
+  arguments: [
+    PromptArgument(
+      name: 'text',
       description: 'Text to translate',
       required: true,
     ),
-    'from': PromptArgumentDefinition(
-      type: String,
+    PromptArgument(
+      name: 'from',
       description: 'Source language',
       required: true,
     ),
-    'to': PromptArgumentDefinition(
-      type: String,
+    PromptArgument(
+      name: 'to',
       description: 'Target language',
       required: true,
     ),
-  },
+  ],
   callback: (args, extra) async => GetPromptResult(
     messages: [
       PromptMessage(
@@ -355,36 +357,37 @@ server.prompt(
 NEW in 1.0.0: Servers can request user input during tool execution:
 
 ```dart
-server.tool(
+server.registerTool(
   'delete-file',
   description: 'Delete a file with confirmation',
-  toolInputSchema: ToolInputSchema(
+  inputSchema: ToolInputSchema(
     properties: {
-      'path': {'type': 'string'},
+      'path': JsonSchema.string(),
     },
     required: ['path'],
   ),
-  callback: ({args, extra}) async {
-    final path = args!['path'] as String;
+  callback: (args, extra) async {
+    final path = args['path'] as String;
 
     // Request user confirmation
-    final result = await extra['elicitUserInput']!(
-      message: 'Are you sure you want to delete $path?',
-      requestedSchema: {
-        'type': 'object',
-        'properties': {
-          'confirmed': {'type': 'boolean'}
-        }
-      }
+    final result = await extra.server.elicitInput(
+      ElicitRequestParams(
+        message: 'Are you sure you want to delete $path?',
+        schema: JsonSchema.object(
+          properties: {
+            'confirmed': JsonSchema.boolean(),
+          },
+        ),
+      ),
     );
 
     if (result.accepted && result.content['confirmed'] == true) {
       await File(path).delete();
-      return CallToolResult.fromContent(
+      return CallToolResult(
         content: [TextContent(text: 'File deleted: $path')],
       );
     } else {
-      return CallToolResult.fromContent(
+      return CallToolResult(
         content: [TextContent(text: 'Deletion cancelled')],
       );
     }
@@ -448,23 +451,27 @@ await server.createSamplingMessage(
 Provide autocomplete suggestions for prompt and resource arguments:
 
 ```dart
-server.setCompletionsHandler((request, extra) async {
-  if (request.ref.type == CompletionReferenceType.resourceRef) {
-    final partial = request.argument.value;
-    final suggestions = await getUserIdSuggestions(partial);
-
-    return CompleteResult(
-      completion: Completion(
-        values: suggestions,
-        total: suggestions.length,
-      ),
+server.registerPrompt(
+  'greet',
+  description: 'Generate a greeting',
+  arguments: [
+    PromptArgument(
+      name: 'name',
+      description: 'Name of the person to greet',
+      required: true,
+    ),
+  ],
+  callback: (args, extra) async {
+    return GetPromptResult(
+      messages: [
+        PromptMessage(
+          role: PromptMessageRole.user,
+          content: TextContent(text: 'Hello, ${args['name']}!'),
+        ),
+      ],
     );
-  }
-
-  return CompleteResult(
-    completion: Completion(values: [], total: 0),
-  );
-});
+  },
+);
 ```
 
 ### Progress Notifications
@@ -472,24 +479,28 @@ server.setCompletionsHandler((request, extra) async {
 Send progress updates for long-running operations:
 
 ```dart
-server.tool(
+server.registerTool(
   'process-large-file',
-  callback: ({args, extra}) async {
-    final progressToken = extra?['progressToken'];
+  callback: (args, extra) async {
+    final progressToken = extra.progressToken;
 
     for (var i = 0; i <= 100; i += 10) {
       await processChunk(i);
 
       if (progressToken != null) {
-        await server.sendProgress(
-          progressToken: progressToken,
-          progress: i,
-          total: 100,
+        await extra.sendNotification(
+          JsonRpcProgressNotification(
+            progressParams: ProgressNotificationParams(
+              progress: i,
+              total: 100,
+              progressToken: progressToken,
+            ),
+          ),
         );
       }
     }
 
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: 'Processing complete')],
     );
   },
@@ -502,31 +513,35 @@ Use annotations for tool characteristics:
 
 ```dart
 // Read-only tool (no side effects)
-server.tool(
+server.registerTool(
   'get-data',
-  readOnlyHint: true,
-  callback: ({args, extra}) async { /* ... */ },
+  inputSchema: ToolInputSchema(properties: {}),
+  annotations: ToolAnnotations(readOnly: true),
+  callback: (args, extra) async { /* ... */ },
 );
 
 // Destructive tool (modifies data)
-server.tool(
+server.registerTool(
   'delete-all',
-  destructiveHint: true,
-  callback: ({args, extra}) async { /* ... */ },
+  inputSchema: ToolInputSchema(properties: {}),
+  annotations: ToolAnnotations(destructive: true),
+  callback: (args, extra) async { /* ... */ },
 );
 
 // Idempotent tool (same result on repeated calls)
-server.tool(
+server.registerTool(
   'update-setting',
-  idempotentHint: true,
-  callback: ({args, extra}) async { /* ... */ },
+  inputSchema: ToolInputSchema(properties: {}),
+  annotations: ToolAnnotations(idempotent: true),
+  callback: (args, extra) async { /* ... */ },
 );
 
 // Open world tool (accesses external data)
-server.tool(
+server.registerTool(
   'web-search',
-  openWorldHint: true,
-  callback: ({args, extra}) async { /* ... */ },
+  inputSchema: ToolInputSchema(properties: {}),
+  annotations: ToolAnnotations(openWorld: true),
+  callback: (args, extra) async { /* ... */ },
 );
 ```
 
@@ -558,10 +573,13 @@ Best for web applications and remote services:
 ```dart
 // Server
 final server = McpServer(/* ... */);
-await server.connect(StreamableHTTPServerTransport(
-  request: httpRequest,
-  response: httpResponse,
-));
+final transport = StreamableHTTPServerTransport(
+  options: StreamableHTTPServerTransportOptions(enableJsonResponse: false),
+);
+await server.connect(transport);
+
+// In your HTTP server loop (e.g., dart:io HttpServer):
+// await transport.handleRequest(request);
 
 // Client
 final client = Client(/* ... */);
@@ -575,21 +593,21 @@ await client.connect(StreamableHTTPClientTransport(
 Best for in-process communication and testing:
 
 ```dart
-final s2c = StreamController<String>();
-final c2s = StreamController<String>();
+final s2c = StreamController<List<int>>();
+final c2s = StreamController<List<int>>();
 
 // Server
 final server = McpServer(/* ... */);
 await server.connect(IOStreamTransport(
-  inputStream: c2s.stream,
-  outputSink: s2c.sink,
+  stream: c2s.stream,
+  sink: s2c.sink,
 ));
 
 // Client
 final client = Client(/* ... */);
 await client.connect(IOStreamTransport(
-  inputStream: s2c.stream,
-  outputSink: c2s.sink,
+  stream: s2c.stream,
+  sink: c2s.sink,
 ));
 ```
 
@@ -626,10 +644,10 @@ For implementation details, refer to the example files which include:
 ### Tool Error Results
 
 ```dart
-server.tool(
+server.registerTool(
   'divide',
-  callback: ({args, extra}) async {
-    final a = args!['a'] as num;
+  callback: (args, extra) async {
+    final a = args['a'] as num;
     final b = args['b'] as num;
 
     if (b == 0) {
@@ -639,7 +657,7 @@ server.tool(
       );
     }
 
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: '${a / b}')],
     );
   },
@@ -775,16 +793,16 @@ test('tool execution', () async {
     Implementation(name: 'test', version: '1.0.0'),
   );
 
-  server.tool('add', callback: ({args, extra}) async {
-    final sum = (args!['a'] as num) + (args['b'] as num);
-    return CallToolResult.fromContent(
+  server.registerTool('add', callback: (args, extra) async {
+    final sum = (args['a'] as num) + (args['b'] as num);
+    return CallToolResult(
       content: [TextContent(text: '$sum')],
     );
   });
 
   await server.connect(IOStreamTransport(
-    inputStream: c2s.stream,
-    outputSink: s2c.sink,
+    stream: c2s.stream,
+    sink: s2c.sink,
   ));
 
   final client = Client(
@@ -792,12 +810,12 @@ test('tool execution', () async {
   );
 
   await client.connect(IOStreamTransport(
-    inputStream: s2c.stream,
-    outputSink: c2s.sink,
+    stream: s2c.stream,
+    sink: c2s.sink,
   ));
 
   final result = await client.callTool(
-    CallToolRequestParams(name: 'add', arguments: {'a': 5, 'b': 3}),
+    CallToolRequest(name: 'add', arguments: {'a': 5, 'b': 3}),
   );
 
   expect(result.content.first.text, '8');
@@ -894,7 +912,7 @@ enum ErrorCode
 - **Task Management SDK**: Refactored `simple_task_interactive_server.dart` logic into reusable SDK components (`TaskStore`, `TaskHandler`)
 - **McpServer**: Added `onError` callback, `notifyTaskStatus`, and `createSamplingMessage` helpers
 - **Breaking Change**: Strict typing for `ServerCapabilities` (e.g., `ServerCapabilitiesTasks`)
-- **Breaking Change**: `StreamableHTTPServerTransport` now requires `ServerOptions`
+- **Breaking Change**: `StreamableHTTPServerTransport` now requires `StreamableHTTPServerTransportOptions`
 
 ### Version 1.0.0
 - Updated to MCP protocol 2025-06-18
@@ -951,4 +969,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Need help?** Check the [documentation](https://github.com/leehack/mcp_dart/tree/main/docs) or open an [issue](https://github.com/leehack/mcp_dart/issues).
+**Need help?** Check the [documentation](https://github.com/leehack/mcp_dart/tree/main/doc) or open an [issue](https://github.com/leehack/mcp_dart/issues).

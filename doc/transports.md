@@ -44,7 +44,7 @@ void main() async {
   );
 
   // Register capabilities
-  server.tool(name: 'example', ...);
+  server.registerTool('example', ...);
 
   // Connect stdio transport
   final transport = StdioServerTransport();
@@ -427,7 +427,7 @@ void main() async {
   final server = McpServer(
     Implementation(name: 'server', version: '1.0.0'),
   );
-  server.tool(name: 'example', ...);
+  server.registerTool('example', ...);
 
   final serverTransport = IOStreamTransport(
     inputStream: clientToServer.stream,
@@ -448,7 +448,7 @@ void main() async {
 
   // Use client and server
   final result = await client.callTool(
-    CallToolRequestParams(
+    CallToolRequest(
       name: 'example',
       arguments: {},
     ),
@@ -478,17 +478,16 @@ void main() {
       Implementation(name: 'test-server', version: '1.0.0'),
     );
 
-    server.tool(
-      name: 'add',
+    server.registerTool(
+      'add',
       description: 'Add numbers',
-      inputSchema: {
-        'type': 'object',
-        'properties': {
-          'a': {'type': 'number'},
-          'b': {'type': 'number'},
+      inputSchema: ToolInputSchema(
+        properties: {
+          'a': JsonSchema.number(),
+          'b': JsonSchema.number(),
         },
-      },
-      callback: (args) async {
+      ),
+      callback: (args, extra) async {
         final result = (args['a'] as num) + (args['b'] as num);
         return CallToolResult(
           content: [TextContent(text: '$result')],
@@ -513,7 +512,7 @@ void main() {
 
     // Test
     final result = await client.callTool(
-      CallToolRequestParams(
+      CallToolRequest(
         name: 'add',
         arguments: {'a': 5, 'b': 3},
       ),
