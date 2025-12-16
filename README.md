@@ -1,5 +1,6 @@
 # MCP(Model Context Protocol) for Dart
 
+[![Coverage](https://img.shields.io/codecov/c/github/leehack/mcp_dart)]
 [![Pub Version](https://img.shields.io/pub/v/mcp_dart?color=blueviolet)](https://pub.dev/packages/mcp_dart)
 [![likes](https://img.shields.io/pub/likes/mcp_dart?logo=dart)](https://pub.dev/packages/mcp_dart/score)
 
