@@ -143,5 +143,116 @@ void main() {
       );
       expect(resPass.statusCode, HttpStatus.ok);
     });
+
+    test('rejects PUT request with 405 Method Not Allowed', () async {
+      final client = http.Client();
+      try {
+        final req = http.Request('PUT', Uri.parse(baseUrl));
+        req.headers['Content-Type'] = 'application/json';
+        req.body = jsonEncode({'data': 'test'});
+        final streamedRes = await client.send(req);
+        final res = await http.Response.fromStream(streamedRes);
+
+        expect(res.statusCode, HttpStatus.methodNotAllowed);
+      } finally {
+        client.close();
+      }
+    });
+
+    test('rejects PATCH request with 405 Method Not Allowed', () async {
+      final client = http.Client();
+      try {
+        final req = http.Request('PATCH', Uri.parse(baseUrl));
+        req.headers['Content-Type'] = 'application/json';
+        req.body = jsonEncode({'data': 'test'});
+        final streamedRes = await client.send(req);
+        final res = await http.Response.fromStream(streamedRes);
+
+        expect(res.statusCode, HttpStatus.methodNotAllowed);
+      } finally {
+        client.close();
+      }
+    });
+
+    test('DELETE request requires valid session ID', () async {
+      final client = http.Client();
+      try {
+        final req = http.Request('DELETE', Uri.parse(baseUrl));
+        final streamedRes = await client.send(req);
+        final res = await http.Response.fromStream(streamedRes);
+
+        // Should fail without session ID
+        expect(res.statusCode, HttpStatus.badRequest);
+      } finally {
+        client.close();
+      }
+    });
+
+    test('DELETE request with valid session closes session', () async {
+      // First, initialize a session
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final httpClient = HttpClient();
+      String? sessionId;
+
+      try {
+        // Initialize session
+        final initReq = await httpClient.postUrl(Uri.parse(baseUrl));
+        initReq.headers.contentType = ContentType.json;
+        initReq.headers.add('Accept', 'application/json, text/event-stream');
+        initReq.write(jsonEncode(initRequest.toJson()));
+        final initRes = await initReq.close();
+        sessionId = initRes.headers.value('mcp-session-id');
+        await initRes.drain();
+
+        expect(sessionId, isNotNull);
+
+        // Now send DELETE with the session ID
+        final deleteReq = await httpClient.deleteUrl(Uri.parse(baseUrl));
+        deleteReq.headers.add('mcp-session-id', sessionId!);
+        final deleteRes = await deleteReq.close();
+
+        expect(deleteRes.statusCode, HttpStatus.ok);
+        await deleteRes.drain();
+      } finally {
+        httpClient.close(force: true);
+      }
+    });
+
+    test('rejects requests to invalid paths', () async {
+      final invalidUrl = 'http://$host:$port/invalid';
+      final res = await http.get(Uri.parse(invalidUrl));
+
+      expect(res.statusCode, HttpStatus.notFound);
+    });
+
+    test('server can be stopped and restarted', () async {
+      await server.stop();
+      await server.start();
+
+      // Should be able to handle OPTIONS request after restart
+      final client = http.Client();
+      try {
+        final req = http.Request('OPTIONS', Uri.parse(baseUrl));
+        final streamedRes = await client.send(req);
+        final res = await http.Response.fromStream(streamedRes);
+
+        expect(res.statusCode, HttpStatus.ok);
+      } finally {
+        client.close();
+      }
+    });
+
+    test('server port is exposed correctly', () async {
+      expect(server.port, equals(port));
+    });
   });
 }

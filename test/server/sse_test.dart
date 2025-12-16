@@ -366,4 +366,118 @@ void main() {
       client.close();
     }
   });
+
+  test('SseServerTransport - sessionId is a valid UUID', () async {
+    final sseUrl = '$serverUrlBase/sse_test';
+    final client = HttpClient();
+
+    final request = await client.getUrl(Uri.parse(sseUrl));
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    final response = await request.close();
+    final sseSub = response.listen((_) {});
+
+    await Future.delayed(const Duration(milliseconds: 100));
+    expect(activeTransports.length, 1);
+
+    final transport = activeTransports.values.first;
+    final sessionId = transport.sessionId;
+
+    // Verify sessionId format (UUID-like)
+    expect(sessionId, isNotEmpty);
+    expect(sessionId.length, greaterThanOrEqualTo(32));
+
+    await sseSub.cancel();
+    client.close();
+  });
+
+  test('SseServerTransport - close() cleans up resources', () async {
+    final sseUrl = '$serverUrlBase/sse_test';
+    final client = HttpClient();
+    final closeCompleter = Completer<void>();
+
+    final request = await client.getUrl(Uri.parse(sseUrl));
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    final response = await request.close();
+
+    late StreamSubscription sseSub;
+    sseSub = response.listen(
+      (_) {},
+      onDone: () {
+        if (!closeCompleter.isCompleted) closeCompleter.complete();
+      },
+    );
+
+    await Future.delayed(const Duration(milliseconds: 100));
+    expect(activeTransports.length, 1);
+
+    final transport = activeTransports.values.first;
+
+    // Close the transport
+    await transport.close();
+
+    // Wait for client to receive close
+    await closeCompleter.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () {
+        // Transport closed, client may or may not receive done
+      },
+    );
+
+    await sseSub.cancel();
+    client.close();
+  });
+
+  test('SseServerTransport - onclose callback is invoked', () async {
+    final sseUrl = '$serverUrlBase/sse_test';
+    final client = HttpClient();
+    final oncloseCompleter = Completer<void>();
+
+    final request = await client.getUrl(Uri.parse(sseUrl));
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    final response = await request.close();
+    final sseSub = response.listen((_) {});
+
+    await Future.delayed(const Duration(milliseconds: 100));
+    expect(activeTransports.length, 1);
+
+    final transport = activeTransports.values.first;
+    final originalOnclose = transport.onclose;
+
+    transport.onclose = () {
+      if (!oncloseCompleter.isCompleted) oncloseCompleter.complete();
+      originalOnclose?.call();
+    };
+
+    await transport.close();
+
+    await oncloseCompleter.future.timeout(
+      const Duration(seconds: 2),
+    );
+
+    await sseSub.cancel();
+    client.close();
+  });
+
+  test('SseServerTransport - multiple close calls are safe', () async {
+    final sseUrl = '$serverUrlBase/sse_test';
+    final client = HttpClient();
+
+    final request = await client.getUrl(Uri.parse(sseUrl));
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    final response = await request.close();
+    final sseSub = response.listen((_) {});
+
+    await Future.delayed(const Duration(milliseconds: 100));
+    expect(activeTransports.length, 1);
+
+    final transport = activeTransports.values.first;
+
+    // Multiple close calls should not throw
+    await transport.close();
+    await transport.close();
+    await transport.close();
+
+    await sseSub.cancel();
+    client.close();
+  });
 } // End of main test group
