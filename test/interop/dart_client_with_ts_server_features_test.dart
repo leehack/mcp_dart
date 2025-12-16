@@ -11,9 +11,9 @@ import 'package:test/test.dart';
 /// Interop tests for Dart client with TS server.
 /// Tests features: roots, sampling, elicitation, completion, progress.
 void main() {
-  // Locate the TS server source
+  // Locate the TS server (compiled JS version)
   final defaultTsPath =
-      p.join(io.Directory.current.path, 'test/interop/ts/src/server.ts');
+      p.join(io.Directory.current.path, 'test/interop/ts/dist/server.js');
   final tsServerScript =
       io.Platform.environment['TS_INTEROP_SERVER_CMD'] ?? defaultTsPath;
 
@@ -36,8 +36,8 @@ void main() {
         // 1. Create the StdioClientTransport with server parameters
         transport = StdioClientTransport(
           StdioServerParameters(
-            command: 'npx',
-            args: ['tsx', tsServerScript, '--transport', 'stdio'],
+            command: 'node',
+            args: [tsServerScript, '--transport', 'stdio'],
             stderrMode: io.ProcessStartMode.normal,
           ),
         );

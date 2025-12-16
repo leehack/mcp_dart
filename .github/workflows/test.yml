@@ -28,6 +28,10 @@ jobs:
         working-directory: test/interop/ts
         run: npm ci
 
+      - name: Build TS Interop fixtures
+        working-directory: test/interop/ts
+        run: npm run build
+
       - name: Install dependencies
         run: dart pub get
 

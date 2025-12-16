@@ -9,8 +9,9 @@ import 'package:path/path.dart' as p;
 import 'test_dart_server.dart';
 
 void main() {
+  // Use compiled JS client for reliability (avoids npx tsx issues in CI)
   final tsClientPath =
-      p.join(Directory.current.path, 'test/interop/ts/src/client.ts');
+      p.join(Directory.current.path, 'test/interop/ts/dist/client.js');
   final dartServerPath =
       p.join(Directory.current.path, 'test/interop/test_dart_server.dart');
 
@@ -26,9 +27,8 @@ void main() {
 
     test('Stdio Transport', () async {
       final result = await Process.run(
-        'npx',
+        'node',
         [
-          'tsx',
           tsClientPath,
           '--transport',
           'stdio',
@@ -136,9 +136,8 @@ void main() {
           try {
             print("Starting TS Client with Session ID $sessionId...");
             final clientProcess = await Process.start(
-              'npx',
+              'node',
               [
-                'tsx',
                 tsClientPath,
                 '--transport',
                 'http',
