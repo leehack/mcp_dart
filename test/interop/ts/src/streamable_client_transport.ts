@@ -8,6 +8,7 @@ export class StreamableHttpClientTransport implements Transport {
   private _messageHandler?: (message: JSONRPCMessage) => void;
   private _closeHandler?: () => void;
   private _abortController: AbortController;
+  private _sseStarted = false;
 
   constructor(endpoint: URL) {
     this._endpoint = new URL(endpoint);
@@ -21,8 +22,8 @@ export class StreamableHttpClientTransport implements Transport {
       this._sessionId = urlSessionId;
     }
 
-    // Start background SSE connection
-    this._connectSSE();
+    // Don't start SSE connection here - wait until after first POST request
+    // The SSE connection is started after we receive the session ID from initialize
   }
 
   private _connectSSE(): void {
@@ -143,6 +144,19 @@ export class StreamableHttpClientTransport implements Transport {
     if (!response.ok) {
       const text = await response.text();
       throw new Error(`HTTP error ${response.status}: ${text}`);
+    }
+
+    // Capture session ID from response headers
+    const responseSessionId = response.headers.get('mcp-session-id');
+    if (responseSessionId && !this._sessionId) {
+      this._sessionId = responseSessionId;
+    }
+
+    // Start SSE connection after first successful POST (which will be initialize)
+    if (!this._sseStarted && this._sessionId) {
+      this._sseStarted = true;
+      // Start SSE in background - don't await
+      this._connectSSE();
     }
 
     const contentType = response.headers.get('content-type');

@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { CompleteRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import express from 'express';
 import { randomUUID } from 'node:crypto'; // Correct import for UUID generation
@@ -73,6 +74,7 @@ async function main() {
   }, {
     taskStore,
     capabilities: {
+      completions: {},
       tasks: {
         requests: {
           tools: { call: {} },
@@ -141,6 +143,175 @@ async function main() {
             content: { type: 'text', text: 'Test Prompt' },
           },
         ],
+      };
+    }
+  );
+
+  // Prompt: greeting - with completable language argument
+  server.registerPrompt(
+    'greeting',
+    {
+      description: 'A greeting prompt with a completable language argument',
+      argsSchema: { language: z.string().describe('The language for the greeting') },
+    },
+    async ({ language }) => {
+      const greetings: Record<string, string> = {
+        English: 'Hello!',
+        Spanish: '¡Hola!',
+        French: 'Bonjour!',
+        German: 'Guten Tag!',
+      };
+      return {
+        messages: [
+          {
+            role: 'user',
+            content: { type: 'text', text: greetings[language] || `Hello in ${language}!` },
+          },
+        ],
+      };
+    }
+  );
+
+  // Completion handler for prompt arguments
+  server.server.setRequestHandler(CompleteRequestSchema, async (request) => {
+    const { ref, argument } = request.params;
+
+    if (ref.type === 'ref/prompt' && ref.name === 'greeting' && argument.name === 'language') {
+      const languages = ['English', 'Spanish', 'French', 'German'];
+      const filtered = languages.filter((l) => l.toLowerCase().startsWith(argument.value.toLowerCase()));
+      return {
+        completion: {
+          values: filtered,
+          hasMore: false,
+        },
+      };
+    }
+
+    return {
+      completion: {
+        values: [],
+        hasMore: false,
+      },
+    };
+  });
+
+  // Tool: get_roots - Lists client's roots
+  server.registerTool(
+    'get_roots',
+    {
+      description: 'Lists the roots provided by the client',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const result = await server.server.listRoots();
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result.roots) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text', text: `Error getting roots: ${error}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool: elicit_input - Requests user input from client
+  server.registerTool(
+    'elicit_input',
+    {
+      description: 'Requests structured input from the client',
+      inputSchema: { message: z.string().describe('The message to show the user') },
+    },
+    async ({ message }) => {
+      try {
+        const result = await server.server.elicitInput({
+          message,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              confirmed: { type: 'boolean', description: 'User confirmation' },
+            },
+            required: ['confirmed'],
+          },
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text', text: `Error eliciting input: ${error}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool: sample_llm - Requests LLM completion from client
+  server.registerTool(
+    'sample_llm',
+    {
+      description: 'Requests an LLM completion from the client',
+      inputSchema: { prompt: z.string().describe('The prompt to send to the LLM') },
+    },
+    async ({ prompt }) => {
+      try {
+        const result = await server.server.createMessage({
+          messages: [
+            {
+              role: 'user',
+              content: { type: 'text', text: prompt },
+            },
+          ],
+          maxTokens: 100,
+        });
+        const content = result.content;
+        const text = content.type === 'text' ? content.text : JSON.stringify(content);
+        return {
+          content: [{ type: 'text', text }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text', text: `Error sampling LLM: ${error}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool: progress_demo - Sends progress notifications during execution
+  server.registerTool(
+    'progress_demo',
+    {
+      description: 'Demonstrates progress notifications',
+      inputSchema: { steps: z.number().optional().describe('Number of progress steps (default 4)') },
+    },
+    async ({ steps = 4 }, extra) => {
+      const totalSteps = Math.max(1, Math.min(steps, 10));
+      const progressToken = extra._meta?.progressToken;
+
+      for (let i = 0; i <= totalSteps; i++) {
+        const progress = Math.round((i / totalSteps) * 100);
+
+        // Send progress notification if we have a progress token
+        if (progressToken !== undefined) {
+          await server.server.notification({
+            method: 'notifications/progress',
+            params: {
+              progressToken,
+              progress,
+              total: 100,
+            },
+          });
+        }
+
+        // Simulate work
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      return {
+        content: [{ type: 'text', text: `Completed ${totalSteps} steps with progress notifications` }],
       };
     }
   );

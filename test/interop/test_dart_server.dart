@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 
@@ -73,6 +74,195 @@ McpServer createServer() {
           PromptMessage(
             role: PromptMessageRole.user,
             content: TextContent(text: 'Test Prompt'),
+          ),
+        ],
+      );
+    },
+  );
+
+  // Prompt: greeting - with completable language argument
+  server.registerPrompt(
+    'greeting',
+    description: 'A greeting prompt with a completable language argument',
+    argsSchema: {
+      'language': PromptArgumentDefinition(
+        description: 'The language for the greeting',
+        required: true,
+        completable: CompletableField(
+          def: CompletableDef(
+            complete: (value) {
+              final languages = ['English', 'Spanish', 'French', 'German'];
+              return languages
+                  .where((l) => l.toLowerCase().startsWith(value.toLowerCase()))
+                  .toList();
+            },
+          ),
+        ),
+      ),
+    },
+    callback: (args, extra) async {
+      final language = (args?['language'] as String?) ?? 'English';
+      final greetings = {
+        'English': 'Hello!',
+        'Spanish': '¡Hola!',
+        'French': 'Bonjour!',
+        'German': 'Guten Tag!',
+      };
+      return GetPromptResult(
+        description: 'Greeting in $language',
+        messages: [
+          PromptMessage(
+            role: PromptMessageRole.user,
+            content: TextContent(
+              text: greetings[language] ?? 'Hello in $language!',
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  // Tool: get_roots - Lists client's roots
+  server.registerTool(
+    'get_roots',
+    description: 'Lists the roots provided by the client',
+    callback: (args, extra) async {
+      try {
+        final result = await server.server.listRoots();
+        final rootsJson =
+            result.roots.map((r) => {'uri': r.uri, 'name': r.name}).toList();
+        return CallToolResult(
+          content: [TextContent(text: jsonEncode(rootsJson))],
+        );
+      } catch (e) {
+        return CallToolResult(
+          content: [TextContent(text: 'Error getting roots: $e')],
+          isError: true,
+        );
+      }
+    },
+  );
+
+  // Tool: elicit_input - Requests user input from client
+  server.registerTool(
+    'elicit_input',
+    description: 'Requests structured input from the client',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'message':
+            JsonSchema.string(description: 'The message to show the user'),
+      },
+      required: ['message'],
+    ),
+    callback: (args, extra) async {
+      try {
+        final message = args['message'] as String;
+        final result = await server.server.elicitInput(
+          ElicitRequestParams.form(
+            message: message,
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'confirmed':
+                    JsonSchema.boolean(description: 'User confirmation'),
+              },
+              required: ['confirmed'],
+            ),
+          ),
+        );
+        return CallToolResult(
+          content: [TextContent(text: jsonEncode(result.toJson()))],
+        );
+      } catch (e) {
+        return CallToolResult(
+          content: [TextContent(text: 'Error eliciting input: $e')],
+          isError: true,
+        );
+      }
+    },
+  );
+
+  // Tool: sample_llm - Requests LLM completion from client
+  server.registerTool(
+    'sample_llm',
+    description: 'Requests an LLM completion from the client',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'prompt':
+            JsonSchema.string(description: 'The prompt to send to the LLM'),
+      },
+      required: ['prompt'],
+    ),
+    callback: (args, extra) async {
+      try {
+        final prompt = args['prompt'] as String;
+        final result = await server.server.createMessage(
+          CreateMessageRequestParams(
+            messages: [
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: SamplingTextContent(text: prompt),
+              ),
+            ],
+            maxTokens: 100,
+          ),
+        );
+        final content = result.content;
+        final text = content is SamplingTextContent
+            ? content.text
+            : jsonEncode(content.toJson());
+        return CallToolResult(
+          content: [TextContent(text: text)],
+        );
+      } catch (e) {
+        return CallToolResult(
+          content: [TextContent(text: 'Error sampling LLM: $e')],
+          isError: true,
+        );
+      }
+    },
+  );
+
+  // Tool: progress_demo - Sends progress notifications during execution
+  server.registerTool(
+    'progress_demo',
+    description: 'Demonstrates progress notifications',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'steps': JsonSchema.number(
+          description: 'Number of progress steps (default 4)',
+        ),
+      },
+    ),
+    callback: (args, extra) async {
+      final steps = (args['steps'] as num?)?.toInt() ?? 4;
+      final totalSteps = steps.clamp(1, 10);
+
+      for (int i = 0; i <= totalSteps; i++) {
+        final progress = ((i / totalSteps) * 100).round();
+
+        // Send progress notification if we have a progress token
+        final progressToken = extra.meta?['progressToken'];
+        if (progressToken != null) {
+          await extra.sendNotification(
+            // Fixed to use extra.sendNotification
+            JsonRpcProgressNotification(
+              progressParams: ProgressNotificationParams(
+                progressToken: progressToken,
+                progress: progress,
+                total: 100,
+              ),
+            ),
+          );
+        }
+
+        // Simulate work
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+
+      return CallToolResult(
+        content: [
+          TextContent(
+            text: 'Completed $totalSteps steps with progress notifications',
           ),
         ],
       );
