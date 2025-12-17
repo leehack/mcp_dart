@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../shared/json_schema/json_schema.dart';
 
 import 'content.dart';
@@ -273,6 +275,9 @@ class CallToolResult implements BaseResultData {
   /// Whether the tool call returned an error.
   final bool isError;
 
+  /// Structured content returned by the tool.
+  final Map<String, dynamic>? structuredContent;
+
   /// Optional metadata.
   @override
   final Map<String, dynamic>? meta;
@@ -283,6 +288,7 @@ class CallToolResult implements BaseResultData {
   const CallToolResult({
     required this.content,
     this.isError = false,
+    this.structuredContent,
     this.meta,
     this.extra,
   });
@@ -293,15 +299,19 @@ class CallToolResult implements BaseResultData {
   }
 
   /// Creates a result from arbitrary structured data.
+  ///
+  /// Automatically populates [content] with a JSON-serialized version of
+  /// [content] for backward compatibility with clients that do not support
+  /// [structuredContent].
   factory CallToolResult.fromStructuredContent(Map<String, dynamic> content) {
     return CallToolResult(
-      content: [],
-      extra: content,
+      content: [TextContent(text: jsonEncode(content))],
+      structuredContent: content,
     );
   }
 
   factory CallToolResult.fromJson(Map<String, dynamic> json) {
-    final knownKeys = {'content', 'isError', '_meta'};
+    final knownKeys = {'content', 'isError', '_meta', 'structuredContent'};
     final extra = Map<String, dynamic>.from(json)
       ..removeWhere((key, value) => knownKeys.contains(key));
 
@@ -311,6 +321,7 @@ class CallToolResult implements BaseResultData {
               .toList() ??
           [],
       isError: json['isError'] as bool? ?? false,
+      structuredContent: json['structuredContent'] as Map<String, dynamic>?,
       meta: json['_meta'] as Map<String, dynamic>?,
       extra: extra.isEmpty ? null : extra,
     );
@@ -320,11 +331,10 @@ class CallToolResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'content': content.map((e) => e.toJson()).toList(),
         if (isError) 'isError': isError,
+        if (structuredContent != null) 'structuredContent': structuredContent,
         if (meta != null) '_meta': meta,
         ...?extra,
       };
-
-  Map<String, dynamic> get structuredContent => toJson();
 }
 
 /// Notification from server indicating the list of available tools has changed.

@@ -120,7 +120,7 @@ void main() {
         const CallToolRequest(name: 'validated_tool'),
       );
 
-      expect(result.structuredContent['result'], equals('success'));
+      expect(result.structuredContent?['result'], equals('success'));
     });
 
     test('throws when tool output validation fails', () async {
