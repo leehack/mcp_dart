@@ -82,7 +82,7 @@ void main() {
       expect(response, isA<JsonRpcResponse>());
       final successResponse = response as JsonRpcResponse;
       final result = CallToolResult.fromJson(successResponse.result);
-      expect(result.structuredContent['result'], equals('success'));
+      expect(result.structuredContent?['result'], equals('success'));
     });
 
     test('invalid output fails validation', () async {

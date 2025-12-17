@@ -597,13 +597,26 @@ class MockTransport extends Transport {
       }
     } else if (message is JsonRpcRequest && message.method == 'tools/call') {
       if (onmessage != null) {
-        final content = [const TextContent(text: "Tool result")];
-        onmessage!(
-          JsonRpcResponse(
-            id: message.id,
-            result: CallToolResult(content: content).toJson(),
-          ),
-        );
+        if (message.params is Map &&
+            message.params!['name'] == 'test-tool-structured') {
+          onmessage!(
+            JsonRpcResponse(
+              id: message.id,
+              result: const CallToolResult(
+                content: [],
+                structuredContent: {'output': 'some value'},
+              ).toJson(),
+            ),
+          );
+        } else {
+          final content = [const TextContent(text: "Tool result")];
+          onmessage!(
+            JsonRpcResponse(
+              id: message.id,
+              result: CallToolResult(content: content).toJson(),
+            ),
+          );
+        }
       }
     } else if (message is JsonRpcRequest && message.method == 'prompts/get') {
       if (onmessage != null) {

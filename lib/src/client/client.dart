@@ -503,24 +503,14 @@ class Client extends Protocol {
     );
 
     final outputSchema = _cachedToolOutputSchemas[params.name];
-    if (outputSchema != null) {
-      // If tool has outputSchema, it MUST return structuredContent (unless it's an error)
-      if (result.structuredContent.isEmpty && result.isError != true) {
+    if (outputSchema != null && !result.isError) {
+      try {
+        outputSchema.validate(result.structuredContent);
+      } catch (e) {
         throw McpError(
-          ErrorCode.invalidRequest.value,
-          "Tool '${params.name}' has an output schema but did not return structured content",
+          ErrorCode.invalidParams.value,
+          "Structured content does not match the tool's output schema: $e",
         );
-      }
-
-      if (result.structuredContent.isNotEmpty) {
-        try {
-          outputSchema.validate(result.structuredContent);
-        } catch (e) {
-          throw McpError(
-            ErrorCode.invalidParams.value,
-            "Structured content does not match the tool's output schema: $e",
-          );
-        }
       }
     }
 

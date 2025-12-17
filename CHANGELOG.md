@@ -1,3 +1,9 @@
+## 1.1.1
+
+- **Structured Content Support**: Added explicit `structuredContent` field to `CallToolResult` with automatic backward compatibility support.
+  - `CallToolResult.fromStructuredContent` now automatically populates both `structuredContent` (for modern clients) and `content` (as JSON string for legacy clients).
+  - Updated validation logic to correctly validate `structuredContent` payload against tool schema.
+
 ## 1.1.0
 
 ### Breaking Changes
