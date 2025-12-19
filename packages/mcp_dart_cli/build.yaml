@@ -1,0 +1,15 @@
+targets:
+  $default:
+    builders:
+      mcp_dart_cli:mason_bundle_builder:
+        enabled: true
+        generate_for:
+          - lib/src/bricks/**/brick.yaml
+
+builders:
+  mason_bundle_builder:
+    import: "package:mcp_dart_cli/src/builders/mason_bundle_builder.dart"
+    builder_factories: ["masonBundleBuilder"]
+    build_extensions: {".yaml": [".bundle.dart"]}
+    auto_apply: root_package
+    build_to: source

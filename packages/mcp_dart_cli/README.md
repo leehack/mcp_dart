@@ -40,3 +40,31 @@ mcp_dart create <project_name> --template https://github.com/leehack/mcp_dart/tr
 ## Commands
 
 - `create`: Creates a new MCP server project.
+- `serve`: Runs the MCP server in the current directory.
+
+### Serve the project
+
+Runs the MCP server in the current directory.
+
+```bash
+mcp_dart serve
+```
+
+Options:
+- `--transport` (`-t`): Transport type to use (`stdio` or `http`). Defaults to `stdio`.
+- `--host`: Host for HTTP transport. Defaults to `0.0.0.0`.
+- `--port` (`-p`): Port for HTTP transport. Defaults to `3000`.
+- `--watch`: Restart the server on file changes.
+
+## Running Tests
+
+To run the tests for this package:
+
+```bash
+dart test
+```
+
+## Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this project.
+
