@@ -1,81 +1,42 @@
-name: Release and Publish
+name: Publish to pub.dev
 
 on:
-  workflow_dispatch:
-    inputs:
-      package:
-        description: 'Package to publish'
-        required: true
-        type: choice
-        options:
-          - mcp_dart
-          - mcp_dart_cli
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'           # mcp_dart: v1.0.0, v1.0.0-dev, etc.
+      - 'mcp_dart_cli-v[0-9]+.[0-9]+.[0-9]+*'  # mcp_dart_cli: mcp_dart_cli-v0.1.0, etc.
 
 jobs:
-  release-and-publish:
+  publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required to create tags and releases
-      id-token: write  # Required for pub.dev OIDC authentication
+      id-token: write # Required for authentication using OIDC
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set package configuration
-        id: set-config
+
+      - name: Determine package from tag
+        id: package-info
         run: |
-          if [ "${{ inputs.package }}" = "mcp_dart" ]; then
-            echo "working_directory=." >> "$GITHUB_OUTPUT"
-            echo "tag_prefix=v" >> "$GITHUB_OUTPUT"
-          else
+          TAG="${{ github.ref_name }}"
+          echo "🏷️ Processing tag: $TAG"
+          
+          if [[ "$TAG" == mcp_dart_cli-v* ]]; then
             echo "working_directory=packages/mcp_dart_cli" >> "$GITHUB_OUTPUT"
-            echo "tag_prefix=mcp_dart_cli-v" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Get version from pubspec.yaml
-        id: get-version
-        working-directory: ${{ steps.set-config.outputs.working_directory }}
-        run: |
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "📦 Package: ${{ inputs.package }}"
-          echo "📦 Detected version: $VERSION"
-
-      - name: Check if tag already exists
-        run: |
-          TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "❌ Error: Tag $TAG already exists!"
-            echo "   This version has already been released."
-            echo "   Please bump the version in pubspec.yaml first."
+            echo "📦 Package: mcp_dart_cli"
+          elif [[ "$TAG" == v* ]]; then
+            echo "working_directory=." >> "$GITHUB_OUTPUT"
+            echo "📦 Package: mcp_dart"
+          else
+            echo "❌ Unknown tag format: $TAG"
             exit 1
           fi
-          echo "✅ Tag $TAG does not exist, proceeding..."
-
-      - name: Create and push tag
-        id: create-tag
-        run: |
-          TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release ${{ inputs.package }} ${{ steps.get-version.outputs.version }}"
-          git push origin "$TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "🏷️ Created and pushed tag: $TAG"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.create-tag.outputs.tag }}
-          name: ${{ inputs.package }} ${{ steps.get-version.outputs.version }}
-          generate_release_notes: true
-          draft: false
 
       - uses: dart-lang/setup-dart@v1
 
       - name: Install dependencies
-        working-directory: ${{ steps.set-config.outputs.working_directory }}
+        working-directory: ${{ steps.package-info.outputs.working_directory }}
         run: dart pub get
 
       - name: Publish to pub.dev
-        working-directory: ${{ steps.set-config.outputs.working_directory }}
+        working-directory: ${{ steps.package-info.outputs.working_directory }}
         run: dart pub publish --force
