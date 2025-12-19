@@ -1,4 +1,4 @@
-name: Create Release
+name: Release and Publish
 
 on:
   workflow_dispatch:
@@ -12,10 +12,11 @@ on:
           - mcp_dart_cli
 
 jobs:
-  create-release:
+  release-and-publish:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required to create tags and releases
+      id-token: write  # Required for pub.dev OIDC authentication
     steps:
       - uses: actions/checkout@v4
       
@@ -69,12 +70,12 @@ jobs:
           generate_release_notes: true
           draft: false
 
-      - name: Save tag for publish workflow
-        run: echo "${{ steps.create-tag.outputs.tag }}" > tag.txt
+      - uses: dart-lang/setup-dart@v1
 
-      - name: Upload tag artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-tag
-          path: tag.txt
-          retention-days: 1
+      - name: Install dependencies
+        working-directory: ${{ steps.set-config.outputs.working_directory }}
+        run: dart pub get
+
+      - name: Publish to pub.dev
+        working-directory: ${{ steps.set-config.outputs.working_directory }}
+        run: dart pub publish --force
