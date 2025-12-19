@@ -1,3 +1,7 @@
+## 1.1.2
+
+- **Fixed StdioClientTransport stderr handling**: Corrected process mode to always use `ProcessStartMode.normal` to ensure stdin/stdout piping works correctly. Fixed inverted stderr mode logic where `stderrMode: normal` now properly exposes stderr via getter (without internal listening), and `stderrMode: inheritStdio` now manually pipes stderr to parent process.
+
 ## 1.1.1
 
 - **Structured Content Support**: Added explicit `structuredContent` field to `CallToolResult` with automatic backward compatibility support.

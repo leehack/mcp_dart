@@ -6,7 +6,7 @@
 
 MCP Dart is the official Dart implementation of the Model Context Protocol, enabling seamless integration between AI applications and external data sources, tools, and services. Build production-ready MCP servers and clients for Dart VM, Flutter, and web platforms.
 
-**Version**: 1.1.0
+**Version**: 1.1.2
 **Protocol**: MCP 2025-06-18 (backward compatible with 2025-03-26, 2024-11-05, 2024-10-07)
 **Repository**: https://github.com/leehack/mcp_dart
 **Package**: https://pub.dev/packages/mcp_dart
@@ -18,7 +18,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mcp_dart: ^1.1.0
+  mcp_dart: ^1.1.2
 ```
 
 Then run:
