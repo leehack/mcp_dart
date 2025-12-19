@@ -7,7 +7,7 @@ Fast lookup guide for common MCP Dart SDK operations.
 ```yaml
 # pubspec.yaml
 dependencies:
-  mcp_dart: ^1.0.0
+  mcp_dart: ^1.1.2
 ```
 
 ```bash
