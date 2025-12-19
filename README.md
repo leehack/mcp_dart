@@ -75,94 +75,58 @@ It's also backward compatible with previous versions including `2025-06-18`, `20
 - 🔐 **[OAuth Authentication](https://github.com/leehack/mcp_dart/blob/main/example/authentication/)** - OAuth2 guides and examples
 - 📝 For resources, prompts, and other features, see the Server and Client guides
 
-## Quick Start Example
+## Quick Start with CLI
 
-Below is the simplest way to create an MCP server:
-
-```dart
-import 'package:mcp_dart/mcp_dart.dart';
-
-void main() async {
-  McpServer server = McpServer(
-    Implementation(name: "mcp-example-server", version: "1.0.0"),
-    options: ServerOptions(
-      capabilities: ServerCapabilities(
-        resources: ServerCapabilitiesResources(),
-        tools: ServerCapabilitiesTools(),
-      ),
-    ),
-  );
-
-  server.registerTool(
-    "calculate",
-    description: 'Perform basic arithmetic operations',
-    inputSchema: ToolInputSchema(
-      properties: {
-        'operation': JsonSchema.string(
-          enumValues: ['add', 'subtract', 'multiply', 'divide'],
-        ),
-        'a': JsonSchema.number(),
-        'b': JsonSchema.number(),
-      },
-      required: ['operation', 'a', 'b'],
-    ),
-    callback: (args, extra) async {
-      final operation = args['operation'];
-      final a = args['a'];
-      final b = args['b'];
-      return CallToolResult.fromContent(
-        content: [
-          TextContent(
-            text: switch (operation) {
-              'add' => 'Result: ${a + b}',
-              'subtract' => 'Result: ${a - b}',
-              'multiply' => 'Result: ${a * b}',
-              'divide' => 'Result: ${a / b}',
-              _ => throw Exception('Invalid operation'),
-            },
-          ),
-        ],
-      );
-    },
-  );
-
-  server.connect(StdioServerTransport());
-}
-```
-
-### Running Your Server
-
-Compile your MCP server to an executable:
+The fastest way to create an MCP server is using the `mcp_dart_cli`:
 
 ```bash
-dart compile exe example/server_stdio.dart -o ./server_stdio
+# Install the CLI
+dart pub global activate mcp_dart_cli
+
+# Create a new project
+mcp_dart create my_server
+
+# Navigate and run
+cd my_server
+mcp_dart serve
 ```
 
-Or run it directly with JIT:
+Your server is now running! Use `mcp_dart inspect` to test it:
 
 ```bash
-dart run example/server_stdio.dart
+mcp_dart inspect              # List all capabilities
+mcp_dart inspect --tool add --json-args '{"a": 1, "b": 2}'   # Call a tool
 ```
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `create` | Scaffold a new MCP server project |
+| `serve` | Run your server (stdio or HTTP) |
+| `doctor` | Check project health and connectivity |
+| `inspect` | Test and debug server capabilities |
+
+📖 **[Full CLI Documentation](https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli)**
 
 ### Connecting to AI Hosts
 
-To configure your server with AI hosts like Claude Desktop:
+Configure your server with AI hosts like Claude Desktop:
 
 ```json
 {
   "mcpServers": {
-    "calculator_jit": {
-      "command": "path/to/dart",
-      "args": [
-        "/path/to/server_stdio.dart"
-      ]
-    },
-    "calculator_aot": {
-      "command": "path/to/compiled/server_stdio",
-    },
+    "my_server": {
+      "command": "mcp_dart",
+      "args": ["serve"],
+      "cwd": "/path/to/my_server"
+    }
   }
 }
 ```
+
+> [!TIP]
+> For manual server implementation or advanced use cases, see the [Server Guide](https://github.com/leehack/mcp_dart/blob/main/doc/server-guide.md).
 
 ## Authentication
 
