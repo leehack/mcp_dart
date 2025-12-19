@@ -6,6 +6,9 @@ A Model Context Protocol (MCP) server created with `mcp_dart`.
 
 ```bash
 dart run bin/server.dart
+# or
+mcp_dart serve
+```
 ```
 
 ## Adding Tools
