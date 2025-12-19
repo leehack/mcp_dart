@@ -1,0 +1,11 @@
+name: simple_server
+description: A gentle introduction to creating an MCP server.
+version: 0.1.0-dev.1
+environment:
+  mason: ^0.1.0
+vars:
+  name:
+    type: string
+    description: The project name
+    default: my_mcp_server
+    prompt: What is the project name?
