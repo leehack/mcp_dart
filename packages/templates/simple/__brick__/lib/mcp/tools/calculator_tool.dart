@@ -31,8 +31,10 @@ class CalculatorTool extends BaseTool {
       Map<String, dynamic> args, RequestHandlerExtra? extra) async {
     final a = args['a'] as num;
     final b = args['b'] as num;
-    return CallToolResult(
-      content: [TextContent(text: 'Result: ${a + b}')],
+    return CallToolResult.fromStructuredContent(
+      {
+        'result': a + b,
+      },
     );
   }
 }
