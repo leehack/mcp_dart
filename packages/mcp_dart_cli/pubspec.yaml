@@ -1,6 +1,6 @@
 name: mcp_dart_cli
 description: CLI for Model Context Protocol (MCP) servers in Dart.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/leehack/mcp_dart
 
 environment:
