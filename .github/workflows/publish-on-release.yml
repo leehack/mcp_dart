@@ -1,0 +1,40 @@
+name: Publish to pub.dev
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for authentication using OIDC
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine package from tag
+        id: package-info
+        run: |
+          TAG="${{ github.ref_name }}"
+          echo "🏷️ Processing tag: $TAG"
+          
+          if [[ "$TAG" == mcp_dart_cli-v* ]]; then
+            echo "working_directory=packages/mcp_dart_cli" >> "$GITHUB_OUTPUT"
+            echo "📦 Package: mcp_dart_cli"
+          elif [[ "$TAG" == v* ]]; then
+            echo "working_directory=." >> "$GITHUB_OUTPUT"
+            echo "📦 Package: mcp_dart"
+          else
+            echo "❌ Unknown tag format: $TAG"
+            exit 1
+          fi
+
+      - uses: dart-lang/setup-dart@v1
+
+      - name: Install dependencies
+        working-directory: ${{ steps.package-info.outputs.working_directory }}
+        run: dart pub get
+
+      - name: Publish to pub.dev
+        working-directory: ${{ steps.package-info.outputs.working_directory }}
+        run: dart pub publish --force

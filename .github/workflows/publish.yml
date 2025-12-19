@@ -1,4 +1,4 @@
-name: Publish to pub.dev
+name: Create Release
 
 on:
   workflow_dispatch:
@@ -10,21 +10,12 @@ on:
         options:
           - mcp_dart
           - mcp_dart_cli
-      dry_run:
-        description: 'Dry run (create release but skip pub.dev publish)'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   create-release:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required to create tags and releases
-    outputs:
-      tag: ${{ steps.create-tag.outputs.tag }}
-      version: ${{ steps.get-version.outputs.version }}
-      working_directory: ${{ steps.set-config.outputs.working_directory }}
     steps:
       - uses: actions/checkout@v4
       
@@ -77,12 +68,3 @@ jobs:
           name: ${{ inputs.package }} ${{ steps.get-version.outputs.version }}
           generate_release_notes: true
           draft: false
-
-  publish:
-    needs: create-release
-    if: ${{ !inputs.dry_run }}
-    permissions:
-      id-token: write # Required for authentication using OIDC
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
-    with:
-      working-directory: ${{ needs.create-release.outputs.working_directory }}
