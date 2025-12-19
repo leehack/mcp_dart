@@ -24,7 +24,7 @@ To run all tests:
 dart test
 ```
 
-## specific tests:
+## Running Specific Tests
 ```bash
 dart test test/src/some_test.dart
 ```
