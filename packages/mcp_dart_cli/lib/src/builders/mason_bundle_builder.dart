@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:build/build.dart';
-import 'package:mason/mason.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 class MasonBundleBuilder implements Builder {
   @override
@@ -16,26 +17,57 @@ class MasonBundleBuilder implements Builder {
     final inputId = buildStep.inputId;
 
     // Calculate the directory of the brick from the input file
-    // The input file is likely .../brick.yaml
-    // We need the directory containing it to pass to createBundle.
-
-    // Note: build_runner usually works with Assets.
-    // Accessing the filesystem via `File` is technically frowned upon for hermetic builds,
-    // but for this local CLI generation task, it is the most pragmatic way to interface
-    // with `mason.createBundle` which expects a Directory.
-    // Ensure we are working with correct paths.
-
-    final packagePath = p.absolute('.'); // Assuming running from package root
+    final packagePath = p.absolute('.');
     final brickDir = p.dirname(p.join(packagePath, inputId.path));
+    final brickYamlPath = p.join(brickDir, 'brick.yaml');
+    final brickTemplateDir = p.join(brickDir, '__brick__');
 
     log.info('Bundling brick at $brickDir');
 
-    final bundle = createBundle(Directory(brickDir));
-    final bundleJson = bundle.toJson();
+    // Read brick.yaml to get metadata
+    final brickYamlFile = File(brickYamlPath);
+    final brickYamlContent = await brickYamlFile.readAsString();
+    final brickYaml = loadYaml(brickYamlContent) as YamlMap;
+
+    // Read .tpl files from __brick__ directory and construct bundle manually
+    // This avoids pana trying to analyze .dart files with template variables
+    final templateFiles = <Map<String, dynamic>>[];
+    final templateDir = Directory(brickTemplateDir);
+
+    if (await templateDir.exists()) {
+      await for (final entity in templateDir.list(recursive: true)) {
+        if (entity is File && entity.path.endsWith('.tpl')) {
+          final relativePath = p.relative(entity.path, from: brickTemplateDir);
+          // Remove .tpl extension to get the target filename
+          final targetPath = relativePath.substring(0, relativePath.length - 4);
+          final content = await entity.readAsString();
+          final base64Content = base64Encode(utf8.encode(content));
+          templateFiles.add({
+            'path': targetPath,
+            'data': base64Content,
+            'type': 'text',
+          });
+        }
+      }
+    }
+
+    // Build bundle JSON manually
+    final bundleJson = <String, dynamic>{
+      'files': templateFiles,
+      'hooks': <dynamic>[],
+      'name': brickYaml['name'] as String,
+      'description': brickYaml['description'] as String? ?? '',
+      'version': brickYaml['version'] as String? ?? '0.1.0',
+      'environment': {
+        'mason': (brickYaml['environment'] as YamlMap?)?['mason'] as String? ??
+            '>=0.1.0-dev.1 <0.1.0',
+      },
+      'vars': _convertVars(brickYaml['vars'] as YamlMap?),
+    };
 
     final outputId = inputId.changeExtension('.bundle.dart');
     // Convert snake_case or whatever to camelCase + Bundle
-    final bundleName = bundle.name;
+    final bundleName = bundleJson['name'] as String;
     final varName = '${_toCamelCase(bundleName)}Bundle';
 
     final content = '''
@@ -60,6 +92,24 @@ final $varName = MasonBundle.fromJson(${_jsonToDart(bundleJson)});
         })
         .values
         .join('');
+  }
+
+  Map<String, dynamic> _convertVars(YamlMap? vars) {
+    if (vars == null) return {};
+    final result = <String, dynamic>{};
+    for (final entry in vars.entries) {
+      final key = entry.key as String;
+      final value = entry.value;
+      if (value is YamlMap) {
+        result[key] = <String, dynamic>{
+          'type': value['type'] as String? ?? 'string',
+          'description': value['description'] as String? ?? '',
+        };
+      } else {
+        result[key] = {'type': 'string', 'description': ''};
+      }
+    }
+    return result;
   }
 
   String _jsonToDart(Map<String, dynamic> json) {
