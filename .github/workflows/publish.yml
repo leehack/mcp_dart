@@ -68,3 +68,13 @@ jobs:
           name: ${{ inputs.package }} ${{ steps.get-version.outputs.version }}
           generate_release_notes: true
           draft: false
+
+      - name: Save tag for publish workflow
+        run: echo "${{ steps.create-tag.outputs.tag }}" > tag.txt
+
+      - name: Upload tag artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-tag
+          path: tag.txt
+          retention-days: 1
