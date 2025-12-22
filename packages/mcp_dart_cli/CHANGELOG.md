@@ -1,3 +1,9 @@
+## 0.1.3
+
+- **`create` command**:
+  - Optional project path argument: `mcp_dart create <project_name> [path]`
+  - General code cleanup and improvements
+
 ## 0.1.2
 
 - **`serve` command** for running MCP servers:

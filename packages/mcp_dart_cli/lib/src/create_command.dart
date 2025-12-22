@@ -11,6 +11,10 @@ class CreateCommand extends Command<int> {
   @override
   final description = 'Creates a new MCP server project.';
 
+  @override
+  String get invocation =>
+      'mcp_dart create <package_name> [project_path] [arguments]';
+
   CreateCommand({Logger? logger}) : _logger = logger ?? Logger() {
     argParser.addOption(
       'template',
@@ -25,16 +29,36 @@ class CreateCommand extends Command<int> {
 
   @override
   Future<int> run() async {
+    final String packageName;
+    final String projectPath;
+
     if (argResults!.rest.isEmpty) {
-      _logger.err('Usage: mcp_dart create <project_name> [arguments]');
+      packageName = _logger.prompt(
+        'What is the project name?',
+        defaultValue: 'mcp_server',
+      );
+      projectPath = packageName;
+    } else {
+      packageName = argResults!.rest.first;
+      projectPath =
+          argResults!.rest.length > 1 ? argResults!.rest[1] : packageName;
+    }
+
+    if (!_isValidPackageName(packageName)) {
+      _logger.err(
+        'Error: "$packageName" is not a valid package name.\n\n'
+        'Package names should be all lowercase, with underscores to separate words, '
+        'e.g. "mcp_server". Use only basic Latin letters and Arabic digits: [a-z0-9_]. '
+        'Also, make sure the name is a valid Dart identifier -- that is, it '
+        "doesn't start with digits and isn't a reserved word.",
+      );
       return ExitCode.usage.code;
     }
 
-    final projectName = argResults!.rest.first;
-    final directory = Directory(projectName);
+    final directory = Directory(projectPath);
 
     if (directory.existsSync()) {
-      _logger.err('Error: Directory "$projectName" already exists.');
+      _logger.err('Error: Directory "$projectPath" already exists.');
       return ExitCode.cantCreate.code;
     }
 
@@ -42,49 +66,83 @@ class CreateCommand extends Command<int> {
     final brick = _resolveBrick(templateArg);
 
     final generator = await MasonGenerator.fromBrick(brick);
-    final progress = _logger.progress('Creating $projectName');
+    final progress = _logger.progress('Creating $projectPath');
 
     await generator.generate(
       DirectoryGeneratorTarget(directory),
-      vars: <String, dynamic>{'name': projectName},
+      vars: <String, dynamic>{'name': packageName},
     );
     progress.complete();
 
-    _logger.info('Running dart pub get...');
-    var result = await Process.run(
+    await _runCommand(
       'dart',
       ['pub', 'get'],
       workingDirectory: directory.path,
-      runInShell: true,
+      label: 'Running pub get',
     );
 
-    if (result.exitCode != 0) {
-      _logger.err('Error running pub get:');
-      _logger.err(result.stderr.toString());
-      return result.exitCode;
-    }
-
     // Auto-add mcp_dart to ensure latest version
-    _logger.info('Adding latest mcp_dart dependency...');
-    result = await Process.run(
+    await _runCommand(
       'dart',
       ['pub', 'add', 'mcp_dart'],
       workingDirectory: directory.path,
-      runInShell: true,
+      label: 'Adding mcp_dart dependency',
     );
 
-    if (result.exitCode != 0) {
-      _logger.err('Error adding mcp_dart:');
-      _logger.err(result.stderr.toString());
-      return result.exitCode;
-    }
+    // Run dart format
+    await _runCommand(
+      'dart',
+      ['format', '.'],
+      workingDirectory: directory.path,
+      label: 'Formatting code',
+    );
 
-    _logger.success('\nSuccess! Created $projectName.');
+    _logger.success('\nSuccess! Created $projectPath.');
     _logger.info('Run your server with:');
-    _logger.info('  cd $projectName');
+    if (projectPath != '.') {
+      _logger.info('  cd $projectPath');
+    }
     _logger.info('  dart run bin/server.dart');
 
     return ExitCode.success.code;
+  }
+
+  Future<void> _runCommand(
+    String executable,
+    List<String> arguments, {
+    required String workingDirectory,
+    required String label,
+  }) async {
+    final progress = _logger.progress(label);
+    try {
+      final result = await Process.run(
+        executable,
+        arguments,
+        workingDirectory: workingDirectory,
+        runInShell: true,
+      );
+
+      if (result.exitCode != 0) {
+        progress.fail();
+        _logger.err('Error running $label:');
+        _logger.err(result.stderr.toString());
+        throw ProcessException(
+          executable,
+          arguments,
+          result.stderr.toString(),
+          result.exitCode,
+        );
+      }
+      progress.complete();
+    } catch (_) {
+      progress.fail();
+      rethrow;
+    }
+  }
+
+  bool _isValidPackageName(String name) {
+    if (name.isEmpty) return false;
+    return RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(name);
   }
 
   Brick _resolveBrick(String template) {

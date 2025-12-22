@@ -13,8 +13,11 @@ dart pub global activate mcp_dart_cli
 ### Create a new project
 
 ```bash
-mcp_dart create <project_name>
+mcp_dart create <project_name> [directory]
 ```
+
+If `directory` is omitted, the project will be created in the current directory with the name `<project_name>`.
+
 
 ### Create from a specific template
 
