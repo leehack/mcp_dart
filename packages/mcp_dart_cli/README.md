@@ -16,6 +16,12 @@ dart pub global activate mcp_dart_cli
 mcp_dart create <project_name> [directory]
 ```
 
+Or simply specify the directory and let the CLI infer the project name:
+
+```bash
+mcp_dart create path/to/my_project
+```
+
 If `directory` is omitted, the project will be created in the current directory with the name `<project_name>`.
 
 

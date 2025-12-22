@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
@@ -10,15 +11,73 @@ class MockLogger extends Mock implements Logger {}
 
 class MockProgress extends Mock implements Progress {}
 
+class MockMasonGenerator extends Mock implements MasonGenerator {}
+
+class MockGeneratorTarget extends Mock implements GeneratorTarget {}
+
+class TestCreateCommand extends CreateCommand {
+  TestCreateCommand({
+    super.logger,
+    super.generatorFromBrick,
+  });
+
+  final List<List<String>> processCalls = [];
+
+  @override
+  Future<ProcessResult> runProcess(
+    String executable,
+    List<String> arguments, {
+    required String workingDirectory,
+  }) async {
+    processCalls.add([executable, ...arguments]);
+    return ProcessResult(0, 0, '', '');
+  }
+}
+
 void main() {
   group('CreateCommand', () {
     late Logger logger;
-    late CreateCommand command;
+    late MasonGenerator generator;
+    late TestCreateCommand command;
+    late CommandRunner<int> runner;
+    late Directory tempDir;
+    late Directory originalCwd;
+
+    setUpAll(() {
+      registerFallbackValue(DirectoryGeneratorTarget(Directory.current));
+      registerFallbackValue(Directory.current);
+    });
 
     setUp(() {
       logger = MockLogger();
-      command = CreateCommand(logger: logger);
+      generator = MockMasonGenerator();
+      tempDir = Directory.systemTemp.createTempSync('mcp_dart_cli_test');
+      originalCwd = Directory.current;
+      Directory.current = tempDir;
+
       when(() => logger.progress(any())).thenReturn(MockProgress());
+      when(() => logger.prompt(any(), defaultValue: any(named: 'defaultValue')))
+          .thenReturn('test_project');
+      when(
+        () => generator.generate(
+          any(),
+          vars: any(named: 'vars'),
+          fileConflictResolution: any(named: 'fileConflictResolution'),
+        ),
+      ).thenAnswer((_) async => []);
+
+      command = TestCreateCommand(
+        logger: logger,
+        generatorFromBrick: (_) async => generator,
+      );
+      runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
+    });
+
+    tearDown(() {
+      try {
+        Directory.current = originalCwd;
+        tempDir.deleteSync(recursive: true);
+      } catch (_) {}
     });
 
     test('can be instantiated', () {
@@ -30,62 +89,133 @@ void main() {
       expect(command.description, equals('Creates a new MCP server project.'));
     });
 
-    test('prompts for project name if not provided', () async {
-      final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
+    group('Argument Parsing', () {
+      test('prompts for project name if not provided (default path)', () async {
+        when(() =>
+                logger.prompt(any(), defaultValue: any(named: 'defaultValue')))
+            .thenReturn('my_prompted_pkg');
 
-      when(() => logger.prompt(any(), defaultValue: any(named: 'defaultValue')))
-          .thenReturn('test_project');
+        final result = await runner.run(['create']);
 
-      // We expect it to fail later because we are not mocking file system or mason
-      // fully, but we want to verify the prompt was called.
-      // Use a temp dir to avoid writing to the repo.
-      Directory.systemTemp.createTempSync('mcp_cli_test');
+        expect(result, equals(ExitCode.success.code));
 
-      // We mock the prompt return to be the PROJECT NAME, but the command
-      // logic for prompt is:
-      // packageName = prompt(...)
-      // projectPath = packageName
-      // So if we want to test that flow, it will try to create ./test_project.
+        verify(() => logger.prompt(
+              'What is the project name?',
+              defaultValue: 'mcp_server',
+            )).called(1);
 
-      // If we can't easily inject the path via the prompt flow (since prompt sets name AND path),
-      // we might want to just let it run and add a tearDown to delete it.
-      // Or we can mock the prompt to return a path if the command supported it, but the command uses the prompt result as name AND path in that branch.
+        verify(() => generator.generate(
+              any(
+                  that: isA<DirectoryGeneratorTarget>().having(
+                      (t) => t.dir.path,
+                      'dir.path',
+                      equals('my_prompted_pkg'))),
+              vars:
+                  any(named: 'vars', that: equals({'name': 'my_prompted_pkg'})),
+            )).called(1);
+      });
 
-      // Let's just use a try-finally to ensure cleanup, or accept it fails.
-      try {
-        await runner.run(['create']);
-      } catch (_) {
-        // Ignore errors
-      } finally {
-        final dir = Directory('test_project');
-        if (dir.existsSync()) {
-          dir.deleteSync(recursive: true);
-        }
-      }
+      test('uses explicit package name and default path', () async {
+        final result = await runner.run(['create', 'my_package']);
 
-      verify(() => logger.prompt(
-            'What is the project name?',
-            defaultValue: 'mcp_server',
-          )).called(1);
+        expect(result, equals(ExitCode.success.code));
+
+        verify(() => generator.generate(
+              any(
+                  that: isA<DirectoryGeneratorTarget>().having(
+                      (t) => t.dir.path, 'dir.path', equals('my_package'))),
+              vars: any(named: 'vars', that: equals({'name': 'my_package'})),
+            )).called(1);
+      });
+
+      test('uses explicit package name and explicit path', () async {
+        final projectDir = Directory('custom_dir');
+
+        final result =
+            await runner.run(['create', 'my_package', projectDir.path]);
+
+        expect(result, equals(ExitCode.success.code));
+
+        verify(() => generator.generate(
+              any(
+                  that: isA<DirectoryGeneratorTarget>().having(
+                      (t) => t.dir.path, 'dir.path', equals(projectDir.path))),
+              vars: any(named: 'vars', that: equals({'name': 'my_package'})),
+            )).called(1);
+
+        expect(
+            command.processCalls,
+            containsAllInOrder([
+              ['dart', 'pub', 'get'],
+              ['dart', 'pub', 'add', 'mcp_dart'],
+              ['dart', 'format', '.'],
+            ]));
+      });
+
+      test('infers package name from path (valid name)', () async {
+        final result = await runner.run(['create', 'valid_name']);
+
+        expect(result, equals(ExitCode.success.code));
+
+        verify(() => generator.generate(
+              any(),
+              vars: any(named: 'vars', that: equals({'name': 'valid_name'})),
+            )).called(1);
+      });
+
+      test('infers package name from path . (current dir)', () async {
+        final result = await runner.run(['create', '.']);
+
+        expect(result, equals(ExitCode.success.code));
+
+        verify(() => generator.generate(
+              any(
+                  that: isA<DirectoryGeneratorTarget>().having(
+                      (t) =>
+                          t.dir.path == '.' ||
+                          t.dir.path.endsWith('mcp_dart_cli_test') ||
+                          t.dir.path.contains('mcp_dart_cli_test'),
+                      'dir.path',
+                      isTrue)),
+              vars: any(named: 'vars', that: isA<Map<String, dynamic>>()),
+            )).called(1);
+      });
+
+      test('infers sanitized package name from path with dashes', () async {
+        final result = await runner.run(['create', './my-project']);
+
+        expect(result, equals(ExitCode.success.code));
+
+        verify(() => generator.generate(
+              any(),
+              vars: any(named: 'vars', that: equals({'name': 'my_project'})),
+            )).called(1);
+      });
+
+      test('infers sanitized package name from path starting with number',
+          () async {
+        final result = await runner.run(['create', './123test']);
+
+        expect(result, equals(ExitCode.success.code));
+
+        verify(() => generator.generate(
+              any(),
+              vars: any(named: 'vars', that: equals({'name': 'mcp_123test'})),
+            )).called(1);
+      });
     });
 
-    test('validates invalid package name', () async {
-      final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
-      final exitCode = await runner.run(['create', 'InvalidName']);
+    test('fails if directory exists and is not empty', () async {
+      final projectDir = Directory('${tempDir.path}/existing');
+      projectDir.createSync();
+      File('${projectDir.path}/file.txt').createSync();
 
-      expect(exitCode, equals(ExitCode.usage.code));
-      verify(() =>
-              logger.err(any(that: contains('is not a valid package name'))))
-          .called(1);
-    });
+      final result = await runner.run(['create', 'pkg', projectDir.path]);
 
-    test('validates valid package name', () async {
-      // This test would trigger side effects (network, FS), so we might just check that it DOESN'T error on validation.
-      // But verifying "does not error on validation" implies running the rest of the command.
-      // Use a flag or partial run? logic is inside run().
+      expect(result, equals(ExitCode.cantCreate.code));
+      verify(() => logger.err(any(that: contains('already exists')))).called(1);
 
-      // We can test the validation logic if we extracted it, but it is private.
-      // For now, let's assume if it passes validation it hits directory check or mason.
+      verifyNever(() => generator.generate(any(), vars: any(named: 'vars')));
     });
   });
 }

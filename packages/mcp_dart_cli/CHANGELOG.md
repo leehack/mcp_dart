@@ -1,3 +1,9 @@
+## 0.1.4
+
+- **`create` command**:
+  - Improved package name inference when creating a project from a path (e.g. `mcp_dart create ./my-project`).
+  - Internal refactoring for better testability.
+
 ## 0.1.3
 
 - **`create` command**:
