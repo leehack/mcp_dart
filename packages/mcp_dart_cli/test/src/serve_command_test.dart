@@ -28,29 +28,31 @@ void main() {
           equals('Runs the MCP server in the current directory.'));
     });
 
-    test('fails if pubspec.yaml is missing', () async {
-      final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
+    group('with temp directory', () {
+      late Directory tempDir;
+      late Directory originalCwd;
 
-      await IOOverrides.runZoned(
-        () async {
-          final tempDir = Directory.systemTemp.createTempSync();
-          addTearDown(() => tempDir.deleteSync(recursive: true));
+      setUp(() {
+        originalCwd = Directory.current;
+        tempDir = Directory.systemTemp.createTempSync();
+        tempDir = Directory(tempDir.resolveSymbolicLinksSync());
+        Directory.current = tempDir;
+      });
 
-          // We can't easily change Directory.current for the *code under test* unless we spawn a process or use IOOverrides to intercept File calls?
-          // No, IOOverrides intercepts `File()` but `File('foo')` still resolves relative to `Directory.current`.
+      tearDown(() {
+        Directory.current = originalCwd;
+        tempDir.deleteSync(recursive: true);
+      });
 
-          // Actually, `Directory.current` is settable.
-          final originalCwd = Directory.current;
-          Directory.current = tempDir;
-          addTearDown(() => Directory.current = originalCwd);
+      test('fails if pubspec.yaml is missing', () async {
+        final runner = CommandRunner<int>('mcp_dart', 'CLI')
+          ..addCommand(command);
+        final exitCode = await runner.run(['serve']);
 
-          final exitCode = await runner.run(['serve']);
-
-          expect(exitCode, equals(ExitCode.usage.code));
-          verify(() => logger.err(
-              'Error: pubspec.yaml not found in current directory.')).called(1);
-        },
-      );
+        expect(exitCode, equals(ExitCode.usage.code));
+        verify(() => logger.err(
+            'Error: pubspec.yaml not found in current directory.')).called(1);
+      });
     });
   });
 }

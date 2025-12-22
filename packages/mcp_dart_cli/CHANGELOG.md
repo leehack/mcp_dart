@@ -1,4 +1,11 @@
+## 0.1.5
+
+- **`update` command**:
+  - Update the CLI to the latest version via `mcp_dart update`.
+  - Automatic update checks on command execution.
+
 ## 0.1.4
+
 
 - **`create` command**:
   - Improved package name inference when creating a project from a path (e.g. `mcp_dart create ./my-project`).
