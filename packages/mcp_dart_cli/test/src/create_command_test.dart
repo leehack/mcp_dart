@@ -52,6 +52,7 @@ void main() {
       logger = MockLogger();
       generator = MockMasonGenerator();
       tempDir = Directory.systemTemp.createTempSync('mcp_dart_cli_test');
+      tempDir = Directory(tempDir.resolveSymbolicLinksSync());
       originalCwd = Directory.current;
       Directory.current = tempDir;
 

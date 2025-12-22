@@ -21,6 +21,7 @@ void main() {
       command = DoctorCommand(logger: logger);
       originalCwd = Directory.current;
       tempDir = Directory.systemTemp.createTempSync('doctor_test_');
+      tempDir = Directory(tempDir.resolveSymbolicLinksSync());
       Directory.current = tempDir;
     });
 

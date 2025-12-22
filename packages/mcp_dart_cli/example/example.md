@@ -147,3 +147,11 @@ mcp_dart inspect --url http://localhost:3000/mcp
 ```bash
 mcp_dart inspect --env API_KEY=your_key --env DEBUG=true -- python my_server.py
 ```
+
+## Updating the CLI
+
+Update to the latest version of `mcp_dart_cli`:
+
+```bash
+mcp_dart update
+```
