@@ -94,7 +94,7 @@ void main() async {
   // Create server instance
   final server = McpServer(
     Implementation(name: 'my-server', version: '1.0.0'),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         resources: ServerCapabilitiesResources(),
@@ -187,7 +187,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
   // Create client instance
-  final client = Client(
+  final client = McpClient(
     Implementation(name: 'my-client', version: '1.0.0'),
   );
 
@@ -215,13 +215,13 @@ void main() async {
 
   // Read a resource
   final resource = await client.readResource(
-    ReadResourceRequestParams(uri: Uri.parse('status://server')),
+    ReadResourceRequest(uri: Uri.parse('status://server')),
   );
   print('Resource: ${resource.contents.first.text}');
 
   // Get a prompt
   final prompt = await client.getPrompt(
-    GetPromptRequestParams(
+    GetPromptRequest(
       name: 'code-review',
       arguments: {'language': 'Dart'},
     ),
@@ -371,7 +371,7 @@ server.registerTool(
 
     // Request user confirmation
     final result = await extra.server.elicitInput(
-      ElicitRequestParams(
+      ElicitRequest(
         message: 'Are you sure you want to delete $path?',
         schema: JsonSchema.object(
           properties: {
@@ -418,7 +418,7 @@ NEW in 1.1.0: Enhanced `McpServer` capabilities:
 // 1. Error Handler
 final server = McpServer(
   implementation,
-  options: ServerOptions(
+  options: McpServerOptions(
     onError: (error) {
       print('Server error: $error');
     },
@@ -490,7 +490,7 @@ server.registerTool(
       if (progressToken != null) {
         await extra.sendNotification(
           JsonRpcProgressNotification(
-            progressParams: ProgressNotificationParams(
+            progressParams: ProgressNotification(
               progress: i,
               total: 100,
               progressToken: progressToken,
@@ -557,7 +557,7 @@ final server = McpServer(/* ... */);
 await server.connect(StdioServerTransport());
 
 // Client
-final client = Client(/* ... */);
+final client = McpClient(/* ... */);
 await client.connect(StdioClientTransport(
   StdioServerParameters(
     command: 'dart',
@@ -582,7 +582,7 @@ await server.connect(transport);
 // await transport.handleRequest(request);
 
 // Client
-final client = Client(/* ... */);
+final client = McpClient(/* ... */);
 await client.connect(StreamableHTTPClientTransport(
   Uri.parse('http://localhost:3000'),
 ));
@@ -604,7 +604,7 @@ await server.connect(IOStreamTransport(
 ));
 
 // Client
-final client = Client(/* ... */);
+final client = McpClient(/* ... */);
 await client.connect(IOStreamTransport(
   stream: s2c.stream,
   sink: c2s.sink,
@@ -805,7 +805,7 @@ test('tool execution', () async {
     sink: s2c.sink,
   ));
 
-  final client = Client(
+  final client = McpClient(
     Implementation(name: 'test', version: '1.0.0'),
   );
 

@@ -23,7 +23,7 @@ Complete guide to building MCP clients with the Dart SDK.
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
-  final client = Client(
+  final client = McpClient(
     Implementation(
       name: 'my-client',
       version: '1.0.0',
@@ -49,7 +49,7 @@ void main() async {
 ### Client Configuration Options
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(
     name: 'my-client',
     version: '1.0.0',
@@ -65,7 +65,7 @@ final client = Client(
 Declare what your client supports:
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(
     name: 'my-client',
     version: '1.0.0',
@@ -202,7 +202,7 @@ for (final resource in response.resources) {
 ```dart
 // Read specific resource
 final result = await client.readResource(
-  ReadResourceRequestParams(
+  ReadResourceRequest(
     uri: 'file:///docs/readme.md',
   ),
 );
@@ -224,7 +224,7 @@ for (final content in result.contents) {
 ```dart
 // Subscribe to changes
 await client.subscribeResource(
-  SubscribeRequestParams(
+  SubscribeRequest(
     uri: 'file:///data/metrics.json',
   ),
 );
@@ -235,7 +235,7 @@ client.onResourceUpdated = (notification) {
 
   // Re-read the resource
   client.readResource(
-    ReadResourceRequestParams(
+    ReadResourceRequest(
       uri: notification.uri,
     ),
   ).then((result) {
@@ -245,7 +245,7 @@ client.onResourceUpdated = (notification) {
 
 // Unsubscribe when done
 await client.unsubscribeResource(
-  UnsubscribeRequestParams(
+  UnsubscribeRequest(
     uri: 'file:///data/metrics.json',
   ),
 );
@@ -266,7 +266,7 @@ for (final resource in response.resources) {
 
 // Read from template
 final result = await client.readResource(
-  ReadResourceRequestParams(
+  ReadResourceRequest(
     uri: 'users://alice/profile',  // Expands template
   ),
 );
@@ -299,7 +299,7 @@ for (final prompt in response.prompts) {
 ```dart
 // Get prompt without arguments
 final result = await client.getPrompt(
-  GetPromptRequestParams(
+  GetPromptRequest(
     name: 'code-review',
   ),
 );
@@ -315,7 +315,7 @@ for (final message in result.messages) {
 ```dart
 // Get prompt with arguments
 final result = await client.getPrompt(
-  GetPromptRequestParams(
+  GetPromptRequest(
     name: 'translate',
     arguments: {
       'target_language': 'Spanish',
@@ -334,7 +334,7 @@ for (final message in result.messages) {
 
 ```dart
 final result = await client.getPrompt(
-  GetPromptRequestParams(
+  GetPromptRequest(
     name: 'analyze-file',
     arguments: {'file_uri': 'file:///data.json'},
   ),
@@ -349,7 +349,7 @@ for (final message in result.messages) {
     // Resolve the embedded resource
     final resourceUri = content.resource.uri;
     final resourceData = await client.readResource(
-      ReadResourceRequestParams(uri: resourceUri),
+      ReadResourceRequest(uri: resourceUri),
     );
     print('Embedded: ${resourceData.contents.first.text}');
   }
@@ -361,7 +361,7 @@ for (final message in result.messages) {
 Handle LLM sampling requests from the server (server asking client to use an LLM):
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(
     name: 'my-client',
     version: '1.0.0',
@@ -412,7 +412,7 @@ Get argument completion suggestions:
 ```dart
 // Complete resource template variable
 final result = await client.complete(
-  CompleteRequestParams(
+  CompleteRequest(
     ref: CompletionReference(
       type: CompletionReferenceType.resourceRef,
       uri: 'users://{userId}/profile',
@@ -437,7 +437,7 @@ if (result.completion.hasMore == true) {
 ```dart
 // Complete prompt argument
 final result = await client.complete(
-  CompleteRequestParams(
+  CompleteRequest(
     ref: CompletionReference(
       type: CompletionReferenceType.promptRef,
       name: 'translate',
@@ -460,7 +460,7 @@ for (final lang in result.completion.values) {
 Roots are filesystem locations the client exposes to the server:
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(
     name: 'my-client',
     version: '1.0.0',
@@ -499,7 +499,7 @@ await client.sendRootsListChanged();
 ```dart
 // Set server's logging level
 await client.setLoggingLevel(
-  SetLevelRequestParams(
+  SetLevelRequest(
     level: LoggingLevel.debug,
   ),
 );
@@ -538,7 +538,7 @@ await client.close();
 ### Reconnection Logic
 
 ```dart
-Future<void> connectWithRetry(Client client, Transport transport) async {
+Future<void> connectWithRetry(McpClient client, Transport transport) async {
   var retries = 0;
   const maxRetries = 3;
 
@@ -608,7 +608,7 @@ print('  ${prompts.prompts.length} prompts');
 
 ```dart
 Future<CallToolResult?> callToolSafely(
-  Client client,
+  McpClient client,
   String toolName,
   Map<String, dynamic> args,
 ) async {
@@ -645,7 +645,7 @@ Future<CallToolResult?> callToolSafely(
 
 ```dart
 // Set up all notification handlers
-void setupNotifications(Client client) {
+void setupNotifications(McpClient client) {
   // Resource updates
   client.onResourceUpdated = (notification) {
     print('Resource updated: ${notification.uri}');
@@ -704,7 +704,7 @@ try {
 
 ```dart
 Future<void> useClient() async {
-  final client = Client(
+  final client = McpClient(
     Implementation(name: 'client', version: '1.0.0'),
   );
 
@@ -751,14 +751,14 @@ processResult(result);
 ```dart
 // ✅ Good
 if (client.serverCapabilities?.resources?.subscribe == true) {
-  await client.subscribeResource(SubscribeRequestParams(uri: uri));
+  await client.subscribeResource(SubscribeRequest(uri: uri));
 } else {
   // Fallback: poll for changes
   pollResourceForChanges(uri);
 }
 
 // ❌ Bad - assume capability exists
-await client.subscribeResource(SubscribeRequestParams(uri: uri));
+await client.subscribeResource(SubscribeRequest(uri: uri));
 ```
 
 ### 4. Use Progress for Long Operations
@@ -798,14 +798,14 @@ final subscriptions = <String>{};
 
 Future<void> subscribe(String uri) async {
   if (!subscriptions.contains(uri)) {
-    await client.subscribeResource(SubscribeRequestParams(uri: uri));
+    await client.subscribeResource(SubscribeRequest(uri: uri));
     subscriptions.add(uri);
   }
 }
 
 Future<void> unsubscribe(String uri) async {
   if (subscriptions.contains(uri)) {
-    await client.unsubscribeResource(UnsubscribeRequestParams(uri: uri));
+    await client.unsubscribeResource(UnsubscribeRequest(uri: uri));
     subscriptions.remove(uri);
   }
 }
@@ -814,7 +814,7 @@ Future<void> unsubscribe(String uri) async {
 Future<void> cleanUp() async {
   await Future.wait(
     subscriptions.map((uri) =>
-      client.unsubscribeResource(UnsubscribeRequestParams(uri: uri)),
+      client.unsubscribeResource(UnsubscribeRequest(uri: uri)),
     ),
   );
   subscriptions.clear();

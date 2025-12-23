@@ -214,7 +214,7 @@ class SamplingMessage {
 enum IncludeContext { none, thisServer, allServers }
 
 /// Parameters for the `sampling/createMessage` request.
-class CreateMessageRequestParams {
+class CreateMessageRequest {
   /// The sequence of messages for the LLM prompt.
   final List<SamplingMessage> messages;
 
@@ -245,7 +245,7 @@ class CreateMessageRequestParams {
   /// Optional tool choice configuration.
   final Map<String, dynamic>? toolChoice;
 
-  const CreateMessageRequestParams({
+  const CreateMessageRequest({
     required this.messages,
     this.systemPrompt,
     this.includeContext,
@@ -258,9 +258,9 @@ class CreateMessageRequestParams {
     this.toolChoice,
   });
 
-  factory CreateMessageRequestParams.fromJson(Map<String, dynamic> json) {
+  factory CreateMessageRequest.fromJson(Map<String, dynamic> json) {
     final ctxStr = json['includeContext'] as String?;
-    return CreateMessageRequestParams(
+    return CreateMessageRequest(
       messages: (json['messages'] as List<dynamic>?)
               ?.map((m) => SamplingMessage.fromJson(m as Map<String, dynamic>))
               .toList() ??
@@ -303,7 +303,7 @@ class CreateMessageRequestParams {
 /// Request sent from server to client to sample an LLM.
 class JsonRpcCreateMessageRequest extends JsonRpcRequest {
   /// The create message parameters.
-  final CreateMessageRequestParams createParams;
+  final CreateMessageRequest createParams;
 
   JsonRpcCreateMessageRequest({
     required super.id,
@@ -322,7 +322,7 @@ class JsonRpcCreateMessageRequest extends JsonRpcRequest {
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcCreateMessageRequest(
       id: json['id'],
-      createParams: CreateMessageRequestParams.fromJson(paramsMap),
+      createParams: CreateMessageRequest.fromJson(paramsMap),
       meta: meta,
     );
   }
@@ -393,3 +393,7 @@ class CreateMessageResult implements BaseResultData {
         'content': content.toJson(),
       };
 }
+
+/// Deprecated alias for [CreateMessageRequest].
+@Deprecated('Use CreateMessageRequest instead')
+typedef CreateMessageRequestParams = CreateMessageRequest;

@@ -48,7 +48,7 @@ extension SchemaExtension on Schema {
 /// A client for interacting with an MCP server and Google's Generative AI API.
 class GoogleMcpClient {
   /// The MCP client instance.
-  final mcp_dart.Client mcp;
+  final mcp_dart.McpClient mcp;
 
   /// The Generative AI model instance.
   final GenerativeModel model;

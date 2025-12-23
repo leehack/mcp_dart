@@ -64,7 +64,7 @@ class RequestOptions {
   final Duration? maxTotalTimeout;
 
   /// Augments the request with task creation parameters.
-  final TaskCreationParams? task;
+  final TaskCreation? task;
 
   /// Associates this request with a related task.
   final RelatedTaskMetadata? relatedTask;
@@ -954,7 +954,7 @@ abstract class Protocol {
 
       final cancelReason = reason?.toString() ?? 'Request cancelled';
       final notification = JsonRpcCancelledNotification(
-        cancelParams: CancelledNotificationParams(
+        cancelParams: CancelledNotification(
           requestId: messageId,
           reason: cancelReason,
         ),
@@ -1284,7 +1284,7 @@ abstract class Protocol {
         final currentTask = await request<Task>(
           JsonRpcGetTaskRequest(
             id: 0, // ID will be overwritten
-            getParams: GetTaskRequestParams(taskId: taskId),
+            getParams: GetTaskRequest(taskId: taskId),
           ),
           (json) => Task.fromJson(json),
           options,
@@ -1296,7 +1296,7 @@ abstract class Protocol {
             final result = await request<T>(
               JsonRpcTaskResultRequest(
                 id: 0,
-                resultParams: TaskResultRequestParams(taskId: taskId),
+                resultParams: TaskResultRequest(taskId: taskId),
               ),
               resultFactory,
               options,
@@ -1319,7 +1319,7 @@ abstract class Protocol {
           final result = await request<T>(
             JsonRpcTaskResultRequest(
               id: 0,
-              resultParams: TaskResultRequestParams(taskId: taskId),
+              resultParams: TaskResultRequest(taskId: taskId),
             ),
             resultFactory,
             options,
@@ -1451,7 +1451,7 @@ class _RequestTaskStoreImpl implements RequestTaskStore {
   );
 
   @override
-  Future<Task> createTask(TaskCreationParams taskParams) {
+  Future<Task> createTask(TaskCreation taskParams) {
     return _store.createTask(
       taskParams,
       _request.id,
@@ -1482,7 +1482,7 @@ class _RequestTaskStoreImpl implements RequestTaskStore {
     final task = await _store.getTask(taskId, _sessionId);
     if (task != null) {
       final notification = JsonRpcTaskStatusNotification(
-        statusParams: TaskStatusNotificationParams(
+        statusParams: TaskStatusNotification(
           taskId: task.taskId,
           status: task.status,
           statusMessage: task.statusMessage,
@@ -1528,7 +1528,7 @@ class _RequestTaskStoreImpl implements RequestTaskStore {
     final updatedTask = await _store.getTask(taskId, _sessionId);
     if (updatedTask != null) {
       final notification = JsonRpcTaskStatusNotification(
-        statusParams: TaskStatusNotificationParams(
+        statusParams: TaskStatusNotification(
           taskId: updatedTask.taskId,
           status: updatedTask.status,
           statusMessage: updatedTask.statusMessage,

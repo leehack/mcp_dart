@@ -5,7 +5,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 Future<void> main() async {
   final mcpServer = McpServer(
     const Implementation(name: "example-dart-server", version: "1.0.0"),
-    options: const ServerOptions(capabilities: ServerCapabilities()),
+    options: const McpServerOptions(capabilities: ServerCapabilities()),
   );
 
   mcpServer.registerTool(

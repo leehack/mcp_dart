@@ -6,7 +6,7 @@ import 'package:mcp_dart/mcp_dart.dart' as mcp_dart;
 
 /// A client for interacting with an MCP server and Anthropic's API.
 class AnthropicMcpClient {
-  final mcp_dart.Client mcp;
+  final mcp_dart.McpClient mcp;
   final AnthropicClient anthropic;
   mcp_dart.StdioClientTransport? transport;
   List<Tool> tools = [];

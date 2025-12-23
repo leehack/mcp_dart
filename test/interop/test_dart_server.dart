@@ -158,7 +158,7 @@ McpServer createServer() {
       try {
         final message = args['message'] as String;
         final result = await server.server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: message,
             requestedSchema: JsonSchema.object(
               properties: {
@@ -196,7 +196,7 @@ McpServer createServer() {
       try {
         final prompt = args['prompt'] as String;
         final result = await server.server.createMessage(
-          CreateMessageRequestParams(
+          CreateMessageRequest(
             messages: [
               SamplingMessage(
                 role: SamplingMessageRole.user,
@@ -246,7 +246,7 @@ McpServer createServer() {
           await extra.sendNotification(
             // Fixed to use extra.sendNotification
             JsonRpcProgressNotification(
-              progressParams: ProgressNotificationParams(
+              progressParams: ProgressNotification(
                 progressToken: progressToken,
                 progress: progress,
                 total: 100,

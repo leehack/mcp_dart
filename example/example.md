@@ -8,7 +8,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 void main() async {
   McpServer server = McpServer(
     Implementation(name: "example-server", version: "1.0.0"),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         resources: ServerCapabilitiesResources(),
         tools: ServerCapabilitiesTools(),
@@ -62,7 +62,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 void main() async {
   final server = McpServer(
     Implementation(name: "example-http-server", version: "1.0.0"),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),

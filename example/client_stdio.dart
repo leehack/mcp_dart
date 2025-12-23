@@ -31,7 +31,7 @@ Future<void> main() async {
       const Implementation(name: 'ExampleClient', version: '1.0.0');
 
   // Create the MCP client
-  final client = Client(clientInfo);
+  final client = McpClient(clientInfo);
 
   // Set up error and close handlers
   transport.onerror = (error) {
@@ -76,13 +76,13 @@ Future<void> main() async {
 
     print('Calling a tool...');
     final resourceResult = await client.readResource(
-      const ReadResourceRequestParams(uri: 'file:///logs'),
+      const ReadResourceRequest(uri: 'file:///logs'),
     );
     print('Tool result: ${resourceResult.toJson()}');
 
     print('Calling a prompt...');
     final promptResult = await client.getPrompt(
-      const GetPromptRequestParams(
+      const GetPromptRequest(
         name: 'analyze-code',
         arguments: {'language': "python"},
       ),

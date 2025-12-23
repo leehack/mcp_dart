@@ -8,7 +8,7 @@ Future<McpServer> getServer() async {
       name: "example-dart-iostream-server",
       version: "1.0.0",
     ),
-    options: const ServerOptions(capabilities: ServerCapabilities()),
+    options: const McpServerOptions(capabilities: ServerCapabilities()),
   );
 
   mcpServer.registerTool(

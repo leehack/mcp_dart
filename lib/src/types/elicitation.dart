@@ -20,7 +20,12 @@ enum ElicitationMode {
 /// Supports two modes:
 /// - **Form mode**: Collects structured data directly through the MCP client
 /// - **URL mode**: Directs users to external URLs for sensitive interactions
-class ElicitRequestParams {
+/// Parameters for the `elicitation/create` request.
+///
+/// Supports two modes:
+/// - **Form mode**: Collects structured data directly through the MCP client
+/// - **URL mode**: Directs users to external URLs for sensitive interactions
+class ElicitRequest {
   /// The mode of elicitation. Defaults to 'form' if omitted (for backwards compatibility).
   final ElicitationMode? mode;
 
@@ -39,7 +44,7 @@ class ElicitRequestParams {
   /// Required for URL mode to correlate with completion notifications.
   final String? elicitationId;
 
-  const ElicitRequestParams({
+  const ElicitRequest({
     this.mode,
     required this.message,
     this.requestedSchema,
@@ -48,7 +53,7 @@ class ElicitRequestParams {
   });
 
   /// Creates form mode elicitation parameters.
-  const ElicitRequestParams.form({
+  const ElicitRequest.form({
     required this.message,
     required ElicitationInputSchema this.requestedSchema,
   })  : mode = ElicitationMode.form,
@@ -56,20 +61,20 @@ class ElicitRequestParams {
         elicitationId = null;
 
   /// Creates URL mode elicitation parameters.
-  const ElicitRequestParams.url({
+  const ElicitRequest.url({
     required this.message,
     required String this.url,
     required String this.elicitationId,
   })  : mode = ElicitationMode.url,
         requestedSchema = null;
 
-  factory ElicitRequestParams.fromJson(Map<String, dynamic> json) {
+  factory ElicitRequest.fromJson(Map<String, dynamic> json) {
     final modeStr = json['mode'] as String?;
     ElicitationMode? mode;
     if (modeStr != null) {
       mode = ElicitationMode.values.byName(modeStr);
     }
-    return ElicitRequestParams(
+    return ElicitRequest(
       mode: mode,
       message: json['message'] as String,
       requestedSchema: json['requestedSchema'] != null
@@ -99,7 +104,7 @@ class ElicitRequestParams {
 /// Request sent from server to client to elicit user input
 class JsonRpcElicitRequest extends JsonRpcRequest {
   /// The elicit parameters
-  final ElicitRequestParams elicitParams;
+  final ElicitRequest elicitParams;
 
   JsonRpcElicitRequest({
     required super.id,
@@ -115,7 +120,7 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcElicitRequest(
       id: json['id'],
-      elicitParams: ElicitRequestParams.fromJson(paramsMap),
+      elicitParams: ElicitRequest.fromJson(paramsMap),
       meta: meta,
     );
   }
@@ -180,14 +185,18 @@ class ElicitResult implements BaseResultData {
 ///
 /// Sent by servers when an out-of-band interaction started by URL mode
 /// elicitation is completed.
-class ElicitationCompleteParams {
+/// Parameters for the `notifications/elicitation/complete` notification.
+///
+/// Sent by servers when an out-of-band interaction started by URL mode
+/// elicitation is completed.
+class ElicitationCompleteNotification {
   /// The unique identifier for the elicitation, matching the original request.
   final String elicitationId;
 
-  const ElicitationCompleteParams({required this.elicitationId});
+  const ElicitationCompleteNotification({required this.elicitationId});
 
-  factory ElicitationCompleteParams.fromJson(Map<String, dynamic> json) {
-    return ElicitationCompleteParams(
+  factory ElicitationCompleteNotification.fromJson(Map<String, dynamic> json) {
+    return ElicitationCompleteNotification(
       elicitationId: json['elicitationId'] as String,
     );
   }
@@ -201,7 +210,7 @@ class ElicitationCompleteParams {
 /// interaction (started via URL mode elicitation) is completed.
 class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
   /// The notification parameters containing the elicitation ID.
-  final ElicitationCompleteParams completeParams;
+  final ElicitationCompleteNotification completeParams;
 
   JsonRpcElicitationCompleteNotification({
     required this.completeParams,
@@ -222,7 +231,7 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcElicitationCompleteNotification(
-      completeParams: ElicitationCompleteParams.fromJson(paramsMap),
+      completeParams: ElicitationCompleteNotification.fromJson(paramsMap),
       meta: meta,
     );
   }
@@ -235,7 +244,7 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
 class URLElicitationRequiredErrorData {
   /// List of elicitations that are required to complete.
   /// All elicitations MUST be URL mode and have an elicitationId.
-  final List<ElicitRequestParams> elicitations;
+  final List<ElicitRequest> elicitations;
 
   const URLElicitationRequiredErrorData({required this.elicitations});
 
@@ -243,7 +252,7 @@ class URLElicitationRequiredErrorData {
     final elicitationsList = json['elicitations'] as List<dynamic>? ?? [];
     return URLElicitationRequiredErrorData(
       elicitations: elicitationsList
-          .map((e) => ElicitRequestParams.fromJson(e as Map<String, dynamic>))
+          .map((e) => ElicitRequest.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }
@@ -252,3 +261,11 @@ class URLElicitationRequiredErrorData {
         'elicitations': elicitations.map((e) => e.toJson()).toList(),
       };
 }
+
+/// Deprecated alias for [ElicitRequest].
+@Deprecated('Use ElicitRequest instead')
+typedef ElicitRequestParams = ElicitRequest;
+
+/// Deprecated alias for [ElicitationCompleteNotification].
+@Deprecated('Use ElicitationCompleteNotification instead')
+typedef ElicitationCompleteParams = ElicitationCompleteNotification;

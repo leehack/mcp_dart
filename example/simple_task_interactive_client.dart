@@ -41,7 +41,7 @@ String getTextContent(CallToolResult result) {
   return textContent?.text ?? '(no text)';
 }
 
-Future<ElicitResult> elicitationCallback(ElicitRequestParams params) async {
+Future<ElicitResult> elicitationCallback(ElicitRequest params) async {
   // Give the polling loop a chance to print the status update
   await Future.delayed(const Duration(milliseconds: 200));
 
@@ -59,7 +59,7 @@ Future<ElicitResult> elicitationCallback(ElicitRequestParams params) async {
 }
 
 Future<CreateMessageResult> samplingCallback(
-  CreateMessageRequestParams params,
+  CreateMessageRequest params,
 ) async {
   // Give the polling loop a chance to print the status update
   await Future.delayed(const Duration(milliseconds: 200));
@@ -96,12 +96,12 @@ Future<void> run(String url) async {
   print('Connecting to $url...');
 
   // Create client with elicitation and sampling capabilities
-  final client = Client(
+  final client = McpClient(
     const Implementation(
       name: 'simple-task-interactive-client',
       version: '1.0.0',
     ),
-    options: const ClientOptions(
+    options: const McpClientOptions(
       capabilities: ClientCapabilities(
         elicitation: ClientElicitation.formOnly(),
         sampling: ClientCapabilitiesSampling(),

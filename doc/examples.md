@@ -439,7 +439,7 @@ final response = await makeAuthenticatedRequest(
 ```dart
 // Argument completion
 final result = await client.complete(
-  CompleteRequestParams(
+  CompleteRequest(
     ref: CompletionReference(
       type: CompletionReferenceType.resourceRef,
       uri: 'users://{userId}/profile',
@@ -497,7 +497,7 @@ test('tool execution', () async {
   ));
 
   // Create client
-  final client = Client(
+  final client = McpClient(
     Implementation(name: 'test', version: '1.0.0'),
   );
 

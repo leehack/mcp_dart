@@ -21,7 +21,7 @@ class _RawResult implements BaseResultData {
 /// which may either return an immediate result or create a long-running task.
 /// It handles polling for task status and retrieving the final result.
 class TaskClient {
-  final Client client;
+  final McpClient client;
 
   TaskClient(this.client);
 
@@ -145,7 +145,7 @@ class TaskClient {
   Future<Task> _getTask(String taskId) async {
     final req = JsonRpcGetTaskRequest(
       id: -1,
-      getParams: GetTaskRequestParams(taskId: taskId),
+      getParams: GetTaskRequest(taskId: taskId),
     );
 
     return await client.request<Task>(
@@ -157,7 +157,7 @@ class TaskClient {
   Future<CallToolResult> _getTaskResult(String taskId) async {
     final req = JsonRpcTaskResultRequest(
       id: -1,
-      resultParams: TaskResultRequestParams(taskId: taskId),
+      resultParams: TaskResultRequest(taskId: taskId),
     );
     return await client.request<CallToolResult>(
       req,
@@ -179,7 +179,7 @@ class TaskClient {
   Future<void> cancelTask(String taskId) async {
     final req = JsonRpcCancelTaskRequest(
       id: -1,
-      cancelParams: CancelTaskRequestParams(taskId: taskId),
+      cancelParams: CancelTaskRequest(taskId: taskId),
     );
     await client.request<EmptyResult>(
       req,

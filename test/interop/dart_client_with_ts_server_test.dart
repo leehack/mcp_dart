@@ -25,7 +25,7 @@ void main() {
 
     group('Stdio', () {
       late StdioClientTransport transport;
-      late Client client;
+      late McpClient client;
 
       setUp(() async {
         // 1. Create the StdioClientTransport with server parameters
@@ -38,9 +38,9 @@ void main() {
         );
 
         // 2. Create the Client instance, which will use this transport
-        client = Client(
+        client = McpClient(
           const Implementation(name: 'dart-test', version: '1.0'),
-          options: const ClientOptions(
+          options: const McpClientOptions(
             capabilities: ClientCapabilities(),
           ),
         );
@@ -74,7 +74,7 @@ void main() {
 
       test('resources', () async {
         final result = await client.readResource(
-          ReadResourceRequestParams(
+          ReadResourceRequest(
             uri: Uri.parse('resource://test').toString(),
           ),
         );
@@ -86,7 +86,7 @@ void main() {
 
       test('prompts', () async {
         final result = await client.getPrompt(
-          const GetPromptRequestParams(name: 'test_prompt', arguments: {}),
+          const GetPromptRequest(name: 'test_prompt', arguments: {}),
         );
         expect(result.messages.first.content, isA<TextContent>());
         expect(
@@ -98,7 +98,7 @@ void main() {
 
     group('HTTP', () {
       late StreamableHttpClientTransport transport;
-      late Client client;
+      late McpClient client;
       late io.Process serverProcess;
       final port = 3001;
 
@@ -119,9 +119,9 @@ void main() {
         );
 
         // 3. Create the Client instance
-        client = Client(
+        client = McpClient(
           const Implementation(name: 'dart-test', version: '1.0'),
-          options: const ClientOptions(
+          options: const McpClientOptions(
             capabilities: ClientCapabilities(),
           ),
         );

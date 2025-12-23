@@ -13,7 +13,7 @@ void main() async {
   // Server declares completions support explicitly per 2025-06-18 spec
   final server = McpServer(
     const Implementation(name: "completions-demo", version: "1.0.0"),
-    options: const ServerOptions(
+    options: const McpServerOptions(
       capabilities: ServerCapabilities(
         completions: ServerCapabilitiesCompletions(),
         resources: ServerCapabilitiesResources(),

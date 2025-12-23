@@ -7,16 +7,20 @@ import 'package:mcp_dart/src/types.dart';
 
 final _logger = Logger("mcp_dart.client");
 
-/// Options for configuring the MCP [Client].
-class ClientOptions extends ProtocolOptions {
+/// Options for configuring the MCP [McpClient].
+class McpClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
-  const ClientOptions({
+  const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
   });
 }
+
+/// Deprecated alias for [McpClientOptions].
+@Deprecated('Use McpClientOptions instead')
+typedef ClientOptions = McpClientOptions;
 
 /// Recursively applies default values from a JSON Schema to a data object.
 /// Recursively applies default values from a JSON Schema to a data object.
@@ -64,7 +68,7 @@ dynamic _deepCopy(dynamic value) {
 ///
 /// Handles the initialization handshake with the server upon connection
 /// and provides methods for making standard MCP requests.
-class Client extends Protocol {
+class McpClient extends Protocol {
   ServerCapabilities? _serverCapabilities;
   Implementation? _serverVersion;
   ClientCapabilities _capabilities;
@@ -79,23 +83,23 @@ class Client extends Protocol {
   /// This will be called when the server sends an `elicitation/create` request
   /// to collect structured user input. The client should prompt the user
   /// and return an [ElicitResult] with the action taken and content provided.
-  Future<ElicitResult> Function(ElicitRequestParams)? onElicitRequest;
+  Future<ElicitResult> Function(ElicitRequest)? onElicitRequest;
 
   /// Callback for handling task status notifications from the server.
-  FutureOr<void> Function(TaskStatusNotificationParams params)? onTaskStatus;
+  FutureOr<void> Function(TaskStatusNotification params)? onTaskStatus;
 
   /// Callback for handling sampling requests from the server.
   ///
   /// This will be called when the server sends a `sampling/createMessage` request
   /// to request an LLM completion from the client.
-  Future<CreateMessageResult> Function(CreateMessageRequestParams params)?
+  Future<CreateMessageResult> Function(CreateMessageRequest params)?
       onSamplingRequest;
 
   /// Initializes this client with its implementation details and options.
   ///
   /// - [_clientInfo]: Information about this client's name and version.
   /// - [options]: Optional configuration settings including client capabilities.
-  Client(this._clientInfo, {ClientOptions? options})
+  McpClient(this._clientInfo, {McpClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         super(options) {
     // Register elicit handler if capability is present
@@ -126,7 +130,7 @@ class Client extends Protocol {
         },
         (id, params, meta) => JsonRpcElicitRequest(
           id: id,
-          elicitParams: ElicitRequestParams.fromJson(params ?? {}),
+          elicitParams: ElicitRequest.fromJson(params ?? {}),
           meta: meta,
         ),
       );
@@ -140,7 +144,7 @@ class Client extends Protocol {
           await onTaskStatus?.call(notification.statusParams);
         },
         (params, meta) => JsonRpcTaskStatusNotification(
-          statusParams: TaskStatusNotificationParams.fromJson(params ?? {}),
+          statusParams: TaskStatusNotification.fromJson(params ?? {}),
           meta: meta,
         ),
       );
@@ -161,7 +165,7 @@ class Client extends Protocol {
         },
         (id, params, meta) => JsonRpcCreateMessageRequest(
           id: id,
-          createParams: CreateMessageRequestParams.fromJson(params ?? {}),
+          createParams: CreateMessageRequest.fromJson(params ?? {}),
           meta: meta,
         ),
       );
@@ -195,7 +199,7 @@ class Client extends Protocol {
     }
 
     try {
-      final initParams = InitializeRequestParams(
+      final initParams = InitializeRequest(
         protocolVersion: latestProtocolVersion,
         capabilities: _capabilities,
         clientInfo: _clientInfo,
@@ -379,7 +383,7 @@ class Client extends Protocol {
 
   /// Sends a `completion/complete` request to the server for argument completion.
   Future<CompleteResult> complete(
-    CompleteRequestParams params, [
+    CompleteRequest params, [
     RequestOptions? options,
   ]) {
     final req = JsonRpcCompleteRequest(id: -1, completeParams: params);
@@ -395,14 +399,14 @@ class Client extends Protocol {
     LoggingLevel level, [
     RequestOptions? options,
   ]) {
-    final params = SetLevelRequestParams(level: level);
+    final params = SetLevelRequest(level: level);
     final req = JsonRpcSetLevelRequest(id: -1, setParams: params);
     return request<EmptyResult>(req, (json) => const EmptyResult(), options);
   }
 
   /// Sends a `prompts/get` request to retrieve a specific prompt/template.
   Future<GetPromptResult> getPrompt(
-    GetPromptRequestParams params, [
+    GetPromptRequest params, [
     RequestOptions? options,
   ]) {
     final req = JsonRpcGetPromptRequest(id: -1, getParams: params);
@@ -415,7 +419,7 @@ class Client extends Protocol {
 
   /// Sends a `prompts/list` request to list available prompts/templates.
   Future<ListPromptsResult> listPrompts({
-    ListPromptsRequestParams? params,
+    ListPromptsRequest? params,
     RequestOptions? options,
   }) {
     final req = JsonRpcListPromptsRequest(id: -1, params: params);
@@ -428,7 +432,7 @@ class Client extends Protocol {
 
   /// Sends a `resources/list` request to list available resources.
   Future<ListResourcesResult> listResources({
-    ListResourcesRequestParams? params,
+    ListResourcesRequest? params,
     RequestOptions? options,
   }) {
     final req = JsonRpcListResourcesRequest(id: -1, params: params);
@@ -441,7 +445,7 @@ class Client extends Protocol {
 
   /// Sends a `resources/templates/list` request to list available resource templates.
   Future<ListResourceTemplatesResult> listResourceTemplates({
-    ListResourceTemplatesRequestParams? params,
+    ListResourceTemplatesRequest? params,
     RequestOptions? options,
   }) {
     final req = JsonRpcListResourceTemplatesRequest(id: -1, params: params);
@@ -454,7 +458,7 @@ class Client extends Protocol {
 
   /// Sends a `resources/read` request to read the content of a resource.
   Future<ReadResourceResult> readResource(
-    ReadResourceRequestParams params, [
+    ReadResourceRequest params, [
     RequestOptions? options,
   ]) {
     final req = JsonRpcReadResourceRequest(id: -1, readParams: params);
@@ -467,7 +471,7 @@ class Client extends Protocol {
 
   /// Sends a `resources/subscribe` request to subscribe to updates for a resource.
   Future<EmptyResult> subscribeResource(
-    SubscribeRequestParams params, [
+    SubscribeRequest params, [
     RequestOptions? options,
   ]) {
     final req = JsonRpcSubscribeRequest(id: -1, subParams: params);
@@ -476,7 +480,7 @@ class Client extends Protocol {
 
   /// Sends a `resources/unsubscribe` request to cancel a resource subscription.
   Future<EmptyResult> unsubscribeResource(
-    UnsubscribeRequestParams params, [
+    UnsubscribeRequest params, [
     RequestOptions? options,
   ]) {
     final req = JsonRpcUnsubscribeRequest(id: -1, unsubParams: params);
@@ -555,3 +559,7 @@ class Client extends Protocol {
     return notification(notif);
   }
 }
+
+/// Deprecated alias for [McpClient].
+@Deprecated('Use McpClient instead')
+typedef Client = McpClient;

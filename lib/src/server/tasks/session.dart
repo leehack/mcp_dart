@@ -27,7 +27,7 @@ class TaskSession {
       server.server
           .notification(
         JsonRpcTaskStatusNotification(
-          statusParams: TaskStatusNotificationParams(
+          statusParams: TaskStatusNotification(
             taskId: taskId,
             status: task.status,
             statusMessage: task.statusMessage,
@@ -53,7 +53,7 @@ class TaskSession {
     await _sendTaskStatusNotification();
 
     final requestId = _nextRequestId();
-    final params = ElicitRequestParams.form(
+    final params = ElicitRequest.form(
       message: message,
       requestedSchema: requestedSchema,
     );
@@ -96,7 +96,7 @@ class TaskSession {
     await _sendTaskStatusNotification();
 
     final requestId = _nextRequestId();
-    final params = CreateMessageRequestParams(
+    final params = CreateMessageRequest(
       messages: messages,
       maxTokens: maxTokens,
     );

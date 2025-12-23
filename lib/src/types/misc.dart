@@ -12,17 +12,17 @@ class EmptyResult implements BaseResultData {
 }
 
 /// Parameters for the `notifications/cancelled` notification.
-class CancelledNotificationParams {
+class CancelledNotification {
   /// The ID of the request to cancel.
   final RequestId requestId;
 
   /// An optional string describing the reason for the cancellation.
   final String? reason;
 
-  const CancelledNotificationParams({required this.requestId, this.reason});
+  const CancelledNotification({required this.requestId, this.reason});
 
-  factory CancelledNotificationParams.fromJson(Map<String, dynamic> json) =>
-      CancelledNotificationParams(
+  factory CancelledNotification.fromJson(Map<String, dynamic> json) =>
+      CancelledNotification(
         requestId: json['requestId'],
         reason: json['reason'] as String?,
       );
@@ -36,7 +36,7 @@ class CancelledNotificationParams {
 /// Notification sent by either side to indicate cancellation of a request.
 class JsonRpcCancelledNotification extends JsonRpcNotification {
   /// The parameters detailing which request is cancelled and why.
-  final CancelledNotificationParams cancelParams;
+  final CancelledNotification cancelParams;
 
   JsonRpcCancelledNotification({required this.cancelParams, super.meta})
       : super(
@@ -51,7 +51,7 @@ class JsonRpcCancelledNotification extends JsonRpcNotification {
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcCancelledNotification(
-      cancelParams: CancelledNotificationParams.fromJson(paramsMap),
+      cancelParams: CancelledNotification.fromJson(paramsMap),
       meta: meta,
     );
   }
@@ -92,7 +92,7 @@ class Progress {
 }
 
 /// Parameters for the `notifications/progress` notification.
-class ProgressNotificationParams implements Progress {
+class ProgressNotification implements Progress {
   /// The token originally provided in the request's `_meta`.
   final ProgressToken progressToken;
 
@@ -104,15 +104,15 @@ class ProgressNotificationParams implements Progress {
   @override
   final num? total;
 
-  const ProgressNotificationParams({
+  const ProgressNotification({
     required this.progressToken,
     required this.progress,
     this.total,
   });
 
-  factory ProgressNotificationParams.fromJson(Map<String, dynamic> json) {
+  factory ProgressNotification.fromJson(Map<String, dynamic> json) {
     final progressData = Progress.fromJson(json);
-    return ProgressNotificationParams(
+    return ProgressNotification(
       progressToken: json['progressToken'],
       progress: progressData.progress,
       total: progressData.total,
@@ -132,7 +132,7 @@ class ProgressNotificationParams implements Progress {
 /// Out-of-band notification informing the receiver of progress on a request.
 class JsonRpcProgressNotification extends JsonRpcNotification {
   /// The progress parameters.
-  final ProgressNotificationParams progressParams;
+  final ProgressNotification progressParams;
 
   /// Creates a progress notification.
   JsonRpcProgressNotification({required this.progressParams, super.meta})
@@ -149,8 +149,16 @@ class JsonRpcProgressNotification extends JsonRpcNotification {
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcProgressNotification(
-      progressParams: ProgressNotificationParams.fromJson(paramsMap),
+      progressParams: ProgressNotification.fromJson(paramsMap),
       meta: meta,
     );
   }
 }
+
+/// Deprecated alias for [CancelledNotification].
+@Deprecated('Use CancelledNotification instead')
+typedef CancelledNotificationParams = CancelledNotification;
+
+/// Deprecated alias for [ProgressNotification].
+@Deprecated('Use ProgressNotification instead')
+typedef ProgressNotificationParams = ProgressNotification;

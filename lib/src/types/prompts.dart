@@ -76,14 +76,14 @@ class Prompt {
 }
 
 /// Parameters for the `prompts/list` request. Includes pagination.
-class ListPromptsRequestParams {
+class ListPromptsRequest {
   /// Opaque token for pagination.
   final Cursor? cursor;
 
-  const ListPromptsRequestParams({this.cursor});
+  const ListPromptsRequest({this.cursor});
 
-  factory ListPromptsRequestParams.fromJson(Map<String, dynamic> json) =>
-      ListPromptsRequestParams(cursor: json['cursor'] as String?);
+  factory ListPromptsRequest.fromJson(Map<String, dynamic> json) =>
+      ListPromptsRequest(cursor: json['cursor'] as String?);
 
   Map<String, dynamic> toJson() => {if (cursor != null) 'cursor': cursor};
 }
@@ -91,13 +91,13 @@ class ListPromptsRequestParams {
 /// Request sent from client to list available prompts and templates.
 class JsonRpcListPromptsRequest extends JsonRpcRequest {
   /// The list parameters (containing cursor).
-  final ListPromptsRequestParams listParams;
+  final ListPromptsRequest listParams;
 
   JsonRpcListPromptsRequest({
     required super.id,
-    ListPromptsRequestParams? params,
+    ListPromptsRequest? params,
     super.meta,
-  })  : listParams = params ?? const ListPromptsRequestParams(),
+  })  : listParams = params ?? const ListPromptsRequest(),
         super(method: Method.promptsList, params: params?.toJson());
 
   factory JsonRpcListPromptsRequest.fromJson(Map<String, dynamic> json) {
@@ -105,9 +105,7 @@ class JsonRpcListPromptsRequest extends JsonRpcRequest {
     final meta = paramsMap?['_meta'] as Map<String, dynamic>?;
     return JsonRpcListPromptsRequest(
       id: json['id'],
-      params: paramsMap == null
-          ? null
-          : ListPromptsRequestParams.fromJson(paramsMap),
+      params: paramsMap == null ? null : ListPromptsRequest.fromJson(paramsMap),
       meta: meta,
     );
   }
@@ -147,17 +145,17 @@ class ListPromptsResult implements BaseResultData {
 }
 
 /// Parameters for the `prompts/get` request.
-class GetPromptRequestParams {
+class GetPromptRequest {
   /// The name of the prompt or template to retrieve.
   final String name;
 
   /// Arguments to use for templating the prompt.
   final Map<String, String>? arguments;
 
-  const GetPromptRequestParams({required this.name, this.arguments});
+  const GetPromptRequest({required this.name, this.arguments});
 
-  factory GetPromptRequestParams.fromJson(Map<String, dynamic> json) =>
-      GetPromptRequestParams(
+  factory GetPromptRequest.fromJson(Map<String, dynamic> json) =>
+      GetPromptRequest(
         name: json['name'] as String,
         arguments: (json['arguments'] as Map<String, dynamic>?)?.map(
           (k, v) => MapEntry(k, v as String),
@@ -173,7 +171,7 @@ class GetPromptRequestParams {
 /// Request sent from client to get a specific prompt, potentially with template arguments.
 class JsonRpcGetPromptRequest extends JsonRpcRequest {
   /// The get prompt parameters.
-  final GetPromptRequestParams getParams;
+  final GetPromptRequest getParams;
 
   JsonRpcGetPromptRequest({
     required super.id,
@@ -189,7 +187,7 @@ class JsonRpcGetPromptRequest extends JsonRpcRequest {
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcGetPromptRequest(
       id: json['id'],
-      getParams: GetPromptRequestParams.fromJson(paramsMap),
+      getParams: GetPromptRequest.fromJson(paramsMap),
       meta: meta,
     );
   }
@@ -267,3 +265,11 @@ class JsonRpcPromptListChangedNotification extends JsonRpcNotification {
   ) =>
       const JsonRpcPromptListChangedNotification();
 }
+
+/// Deprecated alias for [ListPromptsRequest].
+@Deprecated('Use ListPromptsRequest instead')
+typedef ListPromptsRequestParams = ListPromptsRequest;
+
+/// Deprecated alias for [GetPromptRequest].
+@Deprecated('Use GetPromptRequest instead')
+typedef GetPromptRequestParams = GetPromptRequest;

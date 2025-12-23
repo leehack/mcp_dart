@@ -29,7 +29,7 @@ void main() {
     }
 
     group('Stdio Transport', () {
-      late Client client;
+      late McpClient client;
       late StdioClientTransport transport;
 
       setUp(() async {
@@ -43,9 +43,9 @@ void main() {
         );
 
         // 2. Create the Client instance with capabilities for roots, sampling, elicitation
-        client = Client(
+        client = McpClient(
           const Implementation(name: 'dart-test-features', version: '1.0.0'),
-          options: const ClientOptions(
+          options: const McpClientOptions(
             capabilities: ClientCapabilities(
               roots: ClientCapabilitiesRoots(listChanged: true),
               sampling: ClientCapabilitiesSampling(),
@@ -158,7 +158,7 @@ void main() {
 
       test('completion - client gets argument completions', () async {
         final result = await client.complete(
-          const CompleteRequestParams(
+          const CompleteRequest(
             ref: PromptReference(name: 'greeting'),
             argument: ArgumentCompletionInfo(name: 'language', value: 'En'),
           ),

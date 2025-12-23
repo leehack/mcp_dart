@@ -78,7 +78,7 @@ server.registerResource(
 
 // Client reads the resource
 await client.readResource(
-  ReadResourceRequestParams(
+  ReadResourceRequest(
     uri: 'file:///docs/readme.md',
   ),
 );
@@ -114,7 +114,7 @@ server.registerPrompt(
 
 // Client gets the prompt
 await client.getPrompt(
-  GetPromptRequestParams(
+  GetPromptRequest(
     name: 'code-review',
     arguments: {'language': 'Dart'},
   ),
@@ -143,7 +143,7 @@ void main() async {
       name: 'my-first-server',
       version: '1.0.0',
     ),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         resources: ServerCapabilitiesResources(),
@@ -209,7 +209,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
   // Create the client
-  final client = Client(
+  final client = McpClient(
     Implementation(
       name: 'my-first-client',
       version: '1.0.0',
@@ -246,7 +246,7 @@ void main() async {
   // Read a resource
   print('\nReading server info resource...');
   final resource = await client.readResource(
-    ReadResourceRequestParams(
+    ReadResourceRequest(
       uri: 'info://server',
     ),
   );
@@ -448,7 +448,7 @@ await client.callTool(
 Increase timeout for slow operations:
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(name: 'client', version: '1.0.0'),
   requestTimeout: Duration(seconds: 30),  // Default is 10 seconds
 );

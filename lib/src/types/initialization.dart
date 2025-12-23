@@ -350,7 +350,7 @@ class ClientCapabilities {
 }
 
 /// Parameters for the `initialize` request.
-class InitializeRequestParams {
+class InitializeRequest {
   /// The latest protocol version the client supports.
   final String protocolVersion;
 
@@ -360,14 +360,14 @@ class InitializeRequestParams {
   /// Information about the client implementation.
   final Implementation clientInfo;
 
-  const InitializeRequestParams({
+  const InitializeRequest({
     required this.protocolVersion,
     required this.capabilities,
     required this.clientInfo,
   });
 
-  factory InitializeRequestParams.fromJson(Map<String, dynamic> json) =>
-      InitializeRequestParams(
+  factory InitializeRequest.fromJson(Map<String, dynamic> json) =>
+      InitializeRequest(
         protocolVersion: json['protocolVersion'] as String,
         capabilities: ClientCapabilities.fromJson(
           json['capabilities'] as Map<String, dynamic>,
@@ -387,7 +387,7 @@ class InitializeRequestParams {
 /// Request sent from client to server upon connection to begin initialization.
 class JsonRpcInitializeRequest extends JsonRpcRequest {
   /// The initialization parameters.
-  final InitializeRequestParams initParams;
+  final InitializeRequest initParams;
 
   JsonRpcInitializeRequest({
     required super.id,
@@ -403,7 +403,7 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcInitializeRequest(
       id: json['id'],
-      initParams: InitializeRequestParams.fromJson(paramsMap),
+      initParams: InitializeRequest.fromJson(paramsMap),
       meta: meta,
     );
   }
@@ -713,3 +713,7 @@ class JsonRpcInitializedNotification extends JsonRpcNotification {
   factory JsonRpcInitializedNotification.fromJson(Map<String, dynamic> json) =>
       const JsonRpcInitializedNotification();
 }
+
+/// Deprecated alias for [InitializeRequest].
+@Deprecated('Use InitializeRequest instead')
+typedef InitializeRequestParams = InitializeRequest;

@@ -18,7 +18,7 @@ void main(List<String> args) async {
 
   final client = GoogleMcpClient(
     GenerativeModel(model: 'gemini-2.0-flash', apiKey: apiKey),
-    Client(Implementation(name: "gemini-client", version: "1.0.0")),
+    McpClient(Implementation(name: "gemini-client", version: "1.0.0")),
   );
 
   try {

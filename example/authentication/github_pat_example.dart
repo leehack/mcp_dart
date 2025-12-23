@@ -86,7 +86,7 @@ Future<void> main(List<String> args) async {
   }
 
   // Create MCP client
-  final client = Client(
+  final client = McpClient(
     const Implementation(name: 'github-mcp-pat-client', version: '1.0.0'),
   );
 

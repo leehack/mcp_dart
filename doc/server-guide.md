@@ -27,7 +27,7 @@ void main() async {
       name: 'my-server',
       version: '1.0.0',
     ),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         resources: ServerCapabilitiesResources(),
@@ -52,7 +52,7 @@ final server = McpServer(
     name: 'my-server',
     version: '1.0.0',
   ),
-  options: ServerOptions(
+  options: McpServerOptions(
     capabilities: ServerCapabilities(
       tools: ServerCapabilitiesTools(),
       resources: ServerCapabilitiesResources(),
@@ -734,7 +734,7 @@ void main() async {
       name: 'my-server',
       version: '1.0.0',
     ),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         resources: ServerCapabilitiesResources(),
@@ -787,7 +787,7 @@ void main() async {
       name: 'multi-transport-server',
       version: '1.0.0',
     ),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         resources: ServerCapabilitiesResources(),
