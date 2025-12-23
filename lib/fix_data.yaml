@@ -297,6 +297,40 @@ transforms:
       - kind: 'rename'
         newName: 'TaskStatusNotification'
 
+  - title: "Rename to 'TaskCreation'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tasks.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'TaskCreationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'TaskCreation'
+
+  # --- Types: Misc ---
+  - title: "Rename to 'CancelledNotification'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/misc.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'CancelledNotificationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'CancelledNotification'
+
+  - title: "Rename to 'ProgressNotification'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/misc.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ProgressNotificationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ProgressNotification'
+
   # --- Methods: McpServer ---
   - title: "Rename to 'registerResource'"
     date: 2024-12-23

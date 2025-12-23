@@ -30,7 +30,7 @@ final server = McpServer(
     name: 'server-name',
     version: '1.0.0',
   ),
-  options: ServerOptions(
+  options: McpServerOptions(
     capabilities: ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
@@ -175,7 +175,7 @@ await server.connect(transport);
 ### Create Client
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(
     name: 'client-name',
     version: '1.0.0',
@@ -569,7 +569,7 @@ await server.sendPromptListChanged();
 final server = McpServer(
   Implementation(name: 'server', version: '1.0.0'),
   // Capabilities auto-detected from registrations
-  options: ServerOptions(
+  options: McpServerOptions(
     capabilities: ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
@@ -580,7 +580,7 @@ final server = McpServer(
 ### Client Capabilities
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(name: 'client', version: '1.0.0'),
   capabilities: ClientCapabilities(
     sampling: ClientCapabilitiesSampling(tools: true),
@@ -720,7 +720,7 @@ test('example', () async {
     outputSink: s2c.sink,
   ));
 
-  final client = Client(...);
+  final client = McpClient(...);
   await client.connect(IOStreamTransport(
     inputStream: s2c.stream,
     outputSink: c2s.sink,

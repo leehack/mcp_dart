@@ -331,7 +331,7 @@ class SimpleToolTaskHandler implements ToolTaskHandler {
     RequestHandlerExtra? extra,
   ) async {
     final task = await context.store.createTask(
-      const TaskCreationParams(), // ttl
+      const TaskCreation(), // ttl
       extra?.requestId ?? -1,
       {'name': toolName, 'input': args ?? {}},
       extra?.sessionId,

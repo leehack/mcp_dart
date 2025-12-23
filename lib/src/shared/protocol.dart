@@ -64,7 +64,7 @@ class RequestOptions {
   final Duration? maxTotalTimeout;
 
   /// Augments the request with task creation parameters.
-  final TaskCreationParams? task;
+  final TaskCreation? task;
 
   /// Associates this request with a related task.
   final RelatedTaskMetadata? relatedTask;
@@ -954,7 +954,7 @@ abstract class Protocol {
 
       final cancelReason = reason?.toString() ?? 'Request cancelled';
       final notification = JsonRpcCancelledNotification(
-        cancelParams: CancelledNotificationParams(
+        cancelParams: CancelledNotification(
           requestId: messageId,
           reason: cancelReason,
         ),
@@ -1451,7 +1451,7 @@ class _RequestTaskStoreImpl implements RequestTaskStore {
   );
 
   @override
-  Future<Task> createTask(TaskCreationParams taskParams) {
+  Future<Task> createTask(TaskCreation taskParams) {
     return _store.createTask(
       taskParams,
       _request.id,

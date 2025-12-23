@@ -246,7 +246,7 @@ McpServer createServer() {
           await extra.sendNotification(
             // Fixed to use extra.sendNotification
             JsonRpcProgressNotification(
-              progressParams: ProgressNotificationParams(
+              progressParams: ProgressNotification(
                 progressToken: progressToken,
                 progress: progress,
                 total: 100,

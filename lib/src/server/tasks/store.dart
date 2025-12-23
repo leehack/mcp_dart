@@ -63,7 +63,7 @@ class InMemoryTaskStore implements TaskStore {
 
   @override
   Future<Task> createTask(
-    TaskCreationParams taskParams,
+    TaskCreation taskParams,
     RequestId requestId,
     Map<String, dynamic> requestData,
     String? sessionId,

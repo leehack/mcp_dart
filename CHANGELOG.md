@@ -14,7 +14,10 @@
   - `GetPromptRequestParams` -> `GetPromptRequest`
   - `ElicitRequestParams` -> `ElicitRequest`
   - `CreateMessageRequestParams` -> `CreateMessageRequest`
-  - `LoggingMessageNotificationParams` -> `LoggingMessageNotification` (typedef deprecated)
+  - `LoggingMessageNotificationParams` -> `LoggingMessageNotification`
+  - `CancelledNotificationParams` -> `CancelledNotification`
+  - `ProgressNotificationParams` -> `ProgressNotification`
+  - `TaskCreationParams` -> `TaskCreation`
 
 ## 1.1.2
 

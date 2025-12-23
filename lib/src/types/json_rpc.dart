@@ -429,10 +429,10 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
         params?.containsKey('task') == true;
   }
 
-  TaskCreationParams? get taskParams {
+  TaskCreation? get taskParams {
     final taskMap = meta?['task'] ?? params?['task'];
     if (taskMap is Map<String, dynamic>) {
-      return TaskCreationParams.fromJson(taskMap);
+      return TaskCreation.fromJson(taskMap);
     }
     return null;
   }

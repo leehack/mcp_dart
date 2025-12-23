@@ -302,14 +302,14 @@ class JsonRpcTaskResultRequest extends JsonRpcRequest {
 }
 
 /// Parameters for task creation when augmenting requests.
-class TaskCreationParams {
+class TaskCreation {
   /// Requested duration in milliseconds to retain task from creation.
   final int? ttl;
 
-  const TaskCreationParams({this.ttl});
+  const TaskCreation({this.ttl});
 
-  factory TaskCreationParams.fromJson(Map<String, dynamic> json) =>
-      TaskCreationParams(ttl: json['ttl'] as int?);
+  factory TaskCreation.fromJson(Map<String, dynamic> json) =>
+      TaskCreation(ttl: json['ttl'] as int?);
 
   Map<String, dynamic> toJson() => {
         if (ttl != null) 'ttl': ttl,
@@ -468,3 +468,7 @@ typedef TaskResultRequestParams = TaskResultRequest;
 /// Deprecated alias for [TaskStatusNotification].
 @Deprecated('Use TaskStatusNotification instead')
 typedef TaskStatusNotificationParams = TaskStatusNotification;
+
+/// Deprecated alias for [TaskCreation].
+@Deprecated('Use TaskCreation instead')
+typedef TaskCreationParams = TaskCreation;
