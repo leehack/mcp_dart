@@ -10,7 +10,7 @@ import '../runner_script_generator.dart';
 
 /// A wrapper around MCP Client connection lifecycle.
 class McpConnection {
-  final McpClient client;
+  final Client client;
   final Transport transport;
 
   McpConnection._(this.client, this.transport, Logger logger);
@@ -19,7 +19,7 @@ class McpConnection {
   /// Generates the runner script if needed.
   static Future<McpConnection> connectToLocalProject(
     Logger logger, {
-    McpClientOptions? options,
+    ClientOptions? options,
   }) async {
     final pubspecFile = File('pubspec.yaml');
     if (!pubspecFile.existsSync()) {
@@ -65,7 +65,7 @@ class McpConnection {
     String command,
     List<String> args, {
     Map<String, String>? env,
-    McpClientOptions? options,
+    ClientOptions? options,
   }) async {
     logger.detail('Connecting to server: $command ${args.join(' ')}');
 
@@ -77,7 +77,7 @@ class McpConnection {
     );
 
     final transport = StdioClientTransport(serverParams);
-    final client = McpClient(
+    final client = Client(
       Implementation(name: 'mcp_dart_cli', version: '1.0.0'),
       options: options,
     );
@@ -96,12 +96,12 @@ class McpConnection {
   static Future<McpConnection> connectToUrl(
     Logger logger,
     Uri url, {
-    McpClientOptions? options,
+    ClientOptions? options,
   }) async {
     logger.detail('Connecting to server: $url');
 
     final transport = StreamableHttpClientTransport(url);
-    final client = McpClient(
+    final client = Client(
       Implementation(name: 'mcp_dart_cli', version: '1.0.0'),
       options: options,
     );

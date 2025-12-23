@@ -121,7 +121,7 @@ class DoctorCommand extends Command<int> {
         for (final resource in resources.resources) {
           try {
             await connection.client
-                .readResource(ReadResourceRequest(uri: resource.uri));
+                .readResource(ReadResourceRequestParams(uri: resource.uri));
             _logger
                 .detail('    [✓] Resource "${resource.uri}" read successfully');
           } catch (e) {
@@ -140,7 +140,7 @@ class DoctorCommand extends Command<int> {
         for (final prompt in prompts.prompts) {
           try {
             await connection.client
-                .getPrompt(GetPromptRequest(name: prompt.name));
+                .getPrompt(GetPromptRequestParams(name: prompt.name));
             _logger.detail(
                 '    [✓] Prompt "${prompt.name}" retrieved successfully');
           } catch (e) {
