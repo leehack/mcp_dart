@@ -22,7 +22,7 @@ void main() {
     }
 
     late StdioClientTransport transport;
-    late Client client;
+    late McpClient client;
     late TaskClient taskClient;
 
     setUp(() async {
@@ -36,9 +36,9 @@ void main() {
       );
 
       // 2. Create the Client instance
-      client = Client(
+      client = McpClient(
         const Implementation(name: 'dart-task-test', version: '1.0'),
-        options: const ClientOptions(
+        options: const McpClientOptions(
           capabilities: ClientCapabilities(),
         ),
       );

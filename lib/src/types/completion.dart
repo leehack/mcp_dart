@@ -80,17 +80,17 @@ class ArgumentCompletionInfo {
 }
 
 /// Parameters for the `completion/complete` request.
-class CompleteRequestParams {
+class CompleteRequest {
   /// The reference identifying the completion target (prompt or resource).
   final Reference ref;
 
   /// Information about the argument being completed.
   final ArgumentCompletionInfo argument;
 
-  const CompleteRequestParams({required this.ref, required this.argument});
+  const CompleteRequest({required this.ref, required this.argument});
 
-  factory CompleteRequestParams.fromJson(Map<String, dynamic> json) =>
-      CompleteRequestParams(
+  factory CompleteRequest.fromJson(Map<String, dynamic> json) =>
+      CompleteRequest(
         ref: Reference.fromJson(json['ref'] as Map<String, dynamic>),
         argument: ArgumentCompletionInfo.fromJson(
           json['argument'] as Map<String, dynamic>,
@@ -106,7 +106,7 @@ class CompleteRequestParams {
 /// Request sent from client to ask server for completion options for an argument.
 class JsonRpcCompleteRequest extends JsonRpcRequest {
   /// The completion parameters.
-  final CompleteRequestParams completeParams;
+  final CompleteRequest completeParams;
 
   JsonRpcCompleteRequest({
     required super.id,
@@ -125,7 +125,7 @@ class JsonRpcCompleteRequest extends JsonRpcRequest {
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcCompleteRequest(
       id: json['id'],
-      completeParams: CompleteRequestParams.fromJson(paramsMap),
+      completeParams: CompleteRequest.fromJson(paramsMap),
       meta: meta,
     );
   }
@@ -198,3 +198,7 @@ class JsonRpcCompletionListChangedNotification extends JsonRpcNotification {
   ) =>
       const JsonRpcCompletionListChangedNotification();
 }
+
+/// Deprecated alias for [CompleteRequest].
+@Deprecated('Use CompleteRequest instead')
+typedef CompleteRequestParams = CompleteRequest;

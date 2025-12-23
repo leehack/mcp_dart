@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 
 // Global client and transport for interactive commands
-Client? client;
+McpClient? client;
 StreamableHttpClientTransport? transport;
 String serverUrl = 'http://localhost:3000/mcp';
 String? notificationsToolLastEventId;
@@ -187,7 +187,7 @@ Future<void> connect([String? url]) async {
 
   try {
     // Create a new client
-    client = Client(
+    client = McpClient(
       const Implementation(name: 'example-client', version: '1.0.0'),
     );
     client!.onerror = (error) {
@@ -424,7 +424,7 @@ Future<void> getPrompt(String name, Map<String, dynamic> args) async {
   }
 
   try {
-    final params = GetPromptRequestParams(
+    final params = GetPromptRequest(
       name: name,
       arguments: Map<String, String>.from(
         args.map(

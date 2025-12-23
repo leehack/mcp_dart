@@ -19,7 +19,7 @@ class InspectHandlers {
   InspectHandlers(this._logger);
 
   /// Registers all handlers with the given client.
-  void registerHandlers(Client client) {
+  void registerHandlers(McpClient client) {
     // Register sampling request handler
     client.onSamplingRequest = _handleSamplingRequest;
 
@@ -29,7 +29,7 @@ class InspectHandlers {
 
   /// Handles sampling/createMessage requests from the server.
   Future<CreateMessageResult> _handleSamplingRequest(
-      CreateMessageRequestParams params) async {
+      CreateMessageRequest params) async {
     _logger.info('\n[Sampling Request]');
     _logger.info('System Prompt: ${params.systemPrompt ?? "(none)"}');
     _logger.info('Messages:');

@@ -1,3 +1,21 @@
+## 1.2.0
+
+### Breaking Changes
+
+> [!TIP]
+> All breaking changes below are auto-fixable. Run `dart fix --apply` to automatically update your code.
+
+- **Renamed Core Classes**:
+  - `Client` is now `McpClient` to avoid conflicts with other libraries (like `http`).
+  - `ClientOptions` is now `McpClientOptions`.
+  - `ServerOptions` is now `McpServerOptions`.
+- **Renamed Request/Notification Parameters**:
+  - `ReadResourceRequestParams` -> `ReadResourceRequest`
+  - `GetPromptRequestParams` -> `GetPromptRequest`
+  - `ElicitRequestParams` -> `ElicitRequest`
+  - `CreateMessageRequestParams` -> `CreateMessageRequest`
+  - `LoggingMessageNotificationParams` -> `LoggingMessageNotification` (typedef deprecated)
+
 ## 1.1.2
 
 - **Fixed StdioClientTransport stderr handling**: Corrected process mode to always use `ProcessStartMode.normal` to ensure stdin/stdout piping works correctly. Fixed inverted stderr mode logic where `stderrMode: normal` now properly exposes stderr via getter (without internal listening), and `stderrMode: inheritStdio` now manually pipes stderr to parent process.

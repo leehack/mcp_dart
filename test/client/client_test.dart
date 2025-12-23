@@ -59,7 +59,7 @@ void main() {
           const ClientCapabilities(experimental: {'feature1': true});
       client = Client(
         clientInfo,
-        options: ClientOptions(capabilities: initialCapabilities),
+        options: McpClientOptions(capabilities: initialCapabilities),
       );
 
       final additionalCapabilities = const ClientCapabilities(
@@ -199,7 +199,7 @@ void main() {
     test('assertNotificationCapability checks client capabilities', () {
       final capableClient = Client(
         clientInfo,
-        options: const ClientOptions(
+        options: const McpClientOptions(
           capabilities: ClientCapabilities(
             roots: ClientCapabilitiesRoots(listChanged: true),
           ),
@@ -224,7 +224,7 @@ void main() {
     test('assertRequestHandlerCapability checks client capabilities', () {
       final capableClient = Client(
         clientInfo,
-        options: const ClientOptions(
+        options: const McpClientOptions(
           capabilities: ClientCapabilities(
             sampling: ClientCapabilitiesSampling(),
             roots: ClientCapabilitiesRoots(),
@@ -280,7 +280,7 @@ void main() {
 
       transport.clearSentMessages();
 
-      final params = const CompleteRequestParams(
+      final params = const CompleteRequest(
         ref: PromptReference(name: 'test-prompt'),
         argument: ArgumentCompletionInfo(name: 'arg1', value: 'val'),
       );
@@ -325,7 +325,7 @@ void main() {
 
       transport.clearSentMessages();
 
-      final params = const GetPromptRequestParams(name: 'test-prompt');
+      final params = const GetPromptRequest(name: 'test-prompt');
       await client.getPrompt(params);
 
       // Verify a getPrompt request was sent
@@ -407,7 +407,7 @@ void main() {
 
       transport.clearSentMessages();
 
-      final params = const ReadResourceRequestParams(uri: 'test://resource');
+      final params = const ReadResourceRequest(uri: 'test://resource');
       await client.readResource(params);
 
       // Verify a readResource request was sent
@@ -428,7 +428,7 @@ void main() {
 
       transport.clearSentMessages();
 
-      final params = const SubscribeRequestParams(uri: 'test://resource');
+      final params = const SubscribeRequest(uri: 'test://resource');
       await client.subscribeResource(params);
 
       // Verify a subscribeResource request was sent
@@ -449,7 +449,7 @@ void main() {
 
       transport.clearSentMessages();
 
-      final params = const UnsubscribeRequestParams(uri: 'test://resource');
+      final params = const UnsubscribeRequest(uri: 'test://resource');
       await client.unsubscribeResource(params);
 
       // Verify an unsubscribeResource request was sent
@@ -773,7 +773,7 @@ void _addCriticalPathTests() {
       // Create client WITH elicitation capability
       client = Client(
         const Implementation(name: 'TestClient', version: '1.0.0'),
-        options: const ClientOptions(
+        options: const McpClientOptions(
           capabilities: ClientCapabilities(
             elicitation: ClientElicitation.formOnly(),
           ),
@@ -796,7 +796,7 @@ void _addCriticalPathTests() {
       // Simulate server sending elicitation request
       final elicitRequest = JsonRpcElicitRequest(
         id: 100,
-        elicitParams: ElicitRequestParams(
+        elicitParams: ElicitRequest(
           message: 'Please provide input',
           requestedSchema: JsonSchema.string(),
         ),

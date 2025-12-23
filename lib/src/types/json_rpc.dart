@@ -379,7 +379,7 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
   )
   factory JsonRpcListToolsRequest.fromListParams({
     required RequestId id,
-    ListToolsRequestParams? params,
+    ListToolsRequest? params,
     Map<String, dynamic>? meta,
   }) {
     return JsonRpcListToolsRequest(

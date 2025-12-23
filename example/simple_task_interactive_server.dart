@@ -44,7 +44,7 @@ class InteractiveServer {
 
     final server = McpServer(
       const Implementation(name: 'simple-task-interactive', version: '1.0.0'),
-      options: const ServerOptions(
+      options: const McpServerOptions(
         capabilities: ServerCapabilities(
           tools: ServerCapabilitiesTools(),
           tasks: ServerCapabilitiesTasks(listChanged: true),

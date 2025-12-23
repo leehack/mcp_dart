@@ -78,7 +78,7 @@ McpServer getServer() {
       try {
         // Collect username
         final usernameResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter your username (3-20 characters)',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -105,7 +105,7 @@ McpServer getServer() {
 
         // Collect email
         final emailResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter your email address',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -131,7 +131,7 @@ McpServer getServer() {
 
         // Collect password
         final passwordResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter your password (min 8 characters)',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -155,7 +155,7 @@ McpServer getServer() {
 
         // Collect newsletter preference
         final newsletterResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Subscribe to newsletter?',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -205,7 +205,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
       try {
         // Step 1: Collect basic event information
         final titleResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Step 1: Enter event title',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -228,7 +228,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
         final title = titleResult.content?['title'] as String;
 
         final descriptionResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter event description (optional, or type "skip")',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -250,7 +250,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
 
         // Step 2: Collect date and time
         final dateResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Step 2: Enter event date (YYYY-MM-DD)',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -273,7 +273,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
         final date = dateResult.content?['date'] as String;
 
         final startTimeResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter start time (HH:MM)',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -296,7 +296,7 @@ Newsletter: ${newsletter ? 'Yes' : 'No'}''',
         final startTime = startTimeResult.content?['startTime'] as String;
 
         final durationResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter duration in minutes (15-480)',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -354,7 +354,7 @@ Duration: $duration minutes''',
       try {
         // Collect name
         final nameResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter recipient full name',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -380,7 +380,7 @@ Duration: $duration minutes''',
 
         // Collect street address
         final streetResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter street address',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -406,7 +406,7 @@ Duration: $duration minutes''',
 
         // Collect city
         final cityResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter city',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -432,7 +432,7 @@ Duration: $duration minutes''',
 
         // Collect state (2 letters)
         final stateResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter state/province (2 letters)',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -460,7 +460,7 @@ Duration: $duration minutes''',
 
         // Collect ZIP code
         final zipResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter ZIP/Postal code',
             requestedSchema: JsonSchema.object(
               properties: {
@@ -487,7 +487,7 @@ Duration: $duration minutes''',
 
         // Collect optional phone number
         final phoneResult = await server.elicitInput(
-          ElicitRequestParams.form(
+          ElicitRequest.form(
             message: 'Enter phone number (optional, or type "skip")',
             requestedSchema: JsonSchema.object(
               properties: {

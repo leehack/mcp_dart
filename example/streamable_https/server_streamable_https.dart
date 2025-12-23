@@ -110,7 +110,7 @@ McpServer getServer() {
       // Send debug notification
       await extra.sendNotification(
         JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotificationParams(
+          logParams: LoggingMessageNotification(
             level: LoggingLevel.debug,
             data: 'Starting multi-greet for $name',
           ),
@@ -122,7 +122,7 @@ McpServer getServer() {
       // Send first info notification
       await extra.sendNotification(
         JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotificationParams(
+          logParams: LoggingMessageNotification(
             level: LoggingLevel.info,
             data: 'Sending first greeting to $name',
           ),
@@ -134,7 +134,7 @@ McpServer getServer() {
       // Send second info notification
       await extra.sendNotification(
         JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotificationParams(
+          logParams: LoggingMessageNotification(
             level: LoggingLevel.info,
             data: 'Sending second greeting to $name',
           ),
@@ -206,7 +206,7 @@ McpServer getServer() {
         try {
           await extra.sendNotification(
             JsonRpcLoggingMessageNotification(
-              logParams: LoggingMessageNotificationParams(
+              logParams: LoggingMessageNotification(
                 level: LoggingLevel.info,
                 data:
                     'Periodic notification #$counter at ${DateTime.now().toIso8601String()}',

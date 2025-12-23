@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
 
   final client = AnthropicMcpClient(
     AnthropicClient(apiKey: apiKey),
-    Client(Implementation(name: "mcp-client-cli", version: "1.0.0")),
+    McpClient(Implementation(name: "mcp-client-cli", version: "1.0.0")),
   );
   try {
     await client.connectToServer(args[0], args.sublist(1));
