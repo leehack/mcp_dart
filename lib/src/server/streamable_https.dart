@@ -168,8 +168,8 @@ class StreamableHTTPServerTransport implements Transport {
   /// Handles GET requests for SSE stream
   Future<void> _handleGetRequest(HttpRequest req) async {
     // The client MUST include an Accept header, listing text/event-stream as a supported content type.
-    final acceptHeader = req.headers[HttpHeaders.acceptHeader] ?? <String>[];
-    if (acceptHeader.where((item) => item.toLowerCase().contains("text/event-stream"),).isEmpty) {
+    final acceptHeader = req.headers.value(HttpHeaders.acceptHeader) ?? '';
+    if (!acceptHeader.contains("text/event-stream")) {
       req.response
         ..statusCode = HttpStatus.notAcceptable
         ..write(
@@ -348,10 +348,9 @@ class StreamableHTTPServerTransport implements Transport {
   Future<void> _handlePostRequest(HttpRequest req, [dynamic parsedBody]) async {
     try {
       // Validate the Accept header
-      final acceptHeader = req.headers[HttpHeaders.acceptHeader] ?? <String>[];
+      final acceptHeader = req.headers.value(HttpHeaders.acceptHeader) ?? '';
       // The client MUST include an Accept header, listing both application/json and text/event-stream as supported content types.
-      if (acceptHeader.where((item) => item.toLowerCase().contains("application/json")).isEmpty ||
-          acceptHeader.where((item) => item.toLowerCase().contains("text/event-stream")).isEmpty) {
+      if (!acceptHeader.contains("application/json") || !acceptHeader.contains("text/event-stream")) {
         req.response.statusCode = HttpStatus.notAcceptable;
         req.response.write(
           jsonEncode(
@@ -370,7 +369,7 @@ class StreamableHTTPServerTransport implements Transport {
       }
 
       final contentType = req.headers.contentType?.value;
-      if (contentType == null || !contentType.contains("application/json")) {
+      if (!contentType.contains("application/json")) {
         req.response.statusCode = HttpStatus.unsupportedMediaType;
         req.response.write(
           jsonEncode(
