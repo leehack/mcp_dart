@@ -206,7 +206,7 @@ class StreamableHTTPServerTransport implements Transport {
     // The server MUST either return Content-Type: text/event-stream in response to this HTTP GET,
     // or else return HTTP 405 Method Not Allowed
     final headers = {
-      HttpHeaders.contentTypeHeader: "text/event-stream",
+      HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
       HttpHeaders.cacheControlHeader: "no-cache, no-transform",
       HttpHeaders.connectionHeader: "keep-alive",
     };
@@ -263,7 +263,7 @@ class StreamableHTTPServerTransport implements Transport {
     }
     try {
       final headers = {
-        HttpHeaders.contentTypeHeader: "text/event-stream",
+        HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
         HttpHeaders.cacheControlHeader: "no-cache, no-transform",
         HttpHeaders.connectionHeader: "keep-alive",
       };
@@ -348,11 +348,10 @@ class StreamableHTTPServerTransport implements Transport {
   Future<void> _handlePostRequest(HttpRequest req, [dynamic parsedBody]) async {
     try {
       // Validate the Accept header
-      final acceptHeader = req.headers.value(HttpHeaders.acceptHeader);
+      final acceptHeader = req.headers[HttpHeaders.acceptHeader] ?? <String>[];
       // The client MUST include an Accept header, listing both application/json and text/event-stream as supported content types.
-      if (acceptHeader == null ||
-          !acceptHeader.contains("application/json") ||
-          !acceptHeader.contains("text/event-stream")) {
+      if (acceptHeader.where((item) => item.toLowerCase().contains("application/json")).isEmpty ||
+          acceptHeader.where((item) => item.toLowerCase().contains("text/event-stream")).isEmpty) {
         req.response.statusCode = HttpStatus.notAcceptable;
         req.response.write(
           jsonEncode(
@@ -528,7 +527,7 @@ class StreamableHTTPServerTransport implements Transport {
         final streamId = generateUUID();
         if (!_enableJsonResponse) {
           final headers = {
-            HttpHeaders.contentTypeHeader: "text/event-stream",
+            HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
             HttpHeaders.cacheControlHeader: "no-cache",
             HttpHeaders.connectionHeader: "keep-alive",
           };
@@ -783,7 +782,7 @@ class StreamableHTTPServerTransport implements Transport {
         if (_enableJsonResponse) {
           // All responses ready, send as JSON
           final headers = {
-            HttpHeaders.contentTypeHeader: 'application/json',
+            HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
           };
 
           if (sessionId != null) {
