@@ -368,7 +368,7 @@ class StreamableHTTPServerTransport implements Transport {
         return;
       }
 
-      final contentType = req.headers.contentType?.value;
+      final contentType = req.headers.contentType?.value ?? '';
       if (!contentType.contains("application/json")) {
         req.response.statusCode = HttpStatus.unsupportedMediaType;
         req.response.write(
