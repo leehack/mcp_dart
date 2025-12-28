@@ -526,7 +526,7 @@ class StreamableHTTPServerTransport implements Transport {
         final streamId = generateUUID();
         if (!_enableJsonResponse) {
           final headers = {
-            HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
+            HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
             HttpHeaders.cacheControlHeader: "no-cache",
             HttpHeaders.connectionHeader: "keep-alive",
           };
