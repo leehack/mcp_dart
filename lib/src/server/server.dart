@@ -7,20 +7,24 @@ import 'package:mcp_dart/src/types.dart';
 
 final _logger = Logger("mcp_dart.server");
 
-/// Options for configuring the MCP server.
-class ServerOptions extends ProtocolOptions {
+/// Options for configuring the MCP [McpServer].
+class McpServerOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this server.
   final ServerCapabilities? capabilities;
 
   /// Optional instructions describing how to use the server and its features.
   final String? instructions;
 
-  const ServerOptions({
+  const McpServerOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
     this.instructions,
   });
 }
+
+/// Deprecated alias for [McpServerOptions].
+@Deprecated('Use McpServerOptions instead')
+typedef ServerOptions = McpServerOptions;
 
 /// An MCP server implementation built on top of a pluggable [Transport].
 ///
@@ -52,11 +56,12 @@ class Server extends Protocol {
     LoggingLevel.emergency: 7,
   };
 
-  /// Callback invoked when initialization has fully completed.
+  /// Callback to be notified when the server is fully initialized.
   void Function()? oninitialized;
 
   /// Initializes this server with its implementation details and options.
-  Server(this._serverInfo, {ServerOptions? options})
+  /// - [options]: Optional configuration settings including server capabilities.
+  Server(this._serverInfo, {McpServerOptions? options})
       : _capabilities = options?.capabilities ?? const ServerCapabilities(),
         _instructions = options?.instructions,
         super(options) {
@@ -165,7 +170,7 @@ class Server extends Protocol {
   }
 
   /// Handles the client's `initialize` request.
-  Future<InitializeResult> _oninitialize(InitializeRequestParams params) async {
+  Future<InitializeResult> _oninitialize(InitializeRequest params) async {
     final requestedVersion = params.protocolVersion;
 
     _clientCapabilities = params.capabilities;
@@ -411,7 +416,7 @@ class Server extends Protocol {
 
   /// Sends a `sampling/createMessage` request to the client to ask it to sample an LLM.
   Future<CreateMessageResult> createMessage(
-    CreateMessageRequestParams params, [
+    CreateMessageRequest params, [
     RequestOptions? options,
   ]) {
     // Capability check - only required when tools/toolChoice are provided
@@ -489,7 +494,7 @@ class Server extends Protocol {
 
   /// Creates an elicitation request for the given parameters.
   Future<ElicitResult> elicitInput(
-    ElicitRequestParams params, [
+    ElicitRequest params, [
     RequestOptions? options,
   ]) async {
     // Mode defaults to 'form' if omitted (handled in types, but logic here too)
@@ -559,7 +564,7 @@ class Server extends Protocol {
 
     return () => notification(
           JsonRpcElicitationCompleteNotification(
-            completeParams: ElicitationCompleteParams(
+            completeParams: ElicitationCompleteNotification(
               elicitationId: elicitationId,
             ),
           ),
@@ -578,7 +583,7 @@ class Server extends Protocol {
 
   /// Sends a `notifications/message` (logging) notification to the client.
   Future<void> sendLoggingMessage(
-    LoggingMessageNotificationParams params, {
+    LoggingMessageNotification params, {
     String? sessionId,
   }) async {
     if (_capabilities.logging != null) {
@@ -590,7 +595,7 @@ class Server extends Protocol {
   }
 
   /// Sends a `notifications/resources/updated` notification to the client.
-  Future<void> sendResourceUpdated(ResourceUpdatedNotificationParams params) {
+  Future<void> sendResourceUpdated(ResourceUpdatedNotification params) {
     final notif = JsonRpcResourceUpdatedNotification(updatedParams: params);
     return notification(notif);
   }

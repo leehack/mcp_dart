@@ -3,7 +3,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 void main() async {
   final McpServer server = McpServer(
     const Implementation(name: "example_server", version: "1.0.0"),
-    options: const ServerOptions(
+    options: const McpServerOptions(
       capabilities: ServerCapabilities(
         resources: ServerCapabilitiesResources(),
         tools: ServerCapabilitiesTools(),

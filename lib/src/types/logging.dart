@@ -13,14 +13,14 @@ enum LoggingLevel {
 }
 
 /// Parameters for the `logging/setLevel` request.
-class SetLevelRequestParams {
+class SetLevelRequest {
   /// The minimum logging level the client wants to receive.
   final LoggingLevel level;
 
-  const SetLevelRequestParams({required this.level});
+  const SetLevelRequest({required this.level});
 
-  factory SetLevelRequestParams.fromJson(Map<String, dynamic> json) =>
-      SetLevelRequestParams(
+  factory SetLevelRequest.fromJson(Map<String, dynamic> json) =>
+      SetLevelRequest(
         level: LoggingLevel.values.byName(json['level'] as String),
       );
 
@@ -30,7 +30,7 @@ class SetLevelRequestParams {
 /// Request sent from client to enable or adjust logging level from the server.
 class JsonRpcSetLevelRequest extends JsonRpcRequest {
   /// The set level parameters.
-  final SetLevelRequestParams setParams;
+  final SetLevelRequest setParams;
 
   JsonRpcSetLevelRequest({
     required super.id,
@@ -46,14 +46,14 @@ class JsonRpcSetLevelRequest extends JsonRpcRequest {
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcSetLevelRequest(
       id: json['id'],
-      setParams: SetLevelRequestParams.fromJson(paramsMap),
+      setParams: SetLevelRequest.fromJson(paramsMap),
       meta: meta,
     );
   }
 }
 
 /// Parameters for the `notifications/message` (or `logging/message`) notification.
-class LoggingMessageNotificationParams {
+class LoggingMessageNotification {
   /// The severity of this log message.
   final LoggingLevel level;
 
@@ -63,16 +63,16 @@ class LoggingMessageNotificationParams {
   /// The data to be logged (string, object, etc.).
   final dynamic data;
 
-  const LoggingMessageNotificationParams({
+  const LoggingMessageNotification({
     required this.level,
     this.logger,
     this.data,
   });
 
-  factory LoggingMessageNotificationParams.fromJson(
+  factory LoggingMessageNotification.fromJson(
     Map<String, dynamic> json,
   ) =>
-      LoggingMessageNotificationParams(
+      LoggingMessageNotification(
         level: LoggingLevel.values.byName(json['level'] as String),
         logger: json['logger'] as String?,
         data: json['data'],
@@ -88,7 +88,7 @@ class LoggingMessageNotificationParams {
 /// Notification of a log message passed from server to client.
 class JsonRpcLoggingMessageNotification extends JsonRpcNotification {
   /// The logging parameters.
-  final LoggingMessageNotificationParams logParams;
+  final LoggingMessageNotification logParams;
 
   JsonRpcLoggingMessageNotification({required this.logParams, super.meta})
       : super(method: Method.notificationsMessage, params: logParams.toJson());
@@ -104,8 +104,16 @@ class JsonRpcLoggingMessageNotification extends JsonRpcNotification {
     }
     final meta = paramsMap['_meta'] as Map<String, dynamic>?;
     return JsonRpcLoggingMessageNotification(
-      logParams: LoggingMessageNotificationParams.fromJson(paramsMap),
+      logParams: LoggingMessageNotification.fromJson(paramsMap),
       meta: meta,
     );
   }
 }
+
+/// Deprecated alias for [SetLevelRequest].
+@Deprecated('Use SetLevelRequest instead')
+typedef SetLevelRequestParams = SetLevelRequest;
+
+/// Deprecated alias for [LoggingMessageNotification].
+@Deprecated('Use LoggingMessageNotification instead')
+typedef LoggingMessageNotificationParams = LoggingMessageNotification;

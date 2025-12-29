@@ -375,7 +375,7 @@ Future<void> main(List<String> args) async {
   final authProvider = OAuth2Provider(config: config, storage: storage);
 
   // Create MCP client
-  final client = Client(
+  final client = McpClient(
     const Implementation(name: 'oauth-example-client', version: '1.0.0'),
   );
 

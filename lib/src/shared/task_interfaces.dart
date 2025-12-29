@@ -9,7 +9,7 @@ abstract class TaskStore {
   /// [requestData] - The original request method and params.
   /// [sessionId] - The session ID of the client.
   Future<Task> createTask(
-    TaskCreationParams taskParams,
+    TaskCreation taskParams,
     RequestId requestId,
     Map<String, dynamic> requestData,
     String? sessionId,
@@ -73,7 +73,7 @@ class QueuedMessage {
 
 /// Request-scoped TaskStore interface.
 abstract class RequestTaskStore {
-  Future<Task> createTask(TaskCreationParams taskParams);
+  Future<Task> createTask(TaskCreation taskParams);
   Future<Task> getTask(String taskId);
   Future<void> storeTaskResult(
     String taskId,

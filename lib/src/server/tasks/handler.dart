@@ -137,10 +137,10 @@ class TaskResultHandler {
           dynamic response;
 
           if (request.method == 'elicitation/create') {
-            final params = ElicitRequestParams.fromJson(request.params!);
+            final params = ElicitRequest.fromJson(request.params!);
             response = await server.experimental.elicitForTask(taskId, params);
           } else if (request.method == 'sampling/createMessage') {
-            final params = CreateMessageRequestParams.fromJson(request.params!);
+            final params = CreateMessageRequest.fromJson(request.params!);
             response =
                 await server.experimental.createMessageForTask(taskId, params);
           } else {
