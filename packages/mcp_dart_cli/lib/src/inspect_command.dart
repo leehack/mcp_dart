@@ -196,7 +196,7 @@ class InspectCommand extends Command<int> {
     List<String> serverArgs,
     Map<String, String> envMap,
   ) async {
-    final clientOptions = ClientOptions(
+    final clientOptions = McpClientOptions(
       capabilities: const ClientCapabilities(
         sampling: ClientCapabilitiesSampling(),
       ),
@@ -230,7 +230,7 @@ class InspectCommand extends Command<int> {
   }
 
   Future<void> _executeTool(
-      Client client, String name, Map<String, dynamic> args) async {
+      McpClient client, String name, Map<String, dynamic> args) async {
     _logger.info('Executing tool: $name...');
     try {
       final result =
@@ -241,11 +241,10 @@ class InspectCommand extends Command<int> {
     }
   }
 
-  Future<void> _readResource(Client client, String uri) async {
+  Future<void> _readResource(McpClient client, String uri) async {
     _logger.info('Reading resource: $uri...');
     try {
-      final result =
-          await client.readResource(ReadResourceRequestParams(uri: uri));
+      final result = await client.readResource(ReadResourceRequest(uri: uri));
       _printer.printResourceResult(result);
     } catch (e) {
       _logger.err('Resource read failed: $e');
@@ -253,19 +252,19 @@ class InspectCommand extends Command<int> {
   }
 
   Future<void> _getPrompt(
-      Client client, String name, Map<String, dynamic> args) async {
+      McpClient client, String name, Map<String, dynamic> args) async {
     _logger.info('Getting prompt: $name...');
     try {
       final stringArgs = args.map((k, v) => MapEntry(k, v.toString()));
       final result = await client
-          .getPrompt(GetPromptRequestParams(name: name, arguments: stringArgs));
+          .getPrompt(GetPromptRequest(name: name, arguments: stringArgs));
       _printer.printPromptResult(result);
     } catch (e) {
       _logger.err('Get prompt failed: $e');
     }
   }
 
-  Future<void> _listCapabilities(Client client) async {
+  Future<void> _listCapabilities(McpClient client) async {
     try {
       final tools = await client.listTools();
       final resources = await client.listResources();

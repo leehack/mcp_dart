@@ -15,7 +15,7 @@ export 'tools/tools.dart';
 McpServer createMcpServer() {
   final server = McpServer(
     Implementation(name: '{{name}}', version: '1.0.0'),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         resources: ServerCapabilitiesResources(),
