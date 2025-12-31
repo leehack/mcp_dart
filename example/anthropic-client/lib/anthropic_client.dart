@@ -9,7 +9,7 @@ class AnthropicMcpClient {
   final mcp_dart.McpClient mcp;
   final AnthropicClient anthropic;
   mcp_dart.StdioClientTransport? transport;
-  List<Tool> tools = [];
+  List<mcp_dart.Tool> tools = [];
 
   AnthropicMcpClient(this.anthropic, this.mcp);
 
