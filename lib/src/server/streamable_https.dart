@@ -168,8 +168,8 @@ class StreamableHTTPServerTransport implements Transport {
   /// Handles GET requests for SSE stream
   Future<void> _handleGetRequest(HttpRequest req) async {
     // The client MUST include an Accept header, listing text/event-stream as a supported content type.
-    final acceptHeader = req.headers.value(HttpHeaders.acceptHeader);
-    if (acceptHeader == null || !acceptHeader.contains("text/event-stream")) {
+    final acceptHeader = req.headers.value(HttpHeaders.acceptHeader) ?? '';
+    if (!acceptHeader.contains("text/event-stream")) {
       req.response
         ..statusCode = HttpStatus.notAcceptable
         ..write(
@@ -206,7 +206,7 @@ class StreamableHTTPServerTransport implements Transport {
     // The server MUST either return Content-Type: text/event-stream in response to this HTTP GET,
     // or else return HTTP 405 Method Not Allowed
     final headers = {
-      HttpHeaders.contentTypeHeader: "text/event-stream",
+      HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
       HttpHeaders.cacheControlHeader: "no-cache, no-transform",
       HttpHeaders.connectionHeader: "keep-alive",
     };
@@ -263,7 +263,7 @@ class StreamableHTTPServerTransport implements Transport {
     }
     try {
       final headers = {
-        HttpHeaders.contentTypeHeader: "text/event-stream",
+        HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
         HttpHeaders.cacheControlHeader: "no-cache, no-transform",
         HttpHeaders.connectionHeader: "keep-alive",
       };
@@ -348,10 +348,9 @@ class StreamableHTTPServerTransport implements Transport {
   Future<void> _handlePostRequest(HttpRequest req, [dynamic parsedBody]) async {
     try {
       // Validate the Accept header
-      final acceptHeader = req.headers.value(HttpHeaders.acceptHeader);
+      final acceptHeader = req.headers.value(HttpHeaders.acceptHeader) ?? '';
       // The client MUST include an Accept header, listing both application/json and text/event-stream as supported content types.
-      if (acceptHeader == null ||
-          !acceptHeader.contains("application/json") ||
+      if (!acceptHeader.contains("application/json") ||
           !acceptHeader.contains("text/event-stream")) {
         req.response.statusCode = HttpStatus.notAcceptable;
         req.response.write(
@@ -370,8 +369,8 @@ class StreamableHTTPServerTransport implements Transport {
         return;
       }
 
-      final contentType = req.headers.contentType?.value;
-      if (contentType == null || !contentType.contains("application/json")) {
+      final contentType = req.headers.contentType?.value ?? '';
+      if (!contentType.contains("application/json")) {
         req.response.statusCode = HttpStatus.unsupportedMediaType;
         req.response.write(
           jsonEncode(
@@ -528,7 +527,7 @@ class StreamableHTTPServerTransport implements Transport {
         final streamId = generateUUID();
         if (!_enableJsonResponse) {
           final headers = {
-            HttpHeaders.contentTypeHeader: "text/event-stream",
+            HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
             HttpHeaders.cacheControlHeader: "no-cache",
             HttpHeaders.connectionHeader: "keep-alive",
           };
@@ -731,8 +730,10 @@ class StreamableHTTPServerTransport implements Transport {
       String? eventId;
       if (_eventStore != null) {
         // Stores the event and gets the generated event ID
-        eventId =
-            await _eventStore!.storeEvent(_standaloneSseStreamId, message);
+        eventId = await _eventStore!.storeEvent(
+          _standaloneSseStreamId,
+          message,
+        );
       }
 
       // Send the message to the standalone SSE stream
@@ -770,8 +771,9 @@ class StreamableHTTPServerTransport implements Transport {
           .toList();
 
       // Check if we have responses for all requests using this connection
-      final allResponsesReady =
-          relatedIds.every((id) => _requestResponseMap.containsKey(id));
+      final allResponsesReady = relatedIds.every(
+        (id) => _requestResponseMap.containsKey(id),
+      );
 
       if (allResponsesReady) {
         if (response == null) {
@@ -783,7 +785,7 @@ class StreamableHTTPServerTransport implements Transport {
         if (_enableJsonResponse) {
           // All responses ready, send as JSON
           final headers = {
-            HttpHeaders.contentTypeHeader: 'application/json',
+            HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
           };
 
           if (sessionId != null) {
@@ -800,8 +802,9 @@ class StreamableHTTPServerTransport implements Transport {
           if (responses.length == 1) {
             response.write(jsonEncode(responses[0].toJson()));
           } else {
-            response
-                .write(jsonEncode(responses.map((r) => r.toJson()).toList()));
+            response.write(
+              jsonEncode(responses.map((r) => r.toJson()).toList()),
+            );
           }
           await _safeClose(response);
         } else {
