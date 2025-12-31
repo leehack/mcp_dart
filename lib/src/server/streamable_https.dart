@@ -350,7 +350,8 @@ class StreamableHTTPServerTransport implements Transport {
       // Validate the Accept header
       final acceptHeader = req.headers.value(HttpHeaders.acceptHeader) ?? '';
       // The client MUST include an Accept header, listing both application/json and text/event-stream as supported content types.
-      if (!acceptHeader.contains("application/json") || !acceptHeader.contains("text/event-stream")) {
+      if (!acceptHeader.contains("application/json") ||
+          !acceptHeader.contains("text/event-stream")) {
         req.response.statusCode = HttpStatus.notAcceptable;
         req.response.write(
           jsonEncode(
@@ -729,8 +730,10 @@ class StreamableHTTPServerTransport implements Transport {
       String? eventId;
       if (_eventStore != null) {
         // Stores the event and gets the generated event ID
-        eventId =
-            await _eventStore!.storeEvent(_standaloneSseStreamId, message);
+        eventId = await _eventStore!.storeEvent(
+          _standaloneSseStreamId,
+          message,
+        );
       }
 
       // Send the message to the standalone SSE stream
@@ -768,8 +771,9 @@ class StreamableHTTPServerTransport implements Transport {
           .toList();
 
       // Check if we have responses for all requests using this connection
-      final allResponsesReady =
-          relatedIds.every((id) => _requestResponseMap.containsKey(id));
+      final allResponsesReady = relatedIds.every(
+        (id) => _requestResponseMap.containsKey(id),
+      );
 
       if (allResponsesReady) {
         if (response == null) {
@@ -798,8 +802,9 @@ class StreamableHTTPServerTransport implements Transport {
           if (responses.length == 1) {
             response.write(jsonEncode(responses[0].toJson()));
           } else {
-            response
-                .write(jsonEncode(responses.map((r) => r.toJson()).toList()));
+            response.write(
+              jsonEncode(responses.map((r) => r.toJson()).toList()),
+            );
           }
           await _safeClose(response);
         } else {
