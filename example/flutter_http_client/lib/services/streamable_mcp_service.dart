@@ -24,7 +24,7 @@ class NotificationMessage {
 /// MCP Client Service with StreamableHttpClientTransport
 class StreamableMcpService extends ChangeNotifier {
   // MCP client properties
-  Client? _client;
+  McpClient? _client;
   StreamableHttpClientTransport? _transport;
   String serverUrl;
   String? _sessionId;
@@ -75,7 +75,7 @@ class StreamableMcpService extends ChangeNotifier {
 
     try {
       // Create a new client
-      _client = Client(
+      _client = McpClient(
         Implementation(name: 'flutter-mcp-client', version: '1.0.0'),
       );
 
@@ -390,7 +390,7 @@ class StreamableMcpService extends ChangeNotifier {
       throw Exception('Not connected to server.');
     }
 
-    final params = GetPromptRequestParams(
+    final params = GetPromptRequest(
       name: name,
       arguments: Map<String, String>.from(
         args.map((key, value) => MapEntry(key, value.toString())),

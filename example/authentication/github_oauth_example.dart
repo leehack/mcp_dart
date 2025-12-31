@@ -393,7 +393,7 @@ Future<void> main(List<String> args) async {
   );
 
   // Create MCP client
-  final client = Client(
+  final client = McpClient(
     const Implementation(name: 'github-mcp-dart-client', version: '1.0.0'),
   );
 

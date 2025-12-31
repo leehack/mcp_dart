@@ -1,0 +1,381 @@
+version: 1
+
+transforms:
+  # --- Types: Elicitation ---
+  - title: "Rename to 'ElicitRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/elicitation.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ElicitRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ElicitRequest'
+
+  - title: "Rename to 'ElicitationCompleteNotification'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/elicitation.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ElicitationCompleteParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ElicitationCompleteNotification'
+
+  # --- Types: Client/Server Options ---
+  - title: "Rename to 'McpClientOptions'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/client/client.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ClientOptions'
+    changes:
+      - kind: 'rename'
+        newName: 'McpClientOptions'
+
+  - title: "Rename to 'McpServerOptions'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/server/server.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ServerOptions'
+    changes:
+      - kind: 'rename'
+        newName: 'McpServerOptions'
+
+  - title: "Rename to 'McpClient'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/client/client.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'Client'
+    changes:
+      - kind: 'rename'
+        newName: 'McpClient'
+
+  - title: "Rename to 'McpServer'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/server/server.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'Server'
+    changes:
+      - kind: 'rename'
+        newName: 'McpServer'
+
+  # --- Types: Initialization ---
+  - title: "Rename to 'InitializeRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/initialization.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'InitializeRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'InitializeRequest'
+
+  # --- Types: Tools ---
+  - title: "Rename to 'ListToolsRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tools.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ListToolsRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ListToolsRequest'
+
+  - title: "Rename to 'CallToolRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tools.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'CallToolRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'CallToolRequest'
+
+  # --- Types: Resources ---
+  - title: "Rename to 'ListResourcesRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/resources.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ListResourcesRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ListResourcesRequest'
+
+  - title: "Rename to 'ListResourceTemplatesRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/resources.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ListResourceTemplatesRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ListResourceTemplatesRequest'
+
+  - title: "Rename to 'ReadResourceRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/resources.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ReadResourceRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ReadResourceRequest'
+
+  - title: "Rename to 'SubscribeRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/resources.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'SubscribeRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'SubscribeRequest'
+
+  - title: "Rename to 'UnsubscribeRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/resources.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'UnsubscribeRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'UnsubscribeRequest'
+
+  - title: "Rename to 'ResourceUpdatedNotification'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/resources.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ResourceUpdatedNotificationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ResourceUpdatedNotification'
+
+  # --- Types: Prompts ---
+  - title: "Rename to 'ListPromptsRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/prompts.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ListPromptsRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ListPromptsRequest'
+
+  - title: "Rename to 'GetPromptRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/prompts.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'GetPromptRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'GetPromptRequest'
+
+  # --- Types: Completion ---
+  - title: "Rename to 'CompleteRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/completion.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'CompleteRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'CompleteRequest'
+
+  # --- Types: Logging ---
+  - title: "Rename to 'SetLevelRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/logging.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'SetLevelRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'SetLevelRequest'
+
+  - title: "Rename to 'LoggingMessageNotification'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/logging.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'LoggingMessageNotificationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'LoggingMessageNotification'
+
+  # --- Types: Sampling ---
+  - title: "Rename to 'CreateMessageRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/sampling.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'CreateMessageRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'CreateMessageRequest'
+
+  # --- Types: Tasks ---
+  - title: "Rename to 'ListTasksRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tasks.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ListTasksRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ListTasksRequest'
+
+  - title: "Rename to 'CancelTaskRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tasks.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'CancelTaskRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'CancelTaskRequest'
+
+  - title: "Rename to 'GetTaskRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tasks.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'GetTaskRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'GetTaskRequest'
+
+  - title: "Rename to 'TaskResultRequest'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tasks.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'TaskResultRequestParams'
+    changes:
+      - kind: 'rename'
+        newName: 'TaskResultRequest'
+
+  - title: "Rename to 'TaskStatusNotification'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tasks.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'TaskStatusNotificationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'TaskStatusNotification'
+
+  - title: "Rename to 'TaskCreation'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/tasks.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'TaskCreationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'TaskCreation'
+
+  # --- Types: Misc ---
+  - title: "Rename to 'CancelledNotification'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/misc.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'CancelledNotificationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'CancelledNotification'
+
+  - title: "Rename to 'ProgressNotification'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/types/misc.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      class: 'ProgressNotificationParams'
+    changes:
+      - kind: 'rename'
+        newName: 'ProgressNotification'
+
+  # --- Methods: McpServer ---
+  - title: "Rename to 'registerResource'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/server/mcp_server.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      method: 'resource'
+      inClass: 'McpServer'
+    changes:
+      - kind: 'rename'
+        newName: 'registerResource'
+
+  - title: "Rename to 'registerResourceTemplate'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/server/mcp_server.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      method: 'resourceTemplate'
+      inClass: 'McpServer'
+    changes:
+      - kind: 'rename'
+        newName: 'registerResourceTemplate'
+
+  - title: "Rename to 'registerTool'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/server/mcp_server.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      method: 'tool'
+      inClass: 'McpServer'
+    changes:
+      - kind: 'rename'
+        newName: 'registerTool'
+
+  - title: "Rename to 'registerPrompt'"
+    date: 2024-12-23
+    element:
+      uris:
+        - 'package:mcp_dart/src/server/mcp_server.dart'
+        - 'package:mcp_dart/mcp_dart.dart'
+      method: 'prompt'
+      inClass: 'McpServer'
+    changes:
+      - kind: 'rename'
+        newName: 'registerPrompt'

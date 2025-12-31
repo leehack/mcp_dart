@@ -685,7 +685,7 @@ class ExperimentalMcpServerTasks {
   /// Sends an `elicitation/create` request associated with a specific task.
   Future<ElicitResult> elicitForTask(
     String taskId,
-    ElicitRequestParams params, [
+    ElicitRequest params, [
     RequestOptions? options,
   ]) {
     final req = JsonRpcElicitRequest(
@@ -705,7 +705,7 @@ class ExperimentalMcpServerTasks {
   /// Sends a `sampling/createMessage` request associated with a specific task.
   Future<CreateMessageResult> createMessageForTask(
     String taskId,
-    CreateMessageRequestParams params, [
+    CreateMessageRequest params, [
     RequestOptions? options,
   ]) {
     final req = JsonRpcCreateMessageRequest(
@@ -779,7 +779,7 @@ class McpServer {
       _experimental ??= ExperimentalMcpServerTasks(this);
 
   /// Creates an [McpServer] instance.
-  McpServer(Implementation serverInfo, {ServerOptions? options}) {
+  McpServer(Implementation serverInfo, {McpServerOptions? options}) {
     // ignore: deprecated_member_use_from_same_package
     server = Server(serverInfo, options: options);
   }
@@ -799,7 +799,7 @@ class McpServer {
 
   /// Sends a logging message to the client, if connected.
   Future<void> sendLoggingMessage(
-    LoggingMessageNotificationParams params, {
+    LoggingMessageNotification params, {
     String? sessionId,
   }) async {
     return server.sendLoggingMessage(params, sessionId: sessionId);
@@ -1711,7 +1711,7 @@ class McpServer {
 
   /// Requests structured user input from the client using form mode.
   Future<ElicitResult> elicitInput(
-    ElicitRequestParams params, [
+    ElicitRequest params, [
     RequestOptions? options,
   ]) async {
     return server.elicitInput(params, options);

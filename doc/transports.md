@@ -36,7 +36,7 @@ void main() async {
       name: 'stdio-server',
       version: '1.0.0',
     ),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -59,7 +59,7 @@ void main() async {
 #### Connect to Dart Server
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(name: 'client', version: '1.0.0'),
 );
 
@@ -130,7 +130,7 @@ final transport = StdioClientTransport(
 ```dart
 // ✅ Always close client to terminate server process
 try {
-  final client = Client(...);
+  final client = McpClient(...);
   final transport = StdioClientTransport(StdioServerParameters(...));
   await client.connect(transport);
 
@@ -231,7 +231,7 @@ void main() async {
       name: 'http-server',
       version: '1.0.0',
     ),
-    options: ServerOptions(
+    options: McpServerOptions(
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -262,7 +262,7 @@ void main() async {
 ### Client Setup
 
 ```dart
-final client = Client(
+final client = McpClient(
   Implementation(name: 'client', version: '1.0.0'),
 );
 
@@ -436,7 +436,7 @@ void main() async {
   await server.connect(serverTransport);
 
   // Client setup
-  final client = Client(
+  final client = McpClient(
     Implementation(name: 'client', version: '1.0.0'),
   );
 
@@ -501,7 +501,7 @@ void main() {
     ));
 
     // Create client
-    final client = Client(
+    final client = McpClient(
       Implementation(name: 'test-client', version: '1.0.0'),
     );
 

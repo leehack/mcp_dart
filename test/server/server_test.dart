@@ -130,7 +130,7 @@ void main() {
         },
         tools: ServerCapabilitiesTools(),
       );
-      final options = ServerOptions(
+      final options = McpServerOptions(
         capabilities: capabilities,
         instructions: 'Test instructions',
       );
@@ -182,7 +182,7 @@ void main() {
         sampling: ClientCapabilitiesSampling(),
       );
 
-      final initParams = InitializeRequestParams(
+      final initParams = InitializeRequest(
         protocolVersion: latestProtocolVersion,
         capabilities: clientCapabilities,
         clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
@@ -243,7 +243,7 @@ void main() {
 
       final clientCapabilities = const ClientCapabilities();
 
-      final initParams = InitializeRequestParams(
+      final initParams = InitializeRequest(
         protocolVersion: "999.999", // Unsupported version
         capabilities: clientCapabilities,
         clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
@@ -295,7 +295,7 @@ void main() {
       await _initializeClient(transport, server, withSampling: true);
 
       // Create message params
-      final createParams = const CreateMessageRequestParams(
+      final createParams = const CreateMessageRequest(
         messages: [
           SamplingMessage(
             role: SamplingMessageRole.user,
@@ -383,7 +383,7 @@ void main() {
         resources:
             ServerCapabilitiesResources(listChanged: true, subscribe: true),
       );
-      final options = ServerOptions(capabilities: capabilities);
+      final options = McpServerOptions(capabilities: capabilities);
       final resourceServer = Server(serverInfo, options: options);
 
       await resourceServer.connect(transport);
@@ -392,7 +392,7 @@ void main() {
       await resourceServer.sendResourceListChanged();
 
       // Send resource updated notification
-      final resourceParams = const ResourceUpdatedNotificationParams(
+      final resourceParams = const ResourceUpdatedNotification(
         uri: 'test-resource',
       );
       await resourceServer.sendResourceUpdated(resourceParams);
@@ -419,7 +419,7 @@ void main() {
     test('Server cannot send notifications when capability is not registered',
         () {
       // Create server with NO capabilities
-      final options = const ServerOptions();
+      final options = const McpServerOptions();
       final plainServer = Server(serverInfo, options: options);
 
       expect(
@@ -427,7 +427,7 @@ void main() {
         throwsA(isA<StateError>()),
       );
 
-      final resourceParams = const ResourceUpdatedNotificationParams(
+      final resourceParams = const ResourceUpdatedNotification(
         uri: 'test-resource',
       );
       expect(
@@ -444,7 +444,7 @@ void main() {
       );
 
       // Logging notification requires logging capability
-      final logParams = const LoggingMessageNotificationParams(
+      final logParams = const LoggingMessageNotification(
         level: LoggingLevel.info,
         data: 'Test log',
       );
@@ -459,7 +459,7 @@ void main() {
       final capabilities = const ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       );
-      final options = ServerOptions(capabilities: capabilities);
+      final options = McpServerOptions(capabilities: capabilities);
       final server = Server(serverInfo, options: options);
 
       // These should not throw - tools capability is registered
@@ -505,7 +505,7 @@ Future<void> _initializeClient(
     elicitation: withElicitation ? const ClientElicitation.formOnly() : null,
   );
 
-  final initParams = InitializeRequestParams(
+  final initParams = InitializeRequest(
     protocolVersion: latestProtocolVersion,
     capabilities: clientCapabilities,
     clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
@@ -589,7 +589,7 @@ void _addCriticalPathTests() {
         () async {
       server = Server(
         const Implementation(name: 'TestServer', version: '1.0.0'),
-        options: const ServerOptions(
+        options: const McpServerOptions(
           capabilities: ServerCapabilities(
             resources: ServerCapabilitiesResources(), // No subscribe
           ),
@@ -613,7 +613,7 @@ void _addCriticalPathTests() {
         () {
       server = Server(
         const Implementation(name: 'TestServer', version: '1.0.0'),
-        options: const ServerOptions(
+        options: const McpServerOptions(
           capabilities: ServerCapabilities(
             resources: ServerCapabilitiesResources(subscribe: true),
           ),
@@ -631,7 +631,7 @@ void _addCriticalPathTests() {
         () {
       server = Server(
         const Implementation(name: 'TestServer', version: '1.0.0'),
-        options: const ServerOptions(
+        options: const McpServerOptions(
           capabilities: ServerCapabilities(
             resources: ServerCapabilitiesResources(), // No listChanged
           ),
@@ -655,7 +655,7 @@ void _addCriticalPathTests() {
     test('notifications/tools/list_changed requires tools.listChanged', () {
       server = Server(
         const Implementation(name: 'TestServer', version: '1.0.0'),
-        options: const ServerOptions(
+        options: const McpServerOptions(
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(), // No listChanged
           ),
@@ -678,7 +678,7 @@ void _addCriticalPathTests() {
     test('notifications/prompts/list_changed requires prompts.listChanged', () {
       server = Server(
         const Implementation(name: 'TestServer', version: '1.0.0'),
-        options: const ServerOptions(
+        options: const McpServerOptions(
           capabilities: ServerCapabilities(
             prompts: ServerCapabilitiesPrompts(), // No listChanged
           ),
