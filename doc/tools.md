@@ -296,7 +296,7 @@ server.registerTool(
 ### Validation Errors
 
 ```dart
-server.tool(
+server.registerTool(
   name: 'custom-validation',
   inputSchema: {...},
   callback: (args) async {
@@ -313,48 +313,7 @@ server.tool(
 );
 ```
 
-## Long-Running Operations
 
-### Progress Notifications
-
-```dart
-server.registerTool(
-  'process-large-file',
-  inputSchema: ToolInputSchema(properties: {...}),
-  callback: (args, extra) async {
-    final progressToken = extra.progressToken;
-    final file = args['file'] as String;
-
-    if (progressToken != null) {
-      // Initial progress
-      await server.sendProgress(
-        progressToken: progressToken,
-        progress: 0,
-        total: 100,
-      );
-
-      // Processing...
-      for (var i = 0; i <= 100; i += 10) {
-        await processChunk(file, i);
-
-        // Update progress
-        await server.sendProgress(
-          progressToken: progressToken,
-          progress: i,
-          total: 100,
-        );
-      }
-    } else {
-      // Process without progress
-      await processFile(file);
-    }
-
-    return CallToolResult(
-      content: [TextContent(text: 'Processing complete')],
-    );
-  },
-);
-```
 
 ### Cancellation Support
 

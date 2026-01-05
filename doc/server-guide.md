@@ -80,7 +80,7 @@ ServerCapabilities(
 
 ```dart
 // Advertised automatically when you register tools
-server.tool(name: 'my-tool', ...);
+server.registerTool(name: 'my-tool', ...);
 
 // Capabilities include:
 // - listChanged: true (server can notify of tool list changes)
@@ -90,7 +90,7 @@ server.tool(name: 'my-tool', ...);
 
 ```dart
 // Advertised automatically when you register resources
-server.resource(uri: 'file:///data', ...);
+server.registerResource(uri: 'file:///data', ...);
 
 // Capabilities include:
 // - subscribe: true (clients can subscribe to resource changes)
@@ -101,7 +101,7 @@ server.resource(uri: 'file:///data', ...);
 
 ```dart
 // Advertised automatically when you register prompts
-server.prompt(name: 'my-prompt', ...);
+server.registerPrompt(name: 'my-prompt', ...);
 
 // Capabilities include:
 // - listChanged: true (server can notify of prompt list changes)
@@ -592,67 +592,42 @@ Tasks allow servers to expose long-running operations that can be tracked, pause
 
 ### Enabling Tasks
 
-To enable tasks, use the `tasks` method on your `McpServer` instance. You must provide a `listCallback` to return the available tasks.
+To enable tasks, use the `experimental` property on your `McpServer` instance.
 
 ```dart
-server.tasks(
-  listCallback: (extra) async {
-    return ListTasksResult(
-      tasks: [
-        Task(
-          taskId: 'task-1',
-          status: TaskStatus.working,
-          createdAt: DateTime.now().toIso8601String(),
-          name: 'Long Operation',
-          description: 'A task that takes a long time',
-        ),
-      ],
-    );
-  },
-  // Optional: Handle task cancellation
-  cancelCallback: (taskId, extra) async {
-    // Logic to cancel the task
-  },
-  // Optional: Handle getting a specific task
-  getCallback: (taskId, extra) async {
-    // Return the task details
-    return GetTaskResult(
-      task: Task(
-        taskId: taskId,
+server.experimental.onListTasks((extra) async {
+  return ListTasksResult(
+    tasks: [
+      Task(
+        taskId: 'task-1',
         status: TaskStatus.working,
         createdAt: DateTime.now().toIso8601String(),
+        name: 'Long Operation',
+        description: 'A task that takes a long time',
       ),
-    );
-  },
-  // Optional: Handle getting task results
-  resultCallback: (taskId, extra) async {
-     // Return the task result
-     return TaskResultResult(
-       result: CallToolResult.fromContent(
-         content: [TextContent(text: 'Result')],
-       ),
-       task: Task(
-         taskId: taskId,
-         status: TaskStatus.completed,
-         createdAt: DateTime.now().toIso8601String(),
-       ),
-     );
-  },
-);
-```
+    ],
+  );
+});
 
-### Notifying Task Status
+server.experimental.onCancelTask((taskId, extra) async {
+  // Logic to cancel the task
+});
 
-You can notify clients about task status updates using `notifyTaskStatus`:
+server.experimental.onGetTask((taskId, extra) async {
+  // Return the task details
+  return Task(
+    taskId: taskId,
+    status: TaskStatus.working,
+    createdAt: DateTime.now().toIso8601String(),
+  );
+});
 
-```dart
-await server.notifyTaskStatus(
-  status: TaskStatus.completed,
-  taskId: 'task-1',
-  result: CallToolResult.fromContent(
-    content: [TextContent(text: 'Task completed successfully')],
-  ),
-);
+server.experimental.onTaskResult((taskId, extra) async {
+  // Return the task result
+  return CallToolResult.fromContent(
+    content: [TextContent(text: 'Result')],
+  );
+});
 ```
 
 ## Handling Client Requests
@@ -663,47 +638,6 @@ await server.notifyTaskStatus(
 2. Server validates request
 3. Server calls appropriate handler
 4. Server returns result or error
-5. Server may send progress notifications
-
-### Progress Notifications
-
-For long-running operations:
-
-```dart
-server.registerTool(
-  'process-large-file',
-  description: 'Process a large file',
-  inputSchema: ToolInputSchema(properties: {}),
-  callback: (args, extra) async {
-    // Get progress token from extra
-    final progressToken = extra.progressToken; // extra type changed?
-
-    if (progressToken != null) {
-      // Send progress updates
-      await server.sendProgress(
-        progressToken: progressToken,
-        progress: 25,
-        total: 100,
-      );
-
-      // Process...
-      await Future.delayed(Duration(seconds: 1));
-
-      await server.sendProgress(
-        progressToken: progressToken,
-        progress: 50,
-        total: 100,
-      );
-
-      // More processing...
-    }
-
-    return CallToolResult.fromContent(
-      content: [TextContent(text: 'Processing complete')],
-    );
-  },
-);
-```
 
 ### Logging
 
@@ -716,10 +650,12 @@ server.logger.warning('Rate limit approaching');
 server.logger.severe('Database connection failed');
 
 // Custom log levels
-await server.sendLogMessage(
-  level: LoggingLevel.debug,
-  message: 'Detailed debug information',
-  logger: 'MyComponent',
+await server.sendLoggingMessage(
+  LoggingMessageNotification(
+    level: LoggingLevel.debug,
+    data: 'Detailed debug information',
+    logger: 'MyComponent',
+  ),
 );
 ```
 
@@ -811,7 +747,7 @@ void main() async {
 ### Custom Validation
 
 ```dart
-server.tool(
+server.registerTool(
   name: 'custom-validation',
   description: 'Tool with custom validation',
   inputSchema: {...},
@@ -855,9 +791,9 @@ void addNewTool() {
 // Clients can request paginated resource lists
 // Server automatically handles the pagination
 
-server.resource(uri: 'resource-1', ...);
-server.resource(uri: 'resource-2', ...);
-server.resource(uri: 'resource-3', ...);
+server.registerResource(uri: 'resource-1', ...);
+server.registerResource(uri: 'resource-2', ...);
+server.registerResource(uri: 'resource-3', ...);
 // ... many resources
 
 // Client requests:
@@ -871,7 +807,7 @@ server.resource(uri: 'resource-3', ...);
 
 ```dart
 // ✅ Good
-server.tool(
+server.registerTool(
   name: 'search',
   description: 'Search the knowledge base using keywords. '
                'Returns up to 10 most relevant results.',
@@ -879,7 +815,7 @@ server.tool(
 );
 
 // ❌ Bad
-server.tool(
+server.registerTool(
   name: 'search',
   description: 'Searches stuff',
   ...
@@ -944,14 +880,14 @@ callback: (args) async {
 
 ```dart
 // Destructive operations
-server.tool(
+server.registerTool(
   name: 'delete-account',
   destructiveHint: true,  // ⚠️ Warn clients
   ...
 );
 
 // Read-only operations
-server.tool(
+server.registerTool(
   name: 'get-stats',
   readOnlyHint: true,  // Safe to call
   ...

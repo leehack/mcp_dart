@@ -147,12 +147,10 @@ server.registerPrompt(
 ### Register Tasks
 
 ```dart
-server.tasks(
-  listCallback: (extra) async => ListTasksResult(tasks: []),
-  cancelCallback: (taskId, extra) async { /* cancel */ },
-  getCallback: (taskId, extra) async { /* get */ },
-  resultCallback: (taskId, extra) async { /* result */ },
-);
+server.experimental.onListTasks((extra) async => ListTasksResult(tasks: []));
+server.experimental.onCancelTask((taskId, extra) async { /* cancel */ });
+server.experimental.onGetTask((taskId, extra) async { /* get */ });
+server.experimental.onTaskResult((taskId, extra) async { /* result */ });
 ```
 
 ### Connect Transport
@@ -327,33 +325,6 @@ server.registerTool(
 );
 ```
 
-### Tool with Progress
-
-```dart
-server.registerTool(
-  'long-task',
-  inputSchema: ToolInputSchema(properties: {}),
-  callback: (args, extra) async {
-    final token = extra.progressToken;
-
-    for (var i = 0; i <= 100; i += 10) {
-      await processStep(i);
-
-      if (token != null) {
-        await server.sendProgress(
-          progressToken: token,
-          progress: i,
-          total: 100,
-        );
-      }
-    }
-
-    return CallToolResult(
-      content: [TextContent(text: 'Complete')],
-    );
-  },
-);
-```
 
 ### Tool Annotations
 
@@ -528,22 +499,14 @@ try {
 
 ## Notifications
 
-### Send Progress
-
-```dart
-await server.sendProgress(
-  progressToken: 'token-123',
-  progress: 50,
-  total: 100,
-);
-```
-
 ### Send Log Message
 
 ```dart
-await server.sendLogMessage(
-  level: LoggingLevel.info,
-  message: 'Processing started',
+await server.sendLoggingMessage(
+  LoggingMessageNotification(
+    level: LoggingLevel.info,
+    data: 'Processing started',
+  ),
 );
 ```
 
@@ -618,9 +581,15 @@ LoggingLevel.emergency
 ### Receive Logs
 
 ```dart
-client.onLogMessage = (notification) {
-  print('[${notification.level}] ${notification.data}');
-};
+client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
+  Method.notificationsMessage,
+  (notification) async {
+    print('[${notification.logParams.level}] ${notification.logParams.data}');
+  },
+  (params, meta) => JsonRpcLoggingMessageNotification(
+    logParams: LoggingMessageNotification.fromJson(params ?? {}),
+  ),
+);
 ```
 
 ## Resource Subscriptions
@@ -636,10 +605,16 @@ await client.subscribeResource(SubscribeRequest(
 ### Handle Updates
 
 ```dart
-client.onResourceUpdated = (notification) {
-  print('Updated: ${notification.uri}');
-  // Re-read resource
-};
+client.setNotificationHandler<JsonRpcResourceUpdatedNotification>(
+  Method.notificationsResourcesUpdated,
+  (notification) async {
+    print('Updated: ${notification.updatedParams.uri}');
+    // Re-read resource
+  },
+  (params, meta) => JsonRpcResourceUpdatedNotification(
+    updatedParams: ResourceUpdatedNotification.fromJson(params ?? {}),
+  ),
+);
 ```
 
 ### Unsubscribe
@@ -756,7 +731,6 @@ if (Platform.isWeb) {
 - ✅ Use type-safe argument access: `args['key'] as Type`
 - ✅ Provide clear descriptions for tools/resources/prompts
 - ✅ Use appropriate tool hints (readOnly, destructive, etc.)
-- ✅ Send progress for long-running operations
 - ✅ Check server capabilities before using features
 - ✅ Sanitize and validate user inputs for security
 - ✅ Use meaningful error messages
