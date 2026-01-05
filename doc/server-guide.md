@@ -178,6 +178,26 @@ server.registerTool(
 );
 ```
 
+### Reporting Progress
+
+For long-running operations, you can report progress back to the client:
+
+```dart
+server.registerTool(
+  'long-task',
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
+    for (var i = 0; i < 100; i++) {
+      await Future.delayed(Duration(milliseconds: 100));
+      await extra.sendProgress(i.toDouble(), 100);
+    }
+    return CallToolResult(content: [TextContent(text: 'Done')]);
+  },
+);
+```
+
+See [Tools Documentation](tools.md#progress-notifications) for more details.
+
 ### Tool Annotations
 
 Provide hints about tool behavior:

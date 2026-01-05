@@ -110,6 +110,24 @@ for (final content in result.content) {
 }
 ```
 
+### Receive Tool Progress
+
+You can provide a callback to receive progress updates from long-running tools.
+
+```dart
+final result = await client.callTool(
+  CallToolRequest(
+    name: 'long-running-tool',
+    arguments: {},
+  ),
+  options: RequestOptions(
+    onprogress: (progress) {
+      print('Progress: ${progress.progress}/${progress.total}');
+    },
+  ),
+);
+```
+
 ### Handle Tool Errors
 
 ```dart
