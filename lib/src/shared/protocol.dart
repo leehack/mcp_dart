@@ -142,6 +142,38 @@ class RequestHandlerExtra {
     this.closeSSEStream,
     this.closeStandaloneSSEStream,
   });
+
+  /// Sends a progress notification for the current request.
+  ///
+  /// This method automatically retrieves the `progressToken` from the request metadata.
+  /// If the client did not provide a progress token, this method does nothing (or logs a warning).
+  Future<void> sendProgress(double progress, [double? total]) async {
+    final progressToken = meta?['progressToken'];
+    if (progressToken == null) {
+      _logger.warn(
+        "Attempted to send progress for request $requestId, but no progressToken was provided by the client.",
+      );
+      return;
+    }
+
+    // progressToken can be int or string
+    if (progressToken is! int && progressToken is! String) {
+      _logger.warn(
+        "Invalid progressToken type: ${progressToken.runtimeType}. Expected int or String.",
+      );
+      return;
+    }
+
+    final notification = JsonRpcProgressNotification(
+      progressParams: ProgressNotification(
+        progressToken: progressToken,
+        progress: progress,
+        total: total,
+      ),
+    );
+
+    await sendNotification(notification);
+  }
 }
 
 /// Internal class holding timeout state for a request.

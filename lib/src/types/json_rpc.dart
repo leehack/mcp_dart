@@ -125,8 +125,13 @@ sealed class JsonRpcMessage {
           Method.tasksCancel => JsonRpcCancelTaskRequest.fromJson(json),
           Method.tasksGet => JsonRpcGetTaskRequest.fromJson(json),
           Method.tasksResult => JsonRpcTaskResultRequest.fromJson(json),
-          _ => throw UnimplementedError(
-              "fromJson for request method '$method' not implemented",
+          _ => JsonRpcRequest(
+              id: id,
+              method: method,
+              params: json['params'] as Map<String, dynamic>?,
+              meta: json['_meta'] as Map<String, dynamic>? ??
+                  (json['params'] as Map<String, dynamic>?)?['_meta']
+                      as Map<String, dynamic>?,
             ),
         };
       } else {
@@ -160,8 +165,12 @@ sealed class JsonRpcMessage {
             JsonRpcTaskStatusNotification.fromJson(json),
           Method.notificationsElicitationComplete =>
             JsonRpcElicitationCompleteNotification.fromJson(json),
-          _ => throw UnimplementedError(
-              "fromJson for notification method '$method' not implemented",
+          _ => JsonRpcNotification(
+              method: method,
+              params: json['params'] as Map<String, dynamic>?,
+              meta: json['_meta'] as Map<String, dynamic>? ??
+                  (json['params'] as Map<String, dynamic>?)?['_meta']
+                      as Map<String, dynamic>?,
             ),
         };
       }
