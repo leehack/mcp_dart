@@ -189,7 +189,11 @@ server.registerTool(
   callback: (args, extra) async {
     for (var i = 0; i < 100; i++) {
       await Future.delayed(Duration(milliseconds: 100));
-      await extra.sendProgress(i.toDouble(), 100);
+      await extra.sendProgress(
+        i.toDouble(),
+        total: 100,
+        message: 'Processing item $i',
+      );
     }
     return CallToolResult(content: [TextContent(text: 'Done')]);
   },

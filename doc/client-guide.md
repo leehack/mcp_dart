@@ -123,6 +123,9 @@ final result = await client.callTool(
   options: RequestOptions(
     onprogress: (progress) {
       print('Progress: ${progress.progress}/${progress.total}');
+      if (progress.message != null) {
+        print('Status: ${progress.message}');
+      }
     },
   ),
 );

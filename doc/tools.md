@@ -337,7 +337,11 @@ server.registerTool(
 
       // Send progress notification
       // This automatically checks if the client requested progress (via progressToken)
-      await extra.sendProgress(i.toDouble(), totalSteps.toDouble());
+      await extra.sendProgress(
+        i.toDouble(),
+        total: totalSteps.toDouble(),
+        message: 'Processing step $i',
+      );
     }
 
     return CallToolResult(
@@ -370,7 +374,7 @@ server.registerTool(
       await processItem(i);
 
       // Report progress
-      await extra.sendProgress(i.toDouble(), 1000);
+      await extra.sendProgress(i.toDouble(), total: 1000);
     }
 
     return CallToolResult(content: [TextContent(text: 'Done')]);

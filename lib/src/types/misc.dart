@@ -73,21 +73,27 @@ class Progress {
   /// Total number of items or total progress required, if known.
   final num? total;
 
+  /// An optional human-readable message about the current progress.
+  final String? message;
+
   const Progress({
     required this.progress,
     this.total,
+    this.message,
   });
 
   factory Progress.fromJson(Map<String, dynamic> json) {
     return Progress(
       progress: json['progress'] as num,
       total: json['total'] as num?,
+      message: json['message'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'progress': progress,
         if (total != null) 'total': total,
+        if (message != null) 'message': message,
       };
 }
 
@@ -104,10 +110,15 @@ class ProgressNotification implements Progress {
   @override
   final num? total;
 
+  /// An optional human-readable message about the current progress.
+  @override
+  final String? message;
+
   const ProgressNotification({
     required this.progressToken,
     required this.progress,
     this.total,
+    this.message,
   });
 
   factory ProgressNotification.fromJson(Map<String, dynamic> json) {
@@ -116,6 +127,7 @@ class ProgressNotification implements Progress {
       progressToken: json['progressToken'],
       progress: progressData.progress,
       total: progressData.total,
+      message: progressData.message,
     );
   }
 
@@ -125,6 +137,7 @@ class ProgressNotification implements Progress {
         ...Progress(
           progress: progress,
           total: total,
+          message: message,
         ).toJson(),
       };
 }

@@ -147,7 +147,11 @@ class RequestHandlerExtra {
   ///
   /// This method automatically retrieves the `progressToken` from the request metadata.
   /// If the client did not provide a progress token, this method does nothing (or logs a warning).
-  Future<void> sendProgress(double progress, [double? total]) async {
+  Future<void> sendProgress(
+    double progress, {
+    double? total,
+    String? message,
+  }) async {
     final progressToken = meta?['progressToken'];
     if (progressToken == null) {
       _logger.warn(
@@ -169,6 +173,7 @@ class RequestHandlerExtra {
         progressToken: progressToken,
         progress: progress,
         total: total,
+        message: message,
       ),
     );
 
@@ -798,6 +803,7 @@ abstract class Protocol {
       final progressData = Progress(
         progress: params.progress,
         total: params.total,
+        message: params.message,
       );
       progressHandler(progressData);
     } catch (e) {

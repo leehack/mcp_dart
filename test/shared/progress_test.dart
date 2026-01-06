@@ -161,7 +161,6 @@ void main() {
       expect(transport.sentMessages.length, 1);
       final sentRequest = transport.sentMessages.first as JsonRpcRequest;
       final requestId = sentRequest.id; // Capture the real ID
-      print('DEBUG: Client sent request with ID: $requestId');
 
       expect(sentRequest.meta, isNotNull);
       expect(sentRequest.meta!['progressToken'], isNotNull);
@@ -174,6 +173,7 @@ void main() {
             progressToken: progressToken,
             progress: 50,
             total: 100,
+            message: 'Halfway there',
           ),
         ),
       );
@@ -184,6 +184,7 @@ void main() {
             progressToken: progressToken,
             progress: 100,
             total: 100,
+            message: 'Done',
           ),
         ),
       );
@@ -204,7 +205,9 @@ void main() {
       expect(receivedProgress.length, 2);
       expect(receivedProgress[0].progress, 50);
       expect(receivedProgress[0].total, 100);
+      expect(receivedProgress[0].message, 'Halfway there');
       expect(receivedProgress[1].progress, 100);
+      expect(receivedProgress[1].message, 'Done');
     });
 
     test('Server sends progress using RequestHandlerExtra.sendProgress',
@@ -214,8 +217,8 @@ void main() {
         'test/long-task',
         (request, extra) async {
           // Simulate work and send progress
-          await extra.sendProgress(10, 100);
-          await extra.sendProgress(100, 100);
+          await extra.sendProgress(10, total: 100, message: 'Starting');
+          await extra.sendProgress(100, total: 100, message: 'Finished');
           return TestResult(value: 'success');
         },
         (id, params, meta) => JsonRpcRequest(
@@ -249,11 +252,13 @@ void main() {
       expect(msg1.params, isNotNull);
       expect(msg1.params!['progressToken'], progressToken);
       expect(msg1.params!['progress'], 10);
+      expect(msg1.params!['message'], 'Starting');
 
       final msg2 = transport.sentMessages[1];
       expect(msg2, isA<JsonRpcNotification>());
       expect((msg2 as JsonRpcNotification).method, 'notifications/progress');
       expect(msg2.params!['progress'], 100);
+      expect(msg2.params!['message'], 'Finished');
 
       final msg3 = transport.sentMessages[2];
       expect(msg3, isA<JsonRpcResponse>());
