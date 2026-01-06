@@ -206,8 +206,10 @@ void main() {
 
       final message = JsonRpcMessage.fromJson(json);
       expect(message, isA<JsonRpcNotification>());
-      expect((message as JsonRpcNotification).method,
-          equals('notifications/unknown'));
+      expect(
+        (message as JsonRpcNotification).method,
+        equals('notifications/unknown'),
+      );
     });
 
     test('handles response with null id', () {
