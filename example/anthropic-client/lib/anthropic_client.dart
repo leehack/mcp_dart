@@ -9,7 +9,7 @@ class AnthropicMcpClient {
   final mcp_dart.McpClient mcp;
   final AnthropicClient anthropic;
   mcp_dart.StdioClientTransport? transport;
-  List<mcp_dart.Tool> tools = [];
+  List<Tool> tools = [];
 
   AnthropicMcpClient(this.anthropic, this.mcp);
 
@@ -36,13 +36,16 @@ class AnthropicMcpClient {
 
       final toolsResult = await mcp.listTools();
       tools =
-          toolsResult.tools.map((tool) {
-            return Tool.custom(
-              name: tool.name,
-              description: tool.description,
-              inputSchema: tool.inputSchema.toJson(),
-            );
-          }).toList();
+          toolsResult.tools
+              .map((tool) {
+                return Tool.custom(
+                  name: tool.name,
+                  description: tool.description,
+                  inputSchema: tool.inputSchema.toJson(),
+                );
+              })
+              .cast<Tool>()
+              .toList();
 
       print(
         "Connected to server with tools: ${tools.map((t) => t.name).toList()}",
