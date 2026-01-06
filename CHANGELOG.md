@@ -1,3 +1,8 @@
+## 1.2.2
+
+- **Testing**:
+  - Updated `test/types_test.dart` to correct an expectation for unknown methods. `JsonRpcMessage.fromJson` returns a generic `JsonRpcRequest` for unknown methods instead of throwing, aligning tests with existing library behavior.
+
 ## 1.2.1
 
 - **Fix StreamableHTTP client reconnection loop**: Prevented the client from attempting to "reconnect" to short-lived POST response streams (used for tool calls). This fixes an issue where multiple tool calls could exhaust the browser's connection limit by spawning zombie reconnection attempts.

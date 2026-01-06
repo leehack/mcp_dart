@@ -21,7 +21,7 @@ typedef ToolOutputSchema = JsonObject;
 /// received from untrusted servers.
 class ToolAnnotations {
   /// A human-readable title for the tool.
-  final String title;
+  final String? title;
 
   /// If true, the tool does not modify its environment.
   /// default: false
@@ -53,7 +53,7 @@ class ToolAnnotations {
   final List<String>? audience;
 
   const ToolAnnotations({
-    required this.title,
+    this.title,
     this.readOnlyHint = false,
     this.destructiveHint = true,
     this.idempotentHint = false,
@@ -64,7 +64,7 @@ class ToolAnnotations {
 
   factory ToolAnnotations.fromJson(Map<String, dynamic> json) {
     return ToolAnnotations(
-      title: json['title'] as String,
+      title: json['title'] as String?,
       readOnlyHint: json['readOnlyHint'] as bool? ?? false,
       destructiveHint: json['destructiveHint'] as bool? ?? true,
       idempotentHint: json['idempotentHint'] as bool? ?? false,

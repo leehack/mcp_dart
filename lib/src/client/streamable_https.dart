@@ -132,6 +132,7 @@ class StreamableHttpClientTransport implements Transport {
   final OAuthClientProvider? _authProvider;
   String? _sessionId;
   final StreamableHttpReconnectionOptions _reconnectionOptions;
+  bool _isClosed = false;
 
   @override
   void Function()? onclose;
@@ -357,7 +358,7 @@ class StreamableHttpClientTransport implements Transport {
 
     // Helper function to handle reconnection logic
     void handleReconnection(String? eventId, String errorMessage) {
-      if (!options.shouldReconnect) return;
+      if (_isClosed || !options.shouldReconnect) return;
 
       if (_abortController != null && !_abortController!.isClosed) {
         if (eventId != null) {
@@ -488,6 +489,7 @@ class StreamableHttpClientTransport implements Transport {
 
   @override
   Future<void> close() async {
+    _isClosed = true;
     // Abort any pending requests
     _abortController?.add(true);
     _abortController?.close();
