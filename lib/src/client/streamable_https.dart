@@ -43,10 +43,15 @@ class StartSseOptions {
   /// so that response can be associated with the new resumed request.
   final dynamic replayMessageId;
 
+  /// Whether to attempt reconnection when the stream closes.
+  /// Default is true.
+  final bool shouldReconnect;
+
   const StartSseOptions({
     this.resumptionToken,
     this.onResumptionToken,
     this.replayMessageId,
+    this.shouldReconnect = true,
   });
 }
 
@@ -352,6 +357,8 @@ class StreamableHttpClientTransport implements Transport {
 
     // Helper function to handle reconnection logic
     void handleReconnection(String? eventId, String errorMessage) {
+      if (!options.shouldReconnect) return;
+
       if (_abortController != null && !_abortController!.isClosed) {
         if (eventId != null) {
           try {
@@ -360,6 +367,7 @@ class StreamableHttpClientTransport implements Transport {
                 resumptionToken: eventId,
                 onResumptionToken: onResumptionToken,
                 replayMessageId: replayMessageId,
+                shouldReconnect: options.shouldReconnect,
               ),
             );
           } catch (error) {
@@ -599,7 +607,10 @@ class StreamableHttpClientTransport implements Transport {
           // Handle SSE stream responses for requests
           _handleSseStream(
             response,
-            StartSseOptions(onResumptionToken: onResumptionToken),
+            StartSseOptions(
+              onResumptionToken: onResumptionToken,
+              shouldReconnect: false, // Do not reconnect for POST responses
+            ),
           );
         } else if (contentType?.contains('application/json') ?? false) {
           // For non-streaming servers, we might get direct JSON responses
