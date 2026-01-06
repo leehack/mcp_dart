@@ -1,7 +1,0 @@
-localhost:8443 {
-    tls cert.pem key.pem
-    reverse_proxy http://localhost:3000 {
-      header_up Host {http.request.host}
-      header_up X-Forwarded-Proto {scheme}
-    }
-}

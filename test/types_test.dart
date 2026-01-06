@@ -426,13 +426,15 @@ void main() {
       expect(() => JsonRpcMessage.fromJson(json), throwsFormatException);
     });
 
-    test('Throws UnimplementedError for unknown method', () {
+    test('Parses unknown method as generic JsonRpcRequest', () {
       final json = {
         'jsonrpc': '2.0',
         'id': 1,
         'method': 'unknownMethod',
       };
-      expect(() => JsonRpcMessage.fromJson(json), throwsUnimplementedError);
+      final message = JsonRpcMessage.fromJson(json);
+      expect(message, isA<JsonRpcRequest>());
+      expect((message as JsonRpcRequest).method, equals('unknownMethod'));
     });
 
     test('Throws FormatException for invalid message format', () {

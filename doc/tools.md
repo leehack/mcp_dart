@@ -296,7 +296,7 @@ server.registerTool(
 ### Validation Errors
 
 ```dart
-server.tool(
+server.registerTool(
   name: 'custom-validation',
   inputSchema: {...},
   callback: (args) async {
@@ -313,44 +313,39 @@ server.tool(
 );
 ```
 
-## Long-Running Operations
 
-### Progress Notifications
+
+
+## Progress Notifications
+
+Long-running tools can report progress back to the client. This provides feedback to the user about the operation's status.
+
+### Sending Progress
+
+The `callback` function receives an `extra` parameter (of type `RequestHandlerExtra`) which exposes the `sendProgress` method.
 
 ```dart
 server.registerTool(
-  'process-large-file',
+  'long-running-task',
+  description: 'A task that takes some time',
   inputSchema: ToolInputSchema(properties: {...}),
   callback: (args, extra) async {
-    final progressToken = extra.progressToken;
-    final file = args['file'] as String;
+    final totalSteps = 10;
 
-    if (progressToken != null) {
-      // Initial progress
-      await server.sendProgress(
-        progressToken: progressToken,
-        progress: 0,
-        total: 100,
+    for (var i = 1; i <= totalSteps; i++) {
+      await performStep(i);
+
+      // Send progress notification
+      // This automatically checks if the client requested progress (via progressToken)
+      await extra.sendProgress(
+        i.toDouble(),
+        total: totalSteps.toDouble(),
+        message: 'Processing step $i',
       );
-
-      // Processing...
-      for (var i = 0; i <= 100; i += 10) {
-        await processChunk(file, i);
-
-        // Update progress
-        await server.sendProgress(
-          progressToken: progressToken,
-          progress: i,
-          total: 100,
-        );
-      }
-    } else {
-      // Process without progress
-      await processFile(file);
     }
 
     return CallToolResult(
-      content: [TextContent(text: 'Processing complete')],
+      content: [TextContent(text: 'Task completed')],
     );
   },
 );
@@ -358,35 +353,31 @@ server.registerTool(
 
 ### Cancellation Support
 
+Tools should also check for cancellation, especially if they are long-running.
+
 ```dart
 server.registerTool(
   'cancelable-task',
   inputSchema: ToolInputSchema(properties: {...}),
   callback: (args, extra) async {
-    final progressToken = extra.progressToken;
+    // Check if cancelled at the start
+    if (extra.signal.aborted) {
+      throw McpError(ErrorCode.requestCancelled, 'Task cancelled');
+    }
 
     for (var i = 0; i < 1000; i++) {
-      // Check for cancellation
-      if (progressToken != null && await isCancelled(progressToken)) {
-        return CallToolResult(
-          isError: true,
-          content: [TextContent(text: 'Task cancelled')],
-        );
+      // Check for cancellation during loop
+      if (extra.signal.aborted) {
+        throw McpError(ErrorCode.requestCancelled, 'Task cancelled');
       }
 
       await processItem(i);
 
-      // Send progress
-      if (progressToken != null) {
-        await server.sendProgress(
-          progressToken: progressToken,
-          progress: i,
-          total: 1000,
-        );
-      }
+      // Report progress
+      await extra.sendProgress(i.toDouble(), total: 1000);
     }
 
-    return CallToolResult(content: []);
+    return CallToolResult(content: [TextContent(text: 'Done')]);
   },
 );
 ```
