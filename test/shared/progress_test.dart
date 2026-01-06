@@ -240,7 +240,7 @@ void main() {
       );
 
       // Wait for async operations to complete (microtasks)
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // 3. Verify server sent progress notifications
       // Expected messages: Progress(10), Progress(100), Response
@@ -286,7 +286,7 @@ void main() {
         const JsonRpcRequest(id: 100, method: 'test/no-token'),
       );
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // 3. Verify only response is sent, no progress
       expect(transport.sentMessages.length, 1);

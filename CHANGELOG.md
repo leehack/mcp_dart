@@ -1,3 +1,17 @@
+## 1.2.1
+
+- **Progress Notifications**: Implemented full support for progress tracking.
+  - Added `RequestHandlerExtra.sendProgress()` helper for servers to report progress.
+  - Added `RequestOptions.onprogress` callback for clients to receive progress updates.
+  - Updated `Progress` and `ProgressNotification` types to include optional `message` field (compliant with 2025-11-25 spec).
+- **Protocol Improvements**:
+  - `JsonRpcMessage.fromJson` now supports custom/unknown methods instead of throwing.
+  - Fixed `JsonRpcRequest` metadata extraction to correctly handle nested `_meta` in `params`.
+- **Documentation**:
+  - Overhauled documentation (`doc/`) to match current API (v1.1.2+).
+  - Added `AGENTS.md` with comprehensive developer guidelines.
+  - Updated examples to remove deprecated API usage.
+
 ## 1.2.0
 
 ### Breaking Changes
