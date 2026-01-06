@@ -1,21 +1,33 @@
 ## 1.2.1
 
-- **Testing**:
-  - Updated `test/types_test.dart` to correct an expectation for unknown methods. `JsonRpcMessage.fromJson` returns a generic `JsonRpcRequest` for unknown methods instead of throwing, aligning tests with existing library behavior.
+- **Features**:
+  - **Progress Notifications**: Implemented full support for progress tracking.
+    - Added `RequestHandlerExtra.sendProgress()` helper for servers to report progress.
+    - Added `RequestOptions.onprogress` callback for clients to receive progress updates.
+    - Updated `Progress` and `ProgressNotification` types to include optional `message` field (compliant with 2025-11-25 spec).
+  - **Protocol Improvements**:
+    - `JsonRpcMessage.fromJson` now supports custom/unknown methods instead of throwing.
+    - Fixed `JsonRpcRequest` metadata extraction to correctly handle nested `_meta` in `params`.
+    - Updated `ToolAnnotations` to make `title` optional, preventing deserialization errors when the field is missing.
 
-- **Fix StreamableHTTP client reconnection loop**: Prevented the client from attempting to "reconnect" to short-lived POST response streams (used for tool calls). This fixes an issue where multiple tool calls could exhaust the browser's connection limit by spawning zombie reconnection attempts.
+- **Fixes**:
+  - **StreamableHTTP**: Prevented the client from attempting to "reconnect" to short-lived POST response streams (used for tool calls). This fixes an issue where multiple tool calls could exhaust the browser's connection limit by spawning zombie reconnection attempts.
 
-- **Progress Notifications**: Implemented full support for progress tracking.
-  - Added `RequestHandlerExtra.sendProgress()` helper for servers to report progress.
-  - Added `RequestOptions.onprogress` callback for clients to receive progress updates.
-  - Updated `Progress` and `ProgressNotification` types to include optional `message` field (compliant with 2025-11-25 spec).
-- **Protocol Improvements**:
-  - `JsonRpcMessage.fromJson` now supports custom/unknown methods instead of throwing.
-  - Fixed `JsonRpcRequest` metadata extraction to correctly handle nested `_meta` in `params`.
+- **Examples**:
+  - **New Jaspr Client**: Added a comprehensive web client example (`example/jaspr-client`) built with Jaspr, featuring:
+    - Interactive UI for Tools, Resources, Prompts, and Tasks.
+    - Real-time connection management.
+    - Visual task progression and sampling dialogs.
+  - **Anthropic Client**: Fixed issues in the Anthropic client example.
+  - **Task Server**: Added CORS headers and logging to `simple_task_interactive_server.dart`.
+  - Updated examples to remove deprecated API usage.
+
 - **Documentation**:
   - Overhauled documentation (`doc/`) to match current API (v1.1.2+).
   - Added `AGENTS.md` with comprehensive developer guidelines.
-  - Updated examples to remove deprecated API usage.
+
+- **Testing**:
+  - Updated `test/types_test.dart` and `test/types_edge_cases_test.dart` to correct expectations for unknown methods. `JsonRpcMessage.fromJson` returns a generic `JsonRpcRequest` (or `JsonRpcNotification`) for unknown methods instead of throwing, aligning tests with existing library behavior.
 
 ## 1.2.0
 
