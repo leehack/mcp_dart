@@ -1,3 +1,7 @@
+## 1.2.2
+
+- **Fix StreamableHTTP client reconnection loop**: Prevented the client from attempting to "reconnect" to short-lived POST response streams (used for tool calls). This fixes an issue where multiple tool calls could exhaust the browser's connection limit by spawning zombie reconnection attempts.
+
 ## 1.2.1
 
 - **Progress Notifications**: Implemented full support for progress tracking.
