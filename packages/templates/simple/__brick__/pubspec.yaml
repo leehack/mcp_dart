@@ -1,4 +1,4 @@
-name: {{name}}
+name: "{{name}}"
 description: A Model Context Protocol (MCP) server.
 version: 1.0.0
 # repository: https://github.com/my_org/my_repo
