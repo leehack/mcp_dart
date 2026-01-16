@@ -1,3 +1,7 @@
+## 1.2.2
+
+- Fix pana analysis issues
+
 ## 1.2.1
 
 - **Features**:
