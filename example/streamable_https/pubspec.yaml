@@ -1,5 +1,5 @@
-name: fetch_server
-description: A stdio-based MCP server for fetching website content.
+name: streamable_https
+description: Streamable HTTP/S transport examples for MCP.
 version: 1.0.0
 publish_to: "none"
 
@@ -9,8 +9,6 @@ environment:
 dependencies:
   mcp_dart:
     path: ../../
-  http: ^1.0.0
-  args: ^2.0.0
 
 dev_dependencies:
   lints: ^6.0.0

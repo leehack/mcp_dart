@@ -1,0 +1,3 @@
+# Workspace override: mcp_dart resolved as workspace member automatically.
+# When standalone, this file won't exist and pubspec.yaml works as-is.
+dependency_overrides: {}

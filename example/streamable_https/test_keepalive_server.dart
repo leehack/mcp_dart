@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
@@ -21,11 +20,10 @@ void main() async {
     description: 'A tool that waits to test keep-alive',
     toolInputSchema: ToolInputSchema(
       properties: {
-        'delay': {
-          'type': 'number',
-          'description': 'Delay in seconds before responding',
-          'default': 10,
-        },
+        'delay': JsonSchema.number(
+          description: 'Delay in seconds before responding',
+          defaultValue: 10,
+        ),
       },
     ),
     callback: ({args, extra}) async {
@@ -44,7 +42,7 @@ void main() async {
       }
       
       return CallToolResult.fromContent(
-        content: [
+        [
           TextContent(text: 'Completed after $delay seconds!'),
         ],
       );
