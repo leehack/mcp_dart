@@ -6,8 +6,6 @@ repository: https://github.com/leehack/mcp_dart
 environment:
   sdk: '>=3.6.0 <4.0.0'
 
-resolution: workspace
-
 dependencies:
   args: ^2.4.2
   build: ^4.0.3

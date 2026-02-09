@@ -6,8 +6,6 @@ publish_to: none
 environment:
   sdk: ^3.7.2
 
-resolution: workspace
-
 # Add regular dependencies here.
 dependencies:
   anthropic_sdk_dart: ^0.3.1
