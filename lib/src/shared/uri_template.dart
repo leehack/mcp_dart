@@ -377,12 +377,16 @@ class UriTemplateExpander {
       } else if (part is _ExpressionPart) {
         bool firstInExpr = true;
         for (final name in part.names) {
-          if (!firstInExpr) {
-            pattern.write(',');
-          }
           switch (part.operator) {
+            case '':
             case '+':
+              if (!firstInExpr) {
+                pattern.write(',');
+              }
+              pattern.write(valuePattern);
+              break;
             case '#':
+              pattern.write(firstInExpr ? '#' : ',');
               pattern.write(valuePattern);
               break;
             case '.':
@@ -395,23 +399,26 @@ class UriTemplateExpander {
               break;
             case ';':
               pattern.write(';');
-              pattern.write(name);
+              pattern.write(RegExp.escape(name));
               pattern.write('=');
               pattern.write(valuePattern);
               break;
             case '?':
-              pattern.write(r'\?');
-              pattern.write(name);
+              pattern.write(firstInExpr ? r'\?' : '&');
+              pattern.write(RegExp.escape(name));
               pattern.write('=');
               pattern.write(valuePattern);
               break;
             case '&':
               pattern.write('&');
-              pattern.write(name);
+              pattern.write(RegExp.escape(name));
               pattern.write('=');
               pattern.write(valuePattern);
               break;
             default:
+              if (!firstInExpr) {
+                pattern.write(',');
+              }
               pattern.write(valuePattern);
               break;
           }

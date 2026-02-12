@@ -382,6 +382,55 @@ void main() {
       expect(transport.sentMessages.isNotEmpty, isTrue);
     });
 
+    test('resource template read matches query parameters', () async {
+      var readCallbackInvoked = false;
+      Map<String, dynamic>? receivedVariables;
+
+      mcpServer.resourceTemplate(
+        'entity_template',
+        ResourceTemplateRegistration(
+          'entity://list{?status,assignee}',
+          listCallback: (extra) async =>
+              const ListResourcesResult(resources: []),
+        ),
+        (uri, variables, extra) async {
+          readCallbackInvoked = true;
+          receivedVariables = Map<String, dynamic>.from(variables);
+          return ReadResourceResult(
+            contents: [
+              TextResourceContents(uri: uri.toString(), text: 'content'),
+            ],
+          );
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      final initRequest = JsonRpcInitializeRequest(
+        id: 1,
+        initParams: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+        ),
+      );
+      transport.receiveMessage(initRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final readRequest = JsonRpcReadResourceRequest(
+        id: 2,
+        readParams: const ReadResourceRequestParams(
+          uri: 'entity://list?status=s1&assignee=u1',
+        ),
+      );
+
+      transport.receiveMessage(readRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(readCallbackInvoked, isTrue);
+      expect(receivedVariables, equals({'status': 's1', 'assignee': 'u1'}));
+    });
+
     test('cannot register duplicate resource template names', () {
       mcpServer.resourceTemplate(
         'duplicate_template',

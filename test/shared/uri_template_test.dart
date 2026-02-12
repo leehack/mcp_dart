@@ -241,6 +241,18 @@ void main() {
       expect(result, equals({'q': 'dart'}));
     });
 
+    test('matches RFC 6570 query expansion with multiple parameters', () {
+      final expander = UriTemplateExpander('entity://list{?status,assignee}');
+      final result = expander.match('entity://list?status=s1&assignee=u1');
+      expect(result, equals({'status': 's1', 'assignee': 'u1'}));
+    });
+
+    test('matches path expansion with multiple variables', () {
+      final expander = UriTemplateExpander('/api{/version,resource}');
+      final result = expander.match('/api/v1/users');
+      expect(result, equals({'version': 'v1', 'resource': 'users'}));
+    });
+
     test('returns null for non-matching URI', () {
       final expander = UriTemplateExpander('/api/{version}');
       final result = expander.match('/wrong/path');
