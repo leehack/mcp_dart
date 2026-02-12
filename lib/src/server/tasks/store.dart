@@ -27,11 +27,21 @@ class InMemoryTaskStore implements TaskStore {
       final expiredIds = <String>[];
       for (final entry in _tasks.entries) {
         final task = entry.value;
-        if (task.ttl != null && task.createdAt != null) {
-          final created = DateTime.parse(task.createdAt!);
-          if (now.difference(created).inMilliseconds > task.ttl!) {
-            expiredIds.add(entry.key);
-          }
+        final ttl = task.ttl;
+        final createdAt = task.createdAt;
+        if (ttl == null || createdAt == null) {
+          continue;
+        }
+
+        final DateTime created;
+        try {
+          created = DateTime.parse(createdAt);
+        } on FormatException {
+          continue;
+        }
+
+        if (now.difference(created).inMilliseconds > ttl) {
+          expiredIds.add(entry.key);
         }
       }
       for (final id in expiredIds) {

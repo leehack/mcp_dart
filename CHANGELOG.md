@@ -1,3 +1,20 @@
+## 1.3.0
+
+- **Spec Alignment**:
+  - Added `ResourceLink` (`resource_link`) content type support.
+  - Added icon metadata support with `McpIcon`, `IconTheme`, and optional `icons` fields across tools/prompts/resources/templates.
+  - Added `ResourceAnnotations.lastModified` (ISO 8601).
+  - Added MCP `extensions` capability support for client/server initialization capability negotiation.
+- **Security**:
+  - Added optional DNS rebinding protection to streamable HTTP/SSE server entry points via host/origin allowlists.
+- **Reliability**:
+  - Tightened null handling for JSON-RPC tool params and task store TTL parsing paths.
+  - Fixed URI template matching for RFC 6570 multi-variable operators (for example `{?status,assignee}`) so `resources/read` resolves templated URIs correctly.
+  - Fixed tool metadata passthrough so registered `meta` (including nested `_meta` values) is preserved in `tools/list` responses.
+  - Improved URI template variable typing and protocol cancellation reason typing.
+- **Docs**:
+  - Updated transport, client, server, tools, and quick-reference docs for new fields and security options.
+
 ## 1.2.2
 
 - Fix pana analysis issues

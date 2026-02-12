@@ -24,37 +24,52 @@ void main() {
 
     test('Icon Field Support', () {
       final icon = const ImageContent(data: 'base64', mimeType: 'image/png');
+      final icons = [
+        const McpIcon(
+          src: 'https://example.com/icon.png',
+          mimeType: 'image/png',
+          theme: IconTheme.dark,
+        ),
+      ];
 
       final tool = Tool(
         name: 'test-tool',
         inputSchema: const JsonObject(),
         icon: icon,
+        icons: icons,
       );
       expect(tool.icon?.data, 'base64');
       expect(tool.toJson()['icon']['data'], 'base64');
+      expect((tool.toJson()['icons'] as List).first['theme'], 'dark');
 
       final resource = Resource(
         uri: 'file://test',
         name: 'test',
         icon: icon,
+        icons: icons,
       );
       expect(resource.icon?.data, 'base64');
       expect(resource.toJson()['icon']['data'], 'base64');
+      expect((resource.toJson()['icons'] as List).first['theme'], 'dark');
 
       final prompt = Prompt(
         name: 'test-prompt',
         icon: icon,
+        icons: icons,
       );
       expect(prompt.icon?.data, 'base64');
       expect(prompt.toJson()['icon']['data'], 'base64');
+      expect((prompt.toJson()['icons'] as List).first['theme'], 'dark');
 
       final template = ResourceTemplate(
         uriTemplate: 'file:///test/{id}',
         name: 'test-template',
         icon: icon,
+        icons: icons,
       );
       expect(template.icon?.data, 'base64');
       expect(template.toJson()['icon']['data'], 'base64');
+      expect((template.toJson()['icons'] as List).first['theme'], 'dark');
     });
 
     test('Elicitation with URL', () {

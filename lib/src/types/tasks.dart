@@ -70,8 +70,7 @@ class Task implements BaseResultData {
   final int? pollInterval;
 
   /// ISO 8601 timestamp when the task was created.
-  final String?
-      createdAt; // Spec implies defined, but check optionality. Schema usually defines required. Task definition: taskId, status (implied required). Others optional? "createdAt: ISO 8601 timestamp". "optional" not explicitly stated for createdAt, but likely required for accounting. I'll make it optional to be safe or required if I'm sure. I'll make it optional.
+  final String? createdAt;
 
   /// ISO 8601 timestamp when the task status was last updated.
   final String? lastUpdatedAt;

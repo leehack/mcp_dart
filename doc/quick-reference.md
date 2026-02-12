@@ -7,7 +7,7 @@ Fast lookup guide for common MCP Dart SDK operations.
 ```yaml
 # pubspec.yaml
 dependencies:
-  mcp_dart: ^1.1.2
+  mcp_dart: ^1.3.0
 ```
 
 ```bash
@@ -48,8 +48,30 @@ final server = StreamableMcpServer(
   host: '0.0.0.0',
   port: 3000,
   path: '/mcp',
+  // Optional hardening for browser-accessible deployments
+  enableDnsRebindingProtection: true,
+  allowedHosts: {'localhost', 'api.example.com'},
+  allowedOrigins: {'https://app.example.com'},
 );
 await server.start();
+```
+
+### Streamable HTTP Transport Options
+
+```dart
+final transport = StreamableHTTPServerTransport(
+  options: StreamableHTTPServerTransportOptions(
+    sessionIdGenerator: () =>
+        'session-${DateTime.now().millisecondsSinceEpoch}',
+    eventStore: InMemoryEventStore(),
+    enableDnsRebindingProtection: true,
+    allowedHosts: {'localhost'},
+    allowedOrigins: {'http://localhost:5173'},
+  ),
+);
+
+await transport.start();
+await server.connect(transport);
 ```
 
 ### Register Tool
@@ -237,6 +259,7 @@ print(result.content.first.text);
 final result = await client.listResources();
 for (final resource in result.resources) {
   print('${resource.name}: ${resource.uri}');
+  print('lastModified: ${resource.annotations?.lastModified}');
 }
 ```
 
@@ -362,6 +385,24 @@ TextContent(text: 'Hello, world!')
 ImageContent(
   data: base64Encode(bytes),
   mimeType: 'image/png',
+  theme: 'dark', // optional: 'light' | 'dark'
+)
+```
+
+### Resource Link
+
+```dart
+ResourceLink(
+  uri: 'file:///docs/architecture.md',
+  name: 'architecture',
+  mimeType: 'text/markdown',
+  icons: [
+    McpIcon(
+      src: 'https://example.com/icon.png',
+      mimeType: 'image/png',
+      theme: IconTheme.dark,
+    ),
+  ],
 )
 ```
 

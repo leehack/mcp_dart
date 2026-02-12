@@ -11,10 +11,14 @@ class ResourceAnnotations {
   /// The priority of the resource (0.0 to 1.0).
   final double? priority;
 
+  /// ISO 8601 timestamp when the resource was last modified.
+  final String? lastModified;
+
   const ResourceAnnotations({
     this.title,
     this.audience,
     this.priority,
+    this.lastModified,
   });
 
   factory ResourceAnnotations.fromJson(Map<String, dynamic> json) {
@@ -22,6 +26,7 @@ class ResourceAnnotations {
       title: json['title'] as String?,
       audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
       priority: (json['priority'] as num?)?.toDouble(),
+      lastModified: json['lastModified'] as String?,
     );
   }
 
@@ -29,6 +34,7 @@ class ResourceAnnotations {
         if (title != null) 'title': title,
         if (audience != null) 'audience': audience,
         if (priority != null) 'priority': priority,
+        if (lastModified != null) 'lastModified': lastModified,
       };
 }
 
@@ -49,6 +55,9 @@ class Resource {
   /// Optional icon for the resource.
   final ImageContent? icon;
 
+  /// Optional set of icons for the resource.
+  final List<McpIcon>? icons;
+
   /// Optional additional properties describing the resource.
   final ResourceAnnotations? annotations;
 
@@ -58,6 +67,7 @@ class Resource {
     this.description,
     this.mimeType,
     this.icon,
+    this.icons,
     this.annotations,
   });
 
@@ -71,6 +81,9 @@ class Resource {
       icon: json['icon'] != null
           ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
           : null,
+      icons: (json['icons'] as List<dynamic>?)
+          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
+          .toList(),
       annotations: json['annotations'] != null
           ? ResourceAnnotations.fromJson(
               json['annotations'] as Map<String, dynamic>,
@@ -86,6 +99,8 @@ class Resource {
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
         if (icon != null) 'icon': icon!.toJson(),
+        if (icons != null)
+          'icons': icons!.map((icon) => icon.toJson()).toList(),
         if (annotations != null) 'annotations': annotations!.toJson(),
       };
 }
@@ -107,6 +122,9 @@ class ResourceTemplate {
   /// Optional icon for the resource template.
   final ImageContent? icon;
 
+  /// Optional set of icons for the resource template.
+  final List<McpIcon>? icons;
+
   /// Optional additional properties describing the resource template.
   final ResourceAnnotations? annotations;
 
@@ -117,6 +135,7 @@ class ResourceTemplate {
     this.description,
     this.mimeType,
     this.icon,
+    this.icons,
     this.annotations,
   });
 
@@ -130,6 +149,9 @@ class ResourceTemplate {
       icon: json['icon'] != null
           ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
           : null,
+      icons: (json['icons'] as List<dynamic>?)
+          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
+          .toList(),
       annotations: json['annotations'] != null
           ? ResourceAnnotations.fromJson(
               json['annotations'] as Map<String, dynamic>,
@@ -145,6 +167,8 @@ class ResourceTemplate {
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
         if (icon != null) 'icon': icon!.toJson(),
+        if (icons != null)
+          'icons': icons!.map((icon) => icon.toJson()).toList(),
         if (annotations != null) 'annotations': annotations!.toJson(),
       };
 }

@@ -211,6 +211,29 @@ return CallToolResult(
     ImageContent(
       data: base64Encode(imageBytes),
       mimeType: 'image/png',
+      theme: 'dark', // optional: 'light' | 'dark'
+    ),
+  ],
+);
+```
+
+### Resource Link Content
+
+```dart
+return CallToolResult(
+  content: [
+    TextContent(text: 'Open the generated report:'),
+    ResourceLink(
+      uri: 'file:///reports/summary.md',
+      name: 'summary-report',
+      mimeType: 'text/markdown',
+      icons: [
+        McpIcon(
+          src: 'https://example.com/icons/report.png',
+          mimeType: 'image/png',
+          theme: IconTheme.light,
+        ),
+      ],
     ),
   ],
 );

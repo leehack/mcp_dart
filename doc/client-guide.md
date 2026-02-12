@@ -106,6 +106,8 @@ for (final content in result.content) {
     print(content.text);
   } else if (content is ImageContent) {
     print('Image: ${content.mimeType}');
+  } else if (content is ResourceLink) {
+    print('Linked resource: ${content.uri}');
   }
 }
 ```
@@ -170,6 +172,8 @@ for (final resource in response.resources) {
   print('  URI: ${resource.uri}');
   print('  Description: ${resource.description}');
   print('  MIME: ${resource.mimeType}');
+  print('  Last modified: ${resource.annotations?.lastModified}');
+  print('  Icons: ${resource.icons?.length ?? 0}');
 }
 ```
 
@@ -334,6 +338,12 @@ for (final message in result.messages) {
       ReadResourceRequest(uri: resourceUri),
     );
     print('Embedded: ${resourceData.contents.first.text}');
+  } else if (content is ResourceLink) {
+    // Follow resource links directly
+    final resourceData = await client.readResource(
+      ReadResourceRequest(uri: content.uri),
+    );
+    print('Linked: ${resourceData.contents.first.text}');
   }
 }
 ```
