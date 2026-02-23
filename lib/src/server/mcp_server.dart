@@ -16,6 +16,28 @@ final _logger = Logger("mcp_dart.server.mcp");
 /// Callback capable of providing completions for a partial value.
 typedef CompleteCallback = FutureOr<List<String>> Function(String value);
 
+IconTheme? _iconThemeFromString(String? theme) {
+  return switch (theme) {
+    'light' => IconTheme.light,
+    'dark' => IconTheme.dark,
+    _ => null,
+  };
+}
+
+List<McpIcon>? _iconsFromLegacyImage(ImageContent? image) {
+  if (image == null) {
+    return null;
+  }
+
+  return [
+    McpIcon(
+      src: 'data:${image.mimeType};base64,${image.data}',
+      mimeType: image.mimeType,
+      theme: _iconThemeFromString(image.theme),
+    ),
+  ];
+}
+
 /// Definition for a completable argument.
 class CompletableDef {
   /// The callback to invoke to get completion suggestions.
@@ -235,6 +257,7 @@ class _RegisteredResourceImpl implements RegisteredResource {
       description: metadata?.description,
       mimeType: metadata?.mimeType,
       icon: icon,
+      icons: _iconsFromLegacyImage(icon),
       annotations: title != null ? ResourceAnnotations(title: title) : null,
     );
   }
@@ -478,6 +501,7 @@ class _RegisteredToolImpl implements RegisteredTool {
       outputSchema: outputSchema,
       annotations: annotations,
       icon: icon,
+      icons: _iconsFromLegacyImage(icon),
       execution: execution,
       meta: meta,
     );
@@ -604,6 +628,7 @@ class _RegisteredPromptImpl implements RegisteredPrompt {
       description: description,
       arguments: promptArgs,
       icon: icon,
+      icons: _iconsFromLegacyImage(icon),
     );
   }
 

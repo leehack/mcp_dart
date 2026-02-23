@@ -133,6 +133,9 @@ class Tool {
   /// Optional icon content.
   final ImageContent? icon;
 
+  /// Optional set of icons.
+  final List<McpIcon>? icons;
+
   const Tool({
     required this.name,
     this.description,
@@ -142,6 +145,7 @@ class Tool {
     this.meta,
     this.execution,
     this.icon,
+    this.icons,
   });
 
   factory Tool.fromJson(Map<String, dynamic> json) {
@@ -166,6 +170,9 @@ class Tool {
       icon: json['icon'] != null
           ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
           : null,
+      icons: (json['icons'] as List<dynamic>?)
+          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -178,6 +185,8 @@ class Tool {
         if (meta != null) '_meta': meta,
         if (execution != null) 'execution': execution!.toJson(),
         if (icon != null) 'icon': icon!.toJson(),
+        if (icons != null)
+          'icons': icons!.map((icon) => icon.toJson()).toList(),
       };
 }
 

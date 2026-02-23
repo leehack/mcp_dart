@@ -173,6 +173,20 @@ void main() {
       expect(deserialized.mimeType, equals('image/png'));
     });
 
+    test('ImageContent supports optional theme', () {
+      final content = const ImageContent(
+        data: 'base64data',
+        mimeType: 'image/png',
+        theme: 'dark',
+      );
+
+      final json = content.toJson();
+      expect(json['theme'], equals('dark'));
+
+      final deserialized = ImageContent.fromJson(json);
+      expect(deserialized.theme, equals('dark'));
+    });
+
     test('AudioContent serialization and deserialization', () {
       final content =
           const AudioContent(data: 'base64data', mimeType: 'audio/wav');
@@ -193,6 +207,37 @@ void main() {
 
       final deserialized = const UnknownContent(type: 'unknown');
       expect(deserialized.type, equals('unknown'));
+    });
+
+    test('ResourceLink serialization and deserialization', () {
+      final content = const ResourceLink(
+        uri: 'file:///docs/readme.md',
+        name: 'readme',
+        mimeType: 'text/markdown',
+        description: 'Project readme',
+      );
+
+      final json = content.toJson();
+      expect(json['type'], equals('resource_link'));
+      expect(json['uri'], equals('file:///docs/readme.md'));
+      expect(json['name'], equals('readme'));
+
+      final deserialized = ResourceLink.fromJson(json);
+      expect(deserialized.uri, equals('file:///docs/readme.md'));
+      expect(deserialized.name, equals('readme'));
+      expect(deserialized.mimeType, equals('text/markdown'));
+    });
+
+    test('Content.fromJson handles resource_link content type', () {
+      final json = {
+        'type': 'resource_link',
+        'uri': 'file:///docs/spec.md',
+        'name': 'spec',
+      };
+
+      final content = Content.fromJson(json);
+      expect(content, isA<ResourceLink>());
+      expect((content as ResourceLink).uri, equals('file:///docs/spec.md'));
     });
   });
 

@@ -9,7 +9,7 @@ const int maxTemplateExpressions = 10000;
 
 /// Type definition for variables used in template expansion.
 typedef TemplateVariables
-    = Map<String, dynamic /* String | List<String> | Map<String, String> */ >;
+    = Map<String, Object? /* String | List<String> | Map<String, String> */ >;
 
 /// Base class for different parts parsed from a URI template string.
 sealed class _UriTemplatePart {
@@ -440,7 +440,7 @@ class UriTemplateExpander {
 
     if (match == null) return null;
 
-    final result = <String, dynamic>{};
+    final result = <String, Object?>{};
     if (match.groupCount == varNames.length) {
       for (int i = 0; i < varNames.length; i++) {
         final value = match.group(i + 1);

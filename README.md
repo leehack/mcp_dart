@@ -43,7 +43,9 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 - ✅ **Full MCP Protocol Support** - Complete [MCP specification 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25) implementation
 - ✅ **Multiple Transport Options** - Stdio, StreamableHTTP, Stream, or custom transports
 - ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation, Tasks
+- ✅ **Latest Content/Metadata Types** - `resource_link`, themed `icons`, and `annotations.lastModified`
 - ✅ **OAuth2 Support** - Complete authentication with PKCE
+- ✅ **Transport Security Controls** - Optional DNS rebinding protection with host/origin allowlists
 - ✅ **Type-Safe** - Comprehensive type definitions with null safety
 - ✅ **Cross-Platform** - Works on Linux, Windows, macOS, Web, and Flutter
 

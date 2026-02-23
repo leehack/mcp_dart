@@ -19,11 +19,21 @@ class MockHttpRequest extends Stream<Uint8List> implements HttpRequest {
   @override
   final MockHttpResponse response = MockHttpResponse();
 
+  final MockHttpHeaders _headers = MockHttpHeaders();
+
   final StreamController<Uint8List> _bodyController =
       StreamController<Uint8List>();
 
-  MockHttpRequest(this.method, String path, {Map<String, String>? queryParams})
-      : uri = Uri(path: path, queryParameters: queryParams);
+  MockHttpRequest(
+    this.method,
+    String path, {
+    Map<String, String>? queryParams,
+    Map<String, String>? requestHeaders,
+  }) : uri = Uri(path: path, queryParameters: queryParams) {
+    requestHeaders?.forEach((key, value) {
+      _headers.set(key, value);
+    });
+  }
 
   /// Add body data to the request
   void addBodyData(String data) {
@@ -63,7 +73,7 @@ class MockHttpRequest extends Stream<Uint8List> implements HttpRequest {
   List<Cookie> get cookies => [];
 
   @override
-  HttpHeaders get headers => MockHttpHeaders();
+  HttpHeaders get headers => _headers;
 
   @override
   String get protocolVersion => '1.1';
@@ -458,6 +468,52 @@ void main() {
       );
       await customManager.handleRequest(msgRequest);
       expect(msgRequest.response.statusCode, equals(HttpStatus.badRequest));
+    });
+
+    test('dns rebinding protection blocks disallowed host', () async {
+      final secureManager = SseServerManager(
+        mcpServer,
+        enableDnsRebindingProtection: true,
+        allowedHosts: {'localhost'},
+      );
+
+      final request = MockHttpRequest(
+        'GET',
+        '/sse',
+        requestHeaders: {HttpHeaders.hostHeader: 'evil.example'},
+      );
+
+      await secureManager.handleRequest(request);
+
+      expect(request.response.statusCode, equals(HttpStatus.forbidden));
+      expect(
+        request.response.writtenData
+            .any((d) => d.contains('DNS rebinding protection')),
+        isTrue,
+      );
+    });
+
+    test('dns rebinding protection allows configured host and origin',
+        () async {
+      final secureManager = SseServerManager(
+        mcpServer,
+        enableDnsRebindingProtection: true,
+        allowedHosts: {'localhost'},
+        allowedOrigins: {'http://localhost'},
+      );
+
+      final request = MockHttpRequest(
+        'GET',
+        '/sse',
+        requestHeaders: {
+          HttpHeaders.hostHeader: 'localhost',
+          'origin': 'http://localhost',
+        },
+      );
+
+      await secureManager.handleRequest(request);
+
+      expect(secureManager.activeSseTransports.length, equals(1));
     });
   });
 

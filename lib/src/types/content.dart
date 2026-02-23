@@ -79,6 +79,54 @@ class UnknownResourceContents extends ResourceContents {
   });
 }
 
+/// Theme hint for icon rendering.
+enum IconTheme { light, dark }
+
+/// A UI icon reference.
+class McpIcon {
+  /// URI for the icon image (HTTP(S) URL or data URI).
+  final String src;
+
+  /// Optional MIME type override.
+  final String? mimeType;
+
+  /// Optional supported sizes (for example: `48x48`, `96x96`, `any`).
+  final List<String>? sizes;
+
+  /// Optional preferred theme for the icon.
+  final IconTheme? theme;
+
+  const McpIcon({
+    required this.src,
+    this.mimeType,
+    this.sizes,
+    this.theme,
+  });
+
+  factory McpIcon.fromJson(Map<String, dynamic> json) {
+    final themeString = json['theme'] as String?;
+    final iconTheme = switch (themeString) {
+      'light' => IconTheme.light,
+      'dark' => IconTheme.dark,
+      _ => null,
+    };
+
+    return McpIcon(
+      src: json['src'] as String,
+      mimeType: json['mimeType'] as String?,
+      sizes: (json['sizes'] as List<dynamic>?)?.cast<String>(),
+      theme: iconTheme,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'src': src,
+        if (mimeType != null) 'mimeType': mimeType,
+        if (sizes != null) 'sizes': sizes,
+        if (theme != null) 'theme': theme!.name,
+      };
+}
+
 /// Base class for content parts within prompts or tool results.
 sealed class Content {
   /// The type of the content part.
@@ -94,6 +142,7 @@ sealed class Content {
       'text' => TextContent.fromJson(json),
       'image' => ImageContent.fromJson(json),
       'audio' => AudioContent.fromJson(json),
+      'resource_link' => ResourceLink.fromJson(json),
       'resource' => EmbeddedResource.fromJson(json),
       _ => UnknownContent(type: type ?? 'unknown'),
     };
@@ -103,8 +152,24 @@ sealed class Content {
         'type': type,
         ...switch (this) {
           final TextContent c => {'text': c.text},
-          final ImageContent c => {'data': c.data, 'mimeType': c.mimeType},
+          final ImageContent c => {
+              'data': c.data,
+              'mimeType': c.mimeType,
+              if (c.theme != null) 'theme': c.theme,
+            },
           final AudioContent c => {'data': c.data, 'mimeType': c.mimeType},
+          final ResourceLink c => {
+              'uri': c.uri,
+              'name': c.name,
+              if (c.title != null) 'title': c.title,
+              if (c.description != null) 'description': c.description,
+              if (c.mimeType != null) 'mimeType': c.mimeType,
+              if (c.size != null) 'size': c.size,
+              if (c.icons != null)
+                'icons': c.icons!.map((icon) => icon.toJson()).toList(),
+              if (c.annotations != null) 'annotations': c.annotations,
+              if (c.meta != null) '_meta': c.meta,
+            },
           final EmbeddedResource c => {'resource': c.resource.toJson()},
           UnknownContent _ => {},
         },
@@ -133,15 +198,20 @@ class ImageContent extends Content {
   /// MIME type of the image (e.g., "image/png").
   final String mimeType;
 
+  /// Optional theme hint for legacy icon usage (`light` | `dark`).
+  final String? theme;
+
   const ImageContent({
     required this.data,
     required this.mimeType,
+    this.theme,
   }) : super(type: 'image');
 
   factory ImageContent.fromJson(Map<String, dynamic> json) {
     return ImageContent(
       data: json['data'] as String,
       mimeType: json['mimeType'] as String,
+      theme: json['theme'] as String?,
     );
   }
 }
@@ -178,6 +248,64 @@ class EmbeddedResource extends Content {
       resource: ResourceContents.fromJson(
         json['resource'] as Map<String, dynamic>,
       ),
+    );
+  }
+}
+
+/// A resource reference that can be included in prompts or tool results.
+class ResourceLink extends Content {
+  /// URI of the linked resource.
+  final String uri;
+
+  /// Programmatic/logical name of the resource.
+  final String name;
+
+  /// Optional UI-oriented title.
+  final String? title;
+
+  /// Optional human-readable description.
+  final String? description;
+
+  /// Optional MIME type, if known.
+  final String? mimeType;
+
+  /// Optional resource byte size.
+  final int? size;
+
+  /// Optional set of UI icons for this resource.
+  final List<McpIcon>? icons;
+
+  /// Optional annotations.
+  final Map<String, dynamic>? annotations;
+
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
+  const ResourceLink({
+    required this.uri,
+    required this.name,
+    this.title,
+    this.description,
+    this.mimeType,
+    this.size,
+    this.icons,
+    this.annotations,
+    this.meta,
+  }) : super(type: 'resource_link');
+
+  factory ResourceLink.fromJson(Map<String, dynamic> json) {
+    return ResourceLink(
+      uri: json['uri'] as String,
+      name: json['name'] as String,
+      title: json['title'] as String?,
+      description: json['description'] as String?,
+      mimeType: json['mimeType'] as String?,
+      size: json['size'] as int?,
+      icons: (json['icons'] as List<dynamic>?)
+          ?.map((icon) => McpIcon.fromJson(icon as Map<String, dynamic>))
+          .toList(),
+      annotations: json['annotations'] as Map<String, dynamic>?,
+      meta: json['_meta'] as Map<String, dynamic>?,
     );
   }
 }
