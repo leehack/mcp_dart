@@ -359,6 +359,35 @@ void main() {
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
+
+      test('validates additionalProperties as schema', () {
+        final schema = JsonSchema.object(
+          properties: {"name": JsonSchema.string()},
+          additionalProperties: JsonSchema.integer(),
+        );
+
+        // Extra property matching the schema type is valid
+        schema.validate({"name": "John", "age": 30});
+
+        // Extra property not matching the schema type throws
+        expect(
+          () => schema.validate({"name": "John", "age": "not an integer"}),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('validates additionalProperties as empty schema (any)', () {
+        // z.record(z.string(), z.unknown()) produces additionalProperties: {}
+        final json = {
+          'type': 'object',
+          'properties': <String, dynamic>{},
+          'additionalProperties': <String, dynamic>{},
+        };
+        final schema = JsonSchema.fromJson(json) as JsonObject;
+
+        // Any extra properties should be accepted
+        schema.validate({"foo": "bar", "baz": 123, "nested": {"a": true}});
+      });
     });
 
     group('enum validation', () {
