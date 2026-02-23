@@ -479,6 +479,7 @@ class _RegisteredToolImpl implements RegisteredTool {
       annotations: annotations,
       icon: icon,
       execution: execution,
+      meta: meta,
     );
   }
 

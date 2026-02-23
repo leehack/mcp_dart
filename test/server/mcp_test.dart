@@ -229,6 +229,62 @@ void main() {
       // Tool should be registered successfully
       expect(mcpServer, isNotNull);
     });
+
+    test('tool meta is included in tools/list response', () async {
+      mcpServer.registerTool(
+        'ui_tool',
+        description: 'A tool with UI metadata',
+        meta: {
+          'ui': {
+            'resourceUri': 'ui://test-server/dashboard',
+            'visibility': ['model', 'app'],
+          },
+        },
+        callback: (args, extra) async {
+          return const CallToolResult(
+            content: [TextContent(text: 'result')],
+          );
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      // Initialize
+      final initRequest = JsonRpcInitializeRequest(
+        id: 1,
+        initParams: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+        ),
+      );
+      transport.receiveMessage(initRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      // Request tools/list
+      final listRequest = JsonRpcListToolsRequest.fromJson({
+        'jsonrpc': '2.0',
+        'id': 2,
+        'method': 'tools/list',
+      });
+      transport.receiveMessage(listRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      // Find the tools/list response
+      final response = transport.sentMessages
+          .whereType<JsonRpcResponse>()
+          .where((r) => r.id == 2)
+          .first;
+
+      final tools = (response.result['tools'] as List)
+          .cast<Map<String, dynamic>>();
+      final uiTool = tools.firstWhere((t) => t['name'] == 'ui_tool');
+
+      expect(uiTool['_meta'], isNotNull);
+      expect(uiTool['_meta']['ui']['resourceUri'],
+          equals('ui://test-server/dashboard'));
+      expect(uiTool['_meta']['ui']['visibility'], equals(['model', 'app']));
+    });
   });
 
   group('McpServer - Resource Registration', () {
