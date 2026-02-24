@@ -9,6 +9,9 @@ environment:
 
 dependencies:
   http: ^1.4.0
+  # Required for handleShelfRequest() in StreamableHTTPServerTransport —
+  # the method accepts shelf Request and returns shelf Response, and internally
+  # constructs ShelfHttpAdapter. Used by isomorphic_server's request router.
   shelf: ^1.4.0
 
 dev_dependencies:
