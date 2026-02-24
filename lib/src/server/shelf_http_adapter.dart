@@ -169,9 +169,17 @@ class ShelfHttpResponseAdapter implements HttpResponseAdapter {
       }
     }
     
-    // Close the body stream (for streaming responses)
-    if (_isStreaming && !_bodyController.isClosed) {
-      await _bodyController.close();
+    // Close the body stream to prevent resource leaks.
+    // For streaming (SSE) responses, await the close to ensure all data is flushed.
+    // For non-streaming (JSON) responses, the controller was never listened to,
+    // so we close it without awaiting (an unlistened StreamController.close()
+    // returns a Future that never completes in Dart).
+    if (!_bodyController.isClosed) {
+      if (_isStreaming) {
+        await _bodyController.close();
+      } else {
+        unawaited(_bodyController.close());
+      }
     }
     
     // Complete the done Future

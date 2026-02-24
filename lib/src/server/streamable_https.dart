@@ -1204,9 +1204,20 @@ class StreamableHTTPServerTransport implements Transport {
     }
     _streamMapping.clear();
 
+    // Close all adapter streams (shelf)
+    final adapterResponses = List<HttpResponseAdapter>.from(_adapterStreamMapping.values);
+    for (final adapterResponse in adapterResponses) {
+      try {
+        await adapterResponse.close();
+      } catch (_) {
+        // Best-effort close — adapter may already be closed
+      }
+    }
+    _adapterStreamMapping.clear();
+
     // Clear any pending responses
     _requestResponseMap.clear();
-    _requestToStreamMapping.clear(); // Also clear this map
+    _requestToStreamMapping.clear();
     onclose?.call();
   }
 
@@ -1276,7 +1287,7 @@ class StreamableHTTPServerTransport implements Transport {
       }
     }
 
-    if (_isJsonRpcResponse(message)) {
+    if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
       _requestResponseMap[requestId] = message;
       
       // Find all related IDs for this stream (works for both dart:io and adapter)
