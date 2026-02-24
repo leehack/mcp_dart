@@ -3,14 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:shelf/shelf.dart' show Request, Response;
 
-import '../shared/uuid.dart';
 import '../shared/transport.dart';
 import '../types.dart';
 import 'http_adapter.dart';
 import 'shelf_http_adapter.dart';
-import 'dartio_http_adapter.dart';
 
 /// ID for SSE streams
 typedef StreamId = String;
@@ -64,6 +63,15 @@ class StreamableHTTPServerTransportOptions {
   /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
   final EventStore? eventStore;
 
+  /// Enables host/origin validation to mitigate DNS rebinding attacks.
+  final bool enableDnsRebindingProtection;
+
+  /// Explicit host allowlist used when DNS rebinding protection is enabled.
+  final Set<String>? allowedHosts;
+
+  /// Explicit origin allowlist used when DNS rebinding protection is enabled.
+  final Set<String>? allowedOrigins;
+
   /// Interval in seconds for sending SSE keep-alive messages.
   /// Set to null to disable keep-alive messages.
   /// Default is 25 seconds (recommended to prevent client timeouts).
@@ -75,6 +83,9 @@ class StreamableHTTPServerTransportOptions {
     this.onsessioninitialized,
     this.enableJsonResponse = false,
     this.eventStore,
+    this.enableDnsRebindingProtection = false,
+    this.allowedHosts,
+    this.allowedOrigins,
     this.keepAliveInterval = 25,
   });
 }
@@ -131,6 +142,9 @@ class StreamableHTTPServerTransport implements Transport {
   final String _standaloneSseStreamId = '_GET_stream';
   final EventStore? _eventStore;
   final void Function(String sessionId)? _onsessioninitialized;
+  final bool _enableDnsRebindingProtection;
+  final Set<String>? _allowedHosts;
+  final Set<String>? _allowedOrigins;
   final int? _keepAliveInterval;
   final Map<String, Timer> _keepAliveTimers = {};
 
@@ -153,6 +167,9 @@ class StreamableHTTPServerTransport implements Transport {
         _enableJsonResponse = options.enableJsonResponse,
         _eventStore = options.eventStore,
         _onsessioninitialized = options.onsessioninitialized,
+        _enableDnsRebindingProtection = options.enableDnsRebindingProtection,
+        _allowedHosts = options.allowedHosts,
+        _allowedOrigins = options.allowedOrigins,
         _keepAliveInterval = options.keepAliveInterval;
 
   /// Starts the transport. This is required by the Transport interface but is a no-op
@@ -170,6 +187,15 @@ class StreamableHTTPServerTransport implements Transport {
   /// This method is for dart:io HttpRequest. For shelf Request, use handleShelfRequest().
   Future<void> handleRequest(HttpRequest req, [dynamic parsedBody]) async {
     req.response.bufferOutput = false;
+    if (_enableDnsRebindingProtection &&
+        !_isRequestAllowedByDnsRebindingProtection(req)) {
+      req.response
+        ..statusCode = HttpStatus.forbidden
+        ..write('Forbidden: blocked by DNS rebinding protection');
+      await _safeClose(req.response);
+      return;
+    }
+
     if (req.method == "POST") {
       await _handlePostRequest(req, parsedBody);
     } else if (req.method == "GET") {
@@ -179,6 +205,114 @@ class StreamableHTTPServerTransport implements Transport {
     } else {
       await _handleUnsupportedRequest(req.response);
     }
+  }
+
+  bool _isRequestAllowedByDnsRebindingProtection(HttpRequest request) {
+    final hostHeader = request.headers.value(HttpHeaders.hostHeader);
+    if (hostHeader == null || hostHeader.trim().isEmpty) {
+      return false;
+    }
+
+    final allowedHostSet = _normalizedAllowedHosts();
+    if (!_isHostAllowed(hostHeader, allowedHostSet)) {
+      return false;
+    }
+
+    final originHeader = request.headers.value('origin');
+    if (originHeader == null || originHeader.trim().isEmpty) {
+      return true;
+    }
+
+    if (originHeader.trim().toLowerCase() == 'null') {
+      return false;
+    }
+
+    final configuredOrigins = _normalizedAllowedOrigins();
+    if (configuredOrigins != null) {
+      final normalizedOrigin = _normalizeOrigin(originHeader);
+      return normalizedOrigin != null &&
+          configuredOrigins.contains(normalizedOrigin);
+    }
+
+    final originUri = Uri.tryParse(originHeader);
+    if (originUri == null || originUri.host.isEmpty) {
+      return false;
+    }
+
+    final originHost = _extractHost(originUri.host);
+    return allowedHostSet.contains(originHost);
+  }
+
+  Set<String> _normalizedAllowedHosts() {
+    final configuredHosts = _allowedHosts;
+    if (configuredHosts != null && configuredHosts.isNotEmpty) {
+      return configuredHosts.map(_extractHost).toSet();
+    }
+
+    return {
+      'localhost',
+      '127.0.0.1',
+      '::1',
+    };
+  }
+
+  Set<String>? _normalizedAllowedOrigins() {
+    final configuredOrigins = _allowedOrigins;
+    if (configuredOrigins == null || configuredOrigins.isEmpty) {
+      return null;
+    }
+
+    return configuredOrigins.map(_normalizeOrigin).whereType<String>().toSet();
+  }
+
+  bool _isHostAllowed(String hostHeader, Set<String> allowedHosts) {
+    final rawHost = hostHeader.trim().toLowerCase();
+    final normalizedHost = _extractHost(rawHost);
+
+    if (allowedHosts.contains(rawHost)) {
+      return true;
+    }
+
+    return allowedHosts.contains(normalizedHost);
+  }
+
+  String _extractHost(String hostOrOrigin) {
+    final lower = hostOrOrigin.trim().toLowerCase();
+
+    if (lower.contains('://')) {
+      final parsedUri = Uri.tryParse(lower);
+      if (parsedUri != null && parsedUri.host.isNotEmpty) {
+        return _extractHost(parsedUri.host);
+      }
+    }
+
+    if (lower.startsWith('[')) {
+      final end = lower.indexOf(']');
+      if (end > 1) {
+        return lower.substring(1, end);
+      }
+    }
+
+    final firstColon = lower.indexOf(':');
+    final lastColon = lower.lastIndexOf(':');
+    if (firstColon != -1 && firstColon == lastColon) {
+      return lower.substring(0, firstColon);
+    }
+
+    return lower;
+  }
+
+  String? _normalizeOrigin(String origin) {
+    final parsedUri = Uri.tryParse(origin.trim());
+    if (parsedUri == null ||
+        parsedUri.scheme.isEmpty ||
+        parsedUri.host.isEmpty) {
+      return null;
+    }
+
+    final normalizedHost = _extractHost(parsedUri.host);
+    final portPart = parsedUri.hasPort ? ':${parsedUri.port}' : '';
+    return '${parsedUri.scheme.toLowerCase()}://$normalizedHost$portPart';
   }
 
   /// Handles an incoming shelf Request

@@ -406,9 +406,13 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
     );
   }
 
-  ListToolsRequest get listParams => params != null
-      ? ListToolsRequest.fromJson(params!)
-      : const ListToolsRequest();
+  ListToolsRequest get listParams {
+    final requestParams = params;
+    if (requestParams == null) {
+      return const ListToolsRequest();
+    }
+    return ListToolsRequest.fromJson(requestParams);
+  }
 }
 
 /// JSON-RPC request to call a tool.
@@ -429,7 +433,13 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
     );
   }
 
-  CallToolRequest get callParams => CallToolRequest.fromJson(params!);
+  CallToolRequest get callParams {
+    final requestParams = params;
+    if (requestParams == null) {
+      throw const FormatException('Missing params for call tool request');
+    }
+    return CallToolRequest.fromJson(requestParams);
+  }
 
   bool get isTaskAugmented {
     // Check for task augmentation in meta or params as per convention

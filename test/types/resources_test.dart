@@ -8,12 +8,14 @@ void main() {
         'title': 'Test Resource',
         'audience': ['user', 'assistant'],
         'priority': 0.8,
+        'lastModified': '2025-01-12T15:00:58Z',
       };
 
       final annotations = ResourceAnnotations.fromJson(json);
       expect(annotations.title, equals('Test Resource'));
       expect(annotations.audience, equals(['user', 'assistant']));
       expect(annotations.priority, equals(0.8));
+      expect(annotations.lastModified, equals('2025-01-12T15:00:58Z'));
     });
 
     test('fromJson with null fields', () {
@@ -22,6 +24,7 @@ void main() {
       expect(annotations.title, isNull);
       expect(annotations.audience, isNull);
       expect(annotations.priority, isNull);
+      expect(annotations.lastModified, isNull);
     });
 
     test('toJson serializes correctly', () {
@@ -29,12 +32,14 @@ void main() {
         title: 'My Title',
         audience: ['user'],
         priority: 0.5,
+        lastModified: '2025-01-12T15:00:58Z',
       );
 
       final json = annotations.toJson();
       expect(json['title'], equals('My Title'));
       expect(json['audience'], equals(['user']));
       expect(json['priority'], equals(0.5));
+      expect(json['lastModified'], equals('2025-01-12T15:00:58Z'));
     });
 
     test('toJson excludes null fields', () {
@@ -43,6 +48,7 @@ void main() {
       expect(json.containsKey('title'), isTrue);
       expect(json.containsKey('audience'), isFalse);
       expect(json.containsKey('priority'), isFalse);
+      expect(json.containsKey('lastModified'), isFalse);
     });
   });
 
@@ -77,6 +83,13 @@ void main() {
           'title': 'Alt Title',
           'priority': 0.9,
         },
+        'icons': [
+          {
+            'src': 'https://example.com/icon.png',
+            'mimeType': 'image/png',
+            'theme': 'dark',
+          },
+        ],
       };
 
       final resource = Resource.fromJson(json);
@@ -86,6 +99,11 @@ void main() {
       expect(resource.mimeType, equals('text/plain'));
       expect(resource.icon, isNotNull);
       expect(resource.icon!.data, equals('base64data'));
+      expect(resource.icons, isNotNull);
+      expect(
+        resource.icons!.single.src,
+        equals('https://example.com/icon.png'),
+      );
       expect(resource.annotations, isNotNull);
       expect(resource.annotations!.priority, equals(0.9));
     });
@@ -119,6 +137,7 @@ void main() {
       expect(json.containsKey('description'), isFalse);
       expect(json.containsKey('mimeType'), isFalse);
       expect(json.containsKey('icon'), isFalse);
+      expect(json.containsKey('icons'), isFalse);
       expect(json.containsKey('annotations'), isFalse);
     });
   });
@@ -151,6 +170,14 @@ void main() {
         'annotations': {
           'audience': ['user'],
         },
+        'icons': [
+          {
+            'src': 'data:image/svg+xml;base64,PHN2Zy8+',
+            'mimeType': 'image/svg+xml',
+            'sizes': ['any'],
+            'theme': 'light',
+          },
+        ],
       };
 
       final template = ResourceTemplate.fromJson(json);
@@ -159,6 +186,8 @@ void main() {
       expect(template.description, equals('Access user records'));
       expect(template.mimeType, equals('application/json'));
       expect(template.icon, isNotNull);
+      expect(template.icons, isNotNull);
+      expect(template.icons!.single.theme, equals(IconTheme.light));
       expect(template.annotations, isNotNull);
     });
 

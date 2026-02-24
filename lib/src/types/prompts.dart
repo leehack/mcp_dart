@@ -46,11 +46,15 @@ class Prompt {
   /// Optional icon for the prompt.
   final ImageContent? icon;
 
+  /// Optional set of icons for the prompt.
+  final List<McpIcon>? icons;
+
   const Prompt({
     required this.name,
     this.description,
     this.arguments,
     this.icon,
+    this.icons,
   });
 
   factory Prompt.fromJson(Map<String, dynamic> json) {
@@ -63,6 +67,9 @@ class Prompt {
       icon: json['icon'] != null
           ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
           : null,
+      icons: (json['icons'] as List<dynamic>?)
+          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -72,6 +79,8 @@ class Prompt {
         if (arguments != null)
           'arguments': arguments!.map((a) => a.toJson()).toList(),
         if (icon != null) 'icon': icon!.toJson(),
+        if (icons != null)
+          'icons': icons!.map((icon) => icon.toJson()).toList(),
       };
 }
 

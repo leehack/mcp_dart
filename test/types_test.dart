@@ -173,6 +173,20 @@ void main() {
       expect(deserialized.mimeType, equals('image/png'));
     });
 
+    test('ImageContent supports optional theme', () {
+      final content = const ImageContent(
+        data: 'base64data',
+        mimeType: 'image/png',
+        theme: 'dark',
+      );
+
+      final json = content.toJson();
+      expect(json['theme'], equals('dark'));
+
+      final deserialized = ImageContent.fromJson(json);
+      expect(deserialized.theme, equals('dark'));
+    });
+
     test('AudioContent serialization and deserialization', () {
       final content =
           const AudioContent(data: 'base64data', mimeType: 'audio/wav');
@@ -193,6 +207,37 @@ void main() {
 
       final deserialized = const UnknownContent(type: 'unknown');
       expect(deserialized.type, equals('unknown'));
+    });
+
+    test('ResourceLink serialization and deserialization', () {
+      final content = const ResourceLink(
+        uri: 'file:///docs/readme.md',
+        name: 'readme',
+        mimeType: 'text/markdown',
+        description: 'Project readme',
+      );
+
+      final json = content.toJson();
+      expect(json['type'], equals('resource_link'));
+      expect(json['uri'], equals('file:///docs/readme.md'));
+      expect(json['name'], equals('readme'));
+
+      final deserialized = ResourceLink.fromJson(json);
+      expect(deserialized.uri, equals('file:///docs/readme.md'));
+      expect(deserialized.name, equals('readme'));
+      expect(deserialized.mimeType, equals('text/markdown'));
+    });
+
+    test('Content.fromJson handles resource_link content type', () {
+      final json = {
+        'type': 'resource_link',
+        'uri': 'file:///docs/spec.md',
+        'name': 'spec',
+      };
+
+      final content = Content.fromJson(json);
+      expect(content, isA<ResourceLink>());
+      expect((content as ResourceLink).uri, equals('file:///docs/spec.md'));
     });
   });
 
@@ -664,6 +709,130 @@ void main() {
       final restored = ClientCapabilities.fromJson(json);
       expect(restored.elicitation, isNotNull);
       expect(restored.roots, isNotNull);
+    });
+  });
+
+  group('Extensions Capability Tests', () {
+    test('ClientCapabilities with extensions serialization and deserialization',
+        () {
+      final capabilities = ClientCapabilities(
+        extensions: {
+          'io.modelcontextprotocol/ui': {
+            'mimeTypes': ['text/html;profile=mcp-app'],
+          },
+        },
+      );
+
+      final json = capabilities.toJson();
+      expect(json['extensions'], isNotNull);
+      expect(
+        json['extensions']['io.modelcontextprotocol/ui']['mimeTypes'],
+        equals(['text/html;profile=mcp-app']),
+      );
+
+      final deserialized = ClientCapabilities.fromJson(json);
+      expect(deserialized.extensions, isNotNull);
+      expect(
+        deserialized.extensions!['io.modelcontextprotocol/ui']!['mimeTypes'],
+        equals(['text/html;profile=mcp-app']),
+      );
+    });
+
+    test('ClientCapabilities without extensions omits key from JSON', () {
+      final capabilities = const ClientCapabilities(
+        sampling: ClientCapabilitiesSampling(),
+      );
+
+      final json = capabilities.toJson();
+      expect(json.containsKey('extensions'), isFalse);
+    });
+
+    test('ServerCapabilities with extensions serialization and deserialization',
+        () {
+      final capabilities = ServerCapabilities(
+        extensions: {
+          'io.modelcontextprotocol/ui': {
+            'mimeTypes': ['text/html;profile=mcp-app'],
+          },
+        },
+        tools: const ServerCapabilitiesTools(listChanged: true),
+      );
+
+      final json = capabilities.toJson();
+      expect(json['extensions'], isNotNull);
+      expect(
+        json['extensions']['io.modelcontextprotocol/ui']['mimeTypes'],
+        equals(['text/html;profile=mcp-app']),
+      );
+      expect(json['tools']['listChanged'], equals(true));
+
+      final deserialized = ServerCapabilities.fromJson(json);
+      expect(deserialized.extensions, isNotNull);
+      expect(
+        deserialized.extensions!['io.modelcontextprotocol/ui']!['mimeTypes'],
+        equals(['text/html;profile=mcp-app']),
+      );
+      expect(deserialized.tools?.listChanged, equals(true));
+    });
+
+    test('ServerCapabilities without extensions omits key from JSON', () {
+      final capabilities = const ServerCapabilities(
+        logging: {'enabled': true},
+      );
+
+      final json = capabilities.toJson();
+      expect(json.containsKey('extensions'), isFalse);
+    });
+
+    test('Extensions round-trip through InitializeRequest', () {
+      final request = JsonRpcInitializeRequest(
+        id: 1,
+        initParams: InitializeRequest(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(
+            extensions: {
+              'io.modelcontextprotocol/ui': {
+                'mimeTypes': ['text/html;profile=mcp-app'],
+              },
+            },
+          ),
+          clientInfo:
+              const Implementation(name: 'test-client', version: '1.0.0'),
+        ),
+      );
+
+      final json = request.toJson();
+      final deserialized = JsonRpcInitializeRequest.fromJson(json);
+      expect(
+        deserialized.initParams.capabilities.extensions?[
+            'io.modelcontextprotocol/ui']?['mimeTypes'],
+        equals(['text/html;profile=mcp-app']),
+      );
+    });
+
+    test('Multiple extensions can coexist', () {
+      final capabilities = ClientCapabilities(
+        extensions: {
+          'io.modelcontextprotocol/ui': {
+            'mimeTypes': ['text/html;profile=mcp-app'],
+          },
+          'io.modelcontextprotocol/other': {
+            'enabled': true,
+          },
+        },
+      );
+
+      final json = capabilities.toJson();
+      final deserialized = ClientCapabilities.fromJson(json);
+      expect(deserialized.extensions!.length, equals(2));
+      expect(
+        deserialized.extensions!['io.modelcontextprotocol/ui']!['mimeTypes'],
+        equals(['text/html;profile=mcp-app']),
+      );
+      expect(
+        deserialized.extensions!['io.modelcontextprotocol/other']!['enabled'],
+        equals(true),
+      );
     });
   });
 }

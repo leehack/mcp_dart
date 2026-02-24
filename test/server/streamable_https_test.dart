@@ -281,6 +281,25 @@ void main() {
       );
     });
 
+    test('dns rebinding protection options are accepted', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'test-session-id',
+          enableDnsRebindingProtection: true,
+          allowedHosts: {'localhost'},
+          allowedOrigins: {'http://localhost'},
+        ),
+      );
+
+      await transport.start();
+      transports['/mcp'] = transport;
+      transport.sessionId = 'test-session-id';
+
+      await transport.close();
+
+      expect(true, isTrue);
+    });
+
     test('session validation works correctly', () async {
       // Create a transport with session management
       final transport = StreamableHTTPServerTransport(

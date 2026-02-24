@@ -280,6 +280,28 @@ server.registerTool(
 );
 ```
 
+### Tool Returning a Resource Link
+
+```dart
+server.registerTool(
+  'latest-report',
+  description: 'Return a link to the latest generated report',
+  inputSchema: ToolInputSchema(properties: {}),
+  callback: (args, extra) async {
+    return CallToolResult.fromContent(
+      content: [
+        TextContent(text: 'Latest report is available.'),
+        ResourceLink(
+          uri: 'file:///reports/latest.md',
+          name: 'latest-report',
+          mimeType: 'text/markdown',
+        ),
+      ],
+    );
+  },
+);
+```
+
 ### Error Handling in Tools
 
 ```dart
@@ -396,6 +418,37 @@ server.registerResourceTemplate(
         TextResourceContents(
           uri: uri.toString(),
           text: fileContent,
+        ),
+      ],
+    );
+  },
+);
+```
+
+### Query Parameter URI Templates (RFC 6570)
+
+```dart
+server.registerResourceTemplate(
+  'Entity List',
+  ResourceTemplateRegistration(
+    'entity://list{?status,assignee}',
+    listCallback: null,
+  ),
+  null,
+  (uri, vars, extra) async {
+    final status = vars['status'] as String?;
+    final assignee = vars['assignee'] as String?;
+    final data = await repository.list(
+      status: status,
+      assignee: assignee,
+    );
+
+    return ReadResourceResult(
+      contents: [
+        TextResourceContents(
+          uri: uri.toString(),
+          text: jsonEncode(data),
+          mimeType: 'application/json',
         ),
       ],
     );

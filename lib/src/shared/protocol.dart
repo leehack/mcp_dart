@@ -982,7 +982,7 @@ abstract class Protocol {
       meta: finalMeta,
     );
 
-    void cancel([dynamic reason]) {
+    void cancel([Object? reason]) {
       if (completer.isCompleted) return;
 
       _responseCompleters.remove(messageId);

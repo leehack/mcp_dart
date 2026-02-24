@@ -9,7 +9,7 @@ const int maxTemplateExpressions = 10000;
 
 /// Type definition for variables used in template expansion.
 typedef TemplateVariables
-    = Map<String, dynamic /* String | List<String> | Map<String, String> */ >;
+    = Map<String, Object? /* String | List<String> | Map<String, String> */ >;
 
 /// Base class for different parts parsed from a URI template string.
 sealed class _UriTemplatePart {
@@ -377,12 +377,16 @@ class UriTemplateExpander {
       } else if (part is _ExpressionPart) {
         bool firstInExpr = true;
         for (final name in part.names) {
-          if (!firstInExpr) {
-            pattern.write(',');
-          }
           switch (part.operator) {
+            case '':
             case '+':
+              if (!firstInExpr) {
+                pattern.write(',');
+              }
+              pattern.write(valuePattern);
+              break;
             case '#':
+              pattern.write(firstInExpr ? '#' : ',');
               pattern.write(valuePattern);
               break;
             case '.':
@@ -395,23 +399,26 @@ class UriTemplateExpander {
               break;
             case ';':
               pattern.write(';');
-              pattern.write(name);
+              pattern.write(RegExp.escape(name));
               pattern.write('=');
               pattern.write(valuePattern);
               break;
             case '?':
-              pattern.write(r'\?');
-              pattern.write(name);
+              pattern.write(firstInExpr ? r'\?' : '&');
+              pattern.write(RegExp.escape(name));
               pattern.write('=');
               pattern.write(valuePattern);
               break;
             case '&':
               pattern.write('&');
-              pattern.write(name);
+              pattern.write(RegExp.escape(name));
               pattern.write('=');
               pattern.write(valuePattern);
               break;
             default:
+              if (!firstInExpr) {
+                pattern.write(',');
+              }
               pattern.write(valuePattern);
               break;
           }
@@ -433,7 +440,7 @@ class UriTemplateExpander {
 
     if (match == null) return null;
 
-    final result = <String, dynamic>{};
+    final result = <String, Object?>{};
     if (match.groupCount == varNames.length) {
       for (int i = 0; i < varNames.length; i++) {
         final value = match.group(i + 1);

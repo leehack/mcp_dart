@@ -311,12 +311,19 @@ class ClientCapabilities {
   /// Present if the client supports tasks (`tasks/list`, `tasks/requests`, etc).
   final ClientCapabilitiesTasks? tasks;
 
+  /// Optional MCP extension capabilities (SEP-1724).
+  ///
+  /// Keys are extension identifiers (e.g. `"io.modelcontextprotocol/ui"`),
+  /// values are extension-specific settings.
+  final Map<String, Map<String, dynamic>>? extensions;
+
   const ClientCapabilities({
     this.experimental,
     this.sampling,
     this.roots,
     this.elicitation,
     this.tasks,
+    this.extensions,
   });
 
   factory ClientCapabilities.fromJson(Map<String, dynamic> json) {
@@ -324,6 +331,7 @@ class ClientCapabilities {
     final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
     final tasksMap = json['tasks'] as Map<String, dynamic>?;
     final samplingMap = json['sampling'] as Map<String, dynamic>?;
+    final extensionsMap = json['extensions'] as Map<String, dynamic>?;
 
     return ClientCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
@@ -337,6 +345,9 @@ class ClientCapabilities {
           : ClientElicitation.fromJson(elicitationMap),
       tasks:
           tasksMap == null ? null : ClientCapabilitiesTasks.fromJson(tasksMap),
+      extensions: extensionsMap?.map(
+        (key, value) => MapEntry(key, Map<String, dynamic>.from(value as Map)),
+      ),
     );
   }
 
@@ -346,6 +357,7 @@ class ClientCapabilities {
         if (roots != null) 'roots': roots!.toJson(),
         if (elicitation != null) 'elicitation': elicitation!.toJson(),
         if (tasks != null) 'tasks': tasks!.toJson(),
+        if (extensions != null) 'extensions': extensions,
       };
 }
 
@@ -607,6 +619,12 @@ class ServerCapabilities {
   /// Present if the server offers elicitation (`elicitation/create`).
   final ServerCapabilitiesElicitation? elicitation;
 
+  /// Optional MCP extension capabilities (SEP-1724).
+  ///
+  /// Keys are extension identifiers (e.g. `"io.modelcontextprotocol/ui"`),
+  /// values are extension-specific settings.
+  final Map<String, Map<String, dynamic>>? extensions;
+
   const ServerCapabilities({
     this.experimental,
     this.logging,
@@ -616,6 +634,7 @@ class ServerCapabilities {
     this.completions,
     this.tasks,
     this.elicitation,
+    this.extensions,
   });
 
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
@@ -625,6 +644,7 @@ class ServerCapabilities {
     final tMap = json['tools'] as Map<String, dynamic>?;
     final tasksMap = json['tasks'] as Map<String, dynamic>?;
     final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
+    final extensionsMap = json['extensions'] as Map<String, dynamic>?;
 
     return ServerCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
@@ -640,6 +660,9 @@ class ServerCapabilities {
       elicitation: elicitationMap == null
           ? null
           : ServerCapabilitiesElicitation.fromJson(elicitationMap),
+      extensions: extensionsMap?.map(
+        (key, value) => MapEntry(key, Map<String, dynamic>.from(value as Map)),
+      ),
     );
   }
 
@@ -652,6 +675,7 @@ class ServerCapabilities {
         if (completions != null) 'completions': completions!.toJson(),
         if (tasks != null) 'tasks': tasks!.toJson(),
         if (elicitation != null) 'elicitation': elicitation!.toJson(),
+        if (extensions != null) 'extensions': extensions,
       };
 }
 

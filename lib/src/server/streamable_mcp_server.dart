@@ -32,6 +32,8 @@ import 'package:mcp_dart/src/types.dart';
 /// ```
 class StreamableMcpServer {
   static final Logger _logger = Logger('StreamableMcpServer');
+  static const int defaultPort = 3000;
+  static const String defaultCorsMaxAgeSeconds = '86400';
 
   /// Factory to create a new MCP server instance for a given session.
   final McpServer Function(String sessionId) _serverFactory;
@@ -52,6 +54,15 @@ class StreamableMcpServer {
   /// Returns true if the request is allowed, false otherwise.
   final FutureOr<bool> Function(HttpRequest request)? authenticator;
 
+  /// Enables host/origin validation to mitigate DNS rebinding attacks.
+  final bool enableDnsRebindingProtection;
+
+  /// Explicit host allowlist used when DNS rebinding protection is enabled.
+  final Set<String>? allowedHosts;
+
+  /// Explicit origin allowlist used when DNS rebinding protection is enabled.
+  final Set<String>? allowedOrigins;
+
   HttpServer? _httpServer;
   final Map<String, StreamableHTTPServerTransport> _transports = {};
   // Keep track of servers to close them if needed, though closing transport usually suffices
@@ -60,10 +71,13 @@ class StreamableMcpServer {
   StreamableMcpServer({
     required McpServer Function(String sessionId) serverFactory,
     this.host = 'localhost',
-    this.port = 3000,
+    this.port = defaultPort,
     this.path = '/mcp',
     this.eventStore,
     this.authenticator,
+    this.enableDnsRebindingProtection = false,
+    this.allowedHosts,
+    this.allowedOrigins,
   }) : _serverFactory = serverFactory;
 
   /// Starts the HTTP server.
@@ -77,7 +91,11 @@ class StreamableMcpServer {
       'MCP Streamable HTTP Server listening on http://$host:$port$path',
     );
 
-    _httpServer!.listen(_handleRequest);
+    final httpServer = _httpServer;
+    if (httpServer == null) {
+      throw StateError('HTTP server not initialized');
+    }
+    httpServer.listen(_handleRequest);
   }
 
   /// Stops the HTTP server and closes all active sessions.
@@ -95,6 +113,15 @@ class StreamableMcpServer {
 
   Future<void> _handleRequest(HttpRequest request) async {
     _setCorsHeaders(request.response);
+
+    if (enableDnsRebindingProtection &&
+        !_isRequestAllowedByDnsRebindingProtection(request)) {
+      request.response
+        ..statusCode = HttpStatus.forbidden
+        ..write('Forbidden: blocked by DNS rebinding protection');
+      await request.response.close();
+      return;
+    }
 
     if (request.method == 'OPTIONS') {
       request.response.statusCode = HttpStatus.ok;
@@ -263,6 +290,9 @@ class StreamableMcpServer {
       options: StreamableHTTPServerTransportOptions(
         sessionIdGenerator: () => generateUUID(),
         eventStore: eventStore,
+        enableDnsRebindingProtection: enableDnsRebindingProtection,
+        allowedHosts: allowedHosts ?? {host},
+        allowedOrigins: allowedOrigins,
         onsessioninitialized: (sid) {
           _logger.info('Session initialized: $sid');
           _transports[sid] = transport;
@@ -335,6 +365,115 @@ class StreamableMcpServer {
     return completer.future;
   }
 
+  bool _isRequestAllowedByDnsRebindingProtection(HttpRequest request) {
+    final hostHeader = request.headers.value(HttpHeaders.hostHeader);
+    if (hostHeader == null || hostHeader.trim().isEmpty) {
+      return false;
+    }
+
+    final allowedHostSet = _normalizedAllowedHosts();
+    if (!_isHostAllowed(hostHeader, allowedHostSet)) {
+      return false;
+    }
+
+    final originHeader = request.headers.value('origin');
+    if (originHeader == null || originHeader.trim().isEmpty) {
+      return true;
+    }
+
+    if (originHeader.trim().toLowerCase() == 'null') {
+      return false;
+    }
+
+    final configuredOrigins = _normalizedAllowedOrigins();
+    if (configuredOrigins != null) {
+      final normalizedOrigin = _normalizeOrigin(originHeader);
+      return normalizedOrigin != null &&
+          configuredOrigins.contains(normalizedOrigin);
+    }
+
+    final originUri = Uri.tryParse(originHeader);
+    if (originUri == null || originUri.host.isEmpty) {
+      return false;
+    }
+
+    final originHost = _extractHost(originUri.host);
+    return allowedHostSet.contains(originHost);
+  }
+
+  Set<String> _normalizedAllowedHosts() {
+    final configuredHosts = allowedHosts;
+    if (configuredHosts != null && configuredHosts.isNotEmpty) {
+      return configuredHosts.map(_extractHost).toSet();
+    }
+
+    return {
+      _extractHost(host),
+      'localhost',
+      '127.0.0.1',
+      '::1',
+    };
+  }
+
+  Set<String>? _normalizedAllowedOrigins() {
+    final configuredOrigins = allowedOrigins;
+    if (configuredOrigins == null || configuredOrigins.isEmpty) {
+      return null;
+    }
+
+    return configuredOrigins.map(_normalizeOrigin).whereType<String>().toSet();
+  }
+
+  bool _isHostAllowed(String hostHeader, Set<String> allowedHosts) {
+    final rawHost = hostHeader.trim().toLowerCase();
+    final normalizedHost = _extractHost(rawHost);
+
+    if (allowedHosts.contains(rawHost)) {
+      return true;
+    }
+
+    return allowedHosts.contains(normalizedHost);
+  }
+
+  String _extractHost(String hostOrOrigin) {
+    final lower = hostOrOrigin.trim().toLowerCase();
+
+    if (lower.contains('://')) {
+      final parsedUri = Uri.tryParse(lower);
+      if (parsedUri != null && parsedUri.host.isNotEmpty) {
+        return _extractHost(parsedUri.host);
+      }
+    }
+
+    if (lower.startsWith('[')) {
+      final end = lower.indexOf(']');
+      if (end > 1) {
+        return lower.substring(1, end);
+      }
+    }
+
+    final firstColon = lower.indexOf(':');
+    final lastColon = lower.lastIndexOf(':');
+    if (firstColon != -1 && firstColon == lastColon) {
+      return lower.substring(0, firstColon);
+    }
+
+    return lower;
+  }
+
+  String? _normalizeOrigin(String origin) {
+    final parsedUri = Uri.tryParse(origin.trim());
+    if (parsedUri == null ||
+        parsedUri.scheme.isEmpty ||
+        parsedUri.host.isEmpty) {
+      return null;
+    }
+
+    final normalizedHost = _extractHost(parsedUri.host);
+    final portPart = parsedUri.hasPort ? ':${parsedUri.port}' : '';
+    return '${parsedUri.scheme.toLowerCase()}://$normalizedHost$portPart';
+  }
+
   void _setCorsHeaders(HttpResponse response) {
     response.headers.set('Access-Control-Allow-Origin', '*');
     response.headers
@@ -344,7 +483,7 @@ class StreamableMcpServer {
       'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
     );
     response.headers.set('Access-Control-Allow-Credentials', 'true');
-    response.headers.set('Access-Control-Max-Age', '86400');
+    response.headers.set('Access-Control-Max-Age', defaultCorsMaxAgeSeconds);
     response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
   }
 }

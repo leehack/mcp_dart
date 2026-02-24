@@ -206,6 +206,10 @@ void main() async {
     host: '0.0.0.0',
     port: 3000,
     path: '/mcp',
+    // Optional hardening for remote deployments
+    enableDnsRebindingProtection: true,
+    allowedHosts: {'localhost', 'api.example.com'},
+    allowedOrigins: {'https://app.example.com'},
   );
 
   await server.start();
@@ -218,6 +222,16 @@ This helper handles:
 - Managing sessions and event storage
 - Connecting the `McpServer` to the transport
 - Resumability support
+
+### DNS Rebinding Protection
+
+`StreamableMcpServer` and `StreamableHTTPServerTransport` support optional DNS rebinding protection.
+
+- Validate `Host` against `allowedHosts`
+- Validate `Origin` against `allowedOrigins` (if provided)
+- Reject missing/invalid host headers when protection is enabled
+
+Use this for remote/browser-exposed deployments.
 
 ### Server Setup (Streamable HTTP)
 
@@ -239,22 +253,42 @@ void main() async {
   );
 
   // Register capabilities
-  server.tool(name: 'example', ...);
+  server.registerTool(
+    'example',
+    inputSchema: ToolInputSchema(properties: {}),
+    callback: (args, extra) async {
+      return CallToolResult(content: [TextContent(text: 'ok')]);
+    },
+  );
+
+  final transport = StreamableHTTPServerTransport(
+    options: StreamableHTTPServerTransportOptions(
+      sessionIdGenerator: () =>
+          'session-${DateTime.now().millisecondsSinceEpoch}',
+      eventStore: InMemoryEventStore(),
+      enableDnsRebindingProtection: true,
+      allowedHosts: {'localhost'},
+      allowedOrigins: {'http://localhost:5173'},
+    ),
+  );
+
+  await transport.start();
+  await server.connect(transport);
 
   // Create HTTP server
   final httpServer = await HttpServer.bind('localhost', 3000);
   print('Server listening on http://localhost:3000');
 
   await for (final request in httpServer) {
-    // Create transport for each request
-    final transport = StreamableHTTPServerTransport(
-      request: request,
-      response: request.response,
-      sessionId: 'session-${DateTime.now().millisecondsSinceEpoch}',
-    );
+    if (request.uri.path != '/mcp') {
+      request.response
+        ..statusCode = HttpStatus.notFound
+        ..write('Not Found');
+      await request.response.close();
+      continue;
+    }
 
-    // Connect MCP server to this transport
-    await server.connect(transport);
+    await transport.handleRequest(request);
   }
 }
 ```
@@ -280,10 +314,11 @@ await client.connect(transport);
 ```dart
 // Server: Enable session persistence
 final transport = StreamableHTTPServerTransport(
-  request: request,
-  response: response,
-  sessionId: sessionId,
-  enableResume: true,  // Allow resuming
+  options: StreamableHTTPServerTransportOptions(
+    sessionIdGenerator: () =>
+        'session-${DateTime.now().millisecondsSinceEpoch}',
+    eventStore: InMemoryEventStore(), // Enables resumability
+  ),
 );
 ```
 
@@ -300,36 +335,31 @@ final transport = StreamableHTTPClientTransport(
 ```dart
 // Server: Disable session persistence
 final transport = StreamableHTTPServerTransport(
-  request: request,
-  response: response,
-  enableResume: false,  // No session persistence
+  options: StreamableHTTPServerTransportOptions(
+    sessionIdGenerator: () => null, // Stateless mode
+  ),
 );
 ```
 
 ### CORS Configuration
 
 ```dart
-void handleRequest(HttpRequest request) async {
-  // Set CORS headers
-  request.response.headers
-    ..set('Access-Control-Allow-Origin', '*')
-    ..set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-    ..set('Access-Control-Allow-Headers', 'Content-Type');
+final transport = StreamableHTTPServerTransport(
+  options: StreamableHTTPServerTransportOptions(
+    sessionIdGenerator: () =>
+        'session-${DateTime.now().millisecondsSinceEpoch}',
+  ),
+);
 
-  if (request.method == 'OPTIONS') {
-    request.response.statusCode = 204;
-    await request.response.close();
-    return;
-  }
+await transport.start();
+await server.connect(transport);
 
-  // Handle MCP request
-  final transport = StreamableHTTPServerTransport(
-    request: request,
-    response: request.response,
-  );
-  await server.connect(transport);
+await for (final request in httpServer) {
+  await transport.handleRequest(request); // Adds CORS headers internally
 }
 ```
+
+If you enable DNS rebinding protection, set explicit `allowedOrigins` for browser clients.
 
 ### Platform Support
 
@@ -552,18 +582,24 @@ The SDK includes an older SSE transport implementation that is deprecated but st
 
 ```dart
 // Old (deprecated)
-final transport = SseServerTransport(
-  request: request,
-  response: response,
-);
+final manager = SseServerManager(mcpServer);
+await manager.handleRequest(request);
 
 // New (recommended)
 final transport = StreamableHTTPServerTransport(
-  request: request,
-  response: response,
-  sessionId: generateSessionId(),
-  enableResume: true,
+  options: StreamableHTTPServerTransportOptions(
+    sessionIdGenerator: () =>
+        'session-${DateTime.now().millisecondsSinceEpoch}',
+    eventStore: InMemoryEventStore(),
+    enableDnsRebindingProtection: true,
+    allowedHosts: {'localhost'},
+    allowedOrigins: {'http://localhost:5173'},
+  ),
 );
+
+await transport.start();
+await mcpServer.connect(transport);
+await transport.handleRequest(request);
 ```
 
 ## Choosing a Transport
@@ -595,7 +631,7 @@ final transport = StreamableHTTPServerTransport(
 | Transport | Security Features |
 |-----------|------------------|
 | **Stdio** | Process isolation, local only |
-| **HTTP/SSE** | TLS/HTTPS, CORS, authentication |
+| **HTTP/SSE** | TLS/HTTPS, CORS, authentication, optional DNS rebinding protection |
 | **Stream** | In-process only |
 
 ## Advanced Configuration

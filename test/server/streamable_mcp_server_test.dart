@@ -144,6 +144,85 @@ void main() {
       expect(resPass.statusCode, HttpStatus.ok);
     });
 
+    test('dns rebinding protection blocks disallowed host header', () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'DnsServer', version: '1.0')),
+        host: host,
+        port: port,
+        enableDnsRebindingProtection: true,
+        allowedHosts: {'localhost'},
+      );
+      await server.start();
+
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(Uri.parse(baseUrl));
+        req.headers.contentType = ContentType.json;
+        req.headers.set(HttpHeaders.hostHeader, 'evil.example');
+        req.headers.set('Accept', 'application/json, text/event-stream');
+        req.write(jsonEncode(initRequest.toJson()));
+
+        final res = await req.close();
+        expect(res.statusCode, HttpStatus.forbidden);
+        await res.drain();
+      } finally {
+        client.close(force: true);
+      }
+    });
+
+    test('dns rebinding protection allows configured origin', () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'DnsServer', version: '1.0')),
+        host: host,
+        port: port,
+        enableDnsRebindingProtection: true,
+        allowedHosts: {'localhost'},
+        allowedOrigins: {'http://localhost:$port'},
+      );
+      await server.start();
+
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(Uri.parse(baseUrl));
+        req.headers.contentType = ContentType.json;
+        req.headers.set('Origin', 'http://localhost:$port');
+        req.headers.set('Accept', 'application/json, text/event-stream');
+        req.write(jsonEncode(initRequest.toJson()));
+
+        final res = await req.close();
+        expect(res.statusCode, HttpStatus.ok);
+        await res.drain();
+      } finally {
+        client.close(force: true);
+      }
+    });
+
     test('rejects PUT request with 405 Method Not Allowed', () async {
       final client = http.Client();
       try {
