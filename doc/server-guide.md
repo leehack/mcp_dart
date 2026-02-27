@@ -176,7 +176,7 @@ server.registerTool(
   ),
   callback: (args, extra) async {
     final message = args['message'] as String;
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: message)],
     );
   },
@@ -218,7 +218,7 @@ server.registerTool(
       limit: limit,
     );
 
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [
         TextContent(
           text: jsonEncode(results),
@@ -264,7 +264,7 @@ server.registerTool(
   inputSchema: ToolInputSchema(properties: {}),
   callback: (args, extra) async {
     // Delete logic
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: 'User deleted')],
     );
   },
@@ -276,7 +276,7 @@ server.registerTool(
   inputSchema: ToolInputSchema(properties: {}),
   callback: (args, extra) async {
     // Get logic
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: 'User info')],
     );
   },
@@ -288,7 +288,7 @@ server.registerTool(
   inputSchema: ToolInputSchema(properties: {}),
   callback: (args, extra) async {
     // Update logic
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: 'Cache updated')],
     );
   },
@@ -300,7 +300,7 @@ server.registerTool(
   inputSchema: ToolInputSchema(properties: {}),
   callback: (args, extra) async {
     // Search logic
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: 'Results')],
     );
   },
@@ -318,7 +318,7 @@ server.registerTool(
     final report = await generateReport(args);
     final chart = await generateChart(report);
 
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [
         TextContent(text: report.summary),
         ImageContent(
@@ -339,7 +339,7 @@ server.registerTool(
   description: 'Return a link to the latest generated report',
   inputSchema: ToolInputSchema(properties: {}),
   callback: (args, extra) async {
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [
         TextContent(text: 'Latest report is available.'),
         ResourceLink(
@@ -372,7 +372,7 @@ server.registerTool(
 
     if (b == 0) {
       // Return error content
-      return CallToolResult.fromContent(
+      return CallToolResult(
         isError: true,
         content: [
           TextContent(text: 'Error: Division by zero'),
@@ -380,7 +380,7 @@ server.registerTool(
       );
     }
 
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: '${a / b}')],
     );
   },
@@ -752,7 +752,7 @@ server.experimental.onGetTask((taskId, extra) async {
 
 server.experimental.onTaskResult((taskId, extra) async {
   // Return the task result
-  return CallToolResult.fromContent(
+  return CallToolResult(
     content: [TextContent(text: 'Result')],
   );
 });

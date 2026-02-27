@@ -8,7 +8,7 @@ Add the MCP Dart SDK to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mcp_dart: ^1.3.0
+  mcp_dart: ^2.0.0
 ```
 
 Then run:
@@ -163,7 +163,7 @@ void main() async {
     ),
     callback: (args, extra) async {
       final name = args['name'] as String;
-      return CallToolResult.fromContent(
+      return CallToolResult(
         content: [
           TextContent(text: 'Hello, $name! Welcome to MCP!'),
         ],
@@ -462,7 +462,7 @@ The SDK includes many examples in the `example/` directory:
 - **[server_stdio.dart](../example/server_stdio.dart)** - Complete stdio server
 - **[client_stdio.dart](../example/client_stdio.dart)** - Stdio client
 - **[weather.dart](../example/weather.dart)** - Real weather API integration
-- **[oauth_server_example.dart](../example/oauth_server_example.dart)** - OAuth2 server
+- **[oauth_server_example.dart](../example/authentication/oauth_server_example.dart)** - OAuth2 server
 - **[completions_capability_demo.dart](../example/completions_capability_demo.dart)** - Auto-completion
 - **[elicitation_http_server.dart](../example/elicitation_http_server.dart)** - User input collection
 

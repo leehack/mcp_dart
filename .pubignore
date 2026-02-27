@@ -1,0 +1,24 @@
+# Monorepo subpackages are published independently.
+packages/
+
+# Internal/repo-only metadata.
+AGENTS.md
+context7.json
+llms.txt
+
+# Large generated Flutter example platform scaffolding.
+example/flutter_http_client/android/
+example/flutter_http_client/ios/
+example/flutter_http_client/linux/
+example/flutter_http_client/macos/
+example/flutter_http_client/web/
+example/flutter_http_client/windows/
+
+# CI and local artifacts.
+coverage/
+build/
+.dart_tool/
+firebase-debug.log
+
+# JS interop test fixtures (not required by package consumers).
+test/interop/ts/

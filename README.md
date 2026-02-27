@@ -1,4 +1,4 @@
-# MCP(Model Context Protocol) for Dart
+# MCP (Model Context Protocol) for Dart
 
 [![Coverage](https://img.shields.io/codecov/c/github/leehack/mcp_dart)](https://app.codecov.io/gh/leehack/mcp_dart)
 [![Pub Version](https://img.shields.io/pub/v/mcp_dart?color=blueviolet)](https://pub.dev/packages/mcp_dart)
@@ -34,6 +34,21 @@ MCP follows a **client-server architecture** with three key components:
 
 Ensure you have the correct Dart SDK version installed. See <https://dart.dev/get-dart> for installation instructions.
 
+## Installation
+
+Add to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  mcp_dart: ^2.0.0
+```
+
+Then install dependencies:
+
+```bash
+dart pub get
+```
+
 ## What This SDK Provides
 
 **This SDK lets you build both MCP servers and clients in Dart/Flutter.**
@@ -41,7 +56,7 @@ Ensure you have the correct Dart SDK version installed. See <https://dart.dev/ge
 - ✅ **Build MCP Servers** - Create servers that expose tools, resources, and prompts to AI hosts
 - ✅ **Build MCP Clients** - Create AI applications that can connect to and use MCP servers
 - ✅ **Full MCP Protocol Support** - Complete [MCP specification 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25) implementation
-- ✅ **Multiple Transport Options** - Stdio, StreamableHTTP, Stream, or custom transports
+- ✅ **Multiple Transport Options** - Stdio, StreamableHTTP, IOStream, or custom transports
 - ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation, Tasks
 - ✅ **Extension Support** - Generic `extensions` negotiation with typed MCP Apps helpers and TypeScript-style `registerAppTool` / `registerAppResource`
 - ✅ **Latest Content/Metadata Types** - `resource_link`, themed `icons`, and `annotations.lastModified`
@@ -76,7 +91,7 @@ It's also backward compatible with previous versions including `2025-06-18`, `20
 
 ### Advanced Features
 
-- 🔐 **[OAuth Authentication](https://github.com/leehack/mcp_dart/blob/main/example/authentication/)** - OAuth2 guides and examples
+- 🔐 **[OAuth Authentication](https://github.com/leehack/mcp_dart/tree/main/example/authentication)** - OAuth2 guides and examples
 - 📝 For resources, prompts, and other features, see the Server and Client guides
 
 ## Quick Start with CLI
@@ -134,12 +149,12 @@ Configure your server with AI hosts like Claude Desktop:
 
 ## Authentication
 
-This library supports OAuth2 authentication with PKCE for both clients and servers. For complete authentication guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/blob/main/example/authentication/).
+This library supports OAuth2 authentication with PKCE for both clients and servers. For complete authentication guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/tree/main/example/authentication).
 
 ## Platform Support
 
-| Platform | Stdio | StreamableHTTP | Stream | Custom |
-|----------|-------|----------------|--------|--------|
+| Platform | Stdio | StreamableHTTP | IOStream | Custom |
+|----------|-------|----------------|----------|--------|
 | **Desktop** (CLI/Server) | ✅ | ✅ | ✅ | ✅ |
 | **Web** (Browser) | ❌ | ✅ | ✅ | ✅ |
 | **Flutter** (Mobile/Desktop) | ✅ | ✅ | ✅ | ✅ |
@@ -157,6 +172,8 @@ For additional examples including authentication, HTTP clients, and advanced fea
 
 - **Issues & Bug Reports**: [GitHub Issues](https://github.com/leehack/mcp_dart/issues)
 - **Package**: [pub.dev/packages/mcp_dart](https://pub.dev/packages/mcp_dart)
+- **API Docs**: [pub.dev documentation](https://pub.dev/documentation/mcp_dart/latest/)
+- **Changelog**: [CHANGELOG.md](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)
 - **Protocol Spec**: [MCP Specification](https://modelcontextprotocol.io/specification/2025-11-25)
 
 ## Credits
