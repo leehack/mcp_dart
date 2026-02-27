@@ -40,6 +40,9 @@ if (getUiCapability(client.getServerCapabilities())
 
 Register a `ui://` resource and attach `_meta.ui` metadata to both the tool and the UI content.
 
+Use tool names that follow the MCP naming guidance (for example, `weather_get_current`).
+Some hosts reject names containing `/`.
+
 ```dart
 final server = McpServer(
   const Implementation(name: 'weather-server', version: '1.0.0'),
@@ -72,9 +75,29 @@ registerAppTool(
       },
     },
   ),
-  (args, extra) async => const CallToolResult(
-    content: [TextContent(text: 'Weather data')],
-  ),
+  (args, extra) async {
+    final location = args['location'] as String;
+    const temperatureC = 22;
+    const condition = 'Partly Cloudy';
+
+    return CallToolResult(
+      content: [
+        TextContent(
+          text: 'Current weather for $location: $temperatureC C, $condition.',
+        ),
+        const ResourceLink(
+          uri: resourceUri,
+          name: 'Weather Dashboard UI',
+          mimeType: mcpUiResourceMimeType,
+        ),
+      ],
+      structuredContent: {
+        'location': location,
+        'temperatureC': temperatureC,
+        'condition': condition,
+      },
+    );
+  },
 );
 
 registerAppResource(

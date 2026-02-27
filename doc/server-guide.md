@@ -117,7 +117,7 @@ const resourceUri = 'ui://dashboard/view.html';
 
 registerAppTool(
   server,
-  'dashboard/show',
+  'dashboard_show',
   McpUiAppToolConfig(
     meta: const {
       'ui': {
