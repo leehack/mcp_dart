@@ -460,8 +460,8 @@ void main() async {
   server.registerTool('example', ...);
 
   final serverTransport = IOStreamTransport(
-    inputStream: clientToServer.stream,
-    outputSink: serverToClient.sink,
+    stream: clientToServer.stream,
+    sink: serverToClient.sink,
   );
   await server.connect(serverTransport);
 
@@ -471,8 +471,8 @@ void main() async {
   );
 
   final clientTransport = IOStreamTransport(
-    inputStream: serverToClient.stream,
-    outputSink: clientToServer.sink,
+    stream: serverToClient.stream,
+    sink: clientToServer.sink,
   );
   await client.connect(clientTransport);
 
@@ -526,8 +526,8 @@ void main() {
     );
 
     await server.connect(IOStreamTransport(
-      inputStream: c2s.stream,
-      outputSink: s2c.sink,
+      stream: c2s.stream,
+      sink: s2c.sink,
     ));
 
     // Create client
@@ -536,8 +536,8 @@ void main() {
     );
 
     await client.connect(IOStreamTransport(
-      inputStream: s2c.stream,
-      outputSink: c2s.sink,
+      stream: s2c.stream,
+      sink: c2s.sink,
     ));
 
     // Test

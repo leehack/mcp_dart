@@ -75,10 +75,10 @@ Modern HTTP streaming with resumability:
 
 ```bash
 # Start server
-dart run example/streamable_https/server.dart
+dart run example/streamable_https/server_streamable_https.dart
 
 # Run client
-dart run example/streamable_https/client.dart
+dart run example/streamable_https/client_streamable_https.dart
 ```
 
 **Features**:
@@ -112,7 +112,7 @@ dart run example/streamable_https/high_level_server.dart
 Stream-based in-process communication:
 
 ```bash
-dart run example/iostream-client-server/main.dart
+dart run example/iostream-client-server/simple.dart
 ```
 
 **Features**:
@@ -126,12 +126,12 @@ dart run example/iostream-client-server/main.dart
 
 ### OAuth2 Server with PKCE
 
-**Location**: [`example/oauth_server_example.dart`](../example/oauth_server_example.dart)
+**Location**: [`example/authentication/oauth_server_example.dart`](../example/authentication/oauth_server_example.dart)
 
 Complete OAuth2 implementation:
 
 ```bash
-dart run example/oauth_server_example.dart
+dart run example/authentication/oauth_server_example.dart
 ```
 
 **Features**:
@@ -144,12 +144,12 @@ dart run example/oauth_server_example.dart
 
 ### OAuth2 Client
 
-**Location**: [`example/oauth_client_example.dart`](../example/oauth_client_example.dart)
+**Location**: [`example/authentication/oauth_client_example.dart`](../example/authentication/oauth_client_example.dart)
 
 Client-side OAuth2 integration:
 
 ```bash
-dart run example/oauth_client_example.dart
+dart run example/authentication/oauth_client_example.dart
 ```
 
 **Features**:
@@ -161,7 +161,7 @@ dart run example/oauth_client_example.dart
 
 ### GitHub OAuth Integration
 
-**Location**: [`example/github_oauth_example.dart`](../example/github_oauth_example.dart)
+**Location**: [`example/authentication/github_oauth_example.dart`](../example/authentication/github_oauth_example.dart)
 
 Real GitHub OAuth provider integration:
 
@@ -170,7 +170,7 @@ Real GitHub OAuth provider integration:
 export GITHUB_CLIENT_ID=your_client_id
 export GITHUB_CLIENT_SECRET=your_secret
 
-dart run example/github_oauth_example.dart
+dart run example/authentication/github_oauth_example.dart
 ```
 
 **Features**:
@@ -182,13 +182,13 @@ dart run example/github_oauth_example.dart
 
 ### GitHub Personal Access Token
 
-**Location**: [`example/github_pat_example.dart`](../example/github_pat_example.dart)
+**Location**: [`example/authentication/github_pat_example.dart`](../example/authentication/github_pat_example.dart)
 
 Simpler PAT-based authentication:
 
 ```bash
 export GITHUB_TOKEN=your_pat
-dart run example/github_pat_example.dart
+dart run example/authentication/github_pat_example.dart
 ```
 
 **Features**:
@@ -511,7 +511,7 @@ test('tool execution', () async {
     ),
     callback: (args, extra) async {
       final sum = (args['a'] as num) + (args['b'] as num);
-      return CallToolResult.fromContent(
+      return CallToolResult(
         content: [TextContent(text: '$sum')],
       );
     },
@@ -519,8 +519,8 @@ test('tool execution', () async {
 
   // Connect server
   await server.connect(IOStreamTransport(
-    inputStream: c2s.stream,
-    outputSink: s2c.sink,
+    stream: c2s.stream,
+    sink: s2c.sink,
   ));
 
   // Create client
@@ -529,8 +529,8 @@ test('tool execution', () async {
   );
 
   await client.connect(IOStreamTransport(
-    inputStream: s2c.stream,
-    outputSink: c2s.sink,
+    stream: s2c.stream,
+    sink: c2s.sink,
   ));
 
   // Test
@@ -587,11 +587,11 @@ dart run example/client_stdio.dart
 
 # HTTP examples
 dart run example/server_sse.dart
-dart run example/streamable_https/server.dart
+dart run example/streamable_https/server_streamable_https.dart
 
 # Auth examples
-dart run example/oauth_server_example.dart
-dart run example/github_oauth_example.dart
+dart run example/authentication/oauth_server_example.dart
+dart run example/authentication/github_oauth_example.dart
 
 # Feature examples
 dart run example/completions_capability_demo.dart
@@ -612,7 +612,7 @@ flutter run
 
 ### For Advanced Users
 
-1. Study [oauth_server_example.dart](../example/oauth_server_example.dart)
+1. Study [oauth_server_example.dart](../example/authentication/oauth_server_example.dart)
 2. Explore [completions_capability_demo.dart](../example/completions_capability_demo.dart)
 3. Review [elicitation_http_server.dart](../example/elicitation_http_server.dart)
 

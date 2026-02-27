@@ -7,7 +7,7 @@ Fast lookup guide for common MCP Dart SDK operations.
 ```yaml
 # pubspec.yaml
 dependencies:
-  mcp_dart: ^1.3.0
+  mcp_dart: ^2.0.0
 ```
 
 ```bash
@@ -87,7 +87,7 @@ server.registerTool(
     required: ['param'],
   ),
   callback: (args, extra) async {
-    return CallToolResult.fromContent(
+    return CallToolResult(
       content: [TextContent(text: 'result')],
     );
   },
@@ -776,14 +776,14 @@ test('example', () async {
 
   final server = McpServer(...);
   await server.connect(IOStreamTransport(
-    inputStream: c2s.stream,
-    outputSink: s2c.sink,
+    stream: c2s.stream,
+    sink: s2c.sink,
   ));
 
   final client = McpClient(...);
   await client.connect(IOStreamTransport(
-    inputStream: s2c.stream,
-    outputSink: c2s.sink,
+    stream: s2c.stream,
+    sink: c2s.sink,
   ));
 
   // Test operations

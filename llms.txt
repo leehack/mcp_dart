@@ -6,8 +6,8 @@
 
 MCP Dart is the official Dart implementation of the Model Context Protocol, enabling seamless integration between AI applications and external data sources, tools, and services. Build production-ready MCP servers and clients for Dart VM, Flutter, and web platforms.
 
-**Version**: 1.1.2
-**Protocol**: MCP 2025-06-18 (backward compatible with 2025-03-26, 2024-11-05, 2024-10-07)
+**Version**: 2.0.0
+**Protocol**: MCP 2025-11-25 (backward compatible with 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07)
 **Repository**: https://github.com/leehack/mcp_dart
 **Package**: https://pub.dev/packages/mcp_dart
 **License**: MIT
@@ -18,7 +18,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mcp_dart: ^1.1.2
+  mcp_dart: ^2.0.0
 ```
 
 Then run:
@@ -864,11 +864,12 @@ test('tool execution', () async {
 ```dart
 // Server
 class McpServer
-class ServerOptions
+class McpServerOptions
 class ServerCapabilities
 
 // Client
-class Client
+class McpClient
+class McpClientOptions
 class ClientCapabilities
 
 // Tools
@@ -908,24 +909,21 @@ enum ErrorCode
 
 ## Changelog
 
-### Version 1.1.0 (Latest)
-- **Task Management SDK**: Refactored `simple_task_interactive_server.dart` logic into reusable SDK components (`TaskStore`, `TaskHandler`)
-- **McpServer**: Added `onError` callback, `notifyTaskStatus`, and `createSamplingMessage` helpers
-- **Breaking Change**: Strict typing for `ServerCapabilities` (e.g., `ServerCapabilitiesTasks`)
-- **Breaking Change**: `StreamableHTTPServerTransport` now requires `StreamableHTTPServerTransportOptions`
+### Version 2.0.0 (Latest)
+- **Breaking Change**: JSON Schema `additionalProperties` now accepts either `bool` or `JsonSchema` (typed as `Object?`) to match the spec.
+- **MCP Apps Support**: Added typed `io.modelcontextprotocol/ui` metadata models and TypeScript-style helpers (`registerAppTool`, `registerAppResource`, `getUiCapability`).
+- **Compatibility**: Updated MCP Apps weather examples for host-safe tool naming and explicit `resource_link` output.
+- **Reliability**: Fixed `JsonObject.fromJson` parsing for untyped `additionalProperties` map values.
 
-### Version 1.0.0
-- Updated to MCP protocol 2025-06-18
-- Added Elicitation support for server-initiated user input
-- Critical fix: Logger output redirected to stderr (prevents JSON-RPC corruption)
+### Version 1.3.0
+- Added `resource_link`, icon metadata (`McpIcon`), and `ResourceAnnotations.lastModified` support.
+- Added generic `extensions` capability negotiation for client/server initialization.
+- Added optional DNS rebinding protection for Streamable HTTP/SSE server entry points.
+- Fixed RFC 6570 multi-variable URI template matching and tool metadata passthrough.
 
-### Version 0.7.0
-- Added Completions capability per MCP 2025-06-18 spec
-- Improved capability declaration and checking
-
-### Version 0.6.0
-- Added ToolInputSchema and ToolOutputSchema support
-- Enhanced schema validation
+### Version 1.2.1
+- Added progress notifications (`sendProgress`/`onprogress`) and improved protocol parsing for unknown methods.
+- Fixed Streamable HTTP client behavior to avoid reconnecting short-lived POST response streams.
 
 See [CHANGELOG.md](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md) for complete version history.
 
