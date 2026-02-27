@@ -9,8 +9,8 @@ topics:
   - mcp
   - ai
   - llm
-  - sdk
-  - flutter
+  - server
+  - client
 
 environment:
   sdk: ^3.0.0
