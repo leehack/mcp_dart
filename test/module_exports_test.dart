@@ -16,9 +16,11 @@ void main() {
     test('server module symbols are available', () {
       server_module.McpServer? server;
       server_module.StreamableMcpServer? streamableServer;
+      final registerAppTool = server_module.registerAppTool;
 
       expect(server, isNull);
       expect(streamableServer, isNull);
+      expect(registerAppTool, isNotNull);
     });
 
     test('shared module symbols are available', () {

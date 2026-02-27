@@ -10,6 +10,7 @@ export 'streamable_https.dart'; // Streamable HTTPS communication.
 export 'streamable_mcp_server.dart'; // Streamable HTTP Server.
 export 'stdio.dart'; // Standard I/O-based server communication
 export 'mcp_server.dart'; // Utilities and definitions for the MCP protocol.
+export 'mcp_ui.dart'; // MCP Apps helper registrations.
 export 'sse_server_manager.dart'; // Manages SSE connections and routing.
 export 'tasks.dart'; // Task management utilities.
 export 'in_memory_event_store.dart'; // In-memory event store implementation.

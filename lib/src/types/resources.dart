@@ -61,6 +61,9 @@ class Resource {
   /// Optional additional properties describing the resource.
   final ResourceAnnotations? annotations;
 
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
   const Resource({
     required this.uri,
     required this.name,
@@ -69,6 +72,7 @@ class Resource {
     this.icon,
     this.icons,
     this.annotations,
+    this.meta,
   });
 
   /// Creates from JSON.
@@ -89,6 +93,7 @@ class Resource {
               json['annotations'] as Map<String, dynamic>,
             )
           : null,
+      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
     );
   }
 
@@ -102,6 +107,7 @@ class Resource {
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
         if (annotations != null) 'annotations': annotations!.toJson(),
+        if (meta != null) '_meta': meta,
       };
 }
 
@@ -128,6 +134,9 @@ class ResourceTemplate {
   /// Optional additional properties describing the resource template.
   final ResourceAnnotations? annotations;
 
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
   /// Creates a resource template description.
   const ResourceTemplate({
     required this.uriTemplate,
@@ -137,6 +146,7 @@ class ResourceTemplate {
     this.icon,
     this.icons,
     this.annotations,
+    this.meta,
   });
 
   /// Creates from JSON.
@@ -157,6 +167,7 @@ class ResourceTemplate {
               json['annotations'] as Map<String, dynamic>,
             )
           : null,
+      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
     );
   }
 
@@ -170,6 +181,7 @@ class ResourceTemplate {
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
         if (annotations != null) 'annotations': annotations!.toJson(),
+        if (meta != null) '_meta': meta,
       };
 }
 

@@ -74,6 +74,29 @@ final client = McpClient(
 // Capabilities are negotiated during connection
 ```
 
+### MCP Apps Extension Capability
+
+Advertise support for MCP Apps (`io.modelcontextprotocol/ui`) during initialization:
+
+```dart
+final client = McpClient(
+  const Implementation(name: 'my-host', version: '1.0.0'),
+  options: McpClientOptions(
+    capabilities: ClientCapabilities(
+      extensions: withMcpUiExtension(),
+    ),
+  ),
+);
+
+await client.connect(transport);
+
+if (getUiCapability(client.getServerCapabilities())
+        ?.supportsMimeType(mcpUiResourceMimeType) ??
+    false) {
+  // Server supports text/html;profile=mcp-app
+}
+```
+
 ## Calling Tools
 
 ### List Available Tools

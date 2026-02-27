@@ -295,6 +295,7 @@ Done!
 
 - [Server Guide](server-guide.md) - Comprehensive server development guide
 - [Tools](tools.md) - Building powerful tools with validation
+- [MCP Apps](mcp-apps.md) - TypeScript-style `registerAppTool` / `registerAppResource` helpers
 
 ### Learn More About Clients
 

@@ -4,6 +4,7 @@ export 'types/prompts.dart';
 export 'types/tools.dart';
 export 'types/tasks.dart';
 export 'types/json_rpc.dart';
+export 'types/mcp_ui.dart';
 export 'types/misc.dart';
 export 'types/initialization.dart';
 export 'types/logging.dart';

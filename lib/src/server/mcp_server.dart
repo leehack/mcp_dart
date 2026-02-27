@@ -188,7 +188,6 @@ class ResourceTemplateRegistration {
 }
 
 /// Abstract interface for a registered resource.
-/// Abstract interface for a registered resource.
 abstract class RegisteredResource {
   /// The name of the resource.
   String get name;
@@ -198,6 +197,9 @@ abstract class RegisteredResource {
 
   /// Metadata associated with the resource.
   ResourceMetadata? get metadata;
+
+  /// Optional metadata included in resource listings as `_meta`.
+  Map<String, dynamic>? get meta;
 
   /// The callback used to read the resource content.
   ReadResourceCallback get readCallback;
@@ -220,6 +222,7 @@ abstract class RegisteredResource {
     String? title,
     String? uri,
     ResourceMetadata? metadata,
+    Map<String, dynamic>? meta,
     ReadResourceCallback? callback,
     bool? enabled,
   });
@@ -233,6 +236,8 @@ class _RegisteredResourceImpl implements RegisteredResource {
   final String uri;
   @override
   ResourceMetadata? metadata;
+  @override
+  Map<String, dynamic>? meta;
   final ImageContent? icon; // Kept for legacy compatibility
   @override
   ReadResourceCallback readCallback;
@@ -246,6 +251,7 @@ class _RegisteredResourceImpl implements RegisteredResource {
     required this.name,
     required this.uri,
     this.metadata,
+    this.meta,
     this.icon,
     required this.readCallback,
   });
@@ -259,6 +265,7 @@ class _RegisteredResourceImpl implements RegisteredResource {
       icon: icon,
       icons: _iconsFromLegacyImage(icon),
       annotations: title != null ? ResourceAnnotations(title: title) : null,
+      meta: meta,
     );
   }
 
@@ -277,6 +284,7 @@ class _RegisteredResourceImpl implements RegisteredResource {
     String? title,
     String? uri,
     ResourceMetadata? metadata,
+    Map<String, dynamic>? meta,
     ReadResourceCallback? callback,
     bool? enabled,
   }) {
@@ -287,6 +295,7 @@ class _RegisteredResourceImpl implements RegisteredResource {
     if (name != null) this.name = name;
     if (title != null) this.title = title;
     if (metadata != null) this.metadata = metadata;
+    if (meta != null) this.meta = meta;
     if (callback != null) readCallback = callback;
     if (enabled != null) this.enabled = enabled;
 
@@ -307,6 +316,9 @@ abstract class RegisteredResourceTemplate {
 
   /// Metadata associated with the template.
   ResourceMetadata? get metadata;
+
+  /// Optional metadata included in resource template listings as `_meta`.
+  Map<String, dynamic>? get meta;
 
   /// The callback to read resources matching this template.
   ReadResourceTemplateCallback get readCallback;
@@ -329,6 +341,7 @@ abstract class RegisteredResourceTemplate {
     String? title,
     ResourceTemplateRegistration? template,
     ResourceMetadata? metadata,
+    Map<String, dynamic>? meta,
     ReadResourceTemplateCallback? callback,
     bool? enabled,
   });
@@ -343,6 +356,8 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
   @override
   ResourceMetadata? metadata;
   @override
+  Map<String, dynamic>? meta;
+  @override
   ReadResourceTemplateCallback readCallback;
   @override
   bool enabled = true;
@@ -354,6 +369,7 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
     required this.name,
     required this.resourceTemplate,
     this.metadata,
+    this.meta,
     required this.readCallback,
   });
 
@@ -364,6 +380,7 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
       description: metadata?.description,
       mimeType: metadata?.mimeType,
       annotations: title != null ? ResourceAnnotations(title: title) : null,
+      meta: meta,
     );
   }
 
@@ -382,6 +399,7 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
     String? title,
     ResourceTemplateRegistration? template,
     ResourceMetadata? metadata,
+    Map<String, dynamic>? meta,
     ReadResourceTemplateCallback? callback,
     bool? enabled,
   }) {
@@ -391,6 +409,7 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
     if (title != null) this.title = title;
     if (template != null) resourceTemplate = template;
     if (metadata != null) this.metadata = metadata;
+    if (meta != null) this.meta = meta;
     if (callback != null) readCallback = callback;
     if (enabled != null) this.enabled = enabled;
 
@@ -1419,8 +1438,9 @@ class McpServer {
     String name,
     String uri,
     ResourceMetadata? metadata,
-    ReadResourceCallback readCallback,
-  ) {
+    ReadResourceCallback readCallback, {
+    Map<String, dynamic>? meta,
+  }) {
     if (_registeredResources.containsKey(uri)) {
       throw ArgumentError("Resource URI '$uri' already registered.");
     }
@@ -1429,6 +1449,7 @@ class McpServer {
       name: name,
       uri: uri,
       metadata: metadata,
+      meta: meta,
       readCallback: readCallback,
     );
     _registeredResources[uri] = resource;
@@ -1447,8 +1468,9 @@ class McpServer {
     String name,
     ResourceTemplateRegistration template,
     ResourceMetadata? metadata,
-    ReadResourceTemplateCallback readCallback,
-  ) {
+    ReadResourceTemplateCallback readCallback, {
+    Map<String, dynamic>? meta,
+  }) {
     if (_registeredResourceTemplates.containsKey(name)) {
       throw ArgumentError(
         "Resource template name '$name' already registered.",
@@ -1459,6 +1481,7 @@ class McpServer {
       name: name,
       resourceTemplate: template,
       metadata: metadata,
+      meta: meta,
       readCallback: readCallback,
     );
     _registeredResourceTemplates[name] = resourceTemplate;

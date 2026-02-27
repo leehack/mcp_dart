@@ -9,6 +9,7 @@ Complete guide to building MCP servers with the Dart SDK.
 - [Registering Tools](#registering-tools)
 - [Providing Resources](#providing-resources)
 - [Creating Prompts](#creating-prompts)
+- [MCP Apps Metadata](#mcp-apps-metadata)
 - [Task Management](#task-management)
 - [Handling Client Requests](#handling-client-requests)
 - [Server Lifecycle](#server-lifecycle)
@@ -106,6 +107,56 @@ server.registerPrompt(name: 'my-prompt', ...);
 // Capabilities include:
 // - listChanged: true (server can notify of prompt list changes)
 ```
+
+## MCP Apps Metadata
+
+Use TypeScript-style helper APIs to register app tools/resources with `_meta.ui`.
+
+```dart
+const resourceUri = 'ui://dashboard/view.html';
+
+registerAppTool(
+  server,
+  'dashboard_show',
+  McpUiAppToolConfig(
+    meta: const {
+      'ui': {
+        'resourceUri': resourceUri,
+      },
+    },
+  ),
+  (args, extra) async => const CallToolResult(
+    content: [TextContent(text: 'ok')],
+  ),
+);
+
+registerAppResource(
+  server,
+  'Dashboard UI',
+  resourceUri,
+  const McpUiAppResourceConfig(
+    meta: {
+      'ui': {
+        'prefersBorder': true,
+      },
+    },
+  ),
+  (uri, extra) async => ReadResourceResult(
+    contents: [
+      TextResourceContents(
+        uri: uri.toString(),
+        mimeType: mcpUiResourceMimeType,
+        text: '<!doctype html><html></html>',
+        meta: const McpUiResourceMeta(
+          prefersBorder: true,
+        ).toMeta(),
+      ),
+    ],
+  ),
+);
+```
+
+For a complete example, see [MCP Apps guide](mcp-apps.md).
 
 ## Registering Tools
 
