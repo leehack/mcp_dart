@@ -178,7 +178,7 @@ sealed class JsonSchema {
   static JsonObject object({
     Map<String, JsonSchema>? properties,
     List<String>? required,
-    bool? additionalProperties,
+    Object? additionalProperties,
     Map<String, List<String>>? dependentRequired,
     String? title,
     String? description,
@@ -530,7 +530,9 @@ class JsonArray extends JsonSchema {
 class JsonObject extends JsonSchema {
   final Map<String, JsonSchema>? properties;
   final List<String>? required;
-  final bool? additionalProperties;
+
+  /// Can be a [bool] (true/false) or a [JsonSchema] constraining extra properties.
+  final Object? additionalProperties;
   final Map<String, List<String>>? dependentRequired;
 
   const JsonObject({
@@ -547,6 +549,16 @@ class JsonObject extends JsonSchema {
   final Map<String, dynamic>? defaultValue;
 
   factory JsonObject.fromJson(Map<String, dynamic> json) {
+    final additionalProps = json['additionalProperties'];
+    Object? parsedAdditionalProps;
+    if (additionalProps is bool) {
+      parsedAdditionalProps = additionalProps;
+    } else if (additionalProps is Map) {
+      parsedAdditionalProps = JsonSchema.fromJson(
+        Map<String, dynamic>.from(additionalProps),
+      );
+    }
+
     return JsonObject(
       properties: (json['properties'] as Map<String, dynamic>?)?.map(
         (key, value) => MapEntry(
@@ -555,7 +567,7 @@ class JsonObject extends JsonSchema {
         ),
       ),
       required: (json['required'] as List?)?.cast<String>(),
-      additionalProperties: json['additionalProperties'] as bool?,
+      additionalProperties: parsedAdditionalProps,
       dependentRequired:
           (json['dependentRequired'] as Map<String, dynamic>?)?.map(
         (key, value) => MapEntry(
@@ -580,7 +592,9 @@ class JsonObject extends JsonSchema {
         'properties': properties!.map((k, v) => MapEntry(k, v.toJson())),
       if (required != null && required!.isNotEmpty) 'required': required,
       if (additionalProperties != null)
-        'additionalProperties': additionalProperties,
+        'additionalProperties': additionalProperties is JsonSchema
+            ? (additionalProperties as JsonSchema).toJson()
+            : additionalProperties,
       if (dependentRequired != null) 'dependentRequired': dependentRequired,
     };
   }

@@ -115,6 +115,48 @@ void main() {
       });
     });
 
+    test('parses object schema with additionalProperties as schema', () {
+      final json = {
+        'type': 'object',
+        'properties': {
+          'name': {'type': 'string'},
+        },
+        'additionalProperties': {'type': 'string'},
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonObject>());
+      final s = schema as JsonObject;
+      expect(s.additionalProperties, isA<JsonString>());
+    });
+
+    test('parses object schema with untyped additionalProperties map', () {
+      // This is what z.record(z.string(), z.unknown()) produces
+      final json = {'type': 'object', 'additionalProperties': {}};
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonObject>());
+      final s = schema as JsonObject;
+      expect(s.additionalProperties, isA<JsonAny>());
+    });
+
+    test('parses nested object with additionalProperties as schema', () {
+      // Simulates a tool schema with a nested record/map property:
+      // e.g. z.object({ config: z.record(z.string(), z.unknown()) })
+      final json = {
+        'type': 'object',
+        'properties': {
+          'config': {
+            'type': 'object',
+            'additionalProperties': <String, dynamic>{},
+          },
+        },
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonObject>());
+      final s = schema as JsonObject;
+      final config = s.properties!['config'] as JsonObject;
+      expect(config.additionalProperties, isA<JsonAny>());
+    });
+
     test('parses allOf schema', () {
       final json = {
         'allOf': [
@@ -187,6 +229,26 @@ void main() {
       final original = JsonSchema.object(
         properties: {'a': JsonSchema.string()},
         required: ['a'],
+      );
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('object with additionalProperties schema round trip', () {
+      final original = JsonSchema.object(
+        properties: {'name': JsonSchema.string()},
+        additionalProperties: JsonSchema.integer(),
+      );
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('object with additionalProperties bool round trip', () {
+      final original = JsonSchema.object(
+        properties: {'name': JsonSchema.string()},
+        additionalProperties: false,
       );
       final json = original.toJson();
       final parsed = JsonSchema.fromJson(json);

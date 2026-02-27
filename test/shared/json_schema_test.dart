@@ -102,6 +102,22 @@ void main() {
       });
     });
 
+    test('JsonObject serializes additionalProperties as schema', () {
+      final schema = JsonSchema.object(
+        properties: {
+          'name': JsonSchema.string(),
+        },
+        additionalProperties: JsonSchema.string(),
+      );
+      expect(schema.toJson(), {
+        'type': 'object',
+        'properties': {
+          'name': {'type': 'string'},
+        },
+        'additionalProperties': {'type': 'string'},
+      });
+    });
+
     test('JsonAllOf serializes correctly', () {
       final schema = JsonSchema.allOf([
         JsonSchema.string(),
