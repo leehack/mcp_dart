@@ -200,6 +200,33 @@ dart run example/github_pat_example.dart
 
 ## Advanced Features
 
+### MCP Apps Helpers (TypeScript-style)
+
+**Location**: [`example/mcp_apps_helpers_server.dart`](../example/mcp_apps_helpers_server.dart)
+
+TypeScript-style helper APIs for MCP Apps registration:
+
+```bash
+dart run example/mcp_apps_helpers_server.dart
+```
+
+**Features**:
+
+- `registerAppTool(...)` metadata normalization (`ui.resourceUri` + `ui/resourceUri`)
+- `registerAppResource(...)` with default `text/html;profile=mcp-app`
+- `ui://` resource registration and `_meta.ui` metadata
+- Extension capability declaration (`withMcpUiExtension`)
+
+### MCP Apps Manual Metadata
+
+**Location**: [`example/mcp_apps_metadata_server.dart`](../example/mcp_apps_metadata_server.dart)
+
+Low-level MCP Apps metadata wiring without helper wrappers:
+
+```bash
+dart run example/mcp_apps_metadata_server.dart
+```
+
 ### Argument Completions
 
 **Location**: [`example/completions_capability_demo.dart`](../example/completions_capability_demo.dart)

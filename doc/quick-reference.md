@@ -140,6 +140,50 @@ server.registerResourceTemplate(
 );
 ```
 
+### MCP Apps Metadata
+
+```dart
+const resourceUri = 'ui://dashboard/view.html';
+
+registerAppTool(
+  server,
+  'dashboard/show',
+  McpUiAppToolConfig(
+    meta: const {
+      'ui': {
+        'resourceUri': resourceUri,
+      },
+    },
+  ),
+  (args, extra) async => const CallToolResult(
+    content: [TextContent(text: 'ok')],
+  ),
+);
+
+registerAppResource(
+  server,
+  'Dashboard UI',
+  resourceUri,
+  const McpUiAppResourceConfig(
+    meta: {
+      'ui': {
+        'prefersBorder': true,
+      },
+    },
+  ),
+  (uri, extra) async => ReadResourceResult(
+    contents: [
+      TextResourceContents(
+        uri: uri.toString(),
+        mimeType: mcpUiResourceMimeType,
+        text: '<!doctype html><html></html>',
+        meta: const McpUiResourceMeta(prefersBorder: true).toMeta(),
+      ),
+    ],
+  ),
+);
+```
+
 ### Register Prompt
 
 ```dart

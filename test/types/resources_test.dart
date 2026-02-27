@@ -108,6 +108,22 @@ void main() {
       expect(resource.annotations!.priority, equals(0.9));
     });
 
+    test('fromJson with meta', () {
+      final json = {
+        'uri': 'ui://weather/dashboard',
+        'name': 'Weather Dashboard',
+        '_meta': {
+          'ui': {
+            'prefersBorder': true,
+          },
+        },
+      };
+
+      final resource = Resource.fromJson(json);
+      expect(resource.meta, isNotNull);
+      expect(resource.meta!['ui']['prefersBorder'], isTrue);
+    });
+
     test('toJson serializes correctly with all fields', () {
       const resource = Resource(
         uri: 'file:///example.txt',
@@ -139,6 +155,23 @@ void main() {
       expect(json.containsKey('icon'), isFalse);
       expect(json.containsKey('icons'), isFalse);
       expect(json.containsKey('annotations'), isFalse);
+      expect(json.containsKey('_meta'), isFalse);
+    });
+
+    test('toJson includes meta', () {
+      const resource = Resource(
+        uri: 'ui://dashboard',
+        name: 'Dashboard',
+        meta: {
+          'ui': {
+            'domain': 'ui.example.com',
+          },
+        },
+      );
+
+      final json = resource.toJson();
+      expect(json['_meta'], isNotNull);
+      expect(json['_meta']['ui']['domain'], equals('ui.example.com'));
     });
   });
 
@@ -191,6 +224,27 @@ void main() {
       expect(template.annotations, isNotNull);
     });
 
+    test('fromJson with meta', () {
+      final json = {
+        'uriTemplate': 'ui://weather/{location}',
+        'name': 'Weather UI',
+        '_meta': {
+          'ui': {
+            'csp': {
+              'connectDomains': ['https://api.example.com'],
+            },
+          },
+        },
+      };
+
+      final template = ResourceTemplate.fromJson(json);
+      expect(template.meta, isNotNull);
+      expect(
+        template.meta!['ui']['csp']['connectDomains'],
+        equals(['https://api.example.com']),
+      );
+    });
+
     test('toJson serializes correctly', () {
       const template = ResourceTemplate(
         uriTemplate: 'api://v1/{resource}',
@@ -215,6 +269,23 @@ void main() {
       expect(json.containsKey('name'), isTrue);
       expect(json.containsKey('description'), isFalse);
       expect(json.containsKey('mimeType'), isFalse);
+      expect(json.containsKey('_meta'), isFalse);
+    });
+
+    test('toJson includes meta', () {
+      const template = ResourceTemplate(
+        uriTemplate: 'ui://widget/{id}',
+        name: 'Widget UI',
+        meta: {
+          'ui': {
+            'prefersBorder': false,
+          },
+        },
+      );
+
+      final json = template.toJson();
+      expect(json['_meta'], isNotNull);
+      expect(json['_meta']['ui']['prefersBorder'], isFalse);
     });
   });
 
@@ -481,6 +552,67 @@ void main() {
 
       final json = result.toJson();
       expect(json['contents'], isA<List>());
+    });
+
+    test('resource contents preserve metadata and unknown fields', () {
+      final result = ReadResourceResult.fromJson({
+        'contents': [
+          {
+            'uri': 'ui://weather/dashboard',
+            'mimeType': 'text/html;profile=mcp-app',
+            'text': '<!doctype html><html></html>',
+            '_meta': {
+              'ui': {
+                'domain': 'apps.example.com',
+              },
+            },
+            'customField': {
+              'enabled': true,
+            },
+          },
+        ],
+      });
+
+      final content = result.contents.single;
+      expect(content, isA<TextResourceContents>());
+      expect(content.meta, isNotNull);
+      expect(content.meta!['ui']['domain'], equals('apps.example.com'));
+      expect(content.extra, isNotNull);
+      expect(content.extra!['customField']['enabled'], isTrue);
+
+      final json = result.toJson();
+      final roundTripped = (json['contents'] as List).single;
+      expect(roundTripped['_meta']['ui']['domain'], equals('apps.example.com'));
+      expect(roundTripped['customField']['enabled'], isTrue);
+    });
+
+    test('unknown resource content preserves passthrough fields', () {
+      final result = ReadResourceResult.fromJson({
+        'contents': [
+          {
+            'uri': 'ui://weather/raw',
+            'mimeType': 'application/vnd.custom+json',
+            '_meta': {
+              'ui': {
+                'prefersBorder': true,
+              },
+            },
+            'payload': {
+              'kind': 'custom',
+            },
+          },
+        ],
+      });
+
+      final content = result.contents.single;
+      expect(content, isA<UnknownResourceContents>());
+      expect(content.meta!['ui']['prefersBorder'], isTrue);
+      expect(content.extra!['payload']['kind'], equals('custom'));
+
+      final json = result.toJson();
+      final roundTripped = (json['contents'] as List).single;
+      expect(roundTripped['payload']['kind'], equals('custom'));
+      expect(roundTripped['_meta']['ui']['prefersBorder'], isTrue);
     });
   });
 

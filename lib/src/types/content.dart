@@ -6,20 +6,43 @@ sealed class ResourceContents {
   /// The MIME type, if known.
   final String? mimeType;
 
+  /// Optional metadata associated with this resource content.
+  final Map<String, dynamic>? meta;
+
+  /// Additional unknown properties preserved for forward compatibility.
+  final Map<String, dynamic>? extra;
+
   const ResourceContents({
     required this.uri,
     this.mimeType,
+    this.meta,
+    this.extra,
   });
 
   /// Creates a specific [ResourceContents] subclass from JSON.
   factory ResourceContents.fromJson(Map<String, dynamic> json) {
     final uri = json['uri'] as String;
     final mimeType = json['mimeType'] as String?;
+    final meta = (json['_meta'] as Map?)?.cast<String, dynamic>();
+    final extra = Map<String, dynamic>.from(json)
+      ..removeWhere(
+        (key, value) =>
+            key == 'uri' ||
+            key == 'mimeType' ||
+            key == 'text' ||
+            key == 'blob' ||
+            key == '_meta',
+      );
+
+    final passthrough = extra.isEmpty ? null : extra;
+
     if (json.containsKey('text')) {
       return TextResourceContents(
         uri: uri,
         mimeType: mimeType,
         text: json['text'] as String,
+        meta: meta,
+        extra: passthrough,
       );
     }
     if (json.containsKey('blob')) {
@@ -27,11 +50,15 @@ sealed class ResourceContents {
         uri: uri,
         mimeType: mimeType,
         blob: json['blob'] as String,
+        meta: meta,
+        extra: passthrough,
       );
     }
     return UnknownResourceContents(
       uri: uri,
       mimeType: mimeType,
+      meta: meta,
+      extra: passthrough,
     );
   }
 
@@ -44,6 +71,8 @@ sealed class ResourceContents {
           final BlobResourceContents c => {'blob': c.blob},
           UnknownResourceContents _ => {},
         },
+        if (meta != null) '_meta': meta,
+        ...?extra,
       };
 }
 
@@ -55,6 +84,8 @@ class TextResourceContents extends ResourceContents {
   const TextResourceContents({
     required super.uri,
     super.mimeType,
+    super.meta,
+    super.extra,
     required this.text,
   });
 }
@@ -67,6 +98,8 @@ class BlobResourceContents extends ResourceContents {
   const BlobResourceContents({
     required super.uri,
     super.mimeType,
+    super.meta,
+    super.extra,
     required this.blob,
   });
 }
@@ -76,6 +109,8 @@ class UnknownResourceContents extends ResourceContents {
   const UnknownResourceContents({
     required super.uri,
     super.mimeType,
+    super.meta,
+    super.extra,
   });
 }
 

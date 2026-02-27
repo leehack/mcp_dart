@@ -276,6 +276,48 @@ void main() {
       expect(resources.first['uri'], equals('test://resource'));
     });
 
+    test('registerResource includes list metadata when provided', () async {
+      server.registerResource(
+        'UI Resource',
+        'ui://resource',
+        (
+          description: 'A UI resource',
+          mimeType: mcpUiResourceMimeType,
+        ),
+        (uri, extra) async {
+          return ReadResourceResult(
+            contents: [
+              TextResourceContents(
+                uri: uri.toString(),
+                text: '<!doctype html>',
+                mimeType: mcpUiResourceMimeType,
+              ),
+            ],
+          );
+        },
+        meta: const {
+          'ui': {
+            'prefersBorder': true,
+          },
+        },
+      );
+
+      await server.connect(transport);
+
+      final request = JsonRpcListResourcesRequest(id: 1);
+      transport.receiveMessage(request);
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final resources = response.result['resources'] as List<dynamic>;
+      final listed = resources.first as Map<String, dynamic>;
+
+      expect(listed['uri'], equals('ui://resource'));
+      expect(listed['_meta'], isNotNull);
+      expect(listed['_meta']['ui']['prefersBorder'], isTrue);
+    });
+
     test('registerResource can be enabled and disabled', () async {
       final registeredResource = server.registerResource(
         'Toggleable Resource',
