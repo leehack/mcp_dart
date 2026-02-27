@@ -197,9 +197,8 @@ class InspectCommand extends Command<int> {
     Map<String, String> envMap,
   ) async {
     final clientOptions = McpClientOptions(
-      capabilities: ClientCapabilities(
-        sampling: const ClientCapabilitiesSampling(),
-        extensions: withMcpUiExtension(),
+      capabilities: const ClientCapabilities(
+        sampling: ClientCapabilitiesSampling(),
       ),
     );
 
@@ -266,65 +265,13 @@ class InspectCommand extends Command<int> {
   }
 
   Future<void> _listCapabilities(McpClient client) async {
-    final serverCaps = client.getServerCapabilities();
-
-    var tools = const ListToolsResult(tools: []);
-    var resources = const ListResourcesResult(resources: []);
-    var prompts = const ListPromptsResult(prompts: []);
-
-    if (serverCaps?.tools != null) {
-      try {
-        tools = await client.listTools();
-      } catch (e) {
-        if (_isMethodNotFound(e)) {
-          _logger.warn('Server does not implement tools/list; skipping tools.');
-        } else {
-          _logger.err('Failed to list tools: $e');
-        }
-      }
-    } else {
-      _logger.detail('Server does not advertise tools capability; skipping.');
+    try {
+      final tools = await client.listTools();
+      final resources = await client.listResources();
+      final prompts = await client.listPrompts();
+      _printer.printCapabilities(tools, resources, prompts);
+    } catch (e) {
+      _logger.err('Failed to list capabilities: $e');
     }
-
-    if (serverCaps?.resources != null) {
-      try {
-        resources = await client.listResources();
-      } catch (e) {
-        if (_isMethodNotFound(e)) {
-          _logger.warn(
-              'Server does not implement resources/list; skipping resources.');
-        } else {
-          _logger.err('Failed to list resources: $e');
-        }
-      }
-    } else {
-      _logger
-          .detail('Server does not advertise resources capability; skipping.');
-    }
-
-    if (serverCaps?.prompts != null) {
-      try {
-        prompts = await client.listPrompts();
-      } catch (e) {
-        if (_isMethodNotFound(e)) {
-          _logger.warn(
-              'Server does not implement prompts/list; skipping prompts.');
-        } else {
-          _logger.err('Failed to list prompts: $e');
-        }
-      }
-    } else {
-      _logger.detail('Server does not advertise prompts capability; skipping.');
-    }
-
-    _printer.printCapabilities(tools, resources, prompts);
-  }
-
-  bool _isMethodNotFound(Object error) {
-    if (error is McpError) {
-      return error.code == ErrorCode.methodNotFound.value;
-    }
-
-    return error.toString().contains('Method not found');
   }
 }
