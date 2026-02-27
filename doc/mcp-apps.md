@@ -56,7 +56,7 @@ const resourceUri = 'ui://weather/dashboard.html';
 
 registerAppTool(
   server,
-  'weather/get_current',
+  'weather_get_current',
   McpUiAppToolConfig(
     description: 'Get current weather',
     inputSchema: JsonSchema.object(
