@@ -553,8 +553,10 @@ class JsonObject extends JsonSchema {
     Object? parsedAdditionalProps;
     if (additionalProps is bool) {
       parsedAdditionalProps = additionalProps;
-    } else if (additionalProps is Map<String, dynamic>) {
-      parsedAdditionalProps = JsonSchema.fromJson(additionalProps);
+    } else if (additionalProps is Map) {
+      parsedAdditionalProps = JsonSchema.fromJson(
+        Map<String, dynamic>.from(additionalProps),
+      );
     }
 
     return JsonObject(

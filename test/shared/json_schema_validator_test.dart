@@ -381,12 +381,16 @@ void main() {
         final json = {
           'type': 'object',
           'properties': <String, dynamic>{},
-          'additionalProperties': <String, dynamic>{},
+          'additionalProperties': {},
         };
         final schema = JsonSchema.fromJson(json) as JsonObject;
 
         // Any extra properties should be accepted
-        schema.validate({"foo": "bar", "baz": 123, "nested": {"a": true}});
+        schema.validate({
+          "foo": "bar",
+          "baz": 123,
+          "nested": {"a": true},
+        });
       });
     });
 

@@ -1,3 +1,16 @@
+## 2.0.0
+
+### Breaking Changes
+
+- **JSON Schema API**:
+  - `JsonObject.additionalProperties` and `JsonSchema.object(additionalProperties: ...)` now use `Object?` instead of `bool?`.
+  - `additionalProperties` may now be either `bool` or `JsonSchema`, matching the JSON Schema specification.
+
+### Reliability
+
+- **JSON Schema Parsing**:
+  - Fixed `JsonObject.fromJson` to accept untyped map values for `additionalProperties` (for example `{}` decoded as `Map<dynamic, dynamic>`), so schema objects are not silently dropped.
+
 ## 1.3.0
 
 - **Spec Alignment**:

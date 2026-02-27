@@ -129,12 +129,9 @@ void main() {
       expect(s.additionalProperties, isA<JsonString>());
     });
 
-    test('parses object schema with additionalProperties as empty schema', () {
+    test('parses object schema with untyped additionalProperties map', () {
       // This is what z.record(z.string(), z.unknown()) produces
-      final json = {
-        'type': 'object',
-        'additionalProperties': <String, dynamic>{},
-      };
+      final json = {'type': 'object', 'additionalProperties': {}};
       final schema = JsonSchema.fromJson(json);
       expect(schema, isA<JsonObject>());
       final s = schema as JsonObject;

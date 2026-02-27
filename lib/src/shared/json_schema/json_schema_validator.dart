@@ -300,14 +300,15 @@ extension JsonSchemaValidation on JsonSchema {
     final dataKeys = data.keys.cast<String>().toSet();
     final extraKeys = dataKeys.difference(definedKeys);
 
-    // additionalProperties can be bool or JsonSchema
+    // additionalProperties can be bool or JsonSchema.
     if (schema.additionalProperties == false && extraKeys.isNotEmpty) {
       throw JsonSchemaValidationException(
         'Additional properties not allowed: ${extraKeys.join(', ')}',
         path,
       );
     }
-    // When additionalProperties is a JsonSchema, validate each extra key against it
+
+    // When additionalProperties is a JsonSchema, validate each extra key against it.
     if (schema.additionalProperties is JsonSchema && extraKeys.isNotEmpty) {
       final apSchema = schema.additionalProperties as JsonSchema;
       for (final key in extraKeys) {
