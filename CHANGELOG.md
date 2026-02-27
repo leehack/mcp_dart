@@ -6,6 +6,22 @@
   - `JsonObject.additionalProperties` and `JsonSchema.object(additionalProperties: ...)` now use `Object?` instead of `bool?`.
   - `additionalProperties` may now be either `bool` or `JsonSchema`, matching the JSON Schema specification.
 
+### Features
+
+- **MCP Apps Support**:
+  - Added typed MCP Apps metadata models and helpers (`McpUiToolMeta`, `McpUiResourceMeta`, `McpUiCsp`, `McpUiPermissions`) with extension capability helpers for `io.modelcontextprotocol/ui`.
+  - Added TypeScript-style server helpers (`registerAppTool`, `registerAppResource`, `getUiCapability`) and metadata normalization for `_meta.ui.resourceUri` and legacy `_meta['ui/resourceUri']`.
+  - Added MCP Apps server examples for helper-based and manual metadata wiring.
+
+### Compatibility
+
+- **Host Rendering**:
+  - Updated MCP Apps weather examples to use host-safe tool names (`weather_get_current`), include explicit `resource_link` tool output, and demonstrate host-rendered UI updates from tool input/result notifications.
+
+### Documentation
+
+- Added and expanded MCP Apps documentation across guides and quick reference, including host compatibility guidance for tool naming constraints.
+
 ### Reliability
 
 - **JSON Schema Parsing**:
