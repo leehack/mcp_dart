@@ -76,6 +76,37 @@ void main() {
       }
     });
 
+    test('initialize session accepts multiple Accept header values', () async {
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(Uri.parse(baseUrl));
+        req.headers.contentType = ContentType.json;
+        req.headers.add(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        );
+        req.headers.add(HttpHeaders.acceptHeader, 'text/event-stream');
+        req.write(jsonEncode(initRequest.toJson()));
+
+        final res = await req.close();
+        expect(res.statusCode, HttpStatus.ok);
+        expect(res.headers.value('mcp-session-id'), isNotNull);
+        await res.drain();
+      } finally {
+        client.close(force: true);
+      }
+    });
+
     test('rejects POST without session ID for non-init request', () async {
       final req = const JsonRpcRequest(id: 1, method: 'ping');
 

@@ -10,6 +10,10 @@
 - Added runtime logging guidance with `package:logging` integration examples using import aliases.
 - Updated transport logging middleware examples to match SDK logger methods (`debug/info/warn/error`).
 
+### Reliability
+
+- Fixed Streamable HTTP `Accept` header parsing to handle repeated/multi-value headers without throwing `HttpException`, improving compatibility with clients that send duplicated or split `Accept` values.
+
 ## 2.0.0
 
 ### Breaking Changes
