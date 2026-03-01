@@ -49,43 +49,27 @@ class InMemoryEventStore implements EventStore {
   }
 }
 
-async function main() {
-  let transportName = 'stdio';
-  let port = 3000;
-
-  const args = process.argv.slice(2);
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--transport' && args[i + 1]) {
-      transportName = args[i + 1];
-      i++;
-    } else if (args[i] === '--port' && args[i + 1]) {
-      port = parseInt(args[i + 1], 10);
-      i++;
-    }
-  }
-
-  // Task Store for task-enabled tools (placed early so it can be used in McpServer options)
+function createInteropServer(): McpServer {
   const taskStore = new InMemoryTaskStore();
 
-  // 1. Create Server with task support
-  const server = new McpServer({
-    name: 'ts-interop-server',
-    version: '1.0.0',
-  }, {
-    taskStore,
-    capabilities: {
-      completions: {},
-      tasks: {
-        requests: {
-          tools: { call: {} },
+  const server = new McpServer(
+    {
+      name: 'ts-interop-server',
+      version: '1.0.0',
+    },
+    {
+      taskStore,
+      capabilities: {
+        completions: {},
+        tasks: {
+          requests: {
+            tools: { call: {} },
+          },
         },
       },
-    },
-  });
+    }
+  );
 
-  // 2. Register Features
-
-  // Tool: echo
   server.registerTool(
     'echo',
     {
@@ -98,7 +82,6 @@ async function main() {
     }
   );
 
-  // Tool: add
   server.registerTool(
     'add',
     {
@@ -111,11 +94,10 @@ async function main() {
     }
   );
 
-  // Resource: resource://test
   server.registerResource(
     'test-resource',
     'resource://test',
-    {}, // No metadata
+    {},
     async (uri) => {
       return {
         contents: [
@@ -129,7 +111,6 @@ async function main() {
     }
   );
 
-  // Prompt: test_prompt
   server.registerPrompt(
     'test_prompt',
     {
@@ -147,12 +128,13 @@ async function main() {
     }
   );
 
-  // Prompt: greeting - with completable language argument
   server.registerPrompt(
     'greeting',
     {
       description: 'A greeting prompt with a completable language argument',
-      argsSchema: { language: z.string().describe('The language for the greeting') },
+      argsSchema: {
+        language: z.string().describe('The language for the greeting'),
+      },
     },
     async ({ language }) => {
       const greetings: Record<string, string> = {
@@ -165,20 +147,28 @@ async function main() {
         messages: [
           {
             role: 'user',
-            content: { type: 'text', text: greetings[language] || `Hello in ${language}!` },
+            content: {
+              type: 'text',
+              text: greetings[language] || `Hello in ${language}!`,
+            },
           },
         ],
       };
     }
   );
 
-  // Completion handler for prompt arguments
   server.server.setRequestHandler(CompleteRequestSchema, async (request) => {
     const { ref, argument } = request.params;
 
-    if (ref.type === 'ref/prompt' && ref.name === 'greeting' && argument.name === 'language') {
+    if (
+      ref.type === 'ref/prompt' &&
+      ref.name === 'greeting' &&
+      argument.name === 'language'
+    ) {
       const languages = ['English', 'Spanish', 'French', 'German'];
-      const filtered = languages.filter((l) => l.toLowerCase().startsWith(argument.value.toLowerCase()));
+      const filtered = languages.filter((l) =>
+        l.toLowerCase().startsWith(argument.value.toLowerCase())
+      );
       return {
         completion: {
           values: filtered,
@@ -195,7 +185,6 @@ async function main() {
     };
   });
 
-  // Tool: get_roots - Lists client's roots
   server.registerTool(
     'get_roots',
     {
@@ -217,12 +206,13 @@ async function main() {
     }
   );
 
-  // Tool: elicit_input - Requests user input from client
   server.registerTool(
     'elicit_input',
     {
       description: 'Requests structured input from the client',
-      inputSchema: { message: z.string().describe('The message to show the user') },
+      inputSchema: {
+        message: z.string().describe('The message to show the user'),
+      },
     },
     async ({ message }) => {
       try {
@@ -248,12 +238,13 @@ async function main() {
     }
   );
 
-  // Tool: sample_llm - Requests LLM completion from client
   server.registerTool(
     'sample_llm',
     {
       description: 'Requests an LLM completion from the client',
-      inputSchema: { prompt: z.string().describe('The prompt to send to the LLM') },
+      inputSchema: {
+        prompt: z.string().describe('The prompt to send to the LLM'),
+      },
     },
     async ({ prompt }) => {
       try {
@@ -267,7 +258,8 @@ async function main() {
           maxTokens: 100,
         });
         const content = result.content;
-        const text = content.type === 'text' ? content.text : JSON.stringify(content);
+        const text =
+          content.type === 'text' ? content.text : JSON.stringify(content);
         return {
           content: [{ type: 'text', text }],
         };
@@ -280,12 +272,16 @@ async function main() {
     }
   );
 
-  // Tool: progress_demo - Sends progress notifications during execution
   server.registerTool(
     'progress_demo',
     {
       description: 'Demonstrates progress notifications',
-      inputSchema: { steps: z.number().optional().describe('Number of progress steps (default 4)') },
+      inputSchema: {
+        steps: z
+          .number()
+          .optional()
+          .describe('Number of progress steps (default 4)'),
+      },
     },
     async ({ steps = 4 }, extra) => {
       const totalSteps = Math.max(1, Math.min(steps, 10));
@@ -294,7 +290,6 @@ async function main() {
       for (let i = 0; i <= totalSteps; i++) {
         const progress = Math.round((i / totalSteps) * 100);
 
-        // Send progress notification if we have a progress token
         if (progressToken !== undefined) {
           await server.server.notification({
             method: 'notifications/progress',
@@ -306,17 +301,20 @@ async function main() {
           });
         }
 
-        // Simulate work
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
       return {
-        content: [{ type: 'text', text: `Completed ${totalSteps} steps with progress notifications` }],
+        content: [
+          {
+            type: 'text',
+            text: `Completed ${totalSteps} steps with progress notifications`,
+          },
+        ],
       };
     }
   );
 
-  // Tool: long_running (task-enabled)
   server.experimental.tasks.registerToolTask(
     'long_running',
     {
@@ -326,17 +324,23 @@ async function main() {
     },
     {
       createTask: async ({ duration }, extra) => {
-        const task = await extra.taskStore.createTask(
-          { ttl: 60000, pollInterval: 100 }
-        );
+        const task = await extra.taskStore.createTask({
+          ttl: 60000,
+          pollInterval: 100,
+        });
 
-        // Simulate background work
         const workDuration = duration ?? 100;
         setTimeout(async () => {
-          await extra.taskStore.updateTaskStatus(task.taskId, 'working', 'Processing...');
+          await extra.taskStore.updateTaskStatus(
+            task.taskId,
+            'working',
+            'Processing...'
+          );
           setTimeout(async () => {
             await extra.taskStore.storeTaskResult(task.taskId, 'completed', {
-              content: [{ type: 'text', text: `Completed after ${workDuration}ms` }],
+              content: [
+                { type: 'text', text: `Completed after ${workDuration}ms` },
+              ],
             });
           }, workDuration / 2);
         }, workDuration / 2);
@@ -349,114 +353,183 @@ async function main() {
       },
       getTaskResult: async (_args, extra) => {
         const result = await extra.taskStore.getTaskResult(extra.taskId);
-        // Cast to CallToolResult since we always store that shape
-        return result as { content: Array<{ type: 'text'; text: string }>; };
+        return result as { content: Array<{ type: 'text'; text: string }> };
       },
     }
   );
 
-  // 3. Connect Transport
+  return server;
+}
+
+async function main() {
+  let transportName = 'stdio';
+  let port = 3000;
+
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--transport' && args[i + 1]) {
+      transportName = args[i + 1];
+      i++;
+    } else if (args[i] === '--port' && args[i + 1]) {
+      port = parseInt(args[i + 1], 10);
+      i++;
+    }
+  }
+
   if (transportName === 'stdio') {
+    const server = createInteropServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    // Keep process alive
-  } else if (transportName === 'http') {
-    const app = express();
-    // app.use(express.json()); // Removed: StreamableHTTPServerTransport expects raw body
+    return;
+  }
 
+  if (transportName === 'http') {
+    const app = express();
     const transports = new Map<string, StreamableHTTPServerTransport>();
+    const servers = new Map<string, McpServer>();
     const eventStore = new InMemoryEventStore();
 
-    // GET /mcp/sse for establishing the SSE connection
-    app.get('/mcp/sse', async (req, res) => {
-      // const newSessionId = (req.query.sessionId as string) || randomUUID(); // Let transport generate its own ID
-      const options: StreamableHTTPServerTransportOptions = {
-        eventStore,
-      };
-      const transport = new StreamableHTTPServerTransport(options);
+    const getHeaderValue = (
+      value: string | string[] | undefined
+    ): string | undefined => {
+      if (typeof value === 'string' && value.length > 0) {
+        return value;
+      }
+      if (Array.isArray(value) && value.length > 0) {
+        return value[0];
+      }
+      return undefined;
+    };
 
-      await server.connect(transport); // Connect the MCP server to this new transport
+    const getSessionIdFromRequest = (
+      req: express.Request
+    ): string | undefined => {
+      const headerSessionId = getHeaderValue(req.headers['mcp-session-id']);
+      if (headerSessionId !== undefined) {
+        return headerSessionId;
+      }
 
-      const sessionId = transport.sessionId; // Get the generated session ID
-      if (!sessionId) {
-        console.error(
-          '[TS Server] SSE Transport failed to generate session ID'
-        );
-        res.status(500).send('Server error: Could not establish session');
+      const legacyHeaderSessionId = getHeaderValue(
+        req.headers['x-mcp-session-id']
+      );
+      if (legacyHeaderSessionId !== undefined) {
+        return legacyHeaderSessionId;
+      }
+
+      const querySessionId = req.query.sessionId;
+      if (typeof querySessionId === 'string' && querySessionId.length > 0) {
+        return querySessionId;
+      }
+
+      return undefined;
+    };
+
+    const cleanupSession = (sessionId: string): void => {
+      transports.delete(sessionId);
+      const sessionServer = servers.get(sessionId);
+      if (sessionServer !== undefined) {
+        void sessionServer.close().catch((error) => {
+          console.error(
+            `[TS Server] Failed to close session server for ${sessionId}:`,
+            error
+          );
+        });
+        servers.delete(sessionId);
+      }
+    };
+
+    app.get('/mcp', async (req, res) => {
+      const sessionId = getSessionIdFromRequest(req);
+      if (sessionId === undefined || !transports.has(sessionId)) {
+        res.status(400).send('Invalid or missing session ID');
         return;
       }
-      transports.set(sessionId, transport);
-      console.log(
-        `[TS Server] New SSE connection. Session ID: ${sessionId}. Total active sessions: ${transports.size}`
-      );
 
-      // Pass the request and response to the transport for message handling
-      transport.handleRequest(req, res);
-
-      transport.onclose = () => {
-        console.log(
-          `[TS Server] Transport closed: ${sessionId}. Remaining sessions: ${transports.size}`
-        );
-        transports.delete(sessionId);
-      };
+      const transport = transports.get(sessionId)!;
+      await transport.handleRequest(req, res);
     });
 
-    // POST /mcp for sending JSON-RPC messages
-    app.post('/mcp', async (req, res) => {
-      let sessionId =
-        (req.query.sessionId as string) ||
-        (req.headers['x-mcp-session-id'] as string);
-      let transport: StreamableHTTPServerTransport | undefined;
-
-      if (!sessionId || !transports.has(sessionId)) {
-        // Treat as an initial connection for a new session if no session ID or not found
-        console.log(
-          '[TS Server] Initial POST request without known session ID. Creating new session.'
-        );
-        sessionId = randomUUID(); // Explicitly generate a UUID for this initial POST
-        const options: StreamableHTTPServerTransportOptions = {
-          eventStore,
-        };
-        const newTransport = new StreamableHTTPServerTransport(options);
-
-        await server.connect(newTransport); // Connect the MCP server to this new transport
-
-        // The newTransport.sessionId may not be available immediately, so we use our generated ID
-        transports.set(sessionId, newTransport);
-        transport = newTransport;
-
-        console.log(
-          `[TS Server] New POST connection. Session ID: ${sessionId}. Total active sessions: ${transports.size}`
-        );
-
-        // Set the session ID in the response header for the client
-        res.setHeader('x-mcp-session-id', sessionId);
-
-        newTransport.onclose = () => {
-          console.log(
-            `[TS Server] Transport closed: ${sessionId}. Remaining sessions: ${transports.size}`
-          );
-          transports.delete(sessionId);
-        };
-      } else {
-        // Session ID is present and transport exists
-        transport = transports.get(sessionId);
+    app.get('/mcp/sse', async (req, res) => {
+      const sessionId = getSessionIdFromRequest(req);
+      if (sessionId === undefined || !transports.has(sessionId)) {
+        res.status(400).send('Invalid or missing session ID');
+        return;
       }
 
-      if (!transport) {
-        console.error(
-          `[TS Server] Session not found for ID: ${sessionId}. Available: ${Array.from(transports.keys())}`
+      const transport = transports.get(sessionId)!;
+      await transport.handleRequest(req, res);
+    });
+
+    app.post('/mcp', async (req, res) => {
+      const sessionId = getSessionIdFromRequest(req);
+
+      if (sessionId !== undefined) {
+        const transport = transports.get(sessionId);
+        if (transport === undefined) {
+          console.error(
+            `[TS Server] Session not found for ID: ${sessionId}. Available: ${Array.from(transports.keys())}`
+          );
+          res.status(404).send('Session not found');
+          return;
+        }
+
+        console.log(
+          '[TS Server] POST /mcp received.',
+          'Session ID:',
+          sessionId,
+          'Req Body:',
+          req.body
         );
-        res.status(404).send('Session not found');
+        await transport.handleRequest(req, res);
         return;
       }
 
       console.log(
-        `[TS Server] POST /mcp received. Session ID: ${sessionId}. Req Body:`,
-        req.body
+        '[TS Server] Initial POST request without known session ID. Creating new session.'
       );
-      // Pass the request and response to the transport for message handling
-      transport.handleRequest(req, res);
+
+      const server = createInteropServer();
+      let createdSessionId: string | undefined;
+      const transport = new StreamableHTTPServerTransport({
+        eventStore,
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid) => {
+          createdSessionId = sid;
+          transports.set(sid, transport);
+          servers.set(sid, server);
+          console.log(
+            `[TS Server] New POST connection. Session ID: ${sid}. Total active sessions: ${transports.size}`
+          );
+        },
+      } satisfies StreamableHTTPServerTransportOptions);
+
+      transport.onclose = () => {
+        const sid = transport.sessionId ?? createdSessionId;
+        if (sid !== undefined) {
+          cleanupSession(sid);
+          console.log(
+            `[TS Server] Transport closed: ${sid}. Remaining sessions: ${transports.size}`
+          );
+        }
+      };
+
+      await server.connect(transport);
+      await transport.handleRequest(req, res);
+
+      if (createdSessionId === undefined) {
+        await server.close();
+      }
+    });
+
+    app.delete('/mcp', async (req, res) => {
+      const sessionId = getSessionIdFromRequest(req);
+      if (sessionId === undefined || !transports.has(sessionId)) {
+        res.status(400).send('Invalid or missing session ID');
+        return;
+      }
+
+      const transport = transports.get(sessionId)!;
+      await transport.handleRequest(req, res);
     });
 
     app.listen(port, () => {
