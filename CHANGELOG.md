@@ -1,3 +1,15 @@
+## Unreleased
+
+### Features
+
+- Added SDK runtime logging helper APIs: `setMcpLogHandler`, `resetMcpLogHandler`, and `silenceMcpLogs`.
+- Added `Logger.resetHandler()` to restore the default internal log output.
+
+### Documentation
+
+- Added runtime logging guidance with `package:logging` integration examples using import aliases.
+- Updated transport logging middleware examples to match SDK logger methods (`debug/info/warn/error`).
+
 ## 2.0.0
 
 ### Breaking Changes

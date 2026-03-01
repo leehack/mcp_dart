@@ -129,6 +129,62 @@ How clients and servers communicate:
 - **HTTP/SSE**: Web-based (Server-Sent Events)
 - **Stream**: In-process communication
 
+## SDK Runtime Logging
+
+The SDK emits internal runtime logs (for example transport/protocol diagnostics).
+These logs are separate from MCP protocol logging messages (`logging/setLevel`
+and `notifications/message`).
+
+By default:
+
+- **Dart VM/Flutter**: Logs are written to `stderr`
+- **Web**: Logs are written to browser console (`print`)
+
+### Integrate with `package:logging`
+
+If your app does not already depend on `package:logging`, add it first:
+
+```yaml
+dependencies:
+  logging: ^1.2.0
+```
+
+Use import aliases to avoid `Logger` name collisions:
+
+```dart
+import 'package:logging/logging.dart' as app_log;
+import 'package:mcp_dart/mcp_dart.dart' as mcp;
+
+void configureMcpLogging() {
+  final appLogger = app_log.Logger('my_app.mcp');
+
+  mcp.setMcpLogHandler((loggerName, level, message) {
+    final appLevel = switch (level) {
+      mcp.LogLevel.debug => app_log.Level.FINE,
+      mcp.LogLevel.info => app_log.Level.INFO,
+      mcp.LogLevel.warn => app_log.Level.WARNING,
+      mcp.LogLevel.error => app_log.Level.SEVERE,
+    };
+
+    appLogger.log(appLevel, '[$loggerName] $message');
+  });
+}
+```
+
+### Silence or reset SDK logs
+
+```dart
+import 'package:mcp_dart/mcp_dart.dart' as mcp;
+
+void main() {
+  // Turn off internal SDK logs.
+  mcp.silenceMcpLogs();
+
+  // ... later, restore default behavior (stderr on VM, console on web).
+  mcp.resetMcpLogHandler();
+}
+```
+
 ## Your First MCP Server
 
 Create a file `my_server.dart`:

@@ -691,12 +691,12 @@ class LoggingTransport extends Transport {
     await inner.start();
 
     inner.onMessage = (message) {
-      logger.fine('Received: $message');
+      logger.debug('Received: $message');
       onMessage?.call(message);
     };
 
     inner.onError = (error) {
-      logger.warning('Error: $error');
+      logger.warn('Error: $error');
       onError?.call(error);
     };
 
@@ -708,7 +708,7 @@ class LoggingTransport extends Transport {
 
   @override
   Future<void> send(JsonRpcMessage message) async {
-    logger.fine('Sending: $message');
+    logger.debug('Sending: $message');
     await inner.send(message);
   }
 
