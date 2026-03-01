@@ -5,10 +5,13 @@ import 'package:test/test.dart';
 
 void main() {
   setUp(() {
-    // Reset handler before each test to avoid interference
-    Logger.setHandler((loggerName, level, message) {
-      // No-op handler to isolate tests
-    });
+    // Silence logs before each test to avoid interference.
+    silenceMcpLogs();
+  });
+
+  tearDown(() {
+    // Restore default handler after each test.
+    resetMcpLogHandler();
   });
 
   group('Logger', () {
@@ -111,6 +114,59 @@ void main() {
           LogLevel.warn,
           LogLevel.error,
         ]),
+      );
+    });
+
+    test('setMcpLogHandler configures custom LogHandler', () async {
+      final completer = Completer<List<Object?>>();
+      setMcpLogHandler((loggerName, level, message) {
+        completer.complete([loggerName, level, message]);
+      });
+
+      final loggerName = 'test.helper';
+      final logger = Logger(loggerName);
+      logger.warn('helper message');
+
+      final captured = await completer.future;
+      expect(
+        captured,
+        equals([loggerName, LogLevel.warn, 'helper message']),
+      );
+    });
+
+    test('silenceMcpLogs replaces existing handler with no-op', () async {
+      final logs = <String>[];
+      setMcpLogHandler((loggerName, level, message) {
+        logs.add(message);
+      });
+
+      final logger = Logger('test.silence');
+      logger.info('before silence');
+
+      silenceMcpLogs();
+      logger.info('after silence');
+
+      await Future.delayed(Duration.zero);
+
+      expect(logs, equals(['before silence']));
+    });
+
+    test('resetMcpLogHandler restores default log handler', () {
+      setMcpLogHandler((loggerName, level, message) {
+        throw StateError('custom handler was still active');
+      });
+
+      final logger = Logger('test.reset');
+      expect(
+        () => logger.info('before reset'),
+        throwsA(isA<StateError>()),
+      );
+
+      resetMcpLogHandler();
+
+      expect(
+        () => logger.info('after reset'),
+        returnsNormally,
       );
     });
   });

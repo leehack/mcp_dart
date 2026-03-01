@@ -677,6 +677,29 @@ client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
 );
 ```
 
+### SDK Runtime Logs (Internal)
+
+```dart
+import 'package:logging/logging.dart' as app_log;
+import 'package:mcp_dart/mcp_dart.dart' as mcp;
+
+mcp.setMcpLogHandler((name, level, message) {
+  final mapped = switch (level) {
+    mcp.LogLevel.debug => app_log.Level.FINE,
+    mcp.LogLevel.info => app_log.Level.INFO,
+    mcp.LogLevel.warn => app_log.Level.WARNING,
+    mcp.LogLevel.error => app_log.Level.SEVERE,
+  };
+  app_log.Logger('app.mcp').log(mapped, '[$name] $message');
+});
+
+// Silence SDK runtime logs.
+mcp.silenceMcpLogs();
+
+// Restore default SDK log output.
+mcp.resetMcpLogHandler();
+```
+
 ## Resource Subscriptions
 
 ### Subscribe

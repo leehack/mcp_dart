@@ -87,6 +87,7 @@ It's also backward compatible with previous versions including `2025-06-18`, `20
 - 🔌 **[Transport Options](https://github.com/leehack/mcp_dart/blob/main/doc/transports.md)** - Built-in and custom transport implementations
 - 📚 **[Examples](https://github.com/leehack/mcp_dart/blob/main/doc/examples.md)** - Real-world usage examples
 - ⚡ **[Quick Reference](https://github.com/leehack/mcp_dart/blob/main/doc/quick-reference.md)** - Fast lookup guide
+- 🪵 **[Runtime Logging](https://github.com/leehack/mcp_dart/blob/main/doc/getting-started.md#sdk-runtime-logging)** - Configure and route internal SDK logs
 - 🧩 **[MCP Apps Guide](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-apps.md)** - Using `io.modelcontextprotocol/ui` metadata
 
 ### Advanced Features
