@@ -6,8 +6,8 @@ import {
   ListRootsRequestSchema,
   CreateMessageRequestSchema,
   ElicitRequestSchema,
-  Progress,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { Progress } from '@modelcontextprotocol/sdk/types.js';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -305,12 +305,14 @@ async function main() {
         },
       }
     );
-    // @ts-expect-error - accessing content array element  
+    // @ts-expect-error - accessing content array element
     const progressText = progressResult.content[0].text;
     if (!progressText.includes('Completed')) {
       throw new Error(`progress_demo failed. Got: ${progressText}`);
     }
-    console.log(`progress_demo passed! Received ${progressUpdates.length} progress updates`);
+    console.log(
+      `progress_demo passed! Received ${progressUpdates.length} progress updates`
+    );
 
     console.log('\nAll interop tests passed!');
     process.exit(0);

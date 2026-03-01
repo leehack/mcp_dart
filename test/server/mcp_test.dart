@@ -276,13 +276,15 @@ void main() {
           .where((r) => r.id == 2)
           .first;
 
-      final tools = (response.result['tools'] as List)
-          .cast<Map<String, dynamic>>();
+      final tools =
+          (response.result['tools'] as List).cast<Map<String, dynamic>>();
       final uiTool = tools.firstWhere((t) => t['name'] == 'ui_tool');
 
       expect(uiTool['_meta'], isNotNull);
-      expect(uiTool['_meta']['ui']['resourceUri'],
-          equals('ui://test-server/dashboard'));
+      expect(
+        uiTool['_meta']['ui']['resourceUri'],
+        equals('ui://test-server/dashboard'),
+      );
       expect(uiTool['_meta']['ui']['visibility'], equals(['model', 'app']));
     });
   });

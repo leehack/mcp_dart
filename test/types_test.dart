@@ -715,7 +715,7 @@ void main() {
   group('Extensions Capability Tests', () {
     test('ClientCapabilities with extensions serialization and deserialization',
         () {
-      final capabilities = ClientCapabilities(
+      final capabilities = const ClientCapabilities(
         extensions: {
           'io.modelcontextprotocol/ui': {
             'mimeTypes': ['text/html;profile=mcp-app'],
@@ -749,13 +749,13 @@ void main() {
 
     test('ServerCapabilities with extensions serialization and deserialization',
         () {
-      final capabilities = ServerCapabilities(
+      final capabilities = const ServerCapabilities(
         extensions: {
           'io.modelcontextprotocol/ui': {
             'mimeTypes': ['text/html;profile=mcp-app'],
           },
         },
-        tools: const ServerCapabilitiesTools(listChanged: true),
+        tools: ServerCapabilitiesTools(listChanged: true),
       );
 
       final json = capabilities.toJson();
@@ -787,7 +787,7 @@ void main() {
     test('Extensions round-trip through InitializeRequest', () {
       final request = JsonRpcInitializeRequest(
         id: 1,
-        initParams: InitializeRequest(
+        initParams: const InitializeRequest(
           protocolVersion: latestProtocolVersion,
           capabilities: ClientCapabilities(
             extensions: {
@@ -796,22 +796,21 @@ void main() {
               },
             },
           ),
-          clientInfo:
-              const Implementation(name: 'test-client', version: '1.0.0'),
+          clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
         ),
       );
 
       final json = request.toJson();
       final deserialized = JsonRpcInitializeRequest.fromJson(json);
       expect(
-        deserialized.initParams.capabilities.extensions?[
-            'io.modelcontextprotocol/ui']?['mimeTypes'],
+        deserialized.initParams.capabilities
+            .extensions?['io.modelcontextprotocol/ui']?['mimeTypes'],
         equals(['text/html;profile=mcp-app']),
       );
     });
 
     test('Multiple extensions can coexist', () {
-      final capabilities = ClientCapabilities(
+      final capabilities = const ClientCapabilities(
         extensions: {
           'io.modelcontextprotocol/ui': {
             'mimeTypes': ['text/html;profile=mcp-app'],
