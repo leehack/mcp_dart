@@ -276,6 +276,10 @@ void main() {
         name: 'readme',
         mimeType: 'text/markdown',
         description: 'Project readme',
+        annotations: {
+          'audience': ['assistant'],
+          'priority': 0.5,
+        },
       );
 
       final json = content.toJson();
@@ -287,6 +291,11 @@ void main() {
       expect(deserialized.uri, equals('file:///docs/readme.md'));
       expect(deserialized.name, equals('readme'));
       expect(deserialized.mimeType, equals('text/markdown'));
+      expect(deserialized.annotations?['priority'], equals(0.5));
+      expect(
+        deserialized.parsedAnnotations?.audience,
+        equals([AnnotationAudience.assistant]),
+      );
     });
 
     test('Content.fromJson handles resource_link content type', () {

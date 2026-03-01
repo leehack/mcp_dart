@@ -369,7 +369,16 @@ void main() {
       final deserialized = CreateMessageRequestParams.fromJson(json);
       expect(deserialized.tools, hasLength(1));
       expect(deserialized.tools!.first.name, 'calculator');
-      expect(deserialized.toolChoice?.mode, ToolChoiceMode.auto);
+      expect(deserialized.toolChoiceConfig?.mode, ToolChoiceMode.auto);
+
+      final legacyDeserialized = CreateMessageRequestParams.fromJson({
+        ...json,
+        'toolChoice': {'type': 'required'},
+      });
+      expect(
+        legacyDeserialized.toolChoiceConfig?.mode,
+        ToolChoiceMode.required,
+      );
     });
 
     test('Sampling result supports content arrays and toolUse stopReason', () {

@@ -278,7 +278,7 @@ sealed class Content {
               if (c.size != null) 'size': c.size,
               if (c.icons != null)
                 'icons': c.icons!.map((icon) => icon.toJson()).toList(),
-              if (c.annotations != null) 'annotations': c.annotations!.toJson(),
+              if (c.annotations != null) 'annotations': c.annotations,
               if (c.meta != null) '_meta': c.meta,
             },
           final EmbeddedResource c => {
@@ -443,7 +443,11 @@ class ResourceLink extends Content {
   final List<McpIcon>? icons;
 
   /// Optional annotations.
-  final Annotations? annotations;
+  final Map<String, dynamic>? annotations;
+
+  /// Parsed annotations view.
+  Annotations? get parsedAnnotations =>
+      annotations == null ? null : Annotations.fromJson(annotations!);
 
   /// Optional metadata.
   final Map<String, dynamic>? meta;
@@ -471,9 +475,7 @@ class ResourceLink extends Content {
       icons: (json['icons'] as List<dynamic>?)
           ?.map((icon) => McpIcon.fromJson(_asJsonObject(icon)))
           .toList(),
-      annotations: json['annotations'] == null
-          ? null
-          : Annotations.fromJson(_asJsonObject(json['annotations'])),
+      annotations: _asJsonObjectOrNull(json['annotations']),
       meta: _asJsonObjectOrNull(json['_meta']),
     );
   }

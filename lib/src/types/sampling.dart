@@ -34,14 +34,135 @@ Object _parseSamplingMessageContent(dynamic value) {
   return SamplingContent.fromJson(_asJsonObject(value));
 }
 
-dynamic _samplingMessageContentToJson(Object value) {
+List<SamplingContent> _asSamplingContentBlocks(
+  dynamic value, {
+  required String context,
+}) {
+  if (value is SamplingContent) {
+    return [value];
+  }
+
   if (value is List<SamplingContent>) {
-    return value.map((item) => item.toJson()).toList();
+    return value;
   }
+
   if (value is List) {
-    return value.cast<SamplingContent>().map((item) => item.toJson()).toList();
+    return value.map((item) {
+      if (item is SamplingContent) {
+        return item;
+      }
+      if (item is Map) {
+        return SamplingContent.fromJson(item.cast<String, dynamic>());
+      }
+      throw FormatException(
+        'Expected $context items to be SamplingContent or object, got ${item.runtimeType}',
+      );
+    }).toList();
   }
-  return (value as SamplingContent).toJson();
+
+  if (value is Map) {
+    return [SamplingContent.fromJson(value.cast<String, dynamic>())];
+  }
+
+  throw FormatException(
+    'Expected $context to be SamplingContent or list, got ${value.runtimeType}',
+  );
+}
+
+dynamic _samplingMessageContentToJson(Object value) {
+  if (value is List) {
+    return _asSamplingContentBlocks(
+      value,
+      context: 'sampling message content',
+    ).map((item) => item.toJson()).toList();
+  }
+
+  return _asSamplingContentBlocks(
+    value,
+    context: 'sampling message content',
+  ).first.toJson();
+}
+
+ToolChoice? _parseToolChoice(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is ToolChoice) {
+    return value;
+  }
+
+  if (value is Map<String, dynamic>) {
+    return ToolChoice.fromJson(value);
+  }
+
+  if (value is Map) {
+    return ToolChoice.fromJson(value.cast<String, dynamic>());
+  }
+
+  throw FormatException(
+    'Expected toolChoice to be an object, got ${value.runtimeType}',
+  );
+}
+
+Map<String, dynamic>? _toolChoiceToLegacyMap(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+
+  if (value is Map) {
+    return value.cast<String, dynamic>();
+  }
+
+  if (value is ToolChoice) {
+    return {'type': value.mode.name};
+  }
+
+  throw FormatException(
+    'Expected toolChoice to be an object, got ${value.runtimeType}',
+  );
+}
+
+List<Content> _parseToolResultContent(dynamic rawContent) {
+  if (rawContent == null) {
+    return <Content>[];
+  }
+
+  if (rawContent is Content) {
+    return [rawContent];
+  }
+
+  if (rawContent is List<Content>) {
+    return rawContent;
+  }
+
+  if (rawContent is List) {
+    return rawContent.map((item) {
+      if (item is Content) {
+        return item;
+      }
+
+      if (item is Map) {
+        return Content.fromJson(item.cast<String, dynamic>());
+      }
+
+      return TextContent(text: item.toString());
+    }).toList();
+  }
+
+  if (rawContent is Map) {
+    final map = rawContent.cast<String, dynamic>();
+    if (map.containsKey('type')) {
+      return [Content.fromJson(map)];
+    }
+    return [TextContent(text: map.toString())];
+  }
+
+  return [TextContent(text: rawContent.toString())];
 }
 
 /// Hints for model selection during sampling.
@@ -159,7 +280,7 @@ sealed class SamplingContent {
             },
           final SamplingToolResultContent c => {
               'toolUseId': c.toolUseId,
-              'content': c.content.map((item) => item.toJson()).toList(),
+              'content': c.contentBlocks.map((item) => item.toJson()).toList(),
               if (c.structuredContent != null)
                 'structuredContent': c.structuredContent,
               if (c.isError != null) 'isError': c.isError,
@@ -280,7 +401,7 @@ class SamplingToolUseContent extends SamplingContent {
 /// Tool result content for sampling messages.
 class SamplingToolResultContent extends SamplingContent {
   final String toolUseId;
-  final List<Content> content;
+  final dynamic content;
   final Map<String, dynamic>? structuredContent;
   final bool? isError;
   final Map<String, dynamic>? meta;
@@ -293,23 +414,17 @@ class SamplingToolResultContent extends SamplingContent {
     this.meta,
   }) : super(type: 'tool_result');
 
-  factory SamplingToolResultContent.fromJson(Map<String, dynamic> json) {
-    final rawContent = json['content'];
-    final content = switch (rawContent) {
-      final List<dynamic> list =>
-        list.map((item) => Content.fromJson(_asJsonObject(item))).toList(),
-      final Map<dynamic, dynamic> map => [
-          Content.fromJson(map.cast<String, dynamic>()),
-        ],
-      null => <Content>[],
-      _ => throw FormatException(
-          'Expected tool_result content array, got ${rawContent.runtimeType}',
-        ),
-    };
+  /// Normalized content blocks for tool results.
+  List<Content> get contentBlocks => _parseToolResultContent(content);
 
+  /// Legacy shape compatibility map form.
+  @Deprecated('Use contentBlocks')
+  dynamic get legacyContent => content;
+
+  factory SamplingToolResultContent.fromJson(Map<String, dynamic> json) {
     return SamplingToolResultContent(
       toolUseId: json['toolUseId'] as String,
-      content: content,
+      content: _parseToolResultContent(json['content']),
       structuredContent: _asJsonObjectOrNull(json['structuredContent']),
       isError: json['isError'] as bool?,
       meta: _asJsonObjectOrNull(json['_meta']),
@@ -327,8 +442,8 @@ class SamplingMessage {
 
   /// The content of the message.
   ///
-  /// Spec allows either a single content block or a list of blocks.
-  final Object content;
+  /// Legacy APIs may use a single block while newer APIs may use a list.
+  final dynamic content;
 
   /// Optional metadata.
   final Map<String, dynamic>? meta;
@@ -341,13 +456,10 @@ class SamplingMessage {
 
   /// Normalized content blocks representation.
   List<SamplingContent> get contentBlocks {
-    if (content is List<SamplingContent>) {
-      return content as List<SamplingContent>;
-    }
-    if (content is List) {
-      return (content as List).cast<SamplingContent>();
-    }
-    return [content as SamplingContent];
+    return _asSamplingContentBlocks(
+      content,
+      context: 'sampling message content',
+    );
   }
 
   factory SamplingMessage.fromJson(Map<String, dynamic> json) {
@@ -430,7 +542,16 @@ class CreateMessageRequest {
   final List<Tool>? tools;
 
   /// Optional tool choice configuration.
-  final ToolChoice? toolChoice;
+  ///
+  /// For compatibility this can be either a raw map (legacy) or [ToolChoice].
+  final dynamic toolChoice;
+
+  /// Normalized tool choice configuration.
+  ToolChoice? get toolChoiceConfig => _parseToolChoice(toolChoice);
+
+  /// Legacy map representation of [toolChoice].
+  @Deprecated('Use toolChoiceConfig')
+  Map<String, dynamic>? get toolChoiceMap => _toolChoiceToLegacyMap(toolChoice);
 
   const CreateMessageRequest({
     required this.messages,
@@ -471,7 +592,7 @@ class CreateMessageRequest {
       tools: (json['tools'] as List<dynamic>?)
           ?.map((t) => Tool.fromJson(_asJsonObject(t)))
           .toList(),
-      toolChoice: toolChoice == null ? null : ToolChoice.fromJson(toolChoice),
+      toolChoice: toolChoice,
     );
   }
 
@@ -488,7 +609,7 @@ class CreateMessageRequest {
         if (modelPreferences != null)
           'modelPreferences': modelPreferences!.toJson(),
         if (tools != null) 'tools': tools!.map((t) => t.toJson()).toList(),
-        if (toolChoice != null) 'toolChoice': toolChoice!.toJson(),
+        if (toolChoiceConfig != null) 'toolChoice': toolChoiceConfig!.toJson(),
       };
 }
 
@@ -538,7 +659,9 @@ class CreateMessageResult implements BaseResultData {
   final SamplingMessageRole role;
 
   /// Content generated by the model.
-  final Object content;
+  ///
+  /// Legacy APIs may use a single block while newer APIs may use a list.
+  final dynamic content;
 
   /// Optional metadata.
   @override
@@ -554,13 +677,10 @@ class CreateMessageResult implements BaseResultData {
 
   /// Normalized content blocks representation.
   List<SamplingContent> get contentBlocks {
-    if (content is List<SamplingContent>) {
-      return content as List<SamplingContent>;
-    }
-    if (content is List) {
-      return (content as List).cast<SamplingContent>();
-    }
-    return [content as SamplingContent];
+    return _asSamplingContentBlocks(
+      content,
+      context: 'createMessage result content',
+    );
   }
 
   factory CreateMessageResult.fromJson(Map<String, dynamic> json) {

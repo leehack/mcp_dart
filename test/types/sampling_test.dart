@@ -287,6 +287,20 @@ void main() {
       expect(msg.role, equals(SamplingMessageRole.user));
       expect(msg.content, isA<SamplingTextContent>());
     });
+
+    test('supports array content with normalized contentBlocks', () {
+      final msg = const SamplingMessage(
+        role: SamplingMessageRole.assistant,
+        content: [
+          SamplingTextContent(text: 'Part 1'),
+          SamplingTextContent(text: 'Part 2'),
+        ],
+      );
+
+      expect(msg.content, isA<List<SamplingContent>>());
+      expect(msg.contentBlocks, hasLength(2));
+      expect(msg.toJson()['content'], isA<List>());
+    });
   });
 
   group('CreateMessageRequestParams', () {
@@ -325,6 +339,39 @@ void main() {
       expect(json['temperature'], equals(0.7));
     });
 
+    test('supports legacy toolChoice map with type', () {
+      final params = const CreateMessageRequestParams(
+        messages: [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Hello'),
+          ),
+        ],
+        maxTokens: 500,
+        toolChoice: {'type': 'required'},
+      );
+
+      expect(params.toolChoice, {'type': 'required'});
+      expect(params.toolChoiceConfig?.mode, ToolChoiceMode.required);
+      expect(params.toJson()['toolChoice'], {'mode': 'required'});
+    });
+
+    test('supports typed ToolChoice in constructor', () {
+      final params = const CreateMessageRequestParams(
+        messages: [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Hello'),
+          ),
+        ],
+        maxTokens: 500,
+        toolChoice: ToolChoice(mode: ToolChoiceMode.auto),
+      );
+
+      expect(params.toolChoiceConfig?.mode, ToolChoiceMode.auto);
+      expect(params.toJson()['toolChoice'], {'mode': 'auto'});
+    });
+
     test('fromJson parses correctly', () {
       final json = {
         'messages': [
@@ -354,6 +401,20 @@ void main() {
       expect(result.role, equals(SamplingMessageRole.assistant));
       expect(result.model, equals('gpt-4'));
       expect(result.stopReason, equals(StopReason.endTurn));
+    });
+
+    test('supports array content with normalized contentBlocks', () {
+      const result = CreateMessageResult(
+        role: SamplingMessageRole.assistant,
+        content: [
+          SamplingTextContent(text: 'Part 1'),
+          SamplingTextContent(text: 'Part 2'),
+        ],
+        model: 'gpt-4',
+      );
+
+      expect(result.contentBlocks, hasLength(2));
+      expect(result.toJson()['content'], isA<List>());
     });
 
     test('toJson serializes correctly', () {
