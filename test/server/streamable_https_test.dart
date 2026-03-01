@@ -281,13 +281,16 @@ void main() {
       );
     });
 
-    test('dns rebinding protection options are accepted', () async {
+    test('dns rebinding and compatibility toggle options are accepted',
+        () async {
       final transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
           sessionIdGenerator: () => 'test-session-id',
           enableDnsRebindingProtection: true,
           allowedHosts: {'localhost'},
           allowedOrigins: {'http://localhost'},
+          strictProtocolVersionHeaderValidation: false,
+          rejectBatchJsonRpcPayloads: false,
         ),
       );
 
