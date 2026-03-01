@@ -970,7 +970,10 @@ abstract class Protocol {
 
     if (options?.relatedTask != null) {
       finalMeta = Map<String, dynamic>.from(finalMeta ?? {});
-      finalMeta[relatedTaskMetadataKey] = options!.relatedTask!.toJson();
+      final relatedTaskJson = options!.relatedTask!.toJson();
+      finalMeta[relatedTaskMetadataKey] = relatedTaskJson;
+      // Dual-write legacy key for compatibility during migration.
+      finalMeta[legacyRelatedTaskMetadataKey] = relatedTaskJson;
     }
 
     if (finalMeta != null && finalParams == null) {
@@ -1133,7 +1136,10 @@ abstract class Protocol {
 
     if (relatedTask != null) {
       finalMeta = Map<String, dynamic>.from(finalMeta ?? {});
-      finalMeta[relatedTaskMetadataKey] = relatedTask.toJson();
+      final relatedTaskJson = relatedTask.toJson();
+      finalMeta[relatedTaskMetadataKey] = relatedTaskJson;
+      // Dual-write legacy key for compatibility during migration.
+      finalMeta[legacyRelatedTaskMetadataKey] = relatedTaskJson;
     }
 
     if (finalMeta != null && finalParams == null) {

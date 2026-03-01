@@ -1,5 +1,21 @@
 ## Unreleased
 
+### Compatibility Notes (Potentially Breaking)
+
+- **Streamable HTTP defaults are stricter**:
+  - DNS rebinding protection is enabled by default for Streamable HTTP server entry points.
+  - Unsupported `MCP-Protocol-Version` request headers are rejected by default.
+  - JSON-RPC batch POST payloads are rejected by default.
+  - Use compatibility toggles to preserve legacy behavior during rollout:
+    - `strictProtocolVersionHeaderValidation: false`
+    - `rejectBatchJsonRpcPayloads: false`
+    - `enableDnsRebindingProtection: false`
+- **Sampling response shape can now be multi-block**:
+  - `SamplingMessage.content` and `CreateMessageResult.content` may be either a single block or a list.
+  - Prefer normalized access via `contentBlocks`.
+- **Enum expansion**:
+  - `StopReason` now includes `toolUse`; exhaustive `switch` statements may need an additional branch.
+
 ### Features
 
 - Added SDK runtime logging helper APIs: `setMcpLogHandler`, `resetMcpLogHandler`, and `silenceMcpLogs`.
@@ -11,6 +27,8 @@
 - Added Streamable HTTP compatibility toggles:
   - `strictProtocolVersionHeaderValidation`
   - `rejectBatchJsonRpcPayloads`
+- Added related-task metadata compatibility behavior by dual-writing
+  `io.modelcontextprotocol/related-task` and legacy `relatedTask` keys.
 
 ### Documentation
 

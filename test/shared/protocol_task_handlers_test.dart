@@ -435,6 +435,61 @@ void main() {
       // Verify message was queued instead of sent directly
       expect(messageQueue.queues['task-1']?.length, equals(1));
       expect(messageQueue.queues['task-1']?.first.type, equals('notification'));
+
+      final queuedMessage =
+          messageQueue.queues['task-1']!.first.message as JsonRpcNotification;
+      expect(
+        queuedMessage.meta?[relatedTaskMetadataKey]?['taskId'],
+        equals('task-1'),
+      );
+      expect(
+        queuedMessage.meta?[legacyRelatedTaskMetadataKey]?['taskId'],
+        equals('task-1'),
+      );
+    });
+
+    test('request with relatedTask queues message with dual metadata keys',
+        () async {
+      await protocol.connect(transport);
+
+      // Create a task first
+      taskStore.tasks['task-1'] = const Task(
+        taskId: 'task-1',
+        status: TaskStatus.working,
+      );
+
+      final resultFuture = protocol.request<EmptyResult>(
+        const JsonRpcRequest(
+          id: 0,
+          method: 'test/request',
+        ),
+        (_) => const EmptyResult(),
+        const RequestOptions(
+          relatedTask: RelatedTaskMetadata(taskId: 'task-1'),
+        ),
+      );
+
+      expect(messageQueue.queues['task-1']?.length, equals(1));
+      final queuedMessage =
+          messageQueue.queues['task-1']!.first.message as JsonRpcRequest;
+      expect(
+        queuedMessage.meta?[relatedTaskMetadataKey]?['taskId'],
+        equals('task-1'),
+      );
+      expect(
+        queuedMessage.meta?[legacyRelatedTaskMetadataKey]?['taskId'],
+        equals('task-1'),
+      );
+
+      // Complete the queued request.
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: queuedMessage.id,
+          result: const {},
+        ),
+      );
+
+      await resultFuture;
     });
   });
 
