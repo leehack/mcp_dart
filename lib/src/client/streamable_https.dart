@@ -125,12 +125,14 @@ class StreamableHttpClientTransportOptions {
 /// Client transport for Streamable HTTP: this implements the MCP Streamable HTTP transport specification.
 /// It will connect to a server using HTTP POST for sending messages and HTTP GET with Server-Sent Events
 /// for receiving messages.
-class StreamableHttpClientTransport implements Transport {
+class StreamableHttpClientTransport
+    implements Transport, ProtocolVersionAwareTransport {
   StreamController<bool>? _abortController;
   final Uri _url;
   final Map<String, dynamic>? _requestInit;
   final OAuthClientProvider? _authProvider;
   String? _sessionId;
+  String? _protocolVersion;
   final StreamableHttpReconnectionOptions _reconnectionOptions;
   bool _isClosed = false;
 
@@ -192,6 +194,10 @@ class StreamableHttpClientTransport implements Transport {
 
     if (_sessionId != null) {
       headers["mcp-session-id"] = _sessionId!;
+    }
+
+    if (_protocolVersion != null) {
+      headers['MCP-Protocol-Version'] = _protocolVersion!;
     }
 
     if (_requestInit != null && _requestInit!.containsKey('headers')) {
@@ -271,7 +277,11 @@ class StreamableHttpClientTransport implements Transport {
   ///
   /// @param options The SSE connection options
   /// @param attemptCount Current reconnection attempt count for this specific stream
-  void _scheduleReconnection(StartSseOptions options, [int attemptCount = 0]) {
+  void _scheduleReconnection(
+    StartSseOptions options, [
+    int attemptCount = 0,
+    int? retryDelayMs,
+  ]) {
     // Use provided options or default options
     final maxRetries = _reconnectionOptions.maxRetries;
 
@@ -284,7 +294,7 @@ class StreamableHttpClientTransport implements Transport {
     }
 
     // Calculate next delay based on current attempt count
-    final delay = _getNextReconnectionDelay(attemptCount);
+    final delay = retryDelayMs ?? _getNextReconnectionDelay(attemptCount);
 
     // Schedule the reconnection
     Future.delayed(Duration(milliseconds: delay), () {
@@ -310,6 +320,7 @@ class StreamableHttpClientTransport implements Transport {
     final replayMessageId = options.replayMessageId;
 
     String? lastEventId;
+    int? retryDelayMs;
     String buffer = '';
     String? eventName;
     String? eventId;
@@ -357,25 +368,25 @@ class StreamableHttpClientTransport implements Transport {
     }
 
     // Helper function to handle reconnection logic
-    void handleReconnection(String? eventId, String errorMessage) {
+    void handleReconnection(String? eventId, [int? retryDelayOverrideMs]) {
       if (_isClosed || !options.shouldReconnect) return;
 
       if (_abortController != null && !_abortController!.isClosed) {
-        if (eventId != null) {
-          try {
-            _scheduleReconnection(
-              StartSseOptions(
-                resumptionToken: eventId,
-                onResumptionToken: onResumptionToken,
-                replayMessageId: replayMessageId,
-                shouldReconnect: options.shouldReconnect,
-              ),
-            );
-          } catch (error) {
-            final errorMessage =
-                error is Error ? error.toString() : error.toString();
-            onerror?.call(McpError(0, "Failed to reconnect: $errorMessage"));
-          }
+        try {
+          _scheduleReconnection(
+            StartSseOptions(
+              resumptionToken: eventId,
+              onResumptionToken: onResumptionToken,
+              replayMessageId: replayMessageId,
+              shouldReconnect: options.shouldReconnect,
+            ),
+            0,
+            retryDelayOverrideMs,
+          );
+        } catch (error) {
+          final errorMessage =
+              error is Error ? error.toString() : error.toString();
+          onerror?.call(McpError(0, "Failed to reconnect: $errorMessage"));
         }
       }
     }
@@ -427,6 +438,12 @@ class StreamableHttpClientTransport implements Transport {
               case 'id':
                 eventId = value;
                 break;
+              case 'retry':
+                final parsedRetry = int.tryParse(value.trim());
+                if (parsedRetry != null && parsedRetry >= 0) {
+                  retryDelayMs = parsedRetry;
+                }
+                break;
               case 'data':
                 eventData = (eventData ?? '') + value;
                 break;
@@ -439,7 +456,7 @@ class StreamableHttpClientTransport implements Transport {
         processEvent();
 
         // Handle stream closure - likely a network disconnect
-        handleReconnection(lastEventId, "Stream closed");
+        handleReconnection(lastEventId, retryDelayMs);
       },
       onError: (error) {
         final errorMessage =
@@ -447,7 +464,7 @@ class StreamableHttpClientTransport implements Transport {
         onerror?.call(McpError(0, "SSE stream disconnected: $errorMessage"));
 
         // Attempt to reconnect if the stream disconnects unexpectedly
-        handleReconnection(lastEventId, errorMessage);
+        handleReconnection(lastEventId, retryDelayMs);
       },
     );
 
@@ -647,6 +664,14 @@ class StreamableHttpClientTransport implements Transport {
 
   @override
   String? get sessionId => _sessionId;
+
+  @override
+  String? get protocolVersion => _protocolVersion;
+
+  @override
+  set protocolVersion(String? value) {
+    _protocolVersion = value;
+  }
 
   /// Terminates the current session by sending a DELETE request to the server.
   ///

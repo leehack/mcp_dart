@@ -1,3 +1,68 @@
+Map<String, dynamic>? _asJsonObjectOrNull(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+
+  if (value is Map) {
+    return value.cast<String, dynamic>();
+  }
+
+  throw FormatException('Expected object, got ${value.runtimeType}');
+}
+
+Map<String, dynamic> _asJsonObject(dynamic value) {
+  final map = _asJsonObjectOrNull(value);
+  if (map == null) {
+    throw const FormatException('Expected object, got null');
+  }
+  return map;
+}
+
+/// Allowed audience values for content/resource annotations.
+enum AnnotationAudience { user, assistant }
+
+/// Optional annotations that can be attached to content and resources.
+class Annotations {
+  /// Intended audiences for this content.
+  final List<AnnotationAudience>? audience;
+
+  /// Relative importance (0.0 to 1.0).
+  final double? priority;
+
+  /// ISO 8601 timestamp when this content was last modified.
+  final String? lastModified;
+
+  const Annotations({
+    this.audience,
+    this.priority,
+    this.lastModified,
+  }) : assert(
+          priority == null || (priority >= 0 && priority <= 1),
+          'priority must be between 0 and 1',
+        );
+
+  factory Annotations.fromJson(Map<String, dynamic> json) {
+    return Annotations(
+      audience: (json['audience'] as List<dynamic>?)
+          ?.map((value) => AnnotationAudience.values.byName(value as String))
+          .toList(),
+      priority: (json['priority'] as num?)?.toDouble(),
+      lastModified: json['lastModified'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (audience != null)
+          'audience': audience!.map((value) => value.name).toList(),
+        if (priority != null) 'priority': priority,
+        if (lastModified != null) 'lastModified': lastModified,
+      };
+}
+
 /// Sealed class representing the contents of a specific resource or sub-resource.
 sealed class ResourceContents {
   /// The URI of this resource content.
@@ -23,7 +88,7 @@ sealed class ResourceContents {
   factory ResourceContents.fromJson(Map<String, dynamic> json) {
     final uri = json['uri'] as String;
     final mimeType = json['mimeType'] as String?;
-    final meta = (json['_meta'] as Map?)?.cast<String, dynamic>();
+    final meta = _asJsonObjectOrNull(json['_meta']);
     final extra = Map<String, dynamic>.from(json)
       ..removeWhere(
         (key, value) =>
@@ -186,13 +251,24 @@ sealed class Content {
   Map<String, dynamic> toJson() => {
         'type': type,
         ...switch (this) {
-          final TextContent c => {'text': c.text},
+          final TextContent c => {
+              'text': c.text,
+              if (c.annotations != null) 'annotations': c.annotations!.toJson(),
+              if (c.meta != null) '_meta': c.meta,
+            },
           final ImageContent c => {
               'data': c.data,
               'mimeType': c.mimeType,
               if (c.theme != null) 'theme': c.theme,
+              if (c.annotations != null) 'annotations': c.annotations!.toJson(),
+              if (c.meta != null) '_meta': c.meta,
             },
-          final AudioContent c => {'data': c.data, 'mimeType': c.mimeType},
+          final AudioContent c => {
+              'data': c.data,
+              'mimeType': c.mimeType,
+              if (c.annotations != null) 'annotations': c.annotations!.toJson(),
+              if (c.meta != null) '_meta': c.meta,
+            },
           final ResourceLink c => {
               'uri': c.uri,
               'name': c.name,
@@ -202,10 +278,14 @@ sealed class Content {
               if (c.size != null) 'size': c.size,
               if (c.icons != null)
                 'icons': c.icons!.map((icon) => icon.toJson()).toList(),
-              if (c.annotations != null) 'annotations': c.annotations,
+              if (c.annotations != null) 'annotations': c.annotations!.toJson(),
               if (c.meta != null) '_meta': c.meta,
             },
-          final EmbeddedResource c => {'resource': c.resource.toJson()},
+          final EmbeddedResource c => {
+              'resource': c.resource.toJson(),
+              if (c.annotations != null) 'annotations': c.annotations!.toJson(),
+              if (c.meta != null) '_meta': c.meta,
+            },
           UnknownContent _ => {},
         },
       };
@@ -216,11 +296,25 @@ class TextContent extends Content {
   /// The text string.
   final String text;
 
-  const TextContent({required this.text}) : super(type: 'text');
+  /// Optional annotations for the content block.
+  final Annotations? annotations;
+
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
+  const TextContent({
+    required this.text,
+    this.annotations,
+    this.meta,
+  }) : super(type: 'text');
 
   factory TextContent.fromJson(Map<String, dynamic> json) {
     return TextContent(
       text: json['text'] as String,
+      annotations: json['annotations'] == null
+          ? null
+          : Annotations.fromJson(_asJsonObject(json['annotations'])),
+      meta: _asJsonObjectOrNull(json['_meta']),
     );
   }
 }
@@ -236,10 +330,18 @@ class ImageContent extends Content {
   /// Optional theme hint for legacy icon usage (`light` | `dark`).
   final String? theme;
 
+  /// Optional annotations for the content block.
+  final Annotations? annotations;
+
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
   const ImageContent({
     required this.data,
     required this.mimeType,
     this.theme,
+    this.annotations,
+    this.meta,
   }) : super(type: 'image');
 
   factory ImageContent.fromJson(Map<String, dynamic> json) {
@@ -247,6 +349,10 @@ class ImageContent extends Content {
       data: json['data'] as String,
       mimeType: json['mimeType'] as String,
       theme: json['theme'] as String?,
+      annotations: json['annotations'] == null
+          ? null
+          : Annotations.fromJson(_asJsonObject(json['annotations'])),
+      meta: _asJsonObjectOrNull(json['_meta']),
     );
   }
 }
@@ -258,15 +364,27 @@ class AudioContent extends Content {
   /// MIME type of the audio (e.g., "audio/wav").
   final String mimeType;
 
+  /// Optional annotations for the content block.
+  final Annotations? annotations;
+
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
   const AudioContent({
     required this.data,
     required this.mimeType,
+    this.annotations,
+    this.meta,
   }) : super(type: 'audio');
 
   factory AudioContent.fromJson(Map<String, dynamic> json) {
     return AudioContent(
       data: json['data'] as String,
       mimeType: json['mimeType'] as String,
+      annotations: json['annotations'] == null
+          ? null
+          : Annotations.fromJson(_asJsonObject(json['annotations'])),
+      meta: _asJsonObjectOrNull(json['_meta']),
     );
   }
 }
@@ -276,13 +394,27 @@ class EmbeddedResource extends Content {
   /// The embedded resource contents.
   final ResourceContents resource;
 
-  const EmbeddedResource({required this.resource}) : super(type: 'resource');
+  /// Optional annotations for the embedded resource.
+  final Annotations? annotations;
+
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
+  const EmbeddedResource({
+    required this.resource,
+    this.annotations,
+    this.meta,
+  }) : super(type: 'resource');
 
   factory EmbeddedResource.fromJson(Map<String, dynamic> json) {
     return EmbeddedResource(
       resource: ResourceContents.fromJson(
-        json['resource'] as Map<String, dynamic>,
+        _asJsonObject(json['resource']),
       ),
+      annotations: json['annotations'] == null
+          ? null
+          : Annotations.fromJson(_asJsonObject(json['annotations'])),
+      meta: _asJsonObjectOrNull(json['_meta']),
     );
   }
 }
@@ -311,7 +443,7 @@ class ResourceLink extends Content {
   final List<McpIcon>? icons;
 
   /// Optional annotations.
-  final Map<String, dynamic>? annotations;
+  final Annotations? annotations;
 
   /// Optional metadata.
   final Map<String, dynamic>? meta;
@@ -337,10 +469,12 @@ class ResourceLink extends Content {
       mimeType: json['mimeType'] as String?,
       size: json['size'] as int?,
       icons: (json['icons'] as List<dynamic>?)
-          ?.map((icon) => McpIcon.fromJson(icon as Map<String, dynamic>))
+          ?.map((icon) => McpIcon.fromJson(_asJsonObject(icon)))
           .toList(),
-      annotations: json['annotations'] as Map<String, dynamic>?,
-      meta: json['_meta'] as Map<String, dynamic>?,
+      annotations: json['annotations'] == null
+          ? null
+          : Annotations.fromJson(_asJsonObject(json['annotations'])),
+      meta: _asJsonObjectOrNull(json['_meta']),
     );
   }
 }

@@ -25,3 +25,13 @@ abstract class Transport {
   /// The session ID generated for this connection, if applicable.
   String? get sessionId;
 }
+
+/// Optional capability for transports that can attach MCP protocol version
+/// headers to outbound requests.
+abstract class ProtocolVersionAwareTransport {
+  /// Currently negotiated MCP protocol version for this transport.
+  String? get protocolVersion;
+
+  /// Updates the negotiated MCP protocol version.
+  set protocolVersion(String? value);
+}

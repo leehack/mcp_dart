@@ -249,6 +249,7 @@ class _RegisteredResourceImpl implements RegisteredResource {
   _RegisteredResourceImpl(
     this._server, {
     required this.name,
+    this.title,
     required this.uri,
     this.metadata,
     this.meta,
@@ -260,11 +261,11 @@ class _RegisteredResourceImpl implements RegisteredResource {
     return Resource(
       uri: uri,
       name: name,
+      title: title,
       description: metadata?.description,
       mimeType: metadata?.mimeType,
       icon: icon,
       icons: _iconsFromLegacyImage(icon),
-      annotations: title != null ? ResourceAnnotations(title: title) : null,
       meta: meta,
     );
   }
@@ -367,6 +368,7 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
   _RegisteredResourceTemplateImpl(
     this._server, {
     required this.name,
+    this.title,
     required this.resourceTemplate,
     this.metadata,
     this.meta,
@@ -377,9 +379,9 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
     return ResourceTemplate(
       uriTemplate: resourceTemplate.uriTemplate.toString(),
       name: name,
+      title: title,
       description: metadata?.description,
       mimeType: metadata?.mimeType,
-      annotations: title != null ? ResourceAnnotations(title: title) : null,
       meta: meta,
     );
   }
@@ -515,6 +517,7 @@ class _RegisteredToolImpl implements RegisteredTool {
   Tool toTool() {
     return Tool(
       name: name,
+      title: title,
       description: description,
       inputSchema: inputSchema ?? const ToolInputSchema(),
       outputSchema: outputSchema,
@@ -644,6 +647,7 @@ class _RegisteredPromptImpl implements RegisteredPrompt {
     }).toList();
     return Prompt(
       name: name,
+      title: title,
       description: description,
       arguments: promptArgs,
       icon: icon,
@@ -906,7 +910,15 @@ class McpServer {
       server.assertCanSetRequestHandler(Method.tasksResult);
       server.registerCapabilities(
         const ServerCapabilities(
-          tasks: ServerCapabilitiesTasks(listChanged: true),
+          tasks: ServerCapabilitiesTasks(
+            list: true,
+            cancel: true,
+            requests: ServerCapabilitiesTasksRequests(
+              tools: ServerCapabilitiesTasksTools(
+                call: ServerCapabilitiesTasksToolsCall(),
+              ),
+            ),
+          ),
         ),
       );
       _taskHandlersInitialized = true;
@@ -1432,6 +1444,7 @@ class McpServer {
   ///
   /// [name] is the human-readable name of the resource.
   /// [uri] is the unique URI for the resource.
+  /// [title] is an optional display title for UIs.
   /// [metadata] provides optional description and MIME type.
   /// [readCallback] is the function called when the resource is read.
   RegisteredResource registerResource(
@@ -1439,6 +1452,7 @@ class McpServer {
     String uri,
     ResourceMetadata? metadata,
     ReadResourceCallback readCallback, {
+    String? title,
     Map<String, dynamic>? meta,
   }) {
     if (_registeredResources.containsKey(uri)) {
@@ -1447,6 +1461,7 @@ class McpServer {
     final resource = _RegisteredResourceImpl(
       this,
       name: name,
+      title: title,
       uri: uri,
       metadata: metadata,
       meta: meta,
@@ -1462,6 +1477,7 @@ class McpServer {
   ///
   /// [name] is the unique name for this template registration.
   /// [template] defines the URI pattern and completion behavior.
+  /// [title] is an optional display title for UIs.
   /// [metadata] provides optional description and MIME type for resources matching this template.
   /// [readCallback] is the function called when a matching resource is read.
   RegisteredResourceTemplate registerResourceTemplate(
@@ -1469,6 +1485,7 @@ class McpServer {
     ResourceTemplateRegistration template,
     ResourceMetadata? metadata,
     ReadResourceTemplateCallback readCallback, {
+    String? title,
     Map<String, dynamic>? meta,
   }) {
     if (_registeredResourceTemplates.containsKey(name)) {
@@ -1479,6 +1496,7 @@ class McpServer {
     final resourceTemplate = _RegisteredResourceTemplateImpl(
       this,
       name: name,
+      title: title,
       resourceTemplate: template,
       metadata: metadata,
       meta: meta,
@@ -1596,6 +1614,7 @@ class McpServer {
     String uri,
     ReadResourceCallback readCallback, {
     ResourceMetadata? metadata,
+    String? title,
     ImageContent? icon,
   }) {
     if (_registeredResources.containsKey(uri)) {
@@ -1604,6 +1623,7 @@ class McpServer {
     final resource = _RegisteredResourceImpl(
       this,
       name: name,
+      title: title,
       uri: uri,
       metadata: metadata,
       icon: icon,
@@ -1622,12 +1642,14 @@ class McpServer {
     ResourceTemplateRegistration templateRegistration,
     ReadResourceTemplateCallback readCallback, {
     ResourceMetadata? metadata,
+    String? title,
   }) {
     return registerResourceTemplate(
       name,
       templateRegistration,
       metadata,
       readCallback,
+      title: title,
     );
   }
 

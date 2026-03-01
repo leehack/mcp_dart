@@ -320,6 +320,108 @@ void main() {
     );
 
     test(
+      'respects SSE retry field when reconnecting',
+      () async {
+        final retryServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        final retryUrl = Uri.parse('http://localhost:${retryServer.port}/mcp');
+        final retrySessionId = 'retry-session-id';
+
+        DateTime? firstGetAt;
+        DateTime? secondGetAt;
+        int getCount = 0;
+
+        retryServer.listen((request) async {
+          if (request.uri.path != '/mcp') {
+            request.response.statusCode = HttpStatus.notFound;
+            await request.response.close();
+            return;
+          }
+
+          if (request.method == 'POST') {
+            final body = await utf8.decoder.bind(request).join();
+            final json = jsonDecode(body) as Map<String, dynamic>;
+
+            request.response.headers.set('mcp-session-id', retrySessionId);
+            if (json['method'] == 'notifications/initialized') {
+              request.response.statusCode = HttpStatus.accepted;
+              await request.response.close();
+              return;
+            }
+
+            request.response.headers.contentType = ContentType.json;
+            request.response.statusCode = HttpStatus.ok;
+            request.response.write(
+              jsonEncode(
+                JsonRpcResponse(
+                  id: json['id'],
+                  result: const {'success': true},
+                ).toJson(),
+              ),
+            );
+            await request.response.close();
+            return;
+          }
+
+          if (request.method == 'GET') {
+            request.response.headers.add('Content-Type', 'text/event-stream');
+            request.response.headers.add('Cache-Control', 'no-cache');
+            request.response.headers.add('Connection', 'keep-alive');
+            request.response.headers.add('mcp-session-id', retrySessionId);
+
+            getCount += 1;
+            if (getCount == 1) {
+              firstGetAt = DateTime.now();
+              request.response.write('retry: 1200\n\n');
+              await request.response.flush();
+              await request.response.close();
+              return;
+            }
+
+            if (getCount == 2) {
+              secondGetAt = DateTime.now();
+              request.response.write(': connected\n\n');
+              await request.response.flush();
+              await Future.delayed(const Duration(milliseconds: 300));
+              await request.response.close();
+              return;
+            }
+
+            await request.response.close();
+            return;
+          }
+
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+        });
+
+        final retryTransport = StreamableHttpClientTransport(retryUrl);
+        try {
+          await retryTransport.start();
+          await retryTransport.send(const JsonRpcInitializedNotification());
+
+          final deadline = DateTime.now().add(const Duration(seconds: 6));
+          while (secondGetAt == null && DateTime.now().isBefore(deadline)) {
+            await Future.delayed(const Duration(milliseconds: 50));
+          }
+
+          expect(firstGetAt, isNotNull);
+          expect(secondGetAt, isNotNull);
+
+          final reconnectDelayMs =
+              secondGetAt!.difference(firstGetAt!).inMilliseconds;
+          expect(reconnectDelayMs, greaterThanOrEqualTo(1000));
+        } finally {
+          await retryTransport.close();
+          await retryServer.close(force: true);
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
+    test(
       'receives SSE events',
       () async {
         transport = StreamableHttpClientTransport(serverUrl);

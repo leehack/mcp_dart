@@ -160,6 +160,27 @@ void main() {
       expect(deserialized.text, equals('Hello, world!'));
     });
 
+    test('TextContent supports annotations and meta', () {
+      final content = const TextContent(
+        text: 'Annotated text',
+        annotations: Annotations(
+          audience: [AnnotationAudience.assistant],
+          priority: 0.9,
+        ),
+        meta: {
+          'source': 'unit-test',
+        },
+      );
+
+      final json = content.toJson();
+      expect(json['annotations']['audience'], equals(['assistant']));
+      expect(json['_meta']['source'], equals('unit-test'));
+
+      final deserialized = TextContent.fromJson(json);
+      expect(deserialized.annotations?.priority, equals(0.9));
+      expect(deserialized.meta?['source'], equals('unit-test'));
+    });
+
     test('ImageContent serialization and deserialization', () {
       final content =
           const ImageContent(data: 'base64data', mimeType: 'image/png');
@@ -187,6 +208,27 @@ void main() {
       expect(deserialized.theme, equals('dark'));
     });
 
+    test('ImageContent supports annotations and meta', () {
+      final content = const ImageContent(
+        data: 'base64data',
+        mimeType: 'image/png',
+        annotations: Annotations(
+          audience: [AnnotationAudience.user],
+        ),
+        meta: {
+          'traceId': 'img-1',
+        },
+      );
+
+      final json = content.toJson();
+      expect(json['annotations']['audience'], equals(['user']));
+      expect(json['_meta']['traceId'], equals('img-1'));
+
+      final deserialized = ImageContent.fromJson(json);
+      expect(deserialized.annotations?.audience, [AnnotationAudience.user]);
+      expect(deserialized.meta?['traceId'], equals('img-1'));
+    });
+
     test('AudioContent serialization and deserialization', () {
       final content =
           const AudioContent(data: 'base64data', mimeType: 'audio/wav');
@@ -198,6 +240,25 @@ void main() {
       final deserialized = AudioContent.fromJson(json);
       expect(deserialized.data, equals('base64data'));
       expect(deserialized.mimeType, equals('audio/wav'));
+    });
+
+    test('AudioContent supports annotations and meta', () {
+      final content = const AudioContent(
+        data: 'base64data',
+        mimeType: 'audio/wav',
+        annotations: Annotations(priority: 0.3),
+        meta: {
+          'traceId': 'audio-1',
+        },
+      );
+
+      final json = content.toJson();
+      expect(json['annotations']['priority'], equals(0.3));
+      expect(json['_meta']['traceId'], equals('audio-1'));
+
+      final deserialized = AudioContent.fromJson(json);
+      expect(deserialized.annotations?.priority, equals(0.3));
+      expect(deserialized.meta?['traceId'], equals('audio-1'));
     });
 
     test('UnknownContent serialization and deserialization', () {
@@ -238,6 +299,35 @@ void main() {
       final content = Content.fromJson(json);
       expect(content, isA<ResourceLink>());
       expect((content as ResourceLink).uri, equals('file:///docs/spec.md'));
+    });
+
+    test('EmbeddedResource supports annotations and meta', () {
+      final content = const EmbeddedResource(
+        resource: TextResourceContents(
+          uri: 'file:///docs/readme.md',
+          mimeType: 'text/markdown',
+          text: 'README body',
+        ),
+        annotations: Annotations(
+          audience: [AnnotationAudience.assistant],
+        ),
+        meta: {
+          'display': 'inline',
+        },
+      );
+
+      final json = content.toJson();
+      expect(json['type'], equals('resource'));
+      expect(json['resource']['uri'], equals('file:///docs/readme.md'));
+      expect(json['annotations']['audience'], equals(['assistant']));
+      expect(json['_meta']['display'], equals('inline'));
+
+      final deserialized = EmbeddedResource.fromJson(json);
+      expect(
+        deserialized.annotations?.audience,
+        [AnnotationAudience.assistant],
+      );
+      expect(deserialized.meta?['display'], equals('inline'));
     });
   });
 
@@ -352,11 +442,11 @@ void main() {
 
       final json = result.toJson();
       expect(json['model'], equals('gpt-4'));
-      expect(json['stopReason'], equals(StopReason.maxTokens.toString()));
+      expect(json['stopReason'], equals(StopReason.maxTokens.name));
       expect(json['role'], equals('assistant'));
       expect(json['content']['type'], equals('text'));
       expect(json['content']['text'], equals('Hello, world!'));
-      expect(json['_meta'], isNull); // `_meta` is not included in `toJson`
+      expect(json['_meta'], equals({'key': 'value'}));
 
       final deserialized = CreateMessageResult.fromJson({
         'model': 'gpt-4',

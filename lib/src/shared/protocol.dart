@@ -610,8 +610,10 @@ abstract class Protocol {
     final handler = _requestHandlers[request.method] ?? fallbackRequestHandler;
 
     // Check for related task ID in metadata
-    final meta = request.params?['_meta'] as Map<String, dynamic>?;
-    final relatedTaskJson = meta?['relatedTask'] as Map<String, dynamic>?;
+    final meta =
+        request.meta ?? request.params?['_meta'] as Map<String, dynamic>?;
+    final relatedTaskJson = (meta?[relatedTaskMetadataKey] ??
+        meta?[legacyRelatedTaskMetadataKey]) as Map<String, dynamic>?;
     final relatedTaskId = relatedTaskJson?['taskId'] as String?;
 
     if (handler == null) {
@@ -968,7 +970,7 @@ abstract class Protocol {
 
     if (options?.relatedTask != null) {
       finalMeta = Map<String, dynamic>.from(finalMeta ?? {});
-      finalMeta['relatedTask'] = options!.relatedTask!.toJson();
+      finalMeta[relatedTaskMetadataKey] = options!.relatedTask!.toJson();
     }
 
     if (finalMeta != null && finalParams == null) {
@@ -1131,7 +1133,7 @@ abstract class Protocol {
 
     if (relatedTask != null) {
       finalMeta = Map<String, dynamic>.from(finalMeta ?? {});
-      finalMeta['relatedTask'] = relatedTask.toJson();
+      finalMeta[relatedTaskMetadataKey] = relatedTask.toJson();
     }
 
     if (finalMeta != null && finalParams == null) {

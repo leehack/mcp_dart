@@ -1,5 +1,12 @@
 import '../types.dart';
 
+/// Metadata key for associating a request/notification with a task.
+const String relatedTaskMetadataKey = 'io.modelcontextprotocol/related-task';
+
+/// Legacy metadata key retained for backward compatibility.
+@Deprecated('Use relatedTaskMetadataKey instead')
+const String legacyRelatedTaskMetadataKey = 'relatedTask';
+
 /// Interface for storing and retrieving tasks.
 abstract class TaskStore {
   /// Creates a new task with the given creation parameters.

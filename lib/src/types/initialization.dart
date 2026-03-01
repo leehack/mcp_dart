@@ -1,9 +1,49 @@
+import 'content.dart';
 import 'json_rpc.dart';
 
-/// Describes the name and version of an MCP implementation (client or server).
+Map<String, dynamic>? _asJsonObject(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.cast<String, dynamic>();
+  }
+  if (value is bool) {
+    return value ? <String, dynamic>{} : null;
+  }
+  throw FormatException('Expected object capability, got ${value.runtimeType}');
+}
+
+bool? _capabilityDeclared(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is bool) {
+    return value;
+  }
+  if (value is Map) {
+    return true;
+  }
+  throw FormatException('Expected capability marker, got ${value.runtimeType}');
+}
+
+Map<String, dynamic>? _serializeCapabilityObject(bool? declared) {
+  if (declared == true) {
+    return <String, dynamic>{};
+  }
+  return null;
+}
+
+/// Describes an MCP implementation (client or server).
 class Implementation {
   /// The name of the implementation.
   final String name;
+
+  /// A human-readable title for this implementation.
+  final String? title;
 
   /// The version string of the implementation.
   final String version;
@@ -11,24 +51,41 @@ class Implementation {
   /// A description of the implementation.
   final String? description;
 
+  /// Icons for the implementation.
+  final List<McpIcon>? icons;
+
+  /// Website URL for the implementation.
+  final String? websiteUrl;
+
   const Implementation({
     required this.name,
+    this.title,
     required this.version,
     this.description,
+    this.icons,
+    this.websiteUrl,
   });
 
   factory Implementation.fromJson(Map<String, dynamic> json) {
     return Implementation(
       name: json['name'] as String,
+      title: json['title'] as String?,
       version: json['version'] as String,
       description: json['description'] as String?,
+      icons: (json['icons'] as List<dynamic>?)
+          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      websiteUrl: json['websiteUrl'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'name': name,
+        if (title != null) 'title': title,
         'version': version,
         if (description != null) 'description': description,
+        if (icons != null) 'icons': icons?.map((e) => e.toJson()).toList(),
+        if (websiteUrl != null) 'websiteUrl': websiteUrl,
       };
 }
 
@@ -141,19 +198,27 @@ class ClientElicitation {
 
 /// Capabilities related to sampling.
 class ClientCapabilitiesSampling {
+  /// Whether the client supports context inclusion via `includeContext`.
+  final bool context;
+
   /// Whether the client supports sampling with tools.
   final bool tools;
 
-  const ClientCapabilitiesSampling({this.tools = false});
+  const ClientCapabilitiesSampling({
+    this.context = false,
+    this.tools = false,
+  });
 
   factory ClientCapabilitiesSampling.fromJson(Map<String, dynamic> json) {
     return ClientCapabilitiesSampling(
-      tools: json['tools'] as bool? ?? false,
+      context: _capabilityDeclared(json['context']) ?? false,
+      tools: _capabilityDeclared(json['tools']) ?? false,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        if (tools) 'tools': tools,
+        if (context) 'context': <String, dynamic>{},
+        if (tools) 'tools': <String, dynamic>{},
       };
 }
 
@@ -178,7 +243,7 @@ class ClientCapabilitiesTasksElicitation {
   factory ClientCapabilitiesTasksElicitation.fromJson(
     Map<String, dynamic> json,
   ) {
-    final createMap = json['create'] as Map<String, dynamic>?;
+    final createMap = _asJsonObject(json['create']);
     return ClientCapabilitiesTasksElicitation(
       create: createMap != null
           ? ClientCapabilitiesTasksElicitationCreate.fromJson(createMap)
@@ -210,7 +275,7 @@ class ClientCapabilitiesTasksSampling {
   const ClientCapabilitiesTasksSampling({this.createMessage});
 
   factory ClientCapabilitiesTasksSampling.fromJson(Map<String, dynamic> json) {
-    final createMessageMap = json['createMessage'] as Map<String, dynamic>?;
+    final createMessageMap = _asJsonObject(json['createMessage']);
     return ClientCapabilitiesTasksSampling(
       createMessage: createMessageMap != null
           ? ClientCapabilitiesTasksSamplingCreateMessage.fromJson(
@@ -240,8 +305,8 @@ class ClientCapabilitiesTasksRequests {
   });
 
   factory ClientCapabilitiesTasksRequests.fromJson(Map<String, dynamic> json) {
-    final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
-    final samplingMap = json['sampling'] as Map<String, dynamic>?;
+    final elicitationMap = _asJsonObject(json['elicitation']);
+    final samplingMap = _asJsonObject(json['sampling']);
 
     return ClientCapabilitiesTasksRequests(
       elicitation: elicitationMap != null
@@ -277,21 +342,26 @@ class ClientCapabilitiesTasks {
   });
 
   factory ClientCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
-    final requestsMap = json['requests'] as Map<String, dynamic>?;
+    final requestsMap = _asJsonObject(json['requests']);
     return ClientCapabilitiesTasks(
-      cancel: json['cancel'] as bool?,
-      list: json['list'] as bool?,
+      cancel: _capabilityDeclared(json['cancel']),
+      list: _capabilityDeclared(json['list']),
       requests: requestsMap == null
           ? null
           : ClientCapabilitiesTasksRequests.fromJson(requestsMap),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        if (cancel != null) 'cancel': cancel,
-        if (list != null) 'list': list,
-        if (requests != null) 'requests': requests!.toJson(),
-      };
+  Map<String, dynamic> toJson() {
+    final cancelCapability = _serializeCapabilityObject(cancel);
+    final listCapability = _serializeCapabilityObject(list);
+
+    return {
+      if (cancelCapability != null) 'cancel': cancelCapability,
+      if (listCapability != null) 'list': listCapability,
+      if (requests != null) 'requests': requests!.toJson(),
+    };
+  }
 }
 
 /// Capabilities a client may support.
@@ -327,11 +397,11 @@ class ClientCapabilities {
   });
 
   factory ClientCapabilities.fromJson(Map<String, dynamic> json) {
-    final rootsMap = json['roots'] as Map<String, dynamic>?;
-    final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
-    final tasksMap = json['tasks'] as Map<String, dynamic>?;
-    final samplingMap = json['sampling'] as Map<String, dynamic>?;
-    final extensionsMap = json['extensions'] as Map<String, dynamic>?;
+    final rootsMap = _asJsonObject(json['roots']);
+    final elicitationMap = _asJsonObject(json['elicitation']);
+    final tasksMap = _asJsonObject(json['tasks']);
+    final samplingMap = _asJsonObject(json['sampling']);
+    final extensionsMap = _asJsonObject(json['extensions']);
 
     return ClientCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,
@@ -574,23 +644,97 @@ class ServerCapabilitiesCompletions {
 }
 
 /// Describes capabilities related to tasks.
-class ServerCapabilitiesTasks {
-  /// Whether the server supports `notifications/tasks/list_changed`.
-  final bool? listChanged;
+class ServerCapabilitiesTasksToolsCall {
+  const ServerCapabilitiesTasksToolsCall();
 
-  const ServerCapabilitiesTasks({
-    this.listChanged,
-  });
+  factory ServerCapabilitiesTasksToolsCall.fromJson(Map<String, dynamic> json) {
+    return const ServerCapabilitiesTasksToolsCall();
+  }
 
-  factory ServerCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
-    return ServerCapabilitiesTasks(
-      listChanged: json['listChanged'] as bool?,
+  Map<String, dynamic> toJson() => {};
+}
+
+class ServerCapabilitiesTasksTools {
+  final ServerCapabilitiesTasksToolsCall? call;
+
+  const ServerCapabilitiesTasksTools({this.call});
+
+  factory ServerCapabilitiesTasksTools.fromJson(Map<String, dynamic> json) {
+    final callMap = _asJsonObject(json['call']);
+    return ServerCapabilitiesTasksTools(
+      call: callMap == null
+          ? null
+          : ServerCapabilitiesTasksToolsCall.fromJson(callMap),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        if (listChanged != null) 'listChanged': listChanged,
+        if (call != null) 'call': call!.toJson(),
       };
+}
+
+class ServerCapabilitiesTasksRequests {
+  final ServerCapabilitiesTasksTools? tools;
+
+  const ServerCapabilitiesTasksRequests({this.tools});
+
+  factory ServerCapabilitiesTasksRequests.fromJson(Map<String, dynamic> json) {
+    final toolsMap = _asJsonObject(json['tools']);
+    return ServerCapabilitiesTasksRequests(
+      tools: toolsMap == null
+          ? null
+          : ServerCapabilitiesTasksTools.fromJson(toolsMap),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (tools != null) 'tools': tools!.toJson(),
+      };
+}
+
+class ServerCapabilitiesTasks {
+  /// Whether this server supports `tasks/list`.
+  final bool? list;
+
+  /// Whether this server supports `tasks/cancel`.
+  final bool? cancel;
+
+  /// Specifies which request types can be augmented with tasks.
+  final ServerCapabilitiesTasksRequests? requests;
+
+  /// Legacy non-spec field retained for compatibility.
+  final bool? listChanged;
+
+  const ServerCapabilitiesTasks({
+    this.list,
+    this.cancel,
+    this.requests,
+    this.listChanged,
+  });
+
+  factory ServerCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
+    final requestsMap = _asJsonObject(json['requests']);
+    return ServerCapabilitiesTasks(
+      list: _capabilityDeclared(json['list']),
+      cancel: _capabilityDeclared(json['cancel']),
+      requests: requestsMap == null
+          ? null
+          : ServerCapabilitiesTasksRequests.fromJson(requestsMap),
+      listChanged: json['listChanged'] as bool?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final listCapability = _serializeCapabilityObject(list);
+    final cancelCapability = _serializeCapabilityObject(cancel);
+
+    return {
+      if (listCapability != null) 'list': listCapability,
+      if (cancelCapability != null) 'cancel': cancelCapability,
+      if (requests != null) 'requests': requests!.toJson(),
+      if (listChanged != null) 'listChanged': listChanged,
+    };
+  }
 }
 
 /// Capabilities a server may support.
@@ -638,13 +782,13 @@ class ServerCapabilities {
   });
 
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
-    final pMap = json['prompts'] as Map<String, dynamic>?;
-    final rMap = json['resources'] as Map<String, dynamic>?;
-    final cMap = json['completions'] as Map<String, dynamic>?;
-    final tMap = json['tools'] as Map<String, dynamic>?;
-    final tasksMap = json['tasks'] as Map<String, dynamic>?;
-    final elicitationMap = json['elicitation'] as Map<String, dynamic>?;
-    final extensionsMap = json['extensions'] as Map<String, dynamic>?;
+    final pMap = _asJsonObject(json['prompts']);
+    final rMap = _asJsonObject(json['resources']);
+    final cMap = _asJsonObject(json['completions']);
+    final tMap = _asJsonObject(json['tools']);
+    final tasksMap = _asJsonObject(json['tasks']);
+    final elicitationMap = _asJsonObject(json['elicitation']);
+    final extensionsMap = _asJsonObject(json['extensions']);
 
     return ServerCapabilities(
       experimental: json['experimental'] as Map<String, dynamic>?,

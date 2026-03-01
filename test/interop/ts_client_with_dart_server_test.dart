@@ -112,7 +112,7 @@ void main() {
             );
             request.response.headers.add(
               'Access-Control-Allow-Headers',
-              'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+              'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization, MCP-Protocol-Version',
             );
 
             if (request.method == 'OPTIONS') {

@@ -226,6 +226,11 @@ class McpClient extends Protocol {
       _serverVersion = result.serverInfo;
       _instructions = result.instructions;
 
+      if (transport is ProtocolVersionAwareTransport) {
+        (transport as ProtocolVersionAwareTransport).protocolVersion =
+            result.protocolVersion;
+      }
+
       const initializedNotification = JsonRpcInitializedNotification();
       await notification(initializedNotification);
 

@@ -79,8 +79,8 @@ void main() {
             role: SamplingMessageRole.user, // Corrected
             content: SamplingToolResultContent(
               toolUseId: 'call1',
-              content: 'tool result',
-            ), // Corrected: content can be string or list
+              content: [TextContent(text: 'tool result')],
+            ),
           ),
         ],
         maxTokens: 100,
@@ -128,7 +128,7 @@ void main() {
             role: SamplingMessageRole.user, // Corrected
             content: SamplingToolResultContent(
               toolUseId: 'call2',
-              content: 'tool result',
+              content: [TextContent(text: 'tool result')],
             ), // Corrected
           ),
         ],

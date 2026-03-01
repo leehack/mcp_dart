@@ -75,7 +75,7 @@ class StreamableHTTPServerTransportOptions {
     this.onsessioninitialized,
     this.enableJsonResponse = false,
     this.eventStore,
-    this.enableDnsRebindingProtection = false,
+    this.enableDnsRebindingProtection = true,
     this.allowedHosts,
     this.allowedOrigins,
   });
@@ -181,6 +181,10 @@ class StreamableHTTPServerTransport implements Transport {
       return;
     }
 
+    if (!await _validateProtocolVersionHeader(req, req.response)) {
+      return;
+    }
+
     if (req.method == "POST") {
       await _handlePostRequest(req, parsedBody);
     } else if (req.method == "GET") {
@@ -190,6 +194,40 @@ class StreamableHTTPServerTransport implements Transport {
     } else {
       await _handleUnsupportedRequest(req.response);
     }
+  }
+
+  Future<bool> _validateProtocolVersionHeader(
+    HttpRequest req,
+    HttpResponse res,
+  ) async {
+    final versionHeader = req.headers.value('mcp-protocol-version');
+    if (versionHeader == null || versionHeader.trim().isEmpty) {
+      return true;
+    }
+
+    final requestedVersion = versionHeader.trim();
+    if (supportedProtocolVersions.contains(requestedVersion)) {
+      return true;
+    }
+
+    res.statusCode = HttpStatus.badRequest;
+    res.write(
+      jsonEncode(
+        JsonRpcError(
+          id: null,
+          error: JsonRpcErrorData(
+            code: ErrorCode.invalidRequest.value,
+            message: 'Invalid MCP-Protocol-Version header',
+            data: {
+              'requested': requestedVersion,
+              'supported': supportedProtocolVersions,
+            },
+          ),
+        ).toJson(),
+      ),
+    );
+    await _safeClose(res);
+    return false;
   }
 
   bool _isRequestAllowedByDnsRebindingProtection(HttpRequest request) {
@@ -554,53 +592,66 @@ class StreamableHTTPServerTransport implements Transport {
         rawMessage = jsonDecode(bodyString);
       }
 
-      List<JsonRpcMessage> messages = [];
-
-      // Handle batch and single messages
+      // Streamable HTTP requires a single JSON-RPC message per POST body.
       if (rawMessage is List) {
-        for (final msg in rawMessage) {
-          try {
-            messages.add(JsonRpcMessage.fromJson(msg));
-          } catch (e) {
-            req.response.statusCode = HttpStatus.badRequest;
-            req.response.write(
-              jsonEncode(
-                JsonRpcError(
-                  id: null,
-                  error: JsonRpcErrorData(
-                    code: ErrorCode.parseError.value,
-                    message: 'Parse error',
-                    data: e.toString(),
-                  ),
-                ).toJson(),
+        req.response.statusCode = HttpStatus.badRequest;
+        req.response.write(
+          jsonEncode(
+            JsonRpcError(
+              id: null,
+              error: JsonRpcErrorData(
+                code: ErrorCode.invalidRequest.value,
+                message:
+                    'Invalid Request: Batch JSON-RPC payloads are not supported',
               ),
-            );
-            await _safeClose(req.response);
-            onerror?.call(e is Error ? e : StateError(e.toString()));
-            return;
-          }
-        }
-      } else {
-        try {
-          messages = [JsonRpcMessage.fromJson(rawMessage)];
-        } catch (e) {
-          req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(
-            jsonEncode(
-              JsonRpcError(
-                id: null,
-                error: JsonRpcErrorData(
-                  code: ErrorCode.parseError.value,
-                  message: 'Parse error',
-                  data: e.toString(),
-                ),
-              ).toJson(),
-            ),
-          );
-          await _safeClose(req.response);
-          onerror?.call(e is Error ? e : StateError(e.toString()));
-          return;
-        }
+            ).toJson(),
+          ),
+        );
+        await _safeClose(req.response);
+        return;
+      }
+
+      if (rawMessage is! Map) {
+        req.response.statusCode = HttpStatus.badRequest;
+        req.response.write(
+          jsonEncode(
+            JsonRpcError(
+              id: null,
+              error: JsonRpcErrorData(
+                code: ErrorCode.invalidRequest.value,
+                message:
+                    'Invalid Request: POST body must contain a JSON-RPC message object',
+              ),
+            ).toJson(),
+          ),
+        );
+        await _safeClose(req.response);
+        return;
+      }
+
+      List<JsonRpcMessage> messages;
+      try {
+        final messageJson = rawMessage is Map<String, dynamic>
+            ? rawMessage
+            : rawMessage.cast<String, dynamic>();
+        messages = [JsonRpcMessage.fromJson(messageJson)];
+      } catch (e) {
+        req.response.statusCode = HttpStatus.badRequest;
+        req.response.write(
+          jsonEncode(
+            JsonRpcError(
+              id: null,
+              error: JsonRpcErrorData(
+                code: ErrorCode.parseError.value,
+                message: 'Parse error',
+                data: e.toString(),
+              ),
+            ).toJson(),
+          ),
+        );
+        await _safeClose(req.response);
+        onerror?.call(e is Error ? e : StateError(e.toString()));
+        return;
       }
 
       // Check if this is an initialization request

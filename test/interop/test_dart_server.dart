@@ -206,10 +206,11 @@ McpServer createServer() {
             maxTokens: 100,
           ),
         );
-        final content = result.content;
-        final text = content is SamplingTextContent
-            ? content.text
-            : jsonEncode(content.toJson());
+        final contentBlocks = result.contentBlocks;
+        final text = contentBlocks.length == 1 &&
+                contentBlocks.first is SamplingTextContent
+            ? (contentBlocks.first as SamplingTextContent).text
+            : jsonEncode(contentBlocks.map((block) => block.toJson()).toList());
         return CallToolResult(
           content: [TextContent(text: text)],
         );

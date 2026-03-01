@@ -122,6 +122,49 @@ void main() {
       expect(res.statusCode, HttpStatus.badRequest);
     });
 
+    test('rejects batch JSON-RPC payloads with 400', () async {
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final initRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(initRequest.toJson()),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+      );
+      expect(initRes.statusCode, HttpStatus.ok);
+
+      final sessionId = initRes.headers['mcp-session-id'];
+      expect(sessionId, isNotNull);
+
+      final batchRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode([
+          const JsonRpcRequest(id: 2, method: 'ping').toJson(),
+          const JsonRpcNotification(method: 'notifications/initialized')
+              .toJson(),
+        ]),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': sessionId!,
+        },
+      );
+
+      expect(batchRes.statusCode, HttpStatus.badRequest);
+      final body = jsonDecode(batchRes.body) as Map<String, dynamic>;
+      expect(body['error']['code'], ErrorCode.invalidRequest.value);
+    });
+
     test('rejects GET without session ID', () async {
       final res = await http.get(Uri.parse(baseUrl));
       expect(res.statusCode, HttpStatus.badRequest);
@@ -188,6 +231,33 @@ void main() {
       );
       await server.start();
 
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(Uri.parse(baseUrl));
+        req.headers.contentType = ContentType.json;
+        req.headers.set(HttpHeaders.hostHeader, 'evil.example');
+        req.headers.set('Accept', 'application/json, text/event-stream');
+        req.write(jsonEncode(initRequest.toJson()));
+
+        final res = await req.close();
+        expect(res.statusCode, HttpStatus.forbidden);
+        await res.drain();
+      } finally {
+        client.close(force: true);
+      }
+    });
+
+    test('dns rebinding protection is enabled by default', () async {
       final initRequest = JsonRpcRequest(
         id: 1,
         method: 'initialize',

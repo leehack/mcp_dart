@@ -75,7 +75,7 @@ class StreamableMcpServer {
     this.path = '/mcp',
     this.eventStore,
     this.authenticator,
-    this.enableDnsRebindingProtection = false,
+    this.enableDnsRebindingProtection = true,
     this.allowedHosts,
     this.allowedOrigins,
   }) : _serverFactory = serverFactory;
@@ -212,6 +212,44 @@ class StreamableMcpServer {
               error: JsonRpcErrorData(
                 code: ErrorCode.parseError.value,
                 message: 'Parse error',
+              ),
+            ).toJson(),
+          ),
+        )
+        ..close();
+      return;
+    }
+
+    if (body is List) {
+      request.response
+        ..statusCode = HttpStatus.badRequest
+        ..write(
+          jsonEncode(
+            JsonRpcError(
+              id: null,
+              error: JsonRpcErrorData(
+                code: ErrorCode.invalidRequest.value,
+                message:
+                    'Invalid Request: Batch JSON-RPC payloads are not supported',
+              ),
+            ).toJson(),
+          ),
+        )
+        ..close();
+      return;
+    }
+
+    if (body is! Map) {
+      request.response
+        ..statusCode = HttpStatus.badRequest
+        ..write(
+          jsonEncode(
+            JsonRpcError(
+              id: null,
+              error: JsonRpcErrorData(
+                code: ErrorCode.invalidRequest.value,
+                message:
+                    'Invalid Request: POST body must contain a JSON-RPC message object',
               ),
             ).toJson(),
           ),
@@ -480,7 +518,7 @@ class StreamableMcpServer {
         .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     response.headers.set(
       'Access-Control-Allow-Headers',
-      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization, MCP-Protocol-Version',
     );
     response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Max-Age', defaultCorsMaxAgeSeconds);
