@@ -300,11 +300,32 @@ class StreamableHTTPServerTransport implements Transport {
     return '${parsedUri.scheme.toLowerCase()}://$normalizedHost$portPart';
   }
 
+  Set<String> _parseAcceptedMediaTypes(HttpRequest req) {
+    final acceptHeaderValues = req.headers[HttpHeaders.acceptHeader];
+    if (acceptHeaderValues == null || acceptHeaderValues.isEmpty) {
+      return const <String>{};
+    }
+
+    return acceptHeaderValues
+        .expand((value) => value.split(','))
+        .map((value) => value.split(';').first.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+  }
+
+  bool _acceptsMediaType(
+    Set<String> acceptedMediaTypes,
+    String expectedMediaType,
+  ) {
+    final normalizedExpectedMediaType = expectedMediaType.toLowerCase();
+    return acceptedMediaTypes.contains(normalizedExpectedMediaType);
+  }
+
   /// Handles GET requests for SSE stream
   Future<void> _handleGetRequest(HttpRequest req) async {
     // The client MUST include an Accept header, listing text/event-stream as a supported content type.
-    final acceptHeader = req.headers.value(HttpHeaders.acceptHeader) ?? '';
-    if (!acceptHeader.contains("text/event-stream")) {
+    final acceptedMediaTypes = _parseAcceptedMediaTypes(req);
+    if (!_acceptsMediaType(acceptedMediaTypes, 'text/event-stream')) {
       req.response
         ..statusCode = HttpStatus.notAcceptable
         ..write(
@@ -483,10 +504,10 @@ class StreamableHTTPServerTransport implements Transport {
   Future<void> _handlePostRequest(HttpRequest req, [dynamic parsedBody]) async {
     try {
       // Validate the Accept header
-      final acceptHeader = req.headers.value(HttpHeaders.acceptHeader) ?? '';
+      final acceptedMediaTypes = _parseAcceptedMediaTypes(req);
       // The client MUST include an Accept header, listing both application/json and text/event-stream as supported content types.
-      if (!acceptHeader.contains("application/json") ||
-          !acceptHeader.contains("text/event-stream")) {
+      if (!_acceptsMediaType(acceptedMediaTypes, 'application/json') ||
+          !_acceptsMediaType(acceptedMediaTypes, 'text/event-stream')) {
         req.response.statusCode = HttpStatus.notAcceptable;
         req.response.write(
           jsonEncode(
