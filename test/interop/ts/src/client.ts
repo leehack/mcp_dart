@@ -59,7 +59,9 @@ async function main() {
         roots: {
           listChanged: true,
         },
-        sampling: {},
+        sampling: {
+          tools: {},
+        },
         elicitation: {
           form: {
             applyDefaults: true,
@@ -81,18 +83,41 @@ async function main() {
     };
   });
 
+  const extractPromptText = (content: unknown): string => {
+    if (Array.isArray(content)) {
+      const firstTextBlock = content.find((item) => {
+        if (typeof item !== 'object' || item === null) {
+          return false;
+        }
+
+        const maybeBlock = item as { type?: unknown; text?: unknown };
+        return maybeBlock.type === 'text' && typeof maybeBlock.text === 'string';
+      }) as { text?: string } | undefined;
+
+      if (typeof firstTextBlock?.text === 'string') {
+        return firstTextBlock.text;
+      }
+
+      return JSON.stringify(content);
+    }
+
+    if (typeof content === 'object' && content !== null) {
+      const maybeBlock = content as { text?: unknown };
+      if (typeof maybeBlock.text === 'string') {
+        return maybeBlock.text;
+      }
+    }
+
+    return 'unknown';
+  };
+
   // Sampling handler - return mock LLM response
   client.setRequestHandler(CreateMessageRequestSchema, async (request) => {
     // Extract the prompt from the request
     const messages = request.params?.messages || [];
     const firstMessage = messages[0];
-    let promptText = 'unknown';
-    if (firstMessage?.content) {
-      const content = firstMessage.content;
-      if (typeof content === 'object' && 'text' in content) {
-        promptText = content.text as string;
-      }
-    }
+    const promptText = extractPromptText(firstMessage?.content);
+
     return {
       model: 'mock-llm-model',
       role: 'assistant' as const,
@@ -254,6 +279,19 @@ async function main() {
       throw new Error(`sample_llm failed. Got: ${sampleText}`);
     }
     console.log('sample_llm passed!');
+
+    // Test sample_llm again to verify repeated sampling requests
+    console.log('Testing sample_llm repeat call...');
+    const sampleRepeatResult = await client.callTool({
+      name: 'sample_llm',
+      arguments: { prompt: 'Hello again!' },
+    });
+    // @ts-expect-error - accessing content array element
+    const sampleRepeatText = sampleRepeatResult.content[0].text;
+    if (!sampleRepeatText.includes('Mock LLM response')) {
+      throw new Error(`sample_llm repeat failed. Got: ${sampleRepeatText}`);
+    }
+    console.log('sample_llm repeat passed!');
 
     // Test elicit_input tool (server requests user input)
     console.log('Testing elicit_input...');

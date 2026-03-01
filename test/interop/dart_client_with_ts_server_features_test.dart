@@ -31,8 +31,11 @@ void main() {
     group('Stdio Transport', () {
       late McpClient client;
       late StdioClientTransport transport;
+      late List<ToolChoiceMode?> observedToolChoiceModes;
 
       setUp(() async {
+        observedToolChoiceModes = [];
+
         // 1. Create the StdioClientTransport with server parameters
         transport = StdioClientTransport(
           StdioServerParameters(
@@ -48,7 +51,7 @@ void main() {
           options: const McpClientOptions(
             capabilities: ClientCapabilities(
               roots: ClientCapabilitiesRoots(listChanged: true),
-              sampling: ClientCapabilitiesSampling(),
+              sampling: ClientCapabilitiesSampling(tools: true),
               elicitation: ClientElicitation.formOnly(),
             ),
           ),
@@ -82,11 +85,16 @@ void main() {
           final firstMessage = params.messages.firstOrNull;
           String promptText = 'unknown';
           if (firstMessage != null) {
-            final content = firstMessage.content;
-            if (content is SamplingTextContent) {
-              promptText = content.text;
+            final firstText = firstMessage.contentBlocks
+                .whereType<SamplingTextContent>()
+                .firstOrNull;
+            if (firstText != null) {
+              promptText = firstText.text;
             }
           }
+
+          observedToolChoiceModes.add(params.toolChoiceConfig?.mode);
+
           return CreateMessageResult(
             model: 'mock-llm-model',
             role: SamplingMessageRole.assistant,
@@ -139,6 +147,30 @@ void main() {
         final textContent = result.content.first as TextContent;
         expect(textContent.text, contains('Mock LLM response'));
         expect(textContent.text, contains('Hello, world!'));
+        expect(observedToolChoiceModes, contains(ToolChoiceMode.auto));
+      });
+
+      test('sample_llm - supports repeated sampling requests', () async {
+        final first = await client.callTool(
+          const CallToolRequest(
+            name: 'sample_llm',
+            arguments: {'prompt': 'First prompt'},
+          ),
+        );
+
+        final second = await client.callTool(
+          const CallToolRequest(
+            name: 'sample_llm',
+            arguments: {'prompt': 'Second prompt'},
+          ),
+        );
+
+        final firstText = (first.content.first as TextContent).text;
+        final secondText = (second.content.first as TextContent).text;
+
+        expect(firstText, contains('First prompt'));
+        expect(secondText, contains('Second prompt'));
+        expect(observedToolChoiceModes, contains(ToolChoiceMode.auto));
       });
 
       test('elicit_input - server requests user input', () async {

@@ -256,10 +256,16 @@ function createInteropServer(): McpServer {
             },
           ],
           maxTokens: 100,
+          toolChoice: {
+            mode: 'auto',
+          },
         });
         const content = result.content;
-        const text =
-          content.type === 'text' ? content.text : JSON.stringify(content);
+        const text = Array.isArray(content)
+          ? JSON.stringify(content)
+          : content.type === 'text'
+            ? content.text
+            : JSON.stringify(content);
         return {
           content: [{ type: 'text', text }],
         };
