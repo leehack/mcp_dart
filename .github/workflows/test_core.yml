@@ -66,6 +66,7 @@ jobs:
           echo "✓ Package achieves perfect 160/160 score"
 
       - name: Upload coverage to Codecov
+        if: github.event_name != 'pull_request' || github.actor != 'dependabot[bot]'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
