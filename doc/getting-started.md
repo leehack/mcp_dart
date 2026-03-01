@@ -142,6 +142,13 @@ By default:
 
 ### Integrate with `package:logging`
 
+If your app does not already depend on `package:logging`, add it first:
+
+```yaml
+dependencies:
+  logging: ^1.2.0
+```
+
 Use import aliases to avoid `Logger` name collisions:
 
 ```dart
