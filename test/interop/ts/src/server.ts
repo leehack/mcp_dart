@@ -474,7 +474,10 @@ async function main() {
         }
 
         console.log(
-          `[TS Server] POST /mcp received. Session ID: ${sessionId}. Req Body:`,
+          '[TS Server] POST /mcp received.',
+          'Session ID:',
+          sessionId,
+          'Req Body:',
           req.body
         );
         await transport.handleRequest(req, res);
