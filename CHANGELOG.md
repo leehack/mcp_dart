@@ -4,15 +4,26 @@
 
 - Added SDK runtime logging helper APIs: `setMcpLogHandler`, `resetMcpLogHandler`, and `silenceMcpLogs`.
 - Added `Logger.resetHandler()` to restore the default internal log output.
+- Added backward-compatible sampling/content API shims while keeping 2025-11-25 wire-format compliance:
+  - `CreateMessageRequest.toolChoice` supports legacy map and typed `ToolChoice`
+  - `SamplingMessage.content` and `CreateMessageResult.content` accept single or array content forms with normalized `contentBlocks` access
+  - `ResourceLink.annotations` supports map form with typed `parsedAnnotations` accessor
+- Added Streamable HTTP compatibility toggles:
+  - `strictProtocolVersionHeaderValidation`
+  - `rejectBatchJsonRpcPayloads`
 
 ### Documentation
 
 - Added runtime logging guidance with `package:logging` integration examples using import aliases.
 - Updated transport logging middleware examples to match SDK logger methods (`debug/info/warn/error`).
+- Added `doc/migration_2025_11_25_compat.md` with compatibility-mode and API migration guidance.
+- Updated transport/client/quick-reference docs for strict defaults and compatibility toggles.
 
 ### Reliability
 
 - Fixed Streamable HTTP `Accept` header parsing to handle repeated/multi-value headers without throwing `HttpException`, improving compatibility with clients that send duplicated or split `Accept` values.
+- Centralized DNS rebinding validation across Streamable HTTP and legacy SSE server entry points.
+- Added interop coverage for Dart/TypeScript sampling flows (`sampling.tools` capability and tool-choice propagation).
 
 ## 2.0.0
 
