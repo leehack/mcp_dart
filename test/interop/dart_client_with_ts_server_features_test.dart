@@ -19,12 +19,19 @@ void main() {
 
   // Check if we should skip
   final skipTests = !io.File(tsServerScript).existsSync();
+  final isCi = io.Platform.environment['CI'] == 'true';
 
   group('TS Interop - Dart Client Features', () {
     if (skipTests) {
-      print(
-        'Skipping TS Interop Feature tests: TS server not found at $tsServerScript',
-      );
+      final reason =
+          'TS interop feature tests require compiled fixture at $tsServerScript';
+      if (isCi) {
+        test('TS fixture is available in CI', () {
+          fail(reason);
+        });
+      } else {
+        print('Skipping TS Interop Feature tests: $reason');
+      }
       return;
     }
 
@@ -94,6 +101,19 @@ void main() {
           }
 
           observedToolChoiceModes.add(params.toolChoiceConfig?.mode);
+
+          if (promptText.contains('[multi]')) {
+            return CreateMessageResult(
+              model: 'mock-llm-model',
+              role: SamplingMessageRole.assistant,
+              content: [
+                SamplingTextContent(
+                  text: 'Mock LLM response to: $promptText',
+                ),
+                const SamplingTextContent(text: 'Mock LLM follow-up block'),
+              ],
+            );
+          }
 
           return CreateMessageResult(
             model: 'mock-llm-model',
@@ -170,6 +190,28 @@ void main() {
 
         expect(firstText, contains('First prompt'));
         expect(secondText, contains('Second prompt'));
+        expect(observedToolChoiceModes, contains(ToolChoiceMode.auto));
+      });
+
+      test('sample_llm - handles multi-block sampling response', () async {
+        final result = await client.callTool(
+          const CallToolRequest(
+            name: 'sample_llm',
+            arguments: {'prompt': 'Hello [multi] world!'},
+          ),
+        );
+
+        expect(result.content, isNotEmpty);
+        final textContent = result.content.first as TextContent;
+        final decoded = jsonDecode(textContent.text);
+        expect(decoded, isA<List>());
+
+        final blocks = (decoded as List).cast<Map<String, dynamic>>();
+        expect(blocks, hasLength(greaterThanOrEqualTo(2)));
+        expect(blocks.first['type'], equals('text'));
+        expect(blocks.first['text'], contains('Mock LLM response to:'));
+        expect(blocks[1]['type'], equals('text'));
+        expect(blocks[1]['text'], equals('Mock LLM follow-up block'));
         expect(observedToolChoiceModes, contains(ToolChoiceMode.auto));
       });
 

@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: dart pub get
 
+      - name: Run interop test suite
+        run: dart test -t interop
+
       - name: Running tests with coverage
         run: |
           dart pub global activate coverage

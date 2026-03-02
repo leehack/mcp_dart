@@ -256,6 +256,18 @@ function createInteropServer(): McpServer {
             },
           ],
           maxTokens: 100,
+          tools: [
+            {
+              name: 'mock_helper',
+              description: 'Mock helper tool for sampling interop tests',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+              },
+            },
+          ],
           toolChoice: {
             mode: 'auto',
           },

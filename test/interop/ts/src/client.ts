@@ -118,6 +118,23 @@ async function main() {
     const firstMessage = messages[0];
     const promptText = extractPromptText(firstMessage?.content);
 
+    if (promptText.includes('[multi]')) {
+      return {
+        model: 'mock-llm-model',
+        role: 'assistant' as const,
+        content: [
+          {
+            type: 'text' as const,
+            text: `Mock LLM response to: ${promptText}`,
+          },
+          {
+            type: 'text' as const,
+            text: 'Mock LLM follow-up block',
+          },
+        ],
+      };
+    }
+
     return {
       model: 'mock-llm-model',
       role: 'assistant' as const,
@@ -292,6 +309,52 @@ async function main() {
       throw new Error(`sample_llm repeat failed. Got: ${sampleRepeatText}`);
     }
     console.log('sample_llm repeat passed!');
+
+    // Test sample_llm with multi-block sampling response
+    console.log('Testing sample_llm multi-block response...');
+    const sampleMultiResult = await client.callTool({
+      name: 'sample_llm',
+      arguments: { prompt: 'Hello [multi] world!' },
+    });
+    // @ts-expect-error - accessing content array element
+    const sampleMultiText = sampleMultiResult.content[0].text;
+
+    let sampleMultiBlocks: unknown;
+    try {
+      sampleMultiBlocks = JSON.parse(sampleMultiText);
+    } catch (error) {
+      throw new Error(
+        `sample_llm multi-block failed to parse JSON output: ${error}`
+      );
+    }
+
+    if (!Array.isArray(sampleMultiBlocks) || sampleMultiBlocks.length < 2) {
+      throw new Error(
+        `sample_llm multi-block failed. Expected at least 2 blocks, got: ${sampleMultiText}`
+      );
+    }
+
+    const firstBlock = sampleMultiBlocks[0] as { type?: string; text?: string };
+    const secondBlock = sampleMultiBlocks[1] as {
+      type?: string;
+      text?: string;
+    };
+
+    if (firstBlock.type !== 'text' || secondBlock.type !== 'text') {
+      throw new Error(
+        `sample_llm multi-block returned unexpected block types: ${sampleMultiText}`
+      );
+    }
+
+    if (
+      !firstBlock.text?.includes('Mock LLM response') ||
+      secondBlock.text !== 'Mock LLM follow-up block'
+    ) {
+      throw new Error(
+        `sample_llm multi-block returned unexpected text: ${sampleMultiText}`
+      );
+    }
+    console.log('sample_llm multi-block passed!');
 
     // Test elicit_input tool (server requests user input)
     console.log('Testing elicit_input...');

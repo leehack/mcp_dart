@@ -204,6 +204,14 @@ McpServer createServer() {
               ),
             ],
             maxTokens: 100,
+            tools: const [
+              Tool(
+                name: 'mock_helper',
+                description: 'Mock helper tool for sampling interop tests',
+                inputSchema: JsonObject(),
+              ),
+            ],
+            toolChoice: const ToolChoice(mode: ToolChoiceMode.auto),
           ),
         );
         final contentBlocks = result.contentBlocks;
