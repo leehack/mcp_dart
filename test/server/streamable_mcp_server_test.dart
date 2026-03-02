@@ -122,6 +122,230 @@ void main() {
       expect(res.statusCode, HttpStatus.badRequest);
     });
 
+    test('rejects unsupported MCP-Protocol-Version header by default',
+        () async {
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final res = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(initRequest.toJson()),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': '1900-01-01',
+        },
+      );
+
+      expect(res.statusCode, HttpStatus.badRequest);
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      expect(body['error']['code'], ErrorCode.invalidRequest.value);
+    });
+
+    test(
+      'allows unsupported MCP-Protocol-Version when strict validation is disabled',
+      () async {
+        await server.stop();
+
+        server = StreamableMcpServer(
+          serverFactory: (sid) => McpServer(
+            const Implementation(
+              name: 'CompatServer',
+              version: '1.0',
+            ),
+          ),
+          host: host,
+          port: port,
+          strictProtocolVersionHeaderValidation: false,
+        );
+        await server.start();
+
+        final initRequest = JsonRpcRequest(
+          id: 1,
+          method: 'initialize',
+          params: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'Client', version: '1.0'),
+          ).toJson(),
+        );
+
+        final res = await http.post(
+          Uri.parse(baseUrl),
+          body: jsonEncode(initRequest.toJson()),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'MCP-Protocol-Version': '1900-01-01',
+          },
+        );
+
+        expect(res.statusCode, HttpStatus.ok);
+        expect(res.headers['mcp-session-id'], isNotNull);
+      },
+    );
+
+    test('rejects batch JSON-RPC payloads with 400', () async {
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final initRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(initRequest.toJson()),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+      );
+      expect(initRes.statusCode, HttpStatus.ok);
+
+      final sessionId = initRes.headers['mcp-session-id'];
+      expect(sessionId, isNotNull);
+
+      final batchRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode([
+          const JsonRpcRequest(id: 2, method: 'ping').toJson(),
+          const JsonRpcNotification(method: 'notifications/initialized')
+              .toJson(),
+        ]),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': sessionId!,
+        },
+      );
+
+      expect(batchRes.statusCode, HttpStatus.badRequest);
+      final body = jsonDecode(batchRes.body) as Map<String, dynamic>;
+      expect(body['error']['code'], ErrorCode.invalidRequest.value);
+    });
+
+    test('accepts batch JSON-RPC payloads when rejection is disabled',
+        () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) => McpServer(
+          const Implementation(
+            name: 'CompatServer',
+            version: '1.0',
+          ),
+        ),
+        host: host,
+        port: port,
+        rejectBatchJsonRpcPayloads: false,
+      );
+      await server.start();
+
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final initRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(initRequest.toJson()),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+      );
+      expect(initRes.statusCode, HttpStatus.ok);
+
+      final sessionId = initRes.headers['mcp-session-id'];
+      expect(sessionId, isNotNull);
+
+      final batchRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode([
+          const JsonRpcNotification(method: 'test/notify-1').toJson(),
+          const JsonRpcNotification(method: 'test/notify-2').toJson(),
+        ]),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': sessionId!,
+        },
+      );
+
+      expect(batchRes.statusCode, HttpStatus.accepted);
+    });
+
+    test('rejects empty batch payloads even when batch rejection is disabled',
+        () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) => McpServer(
+          const Implementation(
+            name: 'CompatServer',
+            version: '1.0',
+          ),
+        ),
+        host: host,
+        port: port,
+        rejectBatchJsonRpcPayloads: false,
+      );
+      await server.start();
+
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final initRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(initRequest.toJson()),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+      );
+      expect(initRes.statusCode, HttpStatus.ok);
+
+      final sessionId = initRes.headers['mcp-session-id'];
+      expect(sessionId, isNotNull);
+
+      final batchRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode([]),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': sessionId!,
+        },
+      );
+
+      expect(batchRes.statusCode, HttpStatus.badRequest);
+      final body = jsonDecode(batchRes.body) as Map<String, dynamic>;
+      expect(body['error']['code'], ErrorCode.invalidRequest.value);
+    });
+
     test('rejects GET without session ID', () async {
       final res = await http.get(Uri.parse(baseUrl));
       expect(res.statusCode, HttpStatus.badRequest);
@@ -188,6 +412,33 @@ void main() {
       );
       await server.start();
 
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(Uri.parse(baseUrl));
+        req.headers.contentType = ContentType.json;
+        req.headers.set(HttpHeaders.hostHeader, 'evil.example');
+        req.headers.set('Accept', 'application/json, text/event-stream');
+        req.write(jsonEncode(initRequest.toJson()));
+
+        final res = await req.close();
+        expect(res.statusCode, HttpStatus.forbidden);
+        await res.drain();
+      } finally {
+        client.close(force: true);
+      }
+    });
+
+    test('dns rebinding protection is enabled by default', () async {
       final initRequest = JsonRpcRequest(
         id: 1,
         method: 'initialize',

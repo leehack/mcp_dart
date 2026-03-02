@@ -61,7 +61,7 @@ dart pub get
 - ✅ **Extension Support** - Generic `extensions` negotiation with typed MCP Apps helpers and TypeScript-style `registerAppTool` / `registerAppResource`
 - ✅ **Latest Content/Metadata Types** - `resource_link`, themed `icons`, and `annotations.lastModified`
 - ✅ **OAuth2 Support** - Complete authentication with PKCE
-- ✅ **Transport Security Controls** - Optional DNS rebinding protection with host/origin allowlists
+- ✅ **Transport Security Controls** - DNS rebinding protection and strict Streamable HTTP validation with compatibility toggles
 - ✅ **Type-Safe** - Comprehensive type definitions with null safety
 - ✅ **Cross-Platform** - Works on Linux, Windows, macOS, Web, and Flutter
 
@@ -93,6 +93,7 @@ It's also backward compatible with previous versions including `2025-06-18`, `20
 ### Advanced Features
 
 - 🔐 **[OAuth Authentication](https://github.com/leehack/mcp_dart/tree/main/example/authentication)** - OAuth2 guides and examples
+- 🔁 **[2025-11-25 Compatibility Migration](https://github.com/leehack/mcp_dart/blob/main/doc/migration_2025_11_25_compat.md)** - Backward-compatible API/runtime migration notes
 - 📝 For resources, prompts, and other features, see the Server and Client guides
 
 ## Quick Start with CLI

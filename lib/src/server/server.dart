@@ -432,20 +432,15 @@ class Server extends Protocol {
     // Message structure validation - always validate tool_use/tool_result pairs.
     if (params.messages.isNotEmpty) {
       final lastMessage = params.messages.last;
-      final lastContent = lastMessage.content is List
-          ? lastMessage.content as List
-          : [lastMessage.content];
+      final lastContent = lastMessage.contentBlocks;
       final hasToolResults =
           lastContent.any((c) => c is SamplingToolResultContent);
 
       final previousMessage = params.messages.length > 1
           ? params.messages[params.messages.length - 2]
           : null;
-      final previousContent = previousMessage != null
-          ? (previousMessage.content is List
-              ? previousMessage.content as List
-              : [previousMessage.content])
-          : [];
+      final previousContent =
+          previousMessage?.contentBlocks ?? const <SamplingContent>[];
       final hasPreviousToolUse =
           previousContent.any((c) => c is SamplingToolUseContent);
 

@@ -1,3 +1,6 @@
+@Tags(['interop'])
+library;
+
 import 'dart:io' as io;
 import 'package:test/test.dart';
 import 'package:mcp_dart/mcp_dart.dart';
@@ -12,12 +15,19 @@ void main() {
 
   // Check if we should skip
   final skipTests = !io.File(tsServerScript).existsSync();
+  final isCi = io.Platform.environment['CI'] == 'true';
 
   group('TS Interop - Tasks', () {
     if (skipTests) {
-      print(
-        'Skipping TS Interop tasks tests: TS server not found at $tsServerScript',
-      );
+      final reason =
+          'TS interop task tests require compiled fixture at $tsServerScript';
+      if (isCi) {
+        test('TS fixture is available in CI', () {
+          fail(reason);
+        });
+      } else {
+        print('Skipping TS Interop tasks tests: $reason');
+      }
       return;
     }
 

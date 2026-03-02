@@ -75,7 +75,7 @@ class ToolAnnotations {
   }
 
   Map<String, dynamic> toJson() => {
-        'title': title,
+        if (title != null) 'title': title,
         'readOnlyHint': readOnlyHint,
         'destructiveHint': destructiveHint,
         'idempotentHint': idempotentHint,
@@ -112,6 +112,9 @@ class Tool {
   /// The name of the tool.
   final String name;
 
+  /// A human-readable title for the tool.
+  final String? title;
+
   /// A human-readable description of the tool.
   final String? description;
 
@@ -138,6 +141,7 @@ class Tool {
 
   const Tool({
     required this.name,
+    this.title,
     this.description,
     required this.inputSchema,
     this.outputSchema,
@@ -151,6 +155,7 @@ class Tool {
   factory Tool.fromJson(Map<String, dynamic> json) {
     return Tool(
       name: json['name'] as String,
+      title: json['title'] as String?,
       description: json['description'] as String?,
       inputSchema: JsonSchema.fromJson(
         json['inputSchema'] as Map<String, dynamic>,
@@ -178,6 +183,7 @@ class Tool {
 
   Map<String, dynamic> toJson() => {
         'name': name,
+        if (title != null) 'title': title,
         if (description != null) 'description': description,
         'inputSchema': inputSchema.toJson(),
         if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),

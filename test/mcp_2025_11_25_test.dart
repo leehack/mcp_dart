@@ -22,6 +22,39 @@ void main() {
       expect(deserialized.description, 'A test client implementation');
     });
 
+    test('Implementation Extended Metadata', () {
+      final icons = [
+        const McpIcon(
+          src: 'https://example.com/client-icon.png',
+          mimeType: 'image/png',
+          theme: IconTheme.light,
+        ),
+      ];
+
+      final impl = Implementation(
+        name: 'test-client',
+        title: 'Test Client',
+        version: '1.0.0',
+        description: 'A test client implementation',
+        icons: icons,
+        websiteUrl: 'https://example.com',
+      );
+
+      final json = impl.toJson();
+      expect(json['title'], 'Test Client');
+      expect(
+        (json['icons'] as List).single['src'],
+        'https://example.com/client-icon.png',
+      );
+      expect(json['websiteUrl'], 'https://example.com');
+
+      final deserialized = Implementation.fromJson(json);
+      expect(deserialized.title, 'Test Client');
+      expect(deserialized.icons, isNotNull);
+      expect(deserialized.icons!.single.theme, IconTheme.light);
+      expect(deserialized.websiteUrl, 'https://example.com');
+    });
+
     test('Icon Field Support', () {
       final icon = const ImageContent(data: 'base64', mimeType: 'image/png');
       final icons = [
@@ -70,6 +103,56 @@ void main() {
       expect(template.icon?.data, 'base64');
       expect(template.toJson()['icon']['data'], 'base64');
       expect((template.toJson()['icons'] as List).first['theme'], 'dark');
+    });
+
+    test('BaseMetadata title fields are supported', () {
+      final tool = const Tool(
+        name: 'tool-name',
+        title: 'Tool Title',
+        inputSchema: JsonObject(),
+      );
+      expect(tool.toJson()['title'], 'Tool Title');
+      expect(Tool.fromJson(tool.toJson()).title, 'Tool Title');
+
+      final resource = const Resource(
+        uri: 'file://resource',
+        name: 'resource-name',
+        title: 'Resource Title',
+      );
+      expect(resource.toJson()['title'], 'Resource Title');
+      expect(Resource.fromJson(resource.toJson()).title, 'Resource Title');
+
+      final template = const ResourceTemplate(
+        uriTemplate: 'file:///{id}',
+        name: 'template-name',
+        title: 'Template Title',
+      );
+      expect(template.toJson()['title'], 'Template Title');
+      expect(
+        ResourceTemplate.fromJson(template.toJson()).title,
+        'Template Title',
+      );
+
+      final prompt = const Prompt(
+        name: 'prompt-name',
+        title: 'Prompt Title',
+        arguments: [
+          PromptArgument(name: 'arg', title: 'Argument Title'),
+        ],
+        meta: {'scope': 'test'},
+      );
+      final promptJson = prompt.toJson();
+      expect(promptJson['title'], 'Prompt Title');
+      expect(promptJson['_meta'], {'scope': 'test'});
+      expect(
+        (promptJson['arguments'] as List).single['title'],
+        'Argument Title',
+      );
+
+      final deserializedPrompt = Prompt.fromJson(promptJson);
+      expect(deserializedPrompt.title, 'Prompt Title');
+      expect(deserializedPrompt.meta, {'scope': 'test'});
+      expect(deserializedPrompt.arguments?.single.title, 'Argument Title');
     });
 
     test('Elicitation with URL', () {
@@ -165,7 +248,10 @@ void main() {
 
     test('Tasks Capabilities', () {
       final clientCaps = const ClientCapabilities(
+        sampling: ClientCapabilitiesSampling(context: true, tools: true),
         tasks: ClientCapabilitiesTasks(
+          list: true,
+          cancel: true,
           requests: ClientCapabilitiesTasksRequests(
             sampling: ClientCapabilitiesTasksSampling(
               createMessage: ClientCapabilitiesTasksSamplingCreateMessage(),
@@ -175,15 +261,69 @@ void main() {
       );
       expect(clientCaps.tasks, isNotNull);
       expect(clientCaps.toJson()['tasks'], isNotNull);
+      expect(clientCaps.toJson()['sampling']['context'], isA<Map>());
+      expect(clientCaps.toJson()['sampling']['tools'], isA<Map>());
+      expect(clientCaps.toJson()['tasks']['list'], isA<Map>());
+      expect(clientCaps.toJson()['tasks']['cancel'], isA<Map>());
 
       final serverCaps = const ServerCapabilities(
-        tasks: ServerCapabilitiesTasks(listChanged: true),
-        completions: ServerCapabilitiesCompletions(listChanged: true),
+        tasks: ServerCapabilitiesTasks(
+          list: true,
+          cancel: true,
+          requests: ServerCapabilitiesTasksRequests(
+            tools: ServerCapabilitiesTasksTools(
+              call: ServerCapabilitiesTasksToolsCall(),
+            ),
+          ),
+        ),
+        completions: ServerCapabilitiesCompletions(),
       );
       expect(serverCaps.tasks, isNotNull);
       expect(serverCaps.toJson()['tasks'], isNotNull);
-      expect(serverCaps.completions?.listChanged, isTrue);
-      expect(serverCaps.toJson()['completions']['listChanged'], isTrue);
+      expect(serverCaps.toJson()['tasks']['list'], isA<Map>());
+      expect(serverCaps.toJson()['tasks']['cancel'], isA<Map>());
+      expect(
+        serverCaps.toJson()['tasks']['requests']['tools']['call'],
+        isA<Map>(),
+      );
+      expect(serverCaps.toJson()['completions'], isA<Map>());
+      expect(serverCaps.toJson()['completions'].isEmpty, isTrue);
+    });
+
+    test('Capability object markers parse from JSON', () {
+      final parsedClient = ClientCapabilities.fromJson({
+        'sampling': {
+          'context': {},
+          'tools': {},
+        },
+        'tasks': {
+          'list': {},
+          'cancel': {},
+          'requests': {
+            'sampling': {'createMessage': {}},
+            'elicitation': {'create': {}},
+          },
+        },
+      });
+
+      expect(parsedClient.sampling?.context, isTrue);
+      expect(parsedClient.sampling?.tools, isTrue);
+      expect(parsedClient.tasks?.list, isTrue);
+      expect(parsedClient.tasks?.cancel, isTrue);
+
+      final parsedServer = ServerCapabilities.fromJson({
+        'tasks': {
+          'list': {},
+          'cancel': {},
+          'requests': {
+            'tools': {'call': {}},
+          },
+        },
+      });
+
+      expect(parsedServer.tasks?.list, isTrue);
+      expect(parsedServer.tasks?.cancel, isTrue);
+      expect(parsedServer.tasks?.requests?.tools?.call, isNotNull);
     });
 
     test('Task Types', () {
@@ -219,17 +359,50 @@ void main() {
             ),
           ),
         ],
-        toolChoice: {'type': 'auto'},
+        toolChoice: const ToolChoice(mode: ToolChoiceMode.auto),
       );
 
       final json = params.toJson();
       expect(json['tools'], isA<List>());
-      expect(json['toolChoice'], {'type': 'auto'});
+      expect(json['toolChoice'], {'mode': 'auto'});
 
       final deserialized = CreateMessageRequestParams.fromJson(json);
       expect(deserialized.tools, hasLength(1));
       expect(deserialized.tools!.first.name, 'calculator');
-      expect(deserialized.toolChoice, {'type': 'auto'});
+      expect(deserialized.toolChoiceConfig?.mode, ToolChoiceMode.auto);
+
+      final legacyDeserialized = CreateMessageRequestParams.fromJson({
+        ...json,
+        'toolChoice': {'type': 'required'},
+      });
+      expect(
+        legacyDeserialized.toolChoiceConfig?.mode,
+        ToolChoiceMode.required,
+      );
+    });
+
+    test('Sampling result supports content arrays and toolUse stopReason', () {
+      final result = CreateMessageResult.fromJson({
+        'model': 'test-model',
+        'stopReason': 'toolUse',
+        'role': 'assistant',
+        'content': [
+          {
+            'type': 'tool_use',
+            'id': 'call-1',
+            'name': 'calculator',
+            'input': {'expr': '2+2'},
+          },
+        ],
+      });
+
+      expect(result.stopReason, StopReason.toolUse);
+      expect(result.contentBlocks, hasLength(1));
+      expect(result.contentBlocks.single, isA<SamplingToolUseContent>());
+
+      final json = result.toJson();
+      expect(json['stopReason'], 'toolUse');
+      expect((json['content'] as List).single['type'], 'tool_use');
     });
 
     group('Tasks API Types', () {

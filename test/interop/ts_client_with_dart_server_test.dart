@@ -1,3 +1,6 @@
+@Tags(['interop'])
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,10 +21,19 @@ void main() {
   // Check if we should skip
   final skipTests =
       !File(tsClientPath).existsSync() || !File(dartServerPath).existsSync();
+  final isCi = Platform.environment['CI'] == 'true';
 
   group('TS Client with Dart Server', () {
     if (skipTests) {
-      print('Skipping TS Client Interop tests: scripts not found');
+      final reason =
+          'TS client interop tests require compiled fixtures at $tsClientPath and $dartServerPath';
+      if (isCi) {
+        test('TS fixtures are available in CI', () {
+          fail(reason);
+        });
+      } else {
+        print('Skipping TS Client Interop tests: $reason');
+      }
       return;
     }
 
@@ -112,7 +124,7 @@ void main() {
             );
             request.response.headers.add(
               'Access-Control-Allow-Headers',
-              'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+              'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization, MCP-Protocol-Version',
             );
 
             if (request.method == 'OPTIONS') {

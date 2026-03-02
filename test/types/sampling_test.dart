@@ -1,3 +1,4 @@
+import 'package:mcp_dart/src/types/content.dart';
 import 'package:mcp_dart/src/types/sampling.dart';
 import 'package:test/test.dart';
 
@@ -131,6 +132,41 @@ void main() {
       });
     });
 
+    group('SamplingAudioContent', () {
+      test('constructs correctly', () {
+        const content = SamplingAudioContent(
+          data: 'base64audio',
+          mimeType: 'audio/wav',
+        );
+        expect(content.data, equals('base64audio'));
+        expect(content.mimeType, equals('audio/wav'));
+      });
+
+      test('toJson serializes correctly', () {
+        const content = SamplingAudioContent(
+          data: 'audio-data',
+          mimeType: 'audio/mpeg',
+        );
+        final json = content.toJson();
+        expect(json['type'], equals('audio'));
+        expect(json['data'], equals('audio-data'));
+        expect(json['mimeType'], equals('audio/mpeg'));
+      });
+
+      test('fromJson parses correctly', () {
+        final json = {
+          'type': 'audio',
+          'data': 'encoded-audio',
+          'mimeType': 'audio/ogg',
+        };
+        final content = SamplingContent.fromJson(json);
+        expect(content, isA<SamplingAudioContent>());
+        final audio = content as SamplingAudioContent;
+        expect(audio.data, equals('encoded-audio'));
+        expect(audio.mimeType, equals('audio/ogg'));
+      });
+    });
+
     group('SamplingToolUseContent', () {
       test('constructs correctly', () {
         const content = SamplingToolUseContent(
@@ -174,7 +210,9 @@ void main() {
       test('constructs correctly', () {
         const content = SamplingToolResultContent(
           toolUseId: 'result-123',
-          content: {'status': 'ok'},
+          content: [
+            TextContent(text: 'ok'),
+          ],
         );
         expect(content.toolUseId, equals('result-123'));
       });
@@ -182,21 +220,29 @@ void main() {
       test('toJson serializes correctly', () {
         const content = SamplingToolResultContent(
           toolUseId: 'res1',
-          content: {'value': 42},
+          content: [
+            TextContent(text: 'value 42'),
+          ],
+          structuredContent: {'value': 42},
           isError: true,
         );
         final json = content.toJson();
         expect(json['type'], equals('tool_result'));
         expect(json['toolUseId'], equals('res1'));
         expect(json['isError'], isTrue);
-        expect(json['content'], equals({'value': 42}));
+        expect(json['structuredContent'], equals({'value': 42}));
+        expect(json['content'], isA<List>());
+        expect((json['content'] as List).first['type'], equals('text'));
       });
 
       test('fromJson parses correctly', () {
         final json = {
           'type': 'tool_result',
           'toolUseId': 'tr1',
-          'content': {'data': 'result data'},
+          'content': [
+            {'type': 'text', 'text': 'result data'},
+          ],
+          'structuredContent': {'status': 'ok'},
           'isError': false,
         };
         final content = SamplingContent.fromJson(json);
@@ -204,6 +250,9 @@ void main() {
         final result = content as SamplingToolResultContent;
         expect(result.isError, isFalse);
         expect(result.toolUseId, equals('tr1'));
+        expect(result.structuredContent, equals({'status': 'ok'}));
+        expect(result.content, hasLength(1));
+        expect(result.content.first, isA<TextContent>());
       });
     });
   });
@@ -237,6 +286,20 @@ void main() {
       final msg = SamplingMessage.fromJson(json);
       expect(msg.role, equals(SamplingMessageRole.user));
       expect(msg.content, isA<SamplingTextContent>());
+    });
+
+    test('supports array content with normalized contentBlocks', () {
+      final msg = const SamplingMessage(
+        role: SamplingMessageRole.assistant,
+        content: [
+          SamplingTextContent(text: 'Part 1'),
+          SamplingTextContent(text: 'Part 2'),
+        ],
+      );
+
+      expect(msg.content, isA<List<SamplingContent>>());
+      expect(msg.contentBlocks, hasLength(2));
+      expect(msg.toJson()['content'], isA<List>());
     });
   });
 
@@ -276,6 +339,39 @@ void main() {
       expect(json['temperature'], equals(0.7));
     });
 
+    test('supports legacy toolChoice map with type', () {
+      final params = const CreateMessageRequestParams(
+        messages: [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Hello'),
+          ),
+        ],
+        maxTokens: 500,
+        toolChoice: {'type': 'required'},
+      );
+
+      expect(params.toolChoice, {'type': 'required'});
+      expect(params.toolChoiceConfig?.mode, ToolChoiceMode.required);
+      expect(params.toJson()['toolChoice'], {'mode': 'required'});
+    });
+
+    test('supports typed ToolChoice in constructor', () {
+      final params = const CreateMessageRequestParams(
+        messages: [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Hello'),
+          ),
+        ],
+        maxTokens: 500,
+        toolChoice: ToolChoice(mode: ToolChoiceMode.auto),
+      );
+
+      expect(params.toolChoiceConfig?.mode, ToolChoiceMode.auto);
+      expect(params.toJson()['toolChoice'], {'mode': 'auto'});
+    });
+
     test('fromJson parses correctly', () {
       final json = {
         'messages': [
@@ -305,6 +401,20 @@ void main() {
       expect(result.role, equals(SamplingMessageRole.assistant));
       expect(result.model, equals('gpt-4'));
       expect(result.stopReason, equals(StopReason.endTurn));
+    });
+
+    test('supports array content with normalized contentBlocks', () {
+      const result = CreateMessageResult(
+        role: SamplingMessageRole.assistant,
+        content: [
+          SamplingTextContent(text: 'Part 1'),
+          SamplingTextContent(text: 'Part 2'),
+        ],
+        model: 'gpt-4',
+      );
+
+      expect(result.contentBlocks, hasLength(2));
+      expect(result.toJson()['content'], isA<List>());
     });
 
     test('toJson serializes correctly', () {
@@ -406,10 +516,11 @@ void main() {
 
   group('StopReason', () {
     test('has all expected values', () {
-      expect(StopReason.values, hasLength(3));
+      expect(StopReason.values, hasLength(4));
       expect(StopReason.endTurn.name, equals('endTurn'));
       expect(StopReason.stopSequence.name, equals('stopSequence'));
       expect(StopReason.maxTokens.name, equals('maxTokens'));
+      expect(StopReason.toolUse.name, equals('toolUse'));
     });
   });
 

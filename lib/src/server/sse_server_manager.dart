@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:mcp_dart/src/shared/logging.dart';
 
+import 'dns_rebinding_protection.dart';
 import 'mcp_server.dart';
 import 'sse.dart';
 
@@ -44,7 +45,11 @@ class SseServerManager {
     _logger.debug("Received request: ${request.method} ${request.uri.path}");
 
     if (enableDnsRebindingProtection &&
-        !_isRequestAllowedByDnsRebindingProtection(request)) {
+        !isRequestAllowedByDnsRebindingProtection(
+          request,
+          allowedHosts: allowedHosts,
+          allowedOrigins: allowedOrigins,
+        )) {
       request.response
         ..statusCode = HttpStatus.forbidden
         ..write('Forbidden: blocked by DNS rebinding protection');
@@ -155,113 +160,5 @@ class SseServerManager {
       ..headers.set(HttpHeaders.allowHeader, allowedMethods.join(', '))
       ..write('Method Not Allowed');
     await request.response.close();
-  }
-
-  bool _isRequestAllowedByDnsRebindingProtection(HttpRequest request) {
-    final hostHeader = request.headers.value(HttpHeaders.hostHeader);
-    if (hostHeader == null || hostHeader.trim().isEmpty) {
-      return false;
-    }
-
-    final allowedHostSet = _normalizedAllowedHosts();
-    if (!_isHostAllowed(hostHeader, allowedHostSet)) {
-      return false;
-    }
-
-    final originHeader = request.headers.value('origin');
-    if (originHeader == null || originHeader.trim().isEmpty) {
-      return true;
-    }
-
-    if (originHeader.trim().toLowerCase() == 'null') {
-      return false;
-    }
-
-    final configuredOrigins = _normalizedAllowedOrigins();
-    if (configuredOrigins != null) {
-      final normalizedOrigin = _normalizeOrigin(originHeader);
-      return normalizedOrigin != null &&
-          configuredOrigins.contains(normalizedOrigin);
-    }
-
-    final originUri = Uri.tryParse(originHeader);
-    if (originUri == null || originUri.host.isEmpty) {
-      return false;
-    }
-
-    final originHost = _extractHost(originUri.host);
-    return allowedHostSet.contains(originHost);
-  }
-
-  Set<String> _normalizedAllowedHosts() {
-    final configuredHosts = allowedHosts;
-    if (configuredHosts != null && configuredHosts.isNotEmpty) {
-      return configuredHosts.map(_extractHost).toSet();
-    }
-
-    return {
-      'localhost',
-      '127.0.0.1',
-      '::1',
-    };
-  }
-
-  Set<String>? _normalizedAllowedOrigins() {
-    final configuredOrigins = allowedOrigins;
-    if (configuredOrigins == null || configuredOrigins.isEmpty) {
-      return null;
-    }
-
-    return configuredOrigins.map(_normalizeOrigin).whereType<String>().toSet();
-  }
-
-  bool _isHostAllowed(String hostHeader, Set<String> allowedHosts) {
-    final rawHost = hostHeader.trim().toLowerCase();
-    final normalizedHost = _extractHost(rawHost);
-
-    if (allowedHosts.contains(rawHost)) {
-      return true;
-    }
-
-    return allowedHosts.contains(normalizedHost);
-  }
-
-  String _extractHost(String hostOrOrigin) {
-    final lower = hostOrOrigin.trim().toLowerCase();
-
-    if (lower.contains('://')) {
-      final parsedUri = Uri.tryParse(lower);
-      if (parsedUri != null && parsedUri.host.isNotEmpty) {
-        return _extractHost(parsedUri.host);
-      }
-    }
-
-    if (lower.startsWith('[')) {
-      final end = lower.indexOf(']');
-      if (end > 1) {
-        return lower.substring(1, end);
-      }
-    }
-
-    final firstColon = lower.indexOf(':');
-    final lastColon = lower.lastIndexOf(':');
-    if (firstColon != -1 && firstColon == lastColon) {
-      return lower.substring(0, firstColon);
-    }
-
-    return lower;
-  }
-
-  String? _normalizeOrigin(String origin) {
-    final parsedUri = Uri.tryParse(origin.trim());
-    if (parsedUri == null ||
-        parsedUri.scheme.isEmpty ||
-        parsedUri.host.isEmpty) {
-      return null;
-    }
-
-    final normalizedHost = _extractHost(parsedUri.host);
-    final portPart = parsedUri.hasPort ? ':${parsedUri.port}' : '';
-    return '${parsedUri.scheme.toLowerCase()}://$normalizedHost$portPart';
   }
 }

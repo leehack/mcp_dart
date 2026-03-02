@@ -5,6 +5,9 @@ class PromptArgument {
   /// The name of the argument.
   final String name;
 
+  /// A human-readable title of the argument.
+  final String? title;
+
   /// A human-readable description of the argument.
   final String? description;
 
@@ -13,6 +16,7 @@ class PromptArgument {
 
   const PromptArgument({
     required this.name,
+    this.title,
     this.description,
     this.required,
   });
@@ -20,6 +24,7 @@ class PromptArgument {
   factory PromptArgument.fromJson(Map<String, dynamic> json) {
     return PromptArgument(
       name: json['name'] as String,
+      title: json['title'] as String?,
       description: json['description'] as String?,
       required: json['required'] as bool?,
     );
@@ -27,6 +32,7 @@ class PromptArgument {
 
   Map<String, dynamic> toJson() => {
         'name': name,
+        if (title != null) 'title': title,
         if (description != null) 'description': description,
         if (required != null) 'required': required,
       };
@@ -36,6 +42,9 @@ class PromptArgument {
 class Prompt {
   /// The name of the prompt or template.
   final String name;
+
+  /// A human-readable title of the prompt.
+  final String? title;
 
   /// An optional description of what the prompt provides.
   final String? description;
@@ -49,17 +58,23 @@ class Prompt {
   /// Optional set of icons for the prompt.
   final List<McpIcon>? icons;
 
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
   const Prompt({
     required this.name,
+    this.title,
     this.description,
     this.arguments,
     this.icon,
     this.icons,
+    this.meta,
   });
 
   factory Prompt.fromJson(Map<String, dynamic> json) {
     return Prompt(
       name: json['name'] as String,
+      title: json['title'] as String?,
       description: json['description'] as String?,
       arguments: (json['arguments'] as List<dynamic>?)
           ?.map((a) => PromptArgument.fromJson(a as Map<String, dynamic>))
@@ -70,17 +85,20 @@ class Prompt {
       icons: (json['icons'] as List<dynamic>?)
           ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
           .toList(),
+      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
     );
   }
 
   Map<String, dynamic> toJson() => {
         'name': name,
+        if (title != null) 'title': title,
         if (description != null) 'description': description,
         if (arguments != null)
           'arguments': arguments!.map((a) => a.toJson()).toList(),
         if (icon != null) 'icon': icon!.toJson(),
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
+        if (meta != null) '_meta': meta,
       };
 }
 

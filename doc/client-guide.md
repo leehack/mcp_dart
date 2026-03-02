@@ -381,13 +381,17 @@ final client = McpClient(
     name: 'my-client',
     version: '1.0.0',
   ),
-  capabilities: ClientCapabilities(
-    sampling: {},  // Enable sampling capability
+  options: McpClientOptions(
+    capabilities: ClientCapabilities(
+      sampling: ClientCapabilitiesSampling(
+        tools: true,
+      ), // Enable sampling capability with tool support
+    ),
   ),
 );
 
-// Server will send sampling requests via notifications
-// You need to handle them in your client implementation
+// Server will send sampling requests via requests.
+// Handle them with client.onSamplingRequest.
 ```
 
 Example sampling handler (low-level):
@@ -397,7 +401,7 @@ Example sampling handler (low-level):
 // For custom handling:
 
 client.onSamplingRequest = (request) async {
-  // request.params contains:
+  // request contains:
   // - messages: Conversation messages
   // - modelPreferences: Cost/speed/intelligence priorities
   // - systemPrompt: Optional system prompt
@@ -406,14 +410,14 @@ client.onSamplingRequest = (request) async {
 
   // Call your LLM (e.g., Anthropic, OpenAI, Gemini)
   final llmResponse = await callLLM(
-    messages: request.params.messages,
-    systemPrompt: request.params.systemPrompt,
-    maxTokens: request.params.maxTokens,
+    messages: request.messages,
+    systemPrompt: request.systemPrompt,
+    maxTokens: request.maxTokens,
   );
 
   return CreateMessageResult(
-    role: Role.assistant,
-    content: TextContent(text: llmResponse),
+    role: SamplingMessageRole.assistant,
+    content: SamplingTextContent(text: llmResponse),
     model: 'gpt-4',
     stopReason: StopReason.endTurn,
   );
@@ -480,9 +484,11 @@ final client = McpClient(
     name: 'my-client',
     version: '1.0.0',
   ),
-  capabilities: ClientCapabilities(
-    roots: RootsCapability(
-      listChanged: true,
+  options: McpClientOptions(
+    capabilities: ClientCapabilities(
+      roots: ClientCapabilitiesRoots(
+        listChanged: true,
+      ),
     ),
   ),
 );

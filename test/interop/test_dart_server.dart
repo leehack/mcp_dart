@@ -204,12 +204,21 @@ McpServer createServer() {
               ),
             ],
             maxTokens: 100,
+            tools: const [
+              Tool(
+                name: 'mock_helper',
+                description: 'Mock helper tool for sampling interop tests',
+                inputSchema: JsonObject(),
+              ),
+            ],
+            toolChoice: const ToolChoice(mode: ToolChoiceMode.auto),
           ),
         );
-        final content = result.content;
-        final text = content is SamplingTextContent
-            ? content.text
-            : jsonEncode(content.toJson());
+        final contentBlocks = result.contentBlocks;
+        final text = contentBlocks.length == 1 &&
+                contentBlocks.first is SamplingTextContent
+            ? (contentBlocks.first as SamplingTextContent).text
+            : jsonEncode(contentBlocks.map((block) => block.toJson()).toList());
         return CallToolResult(
           content: [TextContent(text: text)],
         );

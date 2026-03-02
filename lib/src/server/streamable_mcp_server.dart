@@ -3,10 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:mcp_dart/src/server/dns_rebinding_protection.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
-import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
+import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
 
 /// A high-level server implementation that manages multiple MCP sessions over Streamable HTTP.
@@ -63,6 +64,14 @@ class StreamableMcpServer {
   /// Explicit origin allowlist used when DNS rebinding protection is enabled.
   final Set<String>? allowedOrigins;
 
+  /// If true, reject unsupported `MCP-Protocol-Version` headers with HTTP 400.
+  final bool strictProtocolVersionHeaderValidation;
+
+  /// If true, reject JSON-RPC batch payloads for Streamable HTTP POST requests.
+  final bool rejectBatchJsonRpcPayloads;
+
+  final Set<String> _defaultDnsRebindingAllowedHosts;
+
   HttpServer? _httpServer;
   final Map<String, StreamableHTTPServerTransport> _transports = {};
   // Keep track of servers to close them if needed, though closing transport usually suffices
@@ -75,10 +84,16 @@ class StreamableMcpServer {
     this.path = '/mcp',
     this.eventStore,
     this.authenticator,
-    this.enableDnsRebindingProtection = false,
+    this.enableDnsRebindingProtection = true,
     this.allowedHosts,
     this.allowedOrigins,
-  }) : _serverFactory = serverFactory;
+    this.strictProtocolVersionHeaderValidation = true,
+    this.rejectBatchJsonRpcPayloads = true,
+  })  : _serverFactory = serverFactory,
+        _defaultDnsRebindingAllowedHosts = {
+          normalizeDnsHost(host),
+          ...defaultDnsRebindingAllowedHosts,
+        };
 
   /// Starts the HTTP server.
   Future<void> start() async {
@@ -115,7 +130,12 @@ class StreamableMcpServer {
     _setCorsHeaders(request.response);
 
     if (enableDnsRebindingProtection &&
-        !_isRequestAllowedByDnsRebindingProtection(request)) {
+        !isRequestAllowedByDnsRebindingProtection(
+          request,
+          allowedHosts: allowedHosts,
+          allowedOrigins: allowedOrigins,
+          defaultAllowedHosts: _defaultDnsRebindingAllowedHosts,
+        )) {
       request.response
         ..statusCode = HttpStatus.forbidden
         ..write('Forbidden: blocked by DNS rebinding protection');
@@ -203,20 +223,33 @@ class StreamableMcpServer {
     try {
       body = jsonDecode(bodyString);
     } catch (e) {
-      request.response
-        ..statusCode = HttpStatus.badRequest
-        ..write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.parseError.value,
-                message: 'Parse error',
-              ),
-            ).toJson(),
-          ),
-        )
-        ..close();
+      await _respondWithJsonRpcError(
+        request.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.parseError,
+        message: 'Parse error',
+      );
+      return;
+    }
+
+    if (rejectBatchJsonRpcPayloads && body is List) {
+      await _respondWithJsonRpcError(
+        request.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.invalidRequest,
+        message: 'Invalid Request: Batch JSON-RPC payloads are not supported',
+      );
+      return;
+    }
+
+    if (body is! Map && body is! List) {
+      await _respondWithJsonRpcError(
+        request.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.invalidRequest,
+        message:
+            'Invalid Request: POST body must contain a JSON-RPC message object',
+      );
       return;
     }
 
@@ -233,21 +266,13 @@ class StreamableMcpServer {
       await transport.handleRequest(request, body);
       return;
     } else {
-      request.response
-        ..statusCode = HttpStatus.badRequest
-        ..write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.connectionClosed.value,
-                message:
-                    'Bad Request: No valid session ID provided or not an initialization request',
-              ),
-            ).toJson(),
-          ),
-        )
-        ..close();
+      await _respondWithJsonRpcError(
+        request.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.connectionClosed,
+        message:
+            'Bad Request: No valid session ID provided or not an initialization request',
+      );
       return;
     }
 
@@ -293,6 +318,9 @@ class StreamableMcpServer {
         enableDnsRebindingProtection: enableDnsRebindingProtection,
         allowedHosts: allowedHosts ?? {host},
         allowedOrigins: allowedOrigins,
+        strictProtocolVersionHeaderValidation:
+            strictProtocolVersionHeaderValidation,
+        rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
         onsessioninitialized: (sid) {
           _logger.info('Session initialized: $sid');
           _transports[sid] = transport;
@@ -365,113 +393,28 @@ class StreamableMcpServer {
     return completer.future;
   }
 
-  bool _isRequestAllowedByDnsRebindingProtection(HttpRequest request) {
-    final hostHeader = request.headers.value(HttpHeaders.hostHeader);
-    if (hostHeader == null || hostHeader.trim().isEmpty) {
-      return false;
-    }
-
-    final allowedHostSet = _normalizedAllowedHosts();
-    if (!_isHostAllowed(hostHeader, allowedHostSet)) {
-      return false;
-    }
-
-    final originHeader = request.headers.value('origin');
-    if (originHeader == null || originHeader.trim().isEmpty) {
-      return true;
-    }
-
-    if (originHeader.trim().toLowerCase() == 'null') {
-      return false;
-    }
-
-    final configuredOrigins = _normalizedAllowedOrigins();
-    if (configuredOrigins != null) {
-      final normalizedOrigin = _normalizeOrigin(originHeader);
-      return normalizedOrigin != null &&
-          configuredOrigins.contains(normalizedOrigin);
-    }
-
-    final originUri = Uri.tryParse(originHeader);
-    if (originUri == null || originUri.host.isEmpty) {
-      return false;
-    }
-
-    final originHost = _extractHost(originUri.host);
-    return allowedHostSet.contains(originHost);
-  }
-
-  Set<String> _normalizedAllowedHosts() {
-    final configuredHosts = allowedHosts;
-    if (configuredHosts != null && configuredHosts.isNotEmpty) {
-      return configuredHosts.map(_extractHost).toSet();
-    }
-
-    return {
-      _extractHost(host),
-      'localhost',
-      '127.0.0.1',
-      '::1',
-    };
-  }
-
-  Set<String>? _normalizedAllowedOrigins() {
-    final configuredOrigins = allowedOrigins;
-    if (configuredOrigins == null || configuredOrigins.isEmpty) {
-      return null;
-    }
-
-    return configuredOrigins.map(_normalizeOrigin).whereType<String>().toSet();
-  }
-
-  bool _isHostAllowed(String hostHeader, Set<String> allowedHosts) {
-    final rawHost = hostHeader.trim().toLowerCase();
-    final normalizedHost = _extractHost(rawHost);
-
-    if (allowedHosts.contains(rawHost)) {
-      return true;
-    }
-
-    return allowedHosts.contains(normalizedHost);
-  }
-
-  String _extractHost(String hostOrOrigin) {
-    final lower = hostOrOrigin.trim().toLowerCase();
-
-    if (lower.contains('://')) {
-      final parsedUri = Uri.tryParse(lower);
-      if (parsedUri != null && parsedUri.host.isNotEmpty) {
-        return _extractHost(parsedUri.host);
-      }
-    }
-
-    if (lower.startsWith('[')) {
-      final end = lower.indexOf(']');
-      if (end > 1) {
-        return lower.substring(1, end);
-      }
-    }
-
-    final firstColon = lower.indexOf(':');
-    final lastColon = lower.lastIndexOf(':');
-    if (firstColon != -1 && firstColon == lastColon) {
-      return lower.substring(0, firstColon);
-    }
-
-    return lower;
-  }
-
-  String? _normalizeOrigin(String origin) {
-    final parsedUri = Uri.tryParse(origin.trim());
-    if (parsedUri == null ||
-        parsedUri.scheme.isEmpty ||
-        parsedUri.host.isEmpty) {
-      return null;
-    }
-
-    final normalizedHost = _extractHost(parsedUri.host);
-    final portPart = parsedUri.hasPort ? ':${parsedUri.port}' : '';
-    return '${parsedUri.scheme.toLowerCase()}://$normalizedHost$portPart';
+  Future<void> _respondWithJsonRpcError(
+    HttpResponse response, {
+    required int httpStatus,
+    required ErrorCode errorCode,
+    required String message,
+    Object? data,
+  }) async {
+    response
+      ..statusCode = httpStatus
+      ..write(
+        jsonEncode(
+          JsonRpcError(
+            id: null,
+            error: JsonRpcErrorData(
+              code: errorCode.value,
+              message: message,
+              data: data,
+            ),
+          ).toJson(),
+        ),
+      );
+    await response.close();
   }
 
   void _setCorsHeaders(HttpResponse response) {
@@ -480,7 +423,7 @@ class StreamableMcpServer {
         .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     response.headers.set(
       'Access-Control-Allow-Headers',
-      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization, MCP-Protocol-Version',
     );
     response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Max-Age', defaultCorsMaxAgeSeconds);

@@ -256,10 +256,28 @@ function createInteropServer(): McpServer {
             },
           ],
           maxTokens: 100,
+          tools: [
+            {
+              name: 'mock_helper',
+              description: 'Mock helper tool for sampling interop tests',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+              },
+            },
+          ],
+          toolChoice: {
+            mode: 'auto',
+          },
         });
         const content = result.content;
-        const text =
-          content.type === 'text' ? content.text : JSON.stringify(content);
+        const text = Array.isArray(content)
+          ? JSON.stringify(content)
+          : content.type === 'text'
+            ? content.text
+            : JSON.stringify(content);
         return {
           content: [{ type: 'text', text }],
         };

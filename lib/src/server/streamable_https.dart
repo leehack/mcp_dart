@@ -7,6 +7,7 @@ import 'package:mcp_dart/src/shared/uuid.dart';
 
 import '../shared/transport.dart';
 import '../types.dart';
+import 'dns_rebinding_protection.dart';
 
 /// ID for SSE streams
 typedef StreamId = String;
@@ -69,15 +70,27 @@ class StreamableHTTPServerTransportOptions {
   /// Explicit origin allowlist used when DNS rebinding protection is enabled.
   final Set<String>? allowedOrigins;
 
+  /// If true, reject unsupported `MCP-Protocol-Version` headers with HTTP 400.
+  ///
+  /// Set to false for backward-compatibility behavior.
+  final bool strictProtocolVersionHeaderValidation;
+
+  /// If true, reject JSON-RPC batch payloads for Streamable HTTP POST requests.
+  ///
+  /// Set to false for backward-compatibility behavior.
+  final bool rejectBatchJsonRpcPayloads;
+
   /// Creates configuration options for StreamableHTTPServerTransport
   StreamableHTTPServerTransportOptions({
     this.sessionIdGenerator,
     this.onsessioninitialized,
     this.enableJsonResponse = false,
     this.eventStore,
-    this.enableDnsRebindingProtection = false,
+    this.enableDnsRebindingProtection = true,
     this.allowedHosts,
     this.allowedOrigins,
+    this.strictProtocolVersionHeaderValidation = true,
+    this.rejectBatchJsonRpcPayloads = true,
   });
 }
 
@@ -135,6 +148,8 @@ class StreamableHTTPServerTransport implements Transport {
   final bool _enableDnsRebindingProtection;
   final Set<String>? _allowedHosts;
   final Set<String>? _allowedOrigins;
+  final bool _strictProtocolVersionHeaderValidation;
+  final bool _rejectBatchJsonRpcPayloads;
 
   @override
   String? sessionId;
@@ -157,7 +172,10 @@ class StreamableHTTPServerTransport implements Transport {
         _onsessioninitialized = options.onsessioninitialized,
         _enableDnsRebindingProtection = options.enableDnsRebindingProtection,
         _allowedHosts = options.allowedHosts,
-        _allowedOrigins = options.allowedOrigins;
+        _allowedOrigins = options.allowedOrigins,
+        _strictProtocolVersionHeaderValidation =
+            options.strictProtocolVersionHeaderValidation,
+        _rejectBatchJsonRpcPayloads = options.rejectBatchJsonRpcPayloads;
 
   /// Starts the transport. This is required by the Transport interface but is a no-op
   /// for the Streamable HTTP transport as connections are managed per-request.
@@ -173,11 +191,19 @@ class StreamableHTTPServerTransport implements Transport {
   Future<void> handleRequest(HttpRequest req, [dynamic parsedBody]) async {
     req.response.bufferOutput = false;
     if (_enableDnsRebindingProtection &&
-        !_isRequestAllowedByDnsRebindingProtection(req)) {
+        !isRequestAllowedByDnsRebindingProtection(
+          req,
+          allowedHosts: _allowedHosts,
+          allowedOrigins: _allowedOrigins,
+        )) {
       req.response
         ..statusCode = HttpStatus.forbidden
         ..write('Forbidden: blocked by DNS rebinding protection');
       await _safeClose(req.response);
+      return;
+    }
+
+    if (!await _validateProtocolVersionHeader(req, req.response)) {
       return;
     }
 
@@ -192,112 +218,58 @@ class StreamableHTTPServerTransport implements Transport {
     }
   }
 
-  bool _isRequestAllowedByDnsRebindingProtection(HttpRequest request) {
-    final hostHeader = request.headers.value(HttpHeaders.hostHeader);
-    if (hostHeader == null || hostHeader.trim().isEmpty) {
-      return false;
-    }
-
-    final allowedHostSet = _normalizedAllowedHosts();
-    if (!_isHostAllowed(hostHeader, allowedHostSet)) {
-      return false;
-    }
-
-    final originHeader = request.headers.value('origin');
-    if (originHeader == null || originHeader.trim().isEmpty) {
+  Future<bool> _validateProtocolVersionHeader(
+    HttpRequest req,
+    HttpResponse res,
+  ) async {
+    if (!_strictProtocolVersionHeaderValidation) {
       return true;
     }
 
-    if (originHeader.trim().toLowerCase() == 'null') {
-      return false;
-    }
-
-    final configuredOrigins = _normalizedAllowedOrigins();
-    if (configuredOrigins != null) {
-      final normalizedOrigin = _normalizeOrigin(originHeader);
-      return normalizedOrigin != null &&
-          configuredOrigins.contains(normalizedOrigin);
-    }
-
-    final originUri = Uri.tryParse(originHeader);
-    if (originUri == null || originUri.host.isEmpty) {
-      return false;
-    }
-
-    final originHost = _extractHost(originUri.host);
-    return allowedHostSet.contains(originHost);
-  }
-
-  Set<String> _normalizedAllowedHosts() {
-    final configuredHosts = _allowedHosts;
-    if (configuredHosts != null && configuredHosts.isNotEmpty) {
-      return configuredHosts.map(_extractHost).toSet();
-    }
-
-    return {
-      'localhost',
-      '127.0.0.1',
-      '::1',
-    };
-  }
-
-  Set<String>? _normalizedAllowedOrigins() {
-    final configuredOrigins = _allowedOrigins;
-    if (configuredOrigins == null || configuredOrigins.isEmpty) {
-      return null;
-    }
-
-    return configuredOrigins.map(_normalizeOrigin).whereType<String>().toSet();
-  }
-
-  bool _isHostAllowed(String hostHeader, Set<String> allowedHosts) {
-    final rawHost = hostHeader.trim().toLowerCase();
-    final normalizedHost = _extractHost(rawHost);
-
-    if (allowedHosts.contains(rawHost)) {
+    final versionHeader = req.headers.value('mcp-protocol-version');
+    if (versionHeader == null || versionHeader.trim().isEmpty) {
       return true;
     }
 
-    return allowedHosts.contains(normalizedHost);
+    final requestedVersion = versionHeader.trim();
+    if (supportedProtocolVersions.contains(requestedVersion)) {
+      return true;
+    }
+
+    await _writeJsonRpcErrorResponse(
+      res,
+      httpStatus: HttpStatus.badRequest,
+      errorCode: ErrorCode.invalidRequest,
+      message: 'Invalid MCP-Protocol-Version header',
+      data: {
+        'requested': requestedVersion,
+        'supported': supportedProtocolVersions,
+      },
+    );
+    return false;
   }
 
-  String _extractHost(String hostOrOrigin) {
-    final lower = hostOrOrigin.trim().toLowerCase();
-
-    if (lower.contains('://')) {
-      final parsedUri = Uri.tryParse(lower);
-      if (parsedUri != null && parsedUri.host.isNotEmpty) {
-        return _extractHost(parsedUri.host);
-      }
-    }
-
-    if (lower.startsWith('[')) {
-      final end = lower.indexOf(']');
-      if (end > 1) {
-        return lower.substring(1, end);
-      }
-    }
-
-    final firstColon = lower.indexOf(':');
-    final lastColon = lower.lastIndexOf(':');
-    if (firstColon != -1 && firstColon == lastColon) {
-      return lower.substring(0, firstColon);
-    }
-
-    return lower;
-  }
-
-  String? _normalizeOrigin(String origin) {
-    final parsedUri = Uri.tryParse(origin.trim());
-    if (parsedUri == null ||
-        parsedUri.scheme.isEmpty ||
-        parsedUri.host.isEmpty) {
-      return null;
-    }
-
-    final normalizedHost = _extractHost(parsedUri.host);
-    final portPart = parsedUri.hasPort ? ':${parsedUri.port}' : '';
-    return '${parsedUri.scheme.toLowerCase()}://$normalizedHost$portPart';
+  Future<void> _writeJsonRpcErrorResponse(
+    HttpResponse response, {
+    required int httpStatus,
+    required ErrorCode errorCode,
+    required String message,
+    Object? data,
+  }) async {
+    response.statusCode = httpStatus;
+    response.write(
+      jsonEncode(
+        JsonRpcError(
+          id: null,
+          error: JsonRpcErrorData(
+            code: errorCode.value,
+            message: message,
+            data: data,
+          ),
+        ).toJson(),
+      ),
+    );
+    await _safeClose(response);
   }
 
   Set<String> _parseAcceptedMediaTypes(HttpRequest req) {
@@ -554,50 +526,68 @@ class StreamableHTTPServerTransport implements Transport {
         rawMessage = jsonDecode(bodyString);
       }
 
-      List<JsonRpcMessage> messages = [];
-
-      // Handle batch and single messages
+      final List<dynamic> rawMessages;
       if (rawMessage is List) {
-        for (final msg in rawMessage) {
-          try {
-            messages.add(JsonRpcMessage.fromJson(msg));
-          } catch (e) {
-            req.response.statusCode = HttpStatus.badRequest;
-            req.response.write(
-              jsonEncode(
-                JsonRpcError(
-                  id: null,
-                  error: JsonRpcErrorData(
-                    code: ErrorCode.parseError.value,
-                    message: 'Parse error',
-                    data: e.toString(),
-                  ),
-                ).toJson(),
-              ),
-            );
-            await _safeClose(req.response);
-            onerror?.call(e is Error ? e : StateError(e.toString()));
-            return;
-          }
-        }
-      } else {
-        try {
-          messages = [JsonRpcMessage.fromJson(rawMessage)];
-        } catch (e) {
-          req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(
-            jsonEncode(
-              JsonRpcError(
-                id: null,
-                error: JsonRpcErrorData(
-                  code: ErrorCode.parseError.value,
-                  message: 'Parse error',
-                  data: e.toString(),
-                ),
-              ).toJson(),
-            ),
+        if (_rejectBatchJsonRpcPayloads) {
+          await _writeJsonRpcErrorResponse(
+            req.response,
+            httpStatus: HttpStatus.badRequest,
+            errorCode: ErrorCode.invalidRequest,
+            message:
+                'Invalid Request: Batch JSON-RPC payloads are not supported',
           );
-          await _safeClose(req.response);
+          return;
+        }
+        rawMessages = rawMessage;
+      } else if (rawMessage is Map) {
+        rawMessages = [rawMessage];
+      } else {
+        await _writeJsonRpcErrorResponse(
+          req.response,
+          httpStatus: HttpStatus.badRequest,
+          errorCode: ErrorCode.invalidRequest,
+          message:
+              'Invalid Request: POST body must contain a JSON-RPC message object',
+        );
+        return;
+      }
+
+      final List<JsonRpcMessage> messages = [];
+      if (rawMessages.isEmpty) {
+        await _writeJsonRpcErrorResponse(
+          req.response,
+          httpStatus: HttpStatus.badRequest,
+          errorCode: ErrorCode.invalidRequest,
+          message: 'Invalid Request: JSON-RPC payload must not be empty',
+        );
+        return;
+      }
+
+      for (final rawItem in rawMessages) {
+        if (rawItem is! Map) {
+          await _writeJsonRpcErrorResponse(
+            req.response,
+            httpStatus: HttpStatus.badRequest,
+            errorCode: ErrorCode.invalidRequest,
+            message:
+                'Invalid Request: each JSON-RPC message in the payload must be an object',
+          );
+          return;
+        }
+
+        try {
+          final messageJson = rawItem is Map<String, dynamic>
+              ? rawItem
+              : rawItem.cast<String, dynamic>();
+          messages.add(JsonRpcMessage.fromJson(messageJson));
+        } catch (e) {
+          await _writeJsonRpcErrorResponse(
+            req.response,
+            httpStatus: HttpStatus.badRequest,
+            errorCode: ErrorCode.parseError,
+            message: 'Parse error',
+            data: e.toString(),
+          );
           onerror?.call(e is Error ? e : StateError(e.toString()));
           return;
         }
@@ -727,21 +717,13 @@ class StreamableHTTPServerTransport implements Transport {
         // This will be handled by the send() method when responses are ready
       }
     } catch (error) {
-      // Return JSON-RPC formatted error
-      req.response.statusCode = HttpStatus.badRequest;
-      req.response.write(
-        jsonEncode(
-          JsonRpcError(
-            id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.parseError.value,
-              message: 'Parse error',
-              data: error.toString(),
-            ),
-          ).toJson(),
-        ),
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.parseError,
+        message: 'Parse error',
+        data: error.toString(),
       );
-      await _safeClose(req.response);
 
       if (error is Error) {
         onerror?.call(error);

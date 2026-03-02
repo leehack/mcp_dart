@@ -67,6 +67,9 @@ final transport = StreamableHTTPServerTransport(
     enableDnsRebindingProtection: true,
     allowedHosts: {'localhost'},
     allowedOrigins: {'http://localhost:5173'},
+    // Defaults are strict; set to false only for compatibility rollouts.
+    strictProtocolVersionHeaderValidation: true,
+    rejectBatchJsonRpcPayloads: true,
   ),
 );
 
@@ -630,11 +633,13 @@ final server = McpServer(
 ```dart
 final client = McpClient(
   Implementation(name: 'client', version: '1.0.0'),
-  capabilities: ClientCapabilities(
-    sampling: ClientCapabilitiesSampling(tools: true),
-    roots: ClientCapabilitiesRoots(listChanged: true),
-    elicitation: ClientElicitation(
-      form: ClientElicitationForm(applyDefaults: true),
+  options: McpClientOptions(
+    capabilities: ClientCapabilities(
+      sampling: ClientCapabilitiesSampling(tools: true),
+      roots: ClientCapabilitiesRoots(listChanged: true),
+      elicitation: ClientElicitation(
+        form: ClientElicitationForm(applyDefaults: true),
+      ),
     ),
   ),
 );

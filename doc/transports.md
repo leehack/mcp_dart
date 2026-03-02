@@ -225,13 +225,45 @@ This helper handles:
 
 ### DNS Rebinding Protection
 
-`StreamableMcpServer` and `StreamableHTTPServerTransport` support optional DNS rebinding protection.
+`StreamableMcpServer` and `StreamableHTTPServerTransport` support DNS rebinding protection, enabled by default for Streamable HTTP entry points.
 
 - Validate `Host` against `allowedHosts`
 - Validate `Origin` against `allowedOrigins` (if provided)
 - Reject missing/invalid host headers when protection is enabled
 
 Use this for remote/browser-exposed deployments.
+
+### Streamable HTTP Strict Defaults
+
+By default, Streamable HTTP server transports also enforce:
+
+- Strict `MCP-Protocol-Version` request header validation
+- Rejection of JSON-RPC batch POST payloads
+
+If you need a temporary compatibility mode during migration, disable strict checks explicitly:
+
+```dart
+final server = StreamableMcpServer(
+  serverFactory: (sessionId) => McpServer(
+    const Implementation(name: 'server', version: '1.0.0'),
+  ),
+  strictProtocolVersionHeaderValidation: false,
+  rejectBatchJsonRpcPayloads: false,
+  enableDnsRebindingProtection: false,
+);
+```
+
+Or with low-level transport options:
+
+```dart
+final transport = StreamableHTTPServerTransport(
+  options: StreamableHTTPServerTransportOptions(
+    strictProtocolVersionHeaderValidation: false,
+    rejectBatchJsonRpcPayloads: false,
+    enableDnsRebindingProtection: false,
+  ),
+);
+```
 
 ### Server Setup (Streamable HTTP)
 

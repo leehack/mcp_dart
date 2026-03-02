@@ -19,20 +19,30 @@ void main() {
 
   // Check if we should skip
   final skipTests = !io.File(tsServerScript).existsSync();
+  final isCi = io.Platform.environment['CI'] == 'true';
 
   group('TS Interop - Dart Client Features', () {
     if (skipTests) {
-      print(
-        'Skipping TS Interop Feature tests: TS server not found at $tsServerScript',
-      );
+      final reason =
+          'TS interop feature tests require compiled fixture at $tsServerScript';
+      if (isCi) {
+        test('TS fixture is available in CI', () {
+          fail(reason);
+        });
+      } else {
+        print('Skipping TS Interop Feature tests: $reason');
+      }
       return;
     }
 
     group('Stdio Transport', () {
       late McpClient client;
       late StdioClientTransport transport;
+      late List<ToolChoiceMode?> observedToolChoiceModes;
 
       setUp(() async {
+        observedToolChoiceModes = [];
+
         // 1. Create the StdioClientTransport with server parameters
         transport = StdioClientTransport(
           StdioServerParameters(
@@ -48,7 +58,7 @@ void main() {
           options: const McpClientOptions(
             capabilities: ClientCapabilities(
               roots: ClientCapabilitiesRoots(listChanged: true),
-              sampling: ClientCapabilitiesSampling(),
+              sampling: ClientCapabilitiesSampling(tools: true),
               elicitation: ClientElicitation.formOnly(),
             ),
           ),
@@ -82,11 +92,29 @@ void main() {
           final firstMessage = params.messages.firstOrNull;
           String promptText = 'unknown';
           if (firstMessage != null) {
-            final content = firstMessage.content;
-            if (content is SamplingTextContent) {
-              promptText = content.text;
+            final firstText = firstMessage.contentBlocks
+                .whereType<SamplingTextContent>()
+                .firstOrNull;
+            if (firstText != null) {
+              promptText = firstText.text;
             }
           }
+
+          observedToolChoiceModes.add(params.toolChoiceConfig?.mode);
+
+          if (promptText.contains('[multi]')) {
+            return CreateMessageResult(
+              model: 'mock-llm-model',
+              role: SamplingMessageRole.assistant,
+              content: [
+                SamplingTextContent(
+                  text: 'Mock LLM response to: $promptText',
+                ),
+                const SamplingTextContent(text: 'Mock LLM follow-up block'),
+              ],
+            );
+          }
+
           return CreateMessageResult(
             model: 'mock-llm-model',
             role: SamplingMessageRole.assistant,
@@ -139,6 +167,52 @@ void main() {
         final textContent = result.content.first as TextContent;
         expect(textContent.text, contains('Mock LLM response'));
         expect(textContent.text, contains('Hello, world!'));
+        expect(observedToolChoiceModes, contains(ToolChoiceMode.auto));
+      });
+
+      test('sample_llm - supports repeated sampling requests', () async {
+        final first = await client.callTool(
+          const CallToolRequest(
+            name: 'sample_llm',
+            arguments: {'prompt': 'First prompt'},
+          ),
+        );
+
+        final second = await client.callTool(
+          const CallToolRequest(
+            name: 'sample_llm',
+            arguments: {'prompt': 'Second prompt'},
+          ),
+        );
+
+        final firstText = (first.content.first as TextContent).text;
+        final secondText = (second.content.first as TextContent).text;
+
+        expect(firstText, contains('First prompt'));
+        expect(secondText, contains('Second prompt'));
+        expect(observedToolChoiceModes, contains(ToolChoiceMode.auto));
+      });
+
+      test('sample_llm - handles multi-block sampling response', () async {
+        final result = await client.callTool(
+          const CallToolRequest(
+            name: 'sample_llm',
+            arguments: {'prompt': 'Hello [multi] world!'},
+          ),
+        );
+
+        expect(result.content, isNotEmpty);
+        final textContent = result.content.first as TextContent;
+        final decoded = jsonDecode(textContent.text);
+        expect(decoded, isA<List>());
+
+        final blocks = (decoded as List).cast<Map<String, dynamic>>();
+        expect(blocks, hasLength(greaterThanOrEqualTo(2)));
+        expect(blocks.first['type'], equals('text'));
+        expect(blocks.first['text'], contains('Mock LLM response to:'));
+        expect(blocks[1]['type'], equals('text'));
+        expect(blocks[1]['text'], equals('Mock LLM follow-up block'));
+        expect(observedToolChoiceModes, contains(ToolChoiceMode.auto));
       });
 
       test('elicit_input - server requests user input', () async {
