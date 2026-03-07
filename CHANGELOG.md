@@ -1,4 +1,4 @@
-## Unreleased
+## 2.1.0
 
 ### Compatibility Notes (Potentially Breaking)
 
