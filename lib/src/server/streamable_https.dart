@@ -35,8 +35,7 @@ abstract class EventStore {
   /// Returns the stream ID associated with the events
   Future<StreamId> replayEventsAfter(
     EventId lastEventId, {
-    required Future<void> Function(EventId eventId, JsonRpcMessage message)
-        send,
+    required Future<void> Function(EventId eventId, JsonRpcMessage message) send,
   });
 }
 
@@ -48,11 +47,12 @@ class StreamableHTTPServerTransportOptions {
   /// Return null to disable session management
   final String? Function()? sessionIdGenerator;
 
-  /// A callback for session initialization events
+  /// A callback for session initialization events.
   /// This is called when the server initializes a new session.
   /// Useful in cases when you need to register multiple MCP sessions
   /// and need to keep track of them.
-  final void Function(String sessionId)? onsessioninitialized;
+  /// If the callback returns a Future, it is awaited before processing messages.
+  final FutureOr<void> Function(String sessionId)? onsessioninitialized;
 
   /// If true, the server will return JSON responses instead of starting an SSE stream.
   /// This can be useful for simple request/response scenarios without streaming.
@@ -141,7 +141,7 @@ class StreamableHTTPServerTransport implements Transport {
   final bool _enableJsonResponse;
   final String _standaloneSseStreamId = '_GET_stream';
   final EventStore? _eventStore;
-  final void Function(String sessionId)? _onsessioninitialized;
+  final FutureOr<void> Function(String sessionId)? _onsessioninitialized;
   final bool _enableDnsRebindingProtection;
   final Set<String>? _allowedHosts;
   final Set<String>? _allowedOrigins;
@@ -161,16 +161,15 @@ class StreamableHTTPServerTransport implements Transport {
   void Function(JsonRpcMessage message)? onmessage;
 
   /// Creates a new StreamableHTTPServerTransport
-  StreamableHTTPServerTransport({
-    required StreamableHTTPServerTransportOptions options,
-  })  : _sessionIdGenerator = options.sessionIdGenerator,
-        _enableJsonResponse = options.enableJsonResponse,
-        _eventStore = options.eventStore,
-        _onsessioninitialized = options.onsessioninitialized,
-        _enableDnsRebindingProtection = options.enableDnsRebindingProtection,
-        _allowedHosts = options.allowedHosts,
-        _allowedOrigins = options.allowedOrigins,
-        _keepAliveInterval = options.keepAliveInterval;
+  StreamableHTTPServerTransport({required StreamableHTTPServerTransportOptions options})
+    : _sessionIdGenerator = options.sessionIdGenerator,
+      _enableJsonResponse = options.enableJsonResponse,
+      _eventStore = options.eventStore,
+      _onsessioninitialized = options.onsessioninitialized,
+      _enableDnsRebindingProtection = options.enableDnsRebindingProtection,
+      _allowedHosts = options.allowedHosts,
+      _allowedOrigins = options.allowedOrigins,
+      _keepAliveInterval = options.keepAliveInterval;
 
   /// Starts the transport. This is required by the Transport interface but is a no-op
   /// for the Streamable HTTP transport as connections are managed per-request.
@@ -183,12 +182,11 @@ class StreamableHTTPServerTransport implements Transport {
   }
 
   /// Handles an incoming HTTP request, whether GET or POST
-  /// 
+  ///
   /// This method is for dart:io HttpRequest. For shelf Request, use handleShelfRequest().
   Future<void> handleRequest(HttpRequest req, [dynamic parsedBody]) async {
     req.response.bufferOutput = false;
-    if (_enableDnsRebindingProtection &&
-        !_isRequestAllowedByDnsRebindingProtection(req)) {
+    if (_enableDnsRebindingProtection && !_isRequestAllowedByDnsRebindingProtection(req)) {
       req.response
         ..statusCode = HttpStatus.forbidden
         ..write('Forbidden: blocked by DNS rebinding protection');
@@ -230,8 +228,7 @@ class StreamableHTTPServerTransport implements Transport {
     final configuredOrigins = _normalizedAllowedOrigins();
     if (configuredOrigins != null) {
       final normalizedOrigin = _normalizeOrigin(originHeader);
-      return normalizedOrigin != null &&
-          configuredOrigins.contains(normalizedOrigin);
+      return normalizedOrigin != null && configuredOrigins.contains(normalizedOrigin);
     }
 
     final originUri = Uri.tryParse(originHeader);
@@ -249,11 +246,7 @@ class StreamableHTTPServerTransport implements Transport {
       return configuredHosts.map(_extractHost).toSet();
     }
 
-    return {
-      'localhost',
-      '127.0.0.1',
-      '::1',
-    };
+    return {'localhost', '127.0.0.1', '::1'};
   }
 
   Set<String>? _normalizedAllowedOrigins() {
@@ -304,9 +297,7 @@ class StreamableHTTPServerTransport implements Transport {
 
   String? _normalizeOrigin(String origin) {
     final parsedUri = Uri.tryParse(origin.trim());
-    if (parsedUri == null ||
-        parsedUri.scheme.isEmpty ||
-        parsedUri.host.isEmpty) {
+    if (parsedUri == null || parsedUri.scheme.isEmpty || parsedUri.host.isEmpty) {
       return null;
     }
 
@@ -316,15 +307,15 @@ class StreamableHTTPServerTransport implements Transport {
   }
 
   /// Handles an incoming shelf Request
-  /// 
+  ///
   /// This method supports shelf-based HTTP servers. It returns a Future<Response>
   /// that completes when the response is ready to be sent.
-  /// 
+  ///
   /// For dart:io HttpRequest, use handleRequest() instead.
   Future<Response> handleShelfRequest(Request req, [dynamic parsedBody]) async {
     final responseCompleter = Completer<Response>();
     final adapter = ShelfHttpAdapter(req, responseCompleter);
-    
+
     if (adapter.method == "POST") {
       await _handlePostRequestAdapter(adapter, parsedBody);
     } else if (adapter.method == "GET") {
@@ -334,7 +325,7 @@ class StreamableHTTPServerTransport implements Transport {
     } else {
       await _handleUnsupportedRequestAdapter(adapter.response);
     }
-    
+
     return adapter.shelfResponse;
   }
 
@@ -454,7 +445,7 @@ class StreamableHTTPServerTransport implements Transport {
       });
       await res.flush();
 
-      final streamId = await _eventStore!.replayEventsAfter(
+      final streamId = await _eventStore.replayEventsAfter(
         lastEventId,
         send: (eventId, message) async {
           if (!await _writeSSEEvent(res, message, eventId)) {
@@ -466,7 +457,7 @@ class StreamableHTTPServerTransport implements Transport {
       );
 
       _streamMapping[streamId] = res;
-      
+
       // Start keep-alive timer for this resumed SSE connection
       _startKeepAliveTimer(streamId, res);
 
@@ -490,11 +481,7 @@ class StreamableHTTPServerTransport implements Transport {
   }
 
   /// Writes an event to the SSE stream with proper formatting
-  Future<bool> _writeSSEEvent(
-    HttpResponse res,
-    JsonRpcMessage message, [
-    String? eventId,
-  ]) async {
+  Future<bool> _writeSSEEvent(HttpResponse res, JsonRpcMessage message, [String? eventId]) async {
     var eventData = "event: message\n";
     // Include event ID if provided - this is important for resumability
     if (eventId != null) {
@@ -512,8 +499,7 @@ class StreamableHTTPServerTransport implements Transport {
   }
 
   /// Writes an event to an adapter response (shelf)
-  bool _writeSSEEventAdapter(HttpResponseAdapter res, JsonRpcMessage message,
-      [String? eventId]) {
+  bool _writeSSEEventAdapter(HttpResponseAdapter res, JsonRpcMessage message, [String? eventId]) {
     var eventData = "event: message\n";
     // Include event ID if provided - this is important for resumability
     if (eventId != null) {
@@ -570,16 +556,13 @@ class StreamableHTTPServerTransport implements Transport {
     _keepAliveTimers[streamId]?.cancel();
 
     // Create new timer
-    _keepAliveTimers[streamId] = Timer.periodic(
-      Duration(seconds: keepAliveInterval),
-      (timer) {
-        if (!_writeKeepAlive(response)) {
-          // Connection closed, cancel timer
-          timer.cancel();
-          _keepAliveTimers.remove(streamId);
-        }
-      },
-    );
+    _keepAliveTimers[streamId] = Timer.periodic(Duration(seconds: keepAliveInterval), (timer) {
+      if (!_writeKeepAlive(response)) {
+        // Connection closed, cancel timer
+        timer.cancel();
+        _keepAliveTimers.remove(streamId);
+      }
+    });
   }
 
   /// Starts a keep-alive timer for an adapter stream
@@ -594,16 +577,13 @@ class StreamableHTTPServerTransport implements Transport {
     _keepAliveTimers[streamId]?.cancel();
 
     // Create new timer
-    _keepAliveTimers[streamId] = Timer.periodic(
-      Duration(seconds: keepAliveInterval),
-      (timer) {
-        if (!_writeKeepAliveAdapter(response)) {
-          // Connection closed, cancel timer
-          timer.cancel();
-          _keepAliveTimers.remove(streamId);
-        }
-      },
-    );
+    _keepAliveTimers[streamId] = Timer.periodic(Duration(seconds: keepAliveInterval), (timer) {
+      if (!_writeKeepAliveAdapter(response)) {
+        // Connection closed, cancel timer
+        timer.cancel();
+        _keepAliveTimers.remove(streamId);
+      }
+    });
   }
 
   /// Stops the keep-alive timer for the given stream
@@ -620,10 +600,7 @@ class StreamableHTTPServerTransport implements Transport {
       jsonEncode(
         JsonRpcError(
           id: null,
-          error: JsonRpcErrorData(
-            code: ErrorCode.connectionClosed.value,
-            message: 'Method not allowed.',
-          ),
+          error: JsonRpcErrorData(code: ErrorCode.connectionClosed.value, message: 'Method not allowed.'),
         ).toJson(),
       ),
     );
@@ -633,7 +610,7 @@ class StreamableHTTPServerTransport implements Transport {
   // ============================================================================
   // Adapter-based methods for shelf support
   // ============================================================================
-  
+
   /// NOTE: These methods are simplified implementations for the initial shelf support.
   /// They handle the core MCP protocol but may not support all advanced features
   /// (like event store resumability) that the dart:io implementation supports.
@@ -643,31 +620,32 @@ class StreamableHTTPServerTransport implements Transport {
   Future<void> _handleUnsupportedRequestAdapter(HttpResponseAdapter res) async {
     res.statusCode = HttpStatus.methodNotAllowed;
     res.setHeader(HttpHeaders.allowHeader, "GET, POST, DELETE");
-    res.write(jsonEncode({
-      "jsonrpc": "2.0",
-      "error": {"code": -32000, "message": "Method not allowed."},
-      "id": null
-    }));
+    res.write(
+      jsonEncode({
+        "jsonrpc": "2.0",
+        "error": {"code": -32000, "message": "Method not allowed."},
+        "id": null,
+      }),
+    );
     await res.close();
   }
 
   /// Handles GET requests via adapter
   Future<void> _handleGetRequestAdapter(HttpAdapter adapter) async {
     final res = adapter.response;
-    
+
     // Check Accept header
     final acceptHeader = adapter.getHeader(HttpHeaders.acceptHeader);
     if (acceptHeader == null || !acceptHeader.contains("text/event-stream")) {
       res.statusCode = HttpStatus.notAcceptable;
       res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-      res.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32000,
-          "message": "Not Acceptable: Client must accept text/event-stream"
-        },
-        "id": null
-      }));
+      res.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {"code": -32000, "message": "Not Acceptable: Client must accept text/event-stream"},
+          "id": null,
+        }),
+      );
       await res.close();
       return;
     }
@@ -682,16 +660,16 @@ class StreamableHTTPServerTransport implements Transport {
     res.setHeader(HttpHeaders.contentTypeHeader, "text/event-stream");
     res.setHeader(HttpHeaders.cacheControlHeader, "no-cache, no-transform");
     res.setHeader(HttpHeaders.connectionHeader, "keep-alive");
-    
+
     if (sessionId != null) {
       res.setHeader("mcp-session-id", sessionId!);
     }
 
     await res.flush();
-    
+
     // Store this GET stream for future server-initiated messages
     _adapterStreamMapping[_standaloneSseStreamId] = res;
-    
+
     // Start keep-alive timer for this SSE connection
     _startKeepAliveTimerAdapter(_standaloneSseStreamId, res);
   }
@@ -699,7 +677,7 @@ class StreamableHTTPServerTransport implements Transport {
   /// Handles POST requests via adapter
   Future<void> _handlePostRequestAdapter(HttpAdapter adapter, [dynamic parsedBody]) async {
     final res = adapter.response;
-    
+
     try {
       // Validate Accept header
       final acceptHeader = adapter.getHeader(HttpHeaders.acceptHeader);
@@ -708,15 +686,16 @@ class StreamableHTTPServerTransport implements Transport {
           !acceptHeader.contains("text/event-stream")) {
         res.statusCode = HttpStatus.notAcceptable;
         res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-        res.write(jsonEncode({
-          "jsonrpc": "2.0",
-          "error": {
-            "code": -32000,
-            "message":
-                "Not Acceptable: Client must accept both application/json and text/event-stream"
-          },
-          "id": null
-        }));
+        res.write(
+          jsonEncode({
+            "jsonrpc": "2.0",
+            "error": {
+              "code": -32000,
+              "message": "Not Acceptable: Client must accept both application/json and text/event-stream",
+            },
+            "id": null,
+          }),
+        );
         await res.close();
         return;
       }
@@ -726,15 +705,13 @@ class StreamableHTTPServerTransport implements Transport {
       if (contentType == null || !contentType.mimeType.contains("application/json")) {
         res.statusCode = HttpStatus.unsupportedMediaType;
         res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-        res.write(jsonEncode({
-          "jsonrpc": "2.0",
-          "error": {
-            "code": -32000,
-            "message":
-                "Unsupported Media Type: Content-Type must be application/json"
-          },
-          "id": null
-        }));
+        res.write(
+          jsonEncode({
+            "jsonrpc": "2.0",
+            "error": {"code": -32000, "message": "Unsupported Media Type: Content-Type must be application/json"},
+            "id": null,
+          }),
+        );
         await res.close();
         return;
       }
@@ -750,7 +727,7 @@ class StreamableHTTPServerTransport implements Transport {
       }
 
       List<JsonRpcMessage> messages = [];
-      
+
       // Handle batch and single messages
       if (rawMessage is List) {
         for (final msg in rawMessage) {
@@ -759,15 +736,13 @@ class StreamableHTTPServerTransport implements Transport {
           } catch (e) {
             res.statusCode = HttpStatus.badRequest;
             res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-            res.write(jsonEncode({
-              "jsonrpc": "2.0",
-              "error": {
-                "code": -32700,
-                "message": "Parse error",
-                "data": e.toString()
-              },
-              "id": null
-            }));
+            res.write(
+              jsonEncode({
+                "jsonrpc": "2.0",
+                "error": {"code": -32700, "message": "Parse error", "data": e.toString()},
+                "id": null,
+              }),
+            );
             await res.close();
             return;
           }
@@ -778,15 +753,13 @@ class StreamableHTTPServerTransport implements Transport {
         } catch (e) {
           res.statusCode = HttpStatus.badRequest;
           res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-          res.write(jsonEncode({
-            "jsonrpc": "2.0",
-            "error": {
-              "code": -32700,
-              "message": "Parse error",
-              "data": e.toString()
-            },
-            "id": null
-          }));
+          res.write(
+            jsonEncode({
+              "jsonrpc": "2.0",
+              "error": {"code": -32700, "message": "Parse error", "data": e.toString()},
+              "id": null,
+            }),
+          );
           await res.close();
           return;
         }
@@ -798,23 +771,24 @@ class StreamableHTTPServerTransport implements Transport {
         if (_initialized && sessionId != null) {
           res.statusCode = HttpStatus.badRequest;
           res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-          res.write(jsonEncode({
-            "jsonrpc": "2.0",
-            "error": {
-              "code": -32600,
-              "message": "Invalid Request: Server already initialized"
-            },
-            "id": null
-          }));
+          res.write(
+            jsonEncode({
+              "jsonrpc": "2.0",
+              "error": {"code": -32600, "message": "Invalid Request: Server already initialized"},
+              "id": null,
+            }),
+          );
           await res.close();
           return;
         }
-        
+
         sessionId = _sessionIdGenerator?.call();
         _initialized = true;
 
-        if (sessionId != null && _onsessioninitialized != null) {
-          _onsessioninitialized!(sessionId!);
+        final cb = _onsessioninitialized;
+        final sid = sessionId;
+        if (sid != null && cb != null) {
+          await cb(sid);
         }
       }
 
@@ -837,13 +811,13 @@ class StreamableHTTPServerTransport implements Transport {
       } else {
         // Has requests - set up response (SSE or JSON based on enableJsonResponse)
         final streamId = generateUUID();
-        
+
         res.statusCode = HttpStatus.ok;
-        
+
         if (sessionId != null) {
           res.setHeader("mcp-session-id", sessionId!);
         }
-        
+
         if (_enableJsonResponse) {
           // JSON response mode - set headers but DON'T flush yet
           // We need to wait for the server to send the response via send()
@@ -853,7 +827,7 @@ class StreamableHTTPServerTransport implements Transport {
           res.setHeader(HttpHeaders.contentTypeHeader, "text/event-stream");
           res.setHeader(HttpHeaders.cacheControlHeader, "no-cache");
           res.setHeader(HttpHeaders.connectionHeader, "keep-alive");
-          
+
           // Flush for SSE to start the stream
           await res.flush();
         }
@@ -870,22 +844,20 @@ class StreamableHTTPServerTransport implements Transport {
         for (final message in messages) {
           onmessage?.call(message);
         }
-        
+
         // For JSON responses, the response will be completed by send()
         // For SSE responses, the stream stays open
       }
     } catch (error) {
       res.statusCode = HttpStatus.badRequest;
       res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-      res.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32700,
-          "message": "Parse error",
-          "data": error.toString()
-        },
-        "id": null
-      }));
+      res.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {"code": -32700, "message": "Parse error", "data": error.toString()},
+          "id": null,
+        }),
+      );
       await res.close();
 
       if (error is Error) {
@@ -901,7 +873,7 @@ class StreamableHTTPServerTransport implements Transport {
     if (!_validateSessionAdapter(adapter)) {
       return;
     }
-    
+
     await close();
     adapter.response.statusCode = HttpStatus.ok;
     await adapter.response.close();
@@ -910,18 +882,17 @@ class StreamableHTTPServerTransport implements Transport {
   /// Validates session for adapter-based requests
   bool _validateSessionAdapter(HttpAdapter adapter) {
     final res = adapter.response;
-    
+
     if (!_initialized) {
       res.statusCode = HttpStatus.badRequest;
       res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-      res.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32000,
-          "message": "Bad Request: Server not initialized"
-        },
-        "id": null
-      }));
+      res.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {"code": -32000, "message": "Bad Request: Server not initialized"},
+          "id": null,
+        }),
+      );
       res.close();
       return false;
     }
@@ -935,24 +906,25 @@ class StreamableHTTPServerTransport implements Transport {
     if (requestSessionId == null) {
       res.statusCode = HttpStatus.badRequest;
       res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-      res.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32000,
-          "message": "Bad Request: Mcp-Session-Id header is required"
-        },
-        "id": null
-      }));
+      res.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {"code": -32000, "message": "Bad Request: Mcp-Session-Id header is required"},
+          "id": null,
+        }),
+      );
       res.close();
       return false;
     } else if (requestSessionId != sessionId) {
       res.statusCode = HttpStatus.notFound;
       res.setHeader(HttpHeaders.contentTypeHeader, "application/json");
-      res.write(jsonEncode({
-        "jsonrpc": "2.0",
-        "error": {"code": -32001, "message": "Session not found"},
-        "id": null
-      }));
+      res.write(
+        jsonEncode({
+          "jsonrpc": "2.0",
+          "error": {"code": -32001, "message": "Session not found"},
+          "id": null,
+        }),
+      );
       res.close();
       return false;
     }
@@ -981,8 +953,7 @@ class StreamableHTTPServerTransport implements Transport {
       // Validate the Accept header
       final acceptHeader = req.headers.value(HttpHeaders.acceptHeader) ?? '';
       // The client MUST include an Accept header, listing both application/json and text/event-stream as supported content types.
-      if (!acceptHeader.contains("application/json") ||
-          !acceptHeader.contains("text/event-stream")) {
+      if (!acceptHeader.contains("application/json") || !acceptHeader.contains("text/event-stream")) {
         req.response.statusCode = HttpStatus.notAcceptable;
         req.response.write(
           jsonEncode(
@@ -990,8 +961,7 @@ class StreamableHTTPServerTransport implements Transport {
               id: null,
               error: JsonRpcErrorData(
                 code: ErrorCode.connectionClosed.value,
-                message:
-                    'Not Acceptable: Client must accept both application/json and text/event-stream',
+                message: 'Not Acceptable: Client must accept both application/json and text/event-stream',
               ),
             ).toJson(),
           ),
@@ -1009,8 +979,7 @@ class StreamableHTTPServerTransport implements Transport {
               id: null,
               error: JsonRpcErrorData(
                 code: ErrorCode.connectionClosed.value,
-                message:
-                    'Unsupported Media Type: Content-Type must be application/json',
+                message: 'Unsupported Media Type: Content-Type must be application/json',
               ),
             ).toJson(),
           ),
@@ -1042,11 +1011,7 @@ class StreamableHTTPServerTransport implements Transport {
               jsonEncode(
                 JsonRpcError(
                   id: null,
-                  error: JsonRpcErrorData(
-                    code: ErrorCode.parseError.value,
-                    message: 'Parse error',
-                    data: e.toString(),
-                  ),
+                  error: JsonRpcErrorData(code: ErrorCode.parseError.value, message: 'Parse error', data: e.toString()),
                 ).toJson(),
               ),
             );
@@ -1064,11 +1029,7 @@ class StreamableHTTPServerTransport implements Transport {
             jsonEncode(
               JsonRpcError(
                 id: null,
-                error: JsonRpcErrorData(
-                  code: ErrorCode.parseError.value,
-                  message: 'Parse error',
-                  data: e.toString(),
-                ),
+                error: JsonRpcErrorData(code: ErrorCode.parseError.value, message: 'Parse error', data: e.toString()),
               ).toJson(),
             ),
           );
@@ -1108,8 +1069,7 @@ class StreamableHTTPServerTransport implements Transport {
                 id: null,
                 error: JsonRpcErrorData(
                   code: ErrorCode.invalidRequest.value,
-                  message:
-                      'Invalid Request: Only one initialization request is allowed',
+                  message: 'Invalid Request: Only one initialization request is allowed',
                 ),
               ).toJson(),
             ),
@@ -1120,18 +1080,19 @@ class StreamableHTTPServerTransport implements Transport {
         sessionId = _sessionIdGenerator?.call();
         _initialized = true;
 
-        // If we have a session ID and an onsessioninitialized handler, call it immediately
-        // This is needed in cases where the server needs to keep track of multiple sessions
-        if (sessionId != null && _onsessioninitialized != null) {
-          _onsessioninitialized!(sessionId!);
+        // If we have a session ID and an onsessioninitialized handler, call and await it
+        // so the server is connected before we process messages
+        final cb = _onsessioninitialized;
+        final sid = sessionId;
+        if (sid != null && cb != null) {
+          await cb(sid);
         }
       }
 
       // If an Mcp-Session-Id is returned by the server during initialization,
       // clients using the Streamable HTTP transport MUST include it
       // in the Mcp-Session-Id header on all of their subsequent HTTP requests.
-      if (!isInitializationRequest &&
-          !await _validateSession(req, req.response)) {
+      if (!isInitializationRequest && !await _validateSession(req, req.response)) {
         return;
       }
 
@@ -1195,6 +1156,12 @@ class StreamableHTTPServerTransport implements Transport {
           _stopKeepAliveTimer(streamId);
         });
 
+        // Flush headers immediately so client receives status and mcp-session-id
+        // before we process messages (which may be async)
+        if (!_enableJsonResponse) {
+          await req.response.flush();
+        }
+
         // Handle each message
         for (final message in messages) {
           try {
@@ -1214,11 +1181,7 @@ class StreamableHTTPServerTransport implements Transport {
         jsonEncode(
           JsonRpcError(
             id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.parseError.value,
-              message: 'Parse error',
-              data: error.toString(),
-            ),
+            error: JsonRpcErrorData(code: ErrorCode.parseError.value, message: 'Parse error', data: error.toString()),
           ).toJson(),
         ),
       );
@@ -1309,10 +1272,7 @@ class StreamableHTTPServerTransport implements Transport {
         jsonEncode(
           JsonRpcError(
             id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.connectionClosed.value,
-              message: 'Session not found',
-            ),
+            error: JsonRpcErrorData(code: ErrorCode.connectionClosed.value, message: 'Session not found'),
           ).toJson(),
         ),
       );
@@ -1369,9 +1329,7 @@ class StreamableHTTPServerTransport implements Transport {
     if (requestId == null) {
       // For standalone SSE streams, we can only send requests and notifications
       if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
-        throw StateError(
-          "Cannot send a response on a standalone SSE stream unless resuming a previous client request",
-        );
+        throw StateError("Cannot send a response on a standalone SSE stream unless resuming a previous client request");
       }
 
       final standaloneSse = _streamMapping[_standaloneSseStreamId];
@@ -1384,10 +1342,7 @@ class StreamableHTTPServerTransport implements Transport {
       String? eventId;
       if (_eventStore != null) {
         // Stores the event and gets the generated event ID
-        eventId = await _eventStore!.storeEvent(
-          _standaloneSseStreamId,
-          message,
-        );
+        eventId = await _eventStore.storeEvent(_standaloneSseStreamId, message);
       }
 
       // Send the message to the standalone SSE stream
@@ -1409,7 +1364,7 @@ class StreamableHTTPServerTransport implements Transport {
       String? eventId;
 
       if (_eventStore != null) {
-        eventId = await _eventStore!.storeEvent(streamId, message);
+        eventId = await _eventStore.storeEvent(streamId, message);
       }
 
       if (response != null) {
@@ -1423,7 +1378,7 @@ class StreamableHTTPServerTransport implements Transport {
 
     if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
       _requestResponseMap[requestId] = message;
-      
+
       // Find all related IDs for this stream (works for both dart:io and adapter)
       final relatedIds = _requestToStreamMapping.entries
           .where((entry) => entry.value == streamId)
@@ -1431,23 +1386,18 @@ class StreamableHTTPServerTransport implements Transport {
           .toList();
 
       // Check if we have responses for all requests using this connection
-      final allResponsesReady = relatedIds.every(
-        (id) => _requestResponseMap.containsKey(id),
-      );
+      final allResponsesReady = relatedIds.every((id) => _requestResponseMap.containsKey(id));
 
       if (allResponsesReady) {
         if (response == null && adapterResponse == null) {
-          throw StateError(
-            "No connection established for request ID: $requestId",
-          );
+          throw StateError("No connection established for request ID: $requestId");
         }
 
         if (_enableJsonResponse) {
           // All responses ready, send as JSON
-          final responses =
-              relatedIds.map((id) => _requestResponseMap[id]!).toList();
+          final responses = relatedIds.map((id) => _requestResponseMap[id]!).toList();
 
-          final jsonBody = responses.length == 1 
+          final jsonBody = responses.length == 1
               ? jsonEncode(responses[0].toJson())
               : jsonEncode(responses.map((r) => r.toJson()).toList());
 

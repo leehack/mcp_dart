@@ -1,0 +1,99 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened, reopened]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  issues: write
+  contents: read
+
+env:
+  GEMINI_API_KEY: ${{ secrets.CICD_GEMINI_API_KEY_OPEN_RUNTIME }}
+  OPENAI_API_KEY: ${{ secrets.OPEN_AI_API_KEY_GLOBAL_CLOUD_RUNTIME }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_GLOBAL_CLOUD_RUNTIME }}
+  AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.OPEN_RUNTIME_AWS_BEDROCK_API_KEY }}
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - name: Check for triage trigger
+        id: trigger
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          if [ "$EVENT_NAME" = "issue_comment" ]; then
+            if echo "$COMMENT_BODY" | grep -qi "@gemini-cli"; then
+              echo "run=true" >> $GITHUB_OUTPUT
+            else
+              echo "run=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "run=true" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/checkout@v6.0.2
+        if: steps.trigger.outputs.run == 'true'
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure Git for HTTPS with Token
+        if: steps.trigger.outputs.run == 'true'
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets.TSAVO_AT_PIECES_PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "git@github.com:"
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/open-runtime/".insteadOf "git@github.com:open-runtime/"
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/pieces-app/".insteadOf "git@github.com:pieces-app/"
+
+      - uses: dart-lang/setup-dart@v1.7.1
+        if: steps.trigger.outputs.run == 'true'
+        with:
+          sdk: "3.9.2"
+
+      - name: Cache Dart pub dependencies
+        if: steps.trigger.outputs.run == 'true'
+        uses: actions/cache@v5.0.3
+        with:
+          path: ${{ runner.os == 'Windows' && format('{0}\\Pub\\Cache', env.LOCALAPPDATA) || '~/.pub-cache' }}
+          key: ${{ runner.os }}-dart-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: ${{ runner.os }}-dart-pub-
+
+      - run: dart pub get
+        if: steps.trigger.outputs.run == 'true'
+
+      - uses: actions/setup-node@v6.2.0
+        if: steps.trigger.outputs.run == 'true'
+        with:
+          node-version: "22"
+
+      - run: npm install -g @google/gemini-cli@latest
+        if: steps.trigger.outputs.run == 'true'
+
+      - name: Cache Go modules (GitHub MCP server)
+        if: steps.trigger.outputs.run == 'true'
+        uses: actions/cache@v5.0.3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mcp-v1
+          restore-keys: ${{ runner.os }}-go-mcp-
+
+      - name: Run triage
+        if: steps.trigger.outputs.run == 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.CICD_GEMINI_API_KEY_OPEN_RUNTIME }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: dart run runtime_ci_tooling:triage_cli "$ISSUE_NUMBER"

@@ -52,7 +52,8 @@ void main() {
       adapter.response.setHeader('Content-Type', 'application/json');
       adapter.response.setHeader('X-Custom-Header', 'test-value');
       adapter.response.write('{"error": "Not Found"}');
-      
+      await adapter.response.flush();
+
       final response = await adapter.shelfResponse;
       expect(response.statusCode, equals(404));
       expect(response.headers['content-type'], equals('application/json'));
@@ -128,13 +129,14 @@ void main() {
       expect(adapter.contentType, isNull);
     });
 
-    test('cannot modify response after it has been sent', () {
+    test('cannot modify response after it has been sent', () async {
       final request = Request('POST', Uri.parse('http://localhost/test'));
       final responseCompleter = Completer<Response>();
       final adapter = ShelfHttpAdapter(request, responseCompleter);
 
-      // Send response by writing data
+      // Send response by writing data and flushing (finalizes the response)
       adapter.response.write('test');
+      await adapter.response.flush();
 
       // Try to modify - should throw
       expect(() => adapter.response.statusCode = 404, throwsStateError);
@@ -160,9 +162,9 @@ void main() {
       // Response should now exist
       final response = await adapter.shelfResponse;
       expect(response.statusCode, equals(200));
-      
-      // The response should be streaming (body is a Stream)
-      expect(response.read, isNotNull);
+
+      final body = await response.readAsString();
+      expect(body, equals('line1\nline2\nline3\n'));
     });
   });
 }

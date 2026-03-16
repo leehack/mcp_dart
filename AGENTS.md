@@ -13,7 +13,15 @@ It enables building MCP servers and clients to connect AI applications with exte
 - **Core Logic**: `lib/src/`
 - **Tests**: `test/` (mirrors `lib/` structure)
 
-## 2. Build, Lint, and Test Commands
+## 2. Managed CI/CD (runtime_ci_tooling)
+
+This repo uses `runtime_ci_tooling` for managed CI/CD scaffolding. Config lives in `.runtime_ci/config.json`.
+
+- **Regenerate workflows:** `dart run runtime_ci_tooling:manage_cicd update --workflows`
+- **Managed workflows:** `.github/workflows/ci.yaml`, `release.yaml`, `issue-triage.yaml`
+- **Legacy workflows:** Removed in favor of the managed `runtime_ci_tooling` setup. Do not recreate parallel CI/CD flows unless the repository intentionally adds a new managed capability first.
+
+## 3. Build, Lint, and Test Commands
 
 All commands should be run from the root of the repository.
 
@@ -52,7 +60,7 @@ dart test --name "Server initialization"
 dart test --coverage=coverage
 ```
 
-## 3. Code Style & Conventions
+## 4. Code Style & Conventions
 
 Adhere strictly to the following conventions.
 
@@ -95,7 +103,7 @@ Adhere strictly to the following conventions.
 - **Argument Errors**: Use `ArgumentError` for invalid inputs.
 - **Try/Catch**: Handle specific exceptions. Avoid catching broad `Error` or `Exception` without rethrowing or logging.
 
-## 4. Testing Guidelines
+## 5. Testing Guidelines
 
 - **Framework**: Use `package:test`.
 - **Structure**: Use `group()` to organize tests by class or feature.
@@ -103,7 +111,7 @@ Adhere strictly to the following conventions.
 - **Mocks**: Use manual mocks or `MockTransport` (as seen in `server_test.dart`) to test protocol logic without network I/O.
 - **Coverage**: Aim to test both success paths and error conditions (e.g., missing capabilities).
 
-## 5. Development Workflow for Agents
+## 6. Development Workflow for Agents
 
 1.  **Explore**: Read related files (`lib/src/...` and `test/...`) to understand the context.
 2.  **Plan**: Create a brief plan of changes.
@@ -115,7 +123,7 @@ Adhere strictly to the following conventions.
     - Run related tests (e.g., `dart test test/path/to/relevant_test.dart`).
     - Run all tests (`dart test`) before finishing to ensure no regressions.
 
-## 6. Example Patterns
+## 7. Example Patterns
 
 **Class Definition:**
 ```dart

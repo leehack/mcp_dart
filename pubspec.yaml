@@ -17,4 +17,9 @@ dependencies:
 dev_dependencies:
   lints: ^6.0.0
   path: ^1.9.1
+  runtime_ci_tooling:
+    git:
+      url: git@github.com:open-runtime/runtime_ci_tooling.git
+      tag_pattern: v{{version}}
+    version: ^0.16.1
   test: ^1.24.0

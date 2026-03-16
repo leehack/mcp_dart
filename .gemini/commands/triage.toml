@@ -1,0 +1,53 @@
+description = "Triage a GitHub issue: classify, prioritize, detect duplicates. Usage: /triage 42"
+
+prompt = """
+Triage GitHub issue #{{args}} for the !{grep '^name:' pubspec.yaml | sed 's/name: //'} package.
+
+## Repository Context
+```
+REPO: !{gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "UNKNOWN"}
+```
+
+## CRITICAL SAFETY RULES — READ BEFORE ACTING
+
+1. **ALWAYS use `--repo <owner/repo>` on EVERY `gh` command.** Never rely on git remote resolution.
+2. **ONLY operate on repositories owned by: `open-runtime`, `pieces-app`.** If the repo above belongs to a different org (e.g. `grpc`, `niclas-pricken`, etc.), STOP IMMEDIATELY and report: "Refusing to triage — repo belongs to an unauthorized org."
+3. **Before posting any comment**, check the existing comments below for duplicates. If a triage comment already exists, do NOT post another one.
+4. **Never post, edit, label, or close issues on upstream/parent repos.** This is a fork — only operate on the fork's own issues.
+
+## Issue Details (including existing comments)
+```
+!{REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null); case "$REPO" in open-runtime/*|pieces-app/*) ;; *) echo "BLOCKED: repo $REPO belongs to unauthorized org — refusing to fetch"; exit 0;; esac; gh issue view {{args}} --repo "$REPO" --json number,title,body,author,labels,createdAt,comments --jq '"#\\(.number): \\(.title)\\nAuthor: @\\(.author.login)\\nLabels: \\([.labels[].name] | join(", "))\\nCreated: \\(.createdAt)\\n\\n\\(.body)\\n\\n--- EXISTING COMMENTS (\\(.comments | length)) ---\\n\\(.comments | map("[\\(.author.login) @ \\(.createdAt)]:\\n\\(.body)") | join("\\n---\\n"))"' 2>/dev/null || echo "Could not fetch issue"}
+```
+
+## Package Structure
+```
+!{tree lib/ -L 2 --dirsfirst -d 2>/dev/null || echo "No lib/ directory"}
+```
+
+## Open Issues (for duplicate detection)
+```
+!{REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null); case "$REPO" in open-runtime/*|pieces-app/*) ;; *) echo "BLOCKED: repo $REPO belongs to unauthorized org"; exit 0;; esac; gh issue list --repo "$REPO" --state open --limit 50 --json number,title,labels --jq '.[] | "#\\(.number): \\(.title) [\\([.labels[].name] | join(", "))]"' 2>/dev/null || echo "Could not list issues"}
+```
+
+## Triage Tasks
+
+1. **Org Check**: Verify the repository belongs to `open-runtime` or `pieces-app`. If not, STOP.
+2. **Duplicate Check**: Review the EXISTING COMMENTS above. If a triage comment already exists, skip commenting.
+3. **Type**: Classify as one of: bug, feature-request, enhancement, documentation, question
+4. **Priority**: Assign P0-critical, P1-high, P2-medium, or P3-low
+5. **Area**: Classify area(s) based on the package structure above
+6. **Duplicates**: Check open issues for duplicates (HIGH/MEDIUM/LOW confidence)
+7. **Comment**: Draft a helpful, welcoming comment for the reporter (only if no triage comment exists yet)
+
+## Actions
+
+IMPORTANT: Replace `OWNER/REPO` below with the actual repo from "Repository Context" above.
+IMPORTANT: If any existing comment above already contains triage analysis, do NOT post a duplicate.
+
+Apply your triage using gh CLI (ALWAYS include --repo):
+- `gh issue edit {{args}} --repo OWNER/REPO --add-label "<type>"`
+- `gh issue edit {{args}} --repo OWNER/REPO --add-label "<priority>"`
+- `gh issue edit {{args}} --repo OWNER/REPO --add-label "area/<area>"`
+- `gh issue comment {{args}} --repo OWNER/REPO --body "<comment>"`
+"""

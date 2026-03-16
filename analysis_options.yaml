@@ -2,6 +2,8 @@ include: package:lints/recommended.yaml
 
 analyzer:
   exclude:
+    - example/**
+    - packages/mcp_dart_cli/**
     - packages/templates/simple/**
   language:
     # strict-casts: true

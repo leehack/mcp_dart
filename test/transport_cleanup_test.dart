@@ -81,22 +81,36 @@ void main() {
       expect(() => adapter.write('more'), throwsStateError);
     });
 
-    test('flush does not close the adapter prematurely', () async {
+    test('flush sends buffered JSON and close remains safe', () async {
       Completer<Response> responseCompleter = Completer<Response>();
       ShelfHttpResponseAdapter adapter = ShelfHttpResponseAdapter(responseCompleter);
 
       adapter.statusCode = 200;
       adapter.setHeader('Content-Type', 'application/json');
       adapter.write('part1');
+      adapter.write('part2');
       await adapter.flush();
 
-      // Should still be able to write after flush
-      adapter.write('part2');
+      // For JSON, flush() finalizes the response (shelf Response is immutable).
+      // close() should still complete without error.
       await adapter.close();
 
       Response response = await responseCompleter.future;
       String body = await response.readAsString();
       expect(body, equals('part1part2'));
+    });
+
+    test('writing after flush throws StateError for JSON responses', () async {
+      Completer<Response> responseCompleter = Completer<Response>();
+      ShelfHttpResponseAdapter adapter = ShelfHttpResponseAdapter(responseCompleter);
+
+      adapter.statusCode = 200;
+      adapter.setHeader('Content-Type', 'application/json');
+      adapter.write('{"result":"ok"}');
+
+      await adapter.flush();
+
+      expect(() => adapter.write('more'), throwsStateError);
     });
   });
 

@@ -1,0 +1,46 @@
+description = "Generate comprehensive release notes with PR links and contributors. Usage: /release-notes 0.1.0"
+
+prompt = """
+Generate comprehensive release notes for !{grep '^name:' pubspec.yaml | sed 's/name: //'} version {{args}}.
+
+## Merged Pull Requests
+```
+!{gh pr list --state merged --limit 50 --json number,title,body,labels,author 2>/dev/null || echo "gh not available"}
+```
+
+## Commits since last tag
+```
+!{git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --oneline --no-merges}
+```
+
+## Commit Details
+```
+!{git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --format="%h %s%n%b" --no-merges}
+```
+
+## Contributors
+```
+!{git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --format="%an <%ae>" --no-merges | sort -u}
+```
+
+## Diff Statistics
+```
+!{git diff --stat $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD}
+```
+
+## Instructions
+
+Create rich, detailed release notes suitable for a GitHub Release page. Include:
+
+1. **Title**: "!{grep '^name:' pubspec.yaml | sed 's/name: //'} v{{args}}"
+2. **Executive Summary**: 2-3 sentences highlighting the most impactful changes
+3. **What's New**: Detailed feature descriptions linked to PRs (#N)
+4. **Bug Fixes**: What was broken and how it's fixed
+5. **Breaking Changes** (if any): What changed, why, and step-by-step migration guide
+6. **Performance Improvements** (if any): Metrics where available
+7. **Contributors**: Acknowledge every contributor with @username mentions
+8. **Full Changelog**: Link to the commit range comparison
+
+Investigate deeply -- run `git diff`, `gh pr view`, and `git show` to understand changes.
+Write the release notes to /tmp/release_notes_body.md.
+"""

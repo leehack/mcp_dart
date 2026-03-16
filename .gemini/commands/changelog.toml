@@ -1,0 +1,42 @@
+description = "Generate a Keep a Changelog entry for a version. Usage: /changelog 0.1.0"
+
+prompt = """
+Generate a Keep a Changelog entry for version {{args}} of !{grep '^name:' pubspec.yaml | sed 's/name: //'}.
+
+## Project Structure
+```
+!{tree lib/ -L 2 --dirsfirst -I "*.pb.dart|*.pbenum.dart|*.pbjson.dart|*.pbgrpc.dart"}
+```
+
+## Recent Commits (since last tag)
+```
+!{git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --format="%h | %s | %an" --no-merges}
+```
+
+## Commit Details
+```
+!{git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --format="--- %h %s ---%n%b" --no-merges}
+```
+
+## Diff Statistics
+```
+!{git diff --stat $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD}
+```
+
+## Merged Pull Requests
+```
+!{gh pr list --state merged --limit 50 --json number,title,labels,author --jq '.[] | "#\\(.number) \\(.title) (@\\(.author.login))"' 2>/dev/null || echo "gh not available"}
+```
+
+## Instructions
+
+1. Run `git diff` to see the full diff -- explore interesting changes deeply
+2. Read the existing CHANGELOG.md to match its format and style
+3. Categorize changes into: Added, Changed, Deprecated, Removed, Fixed, Security
+4. Reference PR numbers as (#N) for each entry
+5. Write from the user's perspective -- what changed FOR THEM
+6. Use action verbs: "Added", "Fixed", "Improved", "Removed"
+7. Omit empty sections
+
+Write the new entry directly to CHANGELOG.md, prepending it after the header.
+"""

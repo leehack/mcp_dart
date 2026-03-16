@@ -41,8 +41,8 @@ class StreamableMcpServer {
   /// Host to bind the HTTP server to.
   final String host;
 
-  /// Port to bind the HTTP server to.
-  final int port;
+  /// Port to bind the HTTP server to. Use 0 to bind to any available port.
+  final int _requestedPort;
 
   /// Path to listen for MCP requests on.
   final String path;
@@ -71,14 +71,19 @@ class StreamableMcpServer {
   StreamableMcpServer({
     required McpServer Function(String sessionId) serverFactory,
     this.host = 'localhost',
-    this.port = defaultPort,
+    int port = defaultPort,
     this.path = '/mcp',
     this.eventStore,
     this.authenticator,
     this.enableDnsRebindingProtection = false,
     this.allowedHosts,
     this.allowedOrigins,
-  }) : _serverFactory = serverFactory;
+  }) : _requestedPort = port,
+       _serverFactory = serverFactory;
+
+  /// The port the server is bound to. When [port] was 0 at construction,
+  /// returns the actual assigned port after [start()].
+  int get port => _httpServer?.port ?? _requestedPort;
 
   /// Starts the HTTP server.
   Future<void> start() async {
@@ -86,10 +91,8 @@ class StreamableMcpServer {
       throw StateError('Server already started');
     }
 
-    _httpServer = await HttpServer.bind(host, port);
-    _logger.info(
-      'MCP Streamable HTTP Server listening on http://$host:$port$path',
-    );
+    _httpServer = await HttpServer.bind(host, _requestedPort);
+    _logger.info('MCP Streamable HTTP Server listening on http://$host:${_httpServer!.port}$path');
 
     final httpServer = _httpServer;
     if (httpServer == null) {
@@ -114,8 +117,7 @@ class StreamableMcpServer {
   Future<void> _handleRequest(HttpRequest request) async {
     _setCorsHeaders(request.response);
 
-    if (enableDnsRebindingProtection &&
-        !_isRequestAllowedByDnsRebindingProtection(request)) {
+    if (enableDnsRebindingProtection && !_isRequestAllowedByDnsRebindingProtection(request)) {
       request.response
         ..statusCode = HttpStatus.forbidden
         ..write('Forbidden: blocked by DNS rebinding protection');
@@ -175,9 +177,7 @@ class StreamableMcpServer {
       }
     } catch (e, stack) {
       _logger.error('Error handling request: $e\n$stack');
-      if (!request.response.headers.contentType
-          .toString()
-          .startsWith('text/event-stream')) {
+      if (!request.response.headers.contentType.toString().startsWith('text/event-stream')) {
         try {
           request.response
             ..statusCode = HttpStatus.internalServerError
@@ -209,10 +209,7 @@ class StreamableMcpServer {
           jsonEncode(
             JsonRpcError(
               id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.parseError.value,
-                message: 'Parse error',
-              ),
+              error: JsonRpcErrorData(code: ErrorCode.parseError.value, message: 'Parse error'),
             ).toJson(),
           ),
         )
@@ -241,8 +238,7 @@ class StreamableMcpServer {
               id: null,
               error: JsonRpcErrorData(
                 code: ErrorCode.connectionClosed.value,
-                message:
-                    'Bad Request: No valid session ID provided or not an initialization request',
+                message: 'Bad Request: No valid session ID provided or not an initialization request',
               ),
             ).toJson(),
           ),
@@ -293,7 +289,7 @@ class StreamableMcpServer {
         enableDnsRebindingProtection: enableDnsRebindingProtection,
         allowedHosts: allowedHosts ?? {host},
         allowedOrigins: allowedOrigins,
-        onsessioninitialized: (sid) {
+        onsessioninitialized: (sid) async {
           _logger.info('Session initialized: $sid');
           _transports[sid] = transport;
 
@@ -301,21 +297,13 @@ class StreamableMcpServer {
           final server = _serverFactory(sid);
           _servers[sid] = server;
 
-          // Connect server to transport
-          // Note: connect() is async, but onsessioninitialized is sync.
-          // This usually works because the transport handles the immediate request
-          // and the server will be hooked up for subsequent messages or the current one
-          // if handleRequest logic flows correctly.
-          // However, for initialization, the Server needs to be connected to handle the
-          // 'initialize' message that is currently being processed.
-          //
-          // StreamableHTTPServerTransport calls onsessioninitialized BEFORE processing messages.
-          // So we should connect here.
-          server.connect(transport).catchError((e) {
+          try {
+            await server.connect(transport);
+          } catch (e) {
             _logger.error('Error connecting server to transport: $e');
             _transports.remove(sid);
             _servers.remove(sid);
-          });
+          }
         },
       ),
     );
@@ -333,17 +321,13 @@ class StreamableMcpServer {
   }
 
   bool _isInitializeRequest(dynamic body) {
-    if (body is Map<String, dynamic> &&
-        body.containsKey('method') &&
-        body['method'] == 'initialize') {
+    if (body is Map<String, dynamic> && body.containsKey('method') && body['method'] == 'initialize') {
       return true;
     }
     // Batch request check
     if (body is List && body.isNotEmpty) {
       for (final item in body) {
-        if (item is Map<String, dynamic> &&
-            item.containsKey('method') &&
-            item['method'] == 'initialize') {
+        if (item is Map<String, dynamic> && item.containsKey('method') && item['method'] == 'initialize') {
           return true;
         }
       }
@@ -388,8 +372,7 @@ class StreamableMcpServer {
     final configuredOrigins = _normalizedAllowedOrigins();
     if (configuredOrigins != null) {
       final normalizedOrigin = _normalizeOrigin(originHeader);
-      return normalizedOrigin != null &&
-          configuredOrigins.contains(normalizedOrigin);
+      return normalizedOrigin != null && configuredOrigins.contains(normalizedOrigin);
     }
 
     final originUri = Uri.tryParse(originHeader);
@@ -407,12 +390,7 @@ class StreamableMcpServer {
       return configuredHosts.map(_extractHost).toSet();
     }
 
-    return {
-      _extractHost(host),
-      'localhost',
-      '127.0.0.1',
-      '::1',
-    };
+    return {_extractHost(host), 'localhost', '127.0.0.1', '::1'};
   }
 
   Set<String>? _normalizedAllowedOrigins() {
@@ -463,9 +441,7 @@ class StreamableMcpServer {
 
   String? _normalizeOrigin(String origin) {
     final parsedUri = Uri.tryParse(origin.trim());
-    if (parsedUri == null ||
-        parsedUri.scheme.isEmpty ||
-        parsedUri.host.isEmpty) {
+    if (parsedUri == null || parsedUri.scheme.isEmpty || parsedUri.host.isEmpty) {
       return null;
     }
 
@@ -476,8 +452,7 @@ class StreamableMcpServer {
 
   void _setCorsHeaders(HttpResponse response) {
     response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers
-        .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     response.headers.set(
       'Access-Control-Allow-Headers',
       'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',

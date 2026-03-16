@@ -1,0 +1,138 @@
+{
+  "repository": {
+    "name": "mcp_dart",
+    "owner": "pieces-app",
+    "triaged_label": "triaged",
+    "changelog_path": "CHANGELOG.md",
+    "release_notes_path": ".runtime_ci/release_notes"
+  },
+  "ci": {
+    "dart_sdk": "3.9.2",
+    "personal_access_token_secret": "GITHUB_TOKEN",
+    "line_length": 120,
+    "artifact_retention_days": 7,
+    "features": {
+      "proto": false,
+      "lfs": false,
+      "format_check": true,
+      "analysis_cache": true,
+      "managed_analyze": true,
+      "managed_test": true,
+      "build_runner": false,
+      "web_test": false
+    },
+    "secrets": {},
+    "sub_packages": [
+      {
+        "name": "mcp_dart_cli",
+        "path": "packages/mcp_dart_cli"
+      }
+    ],
+    "runner_overrides": {
+      "ubuntu": "ubuntu-latest",
+      "ubuntu-x64": "ubuntu-latest"
+    },
+    "git_orgs": [
+      "open-runtime",
+      "pieces-app"
+    ],
+    "platforms": [
+      "ubuntu-x64",
+      "ubuntu-arm64",
+      "macos-arm64",
+      "macos-x64",
+      "windows-x64",
+      "windows-arm64"
+    ]
+  },
+  "gcp": {
+    "project": ""
+  },
+  "sentry": {
+    "organization": "",
+    "projects": [],
+    "scan_on_pre_release": false,
+    "recent_errors_hours": 168
+  },
+  "release": {
+    "pre_release_scan_sentry": false,
+    "pre_release_scan_github": true,
+    "post_release_close_own_repo": true,
+    "post_release_close_cross_repo": false,
+    "post_release_comment_cross_repo": true,
+    "post_release_link_sentry": false
+  },
+  "cross_repo": {
+    "enabled": false,
+    "orgs": [
+      "pieces-app"
+    ],
+    "repos": [],
+    "discovery": {
+      "enabled": true,
+      "search_orgs": [
+        "pieces-app"
+      ]
+    }
+  },
+  "labels": {
+    "type": [
+      "bug",
+      "feature-request",
+      "enhancement",
+      "documentation",
+      "question"
+    ],
+    "priority": [
+      "P0-critical",
+      "P1-high",
+      "P2-medium",
+      "P3-low"
+    ],
+    "area": [
+      "area/core",
+      "area/ci-cd",
+      "area/docs",
+      "area/types",
+      "area/server",
+      "area/shared",
+      "area/client"
+    ]
+  },
+  "thresholds": {
+    "auto_close": 0.9,
+    "suggest_close": 0.7,
+    "comment": 0.5
+  },
+  "agents": {
+    "enabled": [
+      "code_analysis",
+      "pr_correlation",
+      "duplicate",
+      "sentiment",
+      "changelog"
+    ],
+    "conditional": {
+      "changelog": {
+        "require_file": "CHANGELOG.md"
+      }
+    }
+  },
+  "gemini": {
+    "flash_model": "gemini-3-flash-preview",
+    "pro_model": "gemini-3.1-pro-preview",
+    "max_turns": 100,
+    "max_concurrent": 4,
+    "max_retries": 3
+  },
+  "secrets": {
+    "gemini_api_key_env": "GEMINI_API_KEY",
+    "github_token_env": [
+      "GH_TOKEN",
+      "GITHUB_TOKEN",
+      "GITHUB_PAT"
+    ],
+    "sentry_token_env": "SENTRY_ACCESS_TOKEN",
+    "gcp_secret_name": ""
+  }
+}

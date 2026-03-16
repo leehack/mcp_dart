@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,9 +9,8 @@ import 'package:test/test.dart';
 void main() {
   group('StreamableMcpServer', () {
     late StreamableMcpServer server;
-    final port = 8081;
+    late String baseUrl;
     final host = 'localhost';
-    final baseUrl = 'http://$host:$port/mcp';
 
     setUp(() async {
       server = StreamableMcpServer(
@@ -20,9 +20,10 @@ void main() {
           );
         },
         host: host,
-        port: port,
+        port: 0, // Dynamic port to avoid conflicts
       );
       await server.start();
+      baseUrl = 'http://$host:${server.port}/mcp';
     });
 
     tearDown(() async {
@@ -69,8 +70,18 @@ void main() {
 
         expect(res.statusCode, HttpStatus.ok);
         final sessionId = res.headers.value('mcp-session-id');
-        expect(sessionId, isNotNull);
-        await res.drain();
+        final receivedSessionId = sessionId != null;
+        expect(receivedSessionId, isTrue);
+        // Drain SSE stream; tolerate early close (server may close after sending response)
+        try {
+          await res.drain().timeout(const Duration(seconds: 5));
+        } on HttpException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on http.ClientException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on TimeoutException {
+          if (!receivedSessionId) rethrow;
+        }
       } finally {
         client.close(force: true);
       }
@@ -103,11 +114,12 @@ void main() {
         serverFactory: (sid) =>
             McpServer(const Implementation(name: 'AuthServer', version: '1.0')),
         host: host,
-        port: port,
+        port: 0,
         authenticator: (req) =>
             req.headers.value('Authorization') == 'Bearer secret',
       );
       await server.start();
+      baseUrl = 'http://$host:${server.port}/mcp';
 
       // 1. Fail without auth
       final resFail = await http.post(
@@ -121,10 +133,14 @@ void main() {
       );
       expect(resFail.statusCode, HttpStatus.forbidden);
 
-      // 2. Pass with auth
-      final resPass = await http.post(
-        Uri.parse(baseUrl),
-        body: jsonEncode(
+      // 2. Pass with auth (use HttpClient like initialize test for SSE drain handling)
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(Uri.parse(baseUrl));
+        req.headers.contentType = ContentType.json;
+        req.headers.add('Accept', 'application/json, text/event-stream');
+        req.headers.add('Authorization', 'Bearer secret');
+        req.write(jsonEncode(
           JsonRpcRequest(
             id: 1,
             method: 'initialize',
@@ -134,14 +150,22 @@ void main() {
               clientInfo: Implementation(name: 'test', version: '1.0'),
             ).toJson(),
           ).toJson(),
-        ),
-        headers: {
-          'Authorization': 'Bearer secret',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json, text/event-stream',
-        },
-      );
-      expect(resPass.statusCode, HttpStatus.ok);
+        ));
+        final res = await req.close();
+        final receivedOkResponse = res.statusCode == HttpStatus.ok;
+        expect(receivedOkResponse, isTrue);
+        try {
+          await res.drain().timeout(const Duration(seconds: 5));
+        } on HttpException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on http.ClientException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on TimeoutException {
+          if (!receivedOkResponse) rethrow;
+        }
+      } finally {
+        client.close(force: true);
+      }
     });
 
     test('dns rebinding protection blocks disallowed host header', () async {
@@ -151,11 +175,12 @@ void main() {
         serverFactory: (sid) =>
             McpServer(const Implementation(name: 'DnsServer', version: '1.0')),
         host: host,
-        port: port,
+        port: 0,
         enableDnsRebindingProtection: true,
         allowedHosts: {'localhost'},
       );
       await server.start();
+      baseUrl = 'http://$host:${server.port}/mcp';
 
       final initRequest = JsonRpcRequest(
         id: 1,
@@ -176,8 +201,17 @@ void main() {
         req.write(jsonEncode(initRequest.toJson()));
 
         final res = await req.close();
-        expect(res.statusCode, HttpStatus.forbidden);
-        await res.drain();
+        final receivedForbidden = res.statusCode == HttpStatus.forbidden;
+        expect(receivedForbidden, isTrue);
+        try {
+          await res.drain().timeout(const Duration(seconds: 5));
+        } on HttpException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on http.ClientException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on TimeoutException {
+          if (!receivedForbidden) rethrow;
+        }
       } finally {
         client.close(force: true);
       }
@@ -190,12 +224,27 @@ void main() {
         serverFactory: (sid) =>
             McpServer(const Implementation(name: 'DnsServer', version: '1.0')),
         host: host,
-        port: port,
+        port: 0,
         enableDnsRebindingProtection: true,
         allowedHosts: {'localhost'},
-        allowedOrigins: {'http://localhost:$port'},
+        allowedOrigins: null, // Will recreate with correct origin after we know port
       );
       await server.start();
+      final actualPort = server.port;
+      baseUrl = 'http://$host:$actualPort/mcp';
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'DnsServer', version: '1.0')),
+        host: host,
+        port: actualPort,
+        enableDnsRebindingProtection: true,
+        allowedHosts: {'localhost'},
+        allowedOrigins: {'http://localhost:$actualPort'},
+      );
+      await server.start();
+      baseUrl = 'http://$host:${server.port}/mcp';
 
       final initRequest = JsonRpcRequest(
         id: 1,
@@ -211,13 +260,22 @@ void main() {
       try {
         final req = await client.postUrl(Uri.parse(baseUrl));
         req.headers.contentType = ContentType.json;
-        req.headers.set('Origin', 'http://localhost:$port');
+        req.headers.set('Origin', 'http://localhost:${server.port}');
         req.headers.set('Accept', 'application/json, text/event-stream');
         req.write(jsonEncode(initRequest.toJson()));
 
         final res = await req.close();
-        expect(res.statusCode, HttpStatus.ok);
-        await res.drain();
+        final receivedOkResponse = res.statusCode == HttpStatus.ok;
+        expect(receivedOkResponse, isTrue);
+        try {
+          await res.drain().timeout(const Duration(seconds: 5));
+        } on HttpException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on http.ClientException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on TimeoutException {
+          if (!receivedOkResponse) rethrow;
+        }
       } finally {
         client.close(force: true);
       }
@@ -290,24 +348,42 @@ void main() {
         initReq.write(jsonEncode(initRequest.toJson()));
         final initRes = await initReq.close();
         sessionId = initRes.headers.value('mcp-session-id');
-        await initRes.drain();
+        final receivedSessionId = sessionId != null;
+        try {
+          await initRes.drain().timeout(const Duration(seconds: 5));
+        } on HttpException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on http.ClientException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on TimeoutException {
+          if (!receivedSessionId) rethrow;
+        }
 
-        expect(sessionId, isNotNull);
+        expect(receivedSessionId, isTrue);
 
         // Now send DELETE with the session ID
         final deleteReq = await httpClient.deleteUrl(Uri.parse(baseUrl));
         deleteReq.headers.add('mcp-session-id', sessionId!);
         final deleteRes = await deleteReq.close();
 
-        expect(deleteRes.statusCode, HttpStatus.ok);
-        await deleteRes.drain();
+        final receivedOkResponse = deleteRes.statusCode == HttpStatus.ok;
+        expect(receivedOkResponse, isTrue);
+        try {
+          await deleteRes.drain().timeout(const Duration(seconds: 5));
+        } on HttpException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on http.ClientException catch (e) {
+          if (!e.message.contains('Connection closed')) rethrow;
+        } on TimeoutException {
+          if (!receivedOkResponse) rethrow;
+        }
       } finally {
         httpClient.close(force: true);
       }
     });
 
     test('rejects requests to invalid paths', () async {
-      final invalidUrl = 'http://$host:$port/invalid';
+      final invalidUrl = 'http://$host:${server.port}/invalid';
       final res = await http.get(Uri.parse(invalidUrl));
 
       expect(res.statusCode, HttpStatus.notFound);
@@ -316,6 +392,7 @@ void main() {
     test('server can be stopped and restarted', () async {
       await server.stop();
       await server.start();
+      baseUrl = 'http://$host:${server.port}/mcp';
 
       // Should be able to handle OPTIONS request after restart
       final client = http.Client();
@@ -331,7 +408,8 @@ void main() {
     });
 
     test('server port is exposed correctly', () async {
-      expect(server.port, equals(port));
+      expect(server.port, isPositive);
+      expect(server.port, lessThan(65536));
     });
   });
 }

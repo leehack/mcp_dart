@@ -1,0 +1,65 @@
+{
+  "_comment": "Copy this file to your package's .gemini/settings.json and customize as needed.",
+  "model": {
+    "maxSessionTurns": 200
+  },
+  "tools": {
+    "core": [
+      "run_shell_command(git)",
+      "run_shell_command(gh)",
+      "run_shell_command(tree)",
+      "run_shell_command(find)",
+      "run_shell_command(wc)",
+      "run_shell_command(sort)",
+      "run_shell_command(uniq)",
+      "run_shell_command(head)",
+      "run_shell_command(tail)",
+      "run_shell_command(cat)",
+      "run_shell_command(jq)",
+      "run_shell_command(dart)",
+      "run_shell_command(grep)",
+      "run_shell_command(ls)",
+      "run_shell_command(echo)",
+      "run_shell_command(tee)"
+    ],
+    "exclude": [
+      "run_shell_command(rm)",
+      "run_shell_command(sudo)",
+      "run_shell_command(curl)",
+      "run_shell_command(wget)",
+      "run_shell_command(chmod)",
+      "run_shell_command(chown)",
+      "run_shell_command(mv)",
+      "run_shell_command(kill)",
+      "run_shell_command(pkill)",
+      "run_shell_command(npm)",
+      "run_shell_command(pip)"
+    ]
+  },
+  "sandbox": false,
+  "context": {
+    "fileFiltering": {
+      "respectGitIgnore": true
+    }
+  },
+  "mcpServers": {
+    "github": {
+      "command": "go",
+      "args": [
+        "run",
+        "github.com/github/github-mcp-server/cmd/github-mcp-server@latest",
+        "stdio"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "$GH_TOKEN"
+      }
+    },
+    "sentry": {
+      "command": "npx",
+      "args": ["-y", "@sentry/mcp-server@latest"],
+      "env": {
+        "SENTRY_ACCESS_TOKEN": "$SENTRY_ACCESS_TOKEN"
+      }
+    }
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "version": "1.0.0",
+  "gemini_model": "gemini-3.1-pro-preview",
+  "max_concurrent": 4,
+  "modules": [
+    {
+      "id": "client",
+      "name": "Client",
+      "source_paths": [
+        "lib/src/client/"
+      ],
+      "lib_paths": [
+        "lib/src/client/"
+      ],
+      "output_path": "docs/client/",
+      "generate": [
+        "quickstart",
+        "api_reference"
+      ],
+      "hash": "",
+      "last_updated": null
+    },
+    {
+      "id": "server",
+      "name": "Server",
+      "source_paths": [
+        "lib/src/server/"
+      ],
+      "lib_paths": [
+        "lib/src/server/"
+      ],
+      "output_path": "docs/server/",
+      "generate": [
+        "quickstart",
+        "api_reference"
+      ],
+      "hash": "",
+      "last_updated": null
+    },
+    {
+      "id": "shared",
+      "name": "Shared",
+      "source_paths": [
+        "lib/src/shared/"
+      ],
+      "lib_paths": [
+        "lib/src/shared/"
+      ],
+      "output_path": "docs/shared/",
+      "generate": [
+        "quickstart",
+        "api_reference"
+      ],
+      "hash": "",
+      "last_updated": null
+    },
+    {
+      "id": "types",
+      "name": "Types",
+      "source_paths": [
+        "lib/src/types/"
+      ],
+      "lib_paths": [
+        "lib/src/types/"
+      ],
+      "output_path": "docs/types/",
+      "generate": [
+        "quickstart",
+        "api_reference"
+      ],
+      "hash": "",
+      "last_updated": null
+    },
+    {
+      "id": "top_level",
+      "name": "Package Entry Points",
+      "source_paths": [
+        "lib/"
+      ],
+      "lib_paths": [],
+      "output_path": "docs/",
+      "generate": [
+        "quickstart"
+      ],
+      "hash": "",
+      "last_updated": null
+    }
+  ],
+  "templates": {
+    "quickstart": "scripts/prompts/autodoc_quickstart_prompt.dart",
+    "api_reference": "scripts/prompts/autodoc_api_reference_prompt.dart",
+    "examples": "scripts/prompts/autodoc_examples_prompt.dart"
+  }
+}

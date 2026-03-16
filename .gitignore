@@ -8,3 +8,6 @@ pubspec.lock
 coverage/
 .serena
 firebase-debug.log
+
+# Runtime CI audit trails (local only)
+.runtime_ci/runs/
