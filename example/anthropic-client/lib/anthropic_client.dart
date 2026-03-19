@@ -9,7 +9,7 @@ class AnthropicMcpClient {
   final mcp_dart.McpClient mcp;
   final AnthropicClient anthropic;
   mcp_dart.StdioClientTransport? transport;
-  List<Tool> tools = [];
+  List<ToolDefinition> tools = [];
 
   AnthropicMcpClient(this.anthropic, this.mcp);
 
@@ -20,11 +20,7 @@ class AnthropicMcpClient {
   Future<void> connectToServer(String cmd, List<String> args) async {
     try {
       transport = mcp_dart.StdioClientTransport(
-        mcp_dart.StdioServerParameters(
-          command: cmd,
-          args: args,
-          stderrMode: ProcessStartMode.normal,
-        ),
+        mcp_dart.StdioServerParameters(command: cmd, args: args, stderrMode: ProcessStartMode.normal),
       );
       transport!.onerror = (error) {
         print("Transport error: $error");
@@ -38,18 +34,12 @@ class AnthropicMcpClient {
       tools =
           toolsResult.tools
               .map((tool) {
-                return Tool.custom(
-                  name: tool.name,
-                  description: tool.description,
-                  inputSchema: tool.inputSchema.toJson(),
-                );
+                return _toAnthropicTool(tool);
               })
-              .cast<Tool>()
+              .cast<ToolDefinition>()
               .toList();
 
-      print(
-        "Connected to server with tools: ${tools.map((t) => t.name).toList()}",
-      );
+      print("Connected to server with tools: ${toolsResult.tools.map((tool) => tool.name).toList()}");
     } catch (e) {
       print("Failed to connect to MCP server: $e");
       rethrow;
@@ -61,63 +51,102 @@ class AnthropicMcpClient {
   /// [query] is the user's input query.
   /// Returns the response as a string.
   Future<String> processQuery(String query) async {
-    final messages = [
-      Message(role: MessageRole.user, content: MessageContent.text(query)),
-    ];
+    final messages = <InputMessage>[InputMessage(role: MessageRole.user, content: MessageContent.text(query))];
+    final transcript = <String>[];
 
-    final response = await anthropic.createMessage(
-      request: CreateMessageRequest(
-        model: Model.model(Models.claude35Sonnet20241022),
-        maxTokens: 1000,
-        messages: messages,
-        tools: tools,
-      ),
-    );
+    while (true) {
+      final response = await anthropic.messages.create(
+        MessageCreateRequest(
+          model: 'claude-3-5-sonnet-20241022',
+          maxTokens: 1000,
+          messages: messages,
+          tools: tools.isEmpty ? null : tools,
+        ),
+      );
 
-    final finalText = <String>[];
-    final toolResults = <dynamic>[];
+      messages.add(_assistantMessageFromResponse(response));
 
-    for (final content in response.content.blocks) {
-      if (content.type == "text") {
-        finalText.add(content.text);
-      } else if (content case ToolUseBlock()) {
-        final result = await mcp.callTool(
-          mcp_dart.CallToolRequest(
-            name: content.name,
-            arguments: content.input,
+      final toolUses = <ToolUseBlock>[];
+      for (final block in response.content) {
+        switch (block) {
+          case TextBlock(:final text):
+            transcript.add(text);
+          case ToolUseBlock():
+            toolUses.add(block);
+          default:
+            break;
+        }
+      }
+
+      if (toolUses.isEmpty) {
+        return transcript.join("\n");
+      }
+
+      final toolResultBlocks = <InputContentBlock>[];
+      for (final toolUse in toolUses) {
+        final result = await mcp.callTool(mcp_dart.CallToolRequest(name: toolUse.name, arguments: toolUse.input));
+        transcript.add("[Calling tool ${toolUse.name} with args ${jsonEncode(toolUse.input)}]");
+        toolResultBlocks.add(
+          InputContentBlock.toolResult(
+            toolUseId: toolUse.id,
+            content: [ToolResultContent.text(_stringifyToolResult(result))],
+            isError: result.isError,
           ),
-        );
-        toolResults.add(result);
-        finalText.add(
-          "[Calling tool ${content.name} with args ${jsonEncode(content.input)}]",
-        );
-
-        messages.add(
-          Message(
-            role: MessageRole.user,
-            content: MessageContent.blocks(
-              result.content.map((c) => Block.fromJson(c.toJson())).toList(),
-            ),
-          ),
-        );
-
-        final nextResponse = await anthropic.createMessage(
-          request: CreateMessageRequest(
-            model: Model.model(Models.claude35Sonnet20241022),
-            maxTokens: 1000,
-            messages: messages,
-          ),
-        );
-
-        finalText.add(
-          nextResponse.content.blocks.first.type == "text"
-              ? nextResponse.content.blocks.first.text
-              : "",
         );
       }
+
+      messages.add(InputMessage(role: MessageRole.user, content: MessageContent.blocks(toolResultBlocks)));
+    }
+  }
+
+  InputMessage _assistantMessageFromResponse(Message response) {
+    final blocks = response.content.map(_toInputContentBlock).nonNulls.toList();
+    if (blocks.isNotEmpty) {
+      return InputMessage(role: MessageRole.assistant, content: MessageContent.blocks(blocks));
+    }
+    return InputMessage(role: MessageRole.assistant, content: MessageContent.text(""));
+  }
+
+  InputContentBlock? _toInputContentBlock(ContentBlock block) {
+    return switch (block) {
+      TextBlock(:final text) => InputContentBlock.text(text),
+      ToolUseBlock(:final id, :final name, :final input) => InputContentBlock.toolUse(id: id, name: name, input: input),
+      _ => null,
+    };
+  }
+
+  String _stringifyToolResult(mcp_dart.CallToolResult result) {
+    if (result.structuredContent != null) {
+      return jsonEncode(result.structuredContent);
     }
 
-    return finalText.join("\n");
+    final parts =
+        result.content.map((content) {
+          return switch (content) {
+            mcp_dart.TextContent(:final text) => text,
+            _ => jsonEncode(content.toJson()),
+          };
+        }).toList();
+
+    if (parts.isEmpty) {
+      return jsonEncode(result.toJson());
+    }
+
+    return parts.join("\n");
+  }
+
+  ToolDefinition _toAnthropicTool(mcp_dart.Tool tool) {
+    final inputSchema = tool.inputSchema.toJson();
+    return ToolDefinition.custom(
+      Tool(
+        name: tool.name,
+        description: tool.description,
+        inputSchema: InputSchema(
+          properties: (inputSchema['properties'] as Map?)?.cast<String, dynamic>(),
+          required: (inputSchema['required'] as List?)?.map((value) => value.toString()).toList(),
+        ),
+      ),
+    );
   }
 
   /// Starts a chat loop, allowing the user to input queries interactively.

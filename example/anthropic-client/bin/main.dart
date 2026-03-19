@@ -20,7 +20,7 @@ Future<void> main(List<String> args) async {
   }
 
   final client = AnthropicMcpClient(
-    AnthropicClient(apiKey: apiKey),
+    AnthropicClient.withApiKey(apiKey),
     McpClient(Implementation(name: "mcp-client-cli", version: "1.0.0")),
   );
   try {
