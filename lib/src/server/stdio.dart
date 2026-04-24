@@ -31,6 +31,9 @@ class StdioServerTransport implements Transport {
   /// Subscription to stdin data stream.
   StreamSubscription<List<int>>? _stdinSubscription;
 
+  /// Write queue to serialize concurrent send() calls.
+  Future<void> _writeQueue = Future.value();
+
   /// Callback for when the connection is closed.
   @override
   void Function()? onclose;
@@ -164,18 +167,28 @@ class StdioServerTransport implements Transport {
   /// written to the output stream buffer. Use `await _stdout.flush()` if
   /// immediate sending is required.
   @override
-  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (!_started) {
       _logger.warn(
         "Attempted to send message on stopped StdioServerTransport.",
       );
-      return Future.value();
+      return;
     }
+
+    final completer = Completer<void>();
+    final previousWrite = _writeQueue;
+    _writeQueue = completer.future;
+
     try {
+      await previousWrite;
       final jsonString = serializeMessage(message);
       _stdout.write(jsonString);
-      return Future.value();
+      await _stdout.flush();
+      completer.complete();
     } catch (error) {
+      if (!completer.isCompleted) {
+        completer.completeError(error);
+      }
       final Error dartError = (error is Error)
           ? error
           : StateError("Failed to send message: $error");
@@ -184,7 +197,7 @@ class StdioServerTransport implements Transport {
       } catch (e) {
         _logger.warn("Error within onerror handler during send: $e");
       }
-      return Future.error(dartError);
+      rethrow;
     }
   }
 }
