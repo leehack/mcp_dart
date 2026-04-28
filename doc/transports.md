@@ -177,6 +177,10 @@ void main() async {
 }
 ```
 
+#### 4. Concurrent Requests
+
+`StdioClientTransport` and `StdioServerTransport` serialize concurrent `send()` calls internally, so overlapping requests such as `Future.wait([...client.callTool(...)])` are safe on a single connected transport. Stdio servers should still reserve `stdout` for MCP messages and write logs to `stderr`.
+
 ## HTTP/SSE Transport
 
 ### Overview

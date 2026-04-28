@@ -111,6 +111,19 @@ server.registerTool(
 );
 ```
 
+### Enum Wire Format
+
+String enum schemas serialize as standard JSON Schema:
+
+```json
+{
+  "type": "string",
+  "enum": ["user", "admin", "moderator"]
+}
+```
+
+`JsonEnum` uses the same standard output. When enum values include display titles, it emits `enumNames` for compatibility with clients that understand title metadata; mixed primitive enums without titles emit an `enum` array without a `type`. Legacy serialized input using `type: 'enum'` / `values` is still accepted by parsers.
+
 ## Tool Annotations
 
 Provide behavioral hints to clients:

@@ -1,4 +1,4 @@
-## Unreleased
+## 2.1.1
 
 ### Compatibility Notes (Potentially Breaking)
 
@@ -12,6 +12,12 @@
 - Fixed `JsonEnum` tool/input schema serialization to use standard JSON Schema enum output,
   improving compatibility with downstream consumers that reject the legacy
   `type: 'enum'` / `values` shape.
+- Serialized concurrent stdio transport writes so overlapping requests no longer
+  trip Dart `IOSink` write/flush errors.
+
+### Documentation
+
+- Updated installation snippets and schema/stdio transport guidance for the 2.1.1 release.
 
 ## 2.1.0
 

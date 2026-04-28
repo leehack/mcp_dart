@@ -6,7 +6,7 @@
 
 MCP Dart is the official Dart implementation of the Model Context Protocol, enabling seamless integration between AI applications and external data sources, tools, and services. Build production-ready MCP servers and clients for Dart VM, Flutter, and web platforms.
 
-**Version**: 2.1.0
+**Version**: 2.1.1
 **Protocol**: MCP 2025-11-25 (backward compatible with 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07)
 **Repository**: https://github.com/leehack/mcp_dart
 **Package**: https://pub.dev/packages/mcp_dart
@@ -18,7 +18,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.1.0
+  mcp_dart: ^2.1.1
 ```
 
 Then run:
@@ -268,6 +268,8 @@ server.registerTool(
   },
 );
 ```
+
+Enum schemas serialize as standard JSON Schema. Use `JsonSchema.string(enumValues: ...)` for string enums; `JsonEnum` emits `enum`, optional `enumNames` for titled values, and still parses legacy `type: 'enum'` / `values` input.
 
 ### Resources
 
@@ -565,6 +567,8 @@ await client.connect(StdioClientTransport(
   ),
 ));
 ```
+
+Stdio transports serialize concurrent `send()` calls internally, so multiple overlapping requests can share a single connected transport safely. Keep server logs on `stderr`; `stdout` is reserved for MCP protocol messages.
 
 ### StreamableHTTP Transport
 
@@ -909,7 +913,15 @@ enum ErrorCode
 
 ## Changelog
 
-### Version 2.0.0 (Latest)
+### Version 2.1.1 (Latest)
+- **Compatibility**: `JsonEnum` now serializes to standard JSON Schema enum output while still parsing legacy `values` input.
+- **Reliability**: Stdio transports serialize concurrent writes to avoid Dart `IOSink` write/flush errors under overlapping requests.
+
+### Version 2.1.0
+- **Compatibility**: Streamable HTTP defaults are stricter for DNS rebinding protection, protocol-version validation, and JSON-RPC batch rejection.
+- **Features**: Added SDK runtime logging helpers and 2025-11-25 compatibility shims for sampling, content blocks, resource annotations, and related-task metadata.
+
+### Version 2.0.0
 - **Breaking Change**: JSON Schema `additionalProperties` now accepts either `bool` or `JsonSchema` (typed as `Object?`) to match the spec.
 - **MCP Apps Support**: Added typed `io.modelcontextprotocol/ui` metadata models and TypeScript-style helpers (`registerAppTool`, `registerAppResource`, `getUiCapability`).
 - **Compatibility**: Updated MCP Apps weather examples for host-safe tool naming and explicit `resource_link` output.
