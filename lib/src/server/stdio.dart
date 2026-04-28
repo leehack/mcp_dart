@@ -189,7 +189,7 @@ class StdioServerTransport implements Transport {
       final jsonString = serializeMessage(message);
       _stdout.write(jsonString);
       await _stdout.flush();
-    } catch (error) {
+    } catch (error, stackTrace) {
       final Error dartError = (error is Error)
           ? error
           : StateError("Failed to send message: $error");
@@ -198,7 +198,7 @@ class StdioServerTransport implements Transport {
       } catch (e) {
         _logger.warn("Error within onerror handler during send: $e");
       }
-      rethrow;
+      Error.throwWithStackTrace(dartError, stackTrace);
     } finally {
       completer.complete();
     }

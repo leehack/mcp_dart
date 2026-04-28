@@ -10,14 +10,28 @@ void main() {
     late Client client;
     late StdioClientTransport transport;
     StreamSubscription<String>? stderrSub;
+    final stderrOutput = <String>[];
 
     final String serverFilePath =
         '${Directory.current.path}/example/server_stdio.dart';
 
     setUp(() async {
+      stderrOutput.clear();
+
+      final serverFile = File(serverFilePath);
+      expect(
+        await serverFile.exists(),
+        isTrue,
+        reason: 'Example server file not found',
+      );
+
       client = Client(
         const Implementation(name: "test-concurrent-client", version: "1.0.0"),
       );
+      client.onerror = (error) {
+        fail('Client error: $error\nstderr:\n${stderrOutput.join('\n')}');
+      };
+
       transport = StdioClientTransport(
         StdioServerParameters(
           command: Platform.resolvedExecutable,
@@ -25,13 +39,15 @@ void main() {
           stderrMode: ProcessStartMode.normal,
         ),
       );
+      transport.onerror = (error) {
+        fail('Transport error: $error\nstderr:\n${stderrOutput.join('\n')}');
+      };
 
+      await client.connect(transport);
       stderrSub = transport.stderr
           ?.transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen((_) {});
-
-      await client.connect(transport);
+          .listen(stderrOutput.add);
       await Future.delayed(const Duration(milliseconds: 500));
     });
 
