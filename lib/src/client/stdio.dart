@@ -389,8 +389,10 @@ class StdioClientTransport implements Transport {
       } catch (e) {
         _logger.warn("Error in onerror handler: $e");
       }
-      close();
-      throw sendError;
+      if (_process == currentProcess) {
+        close();
+      }
+      Error.throwWithStackTrace(sendError, stackTrace);
     } finally {
       completer.complete();
     }

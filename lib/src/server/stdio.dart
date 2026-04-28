@@ -34,6 +34,9 @@ class StdioServerTransport implements Transport {
   /// Write queue to serialize concurrent send() calls.
   Future<void> _writeQueue = Future.value();
 
+  /// Incremented when the transport starts or closes to invalidate queued sends.
+  int _lifecycleGeneration = 0;
+
   /// Callback for when the connection is closed.
   @override
   void Function()? onclose;
@@ -70,6 +73,7 @@ class StdioServerTransport implements Transport {
       );
     }
     _started = true;
+    _lifecycleGeneration++;
 
     _stdinSubscription = _stdin.listen(
       _ondata,
@@ -147,11 +151,13 @@ class StdioServerTransport implements Transport {
       return;
     }
 
+    _started = false;
+    _lifecycleGeneration++;
+
     await _stdinSubscription?.cancel();
     _stdinSubscription = null;
 
     _readBuffer.clear();
-    _started = false;
 
     try {
       onclose?.call();
@@ -176,11 +182,12 @@ class StdioServerTransport implements Transport {
 
     final completer = Completer<void>();
     final previousWrite = _writeQueue;
+    final lifecycleGeneration = _lifecycleGeneration;
     _writeQueue = completer.future;
 
     try {
       await previousWrite;
-      if (!_started) {
+      if (!_started || _lifecycleGeneration != lifecycleGeneration) {
         _logger.warn(
           "Attempted to send message on stopped StdioServerTransport.",
         );
