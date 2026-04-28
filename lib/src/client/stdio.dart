@@ -76,7 +76,7 @@ class StdioClientTransport implements Transport {
   /// Subscriptions to the process's stdout and stderr streams.
   StreamSubscription<List<int>>? _stdoutSubscription;
   StreamSubscription<List<int>>?
-      _stderrSubscription; // Only used if stderrMode is pipe
+      _stderrSubscription; // Only used when stderrMode is not io.ProcessStartMode.normal and stderr is manually forwarded to io.stderr.
 
   /// Write queue to serialize concurrent send() calls.
   /// Dart's IOSink does not allow concurrent write+flush operations.
