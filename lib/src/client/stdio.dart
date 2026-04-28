@@ -76,7 +76,11 @@ class StdioClientTransport implements Transport {
   /// Subscriptions to the process's stdout and stderr streams.
   StreamSubscription<List<int>>? _stdoutSubscription;
   StreamSubscription<List<int>>?
-      _stderrSubscription; // Only used if stderrMode is pipe
+      _stderrSubscription; // Only used when stderrMode is not io.ProcessStartMode.normal and stderr is manually forwarded to io.stderr.
+
+  /// Write queue to serialize concurrent send() calls.
+  /// Dart's IOSink does not allow concurrent write+flush operations.
+  Future<void> _writeQueue = Future.value();
 
   /// Callback for when the connection (process) is closed.
   @override
@@ -356,10 +360,22 @@ class StdioClientTransport implements Transport {
       );
     }
 
+    // Serialize writes: Dart's IOSink throws if write() is called while a
+    // flush() is pending. Queue each send behind the previous one so that
+    // concurrent callers (e.g. UI + AI agent sharing one client) don't crash.
+    final completer = Completer<void>();
+    final previousWrite = _writeQueue;
+    _writeQueue = completer.future;
+
     try {
+      await previousWrite;
+      if (!_started || _process != currentProcess) {
+        throw StateError(
+          "Cannot send message: StdioClientTransport is not running.",
+        );
+      }
       final jsonString = serializeMessage(message);
       currentProcess.stdin.write(jsonString);
-      // Flushing stdin might be necessary depending on the server's reading behavior.
       await currentProcess.stdin.flush();
     } catch (error, stackTrace) {
       _logger.warn(
@@ -373,9 +389,12 @@ class StdioClientTransport implements Transport {
       } catch (e) {
         _logger.warn("Error in onerror handler: $e");
       }
-      // Consider closing the transport on stdin write failure
-      close();
-      throw sendError; // Rethrow after cleanup attempt
+      if (_process == currentProcess) {
+        close();
+      }
+      Error.throwWithStackTrace(sendError, stackTrace);
+    } finally {
+      completer.complete();
     }
   }
 }

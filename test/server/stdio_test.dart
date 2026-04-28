@@ -8,7 +8,8 @@ import 'package:test/test.dart';
 
 /// Mock stdin stream for testing
 class MockStdin extends Stream<List<int>> implements io.Stdin {
-  final StreamController<List<int>> _controller = StreamController<List<int>>();
+  final StreamController<List<int>> _controller =
+      StreamController<List<int>>.broadcast();
 
   @override
   StreamSubscription<List<int>> listen(
@@ -84,6 +85,9 @@ class MockStdin extends Stream<List<int>> implements io.Stdin {
 class MockStdout implements io.IOSink {
   final List<String> writtenData = [];
   bool _closed = false;
+  Object? flushError;
+  Completer<void>? flushBlocker;
+  Completer<void>? flushStarted;
 
   @override
   void write(Object? object) {
@@ -99,7 +103,24 @@ class MockStdout implements io.IOSink {
   }
 
   @override
-  Future<void> flush() async {}
+  Future<void> flush() async {
+    final started = flushStarted;
+    if (started != null && !started.isCompleted) {
+      started.complete();
+    }
+
+    final error = flushError;
+    if (error != null) {
+      flushError = null;
+      throw error;
+    }
+
+    final blocker = flushBlocker;
+    if (blocker != null) {
+      flushBlocker = null;
+      await blocker.future;
+    }
+  }
 
   @override
   void writeAll(Iterable objects, [String separator = '']) {
@@ -397,6 +418,43 @@ void main() {
 
       // No data written because not started
       expect(stdout.writtenData.length, equals(0));
+    });
+
+    test('continues queued sends after a failed write', () async {
+      await transport.start();
+      stdout.flushError = StateError('Flush failed');
+
+      final firstSend = expectLater(
+        transport.send(const JsonRpcPingRequest(id: 1)),
+        throwsA(isA<StateError>()),
+      );
+      final secondSend = transport.send(const JsonRpcPingRequest(id: 2));
+
+      await firstSend;
+      await secondSend;
+
+      expect(stdout.writtenData.length, equals(2));
+    });
+
+    test('does not write queued sends after restart', () async {
+      await transport.start();
+      stdout.flushStarted = Completer<void>();
+      final flushBlocker = Completer<void>();
+      stdout.flushBlocker = flushBlocker;
+
+      final firstSend = transport.send(const JsonRpcPingRequest(id: 1));
+      await stdout.flushStarted!.future;
+
+      final secondSend = transport.send(const JsonRpcPingRequest(id: 2));
+      await transport.close();
+      await transport.start();
+
+      flushBlocker.complete();
+      await firstSend;
+      await secondSend;
+
+      expect(stdout.writtenData.length, equals(1));
+      expect(stdout.writtenData.single, contains('"id":1'));
     });
   });
 

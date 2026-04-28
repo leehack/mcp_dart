@@ -31,6 +31,12 @@ class StdioServerTransport implements Transport {
   /// Subscription to stdin data stream.
   StreamSubscription<List<int>>? _stdinSubscription;
 
+  /// Write queue to serialize concurrent send() calls.
+  Future<void> _writeQueue = Future.value();
+
+  /// Incremented when the transport starts or closes to invalidate queued sends.
+  int _lifecycleGeneration = 0;
+
   /// Callback for when the connection is closed.
   @override
   void Function()? onclose;
@@ -67,6 +73,7 @@ class StdioServerTransport implements Transport {
       );
     }
     _started = true;
+    _lifecycleGeneration++;
 
     _stdinSubscription = _stdin.listen(
       _ondata,
@@ -144,11 +151,13 @@ class StdioServerTransport implements Transport {
       return;
     }
 
+    _started = false;
+    _lifecycleGeneration++;
+
     await _stdinSubscription?.cancel();
     _stdinSubscription = null;
 
     _readBuffer.clear();
-    _started = false;
 
     try {
       onclose?.call();
@@ -161,21 +170,33 @@ class StdioServerTransport implements Transport {
   /// (JSON string followed by newline) to stdout.
   ///
   /// Returns a Future that completes when the message has been successfully
-  /// written to the output stream buffer. Use `await _stdout.flush()` if
-  /// immediate sending is required.
+  /// written to and flushed from the output stream buffer.
   @override
-  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (!_started) {
       _logger.warn(
         "Attempted to send message on stopped StdioServerTransport.",
       );
-      return Future.value();
+      return;
     }
+
+    final completer = Completer<void>();
+    final previousWrite = _writeQueue;
+    final lifecycleGeneration = _lifecycleGeneration;
+    _writeQueue = completer.future;
+
     try {
+      await previousWrite;
+      if (!_started || _lifecycleGeneration != lifecycleGeneration) {
+        _logger.warn(
+          "Attempted to send message on stopped StdioServerTransport.",
+        );
+        return;
+      }
       final jsonString = serializeMessage(message);
       _stdout.write(jsonString);
-      return Future.value();
-    } catch (error) {
+      await _stdout.flush();
+    } catch (error, stackTrace) {
       final Error dartError = (error is Error)
           ? error
           : StateError("Failed to send message: $error");
@@ -184,7 +205,9 @@ class StdioServerTransport implements Transport {
       } catch (e) {
         _logger.warn("Error within onerror handler during send: $e");
       }
-      return Future.error(dartError);
+      Error.throwWithStackTrace(dartError, stackTrace);
+    } finally {
+      completer.complete();
     }
   }
 }
