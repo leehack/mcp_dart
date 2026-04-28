@@ -369,14 +369,15 @@ class StdioClientTransport implements Transport {
 
     try {
       await previousWrite;
+      if (!_started || _process != currentProcess) {
+        throw StateError(
+          "Cannot send message: StdioClientTransport is not running.",
+        );
+      }
       final jsonString = serializeMessage(message);
       currentProcess.stdin.write(jsonString);
       await currentProcess.stdin.flush();
-      completer.complete();
     } catch (error, stackTrace) {
-      if (!completer.isCompleted) {
-        completer.completeError(error, stackTrace);
-      }
       _logger.warn(
         "StdioClientTransport: Error writing to process stdin: $error",
       );
@@ -390,6 +391,8 @@ class StdioClientTransport implements Transport {
       }
       close();
       throw sendError;
+    } finally {
+      completer.complete();
     }
   }
 }

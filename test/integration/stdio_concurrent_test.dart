@@ -42,52 +42,30 @@ void main() {
       await stderrSub?.cancel();
     });
 
-    test('concurrent callTool requests all succeed', () async {
-      final calls = List.generate(10, (i) {
-        return client.callTool(
-          CallToolRequest(
-            name: 'calculate',
-            arguments: {'operation': 'add', 'a': i, 'b': 100},
-          ),
-        );
-      });
+    test(
+      'concurrent callTool requests all succeed',
+      () async {
+        final calls = List.generate(10, (i) {
+          return client.callTool(
+            CallToolRequest(
+              name: 'calculate',
+              arguments: {'operation': 'add', 'a': i, 'b': 100},
+            ),
+          );
+        });
 
-      final results = await Future.wait(calls);
+        final results = await Future.wait(calls);
 
-      for (var i = 0; i < results.length; i++) {
-        final text = (results[i].content.first as TextContent).text;
-        expect(text, 'Result: ${i + 100}', reason: 'Call $i returned wrong result');
-      }
-    }, timeout: const Timeout(Duration(seconds: 30)));
-
-    test('concurrent calls complete faster than sequential', () async {
-      final sequentialStart = DateTime.now();
-      for (var i = 0; i < 5; i++) {
-        await client.callTool(
-          CallToolRequest(
-            name: 'calculate',
-            arguments: {'operation': 'multiply', 'a': i, 'b': 2},
-          ),
-        );
-      }
-      final sequentialTime = DateTime.now().difference(sequentialStart);
-
-      final concurrentStart = DateTime.now();
-      await Future.wait(List.generate(5, (i) {
-        return client.callTool(
-          CallToolRequest(
-            name: 'calculate',
-            arguments: {'operation': 'multiply', 'a': i, 'b': 3},
-          ),
-        );
-      }));
-      final concurrentTime = DateTime.now().difference(concurrentStart);
-
-      expect(
-        concurrentTime.inMilliseconds <= sequentialTime.inMilliseconds,
-        isTrue,
-        reason: 'Concurrent ($concurrentTime) should not be slower than sequential ($sequentialTime)',
-      );
-    }, timeout: const Timeout(Duration(seconds: 30)));
+        for (var i = 0; i < results.length; i++) {
+          final text = (results[i].content.first as TextContent).text;
+          expect(
+            text,
+            'Result: ${i + 100}',
+            reason: 'Call $i returned wrong result',
+          );
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
   });
 }

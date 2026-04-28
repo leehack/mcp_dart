@@ -164,8 +164,7 @@ class StdioServerTransport implements Transport {
   /// (JSON string followed by newline) to stdout.
   ///
   /// Returns a Future that completes when the message has been successfully
-  /// written to the output stream buffer. Use `await _stdout.flush()` if
-  /// immediate sending is required.
+  /// written to and flushed from the output stream buffer.
   @override
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (!_started) {
@@ -181,14 +180,16 @@ class StdioServerTransport implements Transport {
 
     try {
       await previousWrite;
+      if (!_started) {
+        _logger.warn(
+          "Attempted to send message on stopped StdioServerTransport.",
+        );
+        return;
+      }
       final jsonString = serializeMessage(message);
       _stdout.write(jsonString);
       await _stdout.flush();
-      completer.complete();
     } catch (error) {
-      if (!completer.isCompleted) {
-        completer.completeError(error);
-      }
       final Error dartError = (error is Error)
           ? error
           : StateError("Failed to send message: $error");
@@ -198,6 +199,8 @@ class StdioServerTransport implements Transport {
         _logger.warn("Error within onerror handler during send: $e");
       }
       rethrow;
+    } finally {
+      completer.complete();
     }
   }
 }

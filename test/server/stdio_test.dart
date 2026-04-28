@@ -84,6 +84,7 @@ class MockStdin extends Stream<List<int>> implements io.Stdin {
 class MockStdout implements io.IOSink {
   final List<String> writtenData = [];
   bool _closed = false;
+  Object? flushError;
 
   @override
   void write(Object? object) {
@@ -99,7 +100,13 @@ class MockStdout implements io.IOSink {
   }
 
   @override
-  Future<void> flush() async {}
+  Future<void> flush() async {
+    final error = flushError;
+    if (error != null) {
+      flushError = null;
+      throw error;
+    }
+  }
 
   @override
   void writeAll(Iterable objects, [String separator = '']) {
@@ -397,6 +404,22 @@ void main() {
 
       // No data written because not started
       expect(stdout.writtenData.length, equals(0));
+    });
+
+    test('continues queued sends after a failed write', () async {
+      await transport.start();
+      stdout.flushError = StateError('Flush failed');
+
+      final firstSend = expectLater(
+        transport.send(const JsonRpcPingRequest(id: 1)),
+        throwsA(isA<StateError>()),
+      );
+      final secondSend = transport.send(const JsonRpcPingRequest(id: 2));
+
+      await firstSend;
+      await secondSend;
+
+      expect(stdout.writtenData.length, equals(2));
     });
   });
 
