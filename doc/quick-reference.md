@@ -7,7 +7,7 @@ Fast lookup guide for common MCP Dart SDK operations.
 ```yaml
 # pubspec.yaml
 dependencies:
-  mcp_dart: ^2.1.0
+  mcp_dart: ^2.1.1
 ```
 
 ```bash
@@ -562,6 +562,8 @@ try {
   enumValues: ['active', 'inactive', 'pending'],
 )
 ```
+
+`JsonSchema.string(enumValues: ...)` and `JsonEnum` serialize as standard JSON Schema using `enum`; `JsonEnum` also emits `enumNames` when values include titles. Legacy `type: 'enum'` / `values` input is still accepted when parsing.
 
 ### Array
 
