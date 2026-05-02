@@ -1,12 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:async';
 
 import 'package:mason/mason.dart';
 import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 import 'package:path/path.dart' as p;
 
 import '../runner_script_generator.dart';
+import 'pubspec_utils.dart';
 
 /// A wrapper around MCP Client connection lifecycle.
 class McpConnection {
@@ -26,17 +27,7 @@ class McpConnection {
       throw 'pubspec.yaml not found in current directory.';
     }
 
-    // simplistic package name check
-    String? packageName;
-    try {
-      final lines = await pubspecFile.readAsLines();
-      for (final line in lines) {
-        if (line.trim().startsWith('name:')) {
-          packageName = line.split(':')[1].trim();
-          break;
-        }
-      }
-    } catch (_) {}
+    final packageName = await readPackageNameFromPubspec(pubspecFile);
 
     if (packageName == null) {
       throw 'Could not determine package name from pubspec.yaml.';
