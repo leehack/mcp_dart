@@ -1,3 +1,9 @@
+## 0.1.7
+
+- Fix `mcp_dart inspect` for local projects whose `pubspec.yaml` package name is quoted.
+- Parse local project package names with the YAML parser shared by `inspect` and `serve`.
+- Update the CLI and simple template dependency constraint to `mcp_dart ^2.1.1`.
+
 ## 0.1.6
 
 - Update to mcp_dart 1.2.0
