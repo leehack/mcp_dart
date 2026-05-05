@@ -22,9 +22,11 @@ jobs:
           
           if [[ "$TAG" == mcp_dart_cli-v* ]]; then
             echo "working_directory=packages/mcp_dart_cli" >> "$GITHUB_OUTPUT"
+            echo "package=mcp_dart_cli" >> "$GITHUB_OUTPUT"
             echo "📦 Package: mcp_dart_cli"
           elif [[ "$TAG" == v* ]]; then
             echo "working_directory=." >> "$GITHUB_OUTPUT"
+            echo "package=mcp_dart" >> "$GITHUB_OUTPUT"
             echo "📦 Package: mcp_dart"
           else
             echo "❌ Unknown tag format: $TAG"
@@ -33,10 +35,23 @@ jobs:
 
       - uses: dart-lang/setup-dart@v1
 
+      - name: Prepare nested package publish directory
+        id: publish-dir
+        run: |
+          if [[ "${{ steps.package-info.outputs.package }}" == "mcp_dart_cli" ]]; then
+            PUBLISH_ROOT="$RUNNER_TEMP/mcp_dart_publish"
+            rm -rf "$PUBLISH_ROOT"
+            mkdir -p "$PUBLISH_ROOT"
+            rsync -a --exclude .git --exclude .dart_tool --exclude pubspec.lock ./ "$PUBLISH_ROOT/"
+            echo "working_directory=$PUBLISH_ROOT/${{ steps.package-info.outputs.working_directory }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "working_directory=${{ steps.package-info.outputs.working_directory }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
-        working-directory: ${{ steps.package-info.outputs.working_directory }}
+        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
         run: dart pub get
 
       - name: Publish to pub.dev
-        working-directory: ${{ steps.package-info.outputs.working_directory }}
+        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
         run: dart pub publish --force
