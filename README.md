@@ -60,12 +60,25 @@ dart pub get
 - ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation, Tasks
 - ✅ **Extension Support** - Generic `extensions` negotiation with typed MCP Apps helpers and TypeScript-style `registerAppTool` / `registerAppResource`
 - ✅ **Latest Content/Metadata Types** - `resource_link`, themed `icons`, and `annotations.lastModified`
-- ✅ **OAuth2 Support** - Complete authentication with PKCE
+- ✅ **OAuth Authentication Hooks** - `OAuthClientProvider`, server authenticators, and OAuth2/PKCE examples
 - ✅ **Transport Security Controls** - DNS rebinding protection and strict Streamable HTTP validation with compatibility toggles
 - ✅ **Type-Safe** - Comprehensive type definitions with null safety
 - ✅ **Cross-Platform** - Works on Linux, Windows, macOS, Web, and Flutter
 
 The goal is to make this SDK as similar as possible to the official SDKs available in other languages, ensuring a consistent developer experience across platforms.
+
+## Choosing between `mcp_dart` and the Dart team `dart_mcp` package
+
+The Dart ecosystem now has more than one MCP package. The Dart team-maintained [`dart_mcp`](https://pub.dev/packages/dart_mcp) package lives in [`dart-lang/ai`](https://github.com/dart-lang/ai/tree/main/pkgs/dart_mcp) and is a good place to look when you specifically want the Dart team's implementation.
+
+`mcp_dart` is a community SDK focused on production-oriented MCP servers and clients for Dart and Flutter applications. It is designed for teams that need broad protocol coverage, multiple transports, security controls, and tooling around real deployments.
+
+| Package | Best fit | Notes |
+|---------|----------|-------|
+| `dart_mcp` | Projects that prefer the Dart team-maintained package or want to follow the Dart team's evolving MCP APIs closely. | Check the package docs and changelog for its current feature set and stability guarantees. |
+| `mcp_dart` | Production-focused Dart/Flutter MCP servers, clients, and hosts that need broad transport, auth, security, and tooling support today. | Includes StreamableHTTP, `OAuthClientProvider` and server `authenticator` hooks with OAuth2/PKCE examples, MCP Apps helpers, strict transport security controls, CLI tooling, and compatibility with MCP protocol version `2025-11-25`. |
+
+Use this comparison as a starting point, not a permanent verdict: both packages can evolve quickly. If you compare them for a production decision, re-check the current pub.dev releases and docs first.
 
 ## Model Context Protocol Version
 
@@ -151,7 +164,7 @@ Configure your server with AI hosts like Claude Desktop:
 
 ## Authentication
 
-This library supports OAuth2 authentication with PKCE for both clients and servers. For complete authentication guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/tree/main/example/authentication).
+This library provides OAuth-aware client and server authentication hooks, including `OAuthClientProvider` for StreamableHTTP clients and server-side `authenticator` callbacks. For OAuth2/PKCE guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/tree/main/example/authentication).
 
 ## Platform Support
 
