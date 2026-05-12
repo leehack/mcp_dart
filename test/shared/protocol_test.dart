@@ -6,8 +6,9 @@ import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
 /// A mock transport implementation for testing the protocol layer
-class MockTransport implements Transport {
+class MockTransport implements Transport, RequestIdAwareTransport {
   final List<JsonRpcMessage> sentMessages = [];
+  final List<RequestId?> relatedRequestIds = [];
   final StreamController<JsonRpcMessage> _incomingMessages =
       StreamController<JsonRpcMessage>.broadcast();
   bool _started = false;
@@ -35,6 +36,7 @@ class MockTransport implements Transport {
   /// Clears the list of sent messages - useful between tests
   void clearSentMessages() {
     sentMessages.clear();
+    relatedRequestIds.clear();
   }
 
   /// Simulates receiving a message from the remote end
@@ -80,11 +82,20 @@ class MockTransport implements Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) {
+    return sendWithRequestId(message, relatedRequestId: relatedRequestId);
+  }
+
+  @override
+  Future<void> sendWithRequestId(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+  }) async {
     if (_closed) {
       throw StateError('Transport is closed');
     }
     sentMessages.add(message);
+    relatedRequestIds.add(relatedRequestId);
   }
 
   @override
@@ -106,6 +117,24 @@ class MockTransport implements Transport {
   /// Creates a shutdown error to test error handling
   void simulateError(Error error) {
     onerror?.call(error);
+  }
+}
+
+Future<void> waitForSentMessages(
+  MockTransport transport,
+  int count, {
+  Duration timeout = const Duration(seconds: 1),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (transport.sentMessages.length < count &&
+      DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  if (transport.sentMessages.length < count) {
+    fail(
+      'Timed out waiting for $count sent messages; '
+      'only saw ${transport.sentMessages.length}.',
+    );
   }
 }
 
@@ -270,6 +299,130 @@ void main() {
       final result = await requestFuture;
       expect(result, isA<TestResult>());
       expect(result.value, equals('response-data'));
+    });
+
+    test('routes handler notifications for string request IDs', () async {
+      await protocol.connect(transport);
+
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/string-id',
+        (request, extra) async {
+          await extra.sendNotification(
+            const JsonRpcNotification(method: 'test/notification'),
+          );
+          return TestResult(value: 'ok');
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/string-id',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      transport.receiveMessage(
+        const JsonRpcRequest(id: 'client-req-1', method: 'test/string-id'),
+      );
+
+      await waitForSentMessages(transport, 2);
+
+      expect(transport.sentMessages, hasLength(2));
+      expect(transport.sentMessages[0], isA<JsonRpcNotification>());
+      expect(transport.relatedRequestIds[0], 'client-req-1');
+      expect(transport.sentMessages[1], isA<JsonRpcResponse>());
+      expect((transport.sentMessages[1] as JsonRpcResponse).id, 'client-req-1');
+    });
+
+    test('routes handler requests for string request IDs', () async {
+      await protocol.connect(transport);
+
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/string-id/request',
+        (request, extra) async {
+          final nestedResult = await extra.sendRequest<TestResult>(
+            const JsonRpcRequest(id: 0, method: 'test/method'),
+            (json) => TestResult(value: json['value'] as String),
+            const RequestOptions(timeout: Duration(seconds: 1)),
+          );
+          return TestResult(value: nestedResult.value);
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/string-id/request',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      transport.receiveMessage(
+        const JsonRpcRequest(
+          id: 'client-req-2',
+          method: 'test/string-id/request',
+        ),
+      );
+
+      await waitForSentMessages(transport, 1);
+
+      expect(transport.sentMessages[0], isA<JsonRpcRequest>());
+      expect(transport.relatedRequestIds[0], 'client-req-2');
+
+      final nestedRequest = transport.sentMessages[0] as JsonRpcRequest;
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: nestedRequest.id,
+          result: {'value': 'nested-ok'},
+        ),
+      );
+
+      await waitForSentMessages(transport, 2);
+
+      expect(transport.sentMessages[1], isA<JsonRpcResponse>());
+      final response = transport.sentMessages[1] as JsonRpcResponse;
+      expect(response.id, 'client-req-2');
+      expect(response.result['value'], 'nested-ok');
+    });
+
+    test('routes nested cancellation notifications for string request IDs',
+        () async {
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/cancel-nested',
+        (request, extra) async {
+          final result = await extra
+              .sendRequest<TestResult>(
+                const JsonRpcRequest(id: 0, method: 'test/nested-cancel'),
+                (json) => TestResult(value: json['value'] as String),
+                RequestOptions(signal: controller.signal),
+              )
+              .catchError((_) => TestResult(value: 'cancelled'));
+          return result;
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/cancel-nested',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      transport.receiveMessage(
+        const JsonRpcRequest(id: 'client-req-3', method: 'test/cancel-nested'),
+      );
+
+      await waitForSentMessages(transport, 1);
+      controller.abort('User cancelled');
+
+      await waitForSentMessages(transport, 2);
+      final cancellationIndex = transport.sentMessages.indexWhere(
+        (message) =>
+            message is JsonRpcNotification &&
+            message.method == 'notifications/cancelled',
+      );
+
+      expect(cancellationIndex, isNot(-1));
+      expect(transport.relatedRequestIds[cancellationIndex], 'client-req-3');
     });
 
     test('handles outgoing request errors', () async {

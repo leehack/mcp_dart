@@ -133,7 +133,8 @@ class StreamableHTTPServerTransportOptions {
 /// In stateless mode:
 /// - Session ID is only included in initialization responses
 /// - No session validation is performed
-class StreamableHTTPServerTransport implements Transport {
+class StreamableHTTPServerTransport
+    implements Transport, RequestIdAwareTransport {
   // when sessionId is not set (null), it means the transport is in stateless mode
   final String? Function()? _sessionIdGenerator;
   bool _started = false;
@@ -840,7 +841,15 @@ class StreamableHTTPServerTransport implements Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message, {dynamic relatedRequestId}) async {
+  Future<void> send(JsonRpcMessage message, {dynamic relatedRequestId}) {
+    return sendWithRequestId(message, relatedRequestId: relatedRequestId);
+  }
+
+  @override
+  Future<void> sendWithRequestId(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+  }) async {
     dynamic requestId = relatedRequestId;
     if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
       // If the message is a response, use the request ID from the message

@@ -646,7 +646,8 @@ abstract class Protocol {
           : null,
       taskRequestedTtl:
           (request.params?['task'] as Map<String, dynamic>?)?['ttl'] as int?,
-      sendNotification: (notification, {relatedTask}) => this.notification(
+      sendNotification: (notification, {relatedTask}) =>
+          _notificationWithRequestId(
         notification,
         relatedTask: relatedTask,
         relatedRequestId: request.id,
@@ -668,11 +669,11 @@ abstract class Protocol {
                   ? RelatedTaskMetadata(taskId: relatedTaskId)
                   : null),
         );
-        return this.request<T>(
+        return _requestWithRequestId<T>(
           req,
           resultFactory,
           newOptions,
-          request.id is int ? request.id as int : null,
+          request.id,
         );
       },
     );
@@ -928,6 +929,20 @@ abstract class Protocol {
     RequestOptions? options,
     int? relatedRequestId,
   ]) {
+    return _requestWithRequestId(
+      requestData,
+      resultFactory,
+      options,
+      relatedRequestId,
+    );
+  }
+
+  Future<T> _requestWithRequestId<T extends BaseResultData>(
+    JsonRpcRequest requestData,
+    T Function(Map<String, dynamic> resultJson) resultFactory, [
+    RequestOptions? options,
+    RequestId? relatedRequestId,
+  ]) {
     if (_transport == null) {
       return Future.error(StateError("Not connected to a transport."));
     }
@@ -1007,7 +1022,12 @@ abstract class Protocol {
       // Spec doesn't strictly say, but usually cancellations go via same channel.
       // For now assume standard transport for cancellations unless queued.
 
-      _transport?.send(notification).catchError((e) {
+      _transport
+          ?.sendPreservingRequestId(
+        notification,
+        relatedRequestId: relatedRequestId,
+      )
+          .catchError((e) {
         _onerror(
           StateError("Failed to send cancellation for request $messageId: $e"),
         );
@@ -1085,7 +1105,10 @@ abstract class Protocol {
     } else {
       // Normal transport
       _transport!
-          .send(jsonrpcRequest, relatedRequestId: relatedRequestId)
+          .sendPreservingRequestId(
+        jsonrpcRequest,
+        relatedRequestId: relatedRequestId,
+      )
           .catchError((error) {
         _cleanupTimeout(messageId);
         if (!completer.isCompleted) {
@@ -1122,6 +1145,18 @@ abstract class Protocol {
     JsonRpcNotification notificationData, {
     RelatedTaskMetadata? relatedTask,
     int? relatedRequestId,
+  }) {
+    return _notificationWithRequestId(
+      notificationData,
+      relatedTask: relatedTask,
+      relatedRequestId: relatedRequestId,
+    );
+  }
+
+  Future<void> _notificationWithRequestId(
+    JsonRpcNotification notificationData, {
+    RelatedTaskMetadata? relatedTask,
+    RequestId? relatedRequestId,
   }) async {
     if (_transport == null) {
       throw StateError("Not connected to a transport.");
@@ -1181,7 +1216,7 @@ abstract class Protocol {
         _pendingDebouncedNotifications.remove(notificationData.method);
         if (_transport == null) return;
         _transport!
-            .send(
+            .sendPreservingRequestId(
               jsonrpcNotification,
               relatedRequestId: relatedRequestId,
             )
@@ -1190,7 +1225,7 @@ abstract class Protocol {
       return;
     }
 
-    await _transport!.send(
+    await _transport!.sendPreservingRequestId(
       jsonrpcNotification,
       relatedRequestId: relatedRequestId,
     );
