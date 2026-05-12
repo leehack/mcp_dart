@@ -311,9 +311,6 @@ void main() {
         String? origin,
         String body = '{}',
       }) async {
-        await transport.start();
-        transports['/mcp'] = transport;
-
         final client = HttpClient();
         addTearDown(client.close);
 
@@ -333,11 +330,14 @@ void main() {
         final transport = StreamableHTTPServerTransport(
           options: StreamableHTTPServerTransportOptions(
             sessionIdGenerator: () => 'test-session-id',
+            enableDnsRebindingProtection: true,
             allowedHosts: {'localhost'},
             allowedOrigins: {'http://localhost:$serverPort'},
           ),
         );
         addTearDown(transport.close);
+        await transport.start();
+        transports['/mcp'] = transport;
 
         final response = await postWithHeaders(
           transport,
@@ -362,11 +362,14 @@ void main() {
         final transport = StreamableHTTPServerTransport(
           options: StreamableHTTPServerTransportOptions(
             sessionIdGenerator: () => 'test-session-id',
+            enableDnsRebindingProtection: true,
             allowedHosts: {'localhost'},
             allowedOrigins: {'http://localhost:$serverPort'},
           ),
         );
         addTearDown(transport.close);
+        await transport.start();
+        transports['/mcp'] = transport;
 
         final response = await postWithHeaders(
           transport,
@@ -383,11 +386,14 @@ void main() {
         final transport = StreamableHTTPServerTransport(
           options: StreamableHTTPServerTransportOptions(
             sessionIdGenerator: () => 'test-session-id',
+            enableDnsRebindingProtection: true,
             allowedHosts: {'localhost'},
             allowedOrigins: {'http://localhost:$serverPort'},
           ),
         );
         addTearDown(transport.close);
+        await transport.start();
+        transports['/mcp'] = transport;
 
         final response = await postWithHeaders(
           transport,
