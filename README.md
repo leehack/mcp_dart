@@ -67,6 +67,19 @@ dart pub get
 
 The goal is to make this SDK as similar as possible to the official SDKs available in other languages, ensuring a consistent developer experience across platforms.
 
+## Choosing between `mcp_dart` and the official `dart_mcp` package
+
+The Dart ecosystem now has more than one MCP package. The official [`dart_mcp`](https://pub.dev/packages/dart_mcp) package is maintained in the Dart team's [`dart-lang/ai`](https://github.com/dart-lang/ai/tree/main/pkgs/dart_mcp) repository and is a good place to look when you specifically want the official Dart team implementation.
+
+`mcp_dart` is a community SDK focused on production-oriented MCP servers and clients for Dart and Flutter applications. It is designed for teams that need broad protocol coverage, multiple transports, security controls, and tooling around real deployments.
+
+| Package | Best fit | Notes |
+|---------|----------|-------|
+| `dart_mcp` | Projects that prefer the official Dart team package or want to follow the Dart team's evolving MCP APIs closely. | Check the package docs and changelog for its current feature set and stability guarantees. |
+| `mcp_dart` | Production-focused Dart/Flutter MCP servers, clients, and hosts that need broad transport, auth, security, and tooling support today. | Includes Streamable HTTP, OAuth2/PKCE, MCP Apps helpers, strict transport security controls, CLI tooling, and compatibility with the latest MCP protocol version. |
+
+Use this comparison as a starting point, not a permanent verdict: both packages can evolve quickly. If you compare them for a production decision, re-check the current pub.dev releases and docs first.
+
 ## Model Context Protocol Version
 
 The current version of the protocol is `2025-11-25`. This library is designed to be compatible with this version, and any future updates will be made to ensure continued compatibility.
