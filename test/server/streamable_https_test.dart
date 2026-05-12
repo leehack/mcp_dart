@@ -305,8 +305,7 @@ void main() {
     });
 
     group('DNS rebinding protection', () {
-      Future<HttpClientResponse> postWithHeaders(
-        StreamableHTTPServerTransport transport, {
+      Future<HttpClientResponse> postWithHeaders({
         required String host,
         String? origin,
         String body = '{}',
@@ -340,7 +339,6 @@ void main() {
         transports['/mcp'] = transport;
 
         final response = await postWithHeaders(
-          transport,
           host: 'localhost:$serverPort',
           origin: 'http://localhost:$serverPort',
           body: jsonEncode({
@@ -372,7 +370,6 @@ void main() {
         transports['/mcp'] = transport;
 
         final response = await postWithHeaders(
-          transport,
           host: 'evil.example',
           origin: 'http://localhost:$serverPort',
         );
@@ -396,7 +393,6 @@ void main() {
         transports['/mcp'] = transport;
 
         final response = await postWithHeaders(
-          transport,
           host: 'localhost:$serverPort',
           origin: 'http://evil.example',
         );
