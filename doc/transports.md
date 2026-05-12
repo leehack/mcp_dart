@@ -263,8 +263,10 @@ on a different dev-server port, add that exact origin instead of using a wildcar
 
 **Production browser or remote deployment**
 
-Terminate TLS at your application or reverse proxy, expose only the public MCP
-hostname, and allow only the trusted web origins that should reach it:
+Terminate TLS at your reverse proxy or load balancer, expose only the public MCP
+hostname, and allow only the trusted web origins that should reach it. If your
+deployment needs the Dart process itself to accept HTTPS, provide a custom secure
+`HttpServer` setup; `StreamableMcpServer` binds its listener with plain HTTP:
 
 ```dart
 final server = StreamableMcpServer(

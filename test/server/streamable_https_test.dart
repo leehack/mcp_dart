@@ -349,9 +349,12 @@ void main() {
           }),
         );
         final body = await utf8.decodeStream(response);
+        final decodedBody = jsonDecode(body) as Map<String, dynamic>;
+        final error = decodedBody['error'] as Map<String, dynamic>;
 
         expect(response.statusCode, equals(HttpStatus.badRequest));
-        expect(body, contains('Server not initialized'));
+        expect(error['code'], equals(ErrorCode.connectionClosed.value));
+        expect(error['message'], equals('Bad Request: Server not initialized'));
         expect(body, isNot(contains('DNS rebinding protection')));
       });
 
