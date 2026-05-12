@@ -76,7 +76,7 @@ The Dart ecosystem now has more than one MCP package. The official [`dart_mcp`](
 | Package | Best fit | Notes |
 |---------|----------|-------|
 | `dart_mcp` | Projects that prefer the official Dart team package or want to follow the Dart team's evolving MCP APIs closely. | Check the package docs and changelog for its current feature set and stability guarantees. |
-| `mcp_dart` | Production-focused Dart/Flutter MCP servers, clients, and hosts that need broad transport, auth, security, and tooling support today. | Includes Streamable HTTP, OAuth2/PKCE, MCP Apps helpers, strict transport security controls, CLI tooling, and compatibility with the latest MCP protocol version. |
+| `mcp_dart` | Production-focused Dart/Flutter MCP servers, clients, and hosts that need broad transport, auth, security, and tooling support today. | Includes StreamableHTTP, OAuth2/PKCE, MCP Apps helpers, strict transport security controls, CLI tooling, and compatibility with the latest MCP protocol version. |
 
 Use this comparison as a starting point, not a permanent verdict: both packages can evolve quickly. If you compare them for a production decision, re-check the current pub.dev releases and docs first.
 
