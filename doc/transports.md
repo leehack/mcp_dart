@@ -237,6 +237,56 @@ This helper handles:
 
 Use this for remote/browser-exposed deployments.
 
+#### Deployment recipes
+
+**Safe local development**
+
+Bind only to loopback and allow the exact browser development origin that needs
+to call the MCP endpoint:
+
+```dart
+final server = StreamableMcpServer(
+  serverFactory: (sessionId) => McpServer(
+    const Implementation(name: 'local-dev-server', version: '1.0.0'),
+  ),
+  host: '127.0.0.1',
+  port: 3000,
+  path: '/mcp',
+  enableDnsRebindingProtection: true,
+  allowedHosts: {'localhost', '127.0.0.1'},
+  allowedOrigins: {'http://localhost:5173'},
+);
+```
+
+Keep DNS rebinding protection enabled even on localhost. If your browser app runs
+on a different dev-server port, add that exact origin instead of using a wildcard.
+
+**Production browser or remote deployment**
+
+Terminate TLS at your reverse proxy or load balancer, expose only the public MCP
+hostname, and allow only the trusted web origins that should reach it. If your
+deployment needs the Dart process itself to accept HTTPS, provide a custom secure
+`HttpServer` setup; `StreamableMcpServer` binds its listener with plain HTTP:
+
+```dart
+final server = StreamableMcpServer(
+  serverFactory: (sessionId) => McpServer(
+    const Implementation(name: 'production-server', version: '1.0.0'),
+  ),
+  host: '0.0.0.0',
+  port: 3000,
+  path: '/mcp',
+  enableDnsRebindingProtection: true,
+  allowedHosts: {'mcp.example.com'},
+  allowedOrigins: {'https://app.example.com'},
+);
+```
+
+For authenticated deployments, pair these transport checks with your OAuth or
+bearer-token layer. The examples in `example/authentication/` show the MCP OAuth
+flow and PKCE shape; production clients should use PKCE S256 with cryptographic
+randomness and keep redirect URIs/origins explicit.
+
 ### Streamable HTTP Strict Defaults
 
 By default, Streamable HTTP server transports also enforce:
@@ -244,30 +294,43 @@ By default, Streamable HTTP server transports also enforce:
 - Strict `MCP-Protocol-Version` request header validation
 - Rejection of JSON-RPC batch POST payloads
 
-If you need a temporary compatibility mode during migration, disable strict checks explicitly:
+These defaults make compatibility failures visible instead of accepting requests
+that the Streamable HTTP spec no longer allows. If you need a temporary migration
+mode, disable only the specific check that blocks a known legacy client:
 
 ```dart
 final server = StreamableMcpServer(
   serverFactory: (sessionId) => McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
   ),
+  // Only if a legacy client still sends older or experimental versions.
   strictProtocolVersionHeaderValidation: false,
-  rejectBatchJsonRpcPayloads: false,
-  enableDnsRebindingProtection: false,
+  // Keep DNS rebinding protection enabled and explicit.
+  enableDnsRebindingProtection: true,
+  allowedHosts: {'mcp.example.com'},
+  allowedOrigins: {'https://app.example.com'},
 );
 ```
 
-Or with low-level transport options:
+Or with low-level transport options for a legacy client that temporarily still
+sends JSON-RPC batch payloads:
 
 ```dart
 final transport = StreamableHTTPServerTransport(
   options: StreamableHTTPServerTransportOptions(
-    strictProtocolVersionHeaderValidation: false,
+    // Prefer migrating clients to non-batch Streamable HTTP requests.
     rejectBatchJsonRpcPayloads: false,
-    enableDnsRebindingProtection: false,
+    enableDnsRebindingProtection: true,
+    allowedHosts: {'mcp.example.com'},
+    allowedOrigins: {'https://app.example.com'},
   ),
 );
 ```
+
+Avoid disabling `enableDnsRebindingProtection` on browser-exposed or remote
+servers. If you must disable it for an internal compatibility test, bind to
+loopback/private networking and put the exception behind a short-lived migration
+plan.
 
 ### Server Setup (Streamable HTTP)
 

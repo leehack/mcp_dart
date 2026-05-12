@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:mcp_dart/src/server/streamable_https.dart';
@@ -301,6 +302,105 @@ void main() {
       await transport.close();
 
       expect(true, isTrue);
+    });
+
+    group('DNS rebinding protection', () {
+      Future<HttpClientResponse> postWithHeaders({
+        required String host,
+        String? origin,
+        String body = '{}',
+      }) async {
+        final client = HttpClient();
+        addTearDown(client.close);
+
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..set(HttpHeaders.hostHeader, host)
+          ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+          ..contentType = ContentType.json;
+        if (origin != null) {
+          request.headers.set('Origin', origin);
+        }
+        request.write(body);
+        return request.close();
+      }
+
+      test('allows allowlisted headers to reach session validation', () async {
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => 'test-session-id',
+            enableDnsRebindingProtection: true,
+            allowedHosts: {'localhost'},
+            allowedOrigins: {'http://localhost:$serverPort'},
+          ),
+        );
+        addTearDown(transport.close);
+        await transport.start();
+        transports['/mcp'] = transport;
+
+        final response = await postWithHeaders(
+          host: 'localhost:$serverPort',
+          origin: 'http://localhost:$serverPort',
+          body: jsonEncode({
+            'jsonrpc': '2.0',
+            'method': 'notifications/initialized',
+          }),
+        );
+        final body = await utf8.decodeStream(response);
+        final decodedBody = jsonDecode(body) as Map<String, dynamic>;
+        final error = decodedBody['error'] as Map<String, dynamic>;
+
+        expect(response.statusCode, equals(HttpStatus.badRequest));
+        expect(error['code'], equals(ErrorCode.connectionClosed.value));
+        expect(error['message'], equals('Bad Request: Server not initialized'));
+        expect(body, isNot(contains('DNS rebinding protection')));
+      });
+
+      test('rejects requests with hosts outside the allowlist', () async {
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => 'test-session-id',
+            enableDnsRebindingProtection: true,
+            allowedHosts: {'localhost'},
+            allowedOrigins: {'http://localhost:$serverPort'},
+          ),
+        );
+        addTearDown(transport.close);
+        await transport.start();
+        transports['/mcp'] = transport;
+
+        final response = await postWithHeaders(
+          host: 'evil.example',
+          origin: 'http://localhost:$serverPort',
+        );
+        final body = await utf8.decodeStream(response);
+
+        expect(response.statusCode, equals(HttpStatus.forbidden));
+        expect(body, contains('DNS rebinding protection'));
+      });
+
+      test('rejects requests with origins outside the allowlist', () async {
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => 'test-session-id',
+            enableDnsRebindingProtection: true,
+            allowedHosts: {'localhost'},
+            allowedOrigins: {'http://localhost:$serverPort'},
+          ),
+        );
+        addTearDown(transport.close);
+        await transport.start();
+        transports['/mcp'] = transport;
+
+        final response = await postWithHeaders(
+          host: 'localhost:$serverPort',
+          origin: 'http://evil.example',
+        );
+        final body = await utf8.decodeStream(response);
+
+        expect(response.statusCode, equals(HttpStatus.forbidden));
+        expect(body, contains('DNS rebinding protection'));
+      });
     });
 
     test('session validation works correctly', () async {
