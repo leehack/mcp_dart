@@ -86,6 +86,21 @@ class TestEventStore implements EventStore {
   }
 }
 
+List<Map<String, dynamic>> _decodeSseJsonMessages(String body) {
+  final messages = <Map<String, dynamic>>[];
+  for (final event in body.trim().split('\n\n')) {
+    final data = event
+        .split('\n')
+        .where((line) => line.startsWith('data: '))
+        .map((line) => line.substring('data: '.length))
+        .join('\n');
+    if (data.isNotEmpty) {
+      messages.add(jsonDecode(data) as Map<String, dynamic>);
+    }
+  }
+  return messages;
+}
+
 void main() {
   late HttpServer testServer;
   late int serverPort;
@@ -255,6 +270,115 @@ void main() {
         expect(receivedMessage.params?['data'], equals('test-data'));
 
         await transport.close();
+      },
+      timeout: const Timeout(Duration(seconds: 5)),
+    );
+
+    test(
+      'routes SSE notifications for string request IDs',
+      () async {
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => null,
+          ),
+        );
+        addTearDown(transport.close);
+        await transport.start();
+        transports['/mcp'] = transport;
+
+        Future<HttpClientResponse> postJsonRpc(JsonRpcMessage message) async {
+          final client = HttpClient();
+          addTearDown(() => client.close(force: true));
+
+          final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            );
+          request.write(jsonEncode(message.toJson()));
+          return request.close();
+        }
+
+        transport.onmessage = (message) {
+          if (message is! JsonRpcRequest) {
+            return;
+          }
+
+          if (message.method == 'initialize') {
+            unawaited(
+              transport.send(
+                JsonRpcResponse(
+                  id: message.id,
+                  result: const {
+                    'protocolVersion': latestProtocolVersion,
+                    'capabilities': {},
+                    'serverInfo': {'name': 'TestServer', 'version': '1.0.0'},
+                  },
+                ),
+              ),
+            );
+            return;
+          }
+
+          if (message.method == 'test/string-id') {
+            unawaited(
+              () async {
+                await transport.sendWithRequestId(
+                  const JsonRpcNotification(
+                    method: 'test/notification',
+                    params: {'marker': 'routed'},
+                  ),
+                  relatedRequestId: message.id,
+                );
+                await transport.send(
+                  JsonRpcResponse(
+                    id: message.id,
+                    result: const {'ok': true},
+                  ),
+                );
+              }(),
+            );
+          }
+        };
+
+        final initResponse = await postJsonRpc(
+          const JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+            params: {
+              'protocolVersion': latestProtocolVersion,
+              'capabilities': {},
+              'clientInfo': {'name': 'TestClient', 'version': '1.0.0'},
+            },
+          ),
+        );
+        expect(initResponse.statusCode, HttpStatus.ok);
+        final initMessages = _decodeSseJsonMessages(
+          await utf8.decodeStream(initResponse),
+        );
+        expect(initMessages.single['id'], 1);
+
+        final response = await postJsonRpc(
+          const JsonRpcRequest(
+            id: 'client-req-string',
+            method: 'test/string-id',
+          ),
+        );
+        expect(response.statusCode, HttpStatus.ok);
+        expect(
+          response.headers.contentType?.mimeType,
+          'text/event-stream',
+        );
+
+        final messages =
+            _decodeSseJsonMessages(await utf8.decodeStream(response));
+        expect(messages, hasLength(2));
+        expect(messages[0]['method'], 'test/notification');
+        expect(messages[0]['params'], containsPair('marker', 'routed'));
+        expect(messages[1]['id'], 'client-req-string');
+        expect(messages[1]['result'], containsPair('ok', true));
       },
       timeout: const Timeout(Duration(seconds: 5)),
     );
