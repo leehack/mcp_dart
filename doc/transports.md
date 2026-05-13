@@ -747,8 +747,12 @@ class CustomTransport extends Transport {
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
-    // Send message
+  Future<void> send(
+    JsonRpcMessage message, {
+    int? relatedRequestId,
+  }) async {
+    // Send message. Existing transports can keep the int? relatedRequestId
+    // signature for source compatibility.
   }
 
   @override
@@ -756,19 +760,41 @@ class CustomTransport extends Transport {
     // Clean up resources
   }
 
+  @override
+  String? get sessionId => null;
+
   // Call this when receiving messages
   void receiveMessage(JsonRpcMessage message) {
-    onMessage?.call(message);
+    onmessage?.call(message);
   }
 
   // Call this on connection close
   void handleClose() {
-    onClose?.call();
+    onclose?.call();
   }
 
   // Call this on errors
-  void handleError(Object error) {
-    onError?.call(error);
+  void handleError(Error error) {
+    onerror?.call(error);
+  }
+}
+```
+
+### Request ID-aware Transports
+
+If a custom transport routes messages by JSON-RPC request ID or stream
+correlation key, implement `RequestIdAwareTransport` in addition to `Transport`
+so string request IDs are preserved:
+
+```dart
+class StreamRoutingTransport extends CustomTransport
+    implements RequestIdAwareTransport {
+  @override
+  Future<void> sendWithRequestId(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+  }) async {
+    // Route with the full JSON-RPC request ID shape: String or int.
   }
 }
 ```
@@ -778,7 +804,7 @@ class CustomTransport extends Transport {
 Add logging, metrics, or filtering:
 
 ```dart
-class LoggingTransport extends Transport {
+class LoggingTransport extends Transport implements RequestIdAwareTransport {
   final Transport inner;
   final Logger logger;
 
@@ -789,26 +815,41 @@ class LoggingTransport extends Transport {
     logger.info('Starting transport');
     await inner.start();
 
-    inner.onMessage = (message) {
+    inner.onmessage = (message) {
       logger.debug('Received: $message');
-      onMessage?.call(message);
+      onmessage?.call(message);
     };
 
-    inner.onError = (error) {
+    inner.onerror = (error) {
       logger.warn('Error: $error');
-      onError?.call(error);
+      onerror?.call(error);
     };
 
-    inner.onClose = () {
+    inner.onclose = () {
       logger.info('Closed');
-      onClose?.call();
+      onclose?.call();
     };
   }
 
   @override
-  Future<void> send(JsonRpcMessage message) async {
+  Future<void> send(
+    JsonRpcMessage message, {
+    int? relatedRequestId,
+  }) async {
     logger.debug('Sending: $message');
-    await inner.send(message);
+    await inner.send(message, relatedRequestId: relatedRequestId);
+  }
+
+  @override
+  Future<void> sendWithRequestId(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+  }) async {
+    logger.debug('Sending: $message');
+    await inner.sendPreservingRequestId(
+      message,
+      relatedRequestId: relatedRequestId,
+    );
   }
 
   @override
@@ -816,6 +857,9 @@ class LoggingTransport extends Transport {
     logger.info('Closing transport');
     await inner.close();
   }
+
+  @override
+  String? get sessionId => inner.sessionId;
 }
 
 // Usage
