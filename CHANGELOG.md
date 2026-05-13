@@ -13,6 +13,9 @@
 
 ### Reliability
 
+- Honored `RequestOptions.resetTimeoutOnProgress` and `maxTotalTimeout` together
+  so progress notifications can reset inactivity timers without bypassing the
+  absolute total timeout cap.
 - Supported string progress tokens end-to-end for outgoing requests that supply
   a custom `progressToken`, while preserving generated integer tokens for the
   default `RequestOptions.onprogress` path.
