@@ -489,6 +489,7 @@ abstract class Protocol {
     bool resetOnProgress,
     void Function() onTimeout,
   ) {
+    final startTime = DateTime.now();
     var initialTimeout = timeout;
     if (maxTotalTimeout != null && maxTotalTimeout < initialTimeout) {
       initialTimeout = maxTotalTimeout;
@@ -496,7 +497,7 @@ abstract class Protocol {
 
     final info = _TimeoutInfo(
       timeoutTimer: Timer(initialTimeout, onTimeout),
-      startTime: DateTime.now(),
+      startTime: startTime,
       timeoutDuration: timeout,
       maxTotalTimeoutDuration: maxTotalTimeout,
       resetOnProgress: resetOnProgress,
