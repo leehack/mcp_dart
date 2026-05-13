@@ -522,6 +522,50 @@ void main() {
       expect(result.value, 'response-data');
     });
 
+    test('progress notifications reset timeout for custom tokens', () async {
+      await protocol.connect(transport);
+
+      final requestFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 'reset-token'},
+            ),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(
+              onprogress: (_) {},
+              timeout: const Duration(milliseconds: 80),
+              resetTimeoutOnProgress: true,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(transport.sentMessages, hasLength(1));
+      final sentRequest = transport.sentMessages.single as JsonRpcRequest;
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 'reset-token',
+            progress: 50,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: sentRequest.id,
+          result: {'value': 'response-data'},
+        ),
+      );
+
+      final result = await requestFuture;
+      expect(result.value, 'response-data');
+    });
+
     test('rejects duplicate progress tokens for in-flight requests', () async {
       await protocol.connect(transport);
 

@@ -201,6 +201,9 @@ class _TimeoutInfo {
   /// Maximum total duration allowed, regardless of resets.
   final Duration? maxTotalTimeoutDuration;
 
+  /// Whether progress notifications reset the request timeout timer.
+  final bool resetOnProgress;
+
   /// Callback to execute when the timeout occurs.
   final void Function() onTimeout;
 
@@ -210,6 +213,7 @@ class _TimeoutInfo {
     required this.startTime,
     required this.timeoutDuration,
     this.maxTotalTimeoutDuration,
+    this.resetOnProgress = false,
     required this.onTimeout,
   });
 }
@@ -482,6 +486,7 @@ abstract class Protocol {
     int messageId,
     Duration timeout,
     Duration? maxTotalTimeout,
+    bool resetOnProgress,
     void Function() onTimeout,
   ) {
     final info = _TimeoutInfo(
@@ -489,9 +494,32 @@ abstract class Protocol {
       startTime: DateTime.now(),
       timeoutDuration: timeout,
       maxTotalTimeoutDuration: maxTotalTimeout,
+      resetOnProgress: resetOnProgress,
       onTimeout: onTimeout,
     );
     _timeoutInfo[messageId] = info;
+  }
+
+  void _resetTimeoutOnProgress(_TimeoutInfo timeoutInfo) {
+    if (!timeoutInfo.resetOnProgress) return;
+
+    var nextTimeout = timeoutInfo.timeoutDuration;
+    final maxTotalTimeout = timeoutInfo.maxTotalTimeoutDuration;
+    if (maxTotalTimeout != null) {
+      final elapsed = DateTime.now().difference(timeoutInfo.startTime);
+      final remaining = maxTotalTimeout - elapsed;
+      if (remaining <= Duration.zero) {
+        timeoutInfo.timeoutTimer.cancel();
+        timeoutInfo.onTimeout();
+        return;
+      }
+      if (remaining < nextTimeout) {
+        nextTimeout = remaining;
+      }
+    }
+
+    timeoutInfo.timeoutTimer.cancel();
+    timeoutInfo.timeoutTimer = Timer(nextTimeout, timeoutInfo.onTimeout);
   }
 
   /// Cleans up the timeout state associated with a request ID.
@@ -820,16 +848,8 @@ abstract class Protocol {
     final requestId = _progressTokenRequestIds[progressToken];
     final timeoutInfo = requestId != null ? _timeoutInfo[requestId] : null;
     if (timeoutInfo != null) {
-      // Determine if we should reset
-      // We don't have easy access to RequestOptions here without storing them,
-      // but in the original code we check `resetTimeoutOnProgress`
-      // For now, assume false unless we enhance `_TimeoutInfo` or lookup.
-      // The original code had `_getRequestOptionsFromTimeoutInfo` which returned null.
-      // If we want to support resetTimeoutOnProgress, we need to store it in `_TimeoutInfo` or a map.
+      _resetTimeoutOnProgress(timeoutInfo);
     }
-
-    // In strict TS implementation, `resetTimeoutOnProgress` is stored in `TimeoutInfo`.
-    // I will check `_resetTimeout` logic. It uses `_timeoutInfo`.
 
     try {
       final progressData = Progress(
@@ -1112,6 +1132,7 @@ abstract class Protocol {
       messageId,
       timeoutDuration,
       maxTotalTimeoutDuration,
+      options?.resetTimeoutOnProgress ?? false,
       timeoutHandler,
     );
 
