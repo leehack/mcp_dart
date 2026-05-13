@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:mcp_dart/src/client/client.dart';
 import 'package:mcp_dart/src/client/streamable_https.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -189,6 +190,105 @@ void main() {
         ),
       );
       expect(transport, isNotNull);
+    });
+
+    test('client connect initializes when session ID is preconfigured',
+        () async {
+      final preconfiguredSessionId = 'preconfigured-session-id';
+      final capturedSessionHeaders = <String?>[];
+      var initializeCount = 0;
+      var initializedNotificationCount = 0;
+
+      final initServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => initServer.close(force: true));
+      final initUrl = Uri.parse('http://localhost:${initServer.port}/mcp');
+
+      initServer.listen((request) async {
+        if (request.uri.path != '/mcp') {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        if (request.method == 'GET') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        if (request.method != 'POST') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        capturedSessionHeaders.add(request.headers.value('mcp-session-id'));
+        final body = await utf8.decoder.bind(request).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        if (json['method'] == 'initialize') {
+          initializeCount += 1;
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers
+              .set('mcp-session-id', preconfiguredSessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: json['id'],
+                result: const InitializeResult(
+                  protocolVersion: latestProtocolVersion,
+                  capabilities: ServerCapabilities(
+                    logging: {'supported': true},
+                  ),
+                  serverInfo: Implementation(
+                    name: 'PreconfiguredSessionServer',
+                    version: '1.0.0',
+                  ),
+                  instructions: 'Initialized with preconfigured session',
+                ).toJson(),
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'notifications/initialized') {
+          initializedNotificationCount += 1;
+          request.response.statusCode = HttpStatus.accepted;
+          request.response.headers
+              .set('mcp-session-id', preconfiguredSessionId);
+          await request.response.close();
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.badRequest;
+        await request.response.close();
+      });
+
+      final client = McpClient(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+      transport = StreamableHttpClientTransport(
+        initUrl,
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: preconfiguredSessionId,
+        ),
+      );
+
+      await client.connect(transport);
+
+      expect(initializeCount, 1);
+      expect(initializedNotificationCount, 1);
+      expect(capturedSessionHeaders, isNotEmpty);
+      expect(capturedSessionHeaders, everyElement(preconfiguredSessionId));
+      expect(client.getServerCapabilities()?.logging, isNotNull);
+      expect(client.getServerVersion()?.name, 'PreconfiguredSessionServer');
+      expect(
+        client.getInstructions(),
+        'Initialized with preconfigured session',
+      );
     });
 
     test('start initializes the transport', () async {

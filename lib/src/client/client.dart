@@ -194,10 +194,6 @@ class McpClient extends Protocol {
   Future<void> connect(Transport transport) async {
     await super.connect(transport);
 
-    if (transport.sessionId != null) {
-      return;
-    }
-
     try {
       final initParams = InitializeRequest(
         protocolVersion: latestProtocolVersion,
