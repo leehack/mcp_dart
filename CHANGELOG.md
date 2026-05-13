@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Spec Alignment
+
+- Added MCP `completion/complete` wire support for
+  `context.arguments` and `PromptReference.title`, including context-aware
+  server completion callbacks for prompt and resource-template completions.
+
 ### Compatibility Notes
 
 - **Custom transports remain source-compatible while string request routing is available**:

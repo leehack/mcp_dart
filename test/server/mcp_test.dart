@@ -904,7 +904,148 @@ void main() {
       transport.receiveMessage(completeRequest);
       await Future.delayed(const Duration(milliseconds: 10));
 
-      expect(transport.sentMessages.isNotEmpty, isTrue);
+      final response = transport.sentMessages
+          .whereType<JsonRpcResponse>()
+          .where((r) => r.id == 2)
+          .first;
+      final completion = response.result['completion'] as Map<String, dynamic>;
+      expect(
+        completion['values'],
+        equals(['documents/file1.txt', 'documents/file2.txt']),
+      );
+    });
+
+    test('resource template completion receives context arguments', () async {
+      CompletionContext? receivedContext;
+
+      mcpServer.resourceTemplate(
+        'context_template',
+        ResourceTemplateRegistration(
+          'users://{organization}/{userId}',
+          listCallback: (extra) async =>
+              const ListResourcesResult(resources: []),
+          completeCallbacksWithContext: {
+            'userId': (currentValue, context) async {
+              receivedContext = context;
+              final organization = context?.arguments?['organization'];
+              return ['alice', 'alex', 'bob']
+                  .where((user) => user.startsWith(currentValue))
+                  .map((user) => '$organization/$user')
+                  .toList();
+            },
+          },
+        ),
+        (uri, variables, extra) async {
+          return ReadResourceResult(
+            contents: [
+              TextResourceContents(uri: uri.toString(), text: 'content'),
+            ],
+          );
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      final initRequest = JsonRpcInitializeRequest(
+        id: 1,
+        initParams: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+        ),
+      );
+      transport.receiveMessage(initRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final completeRequest = JsonRpcCompleteRequest(
+        id: 2,
+        completeParams: const CompleteRequestParams(
+          ref: ResourceReference(
+            uri: 'users://{organization}/{userId}',
+          ),
+          argument: ArgumentCompletionInfo(name: 'userId', value: 'al'),
+          context: CompletionContext(arguments: {'organization': 'eng'}),
+        ),
+      );
+      transport.receiveMessage(completeRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(receivedContext?.arguments, equals({'organization': 'eng'}));
+
+      final response = transport.sentMessages
+          .whereType<JsonRpcResponse>()
+          .where((r) => r.id == 2)
+          .first;
+      final completion = response.result['completion'] as Map<String, dynamic>;
+      expect(completion['values'], equals(['eng/alice', 'eng/alex']));
+    });
+
+    test('prompt completion receives context arguments', () async {
+      CompletionContext? receivedContext;
+
+      mcpServer.prompt(
+        'context_prompt',
+        argsSchema: {
+          'city': PromptArgumentDefinition(
+            completable: CompletableField(
+              def: CompletableDef(
+                complete: (value) async => [],
+                completeWithContext: (value, context) async {
+                  receivedContext = context;
+                  final country = context?.arguments?['country'];
+                  return ['$country/$value'];
+                },
+              ),
+            ),
+          ),
+        },
+        callback: (args, extra) async {
+          return const GetPromptResult(
+            messages: [
+              PromptMessage(
+                role: PromptMessageRole.user,
+                content: TextContent(text: 'ok'),
+              ),
+            ],
+          );
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      final initRequest = JsonRpcInitializeRequest(
+        id: 1,
+        initParams: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+        ),
+      );
+      transport.receiveMessage(initRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final completeRequest = JsonRpcCompleteRequest(
+        id: 2,
+        completeParams: const CompleteRequestParams(
+          ref: PromptReference(
+            name: 'context_prompt',
+            title: 'Context Prompt',
+          ),
+          argument: ArgumentCompletionInfo(name: 'city', value: 'Seoul'),
+          context: CompletionContext(arguments: {'country': 'KR'}),
+        ),
+      );
+      transport.receiveMessage(completeRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(receivedContext?.arguments, equals({'country': 'KR'}));
+
+      final response = transport.sentMessages
+          .whereType<JsonRpcResponse>()
+          .where((r) => r.id == 2)
+          .first;
+      final completion = response.result['completion'] as Map<String, dynamic>;
+      expect(completion['values'], equals(['KR/Seoul']));
     });
 
     test('completion limits results to 100 items', () async {

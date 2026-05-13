@@ -467,13 +467,15 @@ final response = await makeAuthenticatedRequest(
 // Argument completion
 final result = await client.complete(
   CompleteRequest(
-    ref: CompletionReference(
-      type: CompletionReferenceType.resourceRef,
-      uri: 'users://{userId}/profile',
+    ref: const ResourceReference(
+      uri: 'users://{organization}/{userId}/profile',
     ),
-    argument: CompletionArgument(
+    argument: const ArgumentCompletionInfo(
       name: 'userId',
       value: 'ali',  // Partial input
+    ),
+    context: const CompletionContext(
+      arguments: {'organization': 'engineering'},
     ),
   ),
 );

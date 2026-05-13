@@ -281,17 +281,21 @@ void main() {
       transport.clearSentMessages();
 
       final params = const CompleteRequest(
-        ref: PromptReference(name: 'test-prompt'),
+        ref: PromptReference(name: 'test-prompt', title: 'Test Prompt'),
         argument: ArgumentCompletionInfo(name: 'arg1', value: 'val'),
+        context: CompletionContext(arguments: {'arg0': 'resolved'}),
       );
 
       await client.complete(params);
 
       // Verify a complete request was sent
       expect(transport.sentMessages.length, equals(1));
+      final request = transport.sentMessages.first as JsonRpcRequest;
+      expect(request.method, equals('completion/complete'));
+      expect(request.params?['ref']['title'], equals('Test Prompt'));
       expect(
-        (transport.sentMessages.first as JsonRpcRequest).method,
-        equals('completion/complete'),
+        request.params?['context']['arguments'],
+        equals({'arg0': 'resolved'}),
       );
     });
 
