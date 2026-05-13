@@ -28,6 +28,8 @@ server.registerTool(
 
 ## JSON Schema Validation
 
+mcp_dart implements a pragmatic JSON Schema subset for MCP tool input/output and elicitation schemas; it is not a complete JSON Schema 2020-12 validator.
+
 ### Basic Types
 
 ```dart
@@ -124,6 +126,28 @@ String enum schemas serialize as standard JSON Schema:
 
 `JsonEnum` uses the same standard output. When enum values include display titles, it emits `enumNames` for compatibility with clients that understand title metadata; mixed primitive enums without titles emit an `enum` array without a `type`. Legacy serialized input using `type: 'enum'` / `values` is still accepted by parsers.
 
+### Const Values
+
+Use `JsonSchema.constValue(...)` when a property must equal exactly one JSON value:
+
+```dart
+'confirmation': JsonSchema.constValue('DELETE')
+```
+
+This emits standard JSON Schema `const` and validates only the constant value.
+
+### Nullable and Type Unions
+
+`JsonSchema.fromJson(...)` also accepts simple JSON Schema `type` arrays, such as nullable string schemas:
+
+```json
+{
+  "type": ["string", "null"]
+}
+```
+
+These are parsed as a union of the listed primitive schema types and validate only values matching one of those types.
+
 ## Tool Annotations
 
 Provide behavioral hints to clients:
@@ -157,7 +181,7 @@ server.registerTool(
   ),
   inputSchema: ToolInputSchema(
     properties: {
-      'confirmation': JsonSchema.string(constValue: 'DELETE'),
+      'confirmation': JsonSchema.constValue('DELETE'),
     },
     required: ['confirmation'],
   ),

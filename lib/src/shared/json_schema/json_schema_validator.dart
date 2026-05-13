@@ -42,6 +42,10 @@ extension JsonSchemaValidation on JsonSchema {
         _validateObject(o, data, path);
       case final JsonEnum e:
         _validateEnum(e, data, path);
+      case final JsonConst c:
+        _validateConst(c, data, path);
+      case final JsonUnion u:
+        _validateUnion(u, data, path);
       case final JsonAllOf all:
         _validateAllOf(all, data, path);
       case final JsonAnyOf any:
@@ -326,6 +330,28 @@ extension JsonSchemaValidation on JsonSchema {
     }
   }
 
+  void _validateConst(JsonConst schema, dynamic data, List<String> path) {
+    if (!_deepEquals(schema.value, data)) {
+      throw JsonSchemaValidationException(
+        'Value must equal ${schema.value}',
+        path,
+      );
+    }
+  }
+
+  void _validateUnion(JsonUnion schema, dynamic data, List<String> path) {
+    for (final subSchema in schema.schemas) {
+      try {
+        _validate(subSchema, data, path);
+        return;
+      } catch (_) {}
+    }
+    throw JsonSchemaValidationException(
+      'Value does not match any union type',
+      path,
+    );
+  }
+
   void _validateAllOf(JsonAllOf schema, dynamic data, List<String> path) {
     for (final subSchema in schema.schemas) {
       _validate(subSchema, data, path);
@@ -371,10 +397,7 @@ extension JsonSchemaValidation on JsonSchema {
     } catch (_) {
       return;
     }
-    throw JsonSchemaValidationException(
-      'Value matches not schema',
-      path,
-    );
+    throw JsonSchemaValidationException('Value matches not schema', path);
   }
 
   bool _hasUniqueItems(List data) {

@@ -13,6 +13,12 @@ sealed class JsonSchema {
 
   /// Creates a [JsonSchema] from a JSON map.
   factory JsonSchema.fromJson(Map<String, dynamic> json) {
+    if (JsonEnum._canParse(json)) {
+      return JsonEnum.fromJson(json);
+    }
+    if (json.containsKey('const')) {
+      return JsonConst.fromJson(json);
+    }
     if (json.containsKey('allOf')) {
       return JsonAllOf.fromJson(json);
     }
@@ -27,6 +33,9 @@ sealed class JsonSchema {
     }
 
     final type = json['type'];
+    if (type is List) {
+      return JsonUnion.fromJson(json);
+    }
     if (type is String) {
       switch (type) {
         case 'string':
@@ -249,6 +258,36 @@ sealed class JsonSchema {
   }) {
     return JsonNot(
       schema,
+      title: title,
+      description: description,
+      defaultValue: defaultValue,
+    );
+  }
+
+  /// Creates a const schema that accepts exactly [value].
+  static JsonConst constValue(
+    dynamic value, {
+    String? title,
+    String? description,
+    dynamic defaultValue,
+  }) {
+    return JsonConst(
+      value,
+      title: title,
+      description: description,
+      defaultValue: defaultValue,
+    );
+  }
+
+  /// Creates a union schema that accepts any one of [schemas].
+  static JsonUnion union(
+    List<JsonSchema> schemas, {
+    String? title,
+    String? description,
+    dynamic defaultValue,
+  }) {
+    return JsonUnion(
+      schemas,
       title: title,
       description: description,
       defaultValue: defaultValue,
@@ -561,20 +600,13 @@ class JsonObject extends JsonSchema {
 
     return JsonObject(
       properties: (json['properties'] as Map<String, dynamic>?)?.map(
-        (key, value) => MapEntry(
-          key,
-          JsonSchema.fromJson(value as Map<String, dynamic>),
-        ),
+        (key, value) =>
+            MapEntry(key, JsonSchema.fromJson(value as Map<String, dynamic>)),
       ),
       required: (json['required'] as List?)?.cast<String>(),
       additionalProperties: parsedAdditionalProps,
-      dependentRequired:
-          (json['dependentRequired'] as Map<String, dynamic>?)?.map(
-        (key, value) => MapEntry(
-          key,
-          (value as List).cast<String>(),
-        ),
-      ),
+      dependentRequired: (json['dependentRequired'] as Map<String, dynamic>?)
+          ?.map((key, value) => MapEntry(key, (value as List).cast<String>())),
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as Map<String, dynamic>?,
@@ -609,10 +641,7 @@ class JsonAny extends JsonSchema {
     String? title,
     String? description,
     this.defaultValue,
-  ]) : super(
-          title: title,
-          description: description,
-        );
+  ]) : super(title: title, description: description);
 
   @override
   final dynamic defaultValue;
@@ -651,6 +680,154 @@ class JsonAny extends JsonSchema {
       if (description != null) 'description': description,
       if (defaultValue != null) 'default': defaultValue,
       ...properties,
+    };
+  }
+}
+
+/// A schema that accepts exactly one JSON value.
+class JsonConst extends JsonSchema {
+  final dynamic value;
+
+  const JsonConst(
+    this.value, {
+    this.defaultValue,
+    super.title,
+    super.description,
+  });
+
+  @override
+  final dynamic defaultValue;
+
+  factory JsonConst.fromJson(Map<String, dynamic> json) {
+    return JsonConst(
+      json['const'],
+      title: json['title'] as String?,
+      description: json['description'] as String?,
+      defaultValue: json['default'],
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (defaultValue != null) 'default': defaultValue,
+      'const': value,
+    };
+  }
+}
+
+/// A schema that validates against any one of the given schemas.
+class JsonUnion extends JsonSchema {
+  final List<JsonSchema> schemas;
+
+  const JsonUnion(
+    this.schemas, {
+    this.defaultValue,
+    super.title,
+    super.description,
+  });
+
+  @override
+  final dynamic defaultValue;
+
+  factory JsonUnion.fromJson(Map<String, dynamic> json) {
+    final types = json['type'] as List;
+    final commonKeys = {'type', 'title', 'description', 'default'};
+    final schemaProperties = Map<String, dynamic>.from(json)
+      ..removeWhere((key, value) => commonKeys.contains(key));
+
+    return JsonUnion(
+      types.whereType<String>().map((type) {
+        return JsonSchema.fromJson({
+          ...schemaProperties,
+          'type': type,
+        });
+      }).toList(),
+      title: json['title'] as String?,
+      description: json['description'] as String?,
+      defaultValue: json['default'],
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    final typeNames = _typeNamesForTypeOnlySchemas();
+
+    return {
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (defaultValue != null) 'default': defaultValue,
+      if (typeNames != null)
+        'type': typeNames
+      else
+        'anyOf': schemas.map((schema) => schema.toJson()).toList(),
+    };
+  }
+
+  List<String>? _typeNamesForTypeOnlySchemas() {
+    final typeNames = <String>[];
+    for (final schema in schemas) {
+      final typeName = _typeNameForTypeOnlySchema(schema);
+      if (typeName == null) {
+        return null;
+      }
+      typeNames.add(typeName);
+    }
+    return typeNames;
+  }
+
+  String? _typeNameForTypeOnlySchema(JsonSchema schema) {
+    if (schema.title != null ||
+        schema.description != null ||
+        schema.defaultValue != null) {
+      return null;
+    }
+
+    return switch (schema) {
+      JsonString(
+        minLength: null,
+        maxLength: null,
+        pattern: null,
+        format: null,
+        enumValues: null,
+        enumNames: null,
+      ) =>
+        'string',
+      JsonNumber(
+        minimum: null,
+        maximum: null,
+        exclusiveMinimum: null,
+        exclusiveMaximum: null,
+        multipleOf: null,
+      ) =>
+        'number',
+      JsonInteger(
+        minimum: null,
+        maximum: null,
+        exclusiveMinimum: null,
+        exclusiveMaximum: null,
+        multipleOf: null,
+      ) =>
+        'integer',
+      JsonBoolean _ => 'boolean',
+      JsonNull _ => 'null',
+      JsonArray(
+        items: null,
+        minItems: null,
+        maxItems: null,
+        uniqueItems: null,
+      ) =>
+        'array',
+      JsonObject(
+        properties: null,
+        required: null,
+        additionalProperties: null,
+        dependentRequired: null,
+      ) =>
+        'object',
+      _ => null,
     };
   }
 }
@@ -815,6 +992,22 @@ class JsonEnum extends JsonSchema {
   List<dynamic> get normalizedValues =>
       values.map((value) => _normalizeEntry(value).value).toList();
 
+  static bool _canParse(Map<String, dynamic> json) {
+    final type = json['type'];
+    if (type == 'enum') {
+      return true;
+    }
+    if (type == null && (json['enum'] is List || json['values'] is List)) {
+      return true;
+    }
+    if ((type == null || type == 'string') &&
+        (_isConstSchemaList(json['oneOf']) ||
+            _isConstSchemaList(json['anyOf']))) {
+      return true;
+    }
+    return false;
+  }
+
   factory JsonEnum.fromJson(Map<String, dynamic> json) {
     return JsonEnum(
       _parseValues(json),
@@ -829,8 +1022,9 @@ class JsonEnum extends JsonSchema {
     final normalizedEntries =
         values.map((value) => _normalizeEntry(value)).toList(growable: false);
     final hasTitles = normalizedEntries.any((entry) => entry.title != null);
-    final allStrings =
-        normalizedEntries.every((entry) => entry.value is String);
+    final allStrings = normalizedEntries.every(
+      (entry) => entry.value is String,
+    );
 
     return {
       if (title != null) 'title': title,
@@ -880,9 +1074,9 @@ class JsonEnum extends JsonSchema {
       return List<dynamic>.from(enumValues);
     }
 
-    final oneOfValues = json['oneOf'];
-    if (oneOfValues is List) {
-      return oneOfValues.map((entry) {
+    final constValues = json['oneOf'] ?? json['anyOf'];
+    if (constValues is List) {
+      return constValues.map((entry) {
         if (entry is Map && entry.containsKey('const')) {
           final value = entry['const'];
           final title = entry['title'];
@@ -897,6 +1091,12 @@ class JsonEnum extends JsonSchema {
     }
 
     return const [];
+  }
+
+  static bool _isConstSchemaList(dynamic schemaList) {
+    return schemaList is List &&
+        schemaList.isNotEmpty &&
+        schemaList.every((entry) => entry is Map && entry.containsKey('const'));
   }
 
   static ({dynamic value, String? title}) _normalizeEntry(dynamic entry) {

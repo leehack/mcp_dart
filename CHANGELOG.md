@@ -19,6 +19,9 @@
 - Preserved string JSON-RPC request IDs when handler code sends nested requests,
   notifications, or cancellation notifications, keeping related-request routing
   compatible with clients that use string IDs.
+- Improved JSON Schema parsing and validation for `const`, enum-only schemas,
+  titled enum `const` entries, and simple `type` array unions such as nullable
+  schemas.
 
 ## 2.1.1
 

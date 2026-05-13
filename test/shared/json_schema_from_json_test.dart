@@ -33,6 +33,80 @@ void main() {
       expect(s.values, ['simple', 'complex']);
     });
 
+    test('parses enum-only schema', () {
+      final json = {
+        'enum': [1, 'a', null],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonEnum>());
+      final s = schema as JsonEnum;
+      expect(s.values, [1, 'a', null]);
+    });
+
+    test('parses const schema', () {
+      final json = {'const': 'DELETE'};
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonConst>());
+      final s = schema as JsonConst;
+      expect(s.value, 'DELETE');
+      expect(s.toJson(), json);
+    });
+
+    test('parses type array union schema', () {
+      final json = {
+        'type': ['string', 'null'],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonUnion>());
+      final s = schema as JsonUnion;
+      expect(s.schemas[0], isA<JsonString>());
+      expect(s.schemas[1], isA<JsonNull>());
+      expect(s.toJson(), json);
+    });
+
+    test('parses titled enum const schemas', () {
+      final json = {
+        'oneOf': [
+          {'const': 1, 'title': 'One'},
+          {'const': true, 'title': 'Enabled'},
+        ],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonEnum>());
+      expect(schema.toJson(), json);
+    });
+
+    test('parses titled string enum const schemas from MCP elicitation', () {
+      final json = {
+        'type': 'string',
+        'oneOf': [
+          {'const': 'red', 'title': 'Red'},
+          {'const': 'blue', 'title': 'Blue'},
+        ],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonEnum>());
+      final s = schema as JsonEnum;
+      expect(s.normalizedValues, ['red', 'blue']);
+    });
+
+    test('parses titled array enum items from MCP elicitation', () {
+      final json = {
+        'type': 'array',
+        'items': {
+          'anyOf': [
+            {'const': 'red', 'title': 'Red'},
+            {'const': 'blue', 'title': 'Blue'},
+          ],
+        },
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonArray>());
+      final array = schema as JsonArray;
+      expect(array.items, isA<JsonEnum>());
+      expect((array.items! as JsonEnum).normalizedValues, ['red', 'blue']);
+    });
+
     test('parses number schema', () {
       final json = {
         'type': 'number',
@@ -261,6 +335,33 @@ void main() {
         properties: {'name': JsonSchema.string()},
         additionalProperties: false,
       );
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('const round trip', () {
+      final original = JsonSchema.constValue('DELETE');
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('type array union round trip', () {
+      final original = JsonSchema.union([
+        JsonSchema.string(),
+        JsonSchema.nullValue(),
+      ]);
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('titled non-string enum round trip', () {
+      const original = JsonEnum([
+        {'value': 1, 'title': 'One'},
+        {'value': true, 'title': 'Enabled'},
+      ]);
       final json = original.toJson();
       final parsed = JsonSchema.fromJson(json);
       expect(parsed.toJson(), json);
