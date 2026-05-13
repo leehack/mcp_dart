@@ -250,6 +250,9 @@ abstract class Protocol {
   /// Progress tokens selected for outgoing requests, mapped by request ID.
   final Map<int, Object> _requestProgressTokens = {};
 
+  /// Request IDs for active progress tokens, mapped by progress token.
+  final Map<Object, int> _progressTokenRequestIds = {};
+
   /// Timeout state for outgoing requests, mapped by request ID.
   final Map<int, _TimeoutInfo> _timeoutInfo = {};
 
@@ -261,9 +264,6 @@ abstract class Protocol {
 
   /// Task message queue implementation.
   final TaskMessageQueue? _taskMessageQueue;
-
-  /// Maps task IDs to progress tokens to keep handlers alive.
-  final Map<String, Object> _taskProgressTokens = {};
 
   /// Set of notification methods currently pending debounce.
   final Set<String> _pendingDebouncedNotifications = {};
@@ -504,7 +504,16 @@ abstract class Protocol {
     final progressToken = _requestProgressTokens.remove(messageId);
     if (progressToken != null) {
       _progressHandlers.remove(progressToken);
+      _progressTokenRequestIds.remove(progressToken);
     }
+  }
+
+  Object _nextAvailableProgressToken(int preferredToken) {
+    var token = preferredToken;
+    while (_progressHandlers.containsKey(token)) {
+      token++;
+    }
+    return token;
   }
 
   /// Sends a JSON-RPC error response for a given request ID.
@@ -552,9 +561,9 @@ abstract class Protocol {
     _responseErrorHandlers.clear();
     _progressHandlers.clear();
     _requestProgressTokens.clear();
+    _progressTokenRequestIds.clear();
     _timeoutInfo.clear();
     _requestHandlerAbortControllers.clear();
-    _taskProgressTokens.clear();
     _pendingDebouncedNotifications.clear();
     _requestResolvers.clear();
     _transport = null;
@@ -808,8 +817,8 @@ abstract class Protocol {
       return;
     }
 
-    final timeoutInfo =
-        progressToken is int ? _timeoutInfo[progressToken] : null;
+    final requestId = _progressTokenRequestIds[progressToken];
+    final timeoutInfo = requestId != null ? _timeoutInfo[requestId] : null;
     if (timeoutInfo != null) {
       // Determine if we should reset
       // We don't have easy access to RequestOptions here without storing them,
@@ -875,23 +884,7 @@ abstract class Protocol {
     final errorHandler = _responseErrorHandlers.remove(messageId);
     _cleanupTimeout(messageId);
 
-    // Keep progress handler if it's a task response
-    bool isTaskResponse = false;
-    if (responseMessage is JsonRpcResponse) {
-      final result = responseMessage.result;
-      if (result['task'] is Map) {
-        final task = result['task'] as Map<String, dynamic>;
-        if (task['taskId'] is String) {
-          isTaskResponse = true;
-          _taskProgressTokens[task['taskId'] as String] =
-              _requestProgressTokens[messageId] ?? messageId;
-        }
-      }
-    }
-
-    if (!isTaskResponse) {
-      _cleanupProgressHandler(messageId);
-    }
+    _cleanupProgressHandler(messageId);
 
     if (completer == null || completer.isCompleted) {
       return;
@@ -1006,12 +999,18 @@ abstract class Protocol {
         }
         progressToken = requestedProgressToken;
       } else {
-        progressToken = messageId;
+        progressToken = _nextAvailableProgressToken(messageId);
         currentMeta['progressToken'] = progressToken;
       }
       final token = progressToken!;
+      if (_progressHandlers.containsKey(token)) {
+        return Future.error(
+          ArgumentError('progressToken is already in use by another request.'),
+        );
+      }
       _progressHandlers[token] = options!.onprogress!;
       _requestProgressTokens[messageId] = token;
+      _progressTokenRequestIds[token] = messageId;
       finalMeta = currentMeta;
     }
 

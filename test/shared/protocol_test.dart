@@ -522,6 +522,115 @@ void main() {
       expect(result.value, 'response-data');
     });
 
+    test('rejects duplicate progress tokens for in-flight requests', () async {
+      await protocol.connect(transport);
+
+      final firstFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 'shared-token'},
+            ),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(onprogress: (_) {}),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      await expectLater(
+        protocol.request<TestResult>(
+          const JsonRpcRequest(
+            id: 0,
+            method: 'test/method',
+            meta: {'progressToken': 'shared-token'},
+          ),
+          (json) => TestResult(value: json['value'] as String),
+          RequestOptions(onprogress: (_) {}),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(transport.sentMessages, hasLength(1));
+      final firstRequest = transport.sentMessages.single as JsonRpcRequest;
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: firstRequest.id,
+          result: {'value': 'response-data'},
+        ),
+      );
+      expect((await firstFuture).value, 'response-data');
+    });
+
+    test('generated progress tokens avoid active custom integer tokens',
+        () async {
+      await protocol.connect(transport);
+
+      final customProgressUpdates = <Progress>[];
+      final generatedProgressUpdates = <Progress>[];
+      final customFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 1},
+            ),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(onprogress: customProgressUpdates.add),
+          )
+          .timeout(const Duration(seconds: 5));
+      final generatedFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(id: 0, method: 'test/method'),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(onprogress: generatedProgressUpdates.add),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(transport.sentMessages, hasLength(2));
+      final customRequest = transport.sentMessages[0] as JsonRpcRequest;
+      final generatedRequest = transport.sentMessages[1] as JsonRpcRequest;
+      expect(customRequest.id, 0);
+      expect(customRequest.meta?['progressToken'], 1);
+      expect(generatedRequest.id, 1);
+      expect(generatedRequest.meta?['progressToken'], 2);
+
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 1,
+            progress: 25,
+          ),
+        ),
+      );
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 2,
+            progress: 50,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(customProgressUpdates.single.progress, 25);
+      expect(generatedProgressUpdates.single.progress, 50);
+
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: customRequest.id,
+          result: {'value': 'custom'},
+        ),
+      );
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: generatedRequest.id,
+          result: {'value': 'generated'},
+        ),
+      );
+      expect((await customFuture).value, 'custom');
+      expect((await generatedFuture).value, 'generated');
+    });
+
     test('custom integer progress tokens survive unrelated request cleanup',
         () async {
       await protocol.connect(transport);
