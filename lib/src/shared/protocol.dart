@@ -8,6 +8,8 @@ import 'transport.dart';
 
 final _logger = Logger("mcp_dart.shared.protocol");
 
+bool _isProgressToken(Object? token) => token is int || token is String;
+
 /// Callback for progress notifications.
 typedef ProgressCallback = void Function(Progress progress);
 
@@ -49,6 +51,10 @@ const Duration defaultRequestTimeout = Duration(milliseconds: 60000);
 /// Options that can be given per request.
 class RequestOptions {
   /// Callback for progress notifications from the remote end.
+  ///
+  /// When set, the protocol adds an integer progress token to outgoing request
+  /// metadata unless the request already carries an `int` or `String`
+  /// `progressToken`, which is preserved for callers that need a custom token.
   final ProgressCallback? onprogress;
 
   /// Signal to cancel an in-flight request.
@@ -238,8 +244,11 @@ abstract class Protocol {
   /// Error handlers for outgoing requests, mapped by request ID.
   final Map<int, void Function(Error error)> _responseErrorHandlers = {};
 
-  /// Progress callbacks for outgoing requests, mapped by request ID.
-  final Map<int, ProgressCallback> _progressHandlers = {};
+  /// Progress callbacks for outgoing requests, mapped by progress token.
+  final Map<Object, ProgressCallback> _progressHandlers = {};
+
+  /// Progress tokens selected for outgoing requests, mapped by request ID.
+  final Map<int, Object> _requestProgressTokens = {};
 
   /// Timeout state for outgoing requests, mapped by request ID.
   final Map<int, _TimeoutInfo> _timeoutInfo = {};
@@ -254,7 +263,7 @@ abstract class Protocol {
   final TaskMessageQueue? _taskMessageQueue;
 
   /// Maps task IDs to progress tokens to keep handlers alive.
-  final Map<String, int> _taskProgressTokens = {};
+  final Map<String, Object> _taskProgressTokens = {};
 
   /// Set of notification methods currently pending debounce.
   final Set<String> _pendingDebouncedNotifications = {};
@@ -490,6 +499,14 @@ abstract class Protocol {
     _timeoutInfo.remove(messageId)?.timeoutTimer.cancel();
   }
 
+  /// Removes progress bookkeeping for an outgoing request.
+  void _cleanupProgressHandler(int messageId) {
+    final progressToken = _requestProgressTokens.remove(messageId);
+    if (progressToken != null) {
+      _progressHandlers.remove(progressToken);
+    }
+  }
+
   /// Sends a JSON-RPC error response for a given request ID.
   Future<void> _sendErrorResponse(
     RequestId id,
@@ -534,6 +551,7 @@ abstract class Protocol {
     _responseCompleters.clear();
     _responseErrorHandlers.clear();
     _progressHandlers.clear();
+    _requestProgressTokens.clear();
     _timeoutInfo.clear();
     _requestHandlerAbortControllers.clear();
     _taskProgressTokens.clear();
@@ -776,20 +794,22 @@ abstract class Protocol {
     final params = notification.progressParams;
     final progressToken = params.progressToken;
 
-    if (progressToken is! int) {
+    if (!_isProgressToken(progressToken)) {
       _onerror(
-        ArgumentError("Received non-integer progressToken: $progressToken"),
+        ArgumentError(
+          "Received invalid progressToken: $progressToken. Expected int or String.",
+        ),
       );
       return;
     }
-    final messageId = progressToken;
 
-    final progressHandler = _progressHandlers[messageId];
+    final progressHandler = _progressHandlers[progressToken];
     if (progressHandler == null) {
       return;
     }
 
-    final timeoutInfo = _timeoutInfo[messageId];
+    final timeoutInfo =
+        progressToken is int ? _timeoutInfo[progressToken] : null;
     if (timeoutInfo != null) {
       // Determine if we should reset
       // We don't have easy access to RequestOptions here without storing them,
@@ -811,7 +831,7 @@ abstract class Protocol {
       progressHandler(progressData);
     } catch (e) {
       _onerror(
-        StateError("Error in progress handler for request $messageId: $e"),
+        StateError("Error in progress handler for token $progressToken: $e"),
       );
     }
   }
@@ -863,13 +883,14 @@ abstract class Protocol {
         final task = result['task'] as Map<String, dynamic>;
         if (task['taskId'] is String) {
           isTaskResponse = true;
-          _taskProgressTokens[task['taskId'] as String] = messageId;
+          _taskProgressTokens[task['taskId'] as String] =
+              _requestProgressTokens[messageId] ?? messageId;
         }
       }
     }
 
     if (!isTaskResponse) {
-      _progressHandlers.remove(messageId);
+      _cleanupProgressHandler(messageId);
     }
 
     if (completer == null || completer.isCompleted) {
@@ -967,14 +988,30 @@ abstract class Protocol {
     final messageId = _requestMessageId++;
     final completer = Completer<JsonRpcResponse>();
     Error? capturedError;
+    Object? progressToken;
 
     Map<String, dynamic>? finalMeta = requestData.meta;
     Map<String, dynamic>? finalParams = requestData.params;
 
     if (options?.onprogress != null) {
-      _progressHandlers[messageId] = options!.onprogress!;
       final currentMeta = Map<String, dynamic>.from(finalMeta ?? {});
-      currentMeta['progressToken'] = messageId;
+      final requestedProgressToken = currentMeta['progressToken'];
+      if (requestedProgressToken != null) {
+        if (!_isProgressToken(requestedProgressToken)) {
+          return Future.error(
+            ArgumentError(
+              'progressToken must be an int or String when onprogress is set.',
+            ),
+          );
+        }
+        progressToken = requestedProgressToken;
+      } else {
+        progressToken = messageId;
+        currentMeta['progressToken'] = progressToken;
+      }
+      final token = progressToken!;
+      _progressHandlers[token] = options!.onprogress!;
+      _requestProgressTokens[messageId] = token;
       finalMeta = currentMeta;
     }
 
@@ -1007,7 +1044,7 @@ abstract class Protocol {
 
       _responseCompleters.remove(messageId);
       _responseErrorHandlers.remove(messageId);
-      _progressHandlers.remove(messageId);
+      _cleanupProgressHandler(messageId);
       _cleanupTimeout(messageId);
 
       final cancelReason = reason?.toString() ?? 'Request cancelled';
@@ -1098,6 +1135,7 @@ abstract class Protocol {
         _transport?.sessionId,
       ).catchError((e) {
         _cleanupTimeout(messageId);
+        _cleanupProgressHandler(messageId);
         if (!completer.isCompleted) {
           completer.completeError(e);
         }
@@ -1111,6 +1149,7 @@ abstract class Protocol {
       )
           .catchError((error) {
         _cleanupTimeout(messageId);
+        _cleanupProgressHandler(messageId);
         if (!completer.isCompleted) {
           completer.completeError(error);
         }
@@ -1134,7 +1173,7 @@ abstract class Protocol {
       abortSubscription?.cancel();
       _responseCompleters.remove(messageId);
       _responseErrorHandlers.remove(messageId);
-      _progressHandlers.remove(messageId);
+      _cleanupProgressHandler(messageId);
     }).catchError((error) {
       throw capturedError ?? error;
     });

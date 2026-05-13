@@ -101,11 +101,11 @@ void main() {
       final errors = <Error>[];
       protocol.onerror = (error) => errors.add(error);
 
-      // Send progress notification with string progressToken (should be int)
+      // Send progress notification with an invalid progressToken type.
       transport.receiveMessage(
         JsonRpcProgressNotification(
           progressParams: const ProgressNotificationParams(
-            progressToken: 'invalid-token' as dynamic,
+            progressToken: false,
             progress: 50,
             total: 100,
           ),
