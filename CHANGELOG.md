@@ -13,6 +13,9 @@
 
 ### Reliability
 
+- Supported string progress tokens end-to-end for outgoing requests that supply
+  a custom `progressToken`, while preserving generated integer tokens for the
+  default `RequestOptions.onprogress` path.
 - Preserved string JSON-RPC request IDs when handler code sends nested requests,
   notifications, or cancellation notifications, keeping related-request routing
   compatible with clients that use string IDs.
