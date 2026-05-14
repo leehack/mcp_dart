@@ -56,6 +56,21 @@ dart test --coverage=coverage
 
 Adhere strictly to the following conventions.
 
+### Protocol Quality Bar
+- **Spec first**: Official MCP specification compliance is the primary quality
+  bar. Convenience APIs must not distort wire-level JSON-RPC/MCP semantics.
+- **Preserve protocol identity**: Keep JSON-RPC request IDs, related request
+  metadata, method names, capability flags, and error codes in their original
+  spec-compatible shape unless the spec explicitly allows normalization.
+- **Capability clarity**: Distinguish advertised capabilities from runtime
+  support. Prefer explicit support/capability checks over structural assumptions
+  when behavior can vary by transport, protocol version, or peer capability.
+- **Interoperability over ergonomics**: If a helper improves ergonomics, also
+  keep the lower-level spec behavior observable, testable, and documented.
+- **Version/spec ambiguity**: When the MCP spec changes or is ambiguous, encode
+  the chosen behavior in tests and cite the spec section or compatibility reason
+  in docs or comments where useful.
+
 ### General
 - **Dart Version**: Use features compatible with Dart 3.0+ (records, patterns, etc. if applicable).
 - **Formatting**: Always run `dart format .` before submitting.
@@ -102,18 +117,31 @@ Adhere strictly to the following conventions.
 - **Setup**: Use `setUp()` and `tearDown()` for resource management.
 - **Mocks**: Use manual mocks or `MockTransport` (as seen in `server_test.dart`) to test protocol logic without network I/O.
 - **Coverage**: Aim to test both success paths and error conditions (e.g., missing capabilities).
+- **Protocol regressions**: For MCP/JSON-RPC behavior, include negative and
+  edge-case tests for id preservation, missing/unsupported capabilities,
+  transport-specific behavior, malformed input, and error-code mapping.
+- **Examples are contracts**: When changing public APIs or protocol flows, verify
+  nested example packages and Flutter/example apps that exercise those APIs, not
+  only the root package analyzer/tests.
 
 ## 5. Development Workflow for Agents
 
 1.  **Explore**: Read related files (`lib/src/...` and `test/...`) to understand the context.
-2.  **Plan**: Create a brief plan of changes.
-3.  **Edit**: Apply changes using `write` or `edit` tools.
+2.  **Spec Check**: Identify the relevant MCP/JSON-RPC spec behavior before
+    changing protocol types, transports, capability negotiation, or errors.
+3.  **Plan**: Create a brief plan of changes.
+4.  **Edit**: Apply changes using `write` or `edit` tools.
     - Prefer editing existing files over creating new ones unless necessary.
-4.  **Verify**:
+5.  **Verify**:
     - Run `dart format .`
     - Run `dart analyze` (fix any issues).
     - Run related tests (e.g., `dart test test/path/to/relevant_test.dart`).
     - Run all tests (`dart test`) before finishing to ensure no regressions.
+    - For protocol or public API changes, run/repair affected examples and add
+      regression tests that would fail against the old behavior.
+6.  **Review Loop**: For PR-bound work, keep the branch focused, update docs or
+    changelog entries when behavior changes, request/monitor review after pushes,
+    and do not report done until CI and unresolved review threads are clean.
 
 ## 6. Example Patterns
 

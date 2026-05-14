@@ -8,6 +8,8 @@ import 'transport.dart';
 
 final _logger = Logger("mcp_dart.shared.protocol");
 
+bool _isProgressToken(Object? token) => token is int || token is String;
+
 /// Callback for progress notifications.
 typedef ProgressCallback = void Function(Progress progress);
 
@@ -49,6 +51,10 @@ const Duration defaultRequestTimeout = Duration(milliseconds: 60000);
 /// Options that can be given per request.
 class RequestOptions {
   /// Callback for progress notifications from the remote end.
+  ///
+  /// When set, the protocol adds an integer progress token to outgoing request
+  /// metadata unless the request already carries an `int` or `String`
+  /// `progressToken`, which is preserved for callers that need a custom token.
   final ProgressCallback? onprogress;
 
   /// Signal to cancel an in-flight request.
@@ -195,6 +201,9 @@ class _TimeoutInfo {
   /// Maximum total duration allowed, regardless of resets.
   final Duration? maxTotalTimeoutDuration;
 
+  /// Whether progress notifications reset the request timeout timer.
+  final bool resetOnProgress;
+
   /// Callback to execute when the timeout occurs.
   final void Function() onTimeout;
 
@@ -204,6 +213,7 @@ class _TimeoutInfo {
     required this.startTime,
     required this.timeoutDuration,
     this.maxTotalTimeoutDuration,
+    this.resetOnProgress = false,
     required this.onTimeout,
   });
 }
@@ -238,8 +248,14 @@ abstract class Protocol {
   /// Error handlers for outgoing requests, mapped by request ID.
   final Map<int, void Function(Error error)> _responseErrorHandlers = {};
 
-  /// Progress callbacks for outgoing requests, mapped by request ID.
-  final Map<int, ProgressCallback> _progressHandlers = {};
+  /// Progress callbacks for outgoing requests, mapped by progress token.
+  final Map<Object, ProgressCallback> _progressHandlers = {};
+
+  /// Progress tokens selected for outgoing requests, mapped by request ID.
+  final Map<int, Object> _requestProgressTokens = {};
+
+  /// Request IDs for active progress tokens, mapped by progress token.
+  final Map<Object, int> _progressTokenRequestIds = {};
 
   /// Timeout state for outgoing requests, mapped by request ID.
   final Map<int, _TimeoutInfo> _timeoutInfo = {};
@@ -252,9 +268,6 @@ abstract class Protocol {
 
   /// Task message queue implementation.
   final TaskMessageQueue? _taskMessageQueue;
-
-  /// Maps task IDs to progress tokens to keep handlers alive.
-  final Map<String, int> _taskProgressTokens = {};
 
   /// Set of notification methods currently pending debounce.
   final Set<String> _pendingDebouncedNotifications = {};
@@ -473,21 +486,68 @@ abstract class Protocol {
     int messageId,
     Duration timeout,
     Duration? maxTotalTimeout,
+    bool resetOnProgress,
     void Function() onTimeout,
   ) {
+    final startTime = DateTime.now();
+    var initialTimeout = timeout;
+    if (maxTotalTimeout != null && maxTotalTimeout < initialTimeout) {
+      initialTimeout = maxTotalTimeout;
+    }
+
     final info = _TimeoutInfo(
-      timeoutTimer: Timer(timeout, onTimeout),
-      startTime: DateTime.now(),
+      timeoutTimer: Timer(initialTimeout, onTimeout),
+      startTime: startTime,
       timeoutDuration: timeout,
       maxTotalTimeoutDuration: maxTotalTimeout,
+      resetOnProgress: resetOnProgress,
       onTimeout: onTimeout,
     );
     _timeoutInfo[messageId] = info;
   }
 
+  void _resetTimeoutOnProgress(_TimeoutInfo timeoutInfo) {
+    if (!timeoutInfo.resetOnProgress) return;
+
+    var nextTimeout = timeoutInfo.timeoutDuration;
+    final maxTotalTimeout = timeoutInfo.maxTotalTimeoutDuration;
+    if (maxTotalTimeout != null) {
+      final elapsed = DateTime.now().difference(timeoutInfo.startTime);
+      final remaining = maxTotalTimeout - elapsed;
+      if (remaining <= Duration.zero) {
+        timeoutInfo.timeoutTimer.cancel();
+        timeoutInfo.onTimeout();
+        return;
+      }
+      if (remaining < nextTimeout) {
+        nextTimeout = remaining;
+      }
+    }
+
+    timeoutInfo.timeoutTimer.cancel();
+    timeoutInfo.timeoutTimer = Timer(nextTimeout, timeoutInfo.onTimeout);
+  }
+
   /// Cleans up the timeout state associated with a request ID.
   void _cleanupTimeout(int messageId) {
     _timeoutInfo.remove(messageId)?.timeoutTimer.cancel();
+  }
+
+  /// Removes progress bookkeeping for an outgoing request.
+  void _cleanupProgressHandler(int messageId) {
+    final progressToken = _requestProgressTokens.remove(messageId);
+    if (progressToken != null) {
+      _progressHandlers.remove(progressToken);
+      _progressTokenRequestIds.remove(progressToken);
+    }
+  }
+
+  Object _nextAvailableProgressToken(int preferredToken) {
+    var token = preferredToken;
+    while (_progressHandlers.containsKey(token)) {
+      token++;
+    }
+    return token;
   }
 
   /// Sends a JSON-RPC error response for a given request ID.
@@ -534,9 +594,10 @@ abstract class Protocol {
     _responseCompleters.clear();
     _responseErrorHandlers.clear();
     _progressHandlers.clear();
+    _requestProgressTokens.clear();
+    _progressTokenRequestIds.clear();
     _timeoutInfo.clear();
     _requestHandlerAbortControllers.clear();
-    _taskProgressTokens.clear();
     _pendingDebouncedNotifications.clear();
     _requestResolvers.clear();
     _transport = null;
@@ -646,7 +707,8 @@ abstract class Protocol {
           : null,
       taskRequestedTtl:
           (request.params?['task'] as Map<String, dynamic>?)?['ttl'] as int?,
-      sendNotification: (notification, {relatedTask}) => this.notification(
+      sendNotification: (notification, {relatedTask}) =>
+          _notificationWithRequestId(
         notification,
         relatedTask: relatedTask,
         relatedRequestId: request.id,
@@ -668,11 +730,11 @@ abstract class Protocol {
                   ? RelatedTaskMetadata(taskId: relatedTaskId)
                   : null),
         );
-        return this.request<T>(
+        return _requestWithRequestId<T>(
           req,
           resultFactory,
           newOptions,
-          request.id is int ? request.id as int : null,
+          request.id,
         );
       },
     );
@@ -775,31 +837,25 @@ abstract class Protocol {
     final params = notification.progressParams;
     final progressToken = params.progressToken;
 
-    if (progressToken is! int) {
+    if (!_isProgressToken(progressToken)) {
       _onerror(
-        ArgumentError("Received non-integer progressToken: $progressToken"),
+        ArgumentError(
+          "Received invalid progressToken: $progressToken. Expected int or String.",
+        ),
       );
       return;
     }
-    final messageId = progressToken;
 
-    final progressHandler = _progressHandlers[messageId];
+    final progressHandler = _progressHandlers[progressToken];
     if (progressHandler == null) {
       return;
     }
 
-    final timeoutInfo = _timeoutInfo[messageId];
+    final requestId = _progressTokenRequestIds[progressToken];
+    final timeoutInfo = requestId != null ? _timeoutInfo[requestId] : null;
     if (timeoutInfo != null) {
-      // Determine if we should reset
-      // We don't have easy access to RequestOptions here without storing them,
-      // but in the original code we check `resetTimeoutOnProgress`
-      // For now, assume false unless we enhance `_TimeoutInfo` or lookup.
-      // The original code had `_getRequestOptionsFromTimeoutInfo` which returned null.
-      // If we want to support resetTimeoutOnProgress, we need to store it in `_TimeoutInfo` or a map.
+      _resetTimeoutOnProgress(timeoutInfo);
     }
-
-    // In strict TS implementation, `resetTimeoutOnProgress` is stored in `TimeoutInfo`.
-    // I will check `_resetTimeout` logic. It uses `_timeoutInfo`.
 
     try {
       final progressData = Progress(
@@ -810,7 +866,7 @@ abstract class Protocol {
       progressHandler(progressData);
     } catch (e) {
       _onerror(
-        StateError("Error in progress handler for request $messageId: $e"),
+        StateError("Error in progress handler for token $progressToken: $e"),
       );
     }
   }
@@ -854,22 +910,7 @@ abstract class Protocol {
     final errorHandler = _responseErrorHandlers.remove(messageId);
     _cleanupTimeout(messageId);
 
-    // Keep progress handler if it's a task response
-    bool isTaskResponse = false;
-    if (responseMessage is JsonRpcResponse) {
-      final result = responseMessage.result;
-      if (result['task'] is Map) {
-        final task = result['task'] as Map<String, dynamic>;
-        if (task['taskId'] is String) {
-          isTaskResponse = true;
-          _taskProgressTokens[task['taskId'] as String] = messageId;
-        }
-      }
-    }
-
-    if (!isTaskResponse) {
-      _progressHandlers.remove(messageId);
-    }
+    _cleanupProgressHandler(messageId);
 
     if (completer == null || completer.isCompleted) {
       return;
@@ -928,6 +969,20 @@ abstract class Protocol {
     RequestOptions? options,
     int? relatedRequestId,
   ]) {
+    return _requestWithRequestId(
+      requestData,
+      resultFactory,
+      options,
+      relatedRequestId,
+    );
+  }
+
+  Future<T> _requestWithRequestId<T extends BaseResultData>(
+    JsonRpcRequest requestData,
+    T Function(Map<String, dynamic> resultJson) resultFactory, [
+    RequestOptions? options,
+    RequestId? relatedRequestId,
+  ]) {
     if (_transport == null) {
       return Future.error(StateError("Not connected to a transport."));
     }
@@ -952,14 +1007,36 @@ abstract class Protocol {
     final messageId = _requestMessageId++;
     final completer = Completer<JsonRpcResponse>();
     Error? capturedError;
+    Object? progressToken;
 
     Map<String, dynamic>? finalMeta = requestData.meta;
     Map<String, dynamic>? finalParams = requestData.params;
 
     if (options?.onprogress != null) {
-      _progressHandlers[messageId] = options!.onprogress!;
       final currentMeta = Map<String, dynamic>.from(finalMeta ?? {});
-      currentMeta['progressToken'] = messageId;
+      final requestedProgressToken = currentMeta['progressToken'];
+      if (requestedProgressToken != null) {
+        if (!_isProgressToken(requestedProgressToken)) {
+          return Future.error(
+            ArgumentError(
+              'progressToken must be an int or String when onprogress is set.',
+            ),
+          );
+        }
+        progressToken = requestedProgressToken;
+      } else {
+        progressToken = _nextAvailableProgressToken(messageId);
+        currentMeta['progressToken'] = progressToken;
+      }
+      final token = progressToken!;
+      if (_progressHandlers.containsKey(token)) {
+        return Future.error(
+          ArgumentError('progressToken is already in use by another request.'),
+        );
+      }
+      _progressHandlers[token] = options!.onprogress!;
+      _requestProgressTokens[messageId] = token;
+      _progressTokenRequestIds[token] = messageId;
       finalMeta = currentMeta;
     }
 
@@ -992,7 +1069,7 @@ abstract class Protocol {
 
       _responseCompleters.remove(messageId);
       _responseErrorHandlers.remove(messageId);
-      _progressHandlers.remove(messageId);
+      _cleanupProgressHandler(messageId);
       _cleanupTimeout(messageId);
 
       final cancelReason = reason?.toString() ?? 'Request cancelled';
@@ -1007,7 +1084,12 @@ abstract class Protocol {
       // Spec doesn't strictly say, but usually cancellations go via same channel.
       // For now assume standard transport for cancellations unless queued.
 
-      _transport?.send(notification).catchError((e) {
+      _transport
+          ?.sendPreservingRequestId(
+        notification,
+        relatedRequestId: relatedRequestId,
+      )
+          .catchError((e) {
         _onerror(
           StateError("Failed to send cancellation for request $messageId: $e"),
         );
@@ -1056,6 +1138,7 @@ abstract class Protocol {
       messageId,
       timeoutDuration,
       maxTotalTimeoutDuration,
+      options?.resetTimeoutOnProgress ?? false,
       timeoutHandler,
     );
 
@@ -1078,6 +1161,7 @@ abstract class Protocol {
         _transport?.sessionId,
       ).catchError((e) {
         _cleanupTimeout(messageId);
+        _cleanupProgressHandler(messageId);
         if (!completer.isCompleted) {
           completer.completeError(e);
         }
@@ -1085,9 +1169,13 @@ abstract class Protocol {
     } else {
       // Normal transport
       _transport!
-          .send(jsonrpcRequest, relatedRequestId: relatedRequestId)
+          .sendPreservingRequestId(
+        jsonrpcRequest,
+        relatedRequestId: relatedRequestId,
+      )
           .catchError((error) {
         _cleanupTimeout(messageId);
+        _cleanupProgressHandler(messageId);
         if (!completer.isCompleted) {
           completer.completeError(error);
         }
@@ -1111,7 +1199,7 @@ abstract class Protocol {
       abortSubscription?.cancel();
       _responseCompleters.remove(messageId);
       _responseErrorHandlers.remove(messageId);
-      _progressHandlers.remove(messageId);
+      _cleanupProgressHandler(messageId);
     }).catchError((error) {
       throw capturedError ?? error;
     });
@@ -1122,6 +1210,18 @@ abstract class Protocol {
     JsonRpcNotification notificationData, {
     RelatedTaskMetadata? relatedTask,
     int? relatedRequestId,
+  }) {
+    return _notificationWithRequestId(
+      notificationData,
+      relatedTask: relatedTask,
+      relatedRequestId: relatedRequestId,
+    );
+  }
+
+  Future<void> _notificationWithRequestId(
+    JsonRpcNotification notificationData, {
+    RelatedTaskMetadata? relatedTask,
+    RequestId? relatedRequestId,
   }) async {
     if (_transport == null) {
       throw StateError("Not connected to a transport.");
@@ -1181,7 +1281,7 @@ abstract class Protocol {
         _pendingDebouncedNotifications.remove(notificationData.method);
         if (_transport == null) return;
         _transport!
-            .send(
+            .sendPreservingRequestId(
               jsonrpcNotification,
               relatedRequestId: relatedRequestId,
             )
@@ -1190,7 +1290,7 @@ abstract class Protocol {
       return;
     }
 
-    await _transport!.send(
+    await _transport!.sendPreservingRequestId(
       jsonrpcNotification,
       relatedRequestId: relatedRequestId,
     );

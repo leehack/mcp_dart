@@ -1,3 +1,28 @@
+## Unreleased
+
+### Compatibility Notes
+
+- **Custom transports remain source-compatible while string request routing is available**:
+  - `Transport.send(... relatedRequestId: ...)` keeps the existing `int?`
+    signature for third-party custom transports and middleware.
+  - Transports that route by JSON-RPC request ID can opt into
+    `RequestIdAwareTransport.sendWithRequestId(... relatedRequestId: ...)` to
+    receive the full MCP/JSON-RPC request ID shape (`String` or `int`).
+  - Middleware wrappers that implement `RequestIdAwareTransport` should forward
+    through `sendPreservingRequestId(...)` so string IDs are not dropped.
+
+### Reliability
+
+- Honored `RequestOptions.resetTimeoutOnProgress` and `maxTotalTimeout` together
+  so progress notifications can reset inactivity timers without bypassing the
+  absolute total timeout cap.
+- Supported string progress tokens end-to-end for outgoing requests that supply
+  a custom `progressToken`, while preserving generated integer tokens for the
+  default `RequestOptions.onprogress` path.
+- Preserved string JSON-RPC request IDs when handler code sends nested requests,
+  notifications, or cancellation notifications, keeping related-request routing
+  compatible with clients that use string IDs.
+
 ## 2.1.1
 
 ### Compatibility Notes (Potentially Breaking)
