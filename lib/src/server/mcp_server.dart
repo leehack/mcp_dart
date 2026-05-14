@@ -972,12 +972,6 @@ class McpServer {
             "Task cancellation callback must return a cancelled task",
           );
         }
-        if (task.createdAt == null || task.lastUpdatedAt == null) {
-          throw McpError(
-            ErrorCode.invalidParams.value,
-            "Cancelled task result must include createdAt and lastUpdatedAt",
-          );
-        }
         return task;
       },
       (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({

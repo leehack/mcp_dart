@@ -64,16 +64,19 @@ class Task implements BaseResultData {
   final String? statusMessage;
 
   /// Time in milliseconds from creation before task may be deleted.
+  ///
+  /// Required by the MCP schema. A null value is serialized explicitly as
+  /// `"ttl": null` when the task has no expiry.
   final int? ttl;
 
   /// Suggested time in milliseconds between status checks.
   final int? pollInterval;
 
   /// ISO 8601 timestamp when the task was created.
-  final String? createdAt;
+  final String createdAt;
 
   /// ISO 8601 timestamp when the task status was last updated.
-  final String? lastUpdatedAt;
+  final String lastUpdatedAt;
 
   /// Optional metadata.
   @override
@@ -82,11 +85,11 @@ class Task implements BaseResultData {
   const Task({
     required this.taskId,
     required this.status,
+    required this.ttl,
+    required this.createdAt,
+    required this.lastUpdatedAt,
     this.statusMessage,
-    this.ttl,
     this.pollInterval,
-    this.createdAt,
-    this.lastUpdatedAt,
     this.meta,
   });
 
@@ -117,27 +120,16 @@ class Task implements BaseResultData {
   }
 
   @override
-  Map<String, dynamic> toJson() {
-    final createdAt = this.createdAt;
-    if (createdAt == null) {
-      throw const FormatException('Task.createdAt is required');
-    }
-    final lastUpdatedAt = this.lastUpdatedAt;
-    if (lastUpdatedAt == null) {
-      throw const FormatException('Task.lastUpdatedAt is required');
-    }
-
-    return {
-      'taskId': taskId,
-      'status': status.name,
-      if (statusMessage != null) 'statusMessage': statusMessage,
-      'ttl': ttl,
-      if (pollInterval != null) 'pollInterval': pollInterval,
-      'createdAt': createdAt,
-      'lastUpdatedAt': lastUpdatedAt,
-      if (meta != null) '_meta': meta,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'taskId': taskId,
+        'status': status.name,
+        if (statusMessage != null) 'statusMessage': statusMessage,
+        'ttl': ttl,
+        if (pollInterval != null) 'pollInterval': pollInterval,
+        'createdAt': createdAt,
+        'lastUpdatedAt': lastUpdatedAt,
+        if (meta != null) '_meta': meta,
+      };
 }
 
 /// Parameters for the `tasks/list` request. Includes pagination.

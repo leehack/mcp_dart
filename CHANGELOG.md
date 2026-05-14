@@ -11,8 +11,9 @@
   - `TaskClient.cancelTask` now expects a task-shaped result and will reject
     older non-compliant servers that still return `{}`.
   - `Task.fromJson()` requires MCP-required task fields (`createdAt`,
-    `lastUpdatedAt`, and `ttl`) and `Task.toJson()` requires timestamps before
-    emitting task-shaped protocol results.
+    `lastUpdatedAt`, and `ttl`), and the `Task` constructor now requires
+    `ttl`, `createdAt`, and `lastUpdatedAt` so serialization is non-throwing
+    for valid task instances.
   - `Task.toJson()` continues to serialize required `ttl` even when it is
     `null`, and now omits optional `pollInterval` when it is not set.
 

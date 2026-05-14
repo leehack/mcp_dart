@@ -238,49 +238,6 @@ void main() {
       expect(errorResponse.error.message, contains('mismatched taskId'));
     });
 
-    test('rejects cancel task callback results without timestamps', () async {
-      mcpServer.experimental
-          .onListTasks((extra) async => const ListTasksResult(tasks: []));
-      mcpServer.experimental.onCancelTask((taskId, extra) async {
-        return Task(
-          taskId: taskId,
-          status: TaskStatus.cancelled,
-          ttl: null,
-        );
-      });
-
-      await mcpServer.connect(transport);
-
-      transport.receiveMessage(
-        JsonRpcInitializeRequest(
-          id: 1,
-          initParams: const InitializeRequestParams(
-            protocolVersion: latestProtocolVersion,
-            capabilities: ClientCapabilities(),
-            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
-          ),
-        ),
-      );
-      await Future.delayed(const Duration(milliseconds: 10));
-
-      transport.receiveMessage(
-        JsonRpcCancelTaskRequest(
-          id: 2,
-          cancelParams: const CancelTaskRequestParams(taskId: 'task123'),
-        ),
-      );
-      await Future.delayed(const Duration(milliseconds: 10));
-
-      final errorResponse = transport.sentMessages
-          .whereType<JsonRpcError>()
-          .firstWhere((r) => r.id == 2);
-      expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
-      expect(
-        errorResponse.error.message,
-        contains('createdAt and lastUpdatedAt'),
-      );
-    });
-
     test('throws error if tasks handlers not registered but requested',
         () async {
       // Do not register tasks handlers

@@ -17,6 +17,8 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
   task-shaped result from MCP 2025-11-25-compatible servers.
 - Task serialization keeps the MCP-required `ttl` field even when it is `null`,
   while omitting optional `pollInterval` when it is not set.
+- The `Task` constructor now requires `ttl`, `createdAt`, and `lastUpdatedAt`,
+  so valid task instances serialize without throwing.
 - Streamable HTTP defaults are stricter for protocol-version headers, DNS
   rebinding protection, and batch request rejection.
 

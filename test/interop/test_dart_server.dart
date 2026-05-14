@@ -339,6 +339,7 @@ class TestTaskHandler implements ToolTaskHandler {
         taskId: taskId,
         status: TaskStatus.working,
         statusMessage: 'Starting...',
+        ttl: null,
         createdAt: DateTime.now().toIso8601String(),
         lastUpdatedAt: DateTime.now().toIso8601String(),
         meta: {'message': message}, // Store message in metadata
@@ -369,6 +370,7 @@ class TestTaskHandler implements ToolTaskHandler {
       taskId: state.task.taskId,
       status: TaskStatus.working,
       statusMessage: 'Halfway there...',
+      ttl: state.task.ttl,
       createdAt: state.task.createdAt,
       lastUpdatedAt: DateTime.now().toIso8601String(),
       pollInterval: 100,
@@ -382,6 +384,7 @@ class TestTaskHandler implements ToolTaskHandler {
       taskId: state.task.taskId,
       status: TaskStatus.completed,
       statusMessage: 'Done!',
+      ttl: state.task.ttl,
       createdAt: state.task.createdAt,
       lastUpdatedAt: DateTime.now().toIso8601String(),
       pollInterval: 100,

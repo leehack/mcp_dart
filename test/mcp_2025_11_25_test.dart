@@ -709,11 +709,21 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
-          () => const Task(
-            taskId: 'missing-timestamps',
-            status: TaskStatus.working,
-            ttl: null,
-          ).toJson(),
+          () => Task.fromJson({
+            'taskId': 'missing-created-at',
+            'status': 'working',
+            'ttl': null,
+            'lastUpdatedAt': '2025-01-15T10:01:00Z',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Task.fromJson({
+            'taskId': 'missing-last-updated-at',
+            'status': 'working',
+            'ttl': null,
+            'createdAt': '2025-01-15T10:00:00Z',
+          }),
           throwsA(isA<FormatException>()),
         );
       });
