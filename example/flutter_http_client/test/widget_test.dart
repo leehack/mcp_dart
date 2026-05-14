@@ -11,6 +11,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final errorWidgetBuilder = ErrorWidget.builder;
+    addTearDown(() => ErrorWidget.builder = errorWidgetBuilder);
     await tester.pumpWidget(const MyApp());
     ErrorWidget.builder = errorWidgetBuilder;
 
