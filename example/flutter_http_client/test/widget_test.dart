@@ -11,9 +11,14 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final errorWidgetBuilder = ErrorWidget.builder;
-    addTearDown(() => ErrorWidget.builder = errorWidgetBuilder);
-    await tester.pumpWidget(const MyApp());
-    ErrorWidget.builder = errorWidgetBuilder;
+    try {
+      await tester.pumpWidget(const MyApp());
+    } finally {
+      // MyApp installs a global ErrorWidget.builder. Restore it as soon as
+      // the first frame is built so Flutter's widget-test global state check
+      // sees the original value even if pumpWidget throws.
+      ErrorWidget.builder = errorWidgetBuilder;
+    }
 
     expect(find.text('MCP Client'), findsOneWidget);
     expect(find.widgetWithText(ElevatedButton, 'Connect'), findsOneWidget);
