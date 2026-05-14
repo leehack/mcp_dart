@@ -498,6 +498,22 @@ void main() {
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
+
+      test('preserves sibling assertions when parsing const schemas', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'string',
+          'const': 1,
+        });
+
+        expect(
+          () => schema.validate(1),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate('1'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
     });
 
     group('union validation', () {
@@ -511,6 +527,24 @@ void main() {
 
         expect(
           () => schema.validate(1),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('preserves top-level constraints around type array unions', () {
+        final schema = JsonSchema.fromJson({
+          'type': ['string', 'null'],
+          'enum': ['a'],
+        });
+
+        schema.validate('a');
+
+        expect(
+          () => schema.validate(null),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate('b'),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
@@ -578,6 +612,24 @@ void main() {
         schema.validate(true);
         expect(
           () => schema.validate("string"),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('preserves sibling assertions around const composition lists', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'string',
+          'oneOf': [
+            {'const': 'a'},
+            {'const': 'bb'},
+          ],
+          'minLength': 2,
+        });
+
+        schema.validate('bb');
+
+        expect(
+          () => schema.validate('a'),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });

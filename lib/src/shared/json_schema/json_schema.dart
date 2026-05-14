@@ -1,3 +1,5 @@
+const _jsonSchemaAnnotationKeys = {'title', 'description', 'default'};
+
 /// A builder for creating JSON Schemas in a type-safe way.
 sealed class JsonSchema {
   final String? title;
@@ -13,9 +15,19 @@ sealed class JsonSchema {
 
   /// Creates a [JsonSchema] from a JSON map.
   factory JsonSchema.fromJson(Map<String, dynamic> json) {
+    return _fromJson(json);
+  }
+
+  static JsonSchema _fromJson(Map<String, dynamic> json) {
     if (JsonEnum._canParse(json)) {
       return JsonEnum.fromJson(json);
     }
+
+    final conjunctiveSchema = _splitConjunctiveSchema(json);
+    if (conjunctiveSchema != null) {
+      return conjunctiveSchema;
+    }
+
     if (json.containsKey('const')) {
       return JsonConst.fromJson(json);
     }
@@ -60,6 +72,101 @@ sealed class JsonSchema {
     // Fallback for schemas without an explicit type, or unknown types.
     // This handles empty schemas {} which validate everything (JsonAny).
     return JsonAny.fromJson(json);
+  }
+
+  static JsonSchema? _splitConjunctiveSchema(Map<String, dynamic> json) {
+    final primaryKeys = _primaryKeysForConjunctiveSplit(json);
+    if (primaryKeys == null) {
+      return null;
+    }
+
+    final siblingKeys = json.keys
+        .where(
+          (key) =>
+              !primaryKeys.contains(key) &&
+              !_jsonSchemaAnnotationKeys.contains(key),
+        )
+        .toSet();
+    if (siblingKeys.isEmpty) {
+      return null;
+    }
+
+    return JsonAllOf(
+      [
+        _fromJson(_schemaWithKeys(json, primaryKeys)),
+        _fromJson(_schemaWithoutKeys(json, primaryKeys)),
+      ],
+      title: json['title'] as String?,
+      description: json['description'] as String?,
+      defaultValue: json['default'],
+    );
+  }
+
+  static Set<String>? _primaryKeysForConjunctiveSplit(
+    Map<String, dynamic> json,
+  ) {
+    if (json.containsKey('const')) {
+      return {'const'};
+    }
+
+    if (json['type'] is List) {
+      return {'type'};
+    }
+
+    for (final keyword in const ['allOf', 'anyOf', 'oneOf', 'not']) {
+      if (json.containsKey(keyword)) {
+        return {keyword};
+      }
+    }
+
+    if (json['type'] == null) {
+      final enumKeys = <String>{};
+      if (json['enum'] is List) {
+        enumKeys.add('enum');
+      }
+      if (json['values'] is List) {
+        enumKeys.add('values');
+      }
+      if (enumKeys.isNotEmpty) {
+        if (json['enumNames'] is List) {
+          enumKeys.add('enumNames');
+        }
+        return enumKeys;
+      }
+    }
+
+    return null;
+  }
+
+  static Map<String, dynamic> _schemaWithKeys(
+    Map<String, dynamic> json,
+    Set<String> keys,
+  ) {
+    return {
+      for (final key in keys)
+        if (json.containsKey(key)) key: json[key],
+    };
+  }
+
+  static Map<String, dynamic> _schemaWithoutKeys(
+    Map<String, dynamic> json,
+    Set<String> keys,
+  ) {
+    return {
+      for (final entry in json.entries)
+        if (!keys.contains(entry.key) &&
+            !_jsonSchemaAnnotationKeys.contains(entry.key))
+          entry.key: entry.value,
+    };
+  }
+
+  static bool _hasOnlyAnnotationAnd(
+    Map<String, dynamic> json,
+    Set<String> keys,
+  ) {
+    return json.keys.every(
+      (key) => keys.contains(key) || _jsonSchemaAnnotationKeys.contains(key),
+    );
   }
 
   /// Converts the schema to a JSON map.
@@ -998,11 +1105,21 @@ class JsonEnum extends JsonSchema {
       return true;
     }
     if (type == null && (json['enum'] is List || json['values'] is List)) {
-      return true;
+      return JsonSchema._hasOnlyAnnotationAnd(
+        json,
+        {'enum', 'values', 'enumNames'},
+      );
     }
-    if ((type == null || type == 'string') &&
-        (_isConstSchemaList(json['oneOf']) ||
-            _isConstSchemaList(json['anyOf']))) {
+
+    final constListKey = _constSchemaListKey(json);
+    if ((type == null || type == 'string') && constListKey != null) {
+      if (!JsonSchema._hasOnlyAnnotationAnd(json, {'type', constListKey})) {
+        return false;
+      }
+      if (type == 'string' &&
+          !_constSchemaListValuesAreStrings(json[constListKey])) {
+        return false;
+      }
       return true;
     }
     return false;
@@ -1093,10 +1210,33 @@ class JsonEnum extends JsonSchema {
     return const [];
   }
 
+  static String? _constSchemaListKey(Map<String, dynamic> json) {
+    final hasOneOf = _isConstSchemaList(json['oneOf']);
+    final hasAnyOf = _isConstSchemaList(json['anyOf']);
+    if (hasOneOf == hasAnyOf) {
+      return null;
+    }
+    return hasOneOf ? 'oneOf' : 'anyOf';
+  }
+
   static bool _isConstSchemaList(dynamic schemaList) {
     return schemaList is List &&
         schemaList.isNotEmpty &&
-        schemaList.every((entry) => entry is Map && entry.containsKey('const'));
+        schemaList.every(
+          (entry) =>
+              entry is Map &&
+              entry.containsKey('const') &&
+              entry.keys.every(
+                (key) =>
+                    key is String &&
+                    (key == 'const' || _jsonSchemaAnnotationKeys.contains(key)),
+              ),
+        );
+  }
+
+  static bool _constSchemaListValuesAreStrings(dynamic schemaList) {
+    return schemaList is List &&
+        schemaList.every((entry) => entry is Map && entry['const'] is String);
   }
 
   static ({dynamic value, String? title}) _normalizeEntry(dynamic entry) {
