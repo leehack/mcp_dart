@@ -147,7 +147,9 @@ typedef ListTasksCallback = FutureOr<ListTasksResult> Function(
 );
 
 /// Callback to cancel a running task.
-typedef CancelTaskCallback = FutureOr<void> Function(
+///
+/// Must return the final cancelled task state for the `tasks/cancel` result.
+typedef CancelTaskCallback = FutureOr<Task> Function(
   String taskId,
   RequestHandlerExtra extra,
 );
@@ -951,10 +953,10 @@ class McpServer {
             "Task cancellation not supported",
           );
         }
-        await Future.value(
+        final task = await Future.value(
           _cancelTaskCallback!(request.cancelParams.taskId, extra),
         );
-        return const EmptyResult();
+        return task;
       },
       (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({
         'id': id,

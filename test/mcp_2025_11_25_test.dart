@@ -676,6 +676,20 @@ void main() {
         );
       });
 
+      test('Task omits null optional pollInterval but keeps required ttl', () {
+        final task = const Task(
+          taskId: 'cancelled-task',
+          status: TaskStatus.cancelled,
+          ttl: null,
+          createdAt: '2025-01-15T10:00:00Z',
+          lastUpdatedAt: '2025-01-15T10:01:00Z',
+        );
+
+        final json = task.toJson();
+        expect(json, containsPair('ttl', null));
+        expect(json, isNot(contains('pollInterval')));
+      });
+
       test('Task all fields serialization', () {
         final task = const Task(
           taskId: 'full-task',

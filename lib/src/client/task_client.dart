@@ -175,15 +175,15 @@ class TaskClient {
     return result.tasks;
   }
 
-  /// Cancel a task by ID
-  Future<void> cancelTask(String taskId) async {
+  /// Cancel a task by ID and return its final cancelled state.
+  Future<Task> cancelTask(String taskId) async {
     final req = JsonRpcCancelTaskRequest(
       id: -1,
       cancelParams: CancelTaskRequest(taskId: taskId),
     );
-    await client.request<EmptyResult>(
+    return client.request<Task>(
       req,
-      (json) => const EmptyResult(),
+      (json) => Task.fromJson(json),
     );
   }
 }

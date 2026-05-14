@@ -110,7 +110,7 @@ class Task implements BaseResultData {
         'status': status.name,
         if (statusMessage != null) 'statusMessage': statusMessage,
         'ttl': ttl,
-        'pollInterval': pollInterval,
+        if (pollInterval != null) 'pollInterval': pollInterval,
         if (createdAt != null) 'createdAt': createdAt,
         if (lastUpdatedAt != null) 'lastUpdatedAt': lastUpdatedAt,
         if (meta != null) '_meta': meta,

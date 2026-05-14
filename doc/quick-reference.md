@@ -217,7 +217,16 @@ server.registerPrompt(
 
 ```dart
 server.experimental.onListTasks((extra) async => ListTasksResult(tasks: []));
-server.experimental.onCancelTask((taskId, extra) async { /* cancel */ });
+server.experimental.onCancelTask((taskId, extra) async {
+  // Cancel the task and return its final cancelled state.
+  return Task(
+    taskId: taskId,
+    status: TaskStatus.cancelled,
+    createdAt: DateTime.now().toIso8601String(),
+    lastUpdatedAt: DateTime.now().toIso8601String(),
+    ttl: null,
+  );
+});
 server.experimental.onGetTask((taskId, extra) async { /* get */ });
 server.experimental.onTaskResult((taskId, extra) async { /* result */ });
 ```

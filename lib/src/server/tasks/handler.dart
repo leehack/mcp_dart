@@ -25,8 +25,8 @@ abstract class ToolTaskHandler {
   /// Retrieves the current status of a task.
   Future<Task> getTask(String taskId, RequestHandlerExtra? extra);
 
-  /// Cancels a running task.
-  Future<void> cancelTask(String taskId, RequestHandlerExtra? extra);
+  /// Cancels a running task and returns its final cancelled state.
+  Future<Task> cancelTask(String taskId, RequestHandlerExtra? extra);
 
   /// Retrieves the final result of a completed task.
   Future<CallToolResult> getTaskResult(

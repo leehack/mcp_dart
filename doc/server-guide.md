@@ -729,9 +729,10 @@ server.experimental.onListTasks((extra) async {
       Task(
         taskId: 'task-1',
         status: TaskStatus.working,
+        statusMessage: 'Long operation is running',
+        ttl: null,
         createdAt: DateTime.now().toIso8601String(),
-        name: 'Long Operation',
-        description: 'A task that takes a long time',
+        lastUpdatedAt: DateTime.now().toIso8601String(),
       ),
     ],
   );
@@ -739,6 +740,14 @@ server.experimental.onListTasks((extra) async {
 
 server.experimental.onCancelTask((taskId, extra) async {
   // Logic to cancel the task
+  return Task(
+    taskId: taskId,
+    status: TaskStatus.cancelled,
+    statusMessage: 'Task cancelled',
+    ttl: null,
+    createdAt: DateTime.now().toIso8601String(),
+    lastUpdatedAt: DateTime.now().toIso8601String(),
+  );
 });
 
 server.experimental.onGetTask((taskId, extra) async {
@@ -746,7 +755,9 @@ server.experimental.onGetTask((taskId, extra) async {
   return Task(
     taskId: taskId,
     status: TaskStatus.working,
+    ttl: null,
     createdAt: DateTime.now().toIso8601String(),
+    lastUpdatedAt: DateTime.now().toIso8601String(),
   );
 });
 

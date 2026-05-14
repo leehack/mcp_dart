@@ -300,7 +300,7 @@ McpServer createServer() {
   });
 
   server.experimental.onCancelTask((taskId, extra) async {
-    await taskHandler.cancelTask(taskId, extra);
+    return await taskHandler.cancelTask(taskId, extra);
   });
 
   server.experimental.onGetTask((taskId, extra) async {
@@ -399,20 +399,22 @@ class TestTaskHandler implements ToolTaskHandler {
   }
 
   @override
-  Future<void> cancelTask(String taskId, RequestHandlerExtra? extra) async {
+  Future<Task> cancelTask(String taskId, RequestHandlerExtra? extra) async {
     final state = _tasks[taskId];
-    if (state != null) {
-      state.task = Task(
-        taskId: state.task.taskId,
-        status: TaskStatus.cancelled,
-        statusMessage: 'Cancelled',
-        meta: state.task.meta,
-        createdAt: state.task.createdAt,
-        lastUpdatedAt: DateTime.now().toIso8601String(),
-      );
-      // Keep it for a bit or remove? Usually keep for history.
-      // But for this simple test, we just mark it cancelled.
+    if (state == null) {
+      throw McpError(ErrorCode.invalidParams.value, 'Task not found');
     }
+    state.task = Task(
+      taskId: state.task.taskId,
+      status: TaskStatus.cancelled,
+      statusMessage: 'Cancelled',
+      meta: state.task.meta,
+      ttl: state.task.ttl,
+      pollInterval: state.task.pollInterval,
+      createdAt: state.task.createdAt,
+      lastUpdatedAt: DateTime.now().toIso8601String(),
+    );
+    return state.task;
   }
 
   @override

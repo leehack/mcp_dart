@@ -198,10 +198,17 @@ void main() {
       expect(tasks[1].taskId, '2');
     });
 
-    test('cancelTask sends cancel request', () async {
-      mockClient.mockResponse('tasks/cancel', {});
+    test('cancelTask sends cancel request and returns final task', () async {
+      mockClient.mockResponse('tasks/cancel', {
+        'taskId': 'task-123',
+        'status': 'cancelled',
+        'statusMessage': 'Task cancelled',
+        'createdAt': '2026-05-14T10:00:00Z',
+        'lastUpdatedAt': '2026-05-14T10:05:00Z',
+        'ttl': null,
+      });
 
-      await taskClient.cancelTask('task-123');
+      final task = await taskClient.cancelTask('task-123');
 
       expect(mockClient.requests.last.method, 'tasks/cancel');
       expect(
@@ -210,6 +217,9 @@ void main() {
             .taskId,
         'task-123',
       );
+      expect(task.taskId, 'task-123');
+      expect(task.status, TaskStatus.cancelled);
+      expect(task.ttl, isNull);
     });
 
     test('callToolStream yields error if initial call fails', () async {

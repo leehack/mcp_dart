@@ -63,7 +63,15 @@ void main() {
           ],
         );
       });
-      mcpServer.experimental.onCancelTask((taskId, extra) async {});
+      mcpServer.experimental.onCancelTask(
+        (taskId, extra) async => Task(
+          taskId: taskId,
+          status: TaskStatus.cancelled,
+          createdAt: '2026-05-14T10:00:00Z',
+          lastUpdatedAt: '2026-05-14T10:00:00Z',
+          ttl: null,
+        ),
+      );
 
       await mcpServer.connect(transport);
 
@@ -91,13 +99,21 @@ void main() {
       expect(result.tasks.first.taskId, 'task1');
     });
 
-    test('handles cancel task request', () async {
+    test('handles cancel task request with final task result', () async {
       var cancelledTaskId = '';
 
       mcpServer.experimental
           .onListTasks((extra) async => const ListTasksResult(tasks: []));
       mcpServer.experimental.onCancelTask((taskId, extra) async {
         cancelledTaskId = taskId;
+        return Task(
+          taskId: taskId,
+          status: TaskStatus.cancelled,
+          statusMessage: 'Task cancelled',
+          createdAt: '2026-05-14T10:00:00Z',
+          lastUpdatedAt: '2026-05-14T10:05:00Z',
+          ttl: null,
+        );
       });
 
       await mcpServer.connect(transport);
@@ -124,7 +140,13 @@ void main() {
       final response = transport.sentMessages
           .whereType<JsonRpcResponse>()
           .firstWhere((r) => r.id == 2);
-      expect(response.result, isEmpty); // EmptyResult
+      expect(response.result['taskId'], 'task123');
+      expect(response.result['status'], 'cancelled');
+      expect(response.result['statusMessage'], 'Task cancelled');
+      expect(response.result, containsPair('ttl', null));
+      expect(response.result, isNot(contains('pollInterval')));
+      expect(response.result['createdAt'], '2026-05-14T10:00:00Z');
+      expect(response.result['lastUpdatedAt'], '2026-05-14T10:05:00Z');
     });
 
     test('throws error if tasks handlers not registered but requested',

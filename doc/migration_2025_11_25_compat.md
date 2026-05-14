@@ -10,6 +10,9 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
   single block or a list of blocks.
 - `SamplingMessage.contentBlocks` and `CreateMessageResult.contentBlocks`
   provide normalized list access.
+- `tasks/cancel` returns the final cancelled `Task` as its JSON-RPC result.
+  `onCancelTask`, `ToolTaskHandler.cancelTask`, and `TaskClient.cancelTask`
+  now return that `Task` instead of an empty result.
 - Streamable HTTP defaults are stricter for protocol-version headers, DNS
   rebinding protection, and batch request rejection.
 
@@ -100,3 +103,34 @@ for (final block in result.contentBlocks) {
   // ...
 }
 ```
+
+### Task cancellation result
+
+Before:
+
+```dart
+server.experimental.onCancelTask((taskId, extra) async {
+  await store.cancelTask(taskId);
+});
+
+await taskClient.cancelTask(taskId);
+```
+
+After:
+
+```dart
+server.experimental.onCancelTask((taskId, extra) async {
+  await store.cancelTask(taskId);
+  final task = await store.getTask(taskId);
+  if (task == null) {
+    throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+  }
+  return task;
+});
+
+final cancelledTask = await taskClient.cancelTask(taskId);
+```
+
+Returned cancelled tasks should include the MCP-required task fields:
+`taskId`, `status`, `createdAt`, `lastUpdatedAt`, and `ttl` (`null` is valid
+for `ttl`).
