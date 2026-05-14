@@ -103,6 +103,9 @@ void main() {
         'task': {
           'taskId': taskId,
           'status': 'working',
+          'createdAt': '2026-05-14T10:00:00Z',
+          'lastUpdatedAt': '2026-05-14T10:00:00Z',
+          'ttl': null,
           'name': 'Long Task',
           'total': 100,
         },
@@ -114,6 +117,9 @@ void main() {
         {
           'taskId': taskId,
           'status': 'working',
+          'createdAt': '2026-05-14T10:00:00Z',
+          'lastUpdatedAt': '2026-05-14T10:01:00Z',
+          'ttl': null,
           'name': 'Long Task',
           'progress': 50,
           'pollInterval': 10,
@@ -122,6 +128,9 @@ void main() {
         {
           'taskId': taskId,
           'status': 'completed',
+          'createdAt': '2026-05-14T10:00:00Z',
+          'lastUpdatedAt': '2026-05-14T10:02:00Z',
+          'ttl': null,
           'name': 'Long Task',
           'progress': 100,
         }
@@ -186,8 +195,22 @@ void main() {
     test('listTasks returns list of tasks', () async {
       mockClient.mockResponse('tasks/list', {
         'tasks': [
-          {'taskId': '1', 'status': 'working', 'name': 'Task 1'},
-          {'taskId': '2', 'status': 'working', 'name': 'Task 2'},
+          {
+            'taskId': '1',
+            'status': 'working',
+            'createdAt': '2026-05-14T10:00:00Z',
+            'lastUpdatedAt': '2026-05-14T10:01:00Z',
+            'ttl': null,
+            'name': 'Task 1',
+          },
+          {
+            'taskId': '2',
+            'status': 'working',
+            'createdAt': '2026-05-14T10:00:00Z',
+            'lastUpdatedAt': '2026-05-14T10:01:00Z',
+            'ttl': null,
+            'name': 'Task 2',
+          },
         ],
       });
 
@@ -198,9 +221,58 @@ void main() {
       expect(tasks[1].taskId, '2');
     });
 
-    test('cancelTask sends cancel request', () async {
+    test('cancelTaskWithResult sends cancel request and returns final task',
+        () async {
+      mockClient.mockResponse('tasks/cancel', {
+        'taskId': 'task-123',
+        'status': 'cancelled',
+        'statusMessage': 'Task cancelled',
+        'createdAt': '2026-05-14T10:00:00Z',
+        'lastUpdatedAt': '2026-05-14T10:05:00Z',
+        'ttl': null,
+      });
+
+      final task = await taskClient.cancelTaskWithResult('task-123');
+
+      expect(mockClient.requests.last.method, 'tasks/cancel');
+      expect(
+        (mockClient.requests.last as JsonRpcCancelTaskRequest)
+            .cancelParams
+            .taskId,
+        'task-123',
+      );
+      expect(task.taskId, 'task-123');
+      expect(task.status, TaskStatus.cancelled);
+      expect(task.ttl, isNull);
+    });
+
+    test('legacy cancelTask sends cancel request and accepts empty result',
+        () async {
       mockClient.mockResponse('tasks/cancel', {});
 
+      // ignore: deprecated_member_use_from_same_package
+      await taskClient.cancelTask('task-123');
+
+      expect(mockClient.requests.last.method, 'tasks/cancel');
+      expect(
+        (mockClient.requests.last as JsonRpcCancelTaskRequest)
+            .cancelParams
+            .taskId,
+        'task-123',
+      );
+    });
+
+    test('legacy cancelTask ignores compliant final task result', () async {
+      mockClient.mockResponse('tasks/cancel', {
+        'taskId': 'task-123',
+        'status': 'cancelled',
+        'statusMessage': 'Task cancelled',
+        'createdAt': '2026-05-14T10:00:00Z',
+        'lastUpdatedAt': '2026-05-14T10:05:00Z',
+        'ttl': null,
+      });
+
+      // ignore: deprecated_member_use_from_same_package
       await taskClient.cancelTask('task-123');
 
       expect(mockClient.requests.last.method, 'tasks/cancel');

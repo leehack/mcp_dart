@@ -299,8 +299,8 @@ McpServer createServer() {
     return ListTasksResult(tasks: await taskHandler.listTasks());
   });
 
-  server.experimental.onCancelTask((taskId, extra) async {
-    await taskHandler.cancelTask(taskId, extra);
+  server.experimental.onCancelTaskWithResult((taskId, extra) async {
+    return await taskHandler.cancelTaskWithResult(taskId, extra);
   });
 
   server.experimental.onGetTask((taskId, extra) async {
@@ -316,7 +316,7 @@ McpServer createServer() {
   return server;
 }
 
-class TestTaskHandler implements ToolTaskHandler {
+class TestTaskHandler extends CancelTaskResultHandler {
   final Map<String, _TaskState> _tasks = {};
   int _counter = 0;
 
@@ -339,6 +339,7 @@ class TestTaskHandler implements ToolTaskHandler {
         taskId: taskId,
         status: TaskStatus.working,
         statusMessage: 'Starting...',
+        ttl: null,
         createdAt: DateTime.now().toIso8601String(),
         lastUpdatedAt: DateTime.now().toIso8601String(),
         meta: {'message': message}, // Store message in metadata
@@ -369,6 +370,7 @@ class TestTaskHandler implements ToolTaskHandler {
       taskId: state.task.taskId,
       status: TaskStatus.working,
       statusMessage: 'Halfway there...',
+      ttl: state.task.ttl,
       createdAt: state.task.createdAt,
       lastUpdatedAt: DateTime.now().toIso8601String(),
       pollInterval: 100,
@@ -382,6 +384,7 @@ class TestTaskHandler implements ToolTaskHandler {
       taskId: state.task.taskId,
       status: TaskStatus.completed,
       statusMessage: 'Done!',
+      ttl: state.task.ttl,
       createdAt: state.task.createdAt,
       lastUpdatedAt: DateTime.now().toIso8601String(),
       pollInterval: 100,
@@ -399,20 +402,25 @@ class TestTaskHandler implements ToolTaskHandler {
   }
 
   @override
-  Future<void> cancelTask(String taskId, RequestHandlerExtra? extra) async {
+  Future<Task> cancelTaskWithResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) async {
     final state = _tasks[taskId];
-    if (state != null) {
-      state.task = Task(
-        taskId: state.task.taskId,
-        status: TaskStatus.cancelled,
-        statusMessage: 'Cancelled',
-        meta: state.task.meta,
-        createdAt: state.task.createdAt,
-        lastUpdatedAt: DateTime.now().toIso8601String(),
-      );
-      // Keep it for a bit or remove? Usually keep for history.
-      // But for this simple test, we just mark it cancelled.
+    if (state == null) {
+      throw McpError(ErrorCode.invalidParams.value, 'Task not found');
     }
+    state.task = Task(
+      taskId: state.task.taskId,
+      status: TaskStatus.cancelled,
+      statusMessage: 'Cancelled',
+      meta: state.task.meta,
+      ttl: state.task.ttl,
+      pollInterval: state.task.pollInterval,
+      createdAt: state.task.createdAt,
+      lastUpdatedAt: DateTime.now().toIso8601String(),
+    );
+    return state.task;
   }
 
   @override

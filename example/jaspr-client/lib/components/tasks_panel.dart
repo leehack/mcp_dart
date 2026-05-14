@@ -53,12 +53,11 @@ class TasksPanel extends StatelessComponent {
       ]),
       div([
         span(classes: 'tool-args', [Component.text('Status: ${task.status.name}')]),
-        if (task.createdAt != null)
-          span(
-            classes: 'tool-args',
-            attributes: {'style': 'margin-left: 0.5rem'},
-            [Component.text('Created: ${task.createdAt}')],
-          ),
+        span(
+          classes: 'tool-args',
+          attributes: {'style': 'margin-left: 0.5rem'},
+          [Component.text('Created: ${task.createdAt}')],
+        ),
       ]),
       if (task.statusMessage != null)
         p(

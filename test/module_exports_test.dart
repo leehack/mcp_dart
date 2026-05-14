@@ -16,10 +16,12 @@ void main() {
     test('server module symbols are available', () {
       server_module.McpServer? server;
       server_module.StreamableMcpServer? streamableServer;
+      server_module.CancelTaskResultHandler? cancelTaskResultHandler;
       final registerAppTool = server_module.registerAppTool;
 
       expect(server, isNull);
       expect(streamableServer, isNull);
+      expect(cancelTaskResultHandler, isNull);
       expect(registerAppTool, isNotNull);
     });
 

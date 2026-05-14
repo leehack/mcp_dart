@@ -26,6 +26,13 @@ abstract class ToolTaskHandler {
   Future<Task> getTask(String taskId, RequestHandlerExtra? extra);
 
   /// Cancels a running task.
+  ///
+  /// Prefer implementing [CancelTaskResultHandler] so cancellations can return
+  /// the final task state required by MCP 2025-11-25.
+  @Deprecated(
+    'MCP 2025-11-25 requires cancellations to return the final Task. '
+    'Extend CancelTaskResultHandler and implement cancelTaskWithResult instead.',
+  )
   Future<void> cancelTask(String taskId, RequestHandlerExtra? extra);
 
   /// Retrieves the final result of a completed task.
@@ -33,6 +40,26 @@ abstract class ToolTaskHandler {
     String taskId,
     RequestHandlerExtra? extra,
   );
+}
+
+/// MCP 2025-11-25-compliant task handler that returns the cancelled task.
+///
+/// Extend this when possible to keep the legacy [ToolTaskHandler.cancelTask]
+/// shim delegating to [cancelTaskWithResult]. If a handler already extends
+/// another base class, implement [ToolTaskHandler] directly and wire
+/// `cancelTaskWithResult` through the server-level `onCancelTaskWithResult`
+/// callback instead.
+abstract class CancelTaskResultHandler extends ToolTaskHandler {
+  /// Cancels a running task and returns its final cancelled state.
+  Future<Task> cancelTaskWithResult(String taskId, RequestHandlerExtra? extra);
+
+  @Deprecated(
+    'MCP 2025-11-25 requires cancellations to return the final Task. '
+    'Use cancelTaskWithResult instead.',
+  )
+  @override
+  Future<void> cancelTask(String taskId, RequestHandlerExtra? extra) =>
+      cancelTaskWithResult(taskId, extra);
 }
 
 /// Handles execution and result retrieval for tasks, managing the queue loop.

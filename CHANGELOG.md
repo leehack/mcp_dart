@@ -1,6 +1,29 @@
 ## Unreleased
 
-### Compatibility Notes
+### Compatibility Notes (Potentially Breaking)
+
+- **Task cancellation now returns the final task state**:
+  - `tasks/cancel` responses now serialize the cancelled `Task` required by MCP
+    2025-11-25 instead of an empty result object.
+  - New spec-compliant APIs expose that result explicitly:
+    `onCancelTaskWithResult`, `CancelTaskCallback`,
+    `CancelTaskResultHandler.cancelTaskWithResult`, and
+    `TaskClient.cancelTaskWithResult` return the cancelled `Task`.
+  - Legacy APIs remain source-compatible for one compatibility window:
+    `onCancelTask`, `ToolTaskHandler.cancelTask`, and `TaskClient.cancelTask`
+    are deprecated shims. The server-side legacy shims still return a full
+    cancelled `Task` on the wire by resolving the post-cancel task through
+    `onGetTask`/`getTask`.
+  - `TaskClient.cancelTaskWithResult` expects a task-shaped result and will
+    reject older non-compliant servers that still return `{}`. Deprecated
+    `TaskClient.cancelTask` remains available when callers intentionally need
+    the legacy empty-result behavior.
+  - `Task.fromJson()` requires MCP-required task fields (`createdAt`,
+    `lastUpdatedAt`, and `ttl`), and the `Task` constructor now requires
+    `ttl`, `createdAt`, and `lastUpdatedAt` so serialization is non-throwing
+    for valid task instances.
+  - `Task.toJson()` continues to serialize required `ttl` even when it is
+    `null`, and now omits optional `pollInterval` when it is not set.
 
 - **Custom transports remain source-compatible while string request routing is available**:
   - `Transport.send(... relatedRequestId: ...)` keeps the existing `int?`
