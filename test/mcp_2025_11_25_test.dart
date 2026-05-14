@@ -728,6 +728,57 @@ void main() {
         );
       });
 
+      test('Task rejects malformed field types with FormatException', () {
+        final validJson = {
+          'taskId': 'typed-task',
+          'status': 'working',
+          'ttl': null,
+          'createdAt': '2025-01-15T10:00:00Z',
+          'lastUpdatedAt': '2025-01-15T10:01:00Z',
+        };
+
+        expect(
+          () => Task.fromJson({...validJson, 'createdAt': 42}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.createdAt must be a string',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson, 'lastUpdatedAt': false}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.lastUpdatedAt must be a string',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson, 'ttl': 1.5}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.ttl must be an integer or null',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson, 'pollInterval': '1000'}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.pollInterval must be an integer or null',
+            ),
+          ),
+        );
+      });
+
       test('Task all fields serialization', () {
         final task = const Task(
           taskId: 'full-task',

@@ -94,25 +94,16 @@ class Task implements BaseResultData {
   });
 
   factory Task.fromJson(Map<String, dynamic> json) {
-    if (!json.containsKey('ttl')) {
-      throw const FormatException('Task.ttl is required');
-    }
-    final createdAt = json['createdAt'];
-    if (createdAt is! String) {
-      throw const FormatException('Task.createdAt is required');
-    }
-    final lastUpdatedAt = json['lastUpdatedAt'];
-    if (lastUpdatedAt is! String) {
-      throw const FormatException('Task.lastUpdatedAt is required');
-    }
+    final createdAt = _readRequiredTaskString(json, 'createdAt');
+    final lastUpdatedAt = _readRequiredTaskString(json, 'lastUpdatedAt');
 
     final meta = json['_meta'] as Map<String, dynamic>?;
     return Task(
       taskId: json['taskId'] as String,
       status: TaskStatusName.fromString(json['status'] as String),
       statusMessage: json['statusMessage'] as String?,
-      ttl: json['ttl'] as int?,
-      pollInterval: json['pollInterval'] as int?,
+      ttl: _readTaskInt(json, 'ttl', requiredField: true),
+      pollInterval: _readTaskInt(json, 'pollInterval'),
       createdAt: createdAt,
       lastUpdatedAt: lastUpdatedAt,
       meta: meta,
@@ -130,6 +121,37 @@ class Task implements BaseResultData {
         'lastUpdatedAt': lastUpdatedAt,
         if (meta != null) '_meta': meta,
       };
+}
+
+String _readRequiredTaskString(Map<String, dynamic> json, String field) {
+  if (!json.containsKey(field)) {
+    throw FormatException('Task.$field is required');
+  }
+  final value = json[field];
+  if (value is! String) {
+    throw FormatException('Task.$field must be a string');
+  }
+  return value;
+}
+
+int? _readTaskInt(
+  Map<String, dynamic> json,
+  String field, {
+  bool requiredField = false,
+}) {
+  if (!json.containsKey(field)) {
+    if (requiredField) {
+      throw FormatException('Task.$field is required');
+    }
+    return null;
+  }
+
+  final value = json[field];
+  if (value == null || value is int) {
+    return value as int?;
+  }
+
+  throw FormatException('Task.$field must be an integer or null');
 }
 
 /// Parameters for the `tasks/list` request. Includes pagination.
