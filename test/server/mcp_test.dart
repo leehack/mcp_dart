@@ -980,6 +980,62 @@ void main() {
       expect(completion['values'], equals(['eng/alice', 'eng/alex']));
     });
 
+    test('resource template completion handles synchronous callback errors',
+        () async {
+      mcpServer.resourceTemplate(
+        'failing_template',
+        ResourceTemplateRegistration(
+          'failing://{path}',
+          listCallback: (extra) async =>
+              const ListResourcesResult(resources: []),
+          completeCallbacks: {
+            'path': (currentValue) {
+              throw StateError('completion exploded');
+            },
+          },
+        ),
+        (uri, variables, extra) async {
+          return ReadResourceResult(
+            contents: [
+              TextResourceContents(uri: uri.toString(), text: 'content'),
+            ],
+          );
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      final initRequest = JsonRpcInitializeRequest(
+        id: 1,
+        initParams: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+        ),
+      );
+      transport.receiveMessage(initRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final completeRequest = JsonRpcCompleteRequest(
+        id: 2,
+        completeParams: const CompleteRequestParams(
+          ref: ResourceReference(
+            uri: 'failing://{path}',
+          ),
+          argument: ArgumentCompletionInfo(name: 'path', value: 'docs'),
+        ),
+      );
+      transport.receiveMessage(completeRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final error = transport.sentMessages
+          .whereType<JsonRpcError>()
+          .where((r) => r.id == 2)
+          .first;
+      expect(error.error.code, equals(ErrorCode.internalError.value));
+      expect(error.error.message, equals('Completion failed'));
+    });
+
     test('prompt completion receives context arguments', () async {
       CompletionContext? receivedContext;
 

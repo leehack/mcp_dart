@@ -1258,13 +1258,13 @@ class McpServer {
     );
     if (!templateEntry.value.enabled) return _emptyCompletionResult();
 
-    final completions = templateEntry.value.resourceTemplate.completeVariable(
-      argInfo.name,
-      argInfo.value,
-      context,
-    );
-    if (completions == null) return _emptyCompletionResult();
     try {
+      final completions = templateEntry.value.resourceTemplate.completeVariable(
+        argInfo.name,
+        argInfo.value,
+        context,
+      );
+      if (completions == null) return _emptyCompletionResult();
       return _createCompletionResult(await completions);
     } catch (e) {
       _logger.warn(
