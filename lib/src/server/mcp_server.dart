@@ -780,6 +780,10 @@ class ExperimentalMcpServerTasks {
   }
 
   /// Registers a callback for cancelling a task.
+  ///
+  /// The callback must cancel the task and return the final cancelled [Task]
+  /// used as the `tasks/cancel` result. Throw [McpError] if the task cannot
+  /// be cancelled, is missing, or is already terminal.
   void onCancelTask(CancelTaskCallback callback) {
     _server._cancelTaskCallback = callback;
     _server._ensureTaskHandlersInitialized();
@@ -956,6 +960,24 @@ class McpServer {
         final task = await Future.value(
           _cancelTaskCallback!(request.cancelParams.taskId, extra),
         );
+        if (task.taskId != request.cancelParams.taskId) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Cancelled task result has mismatched taskId",
+          );
+        }
+        if (task.status != TaskStatus.cancelled) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Task cancellation callback must return a cancelled task",
+          );
+        }
+        if (task.createdAt == null || task.lastUpdatedAt == null) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Cancelled task result must include createdAt and lastUpdatedAt",
+          );
+        }
         return task;
       },
       (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({

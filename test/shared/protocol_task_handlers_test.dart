@@ -6,6 +6,9 @@ import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
+const _taskCreatedAt = '2026-05-14T10:00:00Z';
+const _taskUpdatedAt = '2026-05-14T10:01:00Z';
+
 /// Mock TaskStore for testing protocol task handlers
 class MockTaskStore implements TaskStore {
   final Map<String, Task> tasks = {};
@@ -22,6 +25,9 @@ class MockTaskStore implements TaskStore {
     final task = Task(
       taskId: taskId,
       status: TaskStatus.working,
+      createdAt: _taskCreatedAt,
+      lastUpdatedAt: _taskCreatedAt,
+      ttl: null,
     );
     tasks[taskId] = task;
     return task;
@@ -41,7 +47,14 @@ class MockTaskStore implements TaskStore {
   ]) async {
     results[taskId] = result;
     if (tasks.containsKey(taskId)) {
-      tasks[taskId] = Task(taskId: taskId, status: status);
+      final task = tasks[taskId]!;
+      tasks[taskId] = Task(
+        taskId: taskId,
+        status: status,
+        createdAt: task.createdAt,
+        lastUpdatedAt: _taskUpdatedAt,
+        ttl: task.ttl,
+      );
     }
   }
 
@@ -65,6 +78,9 @@ class MockTaskStore implements TaskStore {
         taskId: taskId,
         status: status,
         statusMessage: statusMessage,
+        createdAt: tasks[taskId]!.createdAt,
+        lastUpdatedAt: _taskUpdatedAt,
+        ttl: tasks[taskId]!.ttl,
       );
     }
   }
@@ -216,6 +232,9 @@ void main() {
         taskId: 'task-1',
         status: TaskStatus.working,
         statusMessage: 'In progress',
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskCreatedAt,
+        ttl: null,
       );
 
       // Simulate tasks/get request
@@ -269,10 +288,16 @@ void main() {
       taskStore.tasks['task-1'] = const Task(
         taskId: 'task-1',
         status: TaskStatus.working,
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskCreatedAt,
+        ttl: null,
       );
       taskStore.tasks['task-2'] = const Task(
         taskId: 'task-2',
         status: TaskStatus.completed,
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskUpdatedAt,
+        ttl: null,
       );
 
       // Simulate tasks/list request
@@ -300,6 +325,9 @@ void main() {
       taskStore.tasks['task-1'] = const Task(
         taskId: 'task-1',
         status: TaskStatus.working,
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskCreatedAt,
+        ttl: null,
       );
 
       // Simulate tasks/cancel request
@@ -328,6 +356,9 @@ void main() {
       taskStore.tasks['task-1'] = const Task(
         taskId: 'task-1',
         status: TaskStatus.completed,
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskUpdatedAt,
+        ttl: null,
       );
 
       // Simulate tasks/cancel request
@@ -358,6 +389,9 @@ void main() {
       taskStore.tasks['task-1'] = const Task(
         taskId: 'task-1',
         status: TaskStatus.working,
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskCreatedAt,
+        ttl: null,
       );
 
       // Add messages to queue
@@ -421,6 +455,9 @@ void main() {
       taskStore.tasks['task-1'] = const Task(
         taskId: 'task-1',
         status: TaskStatus.working,
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskCreatedAt,
+        ttl: null,
       );
 
       // Send notification with relatedTask
@@ -456,6 +493,9 @@ void main() {
       taskStore.tasks['task-1'] = const Task(
         taskId: 'task-1',
         status: TaskStatus.working,
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskCreatedAt,
+        ttl: null,
       );
 
       final resultFuture = protocol.request<EmptyResult>(

@@ -12,7 +12,11 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
   provide normalized list access.
 - `tasks/cancel` returns the final cancelled `Task` as its JSON-RPC result.
   `onCancelTask`, `ToolTaskHandler.cancelTask`, and `TaskClient.cancelTask`
-  now return that `Task` instead of an empty result.
+  now return that `Task` instead of an empty result. This is a source-breaking
+  change for cancellation handlers, and `TaskClient.cancelTask` now expects a
+  task-shaped result from MCP 2025-11-25-compatible servers.
+- Task serialization keeps the MCP-required `ttl` field even when it is `null`,
+  while omitting optional `pollInterval` when it is not set.
 - Streamable HTTP defaults are stricter for protocol-version headers, DNS
   rebinding protection, and batch request rejection.
 
@@ -120,7 +124,13 @@ After:
 
 ```dart
 server.experimental.onCancelTask((taskId, extra) async {
-  await store.cancelTask(taskId);
+  final cancelled = await store.cancelTask(taskId);
+  if (!cancelled) {
+    throw McpError(
+      ErrorCode.invalidParams.value,
+      'Cannot cancel task: not found or already terminal',
+    );
+  }
   final task = await store.getTask(taskId);
   if (task == null) {
     throw McpError(ErrorCode.invalidParams.value, 'Task not found');

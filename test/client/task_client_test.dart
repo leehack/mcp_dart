@@ -103,6 +103,9 @@ void main() {
         'task': {
           'taskId': taskId,
           'status': 'working',
+          'createdAt': '2026-05-14T10:00:00Z',
+          'lastUpdatedAt': '2026-05-14T10:00:00Z',
+          'ttl': null,
           'name': 'Long Task',
           'total': 100,
         },
@@ -114,6 +117,9 @@ void main() {
         {
           'taskId': taskId,
           'status': 'working',
+          'createdAt': '2026-05-14T10:00:00Z',
+          'lastUpdatedAt': '2026-05-14T10:01:00Z',
+          'ttl': null,
           'name': 'Long Task',
           'progress': 50,
           'pollInterval': 10,
@@ -122,6 +128,9 @@ void main() {
         {
           'taskId': taskId,
           'status': 'completed',
+          'createdAt': '2026-05-14T10:00:00Z',
+          'lastUpdatedAt': '2026-05-14T10:02:00Z',
+          'ttl': null,
           'name': 'Long Task',
           'progress': 100,
         }
@@ -186,8 +195,22 @@ void main() {
     test('listTasks returns list of tasks', () async {
       mockClient.mockResponse('tasks/list', {
         'tasks': [
-          {'taskId': '1', 'status': 'working', 'name': 'Task 1'},
-          {'taskId': '2', 'status': 'working', 'name': 'Task 2'},
+          {
+            'taskId': '1',
+            'status': 'working',
+            'createdAt': '2026-05-14T10:00:00Z',
+            'lastUpdatedAt': '2026-05-14T10:01:00Z',
+            'ttl': null,
+            'name': 'Task 1',
+          },
+          {
+            'taskId': '2',
+            'status': 'working',
+            'createdAt': '2026-05-14T10:00:00Z',
+            'lastUpdatedAt': '2026-05-14T10:01:00Z',
+            'ttl': null,
+            'name': 'Task 2',
+          },
         ],
       });
 

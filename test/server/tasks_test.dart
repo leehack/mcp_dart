@@ -58,6 +58,8 @@ void main() {
               taskId: 'task1',
               status: TaskStatus.working,
               statusMessage: 'Processing...',
+              createdAt: '2026-05-14T10:00:00Z',
+              lastUpdatedAt: '2026-05-14T10:00:00Z',
               ttl: 3600,
             ),
           ],
@@ -147,6 +149,50 @@ void main() {
       expect(response.result, isNot(contains('pollInterval')));
       expect(response.result['createdAt'], '2026-05-14T10:00:00Z');
       expect(response.result['lastUpdatedAt'], '2026-05-14T10:05:00Z');
+    });
+
+    test('rejects cancel task callback results that are not cancelled',
+        () async {
+      mcpServer.experimental
+          .onListTasks((extra) async => const ListTasksResult(tasks: []));
+      mcpServer.experimental.onCancelTask((taskId, extra) async {
+        return Task(
+          taskId: taskId,
+          status: TaskStatus.completed,
+          createdAt: '2026-05-14T10:00:00Z',
+          lastUpdatedAt: '2026-05-14T10:05:00Z',
+          ttl: null,
+        );
+      });
+
+      await mcpServer.connect(transport);
+
+      final initRequest = JsonRpcInitializeRequest(
+        id: 1,
+        initParams: const InitializeRequestParams(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+        ),
+      );
+      transport.receiveMessage(initRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final cancelRequest = JsonRpcCancelTaskRequest(
+        id: 2,
+        cancelParams: const CancelTaskRequestParams(taskId: 'task123'),
+      );
+      transport.receiveMessage(cancelRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final errorResponse = transport.sentMessages
+          .whereType<JsonRpcError>()
+          .firstWhere((r) => r.id == 2);
+      expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
+      expect(
+        errorResponse.error.message,
+        contains('must return a cancelled task'),
+      );
     });
 
     test('throws error if tasks handlers not registered but requested',

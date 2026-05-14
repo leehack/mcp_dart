@@ -91,6 +91,18 @@ class Task implements BaseResultData {
   });
 
   factory Task.fromJson(Map<String, dynamic> json) {
+    if (!json.containsKey('ttl')) {
+      throw const FormatException('Task.ttl is required');
+    }
+    final createdAt = json['createdAt'];
+    if (createdAt is! String) {
+      throw const FormatException('Task.createdAt is required');
+    }
+    final lastUpdatedAt = json['lastUpdatedAt'];
+    if (lastUpdatedAt is! String) {
+      throw const FormatException('Task.lastUpdatedAt is required');
+    }
+
     final meta = json['_meta'] as Map<String, dynamic>?;
     return Task(
       taskId: json['taskId'] as String,
@@ -98,23 +110,34 @@ class Task implements BaseResultData {
       statusMessage: json['statusMessage'] as String?,
       ttl: json['ttl'] as int?,
       pollInterval: json['pollInterval'] as int?,
-      createdAt: json['createdAt'] as String?,
-      lastUpdatedAt: json['lastUpdatedAt'] as String?,
+      createdAt: createdAt,
+      lastUpdatedAt: lastUpdatedAt,
       meta: meta,
     );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'taskId': taskId,
-        'status': status.name,
-        if (statusMessage != null) 'statusMessage': statusMessage,
-        'ttl': ttl,
-        if (pollInterval != null) 'pollInterval': pollInterval,
-        if (createdAt != null) 'createdAt': createdAt,
-        if (lastUpdatedAt != null) 'lastUpdatedAt': lastUpdatedAt,
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    final createdAt = this.createdAt;
+    if (createdAt == null) {
+      throw const FormatException('Task.createdAt is required');
+    }
+    final lastUpdatedAt = this.lastUpdatedAt;
+    if (lastUpdatedAt == null) {
+      throw const FormatException('Task.lastUpdatedAt is required');
+    }
+
+    return {
+      'taskId': taskId,
+      'status': status.name,
+      if (statusMessage != null) 'statusMessage': statusMessage,
+      'ttl': ttl,
+      if (pollInterval != null) 'pollInterval': pollInterval,
+      'createdAt': createdAt,
+      'lastUpdatedAt': lastUpdatedAt,
+      if (meta != null) '_meta': meta,
+    };
+  }
 }
 
 /// Parameters for the `tasks/list` request. Includes pagination.

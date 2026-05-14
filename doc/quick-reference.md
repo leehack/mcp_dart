@@ -219,16 +219,29 @@ server.registerPrompt(
 server.experimental.onListTasks((extra) async => ListTasksResult(tasks: []));
 server.experimental.onCancelTask((taskId, extra) async {
   // Cancel the task and return its final cancelled state.
-  return Task(
-    taskId: taskId,
-    status: TaskStatus.cancelled,
-    createdAt: DateTime.now().toIso8601String(),
-    lastUpdatedAt: DateTime.now().toIso8601String(),
-    ttl: null,
-  );
+  final cancelled = await store.cancelTask(taskId);
+  if (!cancelled) {
+    throw McpError(
+      ErrorCode.invalidParams.value,
+      'Cannot cancel task: not found or already terminal',
+    );
+  }
+  final task = await store.getTask(taskId);
+  if (task == null) {
+    throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+  }
+  return task;
 });
-server.experimental.onGetTask((taskId, extra) async { /* get */ });
-server.experimental.onTaskResult((taskId, extra) async { /* result */ });
+server.experimental.onGetTask((taskId, extra) async {
+  final task = await store.getTask(taskId);
+  if (task == null) {
+    throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+  }
+  return task;
+});
+server.experimental.onTaskResult((taskId, extra) async {
+  return await store.getTaskResult(taskId);
+});
 ```
 
 ### Connect Transport

@@ -1,6 +1,6 @@
 ## Unreleased
 
-### Compatibility Notes
+### Compatibility Notes (Potentially Breaking)
 
 - **Task cancellation now returns the final task state**:
   - `tasks/cancel` responses now serialize the cancelled `Task` required by MCP
@@ -8,6 +8,13 @@
   - `CancelTaskCallback`, `ToolTaskHandler.cancelTask`, and
     `TaskClient.cancelTask` return the cancelled `Task`, so server handlers
     should return the post-cancellation task state.
+  - `TaskClient.cancelTask` now expects a task-shaped result and will reject
+    older non-compliant servers that still return `{}`.
+  - `Task.fromJson()` requires MCP-required task fields (`createdAt`,
+    `lastUpdatedAt`, and `ttl`) and `Task.toJson()` requires timestamps before
+    emitting task-shaped protocol results.
+  - `Task.toJson()` continues to serialize required `ttl` even when it is
+    `null`, and now omits optional `pollInterval` when it is not set.
 
 - **Custom transports remain source-compatible while string request routing is available**:
   - `Transport.send(... relatedRequestId: ...)` keeps the existing `int?`
