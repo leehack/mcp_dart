@@ -10,9 +10,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final errorWidgetBuilder = ErrorWidget.builder;
     await tester.pumpWidget(const MyApp());
+    ErrorWidget.builder = errorWidgetBuilder;
 
-    expect(find.text('Simple MCP Client'), findsOneWidget);
+    expect(find.text('MCP Client'), findsOneWidget);
     expect(find.widgetWithText(ElevatedButton, 'Connect'), findsOneWidget);
     expect(find.widgetWithText(ElevatedButton, 'Disconnect'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Call Tool'), findsOneWidget);
