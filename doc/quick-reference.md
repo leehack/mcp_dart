@@ -217,7 +217,7 @@ server.registerPrompt(
 
 ```dart
 server.experimental.onListTasks((extra) async => ListTasksResult(tasks: []));
-server.experimental.onCancelTask((taskId, extra) async {
+server.experimental.onCancelTaskWithResult((taskId, extra) async {
   // Cancel the task and return its final cancelled state.
   final cancelled = await store.cancelTask(taskId);
   if (!cancelled) {

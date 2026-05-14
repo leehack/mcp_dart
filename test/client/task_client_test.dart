@@ -221,7 +221,8 @@ void main() {
       expect(tasks[1].taskId, '2');
     });
 
-    test('cancelTask sends cancel request and returns final task', () async {
+    test('cancelTaskWithResult sends cancel request and returns final task',
+        () async {
       mockClient.mockResponse('tasks/cancel', {
         'taskId': 'task-123',
         'status': 'cancelled',
@@ -231,7 +232,7 @@ void main() {
         'ttl': null,
       });
 
-      final task = await taskClient.cancelTask('task-123');
+      final task = await taskClient.cancelTaskWithResult('task-123');
 
       expect(mockClient.requests.last.method, 'tasks/cancel');
       expect(
@@ -243,6 +244,44 @@ void main() {
       expect(task.taskId, 'task-123');
       expect(task.status, TaskStatus.cancelled);
       expect(task.ttl, isNull);
+    });
+
+    test('legacy cancelTask sends cancel request and accepts empty result',
+        () async {
+      mockClient.mockResponse('tasks/cancel', {});
+
+      // ignore: deprecated_member_use_from_same_package
+      await taskClient.cancelTask('task-123');
+
+      expect(mockClient.requests.last.method, 'tasks/cancel');
+      expect(
+        (mockClient.requests.last as JsonRpcCancelTaskRequest)
+            .cancelParams
+            .taskId,
+        'task-123',
+      );
+    });
+
+    test('legacy cancelTask ignores compliant final task result', () async {
+      mockClient.mockResponse('tasks/cancel', {
+        'taskId': 'task-123',
+        'status': 'cancelled',
+        'statusMessage': 'Task cancelled',
+        'createdAt': '2026-05-14T10:00:00Z',
+        'lastUpdatedAt': '2026-05-14T10:05:00Z',
+        'ttl': null,
+      });
+
+      // ignore: deprecated_member_use_from_same_package
+      await taskClient.cancelTask('task-123');
+
+      expect(mockClient.requests.last.method, 'tasks/cancel');
+      expect(
+        (mockClient.requests.last as JsonRpcCancelTaskRequest)
+            .cancelParams
+            .taskId,
+        'task-123',
+      );
     });
 
     test('callToolStream yields error if initial call fails', () async {

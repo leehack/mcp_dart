@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/server/tasks/handler.dart';
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -36,6 +38,50 @@ class MockTransport extends Transport {
   }
 }
 
+class _ResultHandler extends CancelTaskResultHandler {
+  var cancelWithResultCalls = 0;
+
+  @override
+  Future<CreateTaskResult> createTask(
+    Map<String, dynamic>? args,
+    RequestHandlerExtra? extra,
+  ) async =>
+      const CreateTaskResult(
+        task: Task(
+          taskId: 'task1',
+          status: TaskStatus.working,
+          createdAt: '2026-05-14T10:00:00Z',
+          lastUpdatedAt: '2026-05-14T10:00:00Z',
+          ttl: null,
+        ),
+      );
+
+  @override
+  Future<Task> getTask(String taskId, RequestHandlerExtra? extra) async => Task(
+        taskId: taskId,
+        status: TaskStatus.cancelled,
+        createdAt: '2026-05-14T10:00:00Z',
+        lastUpdatedAt: '2026-05-14T10:05:00Z',
+        ttl: null,
+      );
+
+  @override
+  Future<Task> cancelTaskWithResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) async {
+    cancelWithResultCalls++;
+    return getTask(taskId, extra);
+  }
+
+  @override
+  Future<CallToolResult> getTaskResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) async =>
+      const CallToolResult(content: []);
+}
+
 void main() {
   group('McpServer - Tasks API', () {
     late McpServer mcpServer;
@@ -65,7 +111,7 @@ void main() {
           ],
         );
       });
-      mcpServer.experimental.onCancelTask(
+      mcpServer.experimental.onCancelTaskWithResult(
         (taskId, extra) async => Task(
           taskId: taskId,
           status: TaskStatus.cancelled,
@@ -106,7 +152,7 @@ void main() {
 
       mcpServer.experimental
           .onListTasks((extra) async => const ListTasksResult(tasks: []));
-      mcpServer.experimental.onCancelTask((taskId, extra) async {
+      mcpServer.experimental.onCancelTaskWithResult((taskId, extra) async {
         cancelledTaskId = taskId;
         return Task(
           taskId: taskId,
@@ -151,11 +197,68 @@ void main() {
       expect(response.result['lastUpdatedAt'], '2026-05-14T10:05:00Z');
     });
 
+    test('legacy onCancelTask returns final task via onGetTask', () async {
+      var cancelledTaskId = '';
+      Task task = const Task(
+        taskId: 'task123',
+        status: TaskStatus.working,
+        createdAt: '2026-05-14T10:00:00Z',
+        lastUpdatedAt: '2026-05-14T10:00:00Z',
+        ttl: null,
+      );
+
+      mcpServer.experimental
+          .onListTasks((extra) async => const ListTasksResult(tasks: []));
+      // ignore: deprecated_member_use_from_same_package
+      mcpServer.experimental.onCancelTask((taskId, extra) async {
+        cancelledTaskId = taskId;
+        task = Task(
+          taskId: taskId,
+          status: TaskStatus.cancelled,
+          statusMessage: 'Task cancelled',
+          createdAt: task.createdAt,
+          lastUpdatedAt: '2026-05-14T10:05:00Z',
+          ttl: task.ttl,
+        );
+      });
+      mcpServer.experimental.onGetTask((taskId, extra) async => task);
+
+      await mcpServer.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      transport.receiveMessage(
+        JsonRpcCancelTaskRequest(
+          id: 2,
+          cancelParams: const CancelTaskRequestParams(taskId: 'task123'),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(cancelledTaskId, 'task123');
+      final response = transport.sentMessages
+          .whereType<JsonRpcResponse>()
+          .firstWhere((r) => r.id == 2);
+      expect(response.result['taskId'], 'task123');
+      expect(response.result['status'], 'cancelled');
+      expect(response.result, containsPair('ttl', null));
+    });
+
     test('rejects cancel task callback results that are not cancelled',
         () async {
       mcpServer.experimental
           .onListTasks((extra) async => const ListTasksResult(tasks: []));
-      mcpServer.experimental.onCancelTask((taskId, extra) async {
+      mcpServer.experimental.onCancelTaskWithResult((taskId, extra) async {
         return Task(
           taskId: taskId,
           status: TaskStatus.completed,
@@ -199,7 +302,7 @@ void main() {
         () async {
       mcpServer.experimental
           .onListTasks((extra) async => const ListTasksResult(tasks: []));
-      mcpServer.experimental.onCancelTask((taskId, extra) async {
+      mcpServer.experimental.onCancelTaskWithResult((taskId, extra) async {
         return const Task(
           taskId: 'different-task',
           status: TaskStatus.cancelled,
@@ -236,6 +339,16 @@ void main() {
           .firstWhere((r) => r.id == 2);
       expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
       expect(errorResponse.error.message, contains('mismatched taskId'));
+    });
+
+    test('CancelTaskResultHandler legacy method delegates to result method',
+        () async {
+      final handler = _ResultHandler();
+
+      // ignore: deprecated_member_use_from_same_package
+      await handler.cancelTask('task123', null);
+
+      expect(handler.cancelWithResultCalls, 1);
     });
 
     test('throws error if tasks handlers not registered but requested',

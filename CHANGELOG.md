@@ -5,11 +5,19 @@
 - **Task cancellation now returns the final task state**:
   - `tasks/cancel` responses now serialize the cancelled `Task` required by MCP
     2025-11-25 instead of an empty result object.
-  - `CancelTaskCallback`, `ToolTaskHandler.cancelTask`, and
-    `TaskClient.cancelTask` return the cancelled `Task`, so server handlers
-    should return the post-cancellation task state.
-  - `TaskClient.cancelTask` now expects a task-shaped result and will reject
-    older non-compliant servers that still return `{}`.
+  - New spec-compliant APIs expose that result explicitly:
+    `onCancelTaskWithResult`, `CancelTaskCallback`,
+    `CancelTaskResultHandler.cancelTaskWithResult`, and
+    `TaskClient.cancelTaskWithResult` return the cancelled `Task`.
+  - Legacy APIs remain source-compatible for one compatibility window:
+    `onCancelTask`, `ToolTaskHandler.cancelTask`, and `TaskClient.cancelTask`
+    are deprecated shims. The server-side legacy shims still return a full
+    cancelled `Task` on the wire by resolving the post-cancel task through
+    `onGetTask`/`getTask`.
+  - `TaskClient.cancelTaskWithResult` expects a task-shaped result and will
+    reject older non-compliant servers that still return `{}`. Deprecated
+    `TaskClient.cancelTask` remains available when callers intentionally need
+    the legacy empty-result behavior.
   - `Task.fromJson()` requires MCP-required task fields (`createdAt`,
     `lastUpdatedAt`, and `ttl`), and the `Task` constructor now requires
     `ttl`, `createdAt`, and `lastUpdatedAt` so serialization is non-throwing

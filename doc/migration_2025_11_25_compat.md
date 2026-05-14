@@ -11,10 +11,11 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
 - `SamplingMessage.contentBlocks` and `CreateMessageResult.contentBlocks`
   provide normalized list access.
 - `tasks/cancel` returns the final cancelled `Task` as its JSON-RPC result.
-  `onCancelTask`, `ToolTaskHandler.cancelTask`, and `TaskClient.cancelTask`
-  now return that `Task` instead of an empty result. This is a source-breaking
-  change for cancellation handlers, and `TaskClient.cancelTask` now expects a
-  task-shaped result from MCP 2025-11-25-compatible servers.
+  Use `onCancelTaskWithResult`, `CancelTaskResultHandler.cancelTaskWithResult`,
+  and `TaskClient.cancelTaskWithResult` to access the result explicitly.
+  Legacy `onCancelTask`, `ToolTaskHandler.cancelTask`, and
+  `TaskClient.cancelTask` remain available as deprecated compatibility shims for
+  one release window.
 - Task serialization keeps the MCP-required `ttl` field even when it is `null`,
   while omitting optional `pollInterval` when it is not set.
 - The `Task` constructor now requires `ttl`, `createdAt`, and `lastUpdatedAt`,
@@ -122,10 +123,14 @@ server.experimental.onCancelTask((taskId, extra) async {
 await taskClient.cancelTask(taskId);
 ```
 
+The deprecated `onCancelTask` compatibility shim may still be used during the
+migration window, but it must be paired with `onGetTask` so the server can return
+the final cancelled task on the wire.
+
 After:
 
 ```dart
-server.experimental.onCancelTask((taskId, extra) async {
+server.experimental.onCancelTaskWithResult((taskId, extra) async {
   final cancelled = await store.cancelTask(taskId);
   if (!cancelled) {
     throw McpError(
@@ -140,7 +145,7 @@ server.experimental.onCancelTask((taskId, extra) async {
   return task;
 });
 
-final cancelledTask = await taskClient.cancelTask(taskId);
+final cancelledTask = await taskClient.cancelTaskWithResult(taskId);
 ```
 
 Returned cancelled tasks should include the MCP-required task fields:

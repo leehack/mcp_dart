@@ -299,8 +299,8 @@ McpServer createServer() {
     return ListTasksResult(tasks: await taskHandler.listTasks());
   });
 
-  server.experimental.onCancelTask((taskId, extra) async {
-    return await taskHandler.cancelTask(taskId, extra);
+  server.experimental.onCancelTaskWithResult((taskId, extra) async {
+    return await taskHandler.cancelTaskWithResult(taskId, extra);
   });
 
   server.experimental.onGetTask((taskId, extra) async {
@@ -316,7 +316,7 @@ McpServer createServer() {
   return server;
 }
 
-class TestTaskHandler implements ToolTaskHandler {
+class TestTaskHandler extends CancelTaskResultHandler {
   final Map<String, _TaskState> _tasks = {};
   int _counter = 0;
 
@@ -402,7 +402,10 @@ class TestTaskHandler implements ToolTaskHandler {
   }
 
   @override
-  Future<Task> cancelTask(String taskId, RequestHandlerExtra? extra) async {
+  Future<Task> cancelTaskWithResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) async {
     final state = _tasks[taskId];
     if (state == null) {
       throw McpError(ErrorCode.invalidParams.value, 'Task not found');

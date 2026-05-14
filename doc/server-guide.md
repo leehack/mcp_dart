@@ -738,7 +738,7 @@ server.experimental.onListTasks((extra) async {
   );
 });
 
-server.experimental.onCancelTask((taskId, extra) async {
+server.experimental.onCancelTaskWithResult((taskId, extra) async {
   // Logic to cancel the task
   return Task(
     taskId: taskId,

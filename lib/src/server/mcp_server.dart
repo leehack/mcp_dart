@@ -146,6 +146,15 @@ typedef ListTasksCallback = FutureOr<ListTasksResult> Function(
   RequestHandlerExtra extra,
 );
 
+/// Legacy callback to cancel a running task without returning its final state.
+///
+/// Prefer [CancelTaskCallback] for MCP 2025-11-25-compatible `tasks/cancel`
+/// results.
+typedef LegacyCancelTaskCallback = FutureOr<void> Function(
+  String taskId,
+  RequestHandlerExtra extra,
+);
+
 /// Callback to cancel a running task.
 ///
 /// Must return the final cancelled task state for the `tasks/cancel` result.
@@ -779,12 +788,38 @@ class ExperimentalMcpServerTasks {
     _server._ensureTaskHandlersInitialized();
   }
 
-  /// Registers a callback for cancelling a task.
+  /// Registers a legacy callback for cancelling a task.
+  ///
+  /// This keeps pre-MCP-2025-11-25 code source-compatible. The callback should
+  /// cancel the task; the server then calls the registered `onGetTask` callback
+  /// to return the final cancelled [Task] required by `tasks/cancel`.
+  @Deprecated(
+    'MCP 2025-11-25 requires tasks/cancel to return a Task. '
+    'Use onCancelTaskWithResult instead. '
+    'This compatibility shim will be removed in the next major release.',
+  )
+  void onCancelTask(LegacyCancelTaskCallback callback) {
+    _server._cancelTaskCallback = (taskId, extra) async {
+      await Future.value(callback(taskId, extra));
+
+      final getTask = _server._getTaskCallback;
+      if (getTask == null) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          'Legacy onCancelTask requires onGetTask to resolve the cancelled task',
+        );
+      }
+      return Future.value(getTask(taskId, extra));
+    };
+    _server._ensureTaskHandlersInitialized();
+  }
+
+  /// Registers a callback for cancelling a task and returning its final state.
   ///
   /// The callback must cancel the task and return the final cancelled [Task]
   /// used as the `tasks/cancel` result. Throw [McpError] if the task cannot
   /// be cancelled, is missing, or is already terminal.
-  void onCancelTask(CancelTaskCallback callback) {
+  void onCancelTaskWithResult(CancelTaskCallback callback) {
     _server._cancelTaskCallback = callback;
     _server._ensureTaskHandlersInitialized();
   }
