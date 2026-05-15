@@ -42,6 +42,10 @@ extension JsonSchemaValidation on JsonSchema {
         _validateObject(o, data, path);
       case final JsonEnum e:
         _validateEnum(e, data, path);
+      case final JsonConst c:
+        _validateConst(c, data, path);
+      case final JsonUnion u:
+        _validateUnion(u, data, path);
       case final JsonAllOf all:
         _validateAllOf(all, data, path);
       case final JsonAnyOf any:
@@ -50,10 +54,8 @@ extension JsonSchemaValidation on JsonSchema {
         _validateOneOf(one, data, path);
       case final JsonNot not:
         _validateNot(not, data, path);
-      case JsonAny _:
-        // JsonAny validates everything, but might check for specific properties if any
-        // The implementation has 'properties' map, but it's unstructured.
-        break;
+      case final JsonAny any:
+        _validateAny(any, data, path);
     }
   }
 
@@ -326,6 +328,316 @@ extension JsonSchemaValidation on JsonSchema {
     }
   }
 
+  void _validateConst(JsonConst schema, dynamic data, List<String> path) {
+    if (!_deepEquals(schema.value, data)) {
+      throw JsonSchemaValidationException(
+        'Value must equal ${schema.value}',
+        path,
+      );
+    }
+  }
+
+  void _validateUnion(JsonUnion schema, dynamic data, List<String> path) {
+    for (final subSchema in schema.schemas) {
+      try {
+        _validate(subSchema, data, path);
+        return;
+      } on JsonSchemaValidationException {
+        // This branch did not match; keep checking the remaining branches.
+      }
+    }
+    throw JsonSchemaValidationException(
+      'Value does not match any union type',
+      path,
+    );
+  }
+
+  void _validateAny(JsonAny schema, dynamic data, List<String> path) {
+    final keywords = schema.properties;
+
+    _validateTypeKeyword(keywords['type'], data, path);
+
+    if (keywords.containsKey('const')) {
+      _validateConstValue(keywords['const'], data, path);
+    }
+
+    final enumValues = keywords['enum'] ?? keywords['values'];
+    if (enumValues is List) {
+      _validateEnumValues(enumValues, data, path);
+    }
+
+    if (data is String) {
+      _validateString(
+        JsonString.fromJson(
+          _schemaForKeywords(
+            keywords,
+            'string',
+            const ['minLength', 'maxLength', 'pattern', 'format'],
+          ),
+        ),
+        data,
+        path,
+      );
+    }
+    if (data is num) {
+      _validateNumber(
+        JsonNumber.fromJson(
+          _schemaForKeywords(
+            keywords,
+            'number',
+            const [
+              'minimum',
+              'maximum',
+              'exclusiveMinimum',
+              'exclusiveMaximum',
+              'multipleOf',
+            ],
+          ),
+        ),
+        data,
+        path,
+      );
+    }
+    if (data is List) {
+      _validateArray(
+        JsonArray.fromJson(
+          _schemaForKeywords(
+            keywords,
+            'array',
+            const ['items', 'minItems', 'maxItems', 'uniqueItems'],
+          ),
+        ),
+        data,
+        path,
+      );
+    }
+    if (data is Map) {
+      _validateObject(
+        JsonObject.fromJson(
+          _schemaForKeywords(
+            keywords,
+            'object',
+            const [
+              'properties',
+              'required',
+              'additionalProperties',
+              'dependentRequired',
+            ],
+          ),
+        ),
+        data,
+        path,
+      );
+    }
+
+    _validateCompositionKeywords(keywords, data, path);
+  }
+
+  Map<String, dynamic> _schemaForKeywords(
+    Map<String, dynamic> keywords,
+    String type,
+    Iterable<String> keys,
+  ) {
+    return {
+      'type': type,
+      for (final key in keys)
+        if (keywords.containsKey(key)) key: keywords[key],
+    };
+  }
+
+  void _validateTypeKeyword(
+    dynamic typeKeyword,
+    dynamic data,
+    List<String> path,
+  ) {
+    if (typeKeyword is String) {
+      if (_isKnownJsonType(typeKeyword) &&
+          !_matchesJsonType(typeKeyword, data)) {
+        throw JsonSchemaValidationException(
+          'Expected $typeKeyword, got ${data.runtimeType}',
+          path,
+        );
+      }
+      return;
+    }
+
+    if (typeKeyword is List) {
+      final types = typeKeyword.map((type) {
+        if (type is! String || !_isKnownJsonType(type)) {
+          throw JsonSchemaValidationException(
+            'type array entries must be known JSON types',
+            path,
+          );
+        }
+        return type;
+      }).toList();
+      if (types.isEmpty || types.toSet().length != types.length) {
+        throw JsonSchemaValidationException(
+          'type array must contain unique known JSON types',
+          path,
+        );
+      }
+      if (!types.any((type) => _matchesJsonType(type, data))) {
+        throw JsonSchemaValidationException(
+          'Value does not match any allowed type',
+          path,
+        );
+      }
+    }
+  }
+
+  bool _isKnownJsonType(String type) {
+    return const {
+      'string',
+      'number',
+      'integer',
+      'boolean',
+      'null',
+      'array',
+      'object',
+    }.contains(type);
+  }
+
+  bool _matchesJsonType(String type, dynamic data) {
+    return switch (type) {
+      'string' => data is String,
+      'number' => data is num,
+      'integer' => data is int,
+      'boolean' => data is bool,
+      'null' => data == null,
+      'array' => data is List,
+      'object' => data is Map,
+      _ => true,
+    };
+  }
+
+  void _validateConstValue(
+    dynamic expected,
+    dynamic data,
+    List<String> path,
+  ) {
+    if (!_deepEquals(expected, data)) {
+      throw JsonSchemaValidationException(
+        'Value must equal $expected',
+        path,
+      );
+    }
+  }
+
+  void _validateEnumValues(
+    List<dynamic> values,
+    dynamic data,
+    List<String> path,
+  ) {
+    if (!values.any((value) => _deepEquals(value, data))) {
+      throw JsonSchemaValidationException(
+        'Value must be one of $values',
+        path,
+      );
+    }
+  }
+
+  void _validateCompositionKeywords(
+    Map<String, dynamic> keywords,
+    dynamic data,
+    List<String> path,
+  ) {
+    final allOf = keywords['allOf'];
+    if (keywords.containsKey('allOf')) {
+      for (final entry in _compositionSchemaList('allOf', allOf, path)) {
+        _validate(
+          JsonSchema.fromJson(entry),
+          data,
+          path,
+        );
+      }
+    }
+
+    final anyOf = keywords['anyOf'];
+    if (keywords.containsKey('anyOf')) {
+      final matches = _compositionSchemaList('anyOf', anyOf, path).any((entry) {
+        try {
+          _validate(
+            JsonSchema.fromJson(entry),
+            data,
+            path,
+          );
+          return true;
+        } on JsonSchemaValidationException {
+          return false;
+        }
+      });
+      if (!matches) {
+        throw JsonSchemaValidationException(
+          'Value does not match anyOf schemas',
+          path,
+        );
+      }
+    }
+
+    final oneOf = keywords['oneOf'];
+    if (keywords.containsKey('oneOf')) {
+      final matches =
+          _compositionSchemaList('oneOf', oneOf, path).where((entry) {
+        try {
+          _validate(
+            JsonSchema.fromJson(entry),
+            data,
+            path,
+          );
+          return true;
+        } on JsonSchemaValidationException {
+          return false;
+        }
+      }).length;
+      if (matches != 1) {
+        throw JsonSchemaValidationException(
+          'Value matches $matches schemas, expected exactly 1 for oneOf',
+          path,
+        );
+      }
+    }
+
+    final not = keywords['not'];
+    if (keywords.containsKey('not')) {
+      if (not is! Map) {
+        throw JsonSchemaValidationException(
+          'not must be a schema object',
+          path,
+        );
+      }
+      try {
+        _validate(
+          JsonSchema.fromJson(Map<String, dynamic>.from(not)),
+          data,
+          path,
+        );
+      } on JsonSchemaValidationException {
+        return;
+      }
+      throw JsonSchemaValidationException('Value matches not schema', path);
+    }
+  }
+
+  List<Map<String, dynamic>> _compositionSchemaList(
+    String keyword,
+    dynamic value,
+    List<String> path,
+  ) {
+    if (value is! List) {
+      throw JsonSchemaValidationException('$keyword must be a list', path);
+    }
+    return value.map((entry) {
+      if (entry is! Map) {
+        throw JsonSchemaValidationException(
+          '$keyword entries must be schema objects',
+          path,
+        );
+      }
+      return Map<String, dynamic>.from(entry);
+    }).toList();
+  }
+
   void _validateAllOf(JsonAllOf schema, dynamic data, List<String> path) {
     for (final subSchema in schema.schemas) {
       _validate(subSchema, data, path);
@@ -339,7 +651,9 @@ extension JsonSchemaValidation on JsonSchema {
         _validate(subSchema, data, path);
         isValid = true;
         break;
-      } catch (_) {}
+      } on JsonSchemaValidationException {
+        // This branch did not match; keep checking the remaining branches.
+      }
     }
     if (!isValid) {
       throw JsonSchemaValidationException(
@@ -355,7 +669,9 @@ extension JsonSchemaValidation on JsonSchema {
       try {
         _validate(subSchema, data, path);
         validCount++;
-      } catch (_) {}
+      } on JsonSchemaValidationException {
+        // This branch did not match; keep checking the remaining branches.
+      }
     }
     if (validCount != 1) {
       throw JsonSchemaValidationException(
@@ -368,13 +684,10 @@ extension JsonSchemaValidation on JsonSchema {
   void _validateNot(JsonNot schema, dynamic data, List<String> path) {
     try {
       _validate(schema.schema, data, path);
-    } catch (_) {
+    } on JsonSchemaValidationException {
       return;
     }
-    throw JsonSchemaValidationException(
-      'Value matches not schema',
-      path,
-    );
+    throw JsonSchemaValidationException('Value matches not schema', path);
   }
 
   bool _hasUniqueItems(List data) {

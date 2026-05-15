@@ -164,6 +164,21 @@ void main() {
       });
     });
 
+    test('JsonConst serializes correctly', () {
+      final schema = JsonSchema.constValue('DELETE');
+      expect(schema.toJson(), {'const': 'DELETE'});
+    });
+
+    test('JsonUnion serializes simple type arrays correctly', () {
+      final schema = JsonSchema.union([
+        JsonSchema.string(),
+        JsonSchema.nullValue(),
+      ]);
+      expect(schema.toJson(), {
+        'type': ['string', 'null'],
+      });
+    });
+
     test('JsonEnum serializes titled string values compatibly', () {
       const schema = JsonEnum([
         'simple',

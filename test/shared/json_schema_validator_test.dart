@@ -417,6 +417,21 @@ void main() {
         );
       });
 
+      test('validates enum-only schema from map', () {
+        final schema = JsonSchema.fromJson({
+          'enum': [1, 'a', null],
+        });
+
+        schema.validate(1);
+        schema.validate('a');
+        schema.validate(null);
+
+        expect(
+          () => schema.validate('b'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
       test('validates titled enum values against canonical values', () {
         final schema = const JsonEnum([
           'simple',
@@ -428,6 +443,108 @@ void main() {
 
         expect(
           () => schema.validate('Complex Option'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('round-tripped titled non-string enum stays strict', () {
+        const original = JsonEnum([
+          {'value': 1, 'title': 'One'},
+          {'value': true, 'title': 'Enabled'},
+        ]);
+        final schema = JsonSchema.fromJson(original.toJson());
+
+        schema.validate(1);
+        schema.validate(true);
+
+        expect(
+          () => schema.validate('One'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate(false),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('validates titled anyOf enum items against canonical values', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'array',
+          'items': {
+            'anyOf': [
+              {'const': 'red', 'title': 'Red'},
+              {'const': 'blue', 'title': 'Blue'},
+            ],
+          },
+        });
+
+        schema.validate(['red', 'blue']);
+
+        expect(
+          () => schema.validate(['Red']),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+    });
+
+    group('const validation', () {
+      test('validates only the constant value', () {
+        final schema = JsonSchema.fromJson({'const': 'DELETE'});
+
+        schema.validate('DELETE');
+
+        expect(
+          () => schema.validate('delete'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('preserves sibling assertions when parsing const schemas', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'string',
+          'const': 1,
+        });
+
+        expect(
+          () => schema.validate(1),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate('1'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+    });
+
+    group('union validation', () {
+      test('validates type array union schema', () {
+        final schema = JsonSchema.fromJson({
+          'type': ['string', 'null'],
+        });
+
+        schema.validate('value');
+        schema.validate(null);
+
+        expect(
+          () => schema.validate(1),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('preserves top-level constraints around type array unions', () {
+        final schema = JsonSchema.fromJson({
+          'type': ['string', 'null'],
+          'enum': ['a'],
+        });
+
+        schema.validate('a');
+
+        expect(
+          () => schema.validate(null),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate('b'),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
@@ -495,6 +612,116 @@ void main() {
         schema.validate(true);
         expect(
           () => schema.validate("string"),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('preserves sibling assertions around const composition lists', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'string',
+          'oneOf': [
+            {'const': 'a'},
+            {'const': 'bb'},
+          ],
+          'minLength': 2,
+        });
+
+        schema.validate('bb');
+
+        expect(
+          () => schema.validate('a'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('rejects malformed raw composition keywords', () {
+        final schemas = [
+          {
+            'type': 'string',
+            'allOf': ['not a schema'],
+            'minLength': 1,
+          },
+          {
+            'type': 'string',
+            'anyOf': ['not a schema'],
+            'minLength': 1,
+          },
+          {
+            'type': 'string',
+            'oneOf': ['not a schema'],
+            'minLength': 1,
+          },
+          {
+            'type': 'string',
+            'not': 'not a schema',
+            'minLength': 1,
+          },
+        ];
+
+        for (final json in schemas) {
+          final schema = JsonSchema.fromJson(json);
+          expect(
+            () => schema.validate('value'),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+        }
+      });
+
+      test('rejects malformed raw type arrays', () {
+        final schemas = [
+          {
+            'type': ['string', 1],
+          },
+          {
+            'type': ['string', 'bogus'],
+          },
+          {'type': <String>[]},
+          {
+            'type': ['string', 'string'],
+          },
+          {
+            'type': ['string', 1],
+            'enum': ['value'],
+          },
+        ];
+
+        for (final json in schemas) {
+          final schema = JsonSchema.fromJson(json);
+          expect(schema.toJson(), json);
+          expect(
+            () => schema.validate('value'),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+        }
+      });
+
+      test('validates mixed typed enum schemas conjunctively', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'string',
+          'enum': ['a', null],
+        });
+
+        schema.validate('a');
+        expect(
+          () => schema.validate(null),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate('b'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('preserves exact oneOf semantics for duplicate const branches', () {
+        final schema = JsonSchema.fromJson({
+          'oneOf': [
+            {'const': 'duplicate'},
+            {'const': 'duplicate'},
+          ],
+        });
+
+        expect(
+          () => schema.validate('duplicate'),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });

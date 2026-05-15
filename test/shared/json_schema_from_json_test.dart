@@ -22,6 +22,16 @@ void main() {
       expect(s.enumValues, ['a', 'b']);
     });
 
+    test('preserves mixed typed enum schemas conjunctively', () {
+      final json = {
+        'type': 'string',
+        'enum': ['a', null],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonAny>());
+      expect(schema.toJson(), json);
+    });
+
     test('parses legacy enum schema', () {
       final json = {
         'type': 'enum',
@@ -31,6 +41,87 @@ void main() {
       expect(schema, isA<JsonEnum>());
       final s = schema as JsonEnum;
       expect(s.values, ['simple', 'complex']);
+    });
+
+    test('parses enum-only schema', () {
+      final json = {
+        'enum': [1, 'a', null],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonEnum>());
+      final s = schema as JsonEnum;
+      expect(s.values, [1, 'a', null]);
+      expect(s.toJson(), json);
+    });
+
+    test('parses const schema', () {
+      final json = {'const': 'DELETE'};
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonConst>());
+      final s = schema as JsonConst;
+      expect(s.value, 'DELETE');
+      expect(s.toJson(), json);
+    });
+
+    test('parses type array union schema', () {
+      final json = {
+        'type': ['string', 'null'],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonUnion>());
+      final s = schema as JsonUnion;
+      expect(s.schemas[0], isA<JsonString>());
+      expect(s.schemas[1], isA<JsonNull>());
+      expect(s.toJson(), json);
+    });
+
+    test('parses titled enum const schemas', () {
+      final json = {
+        'oneOf': [
+          {'const': 1, 'title': 'One'},
+          {'const': true, 'title': 'Enabled'},
+        ],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonEnum>());
+      expect(schema.toJson(), json);
+    });
+
+    test('parses titled string enum const schemas from MCP elicitation', () {
+      final json = {
+        'type': 'string',
+        'oneOf': [
+          {
+            'const': 'red',
+            'title': 'Red',
+            'description': 'Primary red option',
+          },
+          {'const': 'blue', 'title': 'Blue', 'default': 'blue'},
+        ],
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonEnum>());
+      final s = schema as JsonEnum;
+      expect(s.normalizedValues, ['red', 'blue']);
+      expect(s.toJson(), json);
+    });
+
+    test('parses titled array enum items from MCP elicitation', () {
+      final json = {
+        'type': 'array',
+        'items': {
+          'anyOf': [
+            {'const': 'red', 'title': 'Red'},
+            {'const': 'blue', 'title': 'Blue'},
+          ],
+        },
+      };
+      final schema = JsonSchema.fromJson(json);
+      expect(schema, isA<JsonArray>());
+      final array = schema as JsonArray;
+      expect(array.items, isA<JsonEnum>());
+      expect((array.items! as JsonEnum).normalizedValues, ['red', 'blue']);
+      expect(array.toJson(), json);
     });
 
     test('parses number schema', () {
@@ -261,6 +352,104 @@ void main() {
         properties: {'name': JsonSchema.string()},
         additionalProperties: false,
       );
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('const round trip', () {
+      final original = JsonSchema.constValue('DELETE');
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('type array union round trip', () {
+      final original = JsonSchema.union([
+        JsonSchema.string(),
+        JsonSchema.nullValue(),
+      ]);
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('type array union with sibling constraints preserves wire shape', () {
+      final json = {
+        'title': 'Optional mode',
+        'description':
+            'Official JSON Schema allows assertions beside type arrays',
+        'type': ['string', 'null'],
+        'enum': ['auto', null],
+        'default': 'auto',
+      };
+
+      final parsed = JsonSchema.fromJson(json);
+
+      expect(parsed.toJson(), json);
+    });
+
+    test('explicit null defaults preserve parsed wire shape', () {
+      final schemas = [
+        {
+          'type': 'string',
+          'default': null,
+        },
+        {
+          'const': 'DELETE',
+          'default': null,
+        },
+        {
+          'type': ['string', 'null'],
+          'enum': ['auto', null],
+          'default': null,
+        },
+        {
+          'oneOf': [
+            {'const': 'short', 'title': 'Short'},
+            {'const': 'longer', 'title': 'Longer'},
+          ],
+          'default': null,
+        },
+      ];
+
+      for (final json in schemas) {
+        expect(JsonSchema.fromJson(json).toJson(), json);
+      }
+    });
+
+    test('composition schema with sibling assertions preserves wire shape', () {
+      final json = {
+        'type': 'string',
+        'oneOf': [
+          {'const': 'short', 'title': 'Short'},
+          {'const': 'longer', 'title': 'Longer'},
+        ],
+        'minLength': 5,
+      };
+
+      final parsed = JsonSchema.fromJson(json);
+
+      expect(parsed.toJson(), json);
+    });
+
+    test('const schema with sibling assertions preserves wire shape', () {
+      final json = {
+        'type': 'string',
+        'const': 'DELETE',
+        'minLength': 6,
+      };
+
+      final parsed = JsonSchema.fromJson(json);
+
+      expect(parsed.toJson(), json);
+    });
+
+    test('titled non-string enum round trip', () {
+      const original = JsonEnum([
+        {'value': 1, 'title': 'One'},
+        {'value': true, 'title': 'Enabled'},
+      ]);
       final json = original.toJson();
       final parsed = JsonSchema.fromJson(json);
       expect(parsed.toJson(), json);
