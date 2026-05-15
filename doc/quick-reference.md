@@ -126,6 +126,12 @@ server.registerResourceTemplate(
   ResourceTemplateRegistration(
     'users://{userId}/profile',
     listCallback: null,
+    completeCallbacksWithContext: {
+      'userId': (value, context) async => suggestUsers(
+        prefix: value,
+        organization: context?.arguments?['organization'],
+      ),
+    },
   ),
   null,
   (uri, vars, extra) async {
@@ -198,6 +204,15 @@ server.registerPrompt(
       type: String,
       description: 'Argument description',
       required: true,
+      completable: CompletableField(
+        def: CompletableDef(
+          complete: (value) async => suggestValues(value),
+          completeWithContext: (value, context) async => suggestValues(
+            value,
+            previousArgs: context?.arguments,
+          ),
+        ),
+      ),
     ),
   },
   callback: (args, extra) async {
@@ -217,9 +232,31 @@ server.registerPrompt(
 
 ```dart
 server.experimental.onListTasks((extra) async => ListTasksResult(tasks: []));
-server.experimental.onCancelTask((taskId, extra) async { /* cancel */ });
-server.experimental.onGetTask((taskId, extra) async { /* get */ });
-server.experimental.onTaskResult((taskId, extra) async { /* result */ });
+server.experimental.onCancelTaskWithResult((taskId, extra) async {
+  // Cancel the task and return its final cancelled state.
+  final cancelled = await store.cancelTask(taskId);
+  if (!cancelled) {
+    throw McpError(
+      ErrorCode.invalidParams.value,
+      'Cannot cancel task: not found or already terminal',
+    );
+  }
+  final task = await store.getTask(taskId);
+  if (task == null) {
+    throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+  }
+  return task;
+});
+server.experimental.onGetTask((taskId, extra) async {
+  final task = await store.getTask(taskId);
+  if (task == null) {
+    throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+  }
+  return task;
+});
+server.experimental.onTaskResult((taskId, extra) async {
+  return await store.getTaskResult(taskId);
+});
 ```
 
 ### Connect Transport

@@ -64,16 +64,19 @@ class Task implements BaseResultData {
   final String? statusMessage;
 
   /// Time in milliseconds from creation before task may be deleted.
+  ///
+  /// Required by the MCP schema. A null value is serialized explicitly as
+  /// `"ttl": null` when the task has no expiry.
   final int? ttl;
 
   /// Suggested time in milliseconds between status checks.
   final int? pollInterval;
 
   /// ISO 8601 timestamp when the task was created.
-  final String? createdAt;
+  final String createdAt;
 
   /// ISO 8601 timestamp when the task status was last updated.
-  final String? lastUpdatedAt;
+  final String lastUpdatedAt;
 
   /// Optional metadata.
   @override
@@ -82,24 +85,27 @@ class Task implements BaseResultData {
   const Task({
     required this.taskId,
     required this.status,
+    required this.ttl,
+    required this.createdAt,
+    required this.lastUpdatedAt,
     this.statusMessage,
-    this.ttl,
     this.pollInterval,
-    this.createdAt,
-    this.lastUpdatedAt,
     this.meta,
   });
 
   factory Task.fromJson(Map<String, dynamic> json) {
+    final createdAt = _readRequiredTaskString(json, 'createdAt');
+    final lastUpdatedAt = _readRequiredTaskString(json, 'lastUpdatedAt');
+
     final meta = json['_meta'] as Map<String, dynamic>?;
     return Task(
       taskId: json['taskId'] as String,
       status: TaskStatusName.fromString(json['status'] as String),
       statusMessage: json['statusMessage'] as String?,
-      ttl: json['ttl'] as int?,
-      pollInterval: json['pollInterval'] as int?,
-      createdAt: json['createdAt'] as String?,
-      lastUpdatedAt: json['lastUpdatedAt'] as String?,
+      ttl: _readTaskInt(json, 'ttl', requiredField: true),
+      pollInterval: _readTaskInt(json, 'pollInterval'),
+      createdAt: createdAt,
+      lastUpdatedAt: lastUpdatedAt,
       meta: meta,
     );
   }
@@ -110,11 +116,42 @@ class Task implements BaseResultData {
         'status': status.name,
         if (statusMessage != null) 'statusMessage': statusMessage,
         'ttl': ttl,
-        'pollInterval': pollInterval,
-        if (createdAt != null) 'createdAt': createdAt,
-        if (lastUpdatedAt != null) 'lastUpdatedAt': lastUpdatedAt,
+        if (pollInterval != null) 'pollInterval': pollInterval,
+        'createdAt': createdAt,
+        'lastUpdatedAt': lastUpdatedAt,
         if (meta != null) '_meta': meta,
       };
+}
+
+String _readRequiredTaskString(Map<String, dynamic> json, String field) {
+  if (!json.containsKey(field)) {
+    throw FormatException('Task.$field is required');
+  }
+  final value = json[field];
+  if (value is! String) {
+    throw FormatException('Task.$field must be a string');
+  }
+  return value;
+}
+
+int? _readTaskInt(
+  Map<String, dynamic> json,
+  String field, {
+  bool requiredField = false,
+}) {
+  if (!json.containsKey(field)) {
+    if (requiredField) {
+      throw FormatException('Task.$field is required');
+    }
+    return null;
+  }
+
+  final value = json[field];
+  if (value == null || value is int) {
+    return value as int?;
+  }
+
+  throw FormatException('Task.$field must be an integer or null');
 }
 
 /// Parameters for the `tasks/list` request. Includes pagination.

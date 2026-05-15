@@ -467,8 +467,8 @@ class McpService {
   Future<void> cancelTask(String taskId) async {
     _ensureConnected();
     try {
-      await _taskClient!.cancelTask(taskId);
-      _emitLog(McpLogLevel.info, 'Cancelled task: $taskId');
+      final task = await _taskClient!.cancelTaskWithResult(taskId);
+      _emitLog(McpLogLevel.info, 'Cancelled task: ${task.taskId}');
     } catch (e) {
       _emitLog(McpLogLevel.error, 'Failed to cancel task: $e');
       rethrow;

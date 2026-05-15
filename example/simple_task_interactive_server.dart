@@ -94,7 +94,7 @@ class InteractiveServer {
       return await handler.handle(taskId);
     });
 
-    server.experimental.onCancelTask((taskId, extra) async {
+    server.experimental.onCancelTaskWithResult((taskId, extra) async {
       print('[Server] tasks/cancel called for task $taskId');
       final cancelled = await store.cancelTask(taskId);
       if (!cancelled) {
@@ -103,6 +103,11 @@ class InteractiveServer {
           "Cannot cancel task: not found or already terminal",
         );
       }
+      final task = await store.getTask(taskId);
+      if (task == null) {
+        throw McpError(ErrorCode.invalidParams.value, "Task not found");
+      }
+      return task;
     });
 
     // Register Tools
@@ -334,7 +339,7 @@ class InteractiveServer {
   }
 }
 
-class SimpleToolTaskHandler implements ToolTaskHandler {
+class SimpleToolTaskHandler extends CancelTaskResultHandler {
   final SessionContext context;
   final String toolName;
   final Future<void> Function(SessionContext, String, Map<String, dynamic>)
@@ -371,8 +376,22 @@ class SimpleToolTaskHandler implements ToolTaskHandler {
   }
 
   @override
-  Future<void> cancelTask(String taskId, RequestHandlerExtra? extra) async {
-    await context.store.cancelTask(taskId);
+  Future<Task> cancelTaskWithResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) async {
+    final cancelled = await context.store.cancelTask(taskId);
+    if (!cancelled) {
+      throw McpError(
+        ErrorCode.invalidParams.value,
+        'Cannot cancel task: not found or already terminal',
+      );
+    }
+    final task = await context.store.getTask(taskId);
+    if (task == null) {
+      throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+    }
+    return task;
   }
 
   @override

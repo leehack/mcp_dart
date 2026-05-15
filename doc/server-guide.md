@@ -443,6 +443,41 @@ server.registerResourceTemplate(
 );
 ```
 
+### Resource Template Completions
+
+Resource template completion callbacks can use `CompletionContext.arguments` to
+tailor suggestions based on other arguments the client already collected:
+
+```dart
+server.registerResourceTemplate(
+  'User Profile',
+  ResourceTemplateRegistration(
+    'users://{organization}/{userId}/profile',
+    listCallback: null,
+    completeCallbacksWithContext: {
+      'userId': (currentValue, context) async {
+        final organization = context?.arguments?['organization'];
+        return directory
+            .suggestUsers(organization: organization, prefix: currentValue);
+      },
+    },
+  ),
+  null,
+  (uri, vars, extra) async {
+    final profile = await database.getUserProfile(vars['userId']);
+    return ReadResourceResult(
+      contents: [
+        TextResourceContents(
+          uri: uri.toString(),
+          text: jsonEncode(profile),
+          mimeType: 'application/json',
+        ),
+      ],
+    );
+  },
+);
+```
+
 ### Multiple URI Template Variables
 
 ```dart
@@ -628,6 +663,44 @@ server.registerPrompt(
 );
 ```
 
+### Prompt Argument Completions
+
+Prompt argument completions can also receive the request context. Use
+`completeWithContext` when suggestions depend on other prompt arguments:
+
+```dart
+server.registerPrompt(
+  'translate',
+  description: 'Generate translation prompt',
+  argsSchema: {
+    'source_language': PromptArgumentDefinition(type: String),
+    'target_language': PromptArgumentDefinition(
+      type: String,
+      completable: CompletableField(
+        def: CompletableDef(
+          complete: (value) async => languageCatalog.suggest(value),
+          completeWithContext: (value, context) async {
+            final sourceLanguage = context?.arguments?['source_language'];
+            return languageCatalog.suggestTargets(
+              prefix: value,
+              sourceLanguage: sourceLanguage,
+            );
+          },
+        ),
+      ),
+    ),
+  },
+  callback: (args, extra) async => GetPromptResult(
+    messages: [
+      PromptMessage(
+        role: PromptMessageRole.user,
+        content: TextContent(text: 'Translate using $args'),
+      ),
+    ],
+  ),
+);
+```
+
 ### Multi-Message Prompts
 
 ```dart
@@ -729,16 +802,25 @@ server.experimental.onListTasks((extra) async {
       Task(
         taskId: 'task-1',
         status: TaskStatus.working,
+        statusMessage: 'Long operation is running',
+        ttl: null,
         createdAt: DateTime.now().toIso8601String(),
-        name: 'Long Operation',
-        description: 'A task that takes a long time',
+        lastUpdatedAt: DateTime.now().toIso8601String(),
       ),
     ],
   );
 });
 
-server.experimental.onCancelTask((taskId, extra) async {
+server.experimental.onCancelTaskWithResult((taskId, extra) async {
   // Logic to cancel the task
+  return Task(
+    taskId: taskId,
+    status: TaskStatus.cancelled,
+    statusMessage: 'Task cancelled',
+    ttl: null,
+    createdAt: DateTime.now().toIso8601String(),
+    lastUpdatedAt: DateTime.now().toIso8601String(),
+  );
 });
 
 server.experimental.onGetTask((taskId, extra) async {
@@ -746,7 +828,9 @@ server.experimental.onGetTask((taskId, extra) async {
   return Task(
     taskId: taskId,
     status: TaskStatus.working,
+    ttl: null,
     createdAt: DateTime.now().toIso8601String(),
+    lastUpdatedAt: DateTime.now().toIso8601String(),
   );
 });
 

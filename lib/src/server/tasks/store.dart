@@ -28,14 +28,13 @@ class InMemoryTaskStore implements TaskStore {
       for (final entry in _tasks.entries) {
         final task = entry.value;
         final ttl = task.ttl;
-        final createdAt = task.createdAt;
-        if (ttl == null || createdAt == null) {
+        if (ttl == null) {
           continue;
         }
 
         final DateTime created;
         try {
-          created = DateTime.parse(createdAt);
+          created = DateTime.parse(task.createdAt);
         } on FormatException {
           continue;
         }

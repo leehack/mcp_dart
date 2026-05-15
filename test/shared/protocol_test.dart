@@ -566,6 +566,258 @@ void main() {
       expect(result.value, 'response-data');
     });
 
+    test('progress notifications keep request alive when reset is enabled',
+        () async {
+      await protocol.connect(transport);
+
+      final progressUpdates = <Progress>[];
+      final requestFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 'keep-alive-token'},
+            ),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(
+              onprogress: progressUpdates.add,
+              timeout: const Duration(milliseconds: 60),
+              resetTimeoutOnProgress: true,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(transport.sentMessages, hasLength(1));
+      final sentRequest = transport.sentMessages.single as JsonRpcRequest;
+
+      for (final progress in [25.0, 50.0, 75.0]) {
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        transport.receiveMessage(
+          JsonRpcProgressNotification(
+            progressParams: ProgressNotification(
+              progressToken: 'keep-alive-token',
+              progress: progress,
+            ),
+          ),
+        );
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: sentRequest.id,
+          result: {'value': 'completed-after-progress'},
+        ),
+      );
+
+      final result = await requestFuture;
+      expect(result.value, 'completed-after-progress');
+      expect(
+        progressUpdates.map((progress) => progress.progress),
+        [25, 50, 75],
+      );
+    });
+
+    test('progress notifications do not reset timeout when disabled', () async {
+      await protocol.connect(transport);
+
+      final requestFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 'no-reset-token'},
+            ),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(
+              onprogress: (_) {},
+              timeout: const Duration(milliseconds: 80),
+              resetTimeoutOnProgress: false,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 'no-reset-token',
+            progress: 50,
+          ),
+        ),
+      );
+
+      await expectLater(
+        requestFuture,
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.requestTimeout.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('timed out'),
+              ),
+        ),
+      );
+    });
+
+    test('maxTotalTimeout aborts despite progress notifications', () async {
+      await protocol.connect(transport);
+
+      final progressTimer = Timer.periodic(
+        const Duration(milliseconds: 30),
+        (_) {
+          transport.receiveMessage(
+            JsonRpcProgressNotification(
+              progressParams: const ProgressNotification(
+                progressToken: 'max-total-token',
+                progress: 1,
+              ),
+            ),
+          );
+        },
+      );
+      addTearDown(progressTimer.cancel);
+
+      final requestFuture = protocol.request<TestResult>(
+        const JsonRpcRequest(
+          id: 0,
+          method: 'test/method',
+          meta: {'progressToken': 'max-total-token'},
+        ),
+        (json) => TestResult(value: json['value'] as String),
+        RequestOptions(
+          onprogress: (_) {},
+          timeout: const Duration(seconds: 1),
+          resetTimeoutOnProgress: false,
+          maxTotalTimeout: const Duration(milliseconds: 120),
+        ),
+      );
+
+      await expectLater(
+        requestFuture.timeout(const Duration(milliseconds: 500)),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.requestTimeout.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('timed out'),
+              ),
+        ),
+      );
+    });
+
+    test('maxTotalTimeout caps progress-based timeout resets', () async {
+      await protocol.connect(transport);
+
+      final progressUpdates = <Progress>[];
+      final requestFuture = protocol.request<TestResult>(
+        const JsonRpcRequest(
+          id: 0,
+          method: 'test/method',
+          meta: {'progressToken': 'capped-reset-token'},
+        ),
+        (json) => TestResult(value: json['value'] as String),
+        RequestOptions(
+          onprogress: progressUpdates.add,
+          timeout: const Duration(seconds: 1),
+          resetTimeoutOnProgress: true,
+          maxTotalTimeout: const Duration(milliseconds: 120),
+        ),
+      );
+
+      final progressTimer = Timer.periodic(
+        const Duration(milliseconds: 30),
+        (_) {
+          transport.receiveMessage(
+            JsonRpcProgressNotification(
+              progressParams: const ProgressNotification(
+                progressToken: 'capped-reset-token',
+                progress: 1,
+              ),
+            ),
+          );
+        },
+      );
+      addTearDown(progressTimer.cancel);
+
+      await expectLater(
+        requestFuture.timeout(const Duration(milliseconds: 500)),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.requestTimeout.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('timed out'),
+              ),
+        ),
+      );
+      expect(progressUpdates, isNotEmpty);
+    });
+
+    test('custom progress token can be reused after timeout cleanup', () async {
+      await protocol.connect(transport);
+
+      final firstFuture = protocol.request<TestResult>(
+        const JsonRpcRequest(
+          id: 0,
+          method: 'test/method',
+          meta: {'progressToken': 'reusable-after-timeout'},
+        ),
+        (json) => TestResult(value: json['value'] as String),
+        RequestOptions(
+          onprogress: (_) {},
+          timeout: const Duration(milliseconds: 50),
+        ),
+      );
+
+      await expectLater(
+        firstFuture.timeout(const Duration(seconds: 5)),
+        throwsA(isA<McpError>()),
+      );
+
+      final secondFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 'reusable-after-timeout'},
+            ),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(
+              onprogress: (_) {},
+              timeout: const Duration(seconds: 1),
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      final sentRequests = transport.sentMessages.whereType<JsonRpcRequest>();
+      expect(sentRequests, hasLength(2));
+      final secondRequest = sentRequests.last;
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: secondRequest.id,
+          result: {'value': 'reused'},
+        ),
+      );
+
+      expect((await secondFuture).value, 'reused');
+    });
+
     test('rejects duplicate progress tokens for in-flight requests', () async {
       await protocol.connect(transport);
 

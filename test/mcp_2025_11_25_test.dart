@@ -393,6 +393,7 @@ void main() {
         taskId: '123',
         status: TaskStatus.working,
         createdAt: '2025-01-01T00:00:00Z',
+        lastUpdatedAt: '2025-01-01T00:01:00Z',
         ttl: 3600,
       );
       expect(task.status, TaskStatus.working);
@@ -582,6 +583,7 @@ void main() {
             ttl: 7200,
             pollInterval: 1000,
             createdAt: '2025-01-15T10:00:00Z',
+            lastUpdatedAt: '2025-01-15T10:01:00Z',
           ),
         );
 
@@ -629,6 +631,9 @@ void main() {
             taskId: 'task-status-456',
             status: TaskStatus.failed,
             statusMessage: 'Task failed due to error',
+            createdAt: '2025-01-15T10:00:00Z',
+            lastUpdatedAt: '2025-01-15T10:05:00Z',
+            ttl: null,
           ),
         );
 
@@ -654,6 +659,9 @@ void main() {
             'taskId': 'task-abc',
             'status': 'input_required',
             'statusMessage': 'Waiting for user input',
+            'createdAt': '2025-01-15T10:00:00Z',
+            'lastUpdatedAt': '2025-01-15T10:05:00Z',
+            'ttl': null,
           },
         };
         final message = JsonRpcMessage.fromJson(json);
@@ -731,6 +739,101 @@ void main() {
         expect(
           () => TaskStatusName.fromString('invalid_status'),
           throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('Task omits null optional pollInterval but keeps required ttl', () {
+        final task = const Task(
+          taskId: 'cancelled-task',
+          status: TaskStatus.cancelled,
+          ttl: null,
+          createdAt: '2025-01-15T10:00:00Z',
+          lastUpdatedAt: '2025-01-15T10:01:00Z',
+        );
+
+        final json = task.toJson();
+        expect(json, containsPair('ttl', null));
+        expect(json, isNot(contains('pollInterval')));
+      });
+
+      test('Task rejects missing MCP-required fields', () {
+        expect(
+          () => Task.fromJson({
+            'taskId': 'missing-ttl',
+            'status': 'working',
+            'createdAt': '2025-01-15T10:00:00Z',
+            'lastUpdatedAt': '2025-01-15T10:01:00Z',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Task.fromJson({
+            'taskId': 'missing-created-at',
+            'status': 'working',
+            'ttl': null,
+            'lastUpdatedAt': '2025-01-15T10:01:00Z',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Task.fromJson({
+            'taskId': 'missing-last-updated-at',
+            'status': 'working',
+            'ttl': null,
+            'createdAt': '2025-01-15T10:00:00Z',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('Task rejects malformed field types with FormatException', () {
+        final validJson = {
+          'taskId': 'typed-task',
+          'status': 'working',
+          'ttl': null,
+          'createdAt': '2025-01-15T10:00:00Z',
+          'lastUpdatedAt': '2025-01-15T10:01:00Z',
+        };
+
+        expect(
+          () => Task.fromJson({...validJson, 'createdAt': 42}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.createdAt must be a string',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson, 'lastUpdatedAt': false}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.lastUpdatedAt must be a string',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson, 'ttl': 1.5}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.ttl must be an integer or null',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson, 'pollInterval': '1000'}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.pollInterval must be an integer or null',
+            ),
+          ),
         );
       });
 

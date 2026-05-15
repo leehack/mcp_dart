@@ -57,7 +57,7 @@ class CompletableDef {
     this.completeWithContext,
   });
 
-  FutureOr<List<String>> completeValue(
+  FutureOr<List<String>> _completeValue(
     String value,
     CompletionContext? context,
   ) {
@@ -176,8 +176,19 @@ typedef ListTasksCallback = FutureOr<ListTasksResult> Function(
   RequestHandlerExtra extra,
 );
 
+/// Legacy callback to cancel a running task without returning its final state.
+///
+/// Prefer [CancelTaskCallback] for MCP 2025-11-25-compatible `tasks/cancel`
+/// results.
+typedef LegacyCancelTaskCallback = FutureOr<void> Function(
+  String taskId,
+  RequestHandlerExtra extra,
+);
+
 /// Callback to cancel a running task.
-typedef CancelTaskCallback = FutureOr<void> Function(
+///
+/// Must return the final cancelled task state for the `tasks/cancel` result.
+typedef CancelTaskCallback = FutureOr<Task> Function(
   String taskId,
   RequestHandlerExtra extra,
 );
@@ -221,7 +232,7 @@ class ResourceTemplateRegistration {
     return completeCallbacks?[variableName];
   }
 
-  FutureOr<List<String>>? completeVariable(
+  FutureOr<List<String>>? _completeVariable(
     String variableName,
     String currentValue,
     CompletionContext? context,
@@ -826,8 +837,38 @@ class ExperimentalMcpServerTasks {
     _server._ensureTaskHandlersInitialized();
   }
 
-  /// Registers a callback for cancelling a task.
-  void onCancelTask(CancelTaskCallback callback) {
+  /// Registers a legacy callback for cancelling a task.
+  ///
+  /// This keeps pre-MCP-2025-11-25 code source-compatible. The callback should
+  /// cancel the task; the server then calls the registered `onGetTask` callback
+  /// to return the final cancelled [Task] required by `tasks/cancel`.
+  @Deprecated(
+    'MCP 2025-11-25 requires tasks/cancel to return a Task. '
+    'Use onCancelTaskWithResult instead. '
+    'This compatibility shim will be removed in the next major release.',
+  )
+  void onCancelTask(LegacyCancelTaskCallback callback) {
+    _server._cancelTaskCallback = (taskId, extra) async {
+      await Future.value(callback(taskId, extra));
+
+      final getTask = _server._getTaskCallback;
+      if (getTask == null) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          'Legacy onCancelTask requires onGetTask to resolve the cancelled task',
+        );
+      }
+      return Future.value(getTask(taskId, extra));
+    };
+    _server._ensureTaskHandlersInitialized();
+  }
+
+  /// Registers a callback for cancelling a task and returning its final state.
+  ///
+  /// The callback must cancel the task and return the final cancelled [Task]
+  /// used as the `tasks/cancel` result. Throw [McpError] if the task cannot
+  /// be cancelled, is missing, or is already terminal.
+  void onCancelTaskWithResult(CancelTaskCallback callback) {
     _server._cancelTaskCallback = callback;
     _server._ensureTaskHandlersInitialized();
   }
@@ -1000,10 +1041,22 @@ class McpServer {
             "Task cancellation not supported",
           );
         }
-        await Future.value(
+        final task = await Future.value(
           _cancelTaskCallback!(request.cancelParams.taskId, extra),
         );
-        return const EmptyResult();
+        if (task.taskId != request.cancelParams.taskId) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Cancelled task result has mismatched taskId",
+          );
+        }
+        if (task.status != TaskStatus.cancelled) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Task cancellation callback must return a cancelled task",
+          );
+        }
+        return task;
       },
       (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({
         'id': id,
@@ -1234,7 +1287,7 @@ class McpServer {
     if (completer == null) return _emptyCompletionResult();
     try {
       return _createCompletionResult(
-        await completer.completeValue(argInfo.value, context),
+        await completer._completeValue(argInfo.value, context),
       );
     } catch (e) {
       _logger.warn(
@@ -1259,7 +1312,8 @@ class McpServer {
     if (!templateEntry.value.enabled) return _emptyCompletionResult();
 
     try {
-      final completions = templateEntry.value.resourceTemplate.completeVariable(
+      final completions =
+          templateEntry.value.resourceTemplate._completeVariable(
         argInfo.name,
         argInfo.value,
         context,

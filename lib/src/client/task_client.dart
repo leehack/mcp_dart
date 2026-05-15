@@ -175,7 +175,13 @@ class TaskClient {
     return result.tasks;
   }
 
-  /// Cancel a task by ID
+  /// Cancel a task by ID and ignore the returned final state.
+  ///
+  /// Prefer [cancelTaskWithResult] for MCP 2025-11-25-compatible clients.
+  @Deprecated(
+    'MCP 2025-11-25 tasks/cancel returns a Task. '
+    'Use cancelTaskWithResult instead.',
+  )
   Future<void> cancelTask(String taskId) async {
     final req = JsonRpcCancelTaskRequest(
       id: -1,
@@ -184,6 +190,18 @@ class TaskClient {
     await client.request<EmptyResult>(
       req,
       (json) => const EmptyResult(),
+    );
+  }
+
+  /// Cancel a task by ID and return its final cancelled state.
+  Future<Task> cancelTaskWithResult(String taskId) async {
+    final req = JsonRpcCancelTaskRequest(
+      id: -1,
+      cancelParams: CancelTaskRequest(taskId: taskId),
+    );
+    return client.request<Task>(
+      req,
+      (json) => Task.fromJson(json),
     );
   }
 }
