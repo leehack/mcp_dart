@@ -291,6 +291,156 @@ void main() {
       );
     });
 
+    test(
+        'client connect retries initialization without stale session ID after 404',
+        () async {
+      const staleSessionId = 'stale-session-id';
+      const newSessionId = 'new-session-id';
+      final initializeSessionHeaders = <String?>[];
+      final initializedSessionHeaders = <String?>[];
+      var initializeCount = 0;
+      var initializedNotificationCount = 0;
+
+      final retryServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => retryServer.close(force: true));
+      final retryUrl = Uri.parse('http://localhost:${retryServer.port}/mcp');
+
+      retryServer.listen((request) async {
+        if (request.uri.path != '/mcp') {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        if (request.method != 'POST') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        final sessionHeader = request.headers.value('mcp-session-id');
+        final body = await utf8.decoder.bind(request).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        if (json['method'] == 'initialize') {
+          initializeSessionHeaders.add(sessionHeader);
+          if (sessionHeader == staleSessionId) {
+            request.response.statusCode = HttpStatus.notFound;
+            request.response.write('Session not found');
+            await request.response.close();
+            return;
+          }
+
+          initializeCount += 1;
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set('mcp-session-id', newSessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: json['id'],
+                result: const InitializeResult(
+                  protocolVersion: latestProtocolVersion,
+                  capabilities: ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'RetrySessionServer',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'notifications/initialized') {
+          initializedNotificationCount += 1;
+          initializedSessionHeaders.add(sessionHeader);
+          request.response.statusCode = HttpStatus.accepted;
+          request.response.headers.set('mcp-session-id', newSessionId);
+          await request.response.close();
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.badRequest;
+        await request.response.close();
+      });
+
+      final client = McpClient(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+      transport = StreamableHttpClientTransport(
+        retryUrl,
+        opts: const StreamableHttpClientTransportOptions(
+          sessionId: staleSessionId,
+        ),
+      );
+
+      await client.connect(transport);
+
+      expect(initializeCount, 1);
+      expect(initializedNotificationCount, 1);
+      expect(initializeSessionHeaders, [staleSessionId, null]);
+      expect(initializedSessionHeaders, [newSessionId]);
+      expect(transport.sessionId, newSessionId);
+      expect(client.getServerVersion()?.name, 'RetrySessionServer');
+    });
+
+    test('send reports retry failure only once after stale session 404',
+        () async {
+      const staleSessionId = 'stale-session-id';
+      var requestCount = 0;
+      final errors = <Error>[];
+
+      final retryServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => retryServer.close(force: true));
+      final retryUrl = Uri.parse('http://localhost:${retryServer.port}/mcp');
+
+      retryServer.listen((request) async {
+        requestCount += 1;
+        await request.drain<void>();
+        request.response.statusCode = requestCount == 1
+            ? HttpStatus.notFound
+            : HttpStatus.internalServerError;
+        request.response.write(
+          requestCount == 1 ? 'Session not found' : 'Retry failed',
+        );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        retryUrl,
+        opts: const StreamableHttpClientTransportOptions(
+          sessionId: staleSessionId,
+        ),
+      );
+      transport.onerror = errors.add;
+      await transport.start();
+
+      await expectLater(
+        transport.send(
+          JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+            params: const InitializeRequestParams(
+              protocolVersion: latestProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+            ).toJson(),
+          ),
+        ),
+        throwsA(isA<McpError>()),
+      );
+
+      expect(requestCount, 2);
+      expect(errors, hasLength(1));
+      expect(errors.single.toString(), contains('Retry failed'));
+      expect(transport.sessionId, isNull);
+    });
+
     test('start initializes the transport', () async {
       transport = StreamableHttpClientTransport(serverUrl);
       await transport.start();

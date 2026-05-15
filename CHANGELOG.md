@@ -44,6 +44,9 @@
 
 ### Reliability
 
+- Returned `404 Session not found` for stale, unknown, or terminated Streamable
+  HTTP session IDs across high-level and bare transports, and retried client
+  initialization once without a stale preconfigured session ID.
 - Honored `RequestOptions.resetTimeoutOnProgress` and `maxTotalTimeout` together
   so progress notifications can reset inactivity timers without bypassing the
   absolute total timeout cap.

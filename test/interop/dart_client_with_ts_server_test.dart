@@ -7,6 +7,13 @@ import 'package:test/test.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:path/path.dart' as p;
 
+Future<int> _findAvailablePort() async {
+  final socket = await io.ServerSocket.bind(io.InternetAddress.loopbackIPv4, 0);
+  final port = socket.port;
+  await socket.close();
+  return port;
+}
+
 void main() {
   // Locate the TS server (compiled JS version)
   // Default: test/interop/ts/dist/server.js relative to project root
@@ -158,6 +165,52 @@ void main() {
           ),
         );
         expect((echo.content.first as TextContent).text, equals('hello'));
+      });
+
+      test('recovers from stale preconfigured session id during initialize',
+          () async {
+        final stalePort = await _findAvailablePort();
+        final staleServerProcess = await io.Process.start(
+          'node',
+          [tsServerScript, '--transport', 'http', '--port', '$stalePort'],
+          mode: io.ProcessStartMode.normal,
+        );
+
+        staleServerProcess.stdout
+            .transform(io.systemEncoding.decoder)
+            .listen((data) => print('[TS Server] $data'));
+        staleServerProcess.stderr
+            .transform(io.systemEncoding.decoder)
+            .listen((data) => print('[TS Server Error] $data'));
+
+        // Give the node server a moment to start before connecting.
+        await Future.delayed(const Duration(seconds: 2));
+
+        final staleTransport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:$stalePort/mcp'),
+          opts: const StreamableHttpClientTransportOptions(
+            sessionId: 'stale-session-id',
+          ),
+        );
+        final staleClient = McpClient(
+          const Implementation(name: 'dart-stale-session-test', version: '1.0'),
+          options: const McpClientOptions(
+            capabilities: ClientCapabilities(),
+          ),
+        );
+
+        try {
+          await staleClient.connect(staleTransport);
+
+          expect(staleTransport.sessionId, isNot(equals('stale-session-id')));
+          expect(staleTransport.sessionId, isNotNull);
+
+          final result = await staleClient.listTools();
+          expect(result.tools.map((t) => t.name), containsAll(['echo', 'add']));
+        } finally {
+          await staleClient.close();
+          staleServerProcess.kill();
+        }
       });
     });
   });

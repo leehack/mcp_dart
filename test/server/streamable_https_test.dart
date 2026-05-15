@@ -527,6 +527,160 @@ void main() {
       });
     });
 
+    test('uninitialized transport rejects initialize with unknown session ID',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'new-session-id',
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('mcp-session-id', 'unknown-session-id');
+      request.write(
+        jsonEncode(
+          JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+            params: const InitializeRequestParams(
+              protocolVersion: latestProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'Client', version: '1.0'),
+            ).toJson(),
+          ).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      final body = await utf8.decodeStream(response);
+
+      expect(response.statusCode, HttpStatus.notFound);
+      expect(body, contains('Session not found'));
+    });
+
+    test('terminated stateful sessions reject subsequent requests with 404',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'terminated-session-id',
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is! JsonRpcRequest) {
+          return;
+        }
+        unawaited(
+          transport.send(
+            JsonRpcResponse(id: message.id, result: const {'ok': true}),
+          ),
+        );
+      };
+
+      Future<HttpClientResponse> postJsonRpc(
+        JsonRpcMessage message, {
+        String? sessionId,
+      }) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        if (sessionId != null) {
+          request.headers.set('mcp-session-id', sessionId);
+        }
+        request.write(jsonEncode(message.toJson()));
+        return request.close();
+      }
+
+      Future<HttpClientResponse> deleteWithSession(String sessionId) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.deleteUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers.set('mcp-session-id', sessionId);
+        return request.close();
+      }
+
+      Future<HttpClientResponse> getWithSession(String sessionId) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.getUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..set(HttpHeaders.acceptHeader, 'text/event-stream')
+          ..set('mcp-session-id', sessionId);
+        return request.close();
+      }
+
+      final initResponse = await postJsonRpc(
+        JsonRpcRequest(
+          id: 1,
+          method: 'initialize',
+          params: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'Client', version: '1.0'),
+          ).toJson(),
+        ),
+      );
+      expect(initResponse.statusCode, HttpStatus.ok);
+      final sessionId = initResponse.headers.value('mcp-session-id');
+      expect(sessionId, 'terminated-session-id');
+      await initResponse.drain();
+
+      final deleteResponse = await deleteWithSession(sessionId!);
+      expect(deleteResponse.statusCode, HttpStatus.ok);
+      await deleteResponse.drain();
+
+      final postAfterDelete = await postJsonRpc(
+        const JsonRpcRequest(id: 2, method: 'ping'),
+        sessionId: sessionId,
+      );
+      final postAfterDeleteBody = await utf8.decodeStream(postAfterDelete);
+      expect(postAfterDelete.statusCode, HttpStatus.notFound);
+      expect(postAfterDeleteBody, contains('Session not found'));
+
+      final initAfterDelete = await postJsonRpc(
+        JsonRpcRequest(
+          id: 3,
+          method: 'initialize',
+          params: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'Client', version: '1.0'),
+          ).toJson(),
+        ),
+        sessionId: sessionId,
+      );
+      final initAfterDeleteBody = await utf8.decodeStream(initAfterDelete);
+      expect(initAfterDelete.statusCode, HttpStatus.notFound);
+      expect(initAfterDeleteBody, contains('Session not found'));
+
+      final getAfterDelete = await getWithSession(sessionId);
+      final getAfterDeleteBody = await utf8.decodeStream(getAfterDelete);
+      expect(getAfterDelete.statusCode, HttpStatus.notFound);
+      expect(getAfterDeleteBody, contains('Session not found'));
+
+      final deleteAfterDelete = await deleteWithSession(sessionId);
+      final deleteAfterDeleteBody = await utf8.decodeStream(deleteAfterDelete);
+      expect(deleteAfterDelete.statusCode, HttpStatus.notFound);
+      expect(deleteAfterDeleteBody, contains('Session not found'));
+    });
+
     test('session validation works correctly', () async {
       // Create a transport with session management
       final transport = StreamableHTTPServerTransport(
@@ -795,6 +949,66 @@ void main() {
       expect(transport.sessionId, isNull);
 
       await transport.close();
+    });
+
+    test('stateless mode allows initialization with session header', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcRequest && message.method == 'initialize') {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const {
+                  'protocolVersion': latestProtocolVersion,
+                  'capabilities': {},
+                  'serverInfo': {'name': 'StatelessServer', 'version': '1.0.0'},
+                },
+              ),
+            ),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        )
+        ..set('mcp-session-id', 'ignored-in-stateless-mode');
+      request.write(
+        jsonEncode(
+          const JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+            params: {
+              'protocolVersion': latestProtocolVersion,
+              'capabilities': {},
+              'clientInfo': {'name': 'TestClient', 'version': '1.0.0'},
+            },
+          ).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers.value('mcp-session-id'), isNull);
+      final messages =
+          _decodeSseJsonMessages(await utf8.decodeStream(response));
+      expect(messages.single['id'], 1);
+      expect(transport.sessionId, isNull);
     });
 
     test('close cleans up all resources', () async {
