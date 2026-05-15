@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:mason_logger/mason_logger.dart';
+import 'package:mcp_dart_cli/src/conformance_command.dart';
 import 'package:mcp_dart_cli/src/create_command.dart';
 import 'package:mcp_dart_cli/src/serve_command.dart';
 import 'package:mcp_dart_cli/src/doctor_command.dart';
@@ -8,6 +9,19 @@ import 'package:mcp_dart_cli/src/inspect_command.dart';
 import 'package:mcp_dart_cli/src/update_command.dart';
 import 'package:mcp_dart_cli/src/version.dart';
 import 'package:mcp_dart_cli/src/version_check.dart';
+
+bool shouldCheckForUpdate(List<String> arguments) {
+  if (arguments.contains('update')) {
+    return false;
+  }
+
+  final command = arguments.isEmpty ? null : arguments.first;
+  if (command == 'conformance' && arguments.contains('--json')) {
+    return false;
+  }
+
+  return true;
+}
 
 void main(List<String> arguments) async {
   if (arguments.contains('--version') || arguments.contains('-v')) {
@@ -24,11 +38,12 @@ void main(List<String> arguments) async {
     ..addCommand(ServeCommand())
     ..addCommand(DoctorCommand())
     ..addCommand(InspectCommand(logger: logger))
+    ..addCommand(ConformanceCommand(logger: logger))
     ..addCommand(UpdateCommand(logger: logger));
 
   try {
     final exitCode = await runner.run(arguments);
-    if (!arguments.contains('update')) {
+    if (shouldCheckForUpdate(arguments)) {
       await checkForUpdate(logger);
     }
     exit(exitCode ?? 0);

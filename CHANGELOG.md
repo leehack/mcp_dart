@@ -57,6 +57,10 @@
   titled enum `const` entries, and simple `type` array unions such as nullable
   schemas.
 
+### Tooling
+
+- Added `mcp_dart conformance` with built-in JSON-RPC and protocol-version fixture checks, deterministic JSON-RPC fuzz cases, exact-case filtering, and JSON output for CI/scripts.
+
 ## 2.1.1
 
 ### Compatibility Notes (Potentially Breaking)
