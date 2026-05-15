@@ -52,6 +52,7 @@ mcp_dart create <project_name> --template https://github.com/leehack/mcp_dart/tr
 - `serve`: Runs the MCP server in the current directory.
 - `doctor`: Checks the project for common issues and verifies connectivity.
 - `inspect`: Interacts with an MCP server (local or external).
+- `conformance`: Runs built-in MCP conformance fixture checks for protocol edge cases.
 - `update`: Updates the CLI to the latest version.
 
 ### Doctor
@@ -122,6 +123,24 @@ mcp_dart inspect --url http://localhost:3000/mcp
 **Sampling Support:**
 
 The CLI supports `sampling/createMessage` requests from the server (often used by tools like `summarize` that need an LLM). Currently, it returns a placeholder response to ensure tools complete successfully.
+
+### Conformance
+
+Run built-in fixture checks and deterministic fuzz checks for MCP protocol edge cases. The initial suite covers JSON-RPC malformed-message handling, string request IDs, string progress tokens, and advertised protocol-version support.
+
+```bash
+# Run all built-in fixture cases
+mcp_dart conformance
+
+# Run one case by exact name
+mcp_dart conformance --case jsonrpc.preserves-string-response-id
+
+# Run deterministic generated JSON-RPC fuzz cases
+mcp_dart conformance --fuzz --iterations 64
+
+# Emit machine-readable results for CI or scripts
+mcp_dart conformance --json
+```
 
 ### Serve
 
