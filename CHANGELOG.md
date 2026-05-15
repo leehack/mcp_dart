@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Spec Alignment
+
+- Added MCP `completion/complete` wire support for
+  `context.arguments` and `PromptReference.title`, including context-aware
+  server completion callbacks for prompt and resource-template completions.
+
 ### Compatibility Notes (Potentially Breaking)
 
 - **Task cancellation now returns the final task state**:
@@ -24,6 +30,8 @@
     for valid task instances.
   - `Task.toJson()` continues to serialize required `ttl` even when it is
     `null`, and now omits optional `pollInterval` when it is not set.
+
+### Compatibility Notes
 
 - **Custom transports remain source-compatible while string request routing is available**:
   - `Transport.send(... relatedRequestId: ...)` keeps the existing `int?`

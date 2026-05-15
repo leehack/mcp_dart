@@ -155,6 +155,64 @@ void main() {
       expect(deserializedPrompt.arguments?.single.title, 'Argument Title');
     });
 
+    test('CompleteRequest supports context arguments and prompt title', () {
+      final request = const CompleteRequest(
+        ref: PromptReference(
+          name: 'translate',
+          title: 'Translate prompt',
+        ),
+        argument: ArgumentCompletionInfo(
+          name: 'target_language',
+          value: 'Spa',
+        ),
+        context: CompletionContext(
+          arguments: {
+            'source_language': 'English',
+            'formality': 'formal',
+          },
+        ),
+      );
+
+      final json = request.toJson();
+      expect(json['ref']['type'], 'ref/prompt');
+      expect(json['ref']['name'], 'translate');
+      expect(json['ref']['title'], 'Translate prompt');
+      expect(json['context']['arguments']['source_language'], 'English');
+      expect(json['context']['arguments']['formality'], 'formal');
+
+      final deserialized = CompleteRequest.fromJson(json);
+      final ref = deserialized.ref as PromptReference;
+      expect(ref.name, 'translate');
+      expect(ref.title, 'Translate prompt');
+      expect(deserialized.context?.arguments, {
+        'source_language': 'English',
+        'formality': 'formal',
+      });
+
+      final message = JsonRpcMessage.fromJson({
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'completion/complete',
+        'params': json,
+      });
+      expect(message, isA<JsonRpcCompleteRequest>());
+
+      final completeRequest = message as JsonRpcCompleteRequest;
+      final promptRef = completeRequest.completeParams.ref as PromptReference;
+      expect(promptRef.title, 'Translate prompt');
+      expect(completeRequest.completeParams.context?.arguments, {
+        'source_language': 'English',
+        'formality': 'formal',
+      });
+      expect(
+        completeRequest.toJson()['params']['context']['arguments'],
+        {
+          'source_language': 'English',
+          'formality': 'formal',
+        },
+      );
+    });
+
     test('Elicitation with URL', () {
       final params = const ElicitRequestParams(
         message: 'test',

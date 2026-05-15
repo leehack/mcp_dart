@@ -22,7 +22,10 @@ sealed class Reference {
         'type': type,
         ...switch (this) {
           final ResourceReference r => {'uri': r.uri},
-          final PromptReference p => {'name': p.name},
+          final PromptReference p => {
+              'name': p.name,
+              if (p.title != null) 'title': p.title,
+            },
         },
       };
 }
@@ -44,11 +47,18 @@ class ResourceReference extends Reference {
 class PromptReference extends Reference {
   final String name;
 
-  const PromptReference({required this.name}) : super(type: 'ref/prompt');
+  /// A human-readable title of the prompt.
+  final String? title;
+
+  const PromptReference({
+    required this.name,
+    this.title,
+  }) : super(type: 'ref/prompt');
 
   factory PromptReference.fromJson(Map<String, dynamic> json) {
     return PromptReference(
       name: json['name'] as String,
+      title: json['title'] as String?,
     );
   }
 }
@@ -79,6 +89,26 @@ class ArgumentCompletionInfo {
       };
 }
 
+/// Additional context for completion requests.
+class CompletionContext {
+  /// Previously-resolved variables in a URI template or prompt.
+  final Map<String, String>? arguments;
+
+  const CompletionContext({this.arguments});
+
+  factory CompletionContext.fromJson(Map<String, dynamic> json) {
+    return CompletionContext(
+      arguments: (json['arguments'] as Map<String, dynamic>?)?.map(
+        (key, value) => MapEntry(key, value as String),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (arguments != null) 'arguments': arguments,
+      };
+}
+
 /// Parameters for the `completion/complete` request.
 class CompleteRequest {
   /// The reference identifying the completion target (prompt or resource).
@@ -87,7 +117,14 @@ class CompleteRequest {
   /// Information about the argument being completed.
   final ArgumentCompletionInfo argument;
 
-  const CompleteRequest({required this.ref, required this.argument});
+  /// Additional context for resolving completions.
+  final CompletionContext? context;
+
+  const CompleteRequest({
+    required this.ref,
+    required this.argument,
+    this.context,
+  });
 
   factory CompleteRequest.fromJson(Map<String, dynamic> json) =>
       CompleteRequest(
@@ -95,11 +132,17 @@ class CompleteRequest {
         argument: ArgumentCompletionInfo.fromJson(
           json['argument'] as Map<String, dynamic>,
         ),
+        context: json['context'] == null
+            ? null
+            : CompletionContext.fromJson(
+                json['context'] as Map<String, dynamic>,
+              ),
       );
 
   Map<String, dynamic> toJson() => {
         'ref': ref.toJson(),
         'argument': argument.toJson(),
+        if (context != null) 'context': context!.toJson(),
       };
 }
 

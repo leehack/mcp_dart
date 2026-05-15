@@ -432,13 +432,15 @@ Get argument completion suggestions:
 // Complete resource template variable
 final result = await client.complete(
   CompleteRequest(
-    ref: CompletionReference(
-      type: CompletionReferenceType.resourceRef,
-      uri: 'users://{userId}/profile',
+    ref: const ResourceReference(
+      uri: 'users://{organization}/{userId}/profile',
     ),
-    argument: CompletionArgument(
+    argument: const ArgumentCompletionInfo(
       name: 'userId',
       value: 'ali',  // Partial value
+    ),
+    context: const CompletionContext(
+      arguments: {'organization': 'engineering'},
     ),
   ),
 );
@@ -457,13 +459,16 @@ if (result.completion.hasMore == true) {
 // Complete prompt argument
 final result = await client.complete(
   CompleteRequest(
-    ref: CompletionReference(
-      type: CompletionReferenceType.promptRef,
+    ref: const PromptReference(
       name: 'translate',
+      title: 'Translate text',
     ),
-    argument: CompletionArgument(
+    argument: const ArgumentCompletionInfo(
       name: 'target_language',
       value: 'Spa',  // Partial value
+    ),
+    context: const CompletionContext(
+      arguments: {'source_language': 'English'},
     ),
   ),
 );

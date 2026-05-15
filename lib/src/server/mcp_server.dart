@@ -16,6 +16,12 @@ final _logger = Logger("mcp_dart.server.mcp");
 /// Callback capable of providing completions for a partial value.
 typedef CompleteCallback = FutureOr<List<String>> Function(String value);
 
+/// Callback capable of providing completions with request context.
+typedef CompleteWithContextCallback = FutureOr<List<String>> Function(
+  String value,
+  CompletionContext? context,
+);
+
 IconTheme? _iconThemeFromString(String? theme) {
   return switch (theme) {
     'light' => IconTheme.light,
@@ -43,7 +49,24 @@ class CompletableDef {
   /// The callback to invoke to get completion suggestions.
   final CompleteCallback complete;
 
-  const CompletableDef({required this.complete});
+  /// Optional callback that also receives `completion/complete` context.
+  final CompleteWithContextCallback? completeWithContext;
+
+  const CompletableDef({
+    required this.complete,
+    this.completeWithContext,
+  });
+
+  FutureOr<List<String>> _completeValue(
+    String value,
+    CompletionContext? context,
+  ) {
+    final completeWithContext = this.completeWithContext;
+    if (completeWithContext != null) {
+      return completeWithContext(value, context);
+    }
+    return complete(value);
+  }
 }
 
 /// A field that supports auto-completion.
@@ -141,6 +164,13 @@ typedef CompleteResourceTemplateCallback = FutureOr<List<String>> Function(
   String currentValue,
 );
 
+/// Callback to complete a value within a resource template with request context.
+typedef CompleteResourceTemplateWithContextCallback = FutureOr<List<String>>
+    Function(
+  String currentValue,
+  CompletionContext? context,
+);
+
 /// Callback to list available tasks.
 typedef ListTasksCallback = FutureOr<ListTasksResult> Function(
   RequestHandlerExtra extra,
@@ -186,15 +216,34 @@ class ResourceTemplateRegistration {
   /// Callbacks to complete variables within the template.
   final Map<String, CompleteResourceTemplateCallback>? completeCallbacks;
 
+  /// Context-aware callbacks to complete variables within the template.
+  final Map<String, CompleteResourceTemplateWithContextCallback>?
+      completeCallbacksWithContext;
+
   ResourceTemplateRegistration(
     String templateString, {
     required this.listCallback,
     this.completeCallbacks,
+    this.completeCallbacksWithContext,
   }) : uriTemplate = UriTemplateExpander(templateString);
 
   /// Gets the completion callback for a specific variable.
   CompleteResourceTemplateCallback? getCompletionCallback(String variableName) {
     return completeCallbacks?[variableName];
+  }
+
+  FutureOr<List<String>>? _completeVariable(
+    String variableName,
+    String currentValue,
+    CompletionContext? context,
+  ) {
+    final completeWithContext = completeCallbacksWithContext?[variableName];
+    if (completeWithContext != null) {
+      return completeWithContext(currentValue, context);
+    }
+    final complete = completeCallbacks?[variableName];
+    if (complete == null) return null;
+    return complete(currentValue);
   }
 }
 
@@ -1208,10 +1257,12 @@ class McpServer {
         final ResourceReference r => _handleResourceCompletion(
             r,
             request.completeParams.argument,
+            request.completeParams.context,
           ),
         final PromptReference p => _handlePromptCompletion(
             p,
             request.completeParams.argument,
+            request.completeParams.context,
           ),
       },
       (id, params, meta) => JsonRpcCompleteRequest.fromJson({
@@ -1226,15 +1277,18 @@ class McpServer {
   Future<CompleteResult> _handlePromptCompletion(
     PromptReference ref,
     ArgumentCompletionInfo argInfo,
+    CompletionContext? context,
   ) async {
     final prompt = _registeredPrompts[ref.name];
     if (prompt == null || !prompt.enabled) return _emptyCompletionResult();
 
     final argDef = prompt.argsSchemaDefinition?[argInfo.name];
-    final completer = argDef?.completable?.def.complete;
+    final completer = argDef?.completable?.def;
     if (completer == null) return _emptyCompletionResult();
     try {
-      return _createCompletionResult(await completer(argInfo.value));
+      return _createCompletionResult(
+        await completer._completeValue(argInfo.value, context),
+      );
     } catch (e) {
       _logger.warn(
         "Error during prompt argument completion for '${ref.name}.${argInfo.name}': $e",
@@ -1246,6 +1300,7 @@ class McpServer {
   Future<CompleteResult> _handleResourceCompletion(
     ResourceReference ref,
     ArgumentCompletionInfo argInfo,
+    CompletionContext? context,
   ) async {
     final templateEntry = _registeredResourceTemplates.entries.firstWhere(
       (e) => e.value.resourceTemplate.uriTemplate.toString() == ref.uri,
@@ -1256,11 +1311,15 @@ class McpServer {
     );
     if (!templateEntry.value.enabled) return _emptyCompletionResult();
 
-    final completer = templateEntry.value.resourceTemplate
-        .getCompletionCallback(argInfo.name);
-    if (completer == null) return _emptyCompletionResult();
     try {
-      return _createCompletionResult(await completer(argInfo.value));
+      final completions =
+          templateEntry.value.resourceTemplate._completeVariable(
+        argInfo.name,
+        argInfo.value,
+        context,
+      );
+      if (completions == null) return _emptyCompletionResult();
+      return _createCompletionResult(await completions);
     } catch (e) {
       _logger.warn(
         "Error during resource template completion for '${ref.uri}' variable '${argInfo.name}': $e",

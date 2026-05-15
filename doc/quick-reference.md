@@ -126,6 +126,12 @@ server.registerResourceTemplate(
   ResourceTemplateRegistration(
     'users://{userId}/profile',
     listCallback: null,
+    completeCallbacksWithContext: {
+      'userId': (value, context) async => suggestUsers(
+        prefix: value,
+        organization: context?.arguments?['organization'],
+      ),
+    },
   ),
   null,
   (uri, vars, extra) async {
@@ -198,6 +204,15 @@ server.registerPrompt(
       type: String,
       description: 'Argument description',
       required: true,
+      completable: CompletableField(
+        def: CompletableDef(
+          complete: (value) async => suggestValues(value),
+          completeWithContext: (value, context) async => suggestValues(
+            value,
+            previousArgs: context?.arguments,
+          ),
+        ),
+      ),
     ),
   },
   callback: (args, extra) async {
@@ -770,13 +785,15 @@ await client.unsubscribeResource(UnsubscribeRequest(
 
 ```dart
 final result = await client.complete(CompleteRequest(
-  ref: CompletionReference(
-    type: CompletionReferenceType.resourceRef,
-    uri: 'users://{userId}/profile',
+  ref: const ResourceReference(
+    uri: 'users://{organization}/{userId}/profile',
   ),
-  argument: CompletionArgument(
+  argument: const ArgumentCompletionInfo(
     name: 'userId',
     value: 'al',  // Partial
+  ),
+  context: const CompletionContext(
+    arguments: {'organization': 'engineering'},
   ),
 ));
 
@@ -789,13 +806,16 @@ for (final value in result.completion.values) {
 
 ```dart
 final result = await client.complete(CompleteRequest(
-  ref: CompletionReference(
-    type: CompletionReferenceType.promptRef,
+  ref: const PromptReference(
     name: 'translate',
+    title: 'Translate text',
   ),
-  argument: CompletionArgument(
+  argument: const ArgumentCompletionInfo(
     name: 'language',
     value: 'Spa',
+  ),
+  context: const CompletionContext(
+    arguments: {'source_language': 'English'},
   ),
 ));
 ```
