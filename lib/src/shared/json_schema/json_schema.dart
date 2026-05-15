@@ -46,6 +46,9 @@ sealed class JsonSchema {
 
     final type = json['type'];
     if (type is List) {
+      if (!_isValidJsonTypeArray(type)) {
+        return JsonAny.fromJson(json);
+      }
       return JsonUnion.fromJson(json);
     }
     if (type is String) {
@@ -91,15 +94,13 @@ sealed class JsonSchema {
       return null;
     }
 
-    return JsonAllOf(
-      [
-        _fromJson(_schemaWithKeys(json, primaryKeys)),
-        _fromJson(_schemaWithoutKeys(json, primaryKeys)),
-      ],
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      defaultValue: json['default'],
-    );
+    // JSON Schema keywords are conjunctive: a schema such as
+    // `{type: ['string', 'null'], enum: ['auto', null]}` means both the
+    // type-array assertion and the enum assertion apply. Preserve the official
+    // wire shape instead of rewriting it into allOf or a typed convenience
+    // schema; JsonAny preserves the keywords and the validator enforces the
+    // supported assertions.
+    return JsonAny.fromJson(json);
   }
 
   static Set<String>? _primaryKeysForConjunctiveSplit(
@@ -111,6 +112,14 @@ sealed class JsonSchema {
 
     if (json['type'] is List) {
       return {'type'};
+    }
+
+    final type = json['type'];
+    if (type is String && json['enum'] is List) {
+      final enumValues = json['enum'] as List;
+      if (type != 'string' || !enumValues.every((value) => value is String)) {
+        return {'type'};
+      }
     }
 
     for (final keyword in const ['allOf', 'anyOf', 'oneOf', 'not']) {
@@ -138,27 +147,30 @@ sealed class JsonSchema {
     return null;
   }
 
-  static Map<String, dynamic> _schemaWithKeys(
-    Map<String, dynamic> json,
-    Set<String> keys,
-  ) {
-    return {
-      for (final key in keys)
-        if (json.containsKey(key)) key: json[key],
-    };
+  static bool _isValidJsonTypeArray(List<dynamic> types) {
+    if (types.isEmpty) {
+      return false;
+    }
+    final seen = <String>{};
+    for (final type in types) {
+      if (type is! String ||
+          !_knownJsonTypes.contains(type) ||
+          !seen.add(type)) {
+        return false;
+      }
+    }
+    return true;
   }
 
-  static Map<String, dynamic> _schemaWithoutKeys(
-    Map<String, dynamic> json,
-    Set<String> keys,
-  ) {
-    return {
-      for (final entry in json.entries)
-        if (!keys.contains(entry.key) &&
-            !_jsonSchemaAnnotationKeys.contains(entry.key))
-          entry.key: entry.value,
-    };
-  }
+  static const Set<String> _knownJsonTypes = {
+    'string',
+    'number',
+    'integer',
+    'boolean',
+    'null',
+    'array',
+    'object',
+  };
 
   static bool _hasOnlyAnnotationAnd(
     Map<String, dynamic> json,
@@ -404,6 +416,7 @@ sealed class JsonSchema {
 
 /// A schema for string values.
 class JsonString extends JsonSchema {
+  final bool _hasDefault;
   final int? minLength;
   final int? maxLength;
   final String? pattern;
@@ -424,13 +437,26 @@ class JsonString extends JsonSchema {
     super.title,
     super.description,
     this.defaultValue,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonString._({
+    this.minLength,
+    this.maxLength,
+    this.pattern,
+    this.format,
+    this.enumValues,
+    this.enumNames,
+    super.title,
+    super.description,
+    this.defaultValue,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final String? defaultValue;
 
   factory JsonString.fromJson(Map<String, dynamic> json) {
-    return JsonString(
+    return JsonString._(
       minLength: json['minLength'] as int?,
       maxLength: json['maxLength'] as int?,
       pattern: json['pattern'] as String?,
@@ -441,6 +467,7 @@ class JsonString extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as String?,
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -449,7 +476,7 @@ class JsonString extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'type': 'string',
       if (minLength != null) 'minLength': minLength,
       if (maxLength != null) 'maxLength': maxLength,
@@ -463,6 +490,7 @@ class JsonString extends JsonSchema {
 
 /// A schema for number values.
 class JsonNumber extends JsonSchema {
+  final bool _hasDefault;
   final num? minimum;
   final num? maximum;
   final num? exclusiveMinimum;
@@ -478,13 +506,25 @@ class JsonNumber extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonNumber._({
+    this.minimum,
+    this.maximum,
+    this.exclusiveMinimum,
+    this.exclusiveMaximum,
+    this.multipleOf,
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final num? defaultValue;
 
   factory JsonNumber.fromJson(Map<String, dynamic> json) {
-    return JsonNumber(
+    return JsonNumber._(
       minimum: json['minimum'] as num?,
       maximum: json['maximum'] as num?,
       exclusiveMinimum: json['exclusiveMinimum'] as num?,
@@ -493,6 +533,7 @@ class JsonNumber extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as num?,
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -501,7 +542,7 @@ class JsonNumber extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'type': 'number',
       if (minimum != null) 'minimum': minimum,
       if (maximum != null) 'maximum': maximum,
@@ -514,6 +555,7 @@ class JsonNumber extends JsonSchema {
 
 /// A schema for integer values.
 class JsonInteger extends JsonSchema {
+  final bool _hasDefault;
   final int? minimum;
   final int? maximum;
   final int? exclusiveMinimum;
@@ -529,13 +571,25 @@ class JsonInteger extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonInteger._({
+    this.minimum,
+    this.maximum,
+    this.exclusiveMinimum,
+    this.exclusiveMaximum,
+    this.multipleOf,
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final int? defaultValue;
 
   factory JsonInteger.fromJson(Map<String, dynamic> json) {
-    return JsonInteger(
+    return JsonInteger._(
       minimum: json['minimum'] as int?,
       maximum: json['maximum'] as int?,
       exclusiveMinimum: json['exclusiveMinimum'] as int?,
@@ -544,6 +598,7 @@ class JsonInteger extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as int?,
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -552,7 +607,7 @@ class JsonInteger extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'type': 'integer',
       if (minimum != null) 'minimum': minimum,
       if (maximum != null) 'maximum': maximum,
@@ -565,20 +620,30 @@ class JsonInteger extends JsonSchema {
 
 /// A schema for boolean values.
 class JsonBoolean extends JsonSchema {
+  final bool _hasDefault;
+
   const JsonBoolean({
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonBoolean._({
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final bool? defaultValue;
 
   factory JsonBoolean.fromJson(Map<String, dynamic> json) {
-    return JsonBoolean(
+    return JsonBoolean._(
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as bool?,
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -587,7 +652,7 @@ class JsonBoolean extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'type': 'boolean',
     };
   }
@@ -595,20 +660,30 @@ class JsonBoolean extends JsonSchema {
 
 /// A schema for null values.
 class JsonNull extends JsonSchema {
+  final bool _hasDefault;
+
   const JsonNull({
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonNull._({
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final dynamic defaultValue;
 
   factory JsonNull.fromJson(Map<String, dynamic> json) {
-    return JsonNull(
+    return JsonNull._(
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -617,7 +692,7 @@ class JsonNull extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'type': 'null',
     };
   }
@@ -625,6 +700,7 @@ class JsonNull extends JsonSchema {
 
 /// A schema for array values.
 class JsonArray extends JsonSchema {
+  final bool _hasDefault;
   final JsonSchema? items;
   final int? minItems;
   final int? maxItems;
@@ -638,13 +714,24 @@ class JsonArray extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonArray._({
+    this.items,
+    this.minItems,
+    this.maxItems,
+    this.uniqueItems,
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final List<dynamic>? defaultValue;
 
   factory JsonArray.fromJson(Map<String, dynamic> json) {
-    return JsonArray(
+    return JsonArray._(
       items: json['items'] != null
           ? JsonSchema.fromJson(json['items'] as Map<String, dynamic>)
           : null,
@@ -654,6 +741,7 @@ class JsonArray extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as List<dynamic>?,
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -662,7 +750,7 @@ class JsonArray extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'type': 'array',
       if (items != null) 'items': items!.toJson(),
       if (minItems != null) 'minItems': minItems,
@@ -674,6 +762,7 @@ class JsonArray extends JsonSchema {
 
 /// A schema for object values.
 class JsonObject extends JsonSchema {
+  final bool _hasDefault;
   final Map<String, JsonSchema>? properties;
   final List<String>? required;
 
@@ -689,7 +778,18 @@ class JsonObject extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonObject._({
+    this.properties,
+    this.required,
+    this.additionalProperties,
+    this.dependentRequired,
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final Map<String, dynamic>? defaultValue;
@@ -705,7 +805,7 @@ class JsonObject extends JsonSchema {
       );
     }
 
-    return JsonObject(
+    return JsonObject._(
       properties: (json['properties'] as Map<String, dynamic>?)?.map(
         (key, value) =>
             MapEntry(key, JsonSchema.fromJson(value as Map<String, dynamic>)),
@@ -717,6 +817,7 @@ class JsonObject extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as Map<String, dynamic>?,
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -725,7 +826,7 @@ class JsonObject extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'type': 'object',
       if (properties != null)
         'properties': properties!.map((k, v) => MapEntry(k, v.toJson())),
@@ -742,13 +843,24 @@ class JsonObject extends JsonSchema {
 /// A schema that accepts any value, potentially with additional constraints not captured by other types.
 class JsonAny extends JsonSchema {
   final Map<String, dynamic> properties;
+  final bool _hasDefault;
 
   const JsonAny([
     this.properties = const {},
     String? title,
     String? description,
     this.defaultValue,
-  ]) : super(title: title, description: description);
+  ])  : _hasDefault = defaultValue != null,
+        super(title: title, description: description);
+
+  const JsonAny._(
+    this.properties,
+    String? title,
+    String? description,
+    this.defaultValue, {
+    required bool hasDefault,
+  })  : _hasDefault = hasDefault,
+        super(title: title, description: description);
 
   @override
   final dynamic defaultValue;
@@ -772,11 +884,12 @@ class JsonAny extends JsonSchema {
       }
     }
 
-    return JsonAny(
+    return JsonAny._(
       Map.unmodifiable(properties),
       title,
       description,
       defaultValue,
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -785,7 +898,7 @@ class JsonAny extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       ...properties,
     };
   }
@@ -793,6 +906,7 @@ class JsonAny extends JsonSchema {
 
 /// A schema that accepts exactly one JSON value.
 class JsonConst extends JsonSchema {
+  final bool _hasDefault;
   final dynamic value;
 
   const JsonConst(
@@ -800,17 +914,26 @@ class JsonConst extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonConst._(
+    this.value, {
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final dynamic defaultValue;
 
   factory JsonConst.fromJson(Map<String, dynamic> json) {
-    return JsonConst(
+    return JsonConst._(
       json['const'],
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -819,7 +942,7 @@ class JsonConst extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'const': value,
     };
   }
@@ -827,6 +950,7 @@ class JsonConst extends JsonSchema {
 
 /// A schema that validates against any one of the given schemas.
 class JsonUnion extends JsonSchema {
+  final bool _hasDefault;
   final List<JsonSchema> schemas;
 
   const JsonUnion(
@@ -834,7 +958,15 @@ class JsonUnion extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonUnion._(
+    this.schemas, {
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final dynamic defaultValue;
@@ -845,7 +977,7 @@ class JsonUnion extends JsonSchema {
     final schemaProperties = Map<String, dynamic>.from(json)
       ..removeWhere((key, value) => commonKeys.contains(key));
 
-    return JsonUnion(
+    return JsonUnion._(
       types.whereType<String>().map((type) {
         return JsonSchema.fromJson({
           ...schemaProperties,
@@ -855,6 +987,7 @@ class JsonUnion extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -865,7 +998,7 @@ class JsonUnion extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       if (typeNames != null)
         'type': typeNames
       else
@@ -941,6 +1074,7 @@ class JsonUnion extends JsonSchema {
 
 /// A schema that validates against all of the given schemas.
 class JsonAllOf extends JsonSchema {
+  final bool _hasDefault;
   final List<JsonSchema> schemas;
 
   const JsonAllOf(
@@ -948,19 +1082,28 @@ class JsonAllOf extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonAllOf._(
+    this.schemas, {
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final dynamic defaultValue;
 
   factory JsonAllOf.fromJson(Map<String, dynamic> json) {
-    return JsonAllOf(
+    return JsonAllOf._(
       (json['allOf'] as List)
           .map((e) => JsonSchema.fromJson(e as Map<String, dynamic>))
           .toList(),
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -969,7 +1112,7 @@ class JsonAllOf extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'allOf': schemas.map((s) => s.toJson()).toList(),
     };
   }
@@ -977,6 +1120,7 @@ class JsonAllOf extends JsonSchema {
 
 /// A schema that validates against any of the given schemas.
 class JsonAnyOf extends JsonSchema {
+  final bool _hasDefault;
   final List<JsonSchema> schemas;
 
   const JsonAnyOf(
@@ -984,19 +1128,28 @@ class JsonAnyOf extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonAnyOf._(
+    this.schemas, {
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final dynamic defaultValue;
 
   factory JsonAnyOf.fromJson(Map<String, dynamic> json) {
-    return JsonAnyOf(
+    return JsonAnyOf._(
       (json['anyOf'] as List)
           .map((e) => JsonSchema.fromJson(e as Map<String, dynamic>))
           .toList(),
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -1005,7 +1158,7 @@ class JsonAnyOf extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'anyOf': schemas.map((s) => s.toJson()).toList(),
     };
   }
@@ -1013,6 +1166,7 @@ class JsonAnyOf extends JsonSchema {
 
 /// A schema that validates against exactly one of the given schemas.
 class JsonOneOf extends JsonSchema {
+  final bool _hasDefault;
   final List<JsonSchema> schemas;
 
   const JsonOneOf(
@@ -1020,19 +1174,28 @@ class JsonOneOf extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonOneOf._(
+    this.schemas, {
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final dynamic defaultValue;
 
   factory JsonOneOf.fromJson(Map<String, dynamic> json) {
-    return JsonOneOf(
+    return JsonOneOf._(
       (json['oneOf'] as List)
           .map((e) => JsonSchema.fromJson(e as Map<String, dynamic>))
           .toList(),
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -1041,7 +1204,7 @@ class JsonOneOf extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'oneOf': schemas.map((s) => s.toJson()).toList(),
     };
   }
@@ -1049,6 +1212,7 @@ class JsonOneOf extends JsonSchema {
 
 /// A schema that validates against none of the given schemas.
 class JsonNot extends JsonSchema {
+  final bool _hasDefault;
   final JsonSchema schema;
 
   const JsonNot(
@@ -1056,17 +1220,26 @@ class JsonNot extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  }) : _hasDefault = defaultValue != null;
+
+  const JsonNot._(
+    this.schema, {
+    this.defaultValue,
+    super.title,
+    super.description,
+    required bool hasDefault,
+  }) : _hasDefault = hasDefault;
 
   @override
   final dynamic defaultValue;
 
   factory JsonNot.fromJson(Map<String, dynamic> json) {
-    return JsonNot(
+    return JsonNot._(
       JsonSchema.fromJson(json['not'] as Map<String, dynamic>),
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
+      hasDefault: json.containsKey('default'),
     );
   }
 
@@ -1075,7 +1248,7 @@ class JsonNot extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
       'not': schema.toJson(),
     };
   }
@@ -1083,14 +1256,39 @@ class JsonNot extends JsonSchema {
 
 /// A schema for enum values.
 class JsonEnum extends JsonSchema {
+  final bool _hasDefault;
   final List<dynamic> values;
+  final String? _constListKeyword;
+  final String? _constListType;
+  final String? _enumValuesKeyword;
+  final dynamic _enumTypeKeyword;
 
   const JsonEnum(
     this.values, {
     this.defaultValue,
     super.title,
     super.description,
-  });
+  })  : _hasDefault = defaultValue != null,
+        _constListKeyword = null,
+        _constListType = null,
+        _enumValuesKeyword = null,
+        _enumTypeKeyword = null;
+
+  const JsonEnum._(
+    this.values, {
+    this.defaultValue,
+    super.title,
+    super.description,
+    String? constListKeyword,
+    String? constListType,
+    String? enumValuesKeyword,
+    dynamic enumTypeKeyword,
+    required bool hasDefault,
+  })  : _hasDefault = hasDefault,
+        _constListKeyword = constListKeyword,
+        _constListType = constListType,
+        _enumValuesKeyword = enumValuesKeyword,
+        _enumTypeKeyword = enumTypeKeyword;
 
   @override
   final dynamic defaultValue;
@@ -1120,17 +1318,35 @@ class JsonEnum extends JsonSchema {
           !_constSchemaListValuesAreStrings(json[constListKey])) {
         return false;
       }
+      if (constListKey == 'oneOf' &&
+          !_constSchemaListValuesAreUnique(json[constListKey])) {
+        return false;
+      }
       return true;
     }
     return false;
   }
 
   factory JsonEnum.fromJson(Map<String, dynamic> json) {
-    return JsonEnum(
+    final constListKey = _constSchemaListKey(json);
+    final enumValuesKeyword = json['values'] is List
+        ? 'values'
+        : json['enum'] is List
+            ? 'enum'
+            : null;
+
+    return JsonEnum._(
       _parseValues(json),
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
+      hasDefault: json.containsKey('default'),
+      constListKeyword: constListKey,
+      constListType: constListKey != null ? json['type'] as String? : null,
+      enumValuesKeyword: enumValuesKeyword,
+      enumTypeKeyword: enumValuesKeyword != null && json.containsKey('type')
+          ? json['type']
+          : null,
     );
   }
 
@@ -1143,10 +1359,46 @@ class JsonEnum extends JsonSchema {
       (entry) => entry.value is String,
     );
 
-    return {
+    final annotations = {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (defaultValue != null) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValue,
+    };
+
+    final constListKeyword = _constListKeyword;
+    if (constListKeyword != null) {
+      return {
+        ...annotations,
+        if (_constListType != null) 'type': _constListType,
+        constListKeyword: normalizedEntries
+            .map(
+              (entry) => {
+                'const': entry.value,
+                if (entry.title != null) 'title': entry.title,
+                if (entry.description != null) 'description': entry.description,
+                if (entry.hasDefault) 'default': entry.defaultValue,
+              },
+            )
+            .toList(),
+      };
+    }
+
+    final enumValuesKeyword = _enumValuesKeyword;
+    if (enumValuesKeyword != null) {
+      return {
+        ...annotations,
+        if (_enumTypeKeyword != null) 'type': _enumTypeKeyword,
+        enumValuesKeyword:
+            normalizedEntries.map((entry) => entry.value).toList(),
+        if (hasTitles)
+          'enumNames': normalizedEntries
+              .map((entry) => entry.title ?? '${entry.value}')
+              .toList(),
+      };
+    }
+
+    return {
+      ...annotations,
       if (allStrings) 'type': 'string',
       if (allStrings)
         'enum': normalizedEntries.map((entry) => entry.value as String).toList()
@@ -1158,6 +1410,8 @@ class JsonEnum extends JsonSchema {
               (entry) => {
                 'const': entry.value,
                 if (entry.title != null) 'title': entry.title,
+                if (entry.description != null) 'description': entry.description,
+                if (entry.hasDefault) 'default': entry.defaultValue,
               },
             )
             .toList(),
@@ -1197,8 +1451,16 @@ class JsonEnum extends JsonSchema {
         if (entry is Map && entry.containsKey('const')) {
           final value = entry['const'];
           final title = entry['title'];
-          if (title is String && title != '$value') {
-            return {'value': value, 'title': title};
+          final description = entry['description'];
+          if (title is String ||
+              description is String ||
+              entry.containsKey('default')) {
+            return {
+              'value': value,
+              if (title is String) 'title': title,
+              if (description is String) 'description': description,
+              if (entry.containsKey('default')) 'default': entry['default'],
+            };
           }
           return value;
         }
@@ -1239,15 +1501,80 @@ class JsonEnum extends JsonSchema {
         schemaList.every((entry) => entry is Map && entry['const'] is String);
   }
 
-  static ({dynamic value, String? title}) _normalizeEntry(dynamic entry) {
+  static bool _constSchemaListValuesAreUnique(dynamic schemaList) {
+    if (schemaList is! List) {
+      return false;
+    }
+    for (var i = 0; i < schemaList.length; i++) {
+      final left = schemaList[i];
+      if (left is! Map) {
+        return false;
+      }
+      for (var j = i + 1; j < schemaList.length; j++) {
+        final right = schemaList[j];
+        if (right is! Map) {
+          return false;
+        }
+        if (_jsonValuesEqual(left['const'], right['const'])) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  static bool _jsonValuesEqual(dynamic left, dynamic right) {
+    if (left is List && right is List) {
+      if (left.length != right.length) {
+        return false;
+      }
+      for (var i = 0; i < left.length; i++) {
+        if (!_jsonValuesEqual(left[i], right[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (left is Map && right is Map) {
+      if (left.length != right.length) {
+        return false;
+      }
+      for (final key in left.keys) {
+        if (!right.containsKey(key) ||
+            !_jsonValuesEqual(left[key], right[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return left == right;
+  }
+
+  static ({
+    dynamic value,
+    String? title,
+    String? description,
+    bool hasDefault,
+    dynamic defaultValue,
+  }) _normalizeEntry(dynamic entry) {
     if (entry is Map && entry.containsKey('value')) {
       final title = entry['title'];
+      final description = entry['description'];
       return (
         value: entry['value'],
         title: title is String ? title : null,
+        description: description is String ? description : null,
+        hasDefault: entry.containsKey('default'),
+        defaultValue: entry['default'],
       );
     }
 
-    return (value: entry, title: null);
+    return (
+      value: entry,
+      title: null,
+      description: null,
+      hasDefault: false,
+      defaultValue: null,
+    );
   }
 }
