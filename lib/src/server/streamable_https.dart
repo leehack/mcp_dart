@@ -142,6 +142,7 @@ class StreamableHTTPServerTransport
   final Map<dynamic, String> _requestToStreamMapping = {};
   final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
   bool _initialized = false;
+  bool _terminated = false;
   final bool _enableJsonResponse;
   final String _standaloneSseStreamId = '_GET_stream';
   final EventStore? _eventStore;
@@ -598,9 +599,23 @@ class StreamableHTTPServerTransport
       // https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle/
       final isInitializationRequest = messages.any(_isInitializeRequest);
       if (isInitializationRequest) {
+        final requestSessionId = req.headers.value('mcp-session-id');
+
         // If it's a server with session management and the session ID is already set we should reject the request
-        // to avoid re-initialization.
+        // to avoid re-initialization. A mismatched or terminated session ID means the client referenced a session
+        // this transport cannot serve, so return the Streamable HTTP stale-session 404.
         if (_initialized && sessionId != null) {
+          if (_terminated ||
+              requestSessionId != null && requestSessionId != sessionId) {
+            await _writeJsonRpcErrorResponse(
+              req.response,
+              httpStatus: HttpStatus.notFound,
+              errorCode: ErrorCode.connectionClosed,
+              message: 'Session not found',
+            );
+            return;
+          }
+
           req.response.statusCode = HttpStatus.badRequest;
           req.response.write(
             jsonEncode(
@@ -633,7 +648,21 @@ class StreamableHTTPServerTransport
           await _safeClose(req.response);
           return;
         }
-        sessionId = _sessionIdGenerator?.call();
+
+        final generatedSessionId = _sessionIdGenerator?.call();
+        if (requestSessionId != null &&
+            generatedSessionId != null &&
+            requestSessionId != generatedSessionId) {
+          await _writeJsonRpcErrorResponse(
+            req.response,
+            httpStatus: HttpStatus.notFound,
+            errorCode: ErrorCode.connectionClosed,
+            message: 'Session not found',
+          );
+          return;
+        }
+
+        sessionId = generatedSessionId;
         _initialized = true;
 
         // If we have a session ID and an onsessioninitialized handler, call it immediately
@@ -804,8 +833,8 @@ class StreamableHTTPServerTransport
       );
       await _safeClose(res);
       return false;
-    } else if (requestSessionId != sessionId) {
-      // Reject requests with invalid session ID with 404 Not Found
+    } else if (_terminated || requestSessionId != sessionId) {
+      // Reject terminated or invalid session IDs with 404 Not Found.
       res.statusCode = HttpStatus.notFound;
       res.write(
         jsonEncode(
@@ -827,6 +856,10 @@ class StreamableHTTPServerTransport
 
   @override
   Future<void> close() async {
+    if (sessionId != null) {
+      _terminated = true;
+    }
+
     // Close all SSE connections - fix concurrent modification by creating a copy of the values first
     final responses = List<HttpResponse>.from(_streamMapping.values);
     for (final response in responses) {

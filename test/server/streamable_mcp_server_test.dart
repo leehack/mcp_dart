@@ -12,6 +12,60 @@ void main() {
     final host = 'localhost';
     final baseUrl = 'http://$host:$port/mcp';
 
+    Future<http.Response> postPingWithSession(String sessionId) {
+      return http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(const JsonRpcRequest(id: 2, method: 'ping').toJson()),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': sessionId,
+        },
+      );
+    }
+
+    Future<http.Response> postInitialize({String? sessionId}) {
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        if (sessionId != null) 'mcp-session-id': sessionId,
+      };
+      return http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+            params: const InitializeRequestParams(
+              protocolVersion: latestProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'Client', version: '1.0'),
+            ).toJson(),
+          ).toJson(),
+        ),
+        headers: headers,
+      );
+    }
+
+    Future<http.Response> getSseWithSession(String sessionId) async {
+      final client = http.Client();
+      addTearDown(client.close);
+      final req = http.Request('GET', Uri.parse(baseUrl));
+      req.headers['Accept'] = 'text/event-stream';
+      req.headers['mcp-session-id'] = sessionId;
+      final streamedRes = await client.send(req);
+      return http.Response.fromStream(streamedRes);
+    }
+
+    Future<http.Response> deleteSession(String sessionId) async {
+      final client = http.Client();
+      addTearDown(client.close);
+      final req = http.Request('DELETE', Uri.parse(baseUrl));
+      req.headers['mcp-session-id'] = sessionId;
+      final streamedRes = await client.send(req);
+      return http.Response.fromStream(streamedRes);
+    }
+
     setUp(() async {
       server = StreamableMcpServer(
         serverFactory: (sessionId) {
@@ -349,6 +403,62 @@ void main() {
     test('rejects GET without session ID', () async {
       final res = await http.get(Uri.parse(baseUrl));
       expect(res.statusCode, HttpStatus.badRequest);
+    });
+
+    test('returns 404 for unknown session IDs', () async {
+      final postRes = await postPingWithSession('unknown-session-id');
+      expect(postRes.statusCode, HttpStatus.notFound);
+      expect(postRes.body, contains('Session not found'));
+
+      final malformedPostRes = await http.post(
+        Uri.parse(baseUrl),
+        body: 'not json',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': 'unknown-session-id',
+        },
+      );
+      expect(malformedPostRes.statusCode, HttpStatus.notFound);
+      expect(malformedPostRes.body, contains('Session not found'));
+
+      final initRes = await postInitialize(sessionId: 'unknown-session-id');
+      expect(initRes.statusCode, HttpStatus.notFound);
+      expect(initRes.body, contains('Session not found'));
+
+      final getRes = await getSseWithSession('unknown-session-id');
+      expect(getRes.statusCode, HttpStatus.notFound);
+      expect(getRes.body, contains('Session not found'));
+
+      final deleteRes = await deleteSession('unknown-session-id');
+      expect(deleteRes.statusCode, HttpStatus.notFound);
+      expect(deleteRes.body, contains('Session not found'));
+    });
+
+    test('returns 404 for requests after session termination', () async {
+      final initRes = await postInitialize();
+      expect(initRes.statusCode, HttpStatus.ok);
+      final sessionId = initRes.headers['mcp-session-id'];
+      expect(sessionId, isNotNull);
+
+      final deleteRes = await deleteSession(sessionId!);
+      expect(deleteRes.statusCode, HttpStatus.ok);
+
+      final postRes = await postPingWithSession(sessionId);
+      expect(postRes.statusCode, HttpStatus.notFound);
+      expect(postRes.body, contains('Session not found'));
+
+      final initAfterDelete = await postInitialize(sessionId: sessionId);
+      expect(initAfterDelete.statusCode, HttpStatus.notFound);
+      expect(initAfterDelete.body, contains('Session not found'));
+
+      final getRes = await getSseWithSession(sessionId);
+      expect(getRes.statusCode, HttpStatus.notFound);
+      expect(getRes.body, contains('Session not found'));
+
+      final deleteAfterDelete = await deleteSession(sessionId);
+      expect(deleteAfterDelete.statusCode, HttpStatus.notFound);
+      expect(deleteAfterDelete.body, contains('Session not found'));
     });
 
     test('authentication', () async {

@@ -521,7 +521,23 @@ class StreamableHttpClientTransport
     int? relatedRequestId,
     String? resumptionToken,
     void Function(String)? onResumptionToken,
+  }) {
+    return _send(
+      message,
+      relatedRequestId: relatedRequestId,
+      resumptionToken: resumptionToken,
+      onResumptionToken: onResumptionToken,
+    );
+  }
+
+  Future<void> _send(
+    JsonRpcMessage message, {
+    int? relatedRequestId,
+    String? resumptionToken,
+    void Function(String)? onResumptionToken,
+    bool retryStaleSessionOn404 = true,
   }) async {
+    var retryFailureAlreadyReported = false;
     try {
       if (resumptionToken != null) {
         // If we have a last event ID, we need to reconnect the SSE stream
@@ -576,6 +592,25 @@ class StreamableHttpClientTransport
         }
 
         final text = await response.stream.transform(utf8.decoder).join();
+        if (response.statusCode == 404 &&
+            retryStaleSessionOn404 &&
+            _sessionId != null &&
+            _isInitializeRequest(message)) {
+          _sessionId = null;
+          try {
+            await _send(
+              message,
+              relatedRequestId: relatedRequestId,
+              resumptionToken: resumptionToken,
+              onResumptionToken: onResumptionToken,
+              retryStaleSessionOn404: false,
+            );
+          } catch (_) {
+            retryFailureAlreadyReported = true;
+            rethrow;
+          }
+          return;
+        }
         throw McpError(
           0,
           "Error POSTing to endpoint (HTTP ${response.statusCode}): $text",
@@ -653,10 +688,12 @@ class StreamableHttpClientTransport
         }
       }
     } catch (error) {
-      if (error is Error) {
-        onerror?.call(error);
-      } else {
-        onerror?.call(McpError(0, error.toString()));
+      if (!retryFailureAlreadyReported) {
+        if (error is Error) {
+          onerror?.call(error);
+        } else {
+          onerror?.call(McpError(0, error.toString()));
+        }
       }
       rethrow;
     }
@@ -711,6 +748,13 @@ class StreamableHttpClientTransport
       }
       rethrow;
     }
+  }
+
+  bool _isInitializeRequest(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      return message.method == 'initialize';
+    }
+    return false;
   }
 
   // Helper method to check if a message is an initialized notification

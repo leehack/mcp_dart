@@ -217,6 +217,17 @@ class StreamableMcpServer {
     // OR be passed the parsed body.
     // To support the routing logic (new vs existing session), we must read it here.
 
+    final sessionId = request.headers.value('mcp-session-id');
+    if (sessionId != null && !_transports.containsKey(sessionId)) {
+      await _respondWithJsonRpcError(
+        request.response,
+        httpStatus: HttpStatus.notFound,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Session not found',
+      );
+      return;
+    }
+
     final bodyBytes = await _collectBytes(request);
     final bodyString = utf8.decode(bodyBytes);
     dynamic body;
@@ -253,12 +264,11 @@ class StreamableMcpServer {
       return;
     }
 
-    final sessionId = request.headers.value('mcp-session-id');
     StreamableHTTPServerTransport? transport;
 
-    if (sessionId != null && _transports.containsKey(sessionId)) {
+    if (sessionId != null) {
       transport = _transports[sessionId]!;
-    } else if (sessionId == null && _isInitializeRequest(body)) {
+    } else if (_isInitializeRequest(body)) {
       // New initialization request
       transport = _createTransport();
 
@@ -282,10 +292,17 @@ class StreamableMcpServer {
 
   Future<void> _handleGetRequest(HttpRequest request) async {
     final sessionId = request.headers.value('mcp-session-id');
-    if (sessionId == null || !_transports.containsKey(sessionId)) {
+    if (sessionId == null) {
       request.response
         ..statusCode = HttpStatus.badRequest
-        ..write('Invalid or missing session ID')
+        ..write('Missing session ID')
+        ..close();
+      return;
+    }
+    if (!_transports.containsKey(sessionId)) {
+      request.response
+        ..statusCode = HttpStatus.notFound
+        ..write('Session not found')
         ..close();
       return;
     }
@@ -296,10 +313,17 @@ class StreamableMcpServer {
 
   Future<void> _handleDeleteRequest(HttpRequest request) async {
     final sessionId = request.headers.value('mcp-session-id');
-    if (sessionId == null || !_transports.containsKey(sessionId)) {
+    if (sessionId == null) {
       request.response
         ..statusCode = HttpStatus.badRequest
-        ..write('Invalid or missing session ID')
+        ..write('Missing session ID')
+        ..close();
+      return;
+    }
+    if (!_transports.containsKey(sessionId)) {
+      request.response
+        ..statusCode = HttpStatus.notFound
+        ..write('Session not found')
         ..close();
       return;
     }
