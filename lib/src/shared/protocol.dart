@@ -1256,7 +1256,7 @@ abstract class Protocol {
       _taskRequestsByMessageId[messageId] = taskRequestState;
     }
 
-    void cancel([Object? reason]) {
+    void cancel(Object? reason, {bool fromTimeout = false}) {
       final errorReason = reason ?? AbortError("Request cancelled");
       final activeTaskState = taskRequestState;
       if (activeTaskState != null) {
@@ -1272,8 +1272,7 @@ abstract class Protocol {
               activeTaskState.cancelReason ?? errorReason,
             );
           }
-        } else if (errorReason is McpError &&
-            errorReason.code == ErrorCode.requestTimeout.value) {
+        } else if (fromTimeout) {
           _responseCompleters.remove(messageId);
           _responseErrorHandlers.remove(messageId);
           _cleanupProgressHandler(messageId);
@@ -1356,6 +1355,7 @@ abstract class Protocol {
           "Request $messageId timed out after $timeoutDuration",
           {'timeout': timeoutDuration.inMilliseconds},
         ),
+        fromTimeout: true,
       );
     }
 
@@ -1385,6 +1385,9 @@ abstract class Protocol {
         ),
         _transport?.sessionId,
       ).catchError((e) {
+        _requestResolvers.remove(messageId);
+        _responseCompleters.remove(messageId);
+        _responseErrorHandlers.remove(messageId);
         _cleanupTimeout(messageId);
         _cleanupProgressHandler(messageId);
         final state = taskRequestState;
@@ -1404,6 +1407,8 @@ abstract class Protocol {
         relatedRequestId: relatedRequestId,
       )
           .catchError((error) {
+        _responseCompleters.remove(messageId);
+        _responseErrorHandlers.remove(messageId);
         _cleanupTimeout(messageId);
         _cleanupProgressHandler(messageId);
         final state = taskRequestState;

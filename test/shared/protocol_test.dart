@@ -1719,6 +1719,55 @@ void main() {
     });
 
     test(
+        'pre-task-id abort distinguishes caller timeout-shaped reason from timeout',
+        () async {
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      final callerReason = McpError(
+        ErrorCode.requestTimeout.value,
+        'caller supplied timeout-shaped abort',
+      );
+      final requestFuture = protocol
+          .request<CreateTaskResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 'caller-timeout-shaped-token'},
+            ),
+            CreateTaskResult.fromJson,
+            RequestOptions(
+              signal: controller.signal,
+              onprogress: (_) {},
+              task: const TaskCreation(),
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      final errorExpectation = expectLater(
+        requestFuture,
+        throwsA(same(callerReason)),
+      );
+      final sentRequest = transport.sentMessages.single as JsonRpcRequest;
+      controller.abort(callerReason);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: sentRequest.id,
+          result: {
+            'task': taskJson('caller-timeout-shaped-task', TaskStatus.working),
+          },
+        ),
+      );
+
+      await waitForSentMessages(transport, 2);
+      final cancelRequest = transport.sentMessages.last as JsonRpcRequest;
+      expect(cancelRequest.method, 'tasks/cancel');
+      expect(cancelRequest.params?['taskId'], 'caller-timeout-shaped-task');
+      await errorExpectation;
+    });
+
+    test(
         'pre-task-id abort preserves cancellation reason over malformed result',
         () async {
       await protocol.connect(transport);
