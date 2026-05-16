@@ -221,6 +221,7 @@ class _TimeoutInfo {
 class _TaskAugmentedRequestState {
   final int messageId;
   final RequestId? relatedRequestId;
+  final AbortSignal? signal;
   StreamSubscription? abortSubscription;
   String? taskId;
   bool cancelRequested = false;
@@ -230,6 +231,7 @@ class _TaskAugmentedRequestState {
   _TaskAugmentedRequestState({
     required this.messageId,
     required this.relatedRequestId,
+    required this.signal,
   });
 }
 
@@ -612,8 +614,17 @@ abstract class Protocol {
   Object? _preTaskIdCancellationReason(
     _TaskAugmentedRequestState? state,
   ) {
-    if (state != null && state.cancelRequested && state.taskId == null) {
+    if (state == null || state.taskId != null) {
+      return null;
+    }
+    if (state.cancelRequested) {
       return state.cancelReason ?? AbortError("Request cancelled");
+    }
+    final signal = state.signal;
+    if (signal != null && signal.aborted) {
+      state.cancelRequested = true;
+      state.cancelReason = signal.reason ?? AbortError("Request cancelled");
+      return state.cancelReason;
     }
     return null;
   }
@@ -1250,6 +1261,7 @@ abstract class Protocol {
         ? _TaskAugmentedRequestState(
             messageId: messageId,
             relatedRequestId: relatedRequestId,
+            signal: options?.signal,
           )
         : null;
     if (taskRequestState != null) {

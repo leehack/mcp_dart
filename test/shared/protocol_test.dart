@@ -1681,8 +1681,11 @@ void main() {
           .timeout(const Duration(seconds: 5));
 
       final sentRequest = transport.sentMessages.single as JsonRpcRequest;
+      final errorExpectation = expectLater(
+        requestFuture,
+        throwsA(equals('pre-error user abort')),
+      );
       controller.abort('pre-error user abort');
-      await Future<void>.delayed(const Duration(milliseconds: 20));
       transport.receiveMessage(
         JsonRpcError(
           id: sentRequest.id,
@@ -1693,7 +1696,7 @@ void main() {
         ),
       );
 
-      await expectLater(requestFuture, throwsA(equals('pre-error user abort')));
+      await errorExpectation;
       expect(transport.sentMessages.length, 1);
 
       final reuseFuture = protocol
