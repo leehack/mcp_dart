@@ -1,26 +1,113 @@
 @Tags(['interop'])
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:mcp_dart/src/server/streamable_https.dart';
-import 'package:mcp_dart/src/shared/uuid.dart';
+import 'package:http/http.dart' as http;
+import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 import 'package:path/path.dart' as p;
 
 import 'test_dart_server.dart';
 
+class _SseEvent {
+  final String? id;
+  final String data;
+
+  const _SseEvent({this.id, required this.data});
+
+  Map<String, dynamic> get json => jsonDecode(data) as Map<String, dynamic>;
+}
+
+class _SseConnection {
+  final HttpClient client;
+  final HttpClientResponse response;
+
+  const _SseConnection(this.client, this.response);
+
+  void close() => client.close(force: true);
+}
+
+Future<int> _findAvailablePort() async {
+  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = socket.port;
+  await socket.close();
+  return port;
+}
+
+Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
+  String? id;
+  final dataLines = <String>[];
+
+  while (await lines.moveNext().timeout(const Duration(seconds: 3))) {
+    final line = lines.current;
+    if (line.isEmpty) {
+      if (id != null || dataLines.isNotEmpty) {
+        return _SseEvent(id: id, data: dataLines.join('\n'));
+      }
+      continue;
+    }
+
+    if (line.startsWith(':')) {
+      continue;
+    }
+
+    final colonIndex = line.indexOf(':');
+    if (colonIndex < 0) {
+      continue;
+    }
+
+    final field = line.substring(0, colonIndex);
+    final valueStart = colonIndex +
+        1 +
+        (line.length > colonIndex + 1 && line[colonIndex + 1] == ' ' ? 1 : 0);
+    final value = line.substring(valueStart);
+
+    switch (field) {
+      case 'id':
+        id = value;
+        break;
+      case 'data':
+        dataLines.add(value);
+        break;
+    }
+  }
+
+  throw StateError('SSE stream ended before an event was received');
+}
+
+Future<_SseConnection> _openGetSse(
+  String baseUrl,
+  String sessionId, {
+  String? lastEventId,
+}) async {
+  final client = HttpClient();
+  final req = await client.getUrl(Uri.parse(baseUrl));
+  req.headers
+    ..set(HttpHeaders.acceptHeader, 'text/event-stream')
+    ..set('mcp-session-id', sessionId);
+  if (lastEventId != null) {
+    req.headers.set('Last-Event-ID', lastEventId);
+  }
+  final response = await req.close();
+  return _SseConnection(client, response);
+}
+
 void main() {
   // Use compiled JS client for reliability (avoids npx tsx issues in CI)
   final tsClientPath =
       p.join(Directory.current.path, 'test/interop/ts/dist/client.js');
+  final tsReplayClientPath =
+      p.join(Directory.current.path, 'test/interop/ts/dist/replay_client.js');
   final dartServerPath =
       p.join(Directory.current.path, 'test/interop/test_dart_server.dart');
 
   // Check if we should skip
-  final skipTests =
-      !File(tsClientPath).existsSync() || !File(dartServerPath).existsSync();
+  final skipTests = !File(tsClientPath).existsSync() ||
+      !File(tsReplayClientPath).existsSync() ||
+      !File(dartServerPath).existsSync();
   final isCi = Platform.environment['CI'] == 'true';
 
   group('TS Client with Dart Server', () {
@@ -188,6 +275,164 @@ void main() {
         }
       },
       timeout: const Timeout(Duration(seconds: 120)),
+    );
+
+    test(
+      'official TS client resumes Dart server SSE replay by Last-Event-ID',
+      () async {
+        final port = await _findAvailablePort();
+        final baseUrl = 'http://127.0.0.1:$port/mcp';
+        final servers = <String, McpServer>{};
+
+        final streamableServer = StreamableMcpServer(
+          serverFactory: (sessionId) {
+            final mcpServer = McpServer(
+              const Implementation(name: 'DartReplayInterop', version: '1.0'),
+            );
+            servers[sessionId] = mcpServer;
+            return mcpServer;
+          },
+          host: '127.0.0.1',
+          port: port,
+          eventStore: InMemoryEventStore(),
+        );
+
+        Future<void> sendServerNotification(
+          McpServer mcpServer,
+          Map<String, Object> params,
+        ) async {
+          await mcpServer.server.notification(
+            JsonRpcNotification(
+              method: 'notifications/message',
+              params: params,
+            ),
+          );
+        }
+
+        await streamableServer.start();
+        try {
+          final initRes = await http.post(
+            Uri.parse(baseUrl),
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'id': 1,
+              'method': 'initialize',
+              'params': {
+                'protocolVersion': '2025-11-25',
+                'capabilities': <String, Object>{},
+                'clientInfo': {'name': 'dart-interop-test', 'version': '1.0'},
+              },
+            }),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json, text/event-stream',
+            },
+          );
+          expect(initRes.statusCode, HttpStatus.ok);
+          final sessionId = initRes.headers['mcp-session-id'];
+          expect(sessionId, isNotNull);
+
+          final initializedRes = await http.post(
+            Uri.parse(baseUrl),
+            body: jsonEncode(
+              const JsonRpcNotification(
+                method: 'notifications/initialized',
+              ).toJson(),
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json, text/event-stream',
+              'mcp-session-id': sessionId!,
+            },
+          );
+          expect(initializedRes.statusCode, HttpStatus.accepted);
+
+          final mcpServer = servers[sessionId];
+          expect(mcpServer, isNotNull);
+
+          final streamAFuture = _openGetSse(baseUrl, sessionId);
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await sendServerNotification(mcpServer!, {'warmup': 'A'});
+          final streamA =
+              await streamAFuture.timeout(const Duration(seconds: 3));
+
+          final streamBFuture = _openGetSse(baseUrl, sessionId);
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await sendServerNotification(mcpServer, {'warmup': 'B'});
+          final streamB =
+              await streamBFuture.timeout(const Duration(seconds: 3));
+
+          final linesA = StreamIterator(
+            streamA.response
+                .transform(utf8.decoder)
+                .transform(const LineSplitter()),
+          );
+          final linesB = StreamIterator(
+            streamB.response
+                .transform(utf8.decoder)
+                .transform(const LineSplitter()),
+          );
+
+          await _readSseEvent(linesA); // stream A warmup
+          await _readSseEvent(linesA); // stream B warmup broadcast to A
+          await _readSseEvent(linesB); // stream B warmup
+
+          await sendServerNotification(mcpServer, {'seq': 1});
+          await sendServerNotification(mcpServer, {'seq': 2});
+
+          final aFirst = await _readSseEvent(linesA);
+          final aSecond = await _readSseEvent(linesA);
+          final bFirst = await _readSseEvent(linesB);
+          final bSecond = await _readSseEvent(linesB);
+
+          expect(aFirst.json['params'], containsPair('seq', 1));
+          expect(aSecond.json['params'], containsPair('seq', 2));
+          expect(bFirst.json['params'], containsPair('seq', 1));
+          expect(bSecond.json['params'], containsPair('seq', 2));
+          expect(aFirst.id, isNotNull);
+          expect(aSecond.id, isNotNull);
+          expect(bSecond.id, isNotNull);
+          expect(aSecond.id, isNot(bSecond.id));
+
+          final result = await Process.run(
+            'node',
+            [
+              tsReplayClientPath,
+              '--url',
+              baseUrl,
+              '--session-id',
+              sessionId,
+              '--last-event-id',
+              aFirst.id!,
+              '--expect-seq',
+              '2',
+              '--expect-token',
+              aSecond.id!,
+              '--reject-token',
+              bSecond.id!,
+            ],
+            runInShell: true,
+          );
+
+          if (result.exitCode != 0) {
+            print('TS replay client stdout: ${result.stdout}');
+            print('TS replay client stderr: ${result.stderr}');
+          }
+          expect(
+            result.exitCode,
+            equals(0),
+            reason: 'Official TS StreamableHTTPClientTransport replay failed',
+          );
+
+          await linesA.cancel();
+          await linesB.cancel();
+          streamA.close();
+          streamB.close();
+        } finally {
+          await streamableServer.stop();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
     );
   });
 }

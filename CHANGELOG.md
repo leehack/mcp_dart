@@ -44,6 +44,9 @@
 
 ### Reliability
 
+- Scoped Streamable HTTP SSE resumability to the stream identified by
+  `Last-Event-ID`, allowing multiple concurrent GET SSE streams per session
+  without replaying events from unrelated streams.
 - Returned `404 Session not found` for stale, unknown, or terminated Streamable
   HTTP session IDs across high-level and bare transports, and retried client
   initialization once without a stale preconfigured session ID.
