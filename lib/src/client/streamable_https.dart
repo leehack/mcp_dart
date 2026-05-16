@@ -328,7 +328,12 @@ class StreamableHttpClientTransport
 
     // Function to process a complete SSE event
     void processEvent() {
-      if (eventData == null) return;
+      final data = eventData;
+      if (data == null) {
+        eventName = null;
+        eventId = null;
+        return;
+      }
 
       // Update last event ID if provided
       if (eventId != null) {
@@ -336,35 +341,41 @@ class StreamableHttpClientTransport
         onResumptionToken?.call(eventId!);
       }
 
-      if (eventName == null || eventName == 'message') {
-        try {
-          final message = JsonRpcMessage.fromJson(jsonDecode(eventData!));
-
-          // Can't set id directly if it's final, need to create a new message
-          if (replayMessageId != null && message is JsonRpcResponse) {
-            // Create a new response with the same data but different ID
-            final newMessage = JsonRpcResponse(
-              id: replayMessageId,
-              result: message.result,
-              meta: message.meta,
-            );
-            onmessage?.call(newMessage);
-          } else {
-            onmessage?.call(message);
-          }
-        } catch (error) {
-          if (error is Error) {
-            onerror?.call(error);
-          } else {
-            onerror?.call(McpError(0, error.toString()));
-          }
-        }
-      }
-
-      // Reset for next event
+      final currentEventName = eventName;
       eventName = null;
       eventId = null;
       eventData = null;
+
+      if (currentEventName != null && currentEventName != 'message') {
+        return;
+      }
+
+      if (data.trim().isEmpty) {
+        return;
+      }
+
+      try {
+        final message = JsonRpcMessage.fromJson(jsonDecode(data));
+
+        // Can't set id directly if it's final, need to create a new message
+        if (replayMessageId != null && message is JsonRpcResponse) {
+          // Create a new response with the same data but different ID
+          final newMessage = JsonRpcResponse(
+            id: replayMessageId,
+            result: message.result,
+            meta: message.meta,
+          );
+          onmessage?.call(newMessage);
+        } else {
+          onmessage?.call(message);
+        }
+      } catch (error) {
+        if (error is Error) {
+          onerror?.call(error);
+        } else {
+          onerror?.call(McpError(0, error.toString()));
+        }
+      }
     }
 
     // Helper function to handle reconnection logic
@@ -445,7 +456,7 @@ class StreamableHttpClientTransport
                 }
                 break;
               case 'data':
-                eventData = (eventData ?? '') + value;
+                eventData = eventData == null ? value : '$eventData\n$value';
                 break;
             }
           }

@@ -25,7 +25,10 @@ abstract class EventStore {
   /// Returns the generated event ID for the stored event
   Future<EventId> storeEvent(StreamId streamId, JsonRpcMessage message);
 
-  /// Replays events after a specified event ID
+  /// Replays events after a specified event ID.
+  ///
+  /// Implementations must replay only events from the stream that originally
+  /// produced [lastEventId]. Events from other streams must not be replayed.
   ///
   /// [lastEventId] The last event ID received by the client
   /// [send] Callback function that will be called for each event
@@ -139,12 +142,15 @@ class StreamableHTTPServerTransport
   final String? Function()? _sessionIdGenerator;
   bool _started = false;
   final Map<String, HttpResponse> _streamMapping = {};
+  final Set<StreamId> _standaloneSseStreamIds = {};
+  final Map<StreamId, Set<HttpResponse>> _standaloneSseResponses = {};
   final Map<dynamic, String> _requestToStreamMapping = {};
   final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
   bool _initialized = false;
   bool _terminated = false;
   final bool _enableJsonResponse;
-  final String _standaloneSseStreamId = '_GET_stream';
+  final String _standaloneSseStreamIdPrefix = '_GET_stream:';
+  final String _legacyStandaloneSseStreamId = '_GET_stream';
   final EventStore? _eventStore;
   final void Function(String sessionId)? _onsessioninitialized;
   final bool _enableDnsRebindingProtection;
@@ -274,6 +280,38 @@ class StreamableHTTPServerTransport
     await _safeClose(response);
   }
 
+  bool _isStandaloneSseStreamId(StreamId streamId) {
+    return streamId == _legacyStandaloneSseStreamId ||
+        streamId.startsWith(_standaloneSseStreamIdPrefix);
+  }
+
+  void _addStandaloneSseResponse(StreamId streamId, HttpResponse response) {
+    _standaloneSseStreamIds.add(streamId);
+    _standaloneSseResponses.putIfAbsent(streamId, () => {}).add(response);
+    _streamMapping.putIfAbsent(streamId, () => response);
+  }
+
+  void _removeStandaloneSseResponse(
+    StreamId streamId,
+    HttpResponse response,
+  ) {
+    final responses = _standaloneSseResponses[streamId];
+    responses?.remove(response);
+
+    if (responses == null || responses.isEmpty) {
+      _standaloneSseResponses.remove(streamId);
+      _standaloneSseStreamIds.remove(streamId);
+      if (identical(_streamMapping[streamId], response)) {
+        _streamMapping.remove(streamId);
+      }
+      return;
+    }
+
+    if (identical(_streamMapping[streamId], response)) {
+      _streamMapping[streamId] = responses.first;
+    }
+  }
+
   Set<String> _parseAcceptedMediaTypes(HttpRequest req) {
     final acceptHeaderValues = req.headers[HttpHeaders.acceptHeader];
     if (acceptHeaderValues == null || acceptHeaderValues.isEmpty) {
@@ -346,26 +384,6 @@ class StreamableHTTPServerTransport
       headers["mcp-session-id"] = sessionId!;
     }
 
-    // Check if there's already an active standalone SSE stream for this session
-    if (_streamMapping[_standaloneSseStreamId] != null) {
-      // Only one GET SSE stream is allowed per session
-      req.response
-        ..statusCode = HttpStatus.conflict
-        ..write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.connectionClosed.value,
-                message: 'Conflict: Only one SSE stream is allowed per session',
-              ),
-            ).toJson(),
-          ),
-        );
-      await _safeClose(req.response);
-      return;
-    }
-
     // We need to send headers immediately as messages will arrive much later,
     // otherwise the client will just wait for the first message
     req.response.statusCode = HttpStatus.ok;
@@ -373,15 +391,17 @@ class StreamableHTTPServerTransport
       req.response.headers.set(key, value);
     });
 
+    final streamId = '$_standaloneSseStreamIdPrefix${generateUUID()}';
+
     // Assign the response to the standalone SSE stream before flushing
     // to ensure it's available if a task tries to send a message immediately
-    _streamMapping[_standaloneSseStreamId] = req.response;
+    _addStandaloneSseResponse(streamId, req.response);
 
     await req.response.flush();
 
     // Set up close handler for client disconnects
     req.response.done.then((_) {
-      _streamMapping.remove(_standaloneSseStreamId);
+      _removeStandaloneSseResponse(streamId, req.response);
     });
   }
 
@@ -419,7 +439,18 @@ class StreamableHTTPServerTransport
         },
       );
 
-      _streamMapping[streamId] = res;
+      if (_isStandaloneSseStreamId(streamId)) {
+        _addStandaloneSseResponse(streamId, res);
+      } else {
+        _streamMapping[streamId] = res;
+      }
+      res.done.then((_) {
+        if (_isStandaloneSseStreamId(streamId)) {
+          _removeStandaloneSseResponse(streamId, res);
+        } else if (identical(_streamMapping[streamId], res)) {
+          _streamMapping.remove(streamId);
+        }
+      });
     } catch (error) {
       onerror?.call(error is Error ? error : StateError(error.toString()));
     }
@@ -860,12 +891,19 @@ class StreamableHTTPServerTransport
       _terminated = true;
     }
 
-    // Close all SSE connections - fix concurrent modification by creating a copy of the values first
-    final responses = List<HttpResponse>.from(_streamMapping.values);
+    // Close all SSE connections, including multiple standalone responses that
+    // may share one replay stream identity.
+    final responses = <HttpResponse>{
+      ..._streamMapping.values,
+      for (final streamResponses in _standaloneSseResponses.values)
+        ...streamResponses,
+    };
     for (final response in responses) {
       await _safeClose(response);
     }
     _streamMapping.clear();
+    _standaloneSseStreamIds.clear();
+    _standaloneSseResponses.clear();
 
     // Clear any pending responses
     _requestResponseMap.clear();
@@ -900,24 +938,32 @@ class StreamableHTTPServerTransport
         );
       }
 
-      final standaloneSse = _streamMapping[_standaloneSseStreamId];
-      if (standaloneSse == null) {
+      if (_standaloneSseStreamIds.isEmpty) {
         // The spec says the server MAY send messages on the stream, so it's ok to discard if no stream
         return;
       }
 
-      // Generate and store event ID if event store is provided
-      String? eventId;
-      if (_eventStore != null) {
-        // Stores the event and gets the generated event ID
-        eventId = await _eventStore!.storeEvent(
-          _standaloneSseStreamId,
-          message,
-        );
-      }
+      for (final streamId in List<StreamId>.from(_standaloneSseStreamIds)) {
+        final responses = _standaloneSseResponses[streamId];
+        if (responses == null || responses.isEmpty) {
+          _standaloneSseStreamIds.remove(streamId);
+          _streamMapping.remove(streamId);
+          continue;
+        }
 
-      // Send the message to the standalone SSE stream
-      await _writeSSEEvent(standaloneSse, message, eventId);
+        // Generate and store a stream-specific event ID if event store is provided.
+        String? eventId;
+        if (_eventStore != null) {
+          eventId = await _eventStore!.storeEvent(streamId, message);
+        }
+
+        for (final standaloneSse in List<HttpResponse>.from(responses)) {
+          final sent = await _writeSSEEvent(standaloneSse, message, eventId);
+          if (!sent) {
+            _removeStandaloneSseResponse(streamId, standaloneSse);
+          }
+        }
+      }
       return;
     }
 

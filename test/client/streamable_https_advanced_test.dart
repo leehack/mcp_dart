@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:mcp_dart/src/client/streamable_https.dart';
@@ -261,6 +262,158 @@ void main() {
 
       // Should have received parsing error
       expect(receivedErrors.isNotEmpty, isTrue);
+    });
+
+    test('ignores empty priming SSE event in POST response stream', () async {
+      final receivedErrors = <Error>[];
+      final messageCompleter = Completer<JsonRpcMessage>();
+
+      final subscription = requestController!.stream.listen((request) async {
+        if (request.uri.path == '/mcp' && request.method == 'POST') {
+          final requestBody = await utf8.decoder.bind(request).join();
+          final requestJson = jsonDecode(requestBody) as Map<String, dynamic>;
+
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.contentType =
+              ContentType('text', 'event-stream');
+          request.response.bufferOutput = false;
+
+          request.response.write('data:\n\n');
+          await request.response.flush();
+
+          request.response.write(
+            'event: message\n'
+            'data: ${jsonEncode({
+                  'jsonrpc': '2.0',
+                  'id': requestJson['id'],
+                  'result': {'ok': true},
+                })}\n\n',
+          );
+          await request.response.flush();
+          await request.response.close();
+        }
+      });
+
+      transport = StreamableHttpClientTransport(serverUrl);
+      transport.onerror = receivedErrors.add;
+      transport.onmessage = (message) {
+        if (!messageCompleter.isCompleted) {
+          messageCompleter.complete(message);
+        }
+      };
+
+      await transport.start();
+      await transport.send(
+        const JsonRpcRequest(
+          id: 1,
+          method: 'test/method',
+          params: {},
+        ),
+      );
+
+      final message = await messageCompleter.future.timeout(
+        const Duration(seconds: 3),
+      );
+      await subscription.cancel();
+
+      expect(message, isA<JsonRpcResponse>());
+      expect((message as JsonRpcResponse).result, containsPair('ok', true));
+      expect(receivedErrors, isEmpty);
+    });
+
+    test('resumed SSE response rewrites id and joins multi-line data',
+        () async {
+      final receivedErrors = <Error>[];
+      final receivedTokens = <String>[];
+      final messageCompleter = Completer<JsonRpcMessage>();
+      final sawResumeRequest = Completer<void>();
+
+      final subscription = requestController!.stream.listen((request) async {
+        if (request.uri.path == '/mcp' && request.method == 'GET') {
+          expect(request.headers.value('last-event-id'), 'resume-token-1');
+          if (!sawResumeRequest.isCompleted) {
+            sawResumeRequest.complete();
+          }
+
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.contentType =
+              ContentType('text', 'event-stream');
+          request.response.bufferOutput = false;
+          request.response.write(
+            'event: message\n'
+            'id: server-event-2\n'
+            'data: {"jsonrpc":"2.0","id":1,\n'
+            'data: "result":{"ok":true}}\n\n',
+          );
+          await request.response.flush();
+        }
+      });
+
+      transport = StreamableHttpClientTransport(serverUrl);
+      transport.onerror = receivedErrors.add;
+      transport.onmessage = (message) {
+        if (!messageCompleter.isCompleted) {
+          messageCompleter.complete(message);
+        }
+      };
+
+      await transport.start();
+      await transport.send(
+        const JsonRpcRequest(id: 99, method: 'test/resume', params: {}),
+        resumptionToken: 'resume-token-1',
+        onResumptionToken: receivedTokens.add,
+      );
+
+      await sawResumeRequest.future.timeout(const Duration(seconds: 3));
+      final message = await messageCompleter.future.timeout(
+        const Duration(seconds: 3),
+      );
+      await subscription.cancel();
+
+      expect(message, isA<JsonRpcResponse>());
+      final response = message as JsonRpcResponse;
+      expect(response.id, 99);
+      expect(response.result, containsPair('ok', true));
+      expect(receivedTokens, contains('server-event-2'));
+      expect(receivedErrors, isEmpty);
+    });
+
+    test('invalid resumed SSE message reports parser errors', () async {
+      final receivedErrors = <Error>[];
+      final sawResumeRequest = Completer<void>();
+
+      final subscription = requestController!.stream.listen((request) async {
+        if (request.uri.path == '/mcp' && request.method == 'GET') {
+          if (!sawResumeRequest.isCompleted) {
+            sawResumeRequest.complete();
+          }
+
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.contentType =
+              ContentType('text', 'event-stream');
+          request.response.bufferOutput = false;
+          request.response.write(
+            'event: message\n'
+            'data: {"jsonrpc":"2.0","method":123}\n\n',
+          );
+          await request.response.flush();
+        }
+      });
+
+      transport = StreamableHttpClientTransport(serverUrl);
+      transport.onerror = receivedErrors.add;
+
+      await transport.start();
+      await transport.send(
+        const JsonRpcRequest(id: 100, method: 'test/resume', params: {}),
+        resumptionToken: 'resume-token-invalid',
+      );
+
+      await sawResumeRequest.future.timeout(const Duration(seconds: 3));
+      await pumpEventQueue(times: 5);
+      await subscription.cancel();
+
+      expect(receivedErrors, isNotEmpty);
     });
 
     test('custom reconnection options are respected', () {

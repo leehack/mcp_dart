@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:mcp_dart/src/server/in_memory_event_store.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
@@ -99,6 +100,69 @@ List<Map<String, dynamic>> _decodeSseJsonMessages(String body) {
     }
   }
   return messages;
+}
+
+class _SseEvent {
+  final String? id;
+  final String? event;
+  final String data;
+
+  const _SseEvent({
+    this.id,
+    this.event,
+    required this.data,
+  });
+
+  Map<String, dynamic> get json => jsonDecode(data) as Map<String, dynamic>;
+}
+
+Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
+  String? id;
+  String? event;
+  final dataLines = <String>[];
+
+  while (await lines.moveNext()) {
+    final line = lines.current;
+    if (line.isEmpty) {
+      if (id != null || event != null || dataLines.isNotEmpty) {
+        return _SseEvent(
+          id: id,
+          event: event,
+          data: dataLines.join('\n'),
+        );
+      }
+      continue;
+    }
+
+    if (line.startsWith(':')) {
+      continue;
+    }
+
+    final colonIndex = line.indexOf(':');
+    if (colonIndex < 0) {
+      continue;
+    }
+
+    final field = line.substring(0, colonIndex);
+    final valueStart = colonIndex +
+        1 +
+        (line.length > colonIndex + 1 && line[colonIndex + 1] == ' ' ? 1 : 0);
+    final value = line.substring(valueStart);
+
+    switch (field) {
+      case 'id':
+        id = value;
+        break;
+      case 'event':
+        event = value;
+        break;
+      case 'data':
+        dataLines.add(value);
+        break;
+    }
+  }
+
+  throw StateError('SSE stream ended before an event was received');
 }
 
 void main() {
@@ -757,6 +821,320 @@ void main() {
       expect(invalidResult, equals("Invalid session rejected correctly"));
 
       await transport.close();
+    });
+
+    test('allows multiple concurrent GET SSE streams for one session',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'multi-stream-session-id',
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcRequest && message.method == 'initialize') {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const {
+                  'protocolVersion': latestProtocolVersion,
+                  'capabilities': {},
+                  'serverInfo': {
+                    'name': 'MultiStreamServer',
+                    'version': '1.0.0',
+                  },
+                },
+              ),
+            ),
+          );
+        }
+      };
+
+      Future<String> initializeSession() async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        request.write(
+          jsonEncode(
+            JsonRpcRequest(
+              id: 1,
+              method: 'initialize',
+              params: const InitializeRequestParams(
+                protocolVersion: latestProtocolVersion,
+                capabilities: ClientCapabilities(),
+                clientInfo: Implementation(name: 'Client', version: '1.0'),
+              ).toJson(),
+            ).toJson(),
+          ),
+        );
+
+        final response = await request.close();
+        expect(response.statusCode, HttpStatus.ok);
+        final sessionId = response.headers.value('mcp-session-id');
+        await response.drain<void>();
+        expect(sessionId, 'multi-stream-session-id');
+        return sessionId!;
+      }
+
+      Future<HttpClientResponse> openGetSse(String sessionId) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.getUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..set(HttpHeaders.acceptHeader, 'text/event-stream')
+          ..set('mcp-session-id', sessionId);
+        return request.close();
+      }
+
+      final sessionId = await initializeSession();
+      final firstFuture = openGetSse(sessionId);
+      await Future.delayed(const Duration(milliseconds: 50));
+      await transport.send(
+        const JsonRpcNotification(
+          method: 'notifications/message',
+          params: {'stream': 'first'},
+        ),
+      );
+      final first = await firstFuture.timeout(const Duration(seconds: 3));
+      expect(first.statusCode, HttpStatus.ok);
+      expect(first.headers.contentType?.mimeType, 'text/event-stream');
+      final firstLines = StreamIterator(
+        first.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+
+      final secondFuture = openGetSse(sessionId);
+      await Future.delayed(const Duration(milliseconds: 50));
+      await transport.send(
+        const JsonRpcNotification(
+          method: 'notifications/message',
+          params: {'stream': 'second'},
+        ),
+      );
+      final second = await secondFuture.timeout(const Duration(seconds: 3));
+      expect(second.statusCode, HttpStatus.ok);
+      expect(second.headers.contentType?.mimeType, 'text/event-stream');
+      final secondLines = StreamIterator(
+        second.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+
+      final firstOnly = await _readSseEvent(firstLines);
+      final broadcastToFirst = await _readSseEvent(firstLines);
+      final broadcastToSecond = await _readSseEvent(secondLines);
+
+      expect(firstOnly.json['params'], containsPair('stream', 'first'));
+      expect(broadcastToFirst.json['params'], containsPair('stream', 'second'));
+      expect(
+        broadcastToSecond.json['params'],
+        containsPair('stream', 'second'),
+      );
+      expect(firstOnly.id, isNull);
+      expect(broadcastToFirst.id, isNull);
+      expect(broadcastToSecond.id, isNull);
+
+      await firstLines.cancel();
+      await secondLines.cancel();
+    });
+
+    test('GET Last-Event-ID replay is scoped to the original SSE stream',
+        () async {
+      final eventStore = InMemoryEventStore();
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'replay-session-id',
+          eventStore: eventStore,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcRequest && message.method == 'initialize') {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const {
+                  'protocolVersion': latestProtocolVersion,
+                  'capabilities': {},
+                  'serverInfo': {
+                    'name': 'ReplayServer',
+                    'version': '1.0.0',
+                  },
+                },
+              ),
+            ),
+          );
+        }
+      };
+
+      Future<String> initializeSession() async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        request.write(
+          jsonEncode(
+            JsonRpcRequest(
+              id: 1,
+              method: 'initialize',
+              params: const InitializeRequestParams(
+                protocolVersion: latestProtocolVersion,
+                capabilities: ClientCapabilities(),
+                clientInfo: Implementation(name: 'Client', version: '1.0'),
+              ).toJson(),
+            ).toJson(),
+          ),
+        );
+
+        final response = await request.close();
+        expect(response.statusCode, HttpStatus.ok);
+        final sessionId = response.headers.value('mcp-session-id');
+        await response.drain<void>();
+        expect(sessionId, 'replay-session-id');
+        return sessionId!;
+      }
+
+      Future<HttpClientResponse> openGetSse(
+        String sessionId, {
+        String? lastEventId,
+      }) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.getUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..set(HttpHeaders.acceptHeader, 'text/event-stream')
+          ..set('mcp-session-id', sessionId);
+        if (lastEventId != null) {
+          request.headers.set('Last-Event-ID', lastEventId);
+        }
+        return request.close();
+      }
+
+      final sessionId = await initializeSession();
+      final streamAFuture = openGetSse(sessionId);
+      await Future.delayed(const Duration(milliseconds: 50));
+      await transport.send(
+        const JsonRpcNotification(
+          method: 'notifications/message',
+          params: {'warmup': 'A'},
+        ),
+      );
+      final streamA = await streamAFuture.timeout(const Duration(seconds: 3));
+      expect(streamA.statusCode, HttpStatus.ok);
+
+      final streamBFuture = openGetSse(sessionId);
+      await Future.delayed(const Duration(milliseconds: 50));
+      await transport.send(
+        const JsonRpcNotification(
+          method: 'notifications/message',
+          params: {'warmup': 'B'},
+        ),
+      );
+      final streamB = await streamBFuture.timeout(const Duration(seconds: 3));
+      expect(streamB.statusCode, HttpStatus.ok);
+
+      final linesA = StreamIterator(
+        streamA.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+      final linesB = StreamIterator(
+        streamB.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+
+      await _readSseEvent(linesA);
+      await _readSseEvent(linesA);
+      await _readSseEvent(linesB);
+
+      await transport.send(
+        const JsonRpcNotification(
+          method: 'notifications/message',
+          params: {'seq': 1},
+        ),
+      );
+      await transport.send(
+        const JsonRpcNotification(
+          method: 'notifications/message',
+          params: {'seq': 2},
+        ),
+      );
+
+      final aFirst = await _readSseEvent(linesA);
+      final aSecond = await _readSseEvent(linesA);
+      final bFirst = await _readSseEvent(linesB);
+      final bSecond = await _readSseEvent(linesB);
+
+      expect(aFirst.id, isNotNull);
+      expect(aSecond.id, isNotNull);
+      expect(bFirst.id, isNotNull);
+      expect(bSecond.id, isNotNull);
+      expect(aFirst.id, isNot(bFirst.id));
+      expect(aSecond.id, isNot(bSecond.id));
+      expect(aFirst.json['params'], containsPair('seq', 1));
+      expect(aSecond.json['params'], containsPair('seq', 2));
+      expect(bFirst.json['params'], containsPair('seq', 1));
+      expect(bSecond.json['params'], containsPair('seq', 2));
+
+      final replay = await openGetSse(sessionId, lastEventId: aFirst.id);
+      expect(replay.statusCode, HttpStatus.ok);
+      final replayLines = StreamIterator(
+        replay.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+      final replayed = await _readSseEvent(replayLines);
+
+      expect(replayed.id, aSecond.id);
+      expect(replayed.json['params'], containsPair('seq', 2));
+      expect(replayed.id, isNot(bSecond.id));
+
+      await Future.delayed(const Duration(milliseconds: 50));
+      await transport.send(
+        const JsonRpcNotification(
+          method: 'notifications/message',
+          params: {'seq': 3},
+        ),
+      );
+
+      final aThird = await _readSseEvent(linesA);
+      final bThird = await _readSseEvent(linesB);
+      final replayThird = await _readSseEvent(replayLines);
+
+      expect(aThird.json['params'], containsPair('seq', 3));
+      expect(bThird.json['params'], containsPair('seq', 3));
+      expect(replayThird.json['params'], containsPair('seq', 3));
+      expect(aThird.id, replayThird.id);
+      expect(aThird.id, isNot(bThird.id));
+
+      await transport.close();
+      expect(
+        await linesA.moveNext().timeout(const Duration(seconds: 3)),
+        isFalse,
+      );
+      expect(
+        await linesB.moveNext().timeout(const Duration(seconds: 3)),
+        isFalse,
+      );
+      expect(
+        await replayLines.moveNext().timeout(const Duration(seconds: 3)),
+        isFalse,
+      );
+
+      await linesA.cancel();
+      await linesB.cancel();
+      await replayLines.cancel();
     });
 
     test('event resumability works with EventStore', () async {

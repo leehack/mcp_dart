@@ -1,9 +1,60 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
+
+class _SseEvent {
+  final String? id;
+  final String data;
+
+  const _SseEvent({this.id, required this.data});
+
+  Map<String, dynamic> get json => jsonDecode(data) as Map<String, dynamic>;
+}
+
+Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
+  String? id;
+  final dataLines = <String>[];
+
+  while (await lines.moveNext().timeout(const Duration(seconds: 3))) {
+    final line = lines.current;
+    if (line.isEmpty) {
+      if (id != null || dataLines.isNotEmpty) {
+        return _SseEvent(id: id, data: dataLines.join('\n'));
+      }
+      continue;
+    }
+
+    if (line.startsWith(':')) {
+      continue;
+    }
+
+    final colonIndex = line.indexOf(':');
+    if (colonIndex < 0) {
+      continue;
+    }
+
+    final field = line.substring(0, colonIndex);
+    final valueStart = colonIndex +
+        1 +
+        (line.length > colonIndex + 1 && line[colonIndex + 1] == ' ' ? 1 : 0);
+    final value = line.substring(valueStart);
+
+    switch (field) {
+      case 'id':
+        id = value;
+        break;
+      case 'data':
+        dataLines.add(value);
+        break;
+    }
+  }
+
+  throw StateError('SSE stream ended before an event was received');
+}
 
 void main() {
   group('StreamableMcpServer', () {
@@ -459,6 +510,162 @@ void main() {
       final deleteAfterDelete = await deleteSession(sessionId);
       expect(deleteAfterDelete.statusCode, HttpStatus.notFound);
       expect(deleteAfterDelete.body, contains('Session not found'));
+    });
+
+    test('E2E GET Last-Event-ID replay is stream-scoped over HTTP', () async {
+      await server.stop();
+
+      final servers = <String, McpServer>{};
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'ReplayE2EServer', version: '1.0'),
+          );
+          servers[sessionId] = mcpServer;
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+        eventStore: InMemoryEventStore(),
+      );
+      await server.start();
+
+      Future<HttpClientResponse> openGetSse(
+        String sessionId, {
+        String? lastEventId,
+      }) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final req = await client.getUrl(Uri.parse(baseUrl));
+        req.headers
+          ..set(HttpHeaders.acceptHeader, 'text/event-stream')
+          ..set('mcp-session-id', sessionId);
+        if (lastEventId != null) {
+          req.headers.set('Last-Event-ID', lastEventId);
+        }
+        return req.close();
+      }
+
+      Future<void> sendServerNotification(
+        McpServer mcpServer,
+        Map<String, Object> params,
+      ) async {
+        await mcpServer.server.notification(
+          JsonRpcNotification(
+            method: 'notifications/message',
+            params: params,
+          ),
+        );
+      }
+
+      final initRes = await postInitialize();
+      expect(initRes.statusCode, HttpStatus.ok);
+      final sessionId = initRes.headers['mcp-session-id'];
+      expect(sessionId, isNotNull);
+
+      final initializedRes = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          const JsonRpcNotification(
+            method: 'notifications/initialized',
+          ).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': sessionId!,
+        },
+      );
+      expect(initializedRes.statusCode, HttpStatus.accepted);
+
+      final mcpServer = servers[sessionId];
+      expect(mcpServer, isNotNull);
+
+      final streamAFuture = openGetSse(sessionId);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await sendServerNotification(mcpServer!, {'warmup': 'A'});
+      final streamA = await streamAFuture.timeout(const Duration(seconds: 3));
+      expect(streamA.statusCode, HttpStatus.ok);
+      expect(streamA.headers.contentType?.mimeType, 'text/event-stream');
+
+      final streamBFuture = openGetSse(sessionId);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await sendServerNotification(mcpServer, {'warmup': 'B'});
+      final streamB = await streamBFuture.timeout(const Duration(seconds: 3));
+      expect(streamB.statusCode, HttpStatus.ok);
+      expect(streamB.headers.contentType?.mimeType, 'text/event-stream');
+
+      final linesA = StreamIterator(
+        streamA.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+      final linesB = StreamIterator(
+        streamB.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+
+      addTearDown(linesA.cancel);
+      addTearDown(linesB.cancel);
+
+      await _readSseEvent(linesA); // stream A warmup
+      await _readSseEvent(linesA); // stream B warmup broadcast to A
+      await _readSseEvent(linesB); // stream B warmup
+
+      await sendServerNotification(mcpServer, {'seq': 1});
+      await sendServerNotification(mcpServer, {'seq': 2});
+
+      final aFirst = await _readSseEvent(linesA);
+      final aSecond = await _readSseEvent(linesA);
+      final bFirst = await _readSseEvent(linesB);
+      final bSecond = await _readSseEvent(linesB);
+
+      expect(aFirst.id, isNotNull);
+      expect(aSecond.id, isNotNull);
+      expect(bFirst.id, isNotNull);
+      expect(bSecond.id, isNotNull);
+      expect(aFirst.id, isNot(bFirst.id));
+      expect(aSecond.id, isNot(bSecond.id));
+      expect(aFirst.json['params'], containsPair('seq', 1));
+      expect(aSecond.json['params'], containsPair('seq', 2));
+      expect(bFirst.json['params'], containsPair('seq', 1));
+      expect(bSecond.json['params'], containsPair('seq', 2));
+
+      final replay = await openGetSse(sessionId, lastEventId: aFirst.id);
+      expect(replay.statusCode, HttpStatus.ok);
+      expect(replay.headers.contentType?.mimeType, 'text/event-stream');
+      final replayLines = StreamIterator(
+        replay.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+      addTearDown(replayLines.cancel);
+
+      final replayed = await _readSseEvent(replayLines);
+      expect(replayed.id, aSecond.id);
+      expect(replayed.json['params'], containsPair('seq', 2));
+      expect(replayed.id, isNot(bSecond.id));
+
+      await sendServerNotification(mcpServer, {'seq': 3});
+      final aThird = await _readSseEvent(linesA);
+      final bThird = await _readSseEvent(linesB);
+      final replayThird = await _readSseEvent(replayLines);
+
+      expect(aThird.json['params'], containsPair('seq', 3));
+      expect(bThird.json['params'], containsPair('seq', 3));
+      expect(replayThird.json['params'], containsPair('seq', 3));
+      expect(aThird.id, replayThird.id);
+      expect(aThird.id, isNot(bThird.id));
+
+      final deleteRes = await deleteSession(sessionId);
+      expect(deleteRes.statusCode, HttpStatus.ok);
+      expect(
+        await linesA.moveNext().timeout(const Duration(seconds: 3)),
+        isFalse,
+      );
+      expect(
+        await linesB.moveNext().timeout(const Duration(seconds: 3)),
+        isFalse,
+      );
+      expect(
+        await replayLines.moveNext().timeout(const Duration(seconds: 3)),
+        isFalse,
+      );
     });
 
     test('authentication', () async {
