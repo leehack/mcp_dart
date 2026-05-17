@@ -126,7 +126,10 @@ RequestId? _parseResponseId(Object? value) {
 /// when present. Other `_meta` fields are preserved without interpretation.
 Map<String, dynamic>? validateRequestMeta(Map<String, dynamic>? meta) {
   if (meta != null && meta.containsKey('progressToken')) {
-    parseProgressToken(meta['progressToken']);
+    parseProgressToken(
+      meta['progressToken'],
+      fieldName: '_meta.progressToken',
+    );
   }
   return meta;
 }
@@ -171,7 +174,6 @@ sealed class JsonRpcMessage {
     if (json.containsKey('method')) {
       final method = json['method'] as String;
       final hasId = json.containsKey('id');
-      final id = hasId ? parseRequestId(json['id']) : null;
 
       if (hasId) {
         return switch (method) {
@@ -200,7 +202,7 @@ sealed class JsonRpcMessage {
           Method.tasksGet => JsonRpcGetTaskRequest.fromJson(json),
           Method.tasksResult => JsonRpcTaskResultRequest.fromJson(json),
           _ => JsonRpcRequest(
-              id: id,
+              id: parseRequestId(json['id']),
               method: method,
               params: json['params'] as Map<String, dynamic>?,
               meta: extractRequestMeta(json),

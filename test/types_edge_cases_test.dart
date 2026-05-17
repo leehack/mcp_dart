@@ -330,8 +330,11 @@ void main() {
             },
           }),
           throwsA(
-            isA<FormatException>()
-                .having((e) => e.message, 'message', contains('progressToken')),
+            isA<FormatException>().having(
+              (e) => e.message,
+              'message',
+              contains('_meta.progressToken'),
+            ),
           ),
         );
       }
