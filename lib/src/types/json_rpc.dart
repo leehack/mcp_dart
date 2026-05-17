@@ -111,6 +111,15 @@ RequestId parseRequestId(Object? value, {String fieldName = 'id'}) {
   );
 }
 
+RequestId? _parseResponseId(Object? value) {
+  if (value == null || value is String || value is int) {
+    return value;
+  }
+  throw FormatException(
+    'Invalid id: expected string, integer, or null, got ${value.runtimeType}',
+  );
+}
+
 /// Validates request metadata that can affect protocol behavior.
 ///
 /// `_meta.progressToken` is an MCP wire token and must be a string or integer
@@ -238,7 +247,7 @@ sealed class JsonRpcMessage {
         };
       }
     } else if (json.containsKey('result')) {
-      final id = json['id'];
+      final id = _parseResponseId(json['id']);
       final resultData = json['result'] as Map<String, dynamic>;
       final meta = resultData['_meta'] as Map<String, dynamic>?;
       final actualResult = Map<String, dynamic>.from(resultData)
@@ -403,7 +412,7 @@ class JsonRpcError extends JsonRpcMessage {
   const JsonRpcError({required this.id, required this.error});
 
   factory JsonRpcError.fromJson(Map<String, dynamic> json) => JsonRpcError(
-        id: json['id'],
+        id: _parseResponseId(json['id']),
         error: JsonRpcErrorData.fromJson(json['error'] as Map<String, dynamic>),
       );
 

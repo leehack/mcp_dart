@@ -422,6 +422,22 @@ void main() {
       expect((message as JsonRpcResponse).id, isNull);
     });
 
+    test('rejects malformed response id wire values', () {
+      for (final id in [false, 1.5, <String, dynamic>{}, <Object>[]]) {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': '2.0',
+            'id': id,
+            'result': {'data': 'test'},
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('id')),
+          ),
+        );
+      }
+    });
+
     test('handles error with null id', () {
       final json = {
         'jsonrpc': '2.0',
@@ -432,6 +448,22 @@ void main() {
       final message = JsonRpcMessage.fromJson(json);
       expect(message, isA<JsonRpcError>());
       expect((message as JsonRpcError).id, isNull);
+    });
+
+    test('rejects malformed error id wire values', () {
+      for (final id in [false, 1.5, <String, dynamic>{}, <Object>[]]) {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': '2.0',
+            'id': id,
+            'error': {'code': -32600, 'message': 'Error'},
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('id')),
+          ),
+        );
+      }
     });
 
     test('handles response with nested _meta in result', () {

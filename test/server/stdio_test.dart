@@ -396,6 +396,25 @@ void main() {
             },
           },
         ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
+            'id': false,
+            'result': <String, dynamic>{},
+          },
+        ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
+            'id': <Object>[],
+            'error': {
+              'code': -32600,
+              'message': 'Invalid request',
+            },
+          },
+        ),
       ];
 
       for (final vector in vectors) {
