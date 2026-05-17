@@ -25,15 +25,15 @@ This is an example Flutter web application that demonstrates how to use the MCP 
 
 ```shell
 cd /path/to/mcp_dart/example/streamable_https
-dart server_streamable_https.dart
+dart run server_streamable_https.dart
 ```
 
 This will start an MCP server on `http://localhost:3000/mcp`.
 
-2. In a separate terminal, run the Flutter web app:
+2. In a separate terminal, run the Flutter app:
 
 ```shell
-cd /path/to/mcp_dart/example/web_client
+cd /path/to/mcp_dart/example/flutter_http_client
 flutter run -d chrome
 ```
 

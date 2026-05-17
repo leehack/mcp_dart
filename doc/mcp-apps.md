@@ -142,7 +142,59 @@ for (final tool in tools.tools) {
 
 `Resource`, `ResourceTemplate`, and `ResourceContents` also expose `mcpUiMeta` helpers when `_meta.ui` is present.
 
-## Example
+## Runnable examples
 
 - TypeScript-style helper example: [`example/mcp_apps_helpers_server.dart`](../example/mcp_apps_helpers_server.dart)
 - Manual metadata example: [`example/mcp_apps_metadata_server.dart`](../example/mcp_apps_metadata_server.dart)
+
+Run either example as a stdio MCP server:
+
+```bash
+dart run example/mcp_apps_helpers_server.dart
+```
+
+Then inspect it from another terminal or from an MCP host that understands MCP Apps metadata:
+
+```bash
+mcp_dart inspect -- dart run example/mcp_apps_helpers_server.dart
+```
+
+## Polished example patterns
+
+### Weather dashboard card
+
+Use this pattern when a tool returns normal model-readable text plus a UI resource for hosts that can render MCP Apps:
+
+1. Register a `ui://weather/dashboard.html` resource with `mcpUiResourceMimeType`.
+2. Attach `McpUiResourceMeta` with `prefersBorder` and a narrow CSP.
+3. Return both `TextContent` and a `ResourceLink` from the tool.
+4. Put machine-readable values in `structuredContent` so non-UI hosts still receive useful data.
+
+The checked-in helper example follows this pattern and keeps the HTML self-contained for easy host testing.
+
+### Form or approval UI
+
+Use this pattern when the UI should collect confirmation before a side-effecting action:
+
+- Keep the actual side effect in a tool call; the HTML resource should only present state and instructions.
+- Use `visibility: ['app']` for UI-only affordances when the model does not need the resource text.
+- Add `ToolAnnotations(destructiveHint: true)` or other annotations to the tool where appropriate.
+- Make the tool handler validate all arguments again; never trust host-rendered form controls as the only validation layer.
+
+### Resource-link update flow
+
+Use this pattern when tool results should point users to an updated resource:
+
+- Return a `ResourceLink` with a stable URI and `mcpUiResourceMimeType`.
+- Keep resource content idempotent and safe to re-read.
+- If the UI depends on remote assets, include only the minimum required domains in `csp.resourceDomains` and `csp.connectDomains`.
+
+## Host compatibility notes
+
+MCP Apps metadata is extension-based, so hosts can differ in what they render:
+
+- A host that does not advertise `io.modelcontextprotocol/ui` support should still receive useful text or structured content.
+- Some hosts reject tool names that contain `/`; prefer snake-case names such as `weather_get_current`.
+- Keep CSP entries explicit and minimal. Avoid wildcard domains in production examples.
+- Treat `_meta.ui` as host-facing metadata, not as an authorization boundary. Server-side handlers must still enforce authentication and permissions.
+- Verify final rendering against each target host before claiming host-specific support.
