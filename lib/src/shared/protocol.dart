@@ -1933,6 +1933,17 @@ class _RequestTaskStoreImpl implements RequestTaskStore {
     TaskStatus status,
     BaseResultData result,
   ) async {
+    final currentTask = await _store.getTask(taskId, _sessionId);
+    if (currentTask == null) {
+      throw McpError(
+        ErrorCode.invalidParams.value,
+        'Failed to store task result: Task not found',
+      );
+    }
+    if (currentTask.status.isTerminal) {
+      return;
+    }
+
     await _store.storeTaskResult(taskId, status, result, _sessionId);
     final task = await _store.getTask(taskId, _sessionId);
     if (task != null) {

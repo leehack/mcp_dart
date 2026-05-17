@@ -382,6 +382,98 @@ void main() {
       expect(errorResponse.error.message, contains('terminal status'));
     });
 
+    test('request task store ignores terminal result updates', () async {
+      await protocol.connect(transport);
+
+      final firstResult = CallToolResult.fromContent([
+        const TextContent(text: 'first result'),
+      ]);
+      taskStore.tasks['task-1'] = const Task(
+        taskId: 'task-1',
+        status: TaskStatus.completed,
+        createdAt: _taskCreatedAt,
+        lastUpdatedAt: _taskUpdatedAt,
+        ttl: null,
+      );
+      taskStore.results['task-1'] = firstResult;
+
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/store-terminal-result',
+        (request, extra) async {
+          await extra.taskStore!.storeTaskResult(
+            'task-1',
+            TaskStatus.failed,
+            CallToolResult.fromContent([
+              const TextContent(text: 'second result'),
+            ]),
+          );
+          return const EmptyResult();
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/store-terminal-result',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      transport.receiveMessage(
+        const JsonRpcRequest(id: 5, method: 'test/store-terminal-result'),
+      );
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(taskStore.tasks['task-1']?.status, TaskStatus.completed);
+      expect(taskStore.tasks['task-1']?.lastUpdatedAt, _taskUpdatedAt);
+      expect(taskStore.results['task-1'], same(firstResult));
+      expect(
+        transport.sentMessages.whereType<JsonRpcTaskStatusNotification>(),
+        isEmpty,
+      );
+      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+    });
+
+    test('request task store rejects result updates for missing tasks',
+        () async {
+      await protocol.connect(transport);
+
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/store-missing-result',
+        (request, extra) async {
+          await extra.taskStore!.storeTaskResult(
+            'missing-task',
+            TaskStatus.completed,
+            CallToolResult.fromContent([
+              const TextContent(text: 'orphan result'),
+            ]),
+          );
+          return const EmptyResult();
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/store-missing-result',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      transport.receiveMessage(
+        const JsonRpcRequest(id: 6, method: 'test/store-missing-result'),
+      );
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(taskStore.results.containsKey('missing-task'), isFalse);
+      final response = transport.sentMessages.last;
+      expect(response, isA<JsonRpcError>());
+      final errorResponse = response as JsonRpcError;
+      expect(errorResponse.error.code, ErrorCode.invalidParams.value);
+      expect(
+        errorResponse.error.message,
+        'Failed to store task result: Task not found',
+      );
+    });
+
     test('tasks/cancel handler clears message queue', () async {
       await protocol.connect(transport);
 

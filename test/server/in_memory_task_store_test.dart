@@ -152,6 +152,39 @@ void main() {
         // Should not throw
         await store.updateTaskStatus('non-existent', TaskStatus.completed);
       });
+
+      test('does not transition terminal tasks', () async {
+        for (final terminalStatus in [
+          TaskStatus.completed,
+          TaskStatus.failed,
+          TaskStatus.cancelled,
+        ]) {
+          final task = await store.createTask(
+            const TaskCreationParams(),
+            terminalStatus.name,
+            {},
+            null,
+          );
+
+          await store.updateTaskStatus(
+            task.taskId,
+            terminalStatus,
+            'terminal ${terminalStatus.name}',
+          );
+          final terminalTask = await store.getTask(task.taskId);
+
+          await store.updateTaskStatus(
+            task.taskId,
+            TaskStatus.working,
+            'should not reopen',
+          );
+          final reopened = await store.getTask(task.taskId);
+
+          expect(reopened!.status, terminalStatus);
+          expect(reopened.statusMessage, terminalTask!.statusMessage);
+          expect(reopened.lastUpdatedAt, terminalTask.lastUpdatedAt);
+        }
+      });
     });
 
     group('storeTaskResult', () {
@@ -173,6 +206,57 @@ void main() {
 
         final storedResult = await store.getTaskResult(task.taskId);
         expect(storedResult, isNotNull);
+      });
+
+      test('does not overwrite terminal task status or result', () async {
+        final task = await store.createTask(
+          const TaskCreationParams(),
+          1,
+          {},
+          null,
+        );
+
+        final firstResult = CallToolResult.fromContent([
+          const TextContent(text: 'first result'),
+        ]);
+        await store.storeTaskResult(
+          task.taskId,
+          TaskStatus.completed,
+          firstResult,
+        );
+
+        final terminalTask = await store.getTask(task.taskId);
+        final secondResult = CallToolResult.fromContent([
+          const TextContent(text: 'second result'),
+        ]);
+        await store.storeTaskResult(
+          task.taskId,
+          TaskStatus.failed,
+          secondResult,
+        );
+
+        final afterSecondResult = await store.getTask(task.taskId);
+        expect(afterSecondResult!.status, TaskStatus.completed);
+        expect(afterSecondResult.lastUpdatedAt, terminalTask!.lastUpdatedAt);
+        expect(await store.getTaskResult(task.taskId), same(firstResult));
+      });
+
+      test('does not store orphaned results for non-existent tasks', () async {
+        final result = CallToolResult.fromContent([
+          const TextContent(text: 'orphan result'),
+        ]);
+
+        await store.storeTaskResult(
+          'non-existent-task',
+          TaskStatus.completed,
+          result,
+        );
+
+        expect(await store.getTask('non-existent-task'), isNull);
+        await expectLater(
+          store.getTaskResult('non-existent-task'),
+          throwsA(isA<McpError>()),
+        );
       });
     });
 

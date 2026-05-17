@@ -625,6 +625,110 @@ void main() {
         expect(deserialized.status, TaskStatus.completed);
       });
 
+      test('TaskStatusNotificationParams requires full Task fields', () {
+        final params = const TaskStatusNotificationParams(
+          taskId: 'task-no-expiry',
+          status: TaskStatus.working,
+          ttl: null,
+          createdAt: '2025-01-15T10:00:00Z',
+          lastUpdatedAt: '2025-01-15T10:01:00Z',
+        );
+
+        final json = params.toJson();
+        expect(json, containsPair('ttl', null));
+        expect(json['createdAt'], '2025-01-15T10:00:00Z');
+        expect(json['lastUpdatedAt'], '2025-01-15T10:01:00Z');
+
+        expect(
+          () => const TaskStatusNotificationParams(
+            taskId: 'task-missing-created',
+            status: TaskStatus.working,
+            ttl: null,
+            lastUpdatedAt: '2025-01-15T10:01:00Z',
+          ).toJson(),
+          throwsA(isA<StateError>()),
+        );
+        expect(
+          () => const TaskStatusNotificationParams(
+            taskId: 'task-missing-updated',
+            status: TaskStatus.working,
+            ttl: null,
+            createdAt: '2025-01-15T10:00:00Z',
+          ).toJson(),
+          throwsA(isA<StateError>()),
+        );
+
+        for (final field in ['ttl', 'createdAt', 'lastUpdatedAt']) {
+          final malformed = Map<String, dynamic>.from(json)..remove(field);
+          expect(
+            () => TaskStatusNotificationParams.fromJson(malformed),
+            throwsA(isA<FormatException>()),
+            reason: 'missing $field should be rejected',
+          );
+          expect(
+            () => JsonRpcMessage.fromJson({
+              'jsonrpc': '2.0',
+              'method': 'notifications/tasks/status',
+              'params': malformed,
+            }),
+            throwsA(isA<FormatException>()),
+            reason: 'missing $field should fail at the JSON-RPC boundary',
+          );
+        }
+
+        expect(
+          () => TaskStatusNotificationParams.fromJson(
+            Map<String, dynamic>.from(json)..remove('ttl'),
+          ),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'TaskStatusNotification.ttl is required',
+            ),
+          ),
+        );
+        expect(
+          () => TaskStatusNotificationParams.fromJson({
+            ...json,
+            'createdAt': 42,
+          }),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'TaskStatusNotification.createdAt must be a string',
+            ),
+          ),
+        );
+        expect(
+          () => TaskStatusNotificationParams.fromJson({
+            ...json,
+            'pollInterval': '1000',
+          }),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'TaskStatusNotification.pollInterval must be an integer or null',
+            ),
+          ),
+        );
+        expect(
+          () => TaskStatusNotificationParams.fromJson({
+            ...json,
+            'statusMessage': 42,
+          }),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'TaskStatusNotification.statusMessage must be a string',
+            ),
+          ),
+        );
+      });
+
       test('JsonRpcTaskStatusNotification serialization', () {
         final notification = JsonRpcTaskStatusNotification(
           statusParams: const TaskStatusNotificationParams(
@@ -645,6 +749,9 @@ void main() {
         expect(json['method'], 'notifications/tasks/status');
         expect(json['params']['taskId'], 'task-status-456');
         expect(json['params']['status'], 'failed');
+        expect(json['params'], containsPair('ttl', null));
+        expect(json['params']['createdAt'], '2025-01-15T10:00:00Z');
+        expect(json['params']['lastUpdatedAt'], '2025-01-15T10:05:00Z');
 
         final deserialized = JsonRpcTaskStatusNotification.fromJson(json);
         expect(deserialized.statusParams.taskId, 'task-status-456');
@@ -806,6 +913,46 @@ void main() {
           ),
         );
         expect(
+          () => Task.fromJson({...validJson, 'taskId': 42}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.taskId must be a string',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson, 'status': false}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.status must be a string',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson}..remove('taskId')),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.taskId is required',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson}..remove('status')),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.status is required',
+            ),
+          ),
+        );
+        expect(
           () => Task.fromJson({...validJson, 'lastUpdatedAt': false}),
           throwsA(
             isA<FormatException>().having(
@@ -832,6 +979,16 @@ void main() {
               (error) => error.message,
               'message',
               'Task.pollInterval must be an integer or null',
+            ),
+          ),
+        );
+        expect(
+          () => Task.fromJson({...validJson, 'statusMessage': 42}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Task.statusMessage must be a string',
             ),
           ),
         );

@@ -9,6 +9,55 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Progress } from '@modelcontextprotocol/sdk/types.js';
 
+type TaskWireShape = {
+  taskId?: unknown;
+  status?: unknown;
+  ttl?: unknown;
+  pollInterval?: unknown;
+  createdAt?: unknown;
+  lastUpdatedAt?: unknown;
+};
+
+function assertTaskWireShape(task: unknown, label: string): void {
+  if (typeof task !== 'object' || task === null) {
+    throw new Error(`${label} was not an object: ${JSON.stringify(task)}`);
+  }
+
+  const taskShape = task as TaskWireShape;
+  if (typeof taskShape.taskId !== 'string' || taskShape.taskId.length === 0) {
+    throw new Error(`${label} missing string taskId: ${JSON.stringify(task)}`);
+  }
+  if (typeof taskShape.status !== 'string' || taskShape.status.length === 0) {
+    throw new Error(`${label} missing string status: ${JSON.stringify(task)}`);
+  }
+  if (!Object.prototype.hasOwnProperty.call(taskShape, 'ttl')) {
+    throw new Error(
+      `${label} missing required ttl key: ${JSON.stringify(task)}`
+    );
+  }
+  if (taskShape.ttl !== null && typeof taskShape.ttl !== 'number') {
+    throw new Error(`${label} has invalid ttl: ${JSON.stringify(task)}`);
+  }
+  if (
+    taskShape.pollInterval !== undefined &&
+    typeof taskShape.pollInterval !== 'number'
+  ) {
+    throw new Error(
+      `${label} has invalid pollInterval: ${JSON.stringify(task)}`
+    );
+  }
+  if (typeof taskShape.createdAt !== 'string') {
+    throw new Error(
+      `${label} missing string createdAt: ${JSON.stringify(task)}`
+    );
+  }
+  if (typeof taskShape.lastUpdatedAt !== 'string') {
+    throw new Error(
+      `${label} missing string lastUpdatedAt: ${JSON.stringify(task)}`
+    );
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   let transportType = 'stdio';
@@ -91,7 +140,9 @@ async function main() {
         }
 
         const maybeBlock = item as { type?: unknown; text?: unknown };
-        return maybeBlock.type === 'text' && typeof maybeBlock.text === 'string';
+        return (
+          maybeBlock.type === 'text' && typeof maybeBlock.text === 'string'
+        );
       }) as { text?: string } | undefined;
 
       if (typeof firstTextBlock?.text === 'string') {
@@ -221,6 +272,9 @@ async function main() {
     if (!listTasksResult.tasks) {
       throw new Error("tasks/list response missing 'tasks' array");
     }
+    listTasksResult.tasks.forEach((task, index) => {
+      assertTaskWireShape(task, `tasks/list task ${index}`);
+    });
     console.log(`Tasks listed: ${listTasksResult.tasks.length}`);
 
     // Call delayed_echo using callToolStream
@@ -238,9 +292,11 @@ async function main() {
     for await (const message of stream) {
       switch (message.type) {
         case 'taskCreated':
+          assertTaskWireShape(message.task, 'taskCreated message task');
           console.log(`Task created: ${message.task.taskId}`);
           break;
         case 'taskStatus':
+          assertTaskWireShape(message.task, 'taskStatus message task');
           console.log(
             `Task status: ${message.task.status} (${message.task.statusMessage})`
           );
