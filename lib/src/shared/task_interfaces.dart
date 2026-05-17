@@ -26,6 +26,10 @@ abstract class TaskStore {
   Future<Task?> getTask(String taskId, [String? sessionId]);
 
   /// Stores the result of a task and sets its final status.
+  ///
+  /// Implementations must treat terminal tasks (`completed`, `failed`, or
+  /// `cancelled`) as immutable and ignore attempts to replace their status or
+  /// result.
   Future<void> storeTaskResult(
     String taskId,
     TaskStatus status,
@@ -37,6 +41,10 @@ abstract class TaskStore {
   Future<BaseResultData> getTaskResult(String taskId, [String? sessionId]);
 
   /// Updates a task's status.
+  ///
+  /// Implementations must treat terminal tasks (`completed`, `failed`, or
+  /// `cancelled`) as immutable and ignore attempts to transition them to any
+  /// later status.
   Future<void> updateTaskStatus(
     String taskId,
     TaskStatus status, [

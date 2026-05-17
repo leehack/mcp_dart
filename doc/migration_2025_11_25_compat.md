@@ -18,6 +18,13 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
   one release window.
 - Task serialization keeps the MCP-required `ttl` field even when it is `null`,
   while omitting optional `pollInterval` when it is not set.
+- Task status notifications now serialize and parse the full MCP
+  `NotificationParams & Task` shape. The `ttl`, `createdAt`, and
+  `lastUpdatedAt` fields are required at the wire boundary, even when `ttl` is
+  `null`.
+- Task stores treat terminal tasks (`completed`, `failed`, `cancelled`) as
+  immutable. Later status or result writes are ignored instead of overwriting
+  the terminal state.
 - The `Task` constructor now requires `ttl`, `createdAt`, and `lastUpdatedAt`,
   so valid task instances serialize without throwing.
 - Streamable HTTP defaults are stricter for protocol-version headers, DNS

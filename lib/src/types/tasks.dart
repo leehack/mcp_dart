@@ -99,9 +99,11 @@ class Task implements BaseResultData {
 
     final meta = json['_meta'] as Map<String, dynamic>?;
     return Task(
-      taskId: json['taskId'] as String,
-      status: TaskStatusName.fromString(json['status'] as String),
-      statusMessage: json['statusMessage'] as String?,
+      taskId: _readRequiredTaskString(json, 'taskId'),
+      status: TaskStatusName.fromString(
+        _readRequiredTaskString(json, 'status'),
+      ),
+      statusMessage: _readOptionalTaskString(json, 'statusMessage'),
       ttl: _readTaskInt(json, 'ttl', requiredField: true),
       pollInterval: _readTaskInt(json, 'pollInterval'),
       createdAt: createdAt,
@@ -123,25 +125,45 @@ class Task implements BaseResultData {
       };
 }
 
-String _readRequiredTaskString(Map<String, dynamic> json, String field) {
+String _readRequiredTaskString(
+  Map<String, dynamic> json,
+  String field, {
+  String owner = 'Task',
+}) {
   if (!json.containsKey(field)) {
-    throw FormatException('Task.$field is required');
+    throw FormatException('$owner.$field is required');
   }
   final value = json[field];
   if (value is! String) {
-    throw FormatException('Task.$field must be a string');
+    throw FormatException('$owner.$field must be a string');
   }
   return value;
+}
+
+String? _readOptionalTaskString(
+  Map<String, dynamic> json,
+  String field, {
+  String owner = 'Task',
+}) {
+  if (!json.containsKey(field)) {
+    return null;
+  }
+  final value = json[field];
+  if (value == null || value is String) {
+    return value as String?;
+  }
+  throw FormatException('$owner.$field must be a string');
 }
 
 int? _readTaskInt(
   Map<String, dynamic> json,
   String field, {
   bool requiredField = false,
+  String owner = 'Task',
 }) {
   if (!json.containsKey(field)) {
     if (requiredField) {
-      throw FormatException('Task.$field is required');
+      throw FormatException('$owner.$field is required');
     }
     return null;
   }
@@ -151,7 +173,7 @@ int? _readTaskInt(
     return value as int?;
   }
 
-  throw FormatException('Task.$field must be an integer or null');
+  throw FormatException('$owner.$field must be an integer or null');
 }
 
 /// Parameters for the `tasks/list` request. Includes pagination.
@@ -415,15 +437,24 @@ class TaskStatusNotification {
   final String? statusMessage;
 
   /// Time in milliseconds from creation before task may be deleted.
+  ///
+  /// Required by the MCP schema. A null value is serialized explicitly as
+  /// `"ttl": null` when the task has no expiry.
   final int? ttl;
 
   /// Suggested time in milliseconds between status checks.
   final int? pollInterval;
 
   /// ISO 8601 timestamp when the task was created.
+  ///
+  /// Required by the MCP schema and required for serialization. The constructor
+  /// keeps this nullable for source compatibility with earlier SDK versions.
   final String? createdAt;
 
   /// ISO 8601 timestamp when the task status was last updated.
+  ///
+  /// Required by the MCP schema and required for serialization. The constructor
+  /// keeps this nullable for source compatibility with earlier SDK versions.
   final String? lastUpdatedAt;
 
   const TaskStatusNotification({
@@ -438,13 +469,44 @@ class TaskStatusNotification {
 
   factory TaskStatusNotification.fromJson(Map<String, dynamic> json) {
     return TaskStatusNotification(
-      taskId: json['taskId'] as String,
-      status: TaskStatusName.fromString(json['status'] as String),
-      statusMessage: json['statusMessage'] as String?,
-      ttl: json['ttl'] as int?,
-      pollInterval: json['pollInterval'] as int?,
-      createdAt: json['createdAt'] as String?,
-      lastUpdatedAt: json['lastUpdatedAt'] as String?,
+      taskId: _readRequiredTaskString(
+        json,
+        'taskId',
+        owner: 'TaskStatusNotification',
+      ),
+      status: TaskStatusName.fromString(
+        _readRequiredTaskString(
+          json,
+          'status',
+          owner: 'TaskStatusNotification',
+        ),
+      ),
+      statusMessage: _readOptionalTaskString(
+        json,
+        'statusMessage',
+        owner: 'TaskStatusNotification',
+      ),
+      ttl: _readTaskInt(
+        json,
+        'ttl',
+        requiredField: true,
+        owner: 'TaskStatusNotification',
+      ),
+      pollInterval: _readTaskInt(
+        json,
+        'pollInterval',
+        owner: 'TaskStatusNotification',
+      ),
+      createdAt: _readRequiredTaskString(
+        json,
+        'createdAt',
+        owner: 'TaskStatusNotification',
+      ),
+      lastUpdatedAt: _readRequiredTaskString(
+        json,
+        'lastUpdatedAt',
+        owner: 'TaskStatusNotification',
+      ),
     );
   }
 
@@ -452,11 +514,24 @@ class TaskStatusNotification {
         'taskId': taskId,
         'status': status.name,
         if (statusMessage != null) 'statusMessage': statusMessage,
-        if (ttl != null) 'ttl': ttl,
+        'ttl': ttl,
         if (pollInterval != null) 'pollInterval': pollInterval,
-        if (createdAt != null) 'createdAt': createdAt,
-        if (lastUpdatedAt != null) 'lastUpdatedAt': lastUpdatedAt,
+        'createdAt': _requireTaskStatusNotificationString(
+          createdAt,
+          'createdAt',
+        ),
+        'lastUpdatedAt': _requireTaskStatusNotificationString(
+          lastUpdatedAt,
+          'lastUpdatedAt',
+        ),
       };
+}
+
+String _requireTaskStatusNotificationString(String? value, String field) {
+  if (value == null) {
+    throw StateError('TaskStatusNotification.$field is required');
+  }
+  return value;
 }
 
 /// Notification from receiver indicating a task status has changed.

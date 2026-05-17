@@ -28,8 +28,14 @@
     `lastUpdatedAt`, and `ttl`), and the `Task` constructor now requires
     `ttl`, `createdAt`, and `lastUpdatedAt` so serialization is non-throwing
     for valid task instances.
+  - `TaskStatusNotification.fromJson()` likewise requires the full MCP
+    `NotificationParams & Task` shape (`taskId`, `status`, `ttl`, `createdAt`,
+    and `lastUpdatedAt`), and task status notifications always serialize the
+    required `ttl` key even when it is `null`.
   - `Task.toJson()` continues to serialize required `ttl` even when it is
     `null`, and now omits optional `pollInterval` when it is not set.
+  - Task stores now treat terminal tasks (`completed`, `failed`, `cancelled`) as
+    immutable, preventing later status or result overwrites.
 
 ### Compatibility Notes
 
