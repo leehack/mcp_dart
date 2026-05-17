@@ -29,6 +29,9 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
   so valid task instances serialize without throwing.
 - Streamable HTTP defaults are stricter for protocol-version headers, DNS
   rebinding protection, and batch request rejection.
+- MCP/JSON-RPC wire parsing now rejects malformed request IDs, progress tokens,
+  and sampling tool-use requests that were not negotiated via
+  `ClientCapabilities.sampling.tools`.
 
 ## Runtime compatibility toggles
 

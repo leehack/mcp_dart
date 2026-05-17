@@ -23,7 +23,7 @@ class CancelledNotification {
 
   factory CancelledNotification.fromJson(Map<String, dynamic> json) =>
       CancelledNotification(
-        requestId: json['requestId'],
+        requestId: parseRequestId(json['requestId'], fieldName: 'requestId'),
         reason: json['reason'] as String?,
       );
 
@@ -59,10 +59,15 @@ class JsonRpcCancelledNotification extends JsonRpcNotification {
 
 /// A ping request, sent by either side to check liveness. Expects an empty result.
 class JsonRpcPingRequest extends JsonRpcRequest {
-  const JsonRpcPingRequest({required super.id}) : super(method: Method.ping);
+  const JsonRpcPingRequest({required super.id, super.meta})
+      : super(method: Method.ping);
 
-  factory JsonRpcPingRequest.fromJson(Map<String, dynamic> json) =>
-      JsonRpcPingRequest(id: json['id']);
+  factory JsonRpcPingRequest.fromJson(Map<String, dynamic> json) {
+    return JsonRpcPingRequest(
+      id: parseRequestId(json['id']),
+      meta: extractRequestMeta(json),
+    );
+  }
 }
 
 /// Represents progress information for a long-running request.
@@ -124,7 +129,7 @@ class ProgressNotification implements Progress {
   factory ProgressNotification.fromJson(Map<String, dynamic> json) {
     final progressData = Progress.fromJson(json);
     return ProgressNotification(
-      progressToken: json['progressToken'],
+      progressToken: parseProgressToken(json['progressToken']),
       progress: progressData.progress,
       total: progressData.total,
       message: progressData.message,

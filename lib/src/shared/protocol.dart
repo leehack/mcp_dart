@@ -348,7 +348,7 @@ abstract class Protocol {
     setRequestHandler<JsonRpcPingRequest>(
       "ping",
       (request, extra) async => const EmptyResult(),
-      (id, params, meta) => JsonRpcPingRequest(id: id),
+      (id, params, meta) => JsonRpcPingRequest(id: id, meta: meta),
     );
 
     if (_taskStore != null) {

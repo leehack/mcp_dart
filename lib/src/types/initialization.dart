@@ -482,9 +482,9 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for initialize request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcInitializeRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       initParams: InitializeRequest.fromJson(paramsMap),
       meta: meta,
     );

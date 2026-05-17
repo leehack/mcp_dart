@@ -1,4 +1,5 @@
 import '../types.dart';
+import 'json_rpc.dart';
 
 /// Describes an argument accepted by a prompt template.
 class PromptArgument {
@@ -129,9 +130,9 @@ class JsonRpcListPromptsRequest extends JsonRpcRequest {
 
   factory JsonRpcListPromptsRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
-    final meta = paramsMap?['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcListPromptsRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       params: paramsMap == null ? null : ListPromptsRequest.fromJson(paramsMap),
       meta: meta,
     );
@@ -211,9 +212,9 @@ class JsonRpcGetPromptRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for get prompt request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcGetPromptRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       getParams: GetPromptRequest.fromJson(paramsMap),
       meta: meta,
     );

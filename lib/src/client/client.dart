@@ -161,6 +161,14 @@ class McpClient extends Protocol {
               "No sampling handler registered",
             );
           }
+          if ((request.createParams.tools != null ||
+                  request.createParams.toolChoice != null) &&
+              _capabilities.sampling?.tools != true) {
+            throw McpError(
+              ErrorCode.invalidRequest.value,
+              "Client does not support 'sampling.tools' capability required by sampling/createMessage request.",
+            );
+          }
           return await onSamplingRequest!(request.createParams);
         },
         (id, params, meta) => JsonRpcCreateMessageRequest(

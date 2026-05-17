@@ -1,4 +1,5 @@
 import '../types.dart';
+import 'json_rpc.dart';
 
 /// The current state of a task execution.
 enum TaskStatus {
@@ -203,9 +204,9 @@ class JsonRpcListTasksRequest extends JsonRpcRequest {
 
   factory JsonRpcListTasksRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
-    final meta = paramsMap?['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcListTasksRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       params: paramsMap == null ? null : ListTasksRequest.fromJson(paramsMap),
       meta: meta,
     );
@@ -274,9 +275,9 @@ class JsonRpcCancelTaskRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for cancel task request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcCancelTaskRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       cancelParams: CancelTaskRequest.fromJson(paramsMap),
       meta: meta,
     );
@@ -312,9 +313,9 @@ class JsonRpcGetTaskRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for get task request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcGetTaskRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       getParams: GetTaskRequest.fromJson(paramsMap),
       meta: meta,
     );
@@ -350,9 +351,9 @@ class JsonRpcTaskResultRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for task result request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcTaskResultRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       resultParams: TaskResultRequest.fromJson(paramsMap),
       meta: meta,
     );

@@ -2,6 +2,10 @@
 
 ### Spec Alignment
 
+- Tightened MCP/JSON-RPC boundary validation for request IDs, progress tokens,
+  cancellation request IDs, and sampling tool-use capability gating so malformed
+  wire values and unsupported `sampling.tools` requests fail before handler code
+  runs.
 - Added MCP `completion/complete` wire support for
   `context.arguments` and `PromptReference.title`, including context-aware
   server completion callbacks for prompt and resource-template completions.
