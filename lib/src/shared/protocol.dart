@@ -218,6 +218,23 @@ class _TimeoutInfo {
   });
 }
 
+class _TaskAugmentedRequestState {
+  final int messageId;
+  final RequestId? relatedRequestId;
+  final AbortSignal? signal;
+  StreamSubscription? abortSubscription;
+  String? taskId;
+  bool cancelRequested = false;
+  Object? cancelReason;
+  bool cancelSent = false;
+
+  _TaskAugmentedRequestState({
+    required this.messageId,
+    required this.relatedRequestId,
+    required this.signal,
+  });
+}
+
 /// Implements MCP protocol framing on top of a pluggable transport, including
 /// features like request/response linking, notifications, and progress.
 ///
@@ -274,6 +291,15 @@ abstract class Protocol {
 
   /// Resolvers for side-channeled requests (via tasks).
   final Map<int, void Function(JsonRpcMessage response)> _requestResolvers = {};
+
+  /// Task-augmented outgoing requests whose lifecycle continues after the
+  /// initial CreateTaskResult response.
+  final Map<int, _TaskAugmentedRequestState> _taskRequestsByMessageId = {};
+  final Map<String, _TaskAugmentedRequestState> _taskRequestsByTaskId = {};
+
+  /// Terminal task statuses that arrived before their CreateTaskResult was
+  /// parsed and registered locally.
+  final Set<String> _earlyTerminalTaskIds = {};
 
   /// Callback invoked when the underlying transport connection is closed.
   void Function()? onclose;
@@ -542,6 +568,144 @@ abstract class Protocol {
     }
   }
 
+  bool get _hasUnidentifiedTaskRequests => _taskRequestsByMessageId.values.any(
+        (pendingState) => pendingState.taskId == null,
+      );
+
+  void _clearEarlyTerminalTaskIdsIfUnneeded() {
+    if (!_hasUnidentifiedTaskRequests) {
+      _earlyTerminalTaskIds.clear();
+    }
+  }
+
+  void _cleanupTaskAugmentedRequest(
+    _TaskAugmentedRequestState state, {
+    bool cleanupProgress = true,
+  }) {
+    _taskRequestsByMessageId.remove(state.messageId);
+    final taskId = state.taskId;
+    if (taskId != null) {
+      final currentState = _taskRequestsByTaskId[taskId];
+      if (identical(currentState, state)) {
+        _taskRequestsByTaskId.remove(taskId);
+      }
+    }
+    _clearEarlyTerminalTaskIdsIfUnneeded();
+    state.abortSubscription?.cancel();
+    state.abortSubscription = null;
+    if (cleanupProgress) {
+      _cleanupProgressHandler(state.messageId);
+    }
+  }
+
+  void _onTaskStatusNotification(JsonRpcTaskStatusNotification notification) {
+    if (!notification.statusParams.status.isTerminal) {
+      return;
+    }
+
+    final state = _taskRequestsByTaskId[notification.statusParams.taskId];
+    if (state != null) {
+      _cleanupTaskAugmentedRequest(state);
+    } else if (_hasUnidentifiedTaskRequests) {
+      _earlyTerminalTaskIds.add(notification.statusParams.taskId);
+    }
+  }
+
+  Object? _preTaskIdCancellationReason(
+    _TaskAugmentedRequestState? state,
+  ) {
+    if (state == null || state.taskId != null) {
+      return null;
+    }
+    if (state.cancelRequested) {
+      return state.cancelReason ?? AbortError("Request cancelled");
+    }
+    final signal = state.signal;
+    if (signal != null && signal.aborted) {
+      state.cancelRequested = true;
+      state.cancelReason = signal.reason ?? AbortError("Request cancelled");
+      return state.cancelReason;
+    }
+    return null;
+  }
+
+  void _handleTaskCancellationResponse(
+    _TaskAugmentedRequestState state,
+    JsonRpcMessage responseMessage,
+  ) {
+    switch (responseMessage) {
+      case final JsonRpcResponse response:
+        try {
+          final task = Task.fromJson(response.result);
+          if (task.taskId != state.taskId) {
+            _cleanupTaskAugmentedRequest(state);
+            _onerror(
+              StateError(
+                "Task cancellation response taskId mismatch: "
+                "expected ${state.taskId}, got ${task.taskId}",
+              ),
+            );
+          } else if (task.status.isTerminal) {
+            _cleanupTaskAugmentedRequest(state);
+          }
+        } catch (e) {
+          _cleanupTaskAugmentedRequest(state);
+          _onerror(
+            StateError(
+              "Failed to parse task cancellation result for task "
+              "${state.taskId}: $e",
+            ),
+          );
+        }
+      case final JsonRpcError error:
+        _cleanupTaskAugmentedRequest(state);
+        _onerror(
+          McpError(
+            error.error.code,
+            error.error.message,
+            error.error.data,
+          ),
+        );
+      default:
+        _onerror(
+          ArgumentError(
+            "Invalid task cancellation response type: "
+            "${responseMessage.runtimeType}",
+          ),
+        );
+    }
+  }
+
+  void _sendTaskCancellation(_TaskAugmentedRequestState state) {
+    final taskId = state.taskId;
+    if (taskId == null || state.cancelSent) {
+      return;
+    }
+    state.cancelSent = true;
+
+    final cancelRequest = JsonRpcCancelTaskRequest(
+      id: _requestMessageId++,
+      cancelParams: CancelTaskRequest(taskId: taskId),
+    );
+    _requestResolvers[cancelRequest.id as int] = (responseMessage) {
+      _handleTaskCancellationResponse(state, responseMessage);
+    };
+
+    _transport
+        ?.sendPreservingRequestId(
+      cancelRequest,
+      relatedRequestId: state.relatedRequestId,
+    )
+        .catchError((e) {
+      _requestResolvers.remove(cancelRequest.id);
+      _cleanupTaskAugmentedRequest(state);
+      _onerror(
+        StateError("Failed to send task cancellation for task $taskId: $e"),
+      );
+      return null;
+    });
+  }
+
   Object _nextAvailableProgressToken(int preferredToken) {
     var token = preferredToken;
     while (_progressHandlers.containsKey(token)) {
@@ -590,6 +754,7 @@ abstract class Protocol {
     final errorHandlers = Map.of(_responseErrorHandlers);
     final pendingTimeouts = Map.of(_timeoutInfo);
     final pendingRequestHandlers = Map.of(_requestHandlerAbortControllers);
+    final pendingTaskRequests = Map.of(_taskRequestsByMessageId);
 
     _responseCompleters.clear();
     _responseErrorHandlers.clear();
@@ -600,10 +765,15 @@ abstract class Protocol {
     _requestHandlerAbortControllers.clear();
     _pendingDebouncedNotifications.clear();
     _requestResolvers.clear();
+    _taskRequestsByMessageId.clear();
+    _taskRequestsByTaskId.clear();
+    _earlyTerminalTaskIds.clear();
     _transport = null;
 
     pendingTimeouts.forEach((_, info) => info.timeoutTimer.cancel());
     pendingRequestHandlers.forEach((_, controller) => controller.abort());
+    pendingTaskRequests
+        .forEach((_, state) => state.abortSubscription?.cancel());
 
     final error = McpError(
       ErrorCode.connectionClosed.value,
@@ -647,6 +817,10 @@ abstract class Protocol {
 
   /// Handles incoming JSON-RPC notifications.
   void _onnotification(JsonRpcNotification notification) {
+    if (notification is JsonRpcTaskStatusNotification) {
+      _onTaskStatusNotification(notification);
+    }
+
     final handler = _notificationHandlers[notification.method] ??
         fallbackNotificationHandler;
     if (handler == null) {
@@ -910,14 +1084,33 @@ abstract class Protocol {
     final errorHandler = _responseErrorHandlers.remove(messageId);
     _cleanupTimeout(messageId);
 
-    _cleanupProgressHandler(messageId);
+    final taskRequestState = _taskRequestsByMessageId[messageId];
+    final preserveTaskProgress =
+        taskRequestState != null && errorPayload == null;
+    if (!preserveTaskProgress) {
+      _cleanupProgressHandler(messageId);
+      if (taskRequestState != null) {
+        _cleanupTaskAugmentedRequest(taskRequestState, cleanupProgress: false);
+      }
+    }
 
     if (completer == null || completer.isCompleted) {
       return;
     }
 
     if (errorPayload != null) {
-      _handleResponseError(messageId, errorPayload, completer, errorHandler);
+      final cancellationReason = _preTaskIdCancellationReason(taskRequestState);
+      if (cancellationReason != null) {
+        try {
+          completer.completeError(cancellationReason);
+        } catch (e) {
+          _onerror(
+            StateError("Error completing cancelled request $messageId: $e"),
+          );
+        }
+      } else {
+        _handleResponseError(messageId, errorPayload, completer, errorHandler);
+      }
     } else if (responseMessage is JsonRpcResponse) {
       try {
         completer.complete(responseMessage);
@@ -1064,7 +1257,50 @@ abstract class Protocol {
       meta: finalMeta,
     );
 
-    void cancel([Object? reason]) {
+    final taskRequestState = options?.task != null
+        ? _TaskAugmentedRequestState(
+            messageId: messageId,
+            relatedRequestId: relatedRequestId,
+            signal: options?.signal,
+          )
+        : null;
+    if (taskRequestState != null) {
+      _taskRequestsByMessageId[messageId] = taskRequestState;
+    }
+
+    void cancel(Object? reason, {bool fromTimeout = false}) {
+      final errorReason = reason ?? AbortError("Request cancelled");
+      final activeTaskState = taskRequestState;
+      if (activeTaskState != null) {
+        final alreadyCancelRequested = activeTaskState.cancelRequested;
+        if (!alreadyCancelRequested) {
+          activeTaskState.cancelRequested = true;
+          activeTaskState.cancelReason = errorReason;
+        }
+        if (activeTaskState.taskId != null) {
+          _sendTaskCancellation(activeTaskState);
+          if (!completer.isCompleted) {
+            completer.completeError(
+              activeTaskState.cancelReason ?? errorReason,
+            );
+          }
+        } else if (fromTimeout) {
+          _responseCompleters.remove(messageId);
+          _responseErrorHandlers.remove(messageId);
+          _cleanupProgressHandler(messageId);
+          _cleanupTaskAugmentedRequest(
+            activeTaskState,
+            cleanupProgress: false,
+          );
+          _cleanupTimeout(messageId);
+          if (!completer.isCompleted) {
+            completer
+                .completeError(activeTaskState.cancelReason ?? errorReason);
+          }
+        }
+        return;
+      }
+
       if (completer.isCompleted) return;
 
       _responseCompleters.remove(messageId);
@@ -1096,7 +1332,6 @@ abstract class Protocol {
         return null;
       });
 
-      final errorReason = reason ?? AbortError("Request cancelled");
       completer.completeError(errorReason);
     }
 
@@ -1120,6 +1355,7 @@ abstract class Protocol {
           );
         },
       );
+      taskRequestState?.abortSubscription = abortSubscription;
     }
 
     final timeoutDuration = options?.timeout ?? defaultRequestTimeout;
@@ -1131,6 +1367,7 @@ abstract class Protocol {
           "Request $messageId timed out after $timeoutDuration",
           {'timeout': timeoutDuration.inMilliseconds},
         ),
+        fromTimeout: true,
       );
     }
 
@@ -1160,10 +1397,18 @@ abstract class Protocol {
         ),
         _transport?.sessionId,
       ).catchError((e) {
+        _requestResolvers.remove(messageId);
+        _responseCompleters.remove(messageId);
+        _responseErrorHandlers.remove(messageId);
         _cleanupTimeout(messageId);
         _cleanupProgressHandler(messageId);
+        final state = taskRequestState;
+        if (state != null) {
+          _cleanupTaskAugmentedRequest(state, cleanupProgress: false);
+        }
         if (!completer.isCompleted) {
-          completer.completeError(e);
+          final cancellationReason = _preTaskIdCancellationReason(state);
+          completer.completeError(cancellationReason ?? e);
         }
       });
     } else {
@@ -1174,32 +1419,96 @@ abstract class Protocol {
         relatedRequestId: relatedRequestId,
       )
           .catchError((error) {
+        _responseCompleters.remove(messageId);
+        _responseErrorHandlers.remove(messageId);
         _cleanupTimeout(messageId);
         _cleanupProgressHandler(messageId);
+        final state = taskRequestState;
+        if (state != null) {
+          _cleanupTaskAugmentedRequest(state, cleanupProgress: false);
+        }
         if (!completer.isCompleted) {
-          completer.completeError(error);
+          final cancellationReason = _preTaskIdCancellationReason(state);
+          completer.completeError(cancellationReason ?? error);
         }
         return null;
       });
     }
 
+    var preserveTaskLifecycle = false;
     return completer.future.then((response) {
+      Object? taskCancellationError;
+      late final T result;
       try {
-        return resultFactory(
+        result = resultFactory(
           response.toJson()['result'] as Map<String, dynamic>,
         );
+        final state = taskRequestState;
+        if (state != null) {
+          if (result is CreateTaskResult) {
+            final createdTask = result as CreateTaskResult;
+            final taskId = createdTask.task.taskId;
+            state.taskId = taskId;
+            final taskIsTerminal = createdTask.task.status.isTerminal ||
+                _earlyTerminalTaskIds.remove(taskId);
+
+            if (state.cancelRequested || options?.signal?.aborted == true) {
+              if (!state.cancelRequested && options?.signal?.aborted == true) {
+                state.cancelRequested = true;
+                state.cancelReason =
+                    options?.signal?.reason ?? AbortError("Request cancelled");
+              }
+              if (taskIsTerminal) {
+                _cleanupTaskAugmentedRequest(state);
+              } else {
+                _taskRequestsByTaskId[taskId] = state;
+                _clearEarlyTerminalTaskIdsIfUnneeded();
+                _sendTaskCancellation(state);
+                preserveTaskLifecycle = true;
+              }
+              taskCancellationError =
+                  state.cancelReason ?? AbortError("Request cancelled");
+            } else if (taskIsTerminal) {
+              _cleanupTaskAugmentedRequest(state);
+            } else {
+              _taskRequestsByTaskId[taskId] = state;
+              _clearEarlyTerminalTaskIdsIfUnneeded();
+              preserveTaskLifecycle = true;
+            }
+          } else {
+            _cleanupTaskAugmentedRequest(state);
+          }
+        }
       } catch (e, s) {
+        final state = taskRequestState;
+        final cancellationReason = _preTaskIdCancellationReason(state);
+        if (state != null) {
+          _cleanupTaskAugmentedRequest(state);
+        }
+        if (cancellationReason != null) {
+          throw cancellationReason;
+        }
         throw McpError(
           ErrorCode.internalError.value,
           "Failed to parse result for ${requestData.method}",
           "$e\n$s",
         );
       }
+      if (taskCancellationError != null) {
+        throw taskCancellationError;
+      }
+      return result;
     }).whenComplete(() {
-      abortSubscription?.cancel();
       _responseCompleters.remove(messageId);
       _responseErrorHandlers.remove(messageId);
-      _cleanupProgressHandler(messageId);
+      if (!preserveTaskLifecycle) {
+        abortSubscription?.cancel();
+        _cleanupProgressHandler(messageId);
+        final state = taskRequestState;
+        if (state != null) {
+          _cleanupTaskAugmentedRequest(state, cleanupProgress: false);
+        }
+      }
     }).catchError((error) {
       throw capturedError ?? error;
     });
