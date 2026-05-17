@@ -165,9 +165,9 @@ class JsonRpcCompleteRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for complete request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcCompleteRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       completeParams: CompleteRequest.fromJson(paramsMap),
       meta: meta,
     );

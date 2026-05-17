@@ -1,4 +1,5 @@
 import '../types.dart';
+import 'json_rpc.dart';
 
 /// Additional properties describing a Resource to clients.
 class ResourceAnnotations {
@@ -229,9 +230,9 @@ class JsonRpcListResourcesRequest extends JsonRpcRequest {
   /// Creates from JSON.
   factory JsonRpcListResourcesRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
-    final meta = paramsMap?['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcListResourcesRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       params:
           paramsMap == null ? null : ListResourcesRequest.fromJson(paramsMap),
       meta: meta,
@@ -310,9 +311,9 @@ class JsonRpcListResourceTemplatesRequest extends JsonRpcRequest {
     Map<String, dynamic> json,
   ) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
-    final meta = paramsMap?['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcListResourceTemplatesRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       params: paramsMap == null
           ? null
           : ListResourceTemplatesRequest.fromJson(paramsMap),
@@ -386,9 +387,9 @@ class JsonRpcReadResourceRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for read resource request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcReadResourceRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       readParams: ReadResourceRequest.fromJson(paramsMap),
       meta: meta,
     );
@@ -462,9 +463,9 @@ class JsonRpcSubscribeRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for subscribe request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcSubscribeRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       subParams: SubscribeRequest.fromJson(paramsMap),
       meta: meta,
     );
@@ -500,9 +501,9 @@ class JsonRpcUnsubscribeRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for unsubscribe request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcUnsubscribeRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       unsubParams: UnsubscribeRequest.fromJson(paramsMap),
       meta: meta,
     );

@@ -74,11 +74,88 @@ class Method {
 /// A progress token, used to associate progress notifications with the original request.
 typedef ProgressToken = dynamic;
 
+/// Parses a wire progress token.
+///
+/// MCP progress tokens are JSON strings or integers. Reject malformed wire
+/// shapes at decode boundaries instead of allowing dynamic values to leak into
+/// higher-level protocol code.
+ProgressToken parseProgressToken(
+  Object? value, {
+  String fieldName = 'progressToken',
+}) {
+  if (value is String || value is int) {
+    return value;
+  }
+  throw FormatException(
+    'Invalid $fieldName: expected string or integer, got ${value.runtimeType}',
+  );
+}
+
 /// An opaque token used to represent a cursor for pagination.
 typedef Cursor = String;
 
 /// A uniquely identifying ID for a request in JSON-RPC.
 typedef RequestId = dynamic;
+
+/// Parses a JSON-RPC request identifier.
+///
+/// JSON-RPC/MCP request IDs are JSON strings or integers for SDK request
+/// boundaries. Notifications omit the `id` member entirely, and responses may
+/// still carry `null` IDs for JSON-RPC error cases.
+RequestId parseRequestId(Object? value, {String fieldName = 'id'}) {
+  if (value is String || value is int) {
+    return value;
+  }
+  throw FormatException(
+    'Invalid $fieldName: expected string or integer, got ${value.runtimeType}',
+  );
+}
+
+RequestId? _parseResponseId(Object? value) {
+  if (value == null || value is String || value is int) {
+    return value;
+  }
+  throw FormatException(
+    'Invalid id: expected string, integer, or null, got ${value.runtimeType}',
+  );
+}
+
+/// Validates request metadata that can affect protocol behavior.
+///
+/// `_meta.progressToken` is an MCP wire token and must be a string or integer
+/// when present. Other `_meta` fields are preserved without interpretation.
+Map<String, dynamic>? validateRequestMeta(Map<String, dynamic>? meta) {
+  if (meta != null && meta.containsKey('progressToken')) {
+    parseProgressToken(
+      meta['progressToken'],
+      fieldName: '_meta.progressToken',
+    );
+  }
+  return meta;
+}
+
+Map<String, dynamic>? _parseRequestMeta(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! Map) {
+    throw FormatException(
+      'Invalid _meta: expected object, got ${value.runtimeType}',
+    );
+  }
+  if (value.keys.any((key) => key is! String)) {
+    throw const FormatException('Invalid _meta: expected string keys');
+  }
+  return validateRequestMeta(Map<String, dynamic>.from(value));
+}
+
+/// Extracts request metadata from either top-level or params-nested `_meta`.
+Map<String, dynamic>? extractRequestMeta(Map<String, dynamic> json) {
+  final topLevelMeta = _parseRequestMeta(json['_meta']);
+  final params = json['params'];
+  final paramsMeta = params is Map ? _parseRequestMeta(params['_meta']) : null;
+  return topLevelMeta ?? paramsMeta;
+}
 
 /// Base class for all JSON-RPC messages (requests, notifications, responses, errors).
 sealed class JsonRpcMessage {
@@ -94,12 +171,11 @@ sealed class JsonRpcMessage {
       throw FormatException('Invalid JSON-RPC version: ${json['jsonrpc']}');
     }
 
-    final id = json['id'];
-
     if (json.containsKey('method')) {
       final method = json['method'] as String;
+      final hasId = json.containsKey('id');
 
-      if (id != null) {
+      if (hasId) {
         return switch (method) {
           Method.initialize => JsonRpcInitializeRequest.fromJson(json),
           Method.ping => JsonRpcPingRequest.fromJson(json),
@@ -126,12 +202,10 @@ sealed class JsonRpcMessage {
           Method.tasksGet => JsonRpcGetTaskRequest.fromJson(json),
           Method.tasksResult => JsonRpcTaskResultRequest.fromJson(json),
           _ => JsonRpcRequest(
-              id: id,
+              id: parseRequestId(json['id']),
               method: method,
               params: json['params'] as Map<String, dynamic>?,
-              meta: json['_meta'] as Map<String, dynamic>? ??
-                  (json['params'] as Map<String, dynamic>?)?['_meta']
-                      as Map<String, dynamic>?,
+              meta: extractRequestMeta(json),
             ),
         };
       } else {
@@ -175,6 +249,7 @@ sealed class JsonRpcMessage {
         };
       }
     } else if (json.containsKey('result')) {
+      final id = _parseResponseId(json['id']);
       final resultData = json['result'] as Map<String, dynamic>;
       final meta = resultData['_meta'] as Map<String, dynamic>?;
       final actualResult = Map<String, dynamic>.from(resultData)
@@ -214,7 +289,10 @@ class JsonRpcRequest extends JsonRpcMessage {
   });
 
   /// The progress token for out-of-band progress notifications.
-  ProgressToken? get progressToken => meta?['progressToken'];
+  ProgressToken? get progressToken {
+    final token = meta?['progressToken'];
+    return token == null ? null : parseProgressToken(token);
+  }
 
   @override
   Map<String, dynamic> toJson() => {
@@ -336,7 +414,7 @@ class JsonRpcError extends JsonRpcMessage {
   const JsonRpcError({required this.id, required this.error});
 
   factory JsonRpcError.fromJson(Map<String, dynamic> json) => JsonRpcError(
-        id: json['id'],
+        id: _parseResponseId(json['id']),
         error: JsonRpcErrorData.fromJson(json['error'] as Map<String, dynamic>),
       );
 
@@ -400,9 +478,9 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
 
   factory JsonRpcListToolsRequest.fromJson(Map<String, dynamic> json) {
     return JsonRpcListToolsRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       params: json['params'] as Map<String, dynamic>?,
-      meta: json['_meta'] as Map<String, dynamic>?,
+      meta: extractRequestMeta(json),
     );
   }
 
@@ -425,11 +503,9 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
 
   factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
     return JsonRpcCallToolRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       params: json['params'] as Map<String, dynamic>? ?? {},
-      meta: json['_meta'] as Map<String, dynamic>? ??
-          (json['params'] as Map<String, dynamic>?)?['_meta']
-              as Map<String, dynamic>?,
+      meta: extractRequestMeta(json),
     );
   }
 

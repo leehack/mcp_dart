@@ -632,9 +632,9 @@ class JsonRpcCreateMessageRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for create message request");
     }
-    final meta = _asJsonObjectOrNull(paramsMap['_meta']);
+    final meta = extractRequestMeta(json);
     return JsonRpcCreateMessageRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       createParams: CreateMessageRequest.fromJson(paramsMap),
       meta: meta,
     );

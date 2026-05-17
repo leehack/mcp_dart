@@ -114,9 +114,10 @@ void main() {
 
       await Future.delayed(const Duration(milliseconds: 50));
 
-      // Should have received an error
+      // Should have received a protocol decode error at the boundary.
       expect(errors.length, greaterThan(0));
-      expect(errors.first, isA<ArgumentError>());
+      expect(errors.first, isA<StateError>());
+      expect(errors.first.toString(), contains('progressToken'));
     });
 
     test('request with timeout times out correctly', () async {

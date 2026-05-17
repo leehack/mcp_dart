@@ -333,6 +333,158 @@ void main() {
       expect(receivedError, isNotNull);
     });
 
+    test('rejects malformed MCP wire values from raw stdio input', () async {
+      final vectors = <({String field, Map<String, dynamic> message})>[
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
+            'id': false,
+            'method': 'ping',
+          },
+        ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
+            'id': null,
+            'method': 'ping',
+          },
+        ),
+        (
+          field: 'progressToken',
+          message: {
+            'jsonrpc': '2.0',
+            'id': 'with-bad-meta',
+            'method': 'ping',
+            'params': {
+              '_meta': {
+                'progressToken': <String, dynamic>{},
+              },
+            },
+          },
+        ),
+        (
+          field: '_meta',
+          message: {
+            'jsonrpc': '2.0',
+            'id': 'with-bad-meta-shape',
+            'method': 'ping',
+            'params': {
+              '_meta': false,
+            },
+          },
+        ),
+        (
+          field: 'progressToken',
+          message: {
+            'jsonrpc': '2.0',
+            'method': 'notifications/progress',
+            'params': {
+              'progressToken': <Object>[],
+              'progress': 0,
+            },
+          },
+        ),
+        (
+          field: 'requestId',
+          message: {
+            'jsonrpc': '2.0',
+            'method': 'notifications/cancelled',
+            'params': {
+              'requestId': true,
+            },
+          },
+        ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
+            'id': false,
+            'result': <String, dynamic>{},
+          },
+        ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
+            'id': <Object>[],
+            'error': {
+              'code': -32600,
+              'message': 'Invalid request',
+            },
+          },
+        ),
+      ];
+
+      for (final vector in vectors) {
+        final localStdin = MockStdin();
+        final localStdout = MockStdout();
+        final localTransport = StdioServerTransport(
+          stdin: localStdin,
+          stdout: localStdout,
+        );
+        final receivedMessages = <JsonRpcMessage>[];
+        final receivedErrors = <Error>[];
+        localTransport
+          ..onmessage = receivedMessages.add
+          ..onerror = receivedErrors.add;
+
+        await localTransport.start();
+        localStdin.addString('${jsonEncode(vector.message)}\n');
+        await Future.delayed(const Duration(milliseconds: 50));
+        await localTransport.close();
+
+        expect(
+          receivedMessages,
+          isEmpty,
+          reason: 'Malformed ${vector.field} should not reach handlers',
+        );
+        expect(receivedErrors, hasLength(1));
+        expect(receivedErrors.single.toString(), contains(vector.field));
+      }
+    });
+
+    test('preserves valid MCP wire IDs and tokens from raw stdio input',
+        () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = receivedMessages.add;
+
+      await transport.start();
+
+      stdin.addString(
+        '${jsonEncode({
+              'jsonrpc': '2.0',
+              'id': 'request-1',
+              'method': 'ping',
+              'params': {
+                '_meta': {'progressToken': 'progress-1'},
+              },
+            })}\n',
+      );
+      stdin.addString(
+        '${jsonEncode({
+              'jsonrpc': '2.0',
+              'id': 2,
+              'method': 'ping',
+              'params': {
+                '_meta': {'progressToken': 3},
+              },
+            })}\n',
+      );
+
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(receivedMessages, hasLength(2));
+      expect((receivedMessages[0] as JsonRpcPingRequest).id, 'request-1');
+      expect(
+        (receivedMessages[0] as JsonRpcPingRequest).progressToken,
+        'progress-1',
+      );
+      expect((receivedMessages[1] as JsonRpcPingRequest).id, 2);
+      expect((receivedMessages[1] as JsonRpcPingRequest).progressToken, 3);
+    });
+
     test('calls onclose when stdin closes', () async {
       var oncloseCalled = false;
       transport.onclose = () {

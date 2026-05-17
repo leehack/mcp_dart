@@ -43,9 +43,9 @@ class JsonRpcSetLevelRequest extends JsonRpcRequest {
     if (paramsMap == null) {
       throw const FormatException("Missing params for set level request");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = extractRequestMeta(json);
     return JsonRpcSetLevelRequest(
-      id: json['id'],
+      id: parseRequestId(json['id']),
       setParams: SetLevelRequest.fromJson(paramsMap),
       meta: meta,
     );

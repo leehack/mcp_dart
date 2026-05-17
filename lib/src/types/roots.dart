@@ -28,11 +28,15 @@ class Root {
 
 /// Request sent from server to client to get the list of root URIs.
 class JsonRpcListRootsRequest extends JsonRpcRequest {
-  const JsonRpcListRootsRequest({required super.id})
+  const JsonRpcListRootsRequest({required super.id, super.meta})
       : super(method: Method.rootsList);
 
-  factory JsonRpcListRootsRequest.fromJson(Map<String, dynamic> json) =>
-      JsonRpcListRootsRequest(id: json['id']);
+  factory JsonRpcListRootsRequest.fromJson(Map<String, dynamic> json) {
+    return JsonRpcListRootsRequest(
+      id: parseRequestId(json['id']),
+      meta: extractRequestMeta(json),
+    );
+  }
 }
 
 /// Result data for a successful `roots/list` request.
