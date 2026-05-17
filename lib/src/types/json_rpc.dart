@@ -122,15 +122,26 @@ Map<String, dynamic>? validateRequestMeta(Map<String, dynamic>? meta) {
   return meta;
 }
 
+Map<String, dynamic>? _parseRequestMeta(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! Map) {
+    throw FormatException(
+      'Invalid _meta: expected object, got ${value.runtimeType}',
+    );
+  }
+  if (value.keys.any((key) => key is! String)) {
+    throw const FormatException('Invalid _meta: expected string keys');
+  }
+  return validateRequestMeta(Map<String, dynamic>.from(value));
+}
+
 /// Extracts request metadata from either top-level or params-nested `_meta`.
 Map<String, dynamic>? extractRequestMeta(Map<String, dynamic> json) {
-  final topLevelMeta = validateRequestMeta(
-    json['_meta'] as Map<String, dynamic>?,
-  );
+  final topLevelMeta = _parseRequestMeta(json['_meta']);
   final params = json['params'];
-  final paramsMeta = params is Map<String, dynamic>
-      ? validateRequestMeta(params['_meta'] as Map<String, dynamic>?)
-      : null;
+  final paramsMeta = params is Map ? _parseRequestMeta(params['_meta']) : null;
   return topLevelMeta ?? paramsMeta;
 }
 

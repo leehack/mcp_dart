@@ -337,6 +337,38 @@ void main() {
       }
     });
 
+    test('rejects malformed request _meta wire values', () {
+      for (final meta in [false, 1, 'not-meta', <Object>[]]) {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': '2.0',
+            'id': 'request-1',
+            'method': 'unknown/request',
+            'params': {
+              '_meta': meta,
+            },
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('_meta')),
+          ),
+        );
+      }
+
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': '2.0',
+          'id': 'request-1',
+          'method': 'unknown/request',
+          '_meta': false,
+        }),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('_meta')),
+        ),
+      );
+    });
+
     test('preserves string and integer request progressToken wire values', () {
       for (final token in <Object>[123, 'progress-123']) {
         final message = JsonRpcMessage.fromJson({

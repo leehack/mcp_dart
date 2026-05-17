@@ -365,6 +365,17 @@ void main() {
           },
         ),
         (
+          field: '_meta',
+          message: {
+            'jsonrpc': '2.0',
+            'id': 'with-bad-meta-shape',
+            'method': 'ping',
+            'params': {
+              '_meta': false,
+            },
+          },
+        ),
+        (
           field: 'progressToken',
           message: {
             'jsonrpc': '2.0',
