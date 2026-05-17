@@ -1,0 +1,9 @@
+coverage:
+  status:
+    project:
+      default:
+        # Workflow-only PRs can show tiny run-to-run coverage variance even when
+        # no Dart source lines change. Keep project coverage enforced, but allow
+        # a narrow tolerance so unrelated CI-maintenance PRs are not blocked by
+        # a sub-0.1% coverage fluctuation.
+        threshold: 0.1%

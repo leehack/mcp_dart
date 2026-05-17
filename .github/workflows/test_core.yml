@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Dart
         uses: dart-lang/setup-dart@v1
@@ -24,7 +24,7 @@ jobs:
           sdk: stable
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -69,8 +69,8 @@ jobs:
           echo "✓ Package achieves perfect 160/160 score"
 
       - name: Upload coverage to Codecov
-        if: github.event_name != 'pull_request' || github.actor != 'dependabot[bot]'
-        uses: codecov/codecov-action@v5
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]' }}
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/lcov.info

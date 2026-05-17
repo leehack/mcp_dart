@@ -12,7 +12,7 @@ jobs:
     permissions:
       id-token: write # Required for authentication using OIDC
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Determine package from tag
         id: package-info
