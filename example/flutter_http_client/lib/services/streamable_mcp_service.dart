@@ -134,10 +134,19 @@ class StreamableMcpService extends ChangeNotifier {
           }
           return Future.value();
         },
-        (params, meta) => JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotification.fromJson(params ?? {}),
-          meta: meta,
-        ),
+        (params, meta) {
+          Map<String, dynamic>? paramsWithMeta;
+          if (params != null) {
+            paramsWithMeta = <String, dynamic>{
+              ...params,
+              if (meta != null) '_meta': meta,
+            };
+          }
+
+          return JsonRpcLoggingMessageNotification.fromJson({
+            'params': paramsWithMeta,
+          });
+        },
       );
 
       _client!.setNotificationHandler(

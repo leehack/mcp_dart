@@ -254,10 +254,19 @@ class McpService {
           };
           _emitLog(level, params.data.toString());
         },
-        (params, meta) => JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotification.fromJson(params ?? {}),
-          meta: meta,
-        ),
+        (params, meta) {
+          Map<String, dynamic>? paramsWithMeta;
+          if (params != null) {
+            paramsWithMeta = <String, dynamic>{
+              ...params,
+              if (meta != null) '_meta': meta,
+            };
+          }
+
+          return JsonRpcLoggingMessageNotification.fromJson({
+            'params': paramsWithMeta,
+          });
+        },
       );
 
       // Create the transport

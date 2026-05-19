@@ -215,10 +215,19 @@ Future<void> connect([String? url]) async {
         stdout.write('> ');
         return Future.value();
       },
-      (params, meta) => JsonRpcLoggingMessageNotification.fromJson({
-        'params': params,
-        if (meta != null) '_meta': meta,
-      }),
+      (params, meta) {
+        Map<String, dynamic>? paramsWithMeta;
+        if (params != null) {
+          paramsWithMeta = <String, dynamic>{
+            ...params,
+            if (meta != null) '_meta': meta,
+          };
+        }
+
+        return JsonRpcLoggingMessageNotification.fromJson({
+          'params': paramsWithMeta,
+        });
+      },
     );
 
     client!.setNotificationHandler(

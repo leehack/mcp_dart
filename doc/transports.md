@@ -478,8 +478,8 @@ If you enable DNS rebinding protection, set explicit `allowedOrigins` for browse
 final transport = StreamableHttpClientTransport(
   Uri.parse('http://localhost:3000/mcp'),
   opts: const StreamableHttpClientTransportOptions(
-    requestInit: {
-      'headers': {'X-Client-Name': 'mcp-dart-example'},
+    requestInit: <String, dynamic>{
+      'headers': <String, dynamic>{'X-Client-Name': 'mcp-dart-example'},
     },
   ),
 );
