@@ -333,10 +333,11 @@ server.registerTool(
 );
 ```
 
-### Throw MCP Errors
+### Tool-domain Permission Errors
 
-Use the SDK's standard `ErrorCode` values unless your application documents a
-project-specific JSON-RPC error code convention.
+For deliverable tool-domain failures such as permission denials, return a tool
+result with `isError: true` instead of using JSON-RPC structural error codes.
+Reserve `McpError`/`ErrorCode` for protocol-level failures or invalid arguments.
 
 ```dart
 server.registerTool(
