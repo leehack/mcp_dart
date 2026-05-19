@@ -354,7 +354,7 @@ void main() async {
   // Register capabilities
   server.registerTool(
     'example',
-    inputSchema: ToolInputSchema(properties: {}),
+    inputSchema: JsonSchema.object(properties: {}),
     callback: (args, extra) async {
       return CallToolResult(content: [TextContent(text: 'ok')]);
     },
@@ -620,7 +620,7 @@ void main() {
     server.registerTool(
       'add',
       description: 'Add numbers',
-      inputSchema: ToolInputSchema(
+      inputSchema: JsonSchema.object(
         properties: {
           'a': JsonSchema.number(),
           'b': JsonSchema.number(),

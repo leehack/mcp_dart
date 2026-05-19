@@ -359,7 +359,7 @@ See [Flutter Host and Client Recipes](flutter-recipes.md) for platform-specific 
 // From weather.dart
 server.registerTool(
   'get-weather',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'city': JsonSchema.string(),
     },
@@ -395,7 +395,7 @@ server.registerTool(
 // From server_stdio.dart
 server.registerTool(
   'longRunningOperation',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     final progressToken = extra.progressToken;
 
@@ -516,7 +516,7 @@ test('tool execution', () async {
 
   server.registerTool(
     'add',
-    inputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
         'a': JsonSchema.number(),
         'b': JsonSchema.number(),

@@ -211,7 +211,7 @@ void main() async {
   server.registerTool(
     'greet',
     description: 'Greet someone by name',
-    inputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
         'name': JsonSchema.string(description: 'Name of person to greet'),
       },
@@ -392,7 +392,7 @@ try {
 server.registerTool(
   'calculate',
   description: 'Perform calculation',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'operation': JsonSchema.string(
         enumValues: ['add', 'subtract', 'multiply', 'divide'],
@@ -476,7 +476,7 @@ Ensure your input matches the schema:
 
 ```dart
 // Schema requires 'name' as string
-inputSchema: ToolInputSchema(
+inputSchema: JsonSchema.object(
   properties: {
     'name': JsonSchema.string(),
   },

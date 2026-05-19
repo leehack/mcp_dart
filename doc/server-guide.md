@@ -168,7 +168,7 @@ Tools allow clients to execute actions through your server.
 server.registerTool(
   'echo',
   description: 'Echo back a message',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'message': JsonSchema.string(),
     },
@@ -189,7 +189,7 @@ server.registerTool(
 server.registerTool(
   'search-database',
   description: 'Search database with filters',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'query': JsonSchema.string(description: 'Search query'),
       'filters': JsonSchema.object(
@@ -236,7 +236,7 @@ For long-running operations, you can report progress back to the client:
 ```dart
 server.registerTool(
   'long-task',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     for (var i = 0; i < 100; i++) {
       await Future.delayed(Duration(milliseconds: 100));
@@ -261,7 +261,7 @@ Provide hints about tool behavior:
 server.registerTool(
   'delete-user',
   description: 'Permanently delete a user account',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     // Delete logic
     return CallToolResult(
@@ -273,7 +273,7 @@ server.registerTool(
 server.registerTool(
   'get-user-info',
   description: 'Get user information',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     // Get logic
     return CallToolResult(
@@ -285,7 +285,7 @@ server.registerTool(
 server.registerTool(
   'update-cache',
   description: 'Update cache entry',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     // Update logic
     return CallToolResult(
@@ -297,7 +297,7 @@ server.registerTool(
 server.registerTool(
   'search-web',
   description: 'Search the web',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     // Search logic
     return CallToolResult(
@@ -313,7 +313,7 @@ server.registerTool(
 server.registerTool(
   'generate-report',
   description: 'Generate a report with chart',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     final report = await generateReport(args);
     final chart = await generateChart(report);
@@ -337,7 +337,7 @@ server.registerTool(
 server.registerTool(
   'latest-report',
   description: 'Return a link to the latest generated report',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     return CallToolResult(
       content: [
@@ -359,7 +359,7 @@ server.registerTool(
 server.registerTool(
   'divide',
   description: 'Divide two numbers',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'a': JsonSchema.number(),
       'b': JsonSchema.number(),
@@ -1038,7 +1038,7 @@ server.registerTool(
 
 ```dart
 // ✅ Good
-inputSchema: ToolInputSchema(
+inputSchema: JsonSchema.object(
   properties: {
     'query': JsonSchema.string(
       description: 'Search keywords',
@@ -1054,7 +1054,7 @@ inputSchema: ToolInputSchema(
 )
 
 // ❌ Bad
-inputSchema: ToolInputSchema(
+inputSchema: JsonSchema.object(
   properties: {
     'query': JsonSchema.string(),
   },

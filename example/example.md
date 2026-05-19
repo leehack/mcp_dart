@@ -19,7 +19,7 @@ void main() async {
   server.registerTool(
     "calculate",
     description: 'Perform basic arithmetic operations',
-    inputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
         'operation': JsonSchema.string(
           enumValues: ['add', 'subtract', 'multiply', 'divide'],
@@ -72,7 +72,7 @@ void main() async {
   server.registerTool(
     "echo",
     description: 'Echoes back the input',
-    inputSchema: ToolInputSchema(properties: {
+    inputSchema: JsonSchema.object(properties: {
       'message': JsonSchema.string(),
     }),
     callback: (args, extra) async {

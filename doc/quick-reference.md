@@ -83,7 +83,7 @@ await server.connect(transport);
 server.registerTool(
   'tool-name',
   description: 'What it does',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'param': JsonSchema.string(),
     },
@@ -392,7 +392,7 @@ await client.close();
 ```dart
 server.registerTool(
   'echo',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'message': JsonSchema.string(),
     },
@@ -408,7 +408,7 @@ server.registerTool(
 ```dart
 server.registerTool(
   'divide',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'a': JsonSchema.number(),
       'b': JsonSchema.number(),
@@ -440,7 +440,7 @@ server.registerTool(
 // Read-only
 server.registerTool(
   'get-data',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   annotations: ToolAnnotations(readOnly: true), // Updated for annotations
   callback: (args, extra) async => CallToolResult(content: []),
 );
@@ -448,7 +448,7 @@ server.registerTool(
 // Destructive
 server.registerTool(
   'delete-all',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   description: 'Delete all data', // hints deprecated?
   callback: (args, extra) async => CallToolResult(content: []),
 );
