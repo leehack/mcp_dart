@@ -310,7 +310,7 @@ await client.connect(transport);
 
 // HTTP
 final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000'),
+  Uri.parse('http://localhost:3000/mcp'),
 );
 await client.connect(transport);
 ```

@@ -466,7 +466,7 @@ final transport = StdioClientTransport(
 
 // HTTP: Check port is available
 final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000'),
+  Uri.parse('http://localhost:3000/mcp'),
 );
 ```
 

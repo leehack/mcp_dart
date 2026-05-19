@@ -376,7 +376,7 @@ void main() async {
 
   // Create HTTP server
   final httpServer = await HttpServer.bind('localhost', 3000);
-  print('Server listening on http://localhost:3000');
+  print('Server listening on http://localhost:3000/mcp');
 
   await for (final request in httpServer) {
     if (request.uri.path != '/mcp') {
@@ -400,7 +400,7 @@ final client = McpClient(
 );
 
 final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000'),
+  Uri.parse('http://localhost:3000/mcp'),
 );
 
 await client.connect(transport);
@@ -424,7 +424,7 @@ final transport = StreamableHTTPServerTransport(
 ```dart
 // Client: Resume session
 final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000'),
+  Uri.parse('http://localhost:3000/mcp'),
   opts: const StreamableHttpClientTransportOptions(
     sessionId: 'existing-session-id', // Resume this session
   ),
@@ -476,7 +476,7 @@ If you enable DNS rebinding protection, set explicit `allowedOrigins` for browse
 
 ```dart
 final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000'),
+  Uri.parse('http://localhost:3000/mcp'),
   opts: const StreamableHttpClientTransportOptions(
     requestInit: {
       'headers': {'X-Client-Name': 'mcp-dart-example'},
@@ -489,7 +489,7 @@ final transport = StreamableHttpClientTransport(
 
 ```dart
 final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000'),
+  Uri.parse('http://localhost:3000/mcp'),
   opts: const StreamableHttpClientTransportOptions(
     reconnectionOptions: StreamableHttpReconnectionOptions(
       maxReconnectionDelay: 30000,
@@ -930,7 +930,7 @@ request.response.headers
 ```dart
 // Increase retry attempts and maximum backoff
 final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000'),
+  Uri.parse('http://localhost:3000/mcp'),
   opts: const StreamableHttpClientTransportOptions(
     reconnectionOptions: StreamableHttpReconnectionOptions(
       maxReconnectionDelay: 60000,
@@ -947,7 +947,7 @@ final transport = StreamableHttpClientTransport(
 ```dart
 // Client: Provide session ID
 final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000'),
+  Uri.parse('http://localhost:3000/mcp'),
   opts: StreamableHttpClientTransportOptions(
     sessionId: previousSessionId,
   ),
