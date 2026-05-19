@@ -342,7 +342,7 @@ server.registerTool(
   callback: (args, extra) async {
     if (!await isAdmin(args['userId'])) {
       throw McpError(
-        ErrorCode.unauthorized,
+        -32003,
         'Admin privileges required',
       );
     }
@@ -422,13 +422,13 @@ server.registerTool(
   callback: (args, extra) async {
     // Check if cancelled at the start
     if (extra.signal.aborted) {
-      throw McpError(ErrorCode.requestCancelled, 'Task cancelled');
+      throw McpError(ErrorCode.invalidRequest.value, 'Task cancelled');
     }
 
     for (var i = 0; i < 1000; i++) {
       // Check for cancellation during loop
       if (extra.signal.aborted) {
-        throw McpError(ErrorCode.requestCancelled, 'Task cancelled');
+        throw McpError(ErrorCode.invalidRequest.value, 'Task cancelled');
       }
 
       await processItem(i);
@@ -624,7 +624,7 @@ inputSchema: ToolInputSchema(
 callback: (args) async {
   final count = args['count'] as int;
   if (count < 1 || count > 100) {
-    throw McpError(ErrorCode.invalidParams, 'Count out of range');
+    throw McpError(ErrorCode.invalidParams.value, 'Count out of range');
   }
   ...
 }
@@ -677,12 +677,12 @@ callback: (args) async {
 
   // Validate path
   if (!isPathAllowed(path)) {
-    throw McpError(ErrorCode.unauthorized, 'Access denied');
+    throw McpError(-32003, 'Access denied');
   }
 
   // Check permissions
   if (!hasPermission(args['userId'], path)) {
-    throw McpError(ErrorCode.unauthorized, 'Insufficient permissions');
+    throw McpError(-32003, 'Insufficient permissions');
   }
 
   // Sanitize input

@@ -147,17 +147,17 @@ for (final tool in tools.tools) {
 - TypeScript-style helper example: [`example/mcp_apps_helpers_server.dart`](../example/mcp_apps_helpers_server.dart)
 - Manual metadata example: [`example/mcp_apps_metadata_server.dart`](../example/mcp_apps_metadata_server.dart)
 
-Run either example as a stdio MCP server:
+Inspect either example by letting the CLI launch it as a stdio MCP server:
 
 ```bash
-dart run example/mcp_apps_helpers_server.dart
+mcp_dart inspect --tool weather_get_current --json-args '{"location":"Seoul"}' -- dart run example/mcp_apps_helpers_server.dart
+mcp_dart inspect --resource ui://weather/dashboard.html -- dart run example/mcp_apps_helpers_server.dart
+mcp_dart inspect --resource ui://weather/dashboard -- dart run example/mcp_apps_metadata_server.dart
 ```
 
-Then inspect it from another terminal or from an MCP host that understands MCP Apps metadata:
+Do not start a stdio server separately for these commands; stdio transports are process-owned, so the inspector spawns the server process. For an already-running server, expose a Streamable HTTP endpoint and connect to that endpoint from the host or inspector.
 
-```bash
-mcp_dart inspect -- dart run example/mcp_apps_helpers_server.dart
-```
+MCP hosts that understand MCP Apps metadata can use the same `dart run example/...` commands as stdio server commands.
 
 ## Polished example patterns
 
@@ -166,11 +166,11 @@ mcp_dart inspect -- dart run example/mcp_apps_helpers_server.dart
 Use this pattern when a tool returns normal model-readable text plus a UI resource for hosts that can render MCP Apps:
 
 1. Register a `ui://weather/dashboard.html` resource with `mcpUiResourceMimeType`.
-2. Attach `McpUiResourceMeta` with `prefersBorder` and a narrow CSP.
+2. Attach `McpUiResourceMeta` with `prefersBorder` and CSP domains that match only the remote resources the HTML actually uses.
 3. Return both `TextContent` and a `ResourceLink` from the tool.
 4. Put machine-readable values in `structuredContent` so non-UI hosts still receive useful data.
 
-The checked-in helper example follows this pattern and keeps the HTML self-contained for easy host testing.
+The checked-in helper example demonstrates the text fallback, `ResourceLink`, structured content, and self-contained HTML portions of this pattern; tighten CSP entries to match your app before treating them as production-ready.
 
 ### Form or approval UI
 
@@ -194,7 +194,7 @@ Use this pattern when tool results should point users to an updated resource:
 MCP Apps metadata is extension-based, so hosts can differ in what they render:
 
 - A host that does not advertise `io.modelcontextprotocol/ui` support should still receive useful text or structured content.
-- Some hosts reject tool names that contain `/`; prefer snake-case names such as `weather_get_current`.
+- Some hosts reject tool names that contain `/`; prefer `snake_case` names such as `weather_get_current`.
 - Keep CSP entries explicit and minimal. Avoid wildcard domains in production examples.
 - Treat `_meta.ui` as host-facing metadata, not as an authorization boundary. Server-side handlers must still enforce authentication and permissions.
 - Verify final rendering against each target host before claiming host-specific support.

@@ -249,6 +249,7 @@ client.setNotificationHandler<JsonRpcResourceUpdatedNotification>(
   },
   (params, meta) => JsonRpcResourceUpdatedNotification(
     updatedParams: ResourceUpdatedNotification.fromJson(params ?? {}),
+    meta: meta,
   ),
 );
 
@@ -546,6 +547,7 @@ client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
   },
   (params, meta) => JsonRpcLoggingMessageNotification(
     logParams: LoggingMessageNotification.fromJson(params ?? {}),
+    meta: meta,
   ),
 );
 ```
@@ -597,7 +599,7 @@ Future<void> connectWithRetry(McpClient client, Transport transport) async {
 
 ```dart
 // After connection, check server capabilities
-final serverCapabilities = client.serverCapabilities;
+final serverCapabilities = client.getServerCapabilities();
 
 if (serverCapabilities?.tools != null) {
   print('Server supports tools');
@@ -652,14 +654,14 @@ Future<CallToolResult?> callToolSafely(
       ),
     );
   } on McpError catch (e) {
-    switch (e.code) {
+    switch (ErrorCode.fromValue(e.code)) {
       case ErrorCode.methodNotFound:
         print('Tool not found: $toolName');
         break;
       case ErrorCode.invalidParams:
         print('Invalid parameters for $toolName: ${e.message}');
         break;
-      case ErrorCode.timeout:
+      case ErrorCode.requestTimeout:
         print('Tool call timed out');
         break;
       default:
@@ -744,7 +746,7 @@ processResult(result);
 
 ```dart
 // ✅ Good
-if (client.serverCapabilities?.resources?.subscribe == true) {
+if (client.getServerCapabilities()?.resources?.subscribe == true) {
   await client.subscribeResource(SubscribeRequest(uri: uri));
 } else {
   // Fallback: poll for changes

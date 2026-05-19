@@ -363,7 +363,7 @@ Done!
 
 - [Transports Guide](transports.md) - Detailed transport options
 - [Stdio](transports.md#stdio-transport) - Best for CLI tools and local services
-- [HTTP/SSE](transports.md#http-transport) - Best for web and remote services
+- [HTTP/SSE](transports.md#httpsse-transport) - Best for web and remote services
 
 ## Common Patterns
 
@@ -465,7 +465,7 @@ final transport = StdioClientTransport(
 );
 
 // HTTP: Check port is available
-final transport = StreamableHTTPClientTransport(
+final transport = StreamableHttpClientTransport(
   Uri.parse('http://localhost:3000'),
 );
 ```

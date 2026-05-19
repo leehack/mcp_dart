@@ -309,7 +309,7 @@ final transport = StdioClientTransport(
 await client.connect(transport);
 
 // HTTP
-final transport = StreamableHTTPClientTransport(
+final transport = StreamableHttpClientTransport(
   Uri.parse('http://localhost:3000'),
 );
 await client.connect(transport);
@@ -528,7 +528,7 @@ return CallToolResult(
 
 ```dart
 throw McpError(
-  ErrorCode.invalidParams,
+  ErrorCode.invalidParams.value,
   'Invalid parameters',
 );
 ```
@@ -717,6 +717,7 @@ client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
   },
   (params, meta) => JsonRpcLoggingMessageNotification(
     logParams: LoggingMessageNotification.fromJson(params ?? {}),
+    meta: meta,
   ),
 );
 ```
@@ -767,6 +768,7 @@ client.setNotificationHandler<JsonRpcResourceUpdatedNotification>(
   },
   (params, meta) => JsonRpcResourceUpdatedNotification(
     updatedParams: ResourceUpdatedNotification.fromJson(params ?? {}),
+    meta: meta,
   ),
 );
 ```

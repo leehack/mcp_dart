@@ -223,7 +223,7 @@ dart run example/mcp_apps_helpers_server.dart
 - `registerAppResource(...)` with default `text/html;profile=mcp-app`
 - `ui://` resource registration and `_meta.ui` metadata
 - Extension capability declaration (`withMcpUiExtension`)
-- Weather dashboard card pattern with text fallback, `ResourceLink`, structured content, and narrow CSP
+- Weather dashboard card pattern with text fallback, `ResourceLink`, structured content, and host-facing UI metadata
 
 See [MCP Apps Support](mcp-apps.md) for host compatibility notes and additional UI patterns.
 

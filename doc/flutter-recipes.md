@@ -128,10 +128,10 @@ client.setNotificationHandler(
     messages.add('${params.level}: ${params.data}');
     notifyListeners();
   },
-  (params, meta) => JsonRpcLoggingMessageNotification.fromJson({
-    'params': params,
-    if (meta != null) '_meta': meta,
-  }),
+  (params, meta) => JsonRpcLoggingMessageNotification(
+    logParams: LoggingMessageNotification.fromJson(params ?? {}),
+    meta: meta,
+  ),
 );
 ```
 
@@ -144,7 +144,7 @@ For OAuth-protected remote servers, keep the OAuth flow outside widget code:
 1. Create an `OAuthClientProvider` implementation or reuse one of the patterns in [`example/authentication/`](../example/authentication/).
 2. Store tokens through a platform-appropriate secure storage layer.
 3. Pass the provider to `StreamableHttpClientTransportOptions(authProvider: ...)`.
-4. Route browser/deep-link callback results back to the provider before retrying the MCP connection.
+4. Extract the authorization `code` from the browser/deep-link callback, call `await transport.finishAuth(code);`, then retry the MCP connection. If you disposed the transport after the failed attempt, recreate it with the same `authProvider` first.
 
 For local development, a loopback callback can be convenient. For production mobile apps, prefer platform deep links/universal links and PKCE.
 

@@ -11,7 +11,7 @@ Use this when porting a small TypeScript MCP server to Dart.
 | `McpServer` | `McpServer` | Both expose tools, resources, prompts, and capabilities. |
 | Server metadata `{ name, version }` | `Implementation(name: ..., version: ...)` | Keep names stable for host diagnostics. |
 | Tool registration | `server.registerTool(...)` or typed helper APIs such as `registerAppTool(...)` | Use MCP-safe tool names; some hosts reject `/` in names. |
-| Zod/JSON Schema tool input | `JsonSchema` helpers or raw JSON Schema maps | Preserve wire-visible JSON Schema keywords when migrating schemas. |
+| Zod/JSON Schema tool input | `JsonSchema.object(...)` helpers or `JsonObject.fromJson(rawObjectSchema)` | Use `JsonObject.fromJson(...)` for supported object-schema keywords, verify the serialized schema for unions/custom keywords, and do not pass raw `Map<String, dynamic>` values directly to `inputSchema`. |
 | `StdioServerTransport` | `StdioServerTransport` | Keep stdout reserved for JSON-RPC; log to stderr. |
 | Streamable HTTP server | `StreamableMcpServer` or `StreamableHTTPServerTransport` | Prefer `StreamableMcpServer` for app-level routing and session management. |
 
