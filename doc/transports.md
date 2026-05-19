@@ -491,7 +491,7 @@ final transport = StreamableHttpClientTransport(
 final transport = StreamableHttpClientTransport(
   Uri.parse('http://localhost:3000/mcp'),
   opts: const StreamableHttpClientTransportOptions(
-    reconnectionOptions: StreamableHttpReconnectionOptions(
+    reconnectionOptions: const StreamableHttpReconnectionOptions(
       maxReconnectionDelay: 30000,
       initialReconnectionDelay: 1000,
       reconnectionDelayGrowFactor: 1.5,
@@ -932,7 +932,7 @@ request.response.headers
 final transport = StreamableHttpClientTransport(
   Uri.parse('http://localhost:3000/mcp'),
   opts: const StreamableHttpClientTransportOptions(
-    reconnectionOptions: StreamableHttpReconnectionOptions(
+    reconnectionOptions: const StreamableHttpReconnectionOptions(
       maxReconnectionDelay: 60000,
       initialReconnectionDelay: 1000,
       reconnectionDelayGrowFactor: 1.5,

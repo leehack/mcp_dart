@@ -1065,7 +1065,7 @@ inputSchema: ToolInputSchema(
 
 ```dart
 // ✅ Good
-callback: (args) async {
+callback: (args, extra) async {
   try {
     final result = await riskyOperation(args);
     return CallToolResult(
@@ -1080,7 +1080,7 @@ callback: (args) async {
 }
 
 // ❌ Bad - uncaught exceptions
-callback: (args) async {
+callback: (args, extra) async {
   final result = await riskyOperation(args);  // May throw!
   return CallToolResult(
     content: [TextContent(text: result)],

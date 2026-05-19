@@ -359,7 +359,7 @@ server.registerTool(
 server.registerTool(
   name: 'custom-validation',
   inputSchema: {...},
-  callback: (args) async {
+  callback: (args, extra) async {
     // Custom business logic validation
     if (!isValid(args)) {
       throw McpError(
@@ -621,7 +621,7 @@ inputSchema: ToolInputSchema(
 
 ```dart
 // ✅ Good - type checking
-callback: (args) async {
+callback: (args, extra) async {
   final count = args['count'] as int;
   if (count < 1 || count > 100) {
     throw McpError(ErrorCode.invalidParams.value, 'Count out of range');
@@ -630,7 +630,7 @@ callback: (args) async {
 }
 
 // ❌ Bad - no type checking
-callback: (args) async {
+callback: (args, extra) async {
   final count = args['count'];  // Could be anything!
   ...
 }
@@ -640,7 +640,7 @@ callback: (args) async {
 
 ```dart
 // ✅ Good - comprehensive error handling
-callback: (args) async {
+callback: (args, extra) async {
   try {
     final result = await riskyOperation(args);
     return CallToolResult(
@@ -660,7 +660,7 @@ callback: (args) async {
 }
 
 // ❌ Bad - unhandled exceptions
-callback: (args) async {
+callback: (args, extra) async {
   final result = await riskyOperation(args);  // May throw!
   return CallToolResult(
     content: [TextContent(text: result)],
@@ -672,7 +672,7 @@ callback: (args) async {
 
 ```dart
 // ✅ Good - validate inputs, check permissions
-callback: (args) async {
+callback: (args, extra) async {
   final path = args['path'] as String;
 
   // Validate path
@@ -692,7 +692,7 @@ callback: (args) async {
 }
 
 // ❌ Bad - no validation or security checks
-callback: (args) async {
+callback: (args, extra) async {
   final path = args['path'] as String;
   final file = File(path);  // Direct file access!
   return CallToolResult(...);
