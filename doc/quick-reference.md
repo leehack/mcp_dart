@@ -715,10 +715,18 @@ client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
   (notification) async {
     print('[${notification.logParams.level}] ${notification.logParams.data}');
   },
-  (params, meta) => JsonRpcLoggingMessageNotification(
-    logParams: LoggingMessageNotification.fromJson(params ?? {}),
-    meta: meta,
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for logging message notification',
+      );
+    }
+
+    return JsonRpcLoggingMessageNotification(
+      logParams: LoggingMessageNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 ```
 
@@ -766,10 +774,18 @@ client.setNotificationHandler<JsonRpcResourceUpdatedNotification>(
     print('Updated: ${notification.updatedParams.uri}');
     // Re-read resource
   },
-  (params, meta) => JsonRpcResourceUpdatedNotification(
-    updatedParams: ResourceUpdatedNotification.fromJson(params ?? {}),
-    meta: meta,
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for resource update notification',
+      );
+    }
+
+    return JsonRpcResourceUpdatedNotification(
+      updatedParams: ResourceUpdatedNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 ```
 

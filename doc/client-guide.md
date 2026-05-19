@@ -247,10 +247,18 @@ client.setNotificationHandler<JsonRpcResourceUpdatedNotification>(
       print('New content: ${(result.contents.first as TextResourceContents).text}');
     }
   },
-  (params, meta) => JsonRpcResourceUpdatedNotification(
-    updatedParams: ResourceUpdatedNotification.fromJson(params ?? {}),
-    meta: meta,
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for resource update notification',
+      );
+    }
+
+    return JsonRpcResourceUpdatedNotification(
+      updatedParams: ResourceUpdatedNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 
 // Unsubscribe when done
@@ -545,10 +553,18 @@ client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
 
     print('[$level] $logger: $message');
   },
-  (params, meta) => JsonRpcLoggingMessageNotification(
-    logParams: LoggingMessageNotification.fromJson(params ?? {}),
-    meta: meta,
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for logging message notification',
+      );
+    }
+
+    return JsonRpcLoggingMessageNotification(
+      logParams: LoggingMessageNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 ```
 

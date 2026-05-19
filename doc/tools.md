@@ -344,9 +344,9 @@ server.registerTool(
   inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     if (!await isAdmin(args['userId'])) {
-      throw McpError(
-        ErrorCode.invalidRequest.value,
-        'Admin privileges required',
+      return CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Admin privileges required')],
       );
     }
 
@@ -691,12 +691,18 @@ callback: (args, extra) async {
 
   // Validate path
   if (!isPathAllowed(path)) {
-    throw McpError(ErrorCode.invalidRequest.value, 'Access denied');
+    return CallToolResult(
+      isError: true,
+      content: [TextContent(text: 'Access denied')],
+    );
   }
 
   // Check permissions
   if (!hasPermission(args['userId'], path)) {
-    throw McpError(ErrorCode.invalidRequest.value, 'Insufficient permissions');
+    return CallToolResult(
+      isError: true,
+      content: [TextContent(text: 'Insufficient permissions')],
+    );
   }
 
   // Sanitize input

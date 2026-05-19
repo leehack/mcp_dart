@@ -128,10 +128,18 @@ client.setNotificationHandler(
     messages.add('${params.level}: ${params.data}');
     notifyListeners();
   },
-  (params, meta) => JsonRpcLoggingMessageNotification(
-    logParams: LoggingMessageNotification.fromJson(params ?? {}),
-    meta: meta,
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for logging message notification',
+      );
+    }
+
+    return JsonRpcLoggingMessageNotification(
+      logParams: LoggingMessageNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 ```
 
