@@ -335,6 +335,9 @@ server.registerTool(
 
 ### Throw MCP Errors
 
+Use the SDK's standard `ErrorCode` values unless your application documents a
+project-specific JSON-RPC error code convention.
+
 ```dart
 server.registerTool(
   'admin-action',
@@ -342,7 +345,7 @@ server.registerTool(
   callback: (args, extra) async {
     if (!await isAdmin(args['userId'])) {
       throw McpError(
-        -32003,
+        ErrorCode.invalidRequest.value,
         'Admin privileges required',
       );
     }
@@ -357,13 +360,13 @@ server.registerTool(
 
 ```dart
 server.registerTool(
-  name: 'custom-validation',
-  inputSchema: {...},
+  'custom-validation',
+  inputSchema: ToolInputSchema(properties: {...}),
   callback: (args, extra) async {
     // Custom business logic validation
     if (!isValid(args)) {
       throw McpError(
-        ErrorCode.invalidParams,
+        ErrorCode.invalidParams.value,
         'Validation failed: ${getErrors(args)}',
       );
     }
@@ -414,6 +417,9 @@ server.registerTool(
 ### Cancellation Support
 
 Tools should also check for cancellation, especially if they are long-running.
+When `extra.signal.aborted` is set, stop work promptly and clean up local state.
+The protocol may suppress any response after cancellation, so do not rely on a
+thrown error being delivered to the client.
 
 ```dart
 server.registerTool(
@@ -422,13 +428,21 @@ server.registerTool(
   callback: (args, extra) async {
     // Check if cancelled at the start
     if (extra.signal.aborted) {
-      throw McpError(ErrorCode.invalidRequest.value, 'Task cancelled');
+      await cleanupPartialWork();
+      return CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Task cancelled')],
+      );
     }
 
     for (var i = 0; i < 1000; i++) {
       // Check for cancellation during loop
       if (extra.signal.aborted) {
-        throw McpError(ErrorCode.invalidRequest.value, 'Task cancelled');
+        await cleanupPartialWork();
+        return CallToolResult(
+          isError: true,
+          content: [TextContent(text: 'Task cancelled')],
+        );
       }
 
       await processItem(i);
@@ -551,7 +565,7 @@ server.registerTool(
     // Validate path (security!)
     if (!isPathAllowed(path)) {
       throw McpError(
-        ErrorCode.invalidParams,
+        ErrorCode.invalidParams.value,
         'Access denied: $path',
       );
     }
@@ -559,7 +573,7 @@ server.registerTool(
     final file = File(path);
     if (!await file.exists()) {
       throw McpError(
-        ErrorCode.invalidParams,
+        ErrorCode.invalidParams.value,
         'File not found: $path',
       );
     }
@@ -677,12 +691,12 @@ callback: (args, extra) async {
 
   // Validate path
   if (!isPathAllowed(path)) {
-    throw McpError(-32003, 'Access denied');
+    throw McpError(ErrorCode.invalidRequest.value, 'Access denied');
   }
 
   // Check permissions
   if (!hasPermission(args['userId'], path)) {
-    throw McpError(-32003, 'Insufficient permissions');
+    throw McpError(ErrorCode.invalidRequest.value, 'Insufficient permissions');
   }
 
   // Sanitize input
