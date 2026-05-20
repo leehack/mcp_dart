@@ -17,23 +17,23 @@ This is an example Flutter web application that demonstrates how to use the MCP 
 
 - Flutter SDK (latest stable version)
 - Dart SDK (latest stable version)
-- An MCP server to connect to (use the included test server)
+- An MCP server to connect to (for local testing, use the Streamable HTTP example server)
 
 ### Running the Example
 
 1. First, start an MCP server:
 
 ```shell
-cd /path/to/mcp_dart/example/streamable_https
-dart server_streamable_https.dart
+cd /path/to/mcp_dart
+dart run example/streamable_https/server_streamable_https.dart
 ```
 
 This will start an MCP server on `http://localhost:3000/mcp`.
 
-2. In a separate terminal, run the Flutter web app:
+2. In a separate terminal, run the Flutter app:
 
 ```shell
-cd /path/to/mcp_dart/example/web_client
+cd /path/to/mcp_dart/example/flutter_http_client
 flutter run -d chrome
 ```
 
@@ -53,9 +53,6 @@ This will launch the application in Chrome. You can also use other browsers by s
 - `lib/main.dart` - Entry point of the application
 - `lib/services/streamable_mcp_service.dart` - Service for communicating with MCP servers
 - `lib/screens/mcp_client_screen.dart` - Main UI interface with button controls
-- `lib/screens/settings_screen.dart` - Settings screen for connection management
-- `lib/widgets/chat_widgets.dart` - UI components for the chat interface
-- `test_server.dart` - Simple MCP server for testing
 
 ## Understanding MCP Communication
 
@@ -66,7 +63,7 @@ The application demonstrates key aspects of MCP client implementation:
 3. **Notifications**: The client receives real-time notifications from server tools.
 4. **Streaming Responses**: For a more interactive experience, the server can stream partial responses as they are generated.
 
-The `McpClientService` class handles all communication with the server and exposes streams that the UI can listen to for updates.
+The `StreamableMcpService` class handles all communication with the server and updates `ChangeNotifier` state that the UI listens to.
 
 ## Customization
 

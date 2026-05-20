@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Documentation
+
+- Added interoperability, Flutter recipe, and migration cookbook guides, and expanded MCP Apps example guidance with host compatibility notes.
+
 ### Spec Alignment
 
 - Tightened MCP/JSON-RPC boundary validation for request IDs, progress tokens,

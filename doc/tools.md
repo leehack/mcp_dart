@@ -12,7 +12,7 @@ Tools are functions that AI can call to perform actions. They are the primary wa
 server.registerTool(
   'tool-name',
   description: 'What the tool does',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'param': JsonSchema.string(),
     },
@@ -75,7 +75,7 @@ mcp_dart implements a pragmatic JSON Schema subset for MCP tool input/output and
 ```dart
 server.registerTool(
   'create-user',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'username': JsonSchema.string(
         minLength: 3,
@@ -159,7 +159,7 @@ server.registerTool(
   'get-user-stats',
   description: 'Get user statistics',
   annotations: ToolAnnotations(readOnly: true), // No side effects
-  inputSchema: ToolInputSchema(properties: {...}),
+  inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     final stats = await database.getUserStats();
     return CallToolResult(
@@ -179,7 +179,7 @@ server.registerTool(
     readOnly: false,
     destructive: true, // Warn users!
   ),
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'confirmation': JsonSchema.constValue('DELETE'),
     },
@@ -201,7 +201,7 @@ server.registerTool(
   'update-cache',
   description: 'Update cache entry',
   annotations: ToolAnnotations(idempotent: true), // Safe to retry
-  inputSchema: ToolInputSchema(properties: {...}),
+  inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     await cache.set(args['key'], args['value']);
     return CallToolResult(
@@ -218,7 +218,7 @@ server.registerTool(
   'search-web',
   description: 'Search the internet',
   annotations: ToolAnnotations(openWorld: true), // Results vary over time
-  inputSchema: ToolInputSchema(properties: {...}),
+  inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     final results = await webSearch(args['query']);
     return CallToolResult(
@@ -314,7 +314,7 @@ return CallToolResult(
 ```dart
 server.registerTool(
   'divide',
-  inputSchema: ToolInputSchema(properties: {...}),
+  inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     final a = args['a'] as num;
     final b = args['b'] as num;
@@ -333,17 +333,21 @@ server.registerTool(
 );
 ```
 
-### Throw MCP Errors
+### Tool-domain Permission Errors
+
+For deliverable tool-domain failures such as permission denials, return a tool
+result with `isError: true` instead of using JSON-RPC structural error codes.
+Reserve `McpError`/`ErrorCode` for protocol-level failures or invalid arguments.
 
 ```dart
 server.registerTool(
   'admin-action',
-  inputSchema: ToolInputSchema(properties: {...}),
+  inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     if (!await isAdmin(args['userId'])) {
-      throw McpError(
-        ErrorCode.unauthorized,
-        'Admin privileges required',
+      return CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Admin privileges required')],
       );
     }
 
@@ -357,13 +361,13 @@ server.registerTool(
 
 ```dart
 server.registerTool(
-  name: 'custom-validation',
-  inputSchema: {...},
-  callback: (args) async {
+  'custom-validation',
+  inputSchema: JsonSchema.object(properties: {...}),
+  callback: (args, extra) async {
     // Custom business logic validation
     if (!isValid(args)) {
       throw McpError(
-        ErrorCode.invalidParams,
+        ErrorCode.invalidParams.value,
         'Validation failed: ${getErrors(args)}',
       );
     }
@@ -388,7 +392,7 @@ The `callback` function receives an `extra` parameter (of type `RequestHandlerEx
 server.registerTool(
   'long-running-task',
   description: 'A task that takes some time',
-  inputSchema: ToolInputSchema(properties: {...}),
+  inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     final totalSteps = 10;
 
@@ -414,21 +418,32 @@ server.registerTool(
 ### Cancellation Support
 
 Tools should also check for cancellation, especially if they are long-running.
+When `extra.signal.aborted` is set, stop work promptly and clean up local state.
+The protocol may suppress any response after cancellation, so do not rely on a
+thrown error being delivered to the client.
 
 ```dart
 server.registerTool(
   'cancelable-task',
-  inputSchema: ToolInputSchema(properties: {...}),
+  inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     // Check if cancelled at the start
     if (extra.signal.aborted) {
-      throw McpError(ErrorCode.requestCancelled, 'Task cancelled');
+      await cleanupPartialWork();
+      return CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Task cancelled')],
+      );
     }
 
     for (var i = 0; i < 1000; i++) {
       // Check for cancellation during loop
       if (extra.signal.aborted) {
-        throw McpError(ErrorCode.requestCancelled, 'Task cancelled');
+        await cleanupPartialWork();
+        return CallToolResult(
+          isError: true,
+          content: [TextContent(text: 'Task cancelled')],
+        );
       }
 
       await processItem(i);
@@ -450,7 +465,7 @@ server.registerTool(
 server.registerTool(
   'get-weather',
   description: 'Get current weather for a city',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'city': JsonSchema.string(description: 'City name'),
       'units': JsonSchema.string(
@@ -488,7 +503,7 @@ server.registerTool(
 server.registerTool(
   'query-users',
   description: 'Query user database',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'filters': JsonSchema.object(
         properties: {
@@ -534,7 +549,7 @@ server.registerTool(
   'read-file',
   description: 'Read file contents',
   annotations: ToolAnnotations(readOnly: true),
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'path': JsonSchema.string(description: 'File path'),
       'encoding': JsonSchema.string(
@@ -551,7 +566,7 @@ server.registerTool(
     // Validate path (security!)
     if (!isPathAllowed(path)) {
       throw McpError(
-        ErrorCode.invalidParams,
+        ErrorCode.invalidParams.value,
         'Access denied: $path',
       );
     }
@@ -559,7 +574,7 @@ server.registerTool(
     final file = File(path);
     if (!await file.exists()) {
       throw McpError(
-        ErrorCode.invalidParams,
+        ErrorCode.invalidParams.value,
         'File not found: $path',
       );
     }
@@ -598,7 +613,7 @@ server.registerTool(
 
 ```dart
 // ✅ Good - descriptive, with validation
-inputSchema: ToolInputSchema(
+inputSchema: JsonSchema.object(
   properties: {
     'query': JsonSchema.string(
       description: 'Search query (keywords)',
@@ -610,7 +625,7 @@ inputSchema: ToolInputSchema(
 )
 
 // ❌ Bad - minimal, no validation
-inputSchema: ToolInputSchema(
+inputSchema: JsonSchema.object(
   properties: {
     'query': JsonSchema.string(),
   },
@@ -621,16 +636,16 @@ inputSchema: ToolInputSchema(
 
 ```dart
 // ✅ Good - type checking
-callback: (args) async {
+callback: (args, extra) async {
   final count = args['count'] as int;
   if (count < 1 || count > 100) {
-    throw McpError(ErrorCode.invalidParams, 'Count out of range');
+    throw McpError(ErrorCode.invalidParams.value, 'Count out of range');
   }
   ...
 }
 
 // ❌ Bad - no type checking
-callback: (args) async {
+callback: (args, extra) async {
   final count = args['count'];  // Could be anything!
   ...
 }
@@ -640,7 +655,7 @@ callback: (args) async {
 
 ```dart
 // ✅ Good - comprehensive error handling
-callback: (args) async {
+callback: (args, extra) async {
   try {
     final result = await riskyOperation(args);
     return CallToolResult(
@@ -660,7 +675,7 @@ callback: (args) async {
 }
 
 // ❌ Bad - unhandled exceptions
-callback: (args) async {
+callback: (args, extra) async {
   final result = await riskyOperation(args);  // May throw!
   return CallToolResult(
     content: [TextContent(text: result)],
@@ -672,17 +687,23 @@ callback: (args) async {
 
 ```dart
 // ✅ Good - validate inputs, check permissions
-callback: (args) async {
+callback: (args, extra) async {
   final path = args['path'] as String;
 
   // Validate path
   if (!isPathAllowed(path)) {
-    throw McpError(ErrorCode.unauthorized, 'Access denied');
+    return CallToolResult(
+      isError: true,
+      content: [TextContent(text: 'Access denied')],
+    );
   }
 
   // Check permissions
   if (!hasPermission(args['userId'], path)) {
-    throw McpError(ErrorCode.unauthorized, 'Insufficient permissions');
+    return CallToolResult(
+      isError: true,
+      content: [TextContent(text: 'Insufficient permissions')],
+    );
   }
 
   // Sanitize input
@@ -692,7 +713,7 @@ callback: (args) async {
 }
 
 // ❌ Bad - no validation or security checks
-callback: (args) async {
+callback: (args, extra) async {
   final path = args['path'] as String;
   final file = File(path);  // Direct file access!
   return CallToolResult(...);
@@ -713,7 +734,7 @@ void main() {
 
     server.registerTool(
       'add',
-      inputSchema: ToolInputSchema(
+      inputSchema: JsonSchema.object(
         properties: {
           'a': JsonSchema.number(),
           'b': JsonSchema.number(),

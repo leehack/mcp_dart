@@ -354,7 +354,7 @@ void main() async {
   // Register capabilities
   server.registerTool(
     'example',
-    inputSchema: ToolInputSchema(properties: {}),
+    inputSchema: JsonSchema.object(properties: {}),
     callback: (args, extra) async {
       return CallToolResult(content: [TextContent(text: 'ok')]);
     },
@@ -376,7 +376,7 @@ void main() async {
 
   // Create HTTP server
   final httpServer = await HttpServer.bind('localhost', 3000);
-  print('Server listening on http://localhost:3000');
+  print('Server listening on http://localhost:3000/mcp');
 
   await for (final request in httpServer) {
     if (request.uri.path != '/mcp') {
@@ -399,8 +399,8 @@ final client = McpClient(
   Implementation(name: 'client', version: '1.0.0'),
 );
 
-final transport = StreamableHTTPClientTransport(
-  Uri.parse('http://localhost:3000'),
+final transport = StreamableHttpClientTransport(
+  Uri.parse('http://localhost:3000/mcp'),
 );
 
 await client.connect(transport);
@@ -423,9 +423,11 @@ final transport = StreamableHTTPServerTransport(
 
 ```dart
 // Client: Resume session
-final transport = StreamableHTTPClientTransport(
-  Uri.parse('http://localhost:3000'),
-  sessionId: 'existing-session-id',  // Resume this session
+final transport = StreamableHttpClientTransport(
+  Uri.parse('http://localhost:3000/mcp'),
+  opts: const StreamableHttpClientTransportOptions(
+    sessionId: 'existing-session-id', // Resume this session
+  ),
 );
 ```
 
@@ -470,24 +472,32 @@ If you enable DNS rebinding protection, set explicit `allowedOrigins` for browse
 
 ### Best Practices
 
-#### 1. Connection Pooling
+#### 1. Request Headers
 
 ```dart
-// Reuse HTTP client connections
-final httpClient = HttpClient();
-
-final transport = StreamableHTTPClientTransport(
-  Uri.parse('http://localhost:3000'),
-  httpClient: httpClient,  // Shared client
+final transport = StreamableHttpClientTransport(
+  Uri.parse('http://localhost:3000/mcp'),
+  opts: const StreamableHttpClientTransportOptions(
+    requestInit: <String, dynamic>{
+      'headers': <String, dynamic>{'X-Client-Name': 'mcp-dart-example'},
+    },
+  ),
 );
 ```
 
-#### 2. Timeout Configuration
+#### 2. Reconnection Configuration
 
 ```dart
-final transport = StreamableHTTPClientTransport(
-  Uri.parse('http://localhost:3000'),
-  timeout: Duration(seconds: 30),
+final transport = StreamableHttpClientTransport(
+  Uri.parse('http://localhost:3000/mcp'),
+  opts: const StreamableHttpClientTransportOptions(
+    reconnectionOptions: const StreamableHttpReconnectionOptions(
+      maxReconnectionDelay: 30000,
+      initialReconnectionDelay: 1000,
+      reconnectionDelayGrowFactor: 1.5,
+      maxRetries: 3,
+    ),
+  ),
 );
 ```
 
@@ -610,7 +620,7 @@ void main() {
     server.registerTool(
       'add',
       description: 'Add numbers',
-      inputSchema: ToolInputSchema(
+      inputSchema: JsonSchema.object(
         properties: {
           'a': JsonSchema.number(),
           'b': JsonSchema.number(),
@@ -915,13 +925,20 @@ request.response.headers
   ..set('Access-Control-Allow-Headers', 'Content-Type');
 ```
 
-**Problem**: Connection timeout
+**Problem**: SSE reconnects give up too quickly
 
 ```dart
-// Increase timeout
-final transport = StreamableHTTPClientTransport(
-  Uri.parse('http://localhost:3000'),
-  timeout: Duration(seconds: 60),
+// Increase retry attempts and maximum backoff
+final transport = StreamableHttpClientTransport(
+  Uri.parse('http://localhost:3000/mcp'),
+  opts: const StreamableHttpClientTransportOptions(
+    reconnectionOptions: const StreamableHttpReconnectionOptions(
+      maxReconnectionDelay: 60000,
+      initialReconnectionDelay: 1000,
+      reconnectionDelayGrowFactor: 1.5,
+      maxRetries: 5,
+    ),
+  ),
 );
 ```
 
@@ -929,9 +946,11 @@ final transport = StreamableHTTPClientTransport(
 
 ```dart
 // Client: Provide session ID
-final transport = StreamableHTTPClientTransport(
-  Uri.parse('http://localhost:3000'),
-  sessionId: previousSessionId,
+final transport = StreamableHttpClientTransport(
+  Uri.parse('http://localhost:3000/mcp'),
+  opts: StreamableHttpClientTransportOptions(
+    sessionId: previousSessionId,
+  ),
 );
 ```
 

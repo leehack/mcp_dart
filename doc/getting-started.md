@@ -211,7 +211,7 @@ void main() async {
   server.registerTool(
     'greet',
     description: 'Greet someone by name',
-    inputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
         'name': JsonSchema.string(description: 'Name of person to greet'),
       },
@@ -363,7 +363,7 @@ Done!
 
 - [Transports Guide](transports.md) - Detailed transport options
 - [Stdio](transports.md#stdio-transport) - Best for CLI tools and local services
-- [HTTP/SSE](transports.md#http-transport) - Best for web and remote services
+- [HTTP/SSE](transports.md#httpsse-transport) - Best for web and remote services
 
 ## Common Patterns
 
@@ -392,7 +392,7 @@ try {
 server.registerTool(
   'calculate',
   description: 'Perform calculation',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'operation': JsonSchema.string(
         enumValues: ['add', 'subtract', 'multiply', 'divide'],
@@ -465,8 +465,8 @@ final transport = StdioClientTransport(
 );
 
 // HTTP: Check port is available
-final transport = StreamableHTTPClientTransport(
-  Uri.parse('http://localhost:3000'),
+final transport = StreamableHttpClientTransport(
+  Uri.parse('http://localhost:3000/mcp'),
 );
 ```
 
@@ -476,7 +476,7 @@ Ensure your input matches the schema:
 
 ```dart
 // Schema requires 'name' as string
-inputSchema: ToolInputSchema(
+inputSchema: JsonSchema.object(
   properties: {
     'name': JsonSchema.string(),
   },

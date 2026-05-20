@@ -6,6 +6,13 @@ Real-world examples and usage patterns for the MCP Dart SDK.
 
 The SDK includes extensive examples in the [`example/`](../example/) directory. This guide highlights key examples and explains their usage.
 
+For task-focused guidance, also see:
+
+- [SDK interoperability matrix](interoperability.md) for verified cross-SDK scenarios.
+- [Flutter host and client recipes](flutter-recipes.md) for platform-specific Flutter guidance.
+- [MCP migration cookbooks](migration-cookbooks.md) for TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migrations.
+- [MCP Apps guide](mcp-apps.md) for `io.modelcontextprotocol/ui` metadata and host compatibility notes.
+
 ## Basic Examples
 
 ### Stdio Server and Client
@@ -216,6 +223,9 @@ dart run example/mcp_apps_helpers_server.dart
 - `registerAppResource(...)` with default `text/html;profile=mcp-app`
 - `ui://` resource registration and `_meta.ui` metadata
 - Extension capability declaration (`withMcpUiExtension`)
+- Weather dashboard card pattern with text fallback, `ResourceLink`, structured content, and host-facing UI metadata
+
+See [MCP Apps Support](mcp-apps.md) for host compatibility notes and additional UI patterns.
 
 ### MCP Apps Manual Metadata
 
@@ -334,10 +344,12 @@ flutter run
 **Features**:
 
 - Cross-platform (iOS, Android, Web)
-- HTTP transport configuration
-- UI state management
+- Streamable HTTP transport configuration
+- UI state management with connection, notification, tool, prompt, and resource state
 - Error handling in Flutter
-- Mobile-optimized UX
+- Mobile/web lifecycle guidance
+
+See [Flutter Host and Client Recipes](flutter-recipes.md) for platform-specific transport, lifecycle, authentication, and testing guidance.
 
 ## Common Patterns
 
@@ -347,7 +359,7 @@ flutter run
 // From weather.dart
 server.registerTool(
   'get-weather',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'city': JsonSchema.string(),
     },
@@ -383,7 +395,7 @@ server.registerTool(
 // From server_stdio.dart
 server.registerTool(
   'longRunningOperation',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     final progressToken = extra.progressToken;
 
@@ -504,7 +516,7 @@ test('tool execution', () async {
 
   server.registerTool(
     'add',
-    inputSchema: ToolInputSchema(
+    inputSchema: JsonSchema.object(
       properties: {
         'a': JsonSchema.number(),
         'b': JsonSchema.number(),

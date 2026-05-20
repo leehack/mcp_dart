@@ -83,7 +83,7 @@ await server.connect(transport);
 server.registerTool(
   'tool-name',
   description: 'What it does',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'param': JsonSchema.string(),
     },
@@ -309,8 +309,8 @@ final transport = StdioClientTransport(
 await client.connect(transport);
 
 // HTTP
-final transport = StreamableHTTPClientTransport(
-  Uri.parse('http://localhost:3000'),
+final transport = StreamableHttpClientTransport(
+  Uri.parse('http://localhost:3000/mcp'),
 );
 await client.connect(transport);
 ```
@@ -392,7 +392,7 @@ await client.close();
 ```dart
 server.registerTool(
   'echo',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'message': JsonSchema.string(),
     },
@@ -408,7 +408,7 @@ server.registerTool(
 ```dart
 server.registerTool(
   'divide',
-  inputSchema: ToolInputSchema(
+  inputSchema: JsonSchema.object(
     properties: {
       'a': JsonSchema.number(),
       'b': JsonSchema.number(),
@@ -440,7 +440,7 @@ server.registerTool(
 // Read-only
 server.registerTool(
   'get-data',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   annotations: ToolAnnotations(readOnly: true), // Updated for annotations
   callback: (args, extra) async => CallToolResult(content: []),
 );
@@ -448,7 +448,7 @@ server.registerTool(
 // Destructive
 server.registerTool(
   'delete-all',
-  inputSchema: ToolInputSchema(properties: {}),
+  inputSchema: JsonSchema.object(properties: {}),
   description: 'Delete all data', // hints deprecated?
   callback: (args, extra) async => CallToolResult(content: []),
 );
@@ -528,7 +528,7 @@ return CallToolResult(
 
 ```dart
 throw McpError(
-  ErrorCode.invalidParams,
+  ErrorCode.invalidParams.value,
   'Invalid parameters',
 );
 ```
@@ -715,9 +715,18 @@ client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
   (notification) async {
     print('[${notification.logParams.level}] ${notification.logParams.data}');
   },
-  (params, meta) => JsonRpcLoggingMessageNotification(
-    logParams: LoggingMessageNotification.fromJson(params ?? {}),
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for logging message notification',
+      );
+    }
+
+    return JsonRpcLoggingMessageNotification(
+      logParams: LoggingMessageNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 ```
 
@@ -765,9 +774,18 @@ client.setNotificationHandler<JsonRpcResourceUpdatedNotification>(
     print('Updated: ${notification.updatedParams.uri}');
     // Re-read resource
   },
-  (params, meta) => JsonRpcResourceUpdatedNotification(
-    updatedParams: ResourceUpdatedNotification.fromJson(params ?? {}),
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for resource update notification',
+      );
+    }
+
+    return JsonRpcResourceUpdatedNotification(
+      updatedParams: ResourceUpdatedNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 ```
 

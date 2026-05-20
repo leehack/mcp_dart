@@ -247,9 +247,18 @@ client.setNotificationHandler<JsonRpcResourceUpdatedNotification>(
       print('New content: ${(result.contents.first as TextResourceContents).text}');
     }
   },
-  (params, meta) => JsonRpcResourceUpdatedNotification(
-    updatedParams: ResourceUpdatedNotification.fromJson(params ?? {}),
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for resource update notification',
+      );
+    }
+
+    return JsonRpcResourceUpdatedNotification(
+      updatedParams: ResourceUpdatedNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 
 // Unsubscribe when done
@@ -544,9 +553,18 @@ client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
 
     print('[$level] $logger: $message');
   },
-  (params, meta) => JsonRpcLoggingMessageNotification(
-    logParams: LoggingMessageNotification.fromJson(params ?? {}),
-  ),
+  (params, meta) {
+    if (params == null) {
+      throw const FormatException(
+        'Missing params for logging message notification',
+      );
+    }
+
+    return JsonRpcLoggingMessageNotification(
+      logParams: LoggingMessageNotification.fromJson(params),
+      meta: meta,
+    );
+  },
 );
 ```
 
@@ -597,7 +615,7 @@ Future<void> connectWithRetry(McpClient client, Transport transport) async {
 
 ```dart
 // After connection, check server capabilities
-final serverCapabilities = client.serverCapabilities;
+final serverCapabilities = client.getServerCapabilities();
 
 if (serverCapabilities?.tools != null) {
   print('Server supports tools');
@@ -652,14 +670,14 @@ Future<CallToolResult?> callToolSafely(
       ),
     );
   } on McpError catch (e) {
-    switch (e.code) {
+    switch (ErrorCode.fromValue(e.code)) {
       case ErrorCode.methodNotFound:
         print('Tool not found: $toolName');
         break;
       case ErrorCode.invalidParams:
         print('Invalid parameters for $toolName: ${e.message}');
         break;
-      case ErrorCode.timeout:
+      case ErrorCode.requestTimeout:
         print('Tool call timed out');
         break;
       default:
@@ -744,7 +762,7 @@ processResult(result);
 
 ```dart
 // ✅ Good
-if (client.serverCapabilities?.resources?.subscribe == true) {
+if (client.getServerCapabilities()?.resources?.subscribe == true) {
   await client.subscribeResource(SubscribeRequest(uri: uri));
 } else {
   // Fallback: poll for changes
