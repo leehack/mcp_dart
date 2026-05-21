@@ -44,6 +44,17 @@
     `null`, and now omits optional `pollInterval` when it is not set.
   - Task stores now treat terminal tasks (`completed`, `failed`, `cancelled`) as
     immutable, preventing later status or result overwrites.
+- **Streamable HTTP session/replay semantics are stricter**:
+  - Custom `sessionIdGenerator` output must now be non-empty visible ASCII
+    without spaces or control characters; invalid generated IDs fail
+    initialization before an `MCP-Session-Id` header is written.
+  - Concurrent standalone GET SSE streams no longer receive broadcast copies of
+    each server-originated message. Messages are routed to one active stream so
+    resumability can preserve the MCP stream ownership boundary.
+  - Custom `EventStore` implementations must return non-empty visible-ASCII SSE
+    event IDs without spaces or control characters, scope `Last-Event-ID`
+    replay to the owning live transport/session stream, and reject unknown or
+    foreign event IDs instead of replaying unrelated stream history.
 
 ### Compatibility Notes
 
@@ -61,9 +72,14 @@
 - Scoped Streamable HTTP SSE resumability to the stream identified by
   `Last-Event-ID`, allowing multiple concurrent GET SSE streams per session
   without replaying events from unrelated streams.
+- Routed each server-originated standalone GET SSE message to one active stream
+  instead of broadcasting the same JSON-RPC message across concurrent streams,
+  and retried another active stream when the selected target was stale.
 - Returned `404 Session not found` for stale, unknown, or terminated Streamable
-  HTTP session IDs across high-level and bare transports, and retried client
-  initialization once without a stale preconfigured session ID.
+  HTTP session IDs across high-level and bare transports, retried client
+  initialization once without a stale preconfigured session ID, refreshed stale
+  sessions with single-flight reinitialization before retrying post-initialize
+  requests, and stopped old SSE reconnect loops after a session reset.
 - Honored `RequestOptions.resetTimeoutOnProgress` and `maxTotalTimeout` together
   so progress notifications can reset inactivity timers without bypassing the
   absolute total timeout cap.

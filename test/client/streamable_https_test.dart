@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:mcp_dart/src/client/client.dart';
 import 'package:mcp_dart/src/client/streamable_https.dart';
+import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
@@ -386,6 +387,541 @@ void main() {
       expect(initializedSessionHeaders, [newSessionId]);
       expect(transport.sessionId, newSessionId);
       expect(client.getServerVersion()?.name, 'RetrySessionServer');
+    });
+
+    test('client request starts fresh session after stale session 404',
+        () async {
+      const initialSessionId = 'initial-session-id';
+      const replacementSessionId = 'replacement-session-id';
+      final initializeSessionHeaders = <String?>[];
+      final initializedSessionHeaders = <String?>[];
+      final pingSessionHeaders = <String?>[];
+      var initializeCount = 0;
+      var pingCount = 0;
+
+      final retryServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => retryServer.close(force: true));
+      final retryUrl = Uri.parse('http://localhost:${retryServer.port}/mcp');
+
+      retryServer.listen((request) async {
+        if (request.uri.path != '/mcp') {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        if (request.method != 'POST') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        final sessionHeader = request.headers.value('mcp-session-id');
+        final body = await utf8.decoder.bind(request).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        if (json['method'] == 'initialize') {
+          initializeCount += 1;
+          initializeSessionHeaders.add(sessionHeader);
+          final sessionId =
+              initializeCount == 1 ? initialSessionId : replacementSessionId;
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set('mcp-session-id', sessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: json['id'],
+                result: InitializeResult(
+                  protocolVersion: latestProtocolVersion,
+                  capabilities: const ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'RetrySessionServer$initializeCount',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'notifications/initialized') {
+          initializedSessionHeaders.add(sessionHeader);
+          request.response.statusCode = HttpStatus.accepted;
+          request.response.headers.set(
+            'mcp-session-id',
+            initializeCount == 1 ? initialSessionId : replacementSessionId,
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'custom/ping') {
+          pingCount += 1;
+          pingSessionHeaders.add(sessionHeader);
+          if (pingCount == 1) {
+            request.response.statusCode = HttpStatus.notFound;
+            request.response.write('Session not found');
+            await request.response.close();
+            return;
+          }
+
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set('mcp-session-id', replacementSessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(id: json['id'], result: const {}).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.badRequest;
+        await request.response.close();
+      });
+
+      final client = McpClient(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+      transport = StreamableHttpClientTransport(retryUrl);
+
+      await client.connect(transport);
+      final result = await client.request<EmptyResult>(
+        const JsonRpcRequest(id: 123, method: 'custom/ping'),
+        (_) => const EmptyResult(),
+      );
+
+      expect(result, isA<EmptyResult>());
+      expect(initializeCount, 2);
+      expect(pingCount, 2);
+      expect(initializeSessionHeaders, [null, null]);
+      expect(
+        initializedSessionHeaders,
+        [initialSessionId, replacementSessionId],
+      );
+      expect(pingSessionHeaders, [initialSessionId, replacementSessionId]);
+      expect(transport.sessionId, replacementSessionId);
+      expect(client.getServerVersion()?.name, 'RetrySessionServer2');
+    });
+
+    test('client stale session recovery retries original request only once',
+        () async {
+      const initialSessionId = 'initial-session-id';
+      const replacementSessionId = 'replacement-session-id';
+      final initializeSessionHeaders = <String?>[];
+      final pingSessionHeaders = <String?>[];
+      var initializeCount = 0;
+      var initializedNotificationCount = 0;
+      var pingCount = 0;
+
+      final retryServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => retryServer.close(force: true));
+      final retryUrl = Uri.parse('http://localhost:${retryServer.port}/mcp');
+
+      retryServer.listen((request) async {
+        if (request.uri.path != '/mcp') {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        if (request.method != 'POST') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        final sessionHeader = request.headers.value('mcp-session-id');
+        final body = await utf8.decoder.bind(request).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        if (json['method'] == 'initialize') {
+          initializeCount += 1;
+          initializeSessionHeaders.add(sessionHeader);
+          final sessionId =
+              initializeCount == 1 ? initialSessionId : replacementSessionId;
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set('mcp-session-id', sessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: json['id'],
+                result: InitializeResult(
+                  protocolVersion: latestProtocolVersion,
+                  capabilities: const ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'RetrySessionServer$initializeCount',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'notifications/initialized') {
+          initializedNotificationCount += 1;
+          request.response.statusCode = HttpStatus.accepted;
+          request.response.headers.set(
+            'mcp-session-id',
+            initializeCount == 1 ? initialSessionId : replacementSessionId,
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'custom/ping') {
+          pingCount += 1;
+          pingSessionHeaders.add(sessionHeader);
+          request.response.statusCode = HttpStatus.notFound;
+          request.response.write('Session not found');
+          await request.response.close();
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.badRequest;
+        await request.response.close();
+      });
+
+      final client = McpClient(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+      transport = StreamableHttpClientTransport(retryUrl);
+
+      await client.connect(transport);
+      await expectLater(
+        client.request<EmptyResult>(
+          const JsonRpcRequest(id: 124, method: 'custom/ping'),
+          (_) => const EmptyResult(),
+        ),
+        throwsA(isA<StaleSessionError>()),
+      );
+
+      expect(initializeCount, 2);
+      expect(initializedNotificationCount, 2);
+      expect(pingCount, 2);
+      expect(initializeSessionHeaders, [null, null]);
+      expect(pingSessionHeaders, [initialSessionId, replacementSessionId]);
+      expect(transport.sessionId, isNull);
+      expect(client.getServerVersion()?.name, 'RetrySessionServer2');
+    });
+
+    test('concurrent stale session requests share one fresh session', () async {
+      const initialSessionId = 'initial-session-id';
+      const replacementSessionId = 'replacement-session-id';
+      final initializeSessionHeaders = <String?>[];
+      final initializedSessionHeaders = <String?>[];
+      final pingSessionHeaders = <String?>[];
+      final staleRequestsReceived = Completer<void>();
+      var initializeCount = 0;
+      var stalePingCount = 0;
+      var successfulPingCount = 0;
+
+      final retryServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => retryServer.close(force: true));
+      final retryUrl = Uri.parse('http://localhost:${retryServer.port}/mcp');
+
+      retryServer.listen((request) async {
+        if (request.uri.path != '/mcp') {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        if (request.method != 'POST') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        final sessionHeader = request.headers.value('mcp-session-id');
+        final body = await utf8.decoder.bind(request).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        if (json['method'] == 'initialize') {
+          initializeCount += 1;
+          initializeSessionHeaders.add(sessionHeader);
+          final sessionId =
+              initializeCount == 1 ? initialSessionId : replacementSessionId;
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set('mcp-session-id', sessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: json['id'],
+                result: InitializeResult(
+                  protocolVersion: latestProtocolVersion,
+                  capabilities: const ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'RetrySessionServer$initializeCount',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'notifications/initialized') {
+          initializedSessionHeaders.add(sessionHeader);
+          request.response.statusCode = HttpStatus.accepted;
+          request.response.headers.set(
+            'mcp-session-id',
+            initializeCount == 1 ? initialSessionId : replacementSessionId,
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'custom/ping') {
+          pingSessionHeaders.add(sessionHeader);
+          if (sessionHeader == initialSessionId) {
+            stalePingCount += 1;
+            if (stalePingCount == 2 && !staleRequestsReceived.isCompleted) {
+              staleRequestsReceived.complete();
+            }
+            await staleRequestsReceived.future;
+            request.response.statusCode = HttpStatus.notFound;
+            request.response.write('Session not found');
+            await request.response.close();
+            return;
+          }
+
+          successfulPingCount += 1;
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set('mcp-session-id', replacementSessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(id: json['id'], result: const {}).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.badRequest;
+        await request.response.close();
+      });
+
+      final client = McpClient(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+      transport = StreamableHttpClientTransport(retryUrl);
+
+      await client.connect(transport);
+      final results = await Future.wait([
+        client.request<EmptyResult>(
+          const JsonRpcRequest(id: 201, method: 'custom/ping'),
+          (_) => const EmptyResult(),
+        ),
+        client.request<EmptyResult>(
+          const JsonRpcRequest(id: 202, method: 'custom/ping'),
+          (_) => const EmptyResult(),
+        ),
+      ]);
+
+      expect(results, everyElement(isA<EmptyResult>()));
+      expect(initializeCount, 2);
+      expect(stalePingCount, 2);
+      expect(successfulPingCount, 2);
+      expect(initializeSessionHeaders, [null, null]);
+      expect(
+        initializedSessionHeaders,
+        [initialSessionId, replacementSessionId],
+      );
+      expect(
+        pingSessionHeaders,
+        [
+          initialSessionId,
+          initialSessionId,
+          replacementSessionId,
+          replacementSessionId,
+        ],
+      );
+      expect(transport.sessionId, replacementSessionId);
+      expect(client.getServerVersion()?.name, 'RetrySessionServer2');
+    });
+
+    test('GET SSE stale session 404 stops reconnect and refreshes on request',
+        () async {
+      const initialSessionId = 'initial-session-id';
+      const replacementSessionId = 'replacement-session-id';
+      final getSessionHeaders = <String?>[];
+      final initializeSessionHeaders = <String?>[];
+      final initializedSessionHeaders = <String?>[];
+      final pingSessionHeaders = <String?>[];
+      final errors = <Error>[];
+      final firstGetClosed = Completer<void>();
+      final staleGetReceived = Completer<void>();
+      var initializeCount = 0;
+      var getCount = 0;
+      var pingCount = 0;
+
+      final retryServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => retryServer.close(force: true));
+      final retryUrl = Uri.parse('http://localhost:${retryServer.port}/mcp');
+
+      retryServer.listen((request) async {
+        if (request.uri.path != '/mcp') {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        final sessionHeader = request.headers.value('mcp-session-id');
+
+        if (request.method == 'GET') {
+          getCount += 1;
+          getSessionHeaders.add(sessionHeader);
+          if (getCount == 1) {
+            request.response.headers.contentType = ContentType(
+              'text',
+              'event-stream',
+            );
+            request.response.statusCode = HttpStatus.ok;
+            request.response.headers.set('mcp-session-id', initialSessionId);
+            request.response.write('id: first\n');
+            request.response.write(
+              'data: {"jsonrpc":"2.0","method":"notifications/test"}\n\n',
+            );
+            await request.response.close();
+            firstGetClosed.complete();
+            return;
+          }
+
+          request.response.statusCode = HttpStatus.notFound;
+          request.response.write('Session not found');
+          await request.response.close();
+          if (!staleGetReceived.isCompleted) {
+            staleGetReceived.complete();
+          }
+          return;
+        }
+
+        if (request.method != 'POST') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        final body = await utf8.decoder.bind(request).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        if (json['method'] == 'initialize') {
+          initializeCount += 1;
+          initializeSessionHeaders.add(sessionHeader);
+          final sessionId =
+              initializeCount == 1 ? initialSessionId : replacementSessionId;
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set('mcp-session-id', sessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: json['id'],
+                result: InitializeResult(
+                  protocolVersion: latestProtocolVersion,
+                  capabilities: const ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'RetrySessionServer$initializeCount',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'notifications/initialized') {
+          initializedSessionHeaders.add(sessionHeader);
+          request.response.statusCode = HttpStatus.accepted;
+          request.response.headers.set(
+            'mcp-session-id',
+            initializeCount == 1 ? initialSessionId : replacementSessionId,
+          );
+          await request.response.close();
+          return;
+        }
+
+        if (json['method'] == 'custom/ping') {
+          pingCount += 1;
+          pingSessionHeaders.add(sessionHeader);
+          request.response.headers.contentType = ContentType.json;
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set('mcp-session-id', replacementSessionId);
+          request.response.write(
+            jsonEncode(
+              JsonRpcResponse(id: json['id'], result: const {}).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.badRequest;
+        await request.response.close();
+      });
+
+      final client = McpClient(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+      transport = StreamableHttpClientTransport(
+        retryUrl,
+        opts: const StreamableHttpClientTransportOptions(
+          reconnectionOptions: StreamableHttpReconnectionOptions(
+            initialReconnectionDelay: 10,
+            maxReconnectionDelay: 10,
+            reconnectionDelayGrowFactor: 1,
+            maxRetries: 3,
+          ),
+        ),
+      );
+      transport.onerror = errors.add;
+      client.onerror = errors.add;
+
+      await client.connect(transport);
+      await firstGetClosed.future.timeout(const Duration(seconds: 5));
+      await staleGetReceived.future.timeout(const Duration(seconds: 5));
+      await Future.delayed(const Duration(milliseconds: 80));
+
+      expect(getCount, 2);
+      expect(getSessionHeaders, [initialSessionId, initialSessionId]);
+      expect(transport.sessionId, isNull);
+      expect(errors.whereType<StaleSessionError>(), hasLength(1));
+
+      final result = await client.request<EmptyResult>(
+        const JsonRpcRequest(id: 203, method: 'custom/ping'),
+        (_) => const EmptyResult(),
+      );
+
+      expect(result, isA<EmptyResult>());
+      expect(initializeCount, 2);
+      expect(pingCount, 1);
+      expect(initializeSessionHeaders, [null, null]);
+      expect(
+        initializedSessionHeaders,
+        [initialSessionId, replacementSessionId],
+      );
+      expect(pingSessionHeaders, [replacementSessionId]);
+      expect(transport.sessionId, replacementSessionId);
+      expect(client.getServerVersion()?.name, 'RetrySessionServer2');
     });
 
     test('send reports retry failure only once after stale session 404',
