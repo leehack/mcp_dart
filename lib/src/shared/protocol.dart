@@ -840,9 +840,52 @@ abstract class Protocol {
     });
   }
 
+  bool _hasTaskAugmentation(JsonRpcRequest request) {
+    return request.meta?.containsKey('task') == true ||
+        request.params?.containsKey('task') == true;
+  }
+
+  Map<String, dynamic>? _withoutTaskKey(Map<String, dynamic>? value) {
+    if (value == null || !value.containsKey('task')) {
+      return value;
+    }
+    final copy = Map<String, dynamic>.from(value)..remove('task');
+    return copy;
+  }
+
+  JsonRpcRequest _withoutTaskAugmentation(JsonRpcRequest request) {
+    final params = _withoutTaskKey(request.params);
+    final meta = _withoutTaskKey(request.meta);
+    final json = <String, dynamic>{
+      'jsonrpc': '2.0',
+      'id': request.id,
+      'method': request.method,
+      if (params != null || meta != null)
+        'params': <String, dynamic>{
+          ...?params,
+          if (meta != null) '_meta': meta,
+        },
+    };
+    return JsonRpcMessage.fromJson(json) as JsonRpcRequest;
+  }
+
+  bool _canHandleTaskAugmentation(String method) {
+    try {
+      assertTaskHandlerCapability(method);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Handles incoming JSON-RPC requests.
   void _onrequest(JsonRpcRequest request) {
     final handler = _requestHandlers[request.method] ?? fallbackRequestHandler;
+
+    if (_hasTaskAugmentation(request) &&
+        !_canHandleTaskAugmentation(request.method)) {
+      request = _withoutTaskAugmentation(request);
+    }
 
     // Check for related task ID in metadata
     final meta =

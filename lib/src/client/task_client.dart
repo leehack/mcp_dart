@@ -21,12 +21,28 @@ class _RawResult implements BaseResultData {
 /// which may either return an immediate result or create a long-running task.
 /// It handles polling for task status and retrieving the final result.
 class TaskClient {
-  final McpClient client;
+  final Client client;
 
   TaskClient(this.client);
 
-  /// Calls a tool and returns a stream of status updates and the final result.
-  ///
+  Future<Tool?> _findTool(String name) async {
+    String? cursor;
+    do {
+      final result = await client.listTools(
+        params: cursor == null ? null : ListToolsRequest(cursor: cursor),
+      );
+      for (final tool in result.tools) {
+        if (tool.name == name) {
+          return tool;
+        }
+      }
+      cursor = result.nextCursor;
+    } while (cursor != null);
+    return null;
+  }
+
+  /// Calls a tool and streams the result, handling task-based execution.
+
   /// This handles both immediate results (yielding a single [TaskResultMessage])
   /// and long-running tasks (yielding [TaskCreatedMessage], multiple
   /// [TaskStatusMessage]s, and finally [TaskResultMessage]).
@@ -40,6 +56,18 @@ class TaskClient {
     Map<String, dynamic>? task,
   }) async* {
     try {
+      if (task != null) {
+        client.assertTaskCapability(Method.toolsCall);
+        final tool = await _findTool(name);
+        final taskSupport = tool?.execution?.taskSupport ?? 'forbidden';
+        if (taskSupport == 'forbidden') {
+          throw McpError(
+            ErrorCode.invalidRequest.value,
+            "Tool '$name' does not support task augmentation (taskSupport: 'forbidden')",
+          );
+        }
+      }
+
       // 1. Call the tool using generic request to capture 'task' field if present.
       // We cannot use client.callTool() because it forces CallToolResult return type
       // which ignores the 'task' field.

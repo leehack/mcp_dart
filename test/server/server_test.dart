@@ -267,6 +267,68 @@ void main() {
       expect(result['protocolVersion'], isNot(equals("999.999")));
     });
 
+    test('assertTaskCapability requires sampling task subcapability', () async {
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequest(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(
+              sampling: ClientCapabilitiesSampling(),
+              tasks: ClientCapabilitiesTasks(),
+            ),
+            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        () => server.assertTaskCapability(Method.samplingCreateMessage),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.message,
+            'message',
+            contains('tasks.requests.sampling.createMessage'),
+          ),
+        ),
+      );
+    });
+
+    test('assertTaskCapability allows declared sampling task subcapability',
+        () async {
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequest(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(
+              sampling: ClientCapabilitiesSampling(),
+              tasks: ClientCapabilitiesTasks(
+                requests: ClientCapabilitiesTasksRequests(
+                  sampling: ClientCapabilitiesTasksSampling(
+                    createMessage:
+                        ClientCapabilitiesTasksSamplingCreateMessage(),
+                  ),
+                ),
+              ),
+            ),
+            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        () => server.assertTaskCapability(Method.samplingCreateMessage),
+        returnsNormally,
+      );
+    });
+
     test('Can send ping requests to client', () async {
       await server.connect(transport);
 

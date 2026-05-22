@@ -772,9 +772,31 @@ class ExperimentalMcpServerTasks {
     final effectiveExecution = ToolExecution(
       taskSupport: execution?.taskSupport ?? 'required',
     );
+    // Validate against the spec-defined wire values before advertising the tool.
+    effectiveExecution.toJson();
     if (effectiveExecution.taskSupport == 'forbidden') {
       throw ArgumentError(
         "Cannot register task-based tool '$name' with taskSupport 'forbidden'. Use registerTool() instead.",
+      );
+    }
+    if (_server._registeredTools.containsKey(name)) {
+      throw ArgumentError("Tool name '$name' already registered.");
+    }
+    validateAndWarnToolName(name);
+
+    final hasTaskToolCallCapability =
+        _server.server.getCapabilities().tasks?.requests?.tools?.call != null;
+    if (!hasTaskToolCallCapability) {
+      _server.server.registerCapabilities(
+        const ServerCapabilities(
+          tasks: ServerCapabilitiesTasks(
+            requests: ServerCapabilitiesTasksRequests(
+              tools: ServerCapabilitiesTasksTools(
+                call: ServerCapabilitiesTasksToolsCall(),
+              ),
+            ),
+          ),
+        ),
       );
     }
 

@@ -5,6 +5,13 @@ import 'package:test/test.dart';
 
 class MockTransport extends Transport {
   final List<JsonRpcMessage> sentMessages = [];
+  ServerCapabilities serverCapabilities;
+
+  MockTransport({
+    this.serverCapabilities = const ServerCapabilities(
+      tools: ServerCapabilitiesTools(),
+    ),
+  });
 
   @override
   String? get sessionId => null;
@@ -21,12 +28,11 @@ class MockTransport extends Transport {
       _respond(
         JsonRpcResponse(
           id: message.id,
-          result: const InitializeResult(
+          result: InitializeResult(
             protocolVersion: latestProtocolVersion,
-            capabilities: ServerCapabilities(
-              tools: ServerCapabilitiesTools(),
-            ),
-            serverInfo: Implementation(name: 'MockServer', version: '1.0.0'),
+            capabilities: serverCapabilities,
+            serverInfo:
+                const Implementation(name: 'MockServer', version: '1.0.0'),
           ).toJson(),
         ),
       );
@@ -156,6 +162,49 @@ void main() {
             contains('requires task-based execution'),
           ),
         ),
+      );
+    });
+    test('assertTaskCapability requires tools/call task subcapability',
+        () async {
+      transport = MockTransport(
+        serverCapabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(),
+          tasks: ServerCapabilitiesTasks(),
+        ),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertTaskCapability(Method.toolsCall),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.message,
+            'message',
+            contains('tasks.requests.tools.call'),
+          ),
+        ),
+      );
+    });
+
+    test('assertTaskCapability allows declared tools/call task subcapability',
+        () async {
+      transport = MockTransport(
+        serverCapabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(),
+          tasks: ServerCapabilitiesTasks(
+            requests: ServerCapabilitiesTasksRequests(
+              tools: ServerCapabilitiesTasksTools(
+                call: ServerCapabilitiesTasksToolsCall(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertTaskCapability(Method.toolsCall),
+        returnsNormally,
       );
     });
   });

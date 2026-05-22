@@ -87,6 +87,12 @@ class ToolAnnotations {
 
 /// Describes how the tool should be executed.
 class ToolExecution {
+  static const Set<String> allowedTaskSupportValues = {
+    'forbidden',
+    'optional',
+    'required',
+  };
+
   /// Describes how the tool supports task augmentation.
   ///
   /// * `forbidden`: The tool does not support tasks.
@@ -97,14 +103,25 @@ class ToolExecution {
   const ToolExecution({this.taskSupport = 'forbidden'});
 
   factory ToolExecution.fromJson(Map<String, dynamic> json) {
-    return ToolExecution(
-      taskSupport: json['taskSupport'] as String? ?? 'forbidden',
-    );
+    final taskSupport = json['taskSupport'] as String? ?? 'forbidden';
+    if (!allowedTaskSupportValues.contains(taskSupport)) {
+      throw FormatException(
+        "Invalid tool execution taskSupport '$taskSupport'. Expected one of: ${allowedTaskSupportValues.join(', ')}",
+      );
+    }
+    return ToolExecution(taskSupport: taskSupport);
   }
 
-  Map<String, dynamic> toJson() => {
-        'taskSupport': taskSupport,
-      };
+  Map<String, dynamic> toJson() {
+    if (!allowedTaskSupportValues.contains(taskSupport)) {
+      throw ArgumentError.value(
+        taskSupport,
+        'taskSupport',
+        "Expected one of: ${allowedTaskSupportValues.join(', ')}",
+      );
+    }
+    return {'taskSupport': taskSupport};
+  }
 }
 
 /// Definition for a tool that the client can call.
@@ -270,9 +287,12 @@ class CallToolRequest {
   });
 
   factory CallToolRequest.fromJson(Map<String, dynamic> json) {
+    final arguments = json['arguments'];
     return CallToolRequest(
       name: json['name'] as String,
-      arguments: json['arguments'] as Map<String, dynamic>? ?? const {},
+      arguments: arguments == null
+          ? const {}
+          : (arguments as Map).cast<String, dynamic>(),
     );
   }
 

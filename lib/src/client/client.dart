@@ -421,19 +421,39 @@ class McpClient extends Protocol {
 
   @override
   void assertTaskCapability(String method) {
-    if (_serverCapabilities?.tasks == null) {
+    final missingCapability = switch (method) {
+      Method.toolsCall =>
+        _serverCapabilities?.tasks?.requests?.tools?.call == null
+            ? 'tasks.requests.tools.call'
+            : null,
+      _ => _serverCapabilities?.tasks == null ? 'tasks' : null,
+    };
+
+    if (missingCapability != null) {
       throw McpError(
         ErrorCode.invalidRequest.value,
-        "Server does not support tasks capability (required for task-based '$method')",
+        "Server does not support capability '$missingCapability' required for task-based '$method'",
       );
     }
   }
 
   @override
   void assertTaskHandlerCapability(String method) {
-    if (_capabilities.tasks == null) {
+    final missingCapability = switch (method) {
+      Method.samplingCreateMessage =>
+        _capabilities.tasks?.requests?.sampling?.createMessage == null
+            ? 'tasks.requests.sampling.createMessage'
+            : null,
+      Method.elicitationCreate =>
+        _capabilities.tasks?.requests?.elicitation?.create == null
+            ? 'tasks.requests.elicitation.create'
+            : null,
+      _ => _capabilities.tasks == null ? 'tasks' : null,
+    };
+
+    if (missingCapability != null) {
       throw StateError(
-        "Client setup error: Cannot handle task-based '$method' without 'tasks' capability registered.",
+        "Client setup error: Cannot handle task-based '$method' without '$missingCapability' capability registered.",
       );
     }
   }

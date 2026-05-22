@@ -107,6 +107,56 @@ void main() {
       expect(receivedArgs['input'], equals('test value'));
     });
 
+    test(
+        'ignores task metadata for normal tools when tool task capability is not advertised',
+        () async {
+      var callbackInvoked = false;
+
+      mcpServer.registerTool(
+        'normal_tool',
+        callback: (args, extra) async {
+          callbackInvoked = true;
+          expect(extra.taskRequestedTtl, isNull);
+          return const CallToolResult(
+            content: [TextContent(text: 'normal result')],
+          );
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      transport.receiveMessage(
+        const JsonRpcCallToolRequest(
+          id: 2,
+          params: {
+            'name': 'normal_tool',
+            'arguments': {},
+            'task': {'ttl': 1000},
+          },
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(callbackInvoked, isTrue);
+      final response = transport.sentMessages.last;
+      expect(response, isA<JsonRpcResponse>());
+      expect((response as JsonRpcResponse).result['content'], [
+        {'type': 'text', 'text': 'normal result'},
+      ]);
+    });
+
     test('tool callback receives RequestHandlerExtra', () async {
       RequestHandlerExtra? receivedExtra;
 
