@@ -329,6 +329,58 @@ void main() {
       );
     });
 
+    test('assertTaskCapability rejects unsupported task-augmented methods',
+        () async {
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequest(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(
+              tasks: ClientCapabilitiesTasks(),
+            ),
+            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        () => server.assertTaskCapability(Method.rootsList),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.message,
+            'message',
+            contains('tasks.requests.roots/list'),
+          ),
+        ),
+      );
+    });
+
+    test('assertTaskHandlerCapability rejects unsupported task handlers', () {
+      server = Server(
+        serverInfo,
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tasks: ServerCapabilitiesTasks(),
+          ),
+        ),
+      );
+
+      expect(
+        () => server.assertTaskHandlerCapability(Method.promptsGet),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('tasks.requests.prompts/get'),
+          ),
+        ),
+      );
+    });
+
     test('Can send ping requests to client', () async {
       await server.connect(transport);
 

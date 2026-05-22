@@ -397,7 +397,8 @@ class Server extends Protocol {
         _clientCapabilities?.tasks?.requests?.elicitation?.create == null
             ? 'tasks.requests.elicitation.create'
             : null,
-      _ => _clientCapabilities?.tasks == null ? 'tasks' : null,
+      _ =>
+        _clientCapabilities?.tasks == null ? 'tasks' : 'tasks.requests.$method',
     };
 
     if (missingCapability != null) {
@@ -414,7 +415,7 @@ class Server extends Protocol {
       Method.toolsCall => _capabilities.tasks?.requests?.tools?.call == null
           ? 'tasks.requests.tools.call'
           : null,
-      _ => _capabilities.tasks == null ? 'tasks' : null,
+      _ => _capabilities.tasks == null ? 'tasks' : 'tasks.requests.$method',
     };
 
     if (missingCapability != null) {

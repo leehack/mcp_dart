@@ -426,7 +426,8 @@ class McpClient extends Protocol {
         _serverCapabilities?.tasks?.requests?.tools?.call == null
             ? 'tasks.requests.tools.call'
             : null,
-      _ => _serverCapabilities?.tasks == null ? 'tasks' : null,
+      _ =>
+        _serverCapabilities?.tasks == null ? 'tasks' : 'tasks.requests.$method',
     };
 
     if (missingCapability != null) {
@@ -448,7 +449,7 @@ class McpClient extends Protocol {
         _capabilities.tasks?.requests?.elicitation?.create == null
             ? 'tasks.requests.elicitation.create'
             : null,
-      _ => _capabilities.tasks == null ? 'tasks' : null,
+      _ => _capabilities.tasks == null ? 'tasks' : 'tasks.requests.$method',
     };
 
     if (missingCapability != null) {

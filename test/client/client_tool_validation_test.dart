@@ -186,6 +186,27 @@ void main() {
       );
     });
 
+    test('assertTaskCapability rejects unsupported task-augmented methods',
+        () async {
+      transport = MockTransport(
+        serverCapabilities: const ServerCapabilities(
+          tasks: ServerCapabilitiesTasks(),
+        ),
+      );
+      await client.connect(transport);
+
+      expect(
+        () => client.assertTaskCapability(Method.completionComplete),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.message,
+            'message',
+            contains('tasks.requests.completion/complete'),
+          ),
+        ),
+      );
+    });
+
     test('assertTaskCapability allows declared tools/call task subcapability',
         () async {
       transport = MockTransport(
@@ -205,6 +226,28 @@ void main() {
       expect(
         () => client.assertTaskCapability(Method.toolsCall),
         returnsNormally,
+      );
+    });
+
+    test('assertTaskHandlerCapability rejects unsupported task handlers', () {
+      client = Client(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+        options: const McpClientOptions(
+          capabilities: ClientCapabilities(
+            tasks: ClientCapabilitiesTasks(),
+          ),
+        ),
+      );
+
+      expect(
+        () => client.assertTaskHandlerCapability(Method.rootsList),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('tasks.requests.roots/list'),
+          ),
+        ),
       );
     });
   });
