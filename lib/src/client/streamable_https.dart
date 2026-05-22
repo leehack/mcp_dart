@@ -133,6 +133,8 @@ class StreamableHttpClientTransport
   final OAuthClientProvider? _authProvider;
   String? _sessionId;
   String? _protocolVersion;
+  int _sessionGeneration = 0;
+  bool _staleSessionDetected = false;
   final StreamableHttpReconnectionOptions _reconnectionOptions;
   bool _isClosed = false;
 
@@ -210,12 +212,25 @@ class StreamableHttpClientTransport
     return headers;
   }
 
+  String? _clearStaleSession() {
+    final staleSessionId = _sessionId;
+    _sessionId = null;
+    _protocolVersion = null;
+    _staleSessionDetected = true;
+    _sessionGeneration += 1;
+    if (_abortController != null && !_abortController!.isClosed) {
+      _abortController!.add(true);
+    }
+    return staleSessionId;
+  }
+
   Future<void> _startOrAuthSse(StartSseOptions options) async {
     final resumptionToken = options.resumptionToken;
     try {
       // Try to open an initial SSE stream with GET to listen for server messages
       // This is optional according to the spec - server may not support it
       final headers = await _commonHeaders();
+      final requestSessionId = headers['mcp-session-id'];
       headers['Accept'] = "text/event-stream";
 
       // Include Last-Event-ID header for resumable streams if provided
@@ -237,6 +252,19 @@ class StreamableHttpClientTransport
         // This is an expected case that should not trigger an error
         if (response.statusCode == 405) {
           return;
+        }
+
+        if (response.statusCode == 404 && requestSessionId != null) {
+          await response.stream.drain<void>();
+          String? staleSessionId = requestSessionId;
+          if (_sessionId == requestSessionId) {
+            staleSessionId = _clearStaleSession();
+          }
+          throw StaleSessionError(
+            'Session not found',
+            code: 404,
+            sessionId: staleSessionId,
+          );
         }
 
         throw StreamableHttpError(
@@ -281,7 +309,13 @@ class StreamableHttpClientTransport
     StartSseOptions options, [
     int attemptCount = 0,
     int? retryDelayMs,
+    int? sessionGeneration,
   ]) {
+    final expectedSessionGeneration = sessionGeneration ?? _sessionGeneration;
+    if (_isClosed || expectedSessionGeneration != _sessionGeneration) {
+      return;
+    }
+
     // Use provided options or default options
     final maxRetries = _reconnectionOptions.maxRetries;
 
@@ -298,8 +332,16 @@ class StreamableHttpClientTransport
 
     // Schedule the reconnection
     Future.delayed(Duration(milliseconds: delay), () {
+      if (_isClosed || expectedSessionGeneration != _sessionGeneration) {
+        return;
+      }
+
       // Use the last event ID to resume where we left off
       _startOrAuthSse(options).catchError((error) {
+        if (error is StaleSessionError) {
+          return null;
+        }
+
         final errorMessage =
             error is Error ? error.toString() : error.toString();
         onerror?.call(
@@ -307,7 +349,12 @@ class StreamableHttpClientTransport
         );
 
         // Schedule another attempt if this one failed, incrementing the attempt counter
-        _scheduleReconnection(options, attemptCount + 1);
+        _scheduleReconnection(
+          options,
+          attemptCount + 1,
+          null,
+          expectedSessionGeneration,
+        );
 
         // Ensure the Future completes
         return null;
@@ -318,6 +365,7 @@ class StreamableHttpClientTransport
   void _handleSseStream(http.StreamedResponse stream, StartSseOptions options) {
     final onResumptionToken = options.onResumptionToken;
     final replayMessageId = options.replayMessageId;
+    final streamSessionGeneration = _sessionGeneration;
 
     String? lastEventId;
     int? retryDelayMs;
@@ -380,7 +428,11 @@ class StreamableHttpClientTransport
 
     // Helper function to handle reconnection logic
     void handleReconnection(String? eventId, [int? retryDelayOverrideMs]) {
-      if (_isClosed || !options.shouldReconnect) return;
+      if (_isClosed ||
+          !options.shouldReconnect ||
+          streamSessionGeneration != _sessionGeneration) {
+        return;
+      }
 
       if (_abortController != null && !_abortController!.isClosed) {
         try {
@@ -393,6 +445,7 @@ class StreamableHttpClientTransport
             ),
             0,
             retryDelayOverrideMs,
+            streamSessionGeneration,
           );
         } catch (error) {
           final errorMessage =
@@ -570,6 +623,10 @@ class StreamableHttpClientTransport
       }
 
       // Check for authentication first - if we need auth, handle it before proceeding
+      if (_staleSessionDetected && !_isInitializeRequest(message)) {
+        throw StaleSessionError('Session not found', code: 404);
+      }
+
       if (_authProvider != null) {
         final tokens = await _authProvider!.tokens();
         if (tokens == null) {
@@ -580,6 +637,7 @@ class StreamableHttpClientTransport
       }
 
       final headers = await _commonHeaders();
+      final requestSessionId = headers['mcp-session-id'];
       headers['content-type'] = 'application/json';
       headers['accept'] = 'application/json, text/event-stream';
 
@@ -588,12 +646,6 @@ class StreamableHttpClientTransport
       request.body = jsonEncode(message.toJson());
 
       final response = await _httpClient.send(request);
-
-      // Handle session ID received during initialization
-      final sessionId = response.headers['mcp-session-id'];
-      if (sessionId != null) {
-        _sessionId = sessionId;
-      }
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         if (response.statusCode == 401 && _authProvider != null) {
@@ -605,9 +657,19 @@ class StreamableHttpClientTransport
         final text = await response.stream.transform(utf8.decoder).join();
         if (response.statusCode == 404 &&
             retryStaleSessionOn404 &&
-            _sessionId != null &&
-            _isInitializeRequest(message)) {
-          _sessionId = null;
+            requestSessionId != null) {
+          String? staleSessionId = requestSessionId;
+          if (_sessionId == requestSessionId) {
+            staleSessionId = _clearStaleSession();
+          }
+          if (!_isInitializeRequest(message)) {
+            throw StaleSessionError(
+              'Session not found',
+              code: 404,
+              sessionId: staleSessionId,
+            );
+          }
+
           try {
             await _send(
               message,
@@ -626,6 +688,13 @@ class StreamableHttpClientTransport
           0,
           "Error POSTing to endpoint (HTTP ${response.statusCode}): $text",
         );
+      }
+
+      // Handle session ID received from successful stateful responses.
+      final sessionId = response.headers['mcp-session-id'];
+      if (sessionId != null) {
+        _sessionId = sessionId;
+        _staleSessionDetected = false;
       }
 
       // If the response is 202 Accepted, there's no body to process
@@ -699,7 +768,7 @@ class StreamableHttpClientTransport
         }
       }
     } catch (error) {
-      if (!retryFailureAlreadyReported) {
+      if (!retryFailureAlreadyReported && error is! StaleSessionError) {
         if (error is Error) {
           onerror?.call(error);
         } else {
@@ -751,6 +820,7 @@ class StreamableHttpClientTransport
       }
 
       _sessionId = null;
+      _staleSessionDetected = false;
     } catch (error) {
       if (error is Error) {
         onerror?.call(error);

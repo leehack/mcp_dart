@@ -303,7 +303,7 @@ void main() {
         ) async {
           await mcpServer.server.notification(
             JsonRpcNotification(
-              method: 'notifications/message',
+              method: 'notifications/custom',
               params: params,
             ),
           );
@@ -350,49 +350,25 @@ void main() {
           final mcpServer = servers[sessionId];
           expect(mcpServer, isNotNull);
 
-          final streamAFuture = _openGetSse(baseUrl, sessionId);
+          final streamFuture = _openGetSse(baseUrl, sessionId);
           await Future<void>.delayed(const Duration(milliseconds: 50));
-          await sendServerNotification(mcpServer!, {'warmup': 'A'});
-          final streamA =
-              await streamAFuture.timeout(const Duration(seconds: 3));
-
-          final streamBFuture = _openGetSse(baseUrl, sessionId);
-          await Future<void>.delayed(const Duration(milliseconds: 50));
-          await sendServerNotification(mcpServer, {'warmup': 'B'});
-          final streamB =
-              await streamBFuture.timeout(const Duration(seconds: 3));
-
-          final linesA = StreamIterator(
-            streamA.response
-                .transform(utf8.decoder)
-                .transform(const LineSplitter()),
-          );
-          final linesB = StreamIterator(
-            streamB.response
-                .transform(utf8.decoder)
-                .transform(const LineSplitter()),
-          );
-
-          await _readSseEvent(linesA); // stream A warmup
-          await _readSseEvent(linesA); // stream B warmup broadcast to A
-          await _readSseEvent(linesB); // stream B warmup
-
-          await sendServerNotification(mcpServer, {'seq': 1});
+          await sendServerNotification(mcpServer!, {'seq': 1});
           await sendServerNotification(mcpServer, {'seq': 2});
+          final stream = await streamFuture.timeout(const Duration(seconds: 3));
 
-          final aFirst = await _readSseEvent(linesA);
-          final aSecond = await _readSseEvent(linesA);
-          final bFirst = await _readSseEvent(linesB);
-          final bSecond = await _readSseEvent(linesB);
+          final lines = StreamIterator(
+            stream.response
+                .transform(utf8.decoder)
+                .transform(const LineSplitter()),
+          );
 
-          expect(aFirst.json['params'], containsPair('seq', 1));
-          expect(aSecond.json['params'], containsPair('seq', 2));
-          expect(bFirst.json['params'], containsPair('seq', 1));
-          expect(bSecond.json['params'], containsPair('seq', 2));
-          expect(aFirst.id, isNotNull);
-          expect(aSecond.id, isNotNull);
-          expect(bSecond.id, isNotNull);
-          expect(aSecond.id, isNot(bSecond.id));
+          final first = await _readSseEvent(lines);
+          final second = await _readSseEvent(lines);
+
+          expect(first.json['params'], containsPair('seq', 1));
+          expect(second.json['params'], containsPair('seq', 2));
+          expect(first.id, isNotNull);
+          expect(second.id, isNotNull);
 
           final result = await Process.run(
             'node',
@@ -403,13 +379,11 @@ void main() {
               '--session-id',
               sessionId,
               '--last-event-id',
-              aFirst.id!,
+              first.id!,
               '--expect-seq',
               '2',
               '--expect-token',
-              aSecond.id!,
-              '--reject-token',
-              bSecond.id!,
+              second.id!,
             ],
             runInShell: true,
           );
@@ -424,10 +398,8 @@ void main() {
             reason: 'Official TS StreamableHTTPClientTransport replay failed',
           );
 
-          await linesA.cancel();
-          await linesB.cancel();
-          streamA.close();
-          streamB.close();
+          await lines.cancel();
+          stream.close();
         } finally {
           await streamableServer.stop();
         }

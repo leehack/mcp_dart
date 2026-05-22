@@ -12,8 +12,10 @@ function getArg(name: string, required = true): string | undefined {
   return undefined;
 }
 
-function getNotificationParams(message: JSONRPCMessage): Record<string, unknown> | undefined {
-  if (!('method' in message) || message.method !== 'notifications/message') {
+function getNotificationParams(
+  message: JSONRPCMessage
+): Record<string, unknown> | undefined {
+  if (!('method' in message) || message.method !== 'notifications/custom') {
     return undefined;
   }
 
@@ -50,7 +52,7 @@ async function main(): Promise<void> {
     const timeout = setTimeout(() => {
       reject(
         new Error(
-          `Timed out waiting for notifications/message with seq=${expectedSeq}; tokens=${tokens.join(',')}`
+          `Timed out waiting for notifications/custom with seq=${expectedSeq}; tokens=${tokens.join(',')}`
         )
       );
     }, timeoutMs);

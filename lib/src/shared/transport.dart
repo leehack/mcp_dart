@@ -1,5 +1,23 @@
 import 'package:mcp_dart/src/types.dart';
 
+/// Error thrown when a stateful transport learns that its current session no
+/// longer exists on the peer.
+class StaleSessionError extends Error {
+  /// HTTP status code or equivalent transport status, when available.
+  final int? code;
+
+  /// Session ID that was rejected by the peer, when known.
+  final String? sessionId;
+
+  /// Human-readable stale-session reason.
+  final String message;
+
+  StaleSessionError(this.message, {this.code, this.sessionId});
+
+  @override
+  String toString() => 'Stale session: $message';
+}
+
 /// Describes the minimal contract for a MCP transport that a client or server
 /// can communicate over.
 abstract class Transport {

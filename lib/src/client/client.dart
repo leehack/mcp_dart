@@ -74,6 +74,7 @@ class McpClient extends Protocol {
   ClientCapabilities _capabilities;
   final Implementation _clientInfo;
   String? _instructions;
+  Future<void>? _sessionRefresh;
 
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
   final Set<String> _cachedRequiredTaskTools = {};
@@ -195,6 +196,47 @@ class McpClient extends Protocol {
     );
   }
 
+  Future<void> _initializeSession(Transport transport) async {
+    final initParams = InitializeRequest(
+      protocolVersion: latestProtocolVersion,
+      capabilities: _capabilities,
+      clientInfo: _clientInfo,
+    );
+
+    final initRequest = JsonRpcInitializeRequest(
+      id: -1,
+      initParams: initParams,
+    );
+
+    final InitializeResult result = await request<InitializeResult>(
+      initRequest,
+      (json) => InitializeResult.fromJson(json),
+    );
+
+    if (!supportedProtocolVersions.contains(result.protocolVersion)) {
+      throw McpError(
+        ErrorCode.internalError.value,
+        "Server's chosen protocol version is not supported by client: ${result.protocolVersion}. Supported: $supportedProtocolVersions",
+      );
+    }
+
+    _serverCapabilities = result.capabilities;
+    _serverVersion = result.serverInfo;
+    _instructions = result.instructions;
+
+    if (transport is ProtocolVersionAwareTransport) {
+      (transport as ProtocolVersionAwareTransport).protocolVersion =
+          result.protocolVersion;
+    }
+
+    const initializedNotification = JsonRpcInitializedNotification();
+    await notification(initializedNotification);
+
+    _logger.debug(
+      "MCP Client Initialized. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: ${result.protocolVersion}",
+    );
+  }
+
   /// Connects to the server using the given [transport].
   ///
   /// Initiates the MCP initialization handshake and processes the result.
@@ -203,48 +245,63 @@ class McpClient extends Protocol {
     await super.connect(transport);
 
     try {
-      final initParams = InitializeRequest(
-        protocolVersion: latestProtocolVersion,
-        capabilities: _capabilities,
-        clientInfo: _clientInfo,
-      );
-
-      final initRequest = JsonRpcInitializeRequest(
-        id: -1,
-        initParams: initParams,
-      );
-
-      final InitializeResult result = await request<InitializeResult>(
-        initRequest,
-        (json) => InitializeResult.fromJson(json),
-      );
-
-      if (!supportedProtocolVersions.contains(result.protocolVersion)) {
-        throw McpError(
-          ErrorCode.internalError.value,
-          "Server's chosen protocol version is not supported by client: ${result.protocolVersion}. Supported: $supportedProtocolVersions",
-        );
-      }
-
-      _serverCapabilities = result.capabilities;
-      _serverVersion = result.serverInfo;
-      _instructions = result.instructions;
-
-      if (transport is ProtocolVersionAwareTransport) {
-        (transport as ProtocolVersionAwareTransport).protocolVersion =
-            result.protocolVersion;
-      }
-
-      const initializedNotification = JsonRpcInitializedNotification();
-      await notification(initializedNotification);
-
-      _logger.debug(
-        "MCP Client Initialized. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: ${result.protocolVersion}",
-      );
+      await _initializeSession(transport);
     } catch (error) {
       _logger.error("MCP Client Initialization Failed: $error");
       await close();
       rethrow;
+    }
+  }
+
+  @override
+  Future<T> request<T extends BaseResultData>(
+    JsonRpcRequest requestData,
+    T Function(Map<String, dynamic> resultJson) resultFactory, [
+    RequestOptions? options,
+    int? relatedRequestId,
+  ]) async {
+    try {
+      return await super.request<T>(
+        requestData,
+        resultFactory,
+        options,
+        relatedRequestId,
+      );
+    } catch (error) {
+      if (error is! StaleSessionError || requestData.method == 'initialize') {
+        rethrow;
+      }
+
+      final activeTransport = transport;
+      if (activeTransport == null) {
+        rethrow;
+      }
+
+      final rejectedSessionId = error.sessionId;
+      final currentSessionId = activeTransport.sessionId;
+      final refreshAlreadyInProgress = _sessionRefresh;
+      if (refreshAlreadyInProgress != null) {
+        await refreshAlreadyInProgress;
+      } else if (rejectedSessionId == null ||
+          currentSessionId == null ||
+          currentSessionId == rejectedSessionId) {
+        final refresh = _initializeSession(activeTransport);
+        _sessionRefresh = refresh;
+        try {
+          await refresh;
+        } finally {
+          if (identical(_sessionRefresh, refresh)) {
+            _sessionRefresh = null;
+          }
+        }
+      }
+
+      return await super.request<T>(
+        requestData,
+        resultFactory,
+        options,
+        relatedRequestId,
+      );
     }
   }
 

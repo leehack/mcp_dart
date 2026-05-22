@@ -362,8 +362,7 @@ void main() async {
 
   final transport = StreamableHTTPServerTransport(
     options: StreamableHTTPServerTransportOptions(
-      sessionIdGenerator: () =>
-          'session-${DateTime.now().millisecondsSinceEpoch}',
+      sessionIdGenerator: () => generateUUID(),
       eventStore: InMemoryEventStore(),
       enableDnsRebindingProtection: true,
       allowedHosts: {'localhost'},
@@ -414,8 +413,7 @@ await client.connect(transport);
 // Server: Enable session persistence
 final transport = StreamableHTTPServerTransport(
   options: StreamableHTTPServerTransportOptions(
-    sessionIdGenerator: () =>
-        'session-${DateTime.now().millisecondsSinceEpoch}',
+    sessionIdGenerator: () => generateUUID(),
     eventStore: InMemoryEventStore(), // Enables resumability
   ),
 );
@@ -430,6 +428,27 @@ final transport = StreamableHttpClientTransport(
   ),
 );
 ```
+
+Generated session IDs are sent in the `MCP-Session-Id` response header. Keep
+custom `sessionIdGenerator` output non-empty visible ASCII without spaces or
+control characters; UUIDs such as `generateUUID()` are a safe default. Invalid
+generated IDs are rejected before the header is written.
+
+With an `eventStore`, resumability follows Streamable HTTP SSE event IDs:
+custom event IDs must be non-empty visible ASCII without spaces or control
+characters because they are written to SSE `id:` fields and later sent in the
+`Last-Event-ID` HTTP header. `Last-Event-ID` replays only events from the
+owning live transport/session stream, and unknown or foreign event IDs are
+rejected instead of replaying unrelated stream history. Concurrent standalone
+GET SSE streams are not fan-out subscriptions: each server-originated JSON-RPC
+message is routed to one active stream, not broadcast to every open GET stream.
+
+When using `StreamableHttpClientTransport` through `McpClient.request`, a
+stateful `404 Session not found` clears the stale session, starts a fresh
+session with a new `initialize` request that omits the stale `MCP-Session-Id`,
+and retries the original request once. Direct `Transport.send` callers and
+custom transports can opt into the same client recovery path by throwing
+`StaleSessionError` when their stateful session is rejected.
 
 #### Stateless Mode
 
@@ -447,8 +466,7 @@ final transport = StreamableHTTPServerTransport(
 ```dart
 final transport = StreamableHTTPServerTransport(
   options: StreamableHTTPServerTransportOptions(
-    sessionIdGenerator: () =>
-        'session-${DateTime.now().millisecondsSinceEpoch}',
+    sessionIdGenerator: () => generateUUID(),
   ),
 );
 
@@ -697,8 +715,7 @@ await manager.handleRequest(request);
 // New (recommended)
 final transport = StreamableHTTPServerTransport(
   options: StreamableHTTPServerTransportOptions(
-    sessionIdGenerator: () =>
-        'session-${DateTime.now().millisecondsSinceEpoch}',
+    sessionIdGenerator: () => generateUUID(),
     eventStore: InMemoryEventStore(),
     enableDnsRebindingProtection: true,
     allowedHosts: {'localhost'},

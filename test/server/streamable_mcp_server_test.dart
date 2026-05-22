@@ -552,7 +552,7 @@ void main() {
       ) async {
         await mcpServer.server.notification(
           JsonRpcNotification(
-            method: 'notifications/message',
+            method: 'notifications/custom',
             params: params,
           ),
         );
@@ -581,54 +581,27 @@ void main() {
       final mcpServer = servers[sessionId];
       expect(mcpServer, isNotNull);
 
-      final streamAFuture = openGetSse(sessionId);
+      final streamFuture = openGetSse(sessionId);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await sendServerNotification(mcpServer!, {'warmup': 'A'});
-      final streamA = await streamAFuture.timeout(const Duration(seconds: 3));
-      expect(streamA.statusCode, HttpStatus.ok);
-      expect(streamA.headers.contentType?.mimeType, 'text/event-stream');
-
-      final streamBFuture = openGetSse(sessionId);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      await sendServerNotification(mcpServer, {'warmup': 'B'});
-      final streamB = await streamBFuture.timeout(const Duration(seconds: 3));
-      expect(streamB.statusCode, HttpStatus.ok);
-      expect(streamB.headers.contentType?.mimeType, 'text/event-stream');
-
-      final linesA = StreamIterator(
-        streamA.transform(utf8.decoder).transform(const LineSplitter()),
-      );
-      final linesB = StreamIterator(
-        streamB.transform(utf8.decoder).transform(const LineSplitter()),
-      );
-
-      addTearDown(linesA.cancel);
-      addTearDown(linesB.cancel);
-
-      await _readSseEvent(linesA); // stream A warmup
-      await _readSseEvent(linesA); // stream B warmup broadcast to A
-      await _readSseEvent(linesB); // stream B warmup
-
-      await sendServerNotification(mcpServer, {'seq': 1});
+      await sendServerNotification(mcpServer!, {'seq': 1});
       await sendServerNotification(mcpServer, {'seq': 2});
+      final stream = await streamFuture.timeout(const Duration(seconds: 3));
+      expect(stream.statusCode, HttpStatus.ok);
+      expect(stream.headers.contentType?.mimeType, 'text/event-stream');
 
-      final aFirst = await _readSseEvent(linesA);
-      final aSecond = await _readSseEvent(linesA);
-      final bFirst = await _readSseEvent(linesB);
-      final bSecond = await _readSseEvent(linesB);
+      final lines = StreamIterator(
+        stream.transform(utf8.decoder).transform(const LineSplitter()),
+      );
+      addTearDown(lines.cancel);
 
-      expect(aFirst.id, isNotNull);
-      expect(aSecond.id, isNotNull);
-      expect(bFirst.id, isNotNull);
-      expect(bSecond.id, isNotNull);
-      expect(aFirst.id, isNot(bFirst.id));
-      expect(aSecond.id, isNot(bSecond.id));
-      expect(aFirst.json['params'], containsPair('seq', 1));
-      expect(aSecond.json['params'], containsPair('seq', 2));
-      expect(bFirst.json['params'], containsPair('seq', 1));
-      expect(bSecond.json['params'], containsPair('seq', 2));
+      final first = await _readSseEvent(lines);
+      final second = await _readSseEvent(lines);
+      expect(first.id, isNotNull);
+      expect(second.id, isNotNull);
+      expect(first.json['params'], containsPair('seq', 1));
+      expect(second.json['params'], containsPair('seq', 2));
 
-      final replay = await openGetSse(sessionId, lastEventId: aFirst.id);
+      final replay = await openGetSse(sessionId, lastEventId: first.id);
       expect(replay.statusCode, HttpStatus.ok);
       expect(replay.headers.contentType?.mimeType, 'text/event-stream');
       final replayLines = StreamIterator(
@@ -637,29 +610,17 @@ void main() {
       addTearDown(replayLines.cancel);
 
       final replayed = await _readSseEvent(replayLines);
-      expect(replayed.id, aSecond.id);
+      expect(replayed.id, second.id);
       expect(replayed.json['params'], containsPair('seq', 2));
-      expect(replayed.id, isNot(bSecond.id));
 
       await sendServerNotification(mcpServer, {'seq': 3});
-      final aThird = await _readSseEvent(linesA);
-      final bThird = await _readSseEvent(linesB);
       final replayThird = await _readSseEvent(replayLines);
-
-      expect(aThird.json['params'], containsPair('seq', 3));
-      expect(bThird.json['params'], containsPair('seq', 3));
       expect(replayThird.json['params'], containsPair('seq', 3));
-      expect(aThird.id, replayThird.id);
-      expect(aThird.id, isNot(bThird.id));
 
       final deleteRes = await deleteSession(sessionId);
       expect(deleteRes.statusCode, HttpStatus.ok);
       expect(
-        await linesA.moveNext().timeout(const Duration(seconds: 3)),
-        isFalse,
-      );
-      expect(
-        await linesB.moveNext().timeout(const Duration(seconds: 3)),
+        await lines.moveNext().timeout(const Duration(seconds: 3)),
         isFalse,
       );
       expect(
