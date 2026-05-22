@@ -845,17 +845,62 @@ abstract class Protocol {
         request.params?.containsKey('task') == true;
   }
 
-  Map<String, dynamic>? _withoutTaskKey(Map<String, dynamic>? value) {
-    if (value == null || !value.containsKey('task')) {
+  Map<String, dynamic>? _withoutTaskMetadata(
+    Map<String, dynamic>? value, {
+    required bool removeRelatedTask,
+  }) {
+    if (value == null) {
+      return null;
+    }
+
+    final hasTask = value.containsKey('task');
+    final hasRelatedTask = removeRelatedTask &&
+        (value.containsKey(relatedTaskMetadataKey) ||
+            value.containsKey(legacyRelatedTaskMetadataKey));
+    if (!hasTask && !hasRelatedTask) {
       return value;
     }
+
     final copy = Map<String, dynamic>.from(value)..remove('task');
-    return copy;
+    if (removeRelatedTask) {
+      copy
+        ..remove(relatedTaskMetadataKey)
+        ..remove(legacyRelatedTaskMetadataKey);
+    }
+    return copy.isEmpty ? null : copy;
+  }
+
+  Map<String, dynamic>? _withoutTaskAugmentedParams(
+    Map<String, dynamic>? params,
+  ) {
+    if (params == null) {
+      return null;
+    }
+
+    Map<String, dynamic>? copy;
+    if (params.containsKey('task')) {
+      copy = Map<String, dynamic>.from(params)..remove('task');
+    }
+
+    final meta = (copy ?? params)['_meta'];
+    if (meta is Map<String, dynamic>) {
+      final strippedMeta = _withoutTaskMetadata(meta, removeRelatedTask: true);
+      if (!identical(strippedMeta, meta)) {
+        copy ??= Map<String, dynamic>.from(params);
+        if (strippedMeta == null) {
+          copy.remove('_meta');
+        } else {
+          copy['_meta'] = strippedMeta;
+        }
+      }
+    }
+
+    return copy?.isEmpty == true ? null : copy ?? params;
   }
 
   JsonRpcRequest _withoutTaskAugmentation(JsonRpcRequest request) {
-    final params = _withoutTaskKey(request.params);
-    final meta = _withoutTaskKey(request.meta);
+    final params = _withoutTaskAugmentedParams(request.params);
+    final meta = _withoutTaskMetadata(request.meta, removeRelatedTask: true);
     final json = <String, dynamic>{
       'jsonrpc': '2.0',
       'id': request.id,

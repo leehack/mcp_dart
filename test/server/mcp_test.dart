@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -117,6 +118,10 @@ void main() {
         callback: (args, extra) async {
           callbackInvoked = true;
           expect(extra.taskRequestedTtl, isNull);
+          expect(extra.taskId, isNull);
+          expect(extra.meta?[relatedTaskMetadataKey], isNull);
+          expect(extra.meta?[legacyRelatedTaskMetadataKey], isNull);
+          expect(extra.meta?['progressToken'], 'keep-progress-token');
           return const CallToolResult(
             content: [TextContent(text: 'normal result')],
           );
@@ -144,6 +149,11 @@ void main() {
             'name': 'normal_tool',
             'arguments': {},
             'task': {'ttl': 1000},
+            '_meta': {
+              relatedTaskMetadataKey: {'taskId': 'unsupported-task'},
+              legacyRelatedTaskMetadataKey: {'taskId': 'unsupported-task'},
+              'progressToken': 'keep-progress-token',
+            },
           },
         ),
       );
