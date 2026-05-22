@@ -214,6 +214,29 @@ void main() {
       );
     });
 
+    test('registerToolTask after connect requires pre-advertised capability',
+        () async {
+      await mcpServer.connect(transport);
+
+      expect(
+        () => mcpServer.experimental.registerToolTask(
+          'late_task_tool',
+          inputSchema: const ToolInputSchema(),
+          handler: _ResultHandler(),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(
+              contains('tasks.requests.tools.call'),
+              contains('before connect()'),
+            ),
+          ),
+        ),
+      );
+    });
+
     test('handles cancel task request with final task result', () async {
       var cancelledTaskId = '';
 

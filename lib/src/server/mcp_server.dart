@@ -782,11 +782,18 @@ class ExperimentalMcpServerTasks {
     if (_server._registeredTools.containsKey(name)) {
       throw ArgumentError("Tool name '$name' already registered.");
     }
-    validateAndWarnToolName(name);
 
     final hasTaskToolCallCapability =
         _server.server.getCapabilities().tasks?.requests?.tools?.call != null;
     if (!hasTaskToolCallCapability) {
+      if (_server.isConnected) {
+        throw StateError(
+          "Cannot register task-based tool '$name' after connect() unless "
+          "server capabilities already include 'tasks.requests.tools.call'. "
+          "Configure ServerCapabilities.tasks.requests.tools.call before "
+          "connect() or register task-based tools before connecting.",
+        );
+      }
       _server.server.registerCapabilities(
         const ServerCapabilities(
           tasks: ServerCapabilitiesTasks(

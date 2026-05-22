@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
-class MockClient implements Client {
+class MockClient implements McpClient {
   final Map<String, dynamic> _responses = {};
   final List<JsonRpcRequest> requests = [];
   bool supportsTaskAugmentedTools = true;

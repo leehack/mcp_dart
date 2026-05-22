@@ -21,7 +21,7 @@ class _RawResult implements BaseResultData {
 /// which may either return an immediate result or create a long-running task.
 /// It handles polling for task status and retrieving the final result.
 class TaskClient {
-  final Client client;
+  final McpClient client;
 
   TaskClient(this.client);
 
