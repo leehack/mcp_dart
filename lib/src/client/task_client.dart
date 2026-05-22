@@ -50,6 +50,12 @@ class TaskClient {
   /// The [task] parameter is used for task augmentation. Pass task creation
   /// parameters (e.g., `{'ttl': 60000, 'pollInterval': 50}`) to request
   /// task-based execution from tools that support it.
+  ///
+  /// When [task] is provided, the connected server must advertise
+  /// `tasks.requests.tools.call`, and the target tool must be discoverable from
+  /// `tools/list` with `execution.taskSupport` set to `optional` or `required`.
+  /// This method performs a `tools/list` preflight before sending `tools/call`
+  /// so it can fail locally before creating a task the server did not advertise.
   Stream<TaskStreamMessage> callToolStream(
     String name,
     Map<String, dynamic> arguments, {
@@ -59,7 +65,13 @@ class TaskClient {
       if (task != null) {
         client.assertTaskCapability(Method.toolsCall);
         final tool = await _findTool(name);
-        final taskSupport = tool?.execution?.taskSupport ?? 'forbidden';
+        if (tool == null) {
+          throw McpError(
+            ErrorCode.invalidRequest.value,
+            "Tool '$name' was not advertised by tools/list; cannot verify task augmentation support",
+          );
+        }
+        final taskSupport = tool.execution?.taskSupport ?? 'forbidden';
         if (taskSupport == 'forbidden') {
           throw McpError(
             ErrorCode.invalidRequest.value,

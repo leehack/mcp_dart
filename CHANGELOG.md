@@ -13,6 +13,10 @@
 - Added MCP `completion/complete` wire support for
   `context.arguments` and `PromptReference.title`, including context-aware
   server completion callbacks for prompt and resource-template completions.
+- Enforced explicit task-augmented request negotiation via `tasks.requests.*`:
+  task-based tool calls require `tasks.requests.tools.call`, server-initiated
+  task sampling requires `tasks.requests.sampling.createMessage`, and
+  server-initiated task elicitation requires `tasks.requests.elicitation.create`.
 
 ### Compatibility Notes (Potentially Breaking)
 

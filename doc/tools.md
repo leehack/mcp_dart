@@ -457,6 +457,69 @@ server.registerTool(
 );
 ```
 
+## Task-Augmented Tools
+
+MCP 2025-11-25 requires task-augmented requests to be negotiated explicitly.
+For tools, the server must advertise `tasks.requests.tools.call`; a top-level
+`tasks` capability is not enough. `registerToolTask()` advertises that
+subcapability automatically when it is called before `connect()`.
+
+```dart
+final server = McpServer(
+  const Implementation(name: 'task-server', version: '1.0.0'),
+);
+
+server.experimental.registerToolTask(
+  'slow-tool',
+  description: 'Runs asynchronously and returns a task first',
+  inputSchema: const ToolInputSchema(),
+  // Defaults to ToolExecution(taskSupport: 'required'). Use 'optional' if the
+  // same tool can also return an immediate CallToolResult.
+  execution: const ToolExecution(taskSupport: 'required'),
+  handler: SlowToolTaskHandler(),
+);
+
+await server.connect(transport);
+```
+
+If a task-based tool must be registered after `connect()`, pre-advertise the
+capability in `ServerOptions` before connecting:
+
+```dart
+final server = McpServer(
+  const Implementation(name: 'task-server', version: '1.0.0'),
+  options: const ServerOptions(
+    capabilities: ServerCapabilities(
+      tasks: ServerCapabilitiesTasks(
+        requests: ServerCapabilitiesTasksRequests(
+          tools: ServerCapabilitiesTasksTools(
+            call: ServerCapabilitiesTasksToolsCall(),
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+```
+
+Clients that call task-augmented tools can use `TaskClient.callToolStream()`.
+When the `task` argument is supplied, `TaskClient` first verifies that the server
+advertised `tasks.requests.tools.call`, then lists tools to confirm the target
+tool advertises `execution.taskSupport` as `optional` or `required`.
+
+```dart
+final taskClient = TaskClient(client);
+
+await for (final message in taskClient.callToolStream(
+  'slow-tool',
+  {'input': 'value'},
+  task: {'ttl': 60000, 'pollInterval': 1000},
+)) {
+  // Handle TaskCreatedMessage, TaskStatusMessage, TaskResultMessage,
+  // or TaskErrorMessage.
+}
+```
+
 ## Real-World Examples
 
 ### API Integration

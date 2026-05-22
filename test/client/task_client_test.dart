@@ -262,6 +262,31 @@ void main() {
       expect(mockClient.requests.map((r) => r.method), [Method.toolsList]);
     });
 
+    test('callToolStream rejects task augmentation when tool is not advertised',
+        () async {
+      mockClient.listedTools = const [
+        Tool(
+          name: 'other-tool',
+          inputSchema: ToolInputSchema(),
+          execution: ToolExecution(taskSupport: 'optional'),
+        ),
+      ];
+
+      final events = await taskClient.callToolStream(
+        'missing-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskErrorMessage>());
+      expect(
+        (events.single as TaskErrorMessage).error.toString(),
+        contains('was not advertised by tools/list'),
+      );
+      expect(mockClient.requests.map((r) => r.method), [Method.toolsList]);
+    });
+
     test(
         'callToolStream allows task augmentation when server and tool permit it',
         () async {
