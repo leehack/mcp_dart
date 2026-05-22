@@ -840,9 +840,17 @@ abstract class Protocol {
     });
   }
 
+  bool _containsTaskMetadata(Map<dynamic, dynamic>? value) {
+    return value?.containsKey('task') == true ||
+        value?.containsKey(relatedTaskMetadataKey) == true ||
+        value?.containsKey(legacyRelatedTaskMetadataKey) == true;
+  }
+
   bool _hasTaskAugmentation(JsonRpcRequest request) {
-    return request.meta?.containsKey('task') == true ||
-        request.params?.containsKey('task') == true;
+    final paramsMeta = request.params?['_meta'];
+    return _containsTaskMetadata(request.meta) ||
+        request.params?.containsKey('task') == true ||
+        (paramsMeta is Map && _containsTaskMetadata(paramsMeta));
   }
 
   Map<String, dynamic>? _withoutTaskMetadata(
