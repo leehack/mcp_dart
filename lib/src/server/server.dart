@@ -7,6 +7,13 @@ import 'package:mcp_dart/src/types.dart';
 
 final _logger = Logger("mcp_dart.server");
 
+enum _ServerLifecycleState {
+  uninitialized,
+  initializing,
+  initialized,
+  ready,
+}
+
 /// Options for configuring the MCP [McpServer].
 class McpServerOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this server.
@@ -37,6 +44,7 @@ typedef ServerOptions = McpServerOptions;
 class Server extends Protocol {
   ClientCapabilities? _clientCapabilities;
   Implementation? _clientVersion;
+  _ServerLifecycleState _lifecycleState = _ServerLifecycleState.uninitialized;
   ServerCapabilities _capabilities;
   final String? _instructions;
   final Implementation _serverInfo;
@@ -77,7 +85,10 @@ class Server extends Protocol {
 
     setNotificationHandler<JsonRpcInitializedNotification>(
       Method.notificationsInitialized,
-      (notification) async => oninitialized?.call(),
+      (notification) async {
+        oninitialized?.call();
+        _lifecycleState = _ServerLifecycleState.ready;
+      },
       (params, meta) => JsonRpcInitializedNotification.fromJson({
         'params': params,
         if (meta != null) '_meta': meta,
@@ -98,6 +109,117 @@ class Server extends Protocol {
         }),
       );
     }
+  }
+
+  void _resetSessionState() {
+    _clientCapabilities = null;
+    _clientVersion = null;
+    _lifecycleState = _ServerLifecycleState.uninitialized;
+    _loggingLevels.clear();
+  }
+
+  @override
+  McpError? validateIncomingRequest(JsonRpcRequest request) {
+    if (request.method == Method.initialize) {
+      if (_lifecycleState != _ServerLifecycleState.uninitialized) {
+        return McpError(
+          ErrorCode.invalidRequest.value,
+          "Received duplicate initialize request.",
+        );
+      }
+      return null;
+    }
+
+    if (request.method == Method.ping) {
+      return null;
+    }
+
+    if (_lifecycleState == _ServerLifecycleState.uninitialized) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        "Received ${request.method} before initialize; initialize must be the first interaction.",
+      );
+    }
+
+    if (_lifecycleState != _ServerLifecycleState.ready) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        "Received ${request.method} before notifications/initialized.",
+      );
+    }
+
+    return null;
+  }
+
+  @override
+  McpError? validateIncomingNotification(JsonRpcNotification notification) {
+    switch (notification.method) {
+      case Method.notificationsCancelled:
+      case Method.notificationsProgress:
+        return null;
+      case Method.notificationsInitialized:
+        if (_lifecycleState == _ServerLifecycleState.uninitialized ||
+            _lifecycleState == _ServerLifecycleState.initializing) {
+          return McpError(
+            ErrorCode.invalidRequest.value,
+            "Received notifications/initialized before initialize.",
+          );
+        }
+        if (_lifecycleState == _ServerLifecycleState.ready) {
+          return McpError(
+            ErrorCode.invalidRequest.value,
+            "Received duplicate notifications/initialized.",
+          );
+        }
+        return null;
+      default:
+        if (_lifecycleState == _ServerLifecycleState.uninitialized) {
+          return McpError(
+            ErrorCode.invalidRequest.value,
+            "Received ${notification.method} before initialize; initialize must be the first interaction.",
+          );
+        }
+        if (_lifecycleState != _ServerLifecycleState.ready) {
+          return McpError(
+            ErrorCode.invalidRequest.value,
+            "Received ${notification.method} before notifications/initialized.",
+          );
+        }
+        return null;
+    }
+  }
+
+  @override
+  void onIncomingRequestAccepted(JsonRpcRequest request) {
+    if (request.method == Method.initialize) {
+      _lifecycleState = _ServerLifecycleState.initializing;
+    }
+  }
+
+  @override
+  void onIncomingRequestHandled(
+    JsonRpcRequest request,
+    BaseResultData result,
+  ) {
+    if (request.method == Method.initialize &&
+        _lifecycleState == _ServerLifecycleState.initializing) {
+      _lifecycleState = _ServerLifecycleState.initialized;
+    }
+  }
+
+  @override
+  void onIncomingRequestFailed(JsonRpcRequest request, Object error) {
+    if (request.method == Method.initialize &&
+        _lifecycleState == _ServerLifecycleState.initializing) {
+      _clientCapabilities = null;
+      _clientVersion = null;
+      _lifecycleState = _ServerLifecycleState.uninitialized;
+    }
+  }
+
+  @override
+  void onConnectionClosed() {
+    _resetSessionState();
   }
 
   /// Checks if a log message should be ignored based on the session's log level.

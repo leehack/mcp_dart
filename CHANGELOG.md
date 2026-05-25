@@ -17,9 +17,23 @@
   task-based tool calls require `tasks.requests.tools.call`, server-initiated
   task sampling requires `tasks.requests.sampling.createMessage`, and
   server-initiated task elicitation requires `tasks.requests.elicitation.create`.
+- Enforced MCP lifecycle ordering for incoming protocol messages: servers now
+  reject operation requests before `initialize` and before
+  `notifications/initialized`, and clients now reject server-initiated operation
+  requests before sending `notifications/initialized`.
+- Validated `elicitation/create` parameters as the MCP 2025-11-25 form/URL
+  union, including URL-only client handler registration and unsupported
+  elicitation-mode rejection.
 
 ### Compatibility Notes (Potentially Breaking)
 
+- **Lifecycle and elicitation validation are stricter**:
+  - Peers that send operation requests before initialization completes now
+    receive `invalidRequest` errors instead of reaching request handlers.
+  - Invalid form/URL `elicitation/create` parameter combinations now fail during
+    parsing or serialization.
+  - No public API signatures were removed or renamed; this is a behavioral
+    wire-protocol compatibility change.
 - **Task cancellation now returns the final task state**:
   - `tasks/cancel` responses now serialize the cancelled `Task` required by MCP
     2025-11-25 instead of an empty result object.

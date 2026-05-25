@@ -30,6 +30,13 @@ class _SseConnection {
   void close() => client.close(force: true);
 }
 
+class _PostSseResult {
+  final int statusCode;
+  final _SseEvent event;
+
+  const _PostSseResult({required this.statusCode, required this.event});
+}
+
 Future<int> _findAvailablePort() async {
   final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
   final port = socket.port;
@@ -95,10 +102,43 @@ Future<_SseConnection> _openGetSse(
   return _SseConnection(client, response);
 }
 
+Future<_PostSseResult> _postJsonForSseEvent(
+  String baseUrl,
+  String sessionId,
+  Map<String, dynamic> body,
+) async {
+  final client = HttpClient();
+  try {
+    final req = await client.postUrl(Uri.parse(baseUrl));
+    req.headers
+      ..set(HttpHeaders.contentTypeHeader, 'application/json')
+      ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+      ..set('mcp-session-id', sessionId);
+    req.write(jsonEncode(body));
+
+    final response = await req.close();
+    final lines = StreamIterator(
+      response.transform(utf8.decoder).transform(const LineSplitter()),
+    );
+    try {
+      final event = await _readSseEvent(lines);
+      return _PostSseResult(statusCode: response.statusCode, event: event);
+    } finally {
+      await lines.cancel();
+    }
+  } finally {
+    client.close(force: true);
+  }
+}
+
 void main() {
   // Use compiled JS client for reliability (avoids npx tsx issues in CI)
   final tsClientPath =
       p.join(Directory.current.path, 'test/interop/ts/dist/client.js');
+  final tsLifecycleClientPath = p.join(
+    Directory.current.path,
+    'test/interop/ts/dist/lifecycle_client.js',
+  );
   final tsReplayClientPath =
       p.join(Directory.current.path, 'test/interop/ts/dist/replay_client.js');
   final dartServerPath =
@@ -106,6 +146,7 @@ void main() {
 
   // Check if we should skip
   final skipTests = !File(tsClientPath).existsSync() ||
+      !File(tsLifecycleClientPath).existsSync() ||
       !File(tsReplayClientPath).existsSync() ||
       !File(dartServerPath).existsSync();
   final isCi = Platform.environment['CI'] == 'true';
@@ -149,6 +190,34 @@ void main() {
         result.exitCode,
         equals(0),
         reason: 'TS Client failed in Stdio mode',
+      );
+    });
+
+    test('official TS stdio client lists tools immediately after lifecycle',
+        () async {
+      final result = await Process.run(
+        'node',
+        [
+          tsLifecycleClientPath,
+          '--transport',
+          'stdio',
+          '--server-command',
+          'dart',
+          '--server-args',
+          dartServerPath,
+        ],
+        runInShell: true,
+      );
+
+      if (result.exitCode != 0) {
+        print('TS lifecycle stdio stdout: ${result.stdout}');
+        print('TS lifecycle stdio stderr: ${result.stderr}');
+      }
+
+      expect(
+        result.exitCode,
+        equals(0),
+        reason: 'Official TS stdio client lifecycle interop failed',
       );
     });
 
@@ -275,6 +344,144 @@ void main() {
         }
       },
       timeout: const Timeout(Duration(seconds: 120)),
+    );
+
+    test(
+      'official TS Streamable HTTP client lists tools immediately after lifecycle',
+      () async {
+        final port = await _findAvailablePort();
+        final baseUrl = 'http://127.0.0.1:$port/mcp';
+        final streamableServer = StreamableMcpServer(
+          serverFactory: (_) => createServer(),
+          host: '127.0.0.1',
+          port: port,
+        );
+
+        await streamableServer.start();
+        try {
+          final result = await Process.run(
+            'node',
+            [
+              tsLifecycleClientPath,
+              '--transport',
+              'http',
+              '--url',
+              baseUrl,
+            ],
+            runInShell: true,
+          );
+
+          if (result.exitCode != 0) {
+            print('TS lifecycle HTTP stdout: ${result.stdout}');
+            print('TS lifecycle HTTP stderr: ${result.stderr}');
+          }
+
+          expect(
+            result.exitCode,
+            equals(0),
+            reason:
+                'Official TS Streamable HTTP client lifecycle interop failed',
+          );
+        } finally {
+          await streamableServer.stop();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test(
+      'Dart Streamable HTTP server rejects operations before initialized',
+      () async {
+        final port = await _findAvailablePort();
+        final baseUrl = 'http://127.0.0.1:$port/mcp';
+        final streamableServer = StreamableMcpServer(
+          serverFactory: (_) => createServer(),
+          host: '127.0.0.1',
+          port: port,
+        );
+
+        await streamableServer.start();
+        try {
+          final initRes = await http.post(
+            Uri.parse(baseUrl),
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'id': 1,
+              'method': 'initialize',
+              'params': {
+                'protocolVersion': '2025-11-25',
+                'capabilities': <String, Object>{},
+                'clientInfo': {'name': 'lifecycle-test', 'version': '1.0'},
+              },
+            }),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json, text/event-stream',
+            },
+          );
+          expect(initRes.statusCode, HttpStatus.ok);
+          final sessionId = initRes.headers['mcp-session-id'];
+          expect(sessionId, isNotNull);
+
+          final earlyList = await _postJsonForSseEvent(
+            baseUrl,
+            sessionId!,
+            {
+              'jsonrpc': '2.0',
+              'id': 2,
+              'method': 'tools/list',
+            },
+          );
+          expect(earlyList.statusCode, HttpStatus.ok);
+          expect(earlyList.event.json['id'], 2);
+          expect(earlyList.event.json['error'], isA<Map<String, dynamic>>());
+          final earlyError =
+              earlyList.event.json['error'] as Map<String, dynamic>;
+          expect(earlyError['code'], ErrorCode.invalidRequest.value);
+          expect(
+            earlyError['message'],
+            contains('notifications/initialized'),
+          );
+
+          final initializedRes = await http.post(
+            Uri.parse(baseUrl),
+            body: jsonEncode(
+              const JsonRpcNotification(
+                method: 'notifications/initialized',
+              ).toJson(),
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json, text/event-stream',
+              'mcp-session-id': sessionId,
+            },
+          );
+          expect(initializedRes.statusCode, HttpStatus.accepted);
+
+          final initializedList = await _postJsonForSseEvent(
+            baseUrl,
+            sessionId,
+            {
+              'jsonrpc': '2.0',
+              'id': 3,
+              'method': 'tools/list',
+            },
+          );
+          expect(initializedList.statusCode, HttpStatus.ok);
+          expect(initializedList.event.json['id'], 3);
+          final result =
+              initializedList.event.json['result'] as Map<String, dynamic>;
+          final tools = result['tools'] as List<dynamic>;
+          final toolNames = tools
+              .cast<Map<String, dynamic>>()
+              .map((tool) => tool['name'])
+              .toList();
+          expect(toolNames, containsAll(['echo', 'add']));
+        } finally {
+          await streamableServer.stop();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
     );
 
     test(

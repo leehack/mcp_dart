@@ -434,6 +434,144 @@ void main() {
       // but the internal request handler won't be registered
       expect(client.onElicitRequest, isNotNull);
     });
+
+    test('Client with URL-only capability handles URL elicitation', () async {
+      final transport = MockTransport();
+      transport.mockInitializeResponse = const InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: ServerCapabilities(),
+        serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
+      );
+
+      final client = Client(
+        const Implementation(name: 'test-client', version: '1.0.0'),
+        options: const ClientOptions(
+          capabilities: ClientCapabilities(
+            elicitation: ClientElicitation.urlOnly(),
+          ),
+        ),
+      );
+
+      ElicitRequest? receivedParams;
+      client.onElicitRequest = (params) async {
+        receivedParams = params;
+        return const ElicitResult(
+          action: 'accept',
+          url: 'https://oauth.example.com/authorize',
+          elicitationId: 'oauth-123',
+        );
+      };
+
+      await client.connect(transport);
+      transport.clearSentMessages();
+
+      transport.onmessage?.call(
+        JsonRpcElicitRequest(
+          id: 7,
+          elicitParams: const ElicitRequest.url(
+            message: 'Please authenticate',
+            url: 'https://oauth.example.com/authorize',
+            elicitationId: 'oauth-123',
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(receivedParams, isNotNull);
+      expect(receivedParams!.isUrlMode, isTrue);
+      expect(transport.sentMessages.single, isA<JsonRpcResponse>());
+      expect((transport.sentMessages.single as JsonRpcResponse).id, 7);
+
+      await client.close();
+    });
+
+    test('Client rejects unsupported elicitation mode', () async {
+      final transport = MockTransport();
+      transport.mockInitializeResponse = const InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: ServerCapabilities(),
+        serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
+      );
+
+      final client = Client(
+        const Implementation(name: 'test-client', version: '1.0.0'),
+        options: const ClientOptions(
+          capabilities: ClientCapabilities(
+            elicitation: ClientElicitation.formOnly(),
+          ),
+        ),
+      );
+      client.onElicitRequest = (params) async {
+        return const ElicitResult(action: 'accept');
+      };
+
+      await client.connect(transport);
+      transport.clearSentMessages();
+
+      transport.onmessage?.call(
+        JsonRpcElicitRequest(
+          id: 8,
+          elicitParams: const ElicitRequest.url(
+            message: 'Please authenticate',
+            url: 'https://oauth.example.com/authorize',
+            elicitationId: 'oauth-123',
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(transport.sentMessages.single, isA<JsonRpcError>());
+      final error = transport.sentMessages.single as JsonRpcError;
+      expect(error.id, 8);
+      expect(error.error.code, ErrorCode.invalidParams.value);
+      expect(error.error.message, contains('URL elicitation'));
+
+      await client.close();
+    });
+
+    test('Client rejects form elicitation when only URL is advertised',
+        () async {
+      final transport = MockTransport();
+      transport.mockInitializeResponse = const InitializeResult(
+        protocolVersion: latestProtocolVersion,
+        capabilities: ServerCapabilities(),
+        serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
+      );
+
+      final client = Client(
+        const Implementation(name: 'test-client', version: '1.0.0'),
+        options: const ClientOptions(
+          capabilities: ClientCapabilities(
+            elicitation: ClientElicitation.urlOnly(),
+          ),
+        ),
+      );
+      client.onElicitRequest = (params) async {
+        return const ElicitResult(action: 'accept');
+      };
+
+      await client.connect(transport);
+      transport.clearSentMessages();
+
+      transport.onmessage?.call(
+        JsonRpcElicitRequest(
+          id: 9,
+          elicitParams: ElicitRequest.form(
+            message: 'Enter your name',
+            requestedSchema: JsonSchema.string(),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(transport.sentMessages.single, isA<JsonRpcError>());
+      final error = transport.sentMessages.single as JsonRpcError;
+      expect(error.id, 9);
+      expect(error.error.code, ErrorCode.invalidParams.value);
+      expect(error.error.message, contains('form elicitation'));
+
+      await client.close();
+    });
   });
 
   group('Elicitation Spec 2025-11-25 Features', () {
@@ -544,6 +682,49 @@ void main() {
       expect(params.requestedSchema, isNotNull);
       expect(params.url, isNull);
       expect(params.elicitationId, isNull);
+    });
+
+    test('ElicitRequestParams rejects invalid form and URL variants', () {
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'oauth',
+          'message': 'Please authenticate',
+          'requestedSchema': {'type': 'object'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'message': 'Enter your name',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'Please authenticate',
+          'url': 'https://oauth.example.com/authorize',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'Please authenticate',
+          'url': 'https://oauth.example.com/authorize',
+          'elicitationId': 'oauth-123',
+          'requestedSchema': {'type': 'object'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams(
+          message: 'Please authenticate',
+          requestedSchema: const JsonObject(),
+          url: 'https://oauth.example.com/authorize',
+        ),
+        throwsA(isA<AssertionError>()),
+      );
     });
 
     test('JsonRpcElicitationCompleteNotification serialization', () {

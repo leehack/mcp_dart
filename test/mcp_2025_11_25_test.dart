@@ -214,19 +214,23 @@ void main() {
     });
 
     test('Elicitation with URL', () {
-      final params = const ElicitRequestParams(
+      final params = const ElicitRequestParams.url(
         message: 'test',
-        requestedSchema: JsonObject(),
         url: 'https://example.com/ui',
+        elicitationId: 'ui-123',
       );
 
       expect(params.url, 'https://example.com/ui');
+      expect(params.elicitationId, 'ui-123');
 
       final json = params.toJson();
+      expect(json['mode'], 'url');
       expect(json['url'], 'https://example.com/ui');
+      expect(json['elicitationId'], 'ui-123');
 
       final deserialized = ElicitRequestParams.fromJson(json);
       expect(deserialized.url, 'https://example.com/ui');
+      expect(deserialized.elicitationId, 'ui-123');
     });
 
     test('JsonEnum SEP-1330', () {

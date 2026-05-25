@@ -22,8 +22,6 @@ class McpClientOptions extends ProtocolOptions {
 @Deprecated('Use McpClientOptions instead')
 typedef ClientOptions = McpClientOptions;
 
-/// Recursively applies default values from a JSON Schema to a data object.
-/// Recursively applies default values from a JSON Schema to a data object.
 // Recursively applies default values from a JSON Schema to a data object.
 void _applyElicitationDefaults(JsonSchema schema, Map<String, dynamic> data) {
   if (schema is! JsonObject) return;
@@ -62,8 +60,6 @@ dynamic _deepCopy(dynamic value) {
   }
 }
 
-// Unused _applyDefaultsFromMap removed
-
 /// An MCP client implementation built on top of a pluggable [Transport].
 ///
 /// Handles the initialization handshake with the server upon connection
@@ -75,6 +71,7 @@ class McpClient extends Protocol {
   final Implementation _clientInfo;
   String? _instructions;
   Future<void>? _sessionRefresh;
+  bool _sentInitialized = false;
 
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
   final Set<String> _cachedRequiredTaskTools = {};
@@ -103,11 +100,25 @@ class McpClient extends Protocol {
   McpClient(this._clientInfo, {McpClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         super(options) {
-    // Register elicit handler if capability is present
-    if (_capabilities.elicitation?.form != null) {
+    // Register elicit handler if any elicitation mode is advertised.
+    if (_capabilities.elicitation != null) {
       setRequestHandler<JsonRpcElicitRequest>(
         Method.elicitationCreate,
         (request, extra) async {
+          if (request.elicitParams.isUrlMode &&
+              _capabilities.elicitation?.url == null) {
+            throw McpError(
+              ErrorCode.invalidParams.value,
+              "Client does not support URL elicitation.",
+            );
+          }
+          if (request.elicitParams.isFormMode &&
+              _capabilities.elicitation?.form == null) {
+            throw McpError(
+              ErrorCode.invalidParams.value,
+              "Client does not support form elicitation.",
+            );
+          }
           if (onElicitRequest == null) {
             throw McpError(
               ErrorCode.methodNotFound.value,
@@ -117,7 +128,7 @@ class McpClient extends Protocol {
           final result = await onElicitRequest!(request.elicitParams);
 
           // Apply defaults if client supports it and it's a form elicitation
-          if (request.elicitParams.mode == ElicitationMode.form &&
+          if (request.elicitParams.isFormMode &&
               result.action == 'accept' &&
               result.content is Map &&
               request.elicitParams.requestedSchema != null &&
@@ -197,6 +208,8 @@ class McpClient extends Protocol {
   }
 
   Future<void> _initializeSession(Transport transport) async {
+    _sentInitialized = false;
+
     final initParams = InitializeRequest(
       protocolVersion: latestProtocolVersion,
       capabilities: _capabilities,
@@ -230,7 +243,13 @@ class McpClient extends Protocol {
     }
 
     const initializedNotification = JsonRpcInitializedNotification();
-    await notification(initializedNotification);
+    try {
+      await notification(initializedNotification);
+      _sentInitialized = true;
+    } catch (_) {
+      _sentInitialized = false;
+      rethrow;
+    }
 
     _logger.debug(
       "MCP Client Initialized. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: ${result.protocolVersion}",
@@ -313,6 +332,37 @@ class McpClient extends Protocol {
 
   /// Gets the server's instructions provided during initialization, if any.
   String? getInstructions() => _instructions;
+
+  @override
+  McpError? validateIncomingRequest(JsonRpcRequest request) {
+    if (_sentInitialized || request.method == Method.ping) {
+      return null;
+    }
+
+    return McpError(
+      ErrorCode.invalidRequest.value,
+      "Received ${request.method} before notifications/initialized was sent.",
+    );
+  }
+
+  @override
+  McpError? validateIncomingNotification(JsonRpcNotification notification) {
+    if (_sentInitialized) {
+      return null;
+    }
+
+    switch (notification.method) {
+      case Method.notificationsMessage:
+      case Method.notificationsCancelled:
+      case Method.notificationsProgress:
+        return null;
+      default:
+        return McpError(
+          ErrorCode.invalidRequest.value,
+          "Received ${notification.method} before notifications/initialized was sent.",
+        );
+    }
+  }
 
   @override
   void assertCapabilityForMethod(String method) {
