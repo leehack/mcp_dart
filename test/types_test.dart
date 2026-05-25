@@ -73,6 +73,22 @@ void main() {
     });
   });
 
+  group('ToolExecution Tests', () {
+    test('rejects invalid taskSupport while parsing wire JSON', () {
+      expect(
+        () => ToolExecution.fromJson({'taskSupport': 'sometimes'}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects invalid taskSupport while serializing wire JSON', () {
+      expect(
+        () => const ToolExecution(taskSupport: 'sometimes').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+  });
+
   group('Capabilities Tests', () {
     test('ServerCapabilitiesCompletions serialization and deserialization', () {
       final completions =

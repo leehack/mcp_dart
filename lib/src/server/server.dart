@@ -388,19 +388,39 @@ class Server extends Protocol {
 
   @override
   void assertTaskCapability(String method) {
-    if (_clientCapabilities?.tasks == null) {
+    final missingCapability = switch (method) {
+      Method.samplingCreateMessage =>
+        _clientCapabilities?.tasks?.requests?.sampling?.createMessage == null
+            ? 'tasks.requests.sampling.createMessage'
+            : null,
+      Method.elicitationCreate =>
+        _clientCapabilities?.tasks?.requests?.elicitation?.create == null
+            ? 'tasks.requests.elicitation.create'
+            : null,
+      _ =>
+        _clientCapabilities?.tasks == null ? 'tasks' : 'tasks.requests.$method',
+    };
+
+    if (missingCapability != null) {
       throw McpError(
         ErrorCode.invalidRequest.value,
-        "Client does not support tasks capability (required for task-based '$method')",
+        "Client does not support capability '$missingCapability' required for task-based '$method'",
       );
     }
   }
 
   @override
   void assertTaskHandlerCapability(String method) {
-    if (_capabilities.tasks == null) {
+    final missingCapability = switch (method) {
+      Method.toolsCall => _capabilities.tasks?.requests?.tools?.call == null
+          ? 'tasks.requests.tools.call'
+          : null,
+      _ => _capabilities.tasks == null ? 'tasks' : 'tasks.requests.$method',
+    };
+
+    if (missingCapability != null) {
       throw StateError(
-        "Server setup error: Cannot handle task-based '$method' without 'tasks' capability registered.",
+        "Server setup error: Cannot handle task-based '$method' without '$missingCapability' capability registered.",
       );
     }
   }

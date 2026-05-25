@@ -131,6 +131,7 @@ For code already using `mcp_dart`, start with [`doc/migration_2025_11_25_compat.
 
 - `tasks/cancel` now returns the final cancelled task object on the wire.
 - Task and task-status wire shapes require `taskId`, `status`, `ttl`, `createdAt`, and `lastUpdatedAt`.
+- Task-augmented requests require explicit `tasks.requests.*` subcapabilities, such as `tasks.requests.tools.call` for task-based tools.
 - Streamable HTTP has stricter protocol-version and security validation defaults.
 - JSON-RPC request IDs, cancellation request IDs, and progress tokens preserve the MCP string-or-integer wire shape.
 - Sampling tool-use requests must be negotiated via `ClientCapabilities.sampling.tools`.

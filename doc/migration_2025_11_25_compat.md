@@ -25,8 +25,13 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
 - Task stores treat terminal tasks (`completed`, `failed`, `cancelled`) as
   immutable. Later status or result writes are ignored instead of overwriting
   the terminal state.
-- The `Task` constructor now requires `ttl`, `createdAt`, and `lastUpdatedAt`,
+- `Task` constructor now requires `ttl`, `createdAt`, and `lastUpdatedAt`,
   so valid task instances serialize without throwing.
+- Task-augmented requests require explicit `tasks.requests.*` negotiation. A
+  top-level `tasks` capability is not enough: task-based tool calls require
+  `tasks.requests.tools.call`, task sampling handlers require
+  `tasks.requests.sampling.createMessage`, and task elicitation handlers require
+  `tasks.requests.elicitation.create`.
 - Streamable HTTP defaults are stricter for protocol-version headers, DNS
   rebinding protection, and batch request rejection.
 - MCP/JSON-RPC wire parsing now rejects malformed request IDs, progress tokens,
@@ -161,3 +166,63 @@ final cancelledTask = await taskClient.cancelTaskWithResult(taskId);
 Returned cancelled tasks should include the MCP-required task fields:
 `taskId`, `status`, `createdAt`, `lastUpdatedAt`, and `ttl` (`null` is valid
 for `ttl`).
+
+### Task request capability negotiation
+
+MCP 2025-11-25 treats `tasks.requests` as an exhaustive list of request methods
+that may be task-augmented. Advertising top-level `tasks` alone no longer allows
+every task-related request shape.
+
+For task-based tools, register task tools before `connect()` so the server can
+auto-advertise `tasks.requests.tools.call`:
+
+```dart
+server.experimental.registerToolTask(
+  'slow-tool',
+  inputSchema: const ToolInputSchema(),
+  handler: SlowToolTaskHandler(),
+);
+```
+
+If task tools are registered after `connect()`, pre-advertise the capability in
+server options before connecting:
+
+```dart
+final server = McpServer(
+  const Implementation(name: 'server', version: '1.0.0'),
+  options: const ServerOptions(
+    capabilities: ServerCapabilities(
+      tasks: ServerCapabilitiesTasks(
+        requests: ServerCapabilitiesTasksRequests(
+          tools: ServerCapabilitiesTasksTools(
+            call: ServerCapabilitiesTasksToolsCall(),
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+```
+
+For server-initiated task interactions, clients must advertise the exact task
+request handlers they register:
+
+```dart
+final client = McpClient(
+  const Implementation(name: 'client', version: '1.0.0'),
+  options: const McpClientOptions(
+    capabilities: ClientCapabilities(
+      tasks: ClientCapabilitiesTasks(
+        requests: ClientCapabilitiesTasksRequests(
+          sampling: ClientCapabilitiesTasksSampling(
+            createMessage: ClientCapabilitiesTasksSamplingCreateMessage(),
+          ),
+          elicitation: ClientCapabilitiesTasksElicitation(
+            create: ClientCapabilitiesTasksElicitationCreate(),
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+```

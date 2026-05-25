@@ -2,9 +2,12 @@ import 'dart:async';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
-class MockClient implements Client {
+class MockClient implements McpClient {
   final Map<String, dynamic> _responses = {};
   final List<JsonRpcRequest> requests = [];
+  bool supportsTaskAugmentedTools = true;
+  List<Tool> listedTools = const [];
+  Map<String?, ListToolsResult> listedToolPages = const {};
 
   void mockResponse(String method, dynamic response) {
     _responses[method] = response;
@@ -58,6 +61,29 @@ class MockClient implements Client {
     }
 
     throw Exception('Mock response not found for ${request.method}');
+  }
+
+  @override
+  void assertTaskCapability(String method) {
+    if (!supportsTaskAugmentedTools) {
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        "Server does not support capability 'tasks.requests.tools.call' required for task-based '$method'",
+      );
+    }
+  }
+
+  @override
+  Future<ListToolsResult> listTools({
+    ListToolsRequest? params,
+    RequestOptions? options,
+  }) async {
+    requests.add(JsonRpcListToolsRequest(id: -1, params: params?.toJson()));
+    if (listedToolPages.isNotEmpty) {
+      return listedToolPages[params?.cursor] ??
+          const ListToolsResult(tools: []);
+    }
+    return ListToolsResult(tools: listedTools);
   }
 
   @override
@@ -190,6 +216,147 @@ void main() {
           'tasks/get',
         ]),
       );
+    });
+
+    test(
+        'callToolStream rejects task augmentation without negotiated server support',
+        () async {
+      mockClient.supportsTaskAugmentedTools = false;
+
+      final events = await taskClient.callToolStream(
+        'task-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskErrorMessage>());
+      final error = (events.single as TaskErrorMessage).error;
+      expect(error, isA<McpError>());
+      expect(error.toString(), contains('tasks.requests.tools.call'));
+      expect(mockClient.requests, isEmpty);
+    });
+
+    test('callToolStream rejects task augmentation when tool forbids tasks',
+        () async {
+      mockClient.listedTools = const [
+        Tool(
+          name: 'sync-tool',
+          inputSchema: ToolInputSchema(),
+          execution: ToolExecution(taskSupport: 'forbidden'),
+        ),
+      ];
+
+      final events = await taskClient.callToolStream(
+        'sync-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskErrorMessage>());
+      expect(
+        (events.single as TaskErrorMessage).error.toString(),
+        contains("does not support task augmentation"),
+      );
+      expect(mockClient.requests.map((r) => r.method), [Method.toolsList]);
+    });
+
+    test('callToolStream rejects task augmentation when tool is not advertised',
+        () async {
+      mockClient.listedTools = const [
+        Tool(
+          name: 'other-tool',
+          inputSchema: ToolInputSchema(),
+          execution: ToolExecution(taskSupport: 'optional'),
+        ),
+      ];
+
+      final events = await taskClient.callToolStream(
+        'missing-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskErrorMessage>());
+      expect(
+        (events.single as TaskErrorMessage).error.toString(),
+        contains('was not advertised by tools/list'),
+      );
+      expect(mockClient.requests.map((r) => r.method), [Method.toolsList]);
+    });
+
+    test(
+        'callToolStream allows task augmentation when server and tool permit it',
+        () async {
+      mockClient.listedTools = const [
+        Tool(
+          name: 'task-tool',
+          inputSchema: ToolInputSchema(),
+          execution: ToolExecution(taskSupport: 'optional'),
+        ),
+      ];
+      mockClient.mockResponse('tools/call', {
+        'content': [
+          {'type': 'text', 'text': 'Task-capable immediate result'},
+        ],
+      });
+
+      final events = await taskClient.callToolStream(
+        'task-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskResultMessage>());
+      expect(mockClient.requests.map((r) => r.method), [
+        Method.toolsList,
+        Method.toolsCall,
+      ]);
+      expect(mockClient.requests.last.params?['task'], {'ttl': 1000});
+    });
+
+    test('callToolStream finds task-capable tools on later list pages',
+        () async {
+      mockClient.listedToolPages = const {
+        null: ListToolsResult(
+          tools: [
+            Tool(name: 'other-tool', inputSchema: ToolInputSchema()),
+          ],
+          nextCursor: 'page-2',
+        ),
+        'page-2': ListToolsResult(
+          tools: [
+            Tool(
+              name: 'task-tool',
+              inputSchema: ToolInputSchema(),
+              execution: ToolExecution(taskSupport: 'optional'),
+            ),
+          ],
+        ),
+      };
+      mockClient.mockResponse('tools/call', {
+        'content': [
+          {'type': 'text', 'text': 'Task-capable paged result'},
+        ],
+      });
+
+      final events = await taskClient.callToolStream(
+        'task-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskResultMessage>());
+      expect(mockClient.requests.map((r) => r.method), [
+        Method.toolsList,
+        Method.toolsList,
+        Method.toolsCall,
+      ]);
+      expect(mockClient.requests[1].params?['cursor'], 'page-2');
     });
 
     test('listTasks returns list of tasks', () async {

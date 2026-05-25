@@ -25,8 +25,24 @@ class TaskClient {
 
   TaskClient(this.client);
 
-  /// Calls a tool and returns a stream of status updates and the final result.
-  ///
+  Future<Tool?> _findTool(String name) async {
+    String? cursor;
+    do {
+      final result = await client.listTools(
+        params: cursor == null ? null : ListToolsRequest(cursor: cursor),
+      );
+      for (final tool in result.tools) {
+        if (tool.name == name) {
+          return tool;
+        }
+      }
+      cursor = result.nextCursor;
+    } while (cursor != null);
+    return null;
+  }
+
+  /// Calls a tool and streams the result, handling task-based execution.
+
   /// This handles both immediate results (yielding a single [TaskResultMessage])
   /// and long-running tasks (yielding [TaskCreatedMessage], multiple
   /// [TaskStatusMessage]s, and finally [TaskResultMessage]).
@@ -34,12 +50,36 @@ class TaskClient {
   /// The [task] parameter is used for task augmentation. Pass task creation
   /// parameters (e.g., `{'ttl': 60000, 'pollInterval': 50}`) to request
   /// task-based execution from tools that support it.
+  ///
+  /// When [task] is provided, the connected server must advertise
+  /// `tasks.requests.tools.call`, and the target tool must be discoverable from
+  /// `tools/list` with `execution.taskSupport` set to `optional` or `required`.
+  /// This method performs a `tools/list` preflight before sending `tools/call`
+  /// so it can fail locally before creating a task the server did not advertise.
   Stream<TaskStreamMessage> callToolStream(
     String name,
     Map<String, dynamic> arguments, {
     Map<String, dynamic>? task,
   }) async* {
     try {
+      if (task != null) {
+        client.assertTaskCapability(Method.toolsCall);
+        final tool = await _findTool(name);
+        if (tool == null) {
+          throw McpError(
+            ErrorCode.invalidRequest.value,
+            "Tool '$name' was not advertised by tools/list; cannot verify task augmentation support",
+          );
+        }
+        final taskSupport = tool.execution?.taskSupport ?? 'forbidden';
+        if (taskSupport == 'forbidden') {
+          throw McpError(
+            ErrorCode.invalidRequest.value,
+            "Tool '$name' does not support task augmentation (taskSupport: 'forbidden')",
+          );
+        }
+      }
+
       // 1. Call the tool using generic request to capture 'task' field if present.
       // We cannot use client.callTool() because it forces CallToolResult return type
       // which ignores the 'task' field.

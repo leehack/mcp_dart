@@ -840,9 +840,105 @@ abstract class Protocol {
     });
   }
 
+  bool _containsTaskMetadata(Map<dynamic, dynamic>? value) {
+    return value?.containsKey('task') == true ||
+        value?.containsKey(relatedTaskMetadataKey) == true ||
+        value?.containsKey(legacyRelatedTaskMetadataKey) == true;
+  }
+
+  bool _hasTaskAugmentation(JsonRpcRequest request) {
+    final paramsMeta = request.params?['_meta'];
+    return _containsTaskMetadata(request.meta) ||
+        request.params?.containsKey('task') == true ||
+        (paramsMeta is Map && _containsTaskMetadata(paramsMeta));
+  }
+
+  Map<String, dynamic>? _withoutTaskMetadata(
+    Map<String, dynamic>? value, {
+    required bool removeRelatedTask,
+  }) {
+    if (value == null) {
+      return null;
+    }
+
+    final hasTask = value.containsKey('task');
+    final hasRelatedTask = removeRelatedTask &&
+        (value.containsKey(relatedTaskMetadataKey) ||
+            value.containsKey(legacyRelatedTaskMetadataKey));
+    if (!hasTask && !hasRelatedTask) {
+      return value;
+    }
+
+    final copy = Map<String, dynamic>.from(value)..remove('task');
+    if (removeRelatedTask) {
+      copy
+        ..remove(relatedTaskMetadataKey)
+        ..remove(legacyRelatedTaskMetadataKey);
+    }
+    return copy.isEmpty ? null : copy;
+  }
+
+  Map<String, dynamic>? _withoutTaskAugmentedParams(
+    Map<String, dynamic>? params,
+  ) {
+    if (params == null) {
+      return null;
+    }
+
+    Map<String, dynamic>? copy;
+    if (params.containsKey('task')) {
+      copy = Map<String, dynamic>.from(params)..remove('task');
+    }
+
+    final meta = (copy ?? params)['_meta'];
+    if (meta is Map<String, dynamic>) {
+      final strippedMeta = _withoutTaskMetadata(meta, removeRelatedTask: true);
+      if (!identical(strippedMeta, meta)) {
+        copy ??= Map<String, dynamic>.from(params);
+        if (strippedMeta == null) {
+          copy.remove('_meta');
+        } else {
+          copy['_meta'] = strippedMeta;
+        }
+      }
+    }
+
+    return copy?.isEmpty == true ? null : copy ?? params;
+  }
+
+  JsonRpcRequest _withoutTaskAugmentation(JsonRpcRequest request) {
+    final params = _withoutTaskAugmentedParams(request.params);
+    final meta = _withoutTaskMetadata(request.meta, removeRelatedTask: true);
+    final json = <String, dynamic>{
+      'jsonrpc': '2.0',
+      'id': request.id,
+      'method': request.method,
+      if (params != null || meta != null)
+        'params': <String, dynamic>{
+          ...?params,
+          if (meta != null) '_meta': meta,
+        },
+    };
+    return JsonRpcMessage.fromJson(json) as JsonRpcRequest;
+  }
+
+  bool _canHandleTaskAugmentation(String method) {
+    try {
+      assertTaskHandlerCapability(method);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Handles incoming JSON-RPC requests.
   void _onrequest(JsonRpcRequest request) {
     final handler = _requestHandlers[request.method] ?? fallbackRequestHandler;
+
+    if (_hasTaskAugmentation(request) &&
+        !_canHandleTaskAugmentation(request.method)) {
+      request = _withoutTaskAugmentation(request);
+    }
 
     // Check for related task ID in metadata
     final meta =

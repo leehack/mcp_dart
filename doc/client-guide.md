@@ -156,6 +156,35 @@ final result = await client.callTool(
 );
 ```
 
+### Task-Augmented Tool Calls
+
+For task-capable tools, use `TaskClient.callToolStream()` and pass task creation
+parameters through the `task` argument. The server must advertise
+`tasks.requests.tools.call`, and the target tool must be visible from
+`tools/list` with `execution.taskSupport` set to `optional` or `required`.
+`TaskClient` performs that `tools/list` preflight before it sends `tools/call`.
+
+```dart
+final taskClient = TaskClient(client);
+
+await for (final event in taskClient.callToolStream(
+  'slow-tool',
+  {'query': 'large job'},
+  task: {'ttl': 60000, 'pollInterval': 1000},
+)) {
+  switch (event) {
+    case TaskCreatedMessage(:final task):
+      print('Created task: ${task.taskId}');
+    case TaskStatusMessage(:final task):
+      print('Task status: ${task.status}');
+    case TaskResultMessage(:final result):
+      print('Tool result: ${result.content.length} content blocks');
+    case TaskErrorMessage(:final error):
+      print('Task error: $error');
+  }
+}
+```
+
 ### Handle Tool Errors
 
 ```dart

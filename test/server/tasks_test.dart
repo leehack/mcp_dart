@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/tasks/handler.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
@@ -145,6 +146,95 @@ void main() {
       final result = ListTasksResult.fromJson(response.result);
       expect(result.tasks.length, 1);
       expect(result.tasks.first.taskId, 'task1');
+    });
+
+    test('registerToolTask advertises tasks.requests.tools.call', () {
+      mcpServer.experimental.registerToolTask(
+        'task_tool',
+        inputSchema: const ToolInputSchema(),
+        handler: _ResultHandler(),
+      );
+
+      final taskCapabilities = mcpServer.server.getCapabilities().tasks;
+      expect(taskCapabilities, isNotNull);
+      expect(taskCapabilities!.requests?.tools?.call, isNotNull);
+    });
+
+    test('registerToolTask duplicate does not mutate capabilities', () {
+      mcpServer.registerTool(
+        'duplicate_tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      expect(
+        () => mcpServer.experimental.registerToolTask(
+          'duplicate_tool',
+          inputSchema: const ToolInputSchema(),
+          handler: _ResultHandler(),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        mcpServer.server.getCapabilities().tasks?.requests?.tools?.call,
+        isNull,
+      );
+    });
+
+    test('registerToolTask reuses pre-advertised capability after connect',
+        () async {
+      final connectedServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const ServerOptions(
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(listChanged: true),
+            tasks: ServerCapabilitiesTasks(
+              requests: ServerCapabilitiesTasksRequests(
+                tools: ServerCapabilitiesTasksTools(
+                  call: ServerCapabilitiesTasksToolsCall(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      connectedServer.experimental.registerToolTask(
+        'initial_task_tool',
+        inputSchema: const ToolInputSchema(),
+        handler: _ResultHandler(),
+      );
+      await connectedServer.connect(transport);
+
+      expect(
+        () => connectedServer.experimental.registerToolTask(
+          'late_task_tool',
+          inputSchema: const ToolInputSchema(),
+          handler: _ResultHandler(),
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('registerToolTask after connect requires pre-advertised capability',
+        () async {
+      await mcpServer.connect(transport);
+
+      expect(
+        () => mcpServer.experimental.registerToolTask(
+          'late_task_tool',
+          inputSchema: const ToolInputSchema(),
+          handler: _ResultHandler(),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(
+              contains('tasks.requests.tools.call'),
+              contains('before connect()'),
+            ),
+          ),
+        ),
+      );
     });
 
     test('handles cancel task request with final task result', () async {

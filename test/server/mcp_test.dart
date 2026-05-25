@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -105,6 +106,118 @@ void main() {
 
       expect(callbackInvoked, isTrue);
       expect(receivedArgs['input'], equals('test value'));
+    });
+
+    test(
+        'ignores task metadata for normal tools when tool task capability is not advertised',
+        () async {
+      var callbackInvoked = false;
+
+      mcpServer.registerTool(
+        'normal_tool',
+        callback: (args, extra) async {
+          callbackInvoked = true;
+          expect(extra.taskRequestedTtl, isNull);
+          expect(extra.taskId, isNull);
+          expect(extra.meta?[relatedTaskMetadataKey], isNull);
+          expect(extra.meta?[legacyRelatedTaskMetadataKey], isNull);
+          expect(extra.meta?['progressToken'], 'keep-progress-token');
+          return const CallToolResult(
+            content: [TextContent(text: 'normal result')],
+          );
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      transport.receiveMessage(
+        const JsonRpcCallToolRequest(
+          id: 2,
+          params: {
+            'name': 'normal_tool',
+            'arguments': {},
+            'task': {'ttl': 1000},
+            '_meta': {
+              relatedTaskMetadataKey: {'taskId': 'unsupported-task'},
+              legacyRelatedTaskMetadataKey: {'taskId': 'unsupported-task'},
+              'progressToken': 'keep-progress-token',
+            },
+          },
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(callbackInvoked, isTrue);
+      final response = transport.sentMessages.last;
+      expect(response, isA<JsonRpcResponse>());
+      expect((response as JsonRpcResponse).result['content'], [
+        {'type': 'text', 'text': 'normal result'},
+      ]);
+    });
+
+    test(
+        'ignores related-task metadata without task key when task capability is not advertised',
+        () async {
+      RequestHandlerExtra? receivedExtra;
+
+      mcpServer.registerTool(
+        'related_only_tool',
+        callback: (args, extra) async {
+          receivedExtra = extra;
+          return const CallToolResult(
+            content: [TextContent(text: 'related only result')],
+          );
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      transport.receiveMessage(
+        const JsonRpcCallToolRequest(
+          id: 2,
+          params: {
+            'name': 'related_only_tool',
+            'arguments': {},
+            '_meta': {
+              relatedTaskMetadataKey: {'taskId': 'unsupported-task'},
+              legacyRelatedTaskMetadataKey: {'taskId': 'unsupported-task'},
+              'progressToken': 'keep-progress-token',
+            },
+          },
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(receivedExtra, isNotNull);
+      expect(receivedExtra!.taskRequestedTtl, isNull);
+      expect(receivedExtra!.taskId, isNull);
+      expect(receivedExtra!.meta?[relatedTaskMetadataKey], isNull);
+      expect(receivedExtra!.meta?[legacyRelatedTaskMetadataKey], isNull);
+      expect(receivedExtra!.meta?['progressToken'], 'keep-progress-token');
     });
 
     test('tool callback receives RequestHandlerExtra', () async {
