@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'constants.dart';
 import 'queue.dart';
 import 'store.dart';
@@ -122,8 +123,10 @@ class TaskResultHandler {
         }
 
         // Add related task meta
+        final relatedTaskJson = {'taskId': taskId};
         final meta = Map<String, dynamic>.from(toolResult.meta ?? {});
-        meta[relatedTaskMetaKey] = {'taskId': taskId};
+        meta.putIfAbsent(relatedTaskMetaKey, () => relatedTaskJson);
+        meta.putIfAbsent(legacyRelatedTaskMetadataKey, () => relatedTaskJson);
 
         return CallToolResult(
           content: toolResult.content,

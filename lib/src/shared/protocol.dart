@@ -132,8 +132,10 @@ class RequestHandlerExtra {
   /// Closes the standalone SSE stream (if supported).
   final void Function()? closeStandaloneSSEStream;
 
+  double? _lastProgress;
+
   /// Creates extra data for request handlers.
-  const RequestHandlerExtra({
+  RequestHandlerExtra({
     required this.signal,
     this.sessionId,
     required this.requestId,
@@ -173,6 +175,15 @@ class RequestHandlerExtra {
       );
       return;
     }
+
+    final lastProgress = _lastProgress;
+    if (lastProgress != null && progress <= lastProgress) {
+      throw ArgumentError(
+        "Progress values must increase monotonically for request $requestId: "
+        "$progress <= $lastProgress.",
+      );
+    }
+    _lastProgress = progress;
 
     final notification = JsonRpcProgressNotification(
       progressParams: ProgressNotification(
@@ -714,6 +725,18 @@ abstract class Protocol {
     return token;
   }
 
+  Map<String, dynamic>? _mergeRelatedTaskMeta(
+    Map<String, dynamic>? meta,
+    Map<String, dynamic>? relatedTaskJson,
+  ) {
+    if (relatedTaskJson == null) return meta;
+
+    final finalMeta = Map<String, dynamic>.from(meta ?? {});
+    finalMeta.putIfAbsent(relatedTaskMetadataKey, () => relatedTaskJson);
+    finalMeta.putIfAbsent(legacyRelatedTaskMetadataKey, () => relatedTaskJson);
+    return finalMeta;
+  }
+
   /// Sends a JSON-RPC error response for a given request ID.
   Future<void> _sendErrorResponse(
     RequestId id,
@@ -1045,7 +1068,7 @@ abstract class Protocol {
         final response = JsonRpcResponse(
           id: request.id,
           result: result.toJson(),
-          meta: result.meta,
+          meta: _mergeRelatedTaskMeta(result.meta, relatedTaskJson),
         );
 
         if (relatedTaskId != null && _taskMessageQueue != null) {

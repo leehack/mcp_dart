@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:mcp_dart/mcp_dart.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:test/test.dart';
 
 // Mock Transport
@@ -202,6 +203,39 @@ void main() {
       final result = await future;
       expect(result.content.first, isA<TextContent>());
       expect((result.content.first as TextContent).text, 'Done');
+    });
+
+    test('handle preserves result metadata and adds related task metadata',
+        () async {
+      final task = await store.createTask(
+        const TaskCreationParams(),
+        123,
+        {'name': 'test_tool'},
+        'session1',
+      );
+
+      final future = handler.handle(task.taskId);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      await store.storeTaskResult(
+        task.taskId,
+        TaskStatus.completed,
+        const CallToolResult(
+          content: [TextContent(text: 'Done')],
+          meta: {'source': 'handler'},
+        ),
+      );
+
+      final result = await future;
+      expect(result.meta?['source'], 'handler');
+      expect(
+        result.meta?[relatedTaskMetadataKey]?['taskId'],
+        task.taskId,
+      );
+      expect(
+        result.meta?[legacyRelatedTaskMetadataKey]?['taskId'],
+        task.taskId,
+      );
     });
 
     test('handle processes queued requests (elicit)', () async {

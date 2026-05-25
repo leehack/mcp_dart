@@ -3,6 +3,7 @@ import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/tool_name_validation.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/shared/uri_template.dart';
@@ -204,6 +205,23 @@ typedef TaskResultCallback = FutureOr<CallToolResult> Function(
   String taskId,
   RequestHandlerExtra extra,
 );
+
+Map<String, dynamic> _relatedTaskMeta(String taskId) => {'taskId': taskId};
+
+CallToolResult _withRelatedTaskMeta(CallToolResult result, String taskId) {
+  final relatedTaskJson = _relatedTaskMeta(taskId);
+  final meta = Map<String, dynamic>.from(result.meta ?? {});
+  meta.putIfAbsent(relatedTaskMetadataKey, () => relatedTaskJson);
+  meta.putIfAbsent(legacyRelatedTaskMetadataKey, () => relatedTaskJson);
+
+  return CallToolResult(
+    content: result.content,
+    isError: result.isError,
+    structuredContent: result.structuredContent,
+    meta: meta,
+    extra: result.extra,
+  );
+}
 
 /// Registration details for a resource template.
 class ResourceTemplateRegistration {
@@ -1114,7 +1132,10 @@ class McpServer {
         Method.tasksResult,
         (request, extra) async {
           final taskId = request.resultParams.taskId;
-          return await Future.value(_taskResultCallback!(taskId, extra));
+          final result = await Future.value(
+            _taskResultCallback!(taskId, extra),
+          );
+          return _withRelatedTaskMeta(result, taskId);
         },
         (id, params, meta) => JsonRpcTaskResultRequest.fromJson({
           'id': id,
