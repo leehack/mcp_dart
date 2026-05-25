@@ -20,11 +20,6 @@ enum ElicitationMode {
 /// Supports two modes:
 /// - **Form mode**: Collects structured data directly through the MCP client
 /// - **URL mode**: Directs users to external URLs for sensitive interactions
-/// Parameters for the `elicitation/create` request.
-///
-/// Supports two modes:
-/// - **Form mode**: Collects structured data directly through the MCP client
-/// - **URL mode**: Directs users to external URLs for sensitive interactions
 class ElicitRequest {
   /// The mode of elicitation. Defaults to 'form' if omitted (for backwards compatibility).
   final ElicitationMode? mode;
@@ -50,7 +45,30 @@ class ElicitRequest {
     this.requestedSchema,
     this.url,
     this.elicitationId,
-  });
+  })  : assert(
+          mode != ElicitationMode.url || requestedSchema == null,
+          'URL elicitation must not include requestedSchema.',
+        ),
+        assert(
+          mode != ElicitationMode.url || url != null,
+          'URL elicitation requires url.',
+        ),
+        assert(
+          mode != ElicitationMode.url || elicitationId != null,
+          'URL elicitation requires elicitationId.',
+        ),
+        assert(
+          mode == ElicitationMode.url || requestedSchema != null,
+          'Form elicitation requires requestedSchema.',
+        ),
+        assert(
+          mode == ElicitationMode.url || url == null,
+          'Form elicitation must not include url.',
+        ),
+        assert(
+          mode == ElicitationMode.url || elicitationId == null,
+          'Form elicitation must not include elicitationId.',
+        );
 
   /// Creates form mode elicitation parameters.
   const ElicitRequest.form({
@@ -69,30 +87,104 @@ class ElicitRequest {
         requestedSchema = null;
 
   factory ElicitRequest.fromJson(Map<String, dynamic> json) {
-    final modeStr = json['mode'] as String?;
-    ElicitationMode? mode;
-    if (modeStr != null) {
-      mode = ElicitationMode.values.byName(modeStr);
+    final modeValue = json['mode'];
+    if (modeValue != null && modeValue is! String) {
+      throw const FormatException('Elicitation mode must be a string.');
     }
+
+    ElicitationMode? mode;
+    if (modeValue != null) {
+      try {
+        mode = ElicitationMode.values.byName(modeValue);
+      } catch (_) {
+        throw FormatException('Unsupported elicitation mode: $modeValue');
+      }
+    }
+
+    final message = json['message'];
+    if (message is! String) {
+      throw const FormatException('Elicitation message is required.');
+    }
+
+    final requestedSchemaJson = json['requestedSchema'];
+    final url = json['url'];
+    final elicitationId = json['elicitationId'];
+
+    if (mode == ElicitationMode.url) {
+      if (url is! String) {
+        throw const FormatException('URL elicitation requires url.');
+      }
+      if (elicitationId is! String) {
+        throw const FormatException('URL elicitation requires elicitationId.');
+      }
+      if (requestedSchemaJson != null) {
+        throw const FormatException(
+          'URL elicitation must not include requestedSchema.',
+        );
+      }
+      return ElicitRequest.url(
+        message: message,
+        url: url,
+        elicitationId: elicitationId,
+      );
+    }
+
+    if (requestedSchemaJson is! Map<String, dynamic>) {
+      throw const FormatException('Form elicitation requires requestedSchema.');
+    }
+    if (url != null) {
+      throw const FormatException('Form elicitation must not include url.');
+    }
+    if (elicitationId != null) {
+      throw const FormatException(
+        'Form elicitation must not include elicitationId.',
+      );
+    }
+
     return ElicitRequest(
       mode: mode,
-      message: json['message'] as String,
-      requestedSchema: json['requestedSchema'] != null
-          ? JsonSchema.fromJson(json['requestedSchema'] as Map<String, dynamic>)
-          : null,
-      url: json['url'] as String?,
-      elicitationId: json['elicitationId'] as String?,
+      message: message,
+      requestedSchema: JsonSchema.fromJson(requestedSchemaJson),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        if (mode != null) 'mode': mode!.name,
-        'message': message,
-        if (requestedSchema != null)
-          'requestedSchema': requestedSchema!.toJson(),
-        if (url != null) 'url': url,
-        if (elicitationId != null) 'elicitationId': elicitationId,
-      };
+  void _validateShape() {
+    if (isUrlMode) {
+      if (requestedSchema != null) {
+        throw ArgumentError(
+          'URL elicitation must not include requestedSchema.',
+        );
+      }
+      if (url == null) {
+        throw ArgumentError('URL elicitation requires url.');
+      }
+      if (elicitationId == null) {
+        throw ArgumentError('URL elicitation requires elicitationId.');
+      }
+      return;
+    }
+
+    if (requestedSchema == null) {
+      throw ArgumentError('Form elicitation requires requestedSchema.');
+    }
+    if (url != null) {
+      throw ArgumentError('Form elicitation must not include url.');
+    }
+    if (elicitationId != null) {
+      throw ArgumentError('Form elicitation must not include elicitationId.');
+    }
+  }
+
+  Map<String, dynamic> toJson() {
+    _validateShape();
+    return {
+      if (mode != null) 'mode': mode!.name,
+      'message': message,
+      if (requestedSchema != null) 'requestedSchema': requestedSchema!.toJson(),
+      if (url != null) 'url': url,
+      if (elicitationId != null) 'elicitationId': elicitationId,
+    };
+  }
 
   /// Whether this is a form mode elicitation.
   bool get isFormMode => mode == null || mode == ElicitationMode.form;

@@ -195,6 +195,14 @@ void main() {
     });
 
     test('does not apply defaults for url elicitation', () async {
+      client = Client(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+        options: const ClientOptions(
+          capabilities: ClientCapabilities(
+            elicitation: ClientElicitation.urlOnly(),
+          ),
+        ),
+      );
       await client.connect(transport);
 
       Map<String, dynamic>? receivedContent;

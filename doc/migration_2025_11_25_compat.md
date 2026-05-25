@@ -37,6 +37,24 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
 - MCP/JSON-RPC wire parsing now rejects malformed request IDs, progress tokens,
   and sampling tool-use requests that were not negotiated via
   `ClientCapabilities.sampling.tools`.
+- Servers now reject normal incoming requests before `initialize` and before
+  the client sends `notifications/initialized`; `ping` remains available during
+  lifecycle setup. Clients likewise reject server-initiated operation requests
+  until their initialized notification has been sent. The interop suite covers
+  official TypeScript SDK clients listing tools immediately after the lifecycle
+  handshake over stdio and Streamable HTTP.
+- `elicitation/create` parameters are validated as the MCP 2025-11-25 form/URL
+  union. Form mode requires `requestedSchema`; URL mode requires `mode: "url"`,
+  `url`, and `elicitationId`.
+
+## Capability enforcement
+
+For source compatibility, `ProtocolOptions.enforceStrictCapabilities` remains
+opt-in for outgoing requests and notifications. High-level APIs still perform
+targeted checks for compatibility-sensitive behavior, such as task
+subcapabilities, sampling tools, and elicitation mode support. Enable strict
+capabilities in tests or production integrations that should fail fast when a
+peer has not advertised the required capability.
 
 ## Runtime compatibility toggles
 
