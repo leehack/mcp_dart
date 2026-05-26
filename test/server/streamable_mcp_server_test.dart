@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
@@ -57,6 +57,41 @@ Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
 }
 
 void main() {
+  test('OAuthBearerChallenge builds insufficient-scope challenge', () {
+    final challenge = OAuthBearerChallenge.insufficientScope(
+      resourceMetadata: Uri.parse(
+        'https://mcp.example.com/.well-known/oauth-protected-resource/mcp',
+      ),
+      scope: 'tools:read',
+      errorDescription: 'Need tools:read',
+    ).toHeaderValue();
+
+    expect(challenge, startsWith('Bearer '));
+    expect(
+      challenge,
+      contains(
+        'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"',
+      ),
+    );
+    expect(challenge, contains('scope="tools:read"'));
+    expect(challenge, contains('error="insufficient_scope"'));
+    expect(challenge, contains('error_description="Need tools:read"'));
+  });
+
+  test('OAuthBearerChallenge escapes quoted-string values', () {
+    final challenge = const OAuthBearerChallenge(
+      scope: r'tools:"read"\admin',
+      errorDescription: r'Need "read" scope \ admin',
+    ).toHeaderValue();
+
+    expect(challenge, startsWith('Bearer '));
+    expect(challenge, contains(r'scope="tools:\"read\"\\admin"'));
+    expect(
+      challenge,
+      contains(r'error_description="Need \"read\" scope \\ admin"'),
+    );
+  });
+
   group('StreamableMcpServer', () {
     late StreamableMcpServer server;
     final port = 8081;
@@ -75,11 +110,13 @@ void main() {
       );
     }
 
-    Future<http.Response> postInitialize({String? sessionId}) {
-      final headers = {
+    Future<http.Response> postInitializeWithHeaders({
+      Map<String, String> headers = const {},
+    }) {
+      final mergedHeaders = {
         'Content-Type': 'application/json',
         'Accept': 'application/json, text/event-stream',
-        if (sessionId != null) 'mcp-session-id': sessionId,
+        ...headers,
       };
       return http.post(
         Uri.parse(baseUrl),
@@ -94,7 +131,15 @@ void main() {
             ).toJson(),
           ).toJson(),
         ),
-        headers: headers,
+        headers: mergedHeaders,
+      );
+    }
+
+    Future<http.Response> postInitialize({String? sessionId}) {
+      return postInitializeWithHeaders(
+        headers: {
+          if (sessionId != null) 'mcp-session-id': sessionId,
+        },
       );
     }
 
@@ -675,6 +720,155 @@ void main() {
         },
       );
       expect(resPass.statusCode, HttpStatus.ok);
+    });
+
+    test('authentication remains forbidden without OAuth metadata', () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) => McpServer(
+          const Implementation(name: 'LegacyAuthServer', version: '1.0'),
+        ),
+        host: host,
+        port: port,
+        authenticator: (req) => false,
+      );
+      await server.start();
+
+      final res = await postInitialize();
+
+      expect(res.statusCode, HttpStatus.forbidden);
+      expect(res.headers, isNot(contains(HttpHeaders.wwwAuthenticateHeader)));
+    });
+
+    test('serves OAuth protected-resource metadata endpoints', () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) => McpServer(
+          const Implementation(name: 'OAuthMetadataServer', version: '1.0'),
+        ),
+        host: host,
+        port: port,
+        oauthProtectedResource: OAuthProtectedResourceOptions(
+          metadata: OAuthProtectedResourceMetadata(
+            resource: Uri.parse(baseUrl),
+            authorizationServers: [Uri.parse('https://auth.example.com')],
+            scopesSupported: const ['tools:read'],
+          ),
+          scope: 'tools:read',
+        ),
+      );
+      await server.start();
+
+      final endpointMetadata = await http.get(
+        Uri.parse(
+          'http://$host:$port/.well-known/oauth-protected-resource/mcp',
+        ),
+      );
+      final rootMetadata = await http.get(
+        Uri.parse('http://$host:$port/.well-known/oauth-protected-resource'),
+      );
+
+      for (final response in [endpointMetadata, rootMetadata]) {
+        expect(response.statusCode, HttpStatus.ok);
+        expect(
+          response.headers[HttpHeaders.contentTypeHeader],
+          contains('json'),
+        );
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        expect(body['resource'], baseUrl);
+        expect(body['authorization_servers'], ['https://auth.example.com']);
+        expect(body['bearer_methods_supported'], ['header']);
+        expect(body['scopes_supported'], ['tools:read']);
+      }
+    });
+
+    test('failed OAuth protected-resource auth returns bearer challenge',
+        () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) => McpServer(
+          const Implementation(name: 'OAuthChallengeServer', version: '1.0'),
+        ),
+        host: host,
+        port: port,
+        authenticator: (req) =>
+            req.headers.value(HttpHeaders.authorizationHeader) ==
+            'Bearer secret',
+        oauthProtectedResource: OAuthProtectedResourceOptions(
+          metadata: OAuthProtectedResourceMetadata(
+            resource: Uri.parse(baseUrl),
+            authorizationServers: [Uri.parse('https://auth.example.com')],
+            scopesSupported: const ['tools:read'],
+          ),
+          scope: 'tools:read',
+        ),
+      );
+      await server.start();
+
+      final denied = await postInitialize();
+
+      expect(denied.statusCode, HttpStatus.unauthorized);
+      expect(denied.body, 'Unauthorized');
+      final challenge = denied.headers[HttpHeaders.wwwAuthenticateHeader];
+      expect(challenge, isNotNull);
+      expect(challenge, startsWith('Bearer '));
+      expect(
+        challenge,
+        contains(
+          'resource_metadata="http://localhost:$port/.well-known/oauth-protected-resource/mcp"',
+        ),
+      );
+      expect(challenge, contains('scope="tools:read"'));
+
+      final allowed = await postInitializeWithHeaders(
+        headers: {
+          HttpHeaders.authorizationHeader: 'Bearer secret',
+        },
+      );
+      expect(allowed.statusCode, HttpStatus.ok);
+    });
+
+    test('OAuth challenge can use configured public metadata URL', () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) => McpServer(
+          const Implementation(name: 'PublicOAuthServer', version: '1.0'),
+        ),
+        host: host,
+        port: port,
+        authenticator: (req) => false,
+        oauthProtectedResource: OAuthProtectedResourceOptions(
+          metadata: OAuthProtectedResourceMetadata(
+            resource: Uri.parse('https://mcp.example.com/mcp'),
+            authorizationServers: [Uri.parse('https://auth.example.com')],
+            scopesSupported: const ['tools:read'],
+          ),
+          metadataUri: Uri.parse(
+            'https://mcp.example.com/.well-known/oauth-protected-resource/mcp',
+          ),
+          scope: 'tools:read',
+        ),
+      );
+      await server.start();
+
+      final denied = await postInitialize();
+
+      expect(denied.statusCode, HttpStatus.unauthorized);
+      final challenge = denied.headers[HttpHeaders.wwwAuthenticateHeader];
+      expect(
+        challenge,
+        contains(
+          'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"',
+        ),
+      );
+      expect(
+        challenge,
+        isNot(contains('http://localhost:$port')),
+      );
     });
 
     test('dns rebinding protection blocks disallowed host header', () async {

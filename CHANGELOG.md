@@ -9,6 +9,8 @@
 - Added deployment-oriented security coverage for Streamable HTTP Host/Origin
   allowlists, auth gating, compatibility-toggle trade-offs, and OAuth PKCE S256
   example flow, including TypeScript SDK OAuth interop coverage.
+- Documented first-class OAuth protected-resource metadata and bearer challenge
+  support for `StreamableMcpServer`.
 
 ### Spec Alignment
 
@@ -16,6 +18,12 @@
   cancellation request IDs, and sampling tool-use capability gating so malformed
   wire values and unsupported `sampling.tools` requests fail before handler code
   runs.
+- Added optional `StreamableMcpServer` OAuth protected-resource support that
+  serves OAuth Protected Resource Metadata and returns spec-shaped
+  `WWW-Authenticate: Bearer ... resource_metadata=...` challenges for failed
+  authentication, including an explicit public metadata URL for reverse-proxy
+  deployments, while preserving legacy generic-auth `403` behavior when the
+  option is not configured.
 - Enforced MCP task related-metadata and progress rules by overwriting
   reserved related-task metadata from the SDK's source task id, preserving
   unrelated handler metadata, and rejecting repeated/decreasing progress values

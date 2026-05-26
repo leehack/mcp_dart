@@ -287,6 +287,48 @@ bearer-token layer. The examples in `example/authentication/` show the MCP OAuth
 flow and PKCE shape; production clients should use PKCE S256 with cryptographic
 randomness and keep redirect URIs/origins explicit.
 
+`StreamableMcpServer` can advertise OAuth Protected Resource Metadata and return
+the MCP-required bearer challenge when authentication fails:
+
+```dart
+final server = StreamableMcpServer(
+  serverFactory: (sessionId) => McpServer(
+    const Implementation(name: 'protected-server', version: '1.0.0'),
+  ),
+  host: '0.0.0.0',
+  port: 3000,
+  path: '/mcp',
+  enableDnsRebindingProtection: true,
+  allowedHosts: {'mcp.example.com'},
+  allowedOrigins: {'https://app.example.com'},
+  authenticator: (request) {
+    final authorization = request.headers.value('Authorization');
+    return authorization == 'Bearer expected-token';
+  },
+  oauthProtectedResource: OAuthProtectedResourceOptions(
+    metadata: OAuthProtectedResourceMetadata(
+      resource: Uri.parse('https://mcp.example.com/mcp'),
+      authorizationServers: [Uri.parse('https://auth.example.com')],
+      scopesSupported: const ['tools:read'],
+    ),
+    metadataUri: Uri.parse(
+      'https://mcp.example.com/.well-known/oauth-protected-resource/mcp',
+    ),
+    scope: 'tools:read',
+  ),
+);
+```
+
+With this option enabled, failed authentication returns `401 Unauthorized` with
+`WWW-Authenticate: Bearer resource_metadata="..."`. Metadata is served at the
+endpoint-specific well-known path, such as
+`/.well-known/oauth-protected-resource/mcp`, and also at the root
+`/.well-known/oauth-protected-resource` by default. Without
+`oauthProtectedResource`, the generic `authenticator` hook keeps its historical
+`403 Forbidden` response. Set `metadataUri` to the public metadata URL when a
+reverse proxy or TLS terminator rewrites the scheme, host, or port observed by
+the Dart server.
+
 Executable coverage for these recipes lives in
 [`test/server/streamable_security_harness_test.dart`](../test/server/streamable_security_harness_test.dart).
 It verifies that local-development and production allowlists reject untrusted
@@ -294,7 +336,11 @@ Host/Origin headers before authentication runs, and that authentication still
 gates requests after transport-level checks pass. The OAuth client PKCE flow is
 covered by
 [`test/example/oauth_client_example_test.dart`](../test/example/oauth_client_example_test.dart)
-with a local token endpoint.
+with a local token endpoint. The first-class OAuth protected-resource helper is
+covered by
+[`test/server/streamable_mcp_server_test.dart`](../test/server/streamable_mcp_server_test.dart)
+and the official TypeScript SDK OAuth interop path in
+[`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart).
 
 ### Streamable HTTP Strict Defaults
 
