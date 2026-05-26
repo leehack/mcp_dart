@@ -1,6 +1,6 @@
 /// Example demonstrating OAuth 2.0 authentication with MCP Dart SDK
 ///
-/// **COMPLIES WITH MCP OAUTH SPECIFICATION (2025-06-18)**
+/// **COMPLIES WITH MCP OAUTH SPECIFICATION (2025-11-25)**
 ///
 /// This example shows how to implement a complete OAuth flow for authenticating
 /// with an MCP server that requires OAuth 2.0 authorization.
@@ -8,7 +8,7 @@
 /// ## MCP Specification Compliance
 ///
 /// ✅ **PKCE Support** - Generates code_verifier and code_challenge
-/// ✅ **Resource Parameter** - Includes resource parameter in token requests
+/// ✅ **Resource Parameter** - Includes resource parameter in authorization and token requests
 /// ✅ **Proper Authorization** - Uses body parameters (not Basic Auth header)
 ///
 /// Compatible with [oauth_server_example.dart](oauth_server_example.dart)
@@ -17,6 +17,9 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 import 'package:mcp_dart/mcp_dart.dart';
 
@@ -43,16 +46,33 @@ class OAuthConfig {
   });
 }
 
+/// Prepared OAuth authorization request with PKCE state.
+class OAuthAuthorizationRequest {
+  final Uri authorizationUri;
+  final String codeVerifier;
+  final String codeChallenge;
+  final String state;
+
+  const OAuthAuthorizationRequest({
+    required this.authorizationUri,
+    required this.codeVerifier,
+    required this.codeChallenge,
+    required this.state,
+  });
+}
+
 /// Implementation of OAuthClientProvider for OAuth 2.0 flow
 /// Complies with MCP OAuth specification
 class OAuth2Provider implements OAuthClientProvider {
   final OAuthConfig config;
   final TokenStorage storage;
+  final Random _random;
 
   OAuth2Provider({
     required this.config,
     required this.storage,
-  });
+    Random? random,
+  }) : _random = random ?? Random.secure();
 
   @override
   Future<OAuthTokens?> tokens() async {
@@ -78,31 +98,19 @@ class OAuth2Provider implements OAuthClientProvider {
   /// Generate PKCE code verifier (RFC 7636)
   /// Uses a cryptographically secure random string
   String _generateCodeVerifier() {
-    // Generate 32 random bytes (256 bits)
-    final bytes = List<int>.generate(
-      32,
-      (_) => DateTime.now().microsecondsSinceEpoch % 256,
+    return _base64UrlNoPadding(
+      List<int>.generate(32, (_) => _random.nextInt(256)),
     );
-    // Base64url encode without padding
-    return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
   /// Generate PKCE code challenge from verifier (S256 method)
-  /// Note: This is a simplified implementation for demonstration
-  /// In production, use a proper SHA256 implementation or add crypto package
   String _generateCodeChallenge(String verifier) {
-    // For MCP compliance demonstration, we use plain method
-    // In production with crypto package, use S256:
-    // final bytes = utf8.encode(verifier);
-    // final digest = sha256.convert(bytes);
-    // return base64UrlEncode(digest.bytes).replaceAll('=', '');
-
-    // Using plain method (less secure, but doesn't require crypto package)
-    return verifier;
+    final digest = crypto.sha256.convert(utf8.encode(verifier));
+    return _base64UrlNoPadding(digest.bytes);
   }
 
-  @override
-  Future<void> redirectToAuthorization() async {
+  /// Builds and stores a PKCE S256 authorization request.
+  Future<OAuthAuthorizationRequest> createAuthorizationRequest() async {
     // Generate PKCE parameters (MCP spec requirement)
     final codeVerifier = _generateCodeVerifier();
     final codeChallenge = _generateCodeChallenge(codeVerifier);
@@ -114,34 +122,43 @@ class OAuth2Provider implements OAuthClientProvider {
     final state = _generateRandomState();
     await storage.saveState(state);
 
-    final authUrl = Uri(
-      scheme: config.authorizationEndpoint.scheme,
-      host: config.authorizationEndpoint.host,
-      port: config.authorizationEndpoint.port,
-      path: config.authorizationEndpoint.path,
+    final authUrl = config.authorizationEndpoint.replace(
       queryParameters: {
+        ...config.authorizationEndpoint.queryParameters,
         'client_id': config.clientId,
         'response_type': 'code',
         'redirect_uri': config.redirectUri.toString(),
         'scope': config.scopes.join(' '),
         'state': state,
         'code_challenge': codeChallenge, // PKCE parameter
-        'code_challenge_method':
-            'plain', // Using plain for demo (use S256 in production)
+        'code_challenge_method': 'S256',
+        'resource': config.serverUri, // MCP spec requirement
       },
     );
+
+    return OAuthAuthorizationRequest(
+      authorizationUri: authUrl,
+      codeVerifier: codeVerifier,
+      codeChallenge: codeChallenge,
+      state: state,
+    );
+  }
+
+  @override
+  Future<void> redirectToAuthorization() async {
+    final authRequest = await createAuthorizationRequest();
 
     print('\n${'=' * 60}');
     print('AUTHORIZATION REQUIRED (MCP OAuth Spec Compliant)');
     print('=' * 60);
-    print('\nPKCE Code Verifier: $codeVerifier');
-    print('PKCE Code Challenge: $codeChallenge\n');
+    print('\nPKCE Code Verifier: ${authRequest.codeVerifier}');
+    print('PKCE Code Challenge: ${authRequest.codeChallenge}\n');
     print('Please open the following URL in your browser:\n');
-    print(authUrl.toString());
+    print(authRequest.authorizationUri.toString());
     print('\nAfter authorization, you will be redirected to:');
-    print('${config.redirectUri}?code=AUTHORIZATION_CODE&state=$state\n');
-    print('⚠️  Note: Using PKCE plain method (for demo). In production, add');
-    print('    crypto package and use S256 method for better security.\n');
+    print(
+      '${config.redirectUri}?code=AUTHORIZATION_CODE&state=${authRequest.state}\n',
+    );
     print('=' * 60 + '\n');
 
     // In a real application, you would:
@@ -249,8 +266,13 @@ class OAuth2Provider implements OAuthClientProvider {
   }
 
   String _generateRandomState() {
-    final random = DateTime.now().millisecondsSinceEpoch.toString();
-    return base64UrlEncode(utf8.encode(random));
+    return _base64UrlNoPadding(
+      List<int>.generate(16, (_) => _random.nextInt(256)),
+    );
+  }
+
+  String _base64UrlNoPadding(List<int> bytes) {
+    return base64UrlEncode(bytes).replaceAll('=', '');
   }
 }
 

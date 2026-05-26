@@ -6,6 +6,9 @@
 - Added an MCP 2025-11-25 spec coverage matrix that maps high-risk
   requirements to unit tests, TypeScript interop tests, CLI conformance cases,
   and known follow-up gaps.
+- Added deployment-oriented security coverage for Streamable HTTP Host/Origin
+  allowlists, auth gating, compatibility-toggle trade-offs, and OAuth PKCE S256
+  example flow, including TypeScript SDK OAuth interop coverage.
 
 ### Spec Alignment
 
