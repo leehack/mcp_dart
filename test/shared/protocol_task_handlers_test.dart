@@ -577,6 +577,55 @@ void main() {
       );
     });
 
+    test('related task request response preserves result metadata', () async {
+      final protocol = TaskTestProtocol();
+      final transport = TaskTestMockTransport();
+      await protocol.connect(transport);
+
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/related-response',
+        (request, extra) async => const EmptyResult(
+          meta: {
+            'source': 'handler',
+            relatedTaskMetadataKey: {'taskId': 'stale-task'},
+            legacyRelatedTaskMetadataKey: {'taskId': 'stale-task'},
+          },
+        ),
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/related-response',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      transport.receiveMessage(
+        const JsonRpcRequest(
+          id: 20,
+          method: 'test/related-response',
+          meta: {
+            relatedTaskMetadataKey: {'taskId': 'task-1'},
+          },
+        ),
+      );
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.meta?['source'], equals('handler'));
+      expect(
+        response.meta?[relatedTaskMetadataKey]?['taskId'],
+        equals('task-1'),
+      );
+      expect(
+        response.meta?[legacyRelatedTaskMetadataKey]?['taskId'],
+        equals('task-1'),
+      );
+
+      await protocol.close();
+      await transport.close();
+    });
+
     test('request with relatedTask queues message with dual metadata keys',
         () async {
       await protocol.connect(transport);

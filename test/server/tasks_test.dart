@@ -4,6 +4,7 @@ import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/tasks/handler.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -434,6 +435,51 @@ void main() {
           .firstWhere((r) => r.id == 2);
       expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
       expect(errorResponse.error.message, contains('mismatched taskId'));
+    });
+
+    test(
+        'tasks/result preserves result metadata and adds related task metadata',
+        () async {
+      mcpServer.experimental.onTaskResult(
+        (taskId, extra) async => const CallToolResult(
+          content: [TextContent(text: 'Done')],
+          meta: {
+            'source': 'handler',
+            relatedTaskMetadataKey: {'taskId': 'stale-task'},
+            legacyRelatedTaskMetadataKey: {'taskId': 'stale-task'},
+          },
+        ),
+      );
+
+      await mcpServer.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      transport.receiveMessage(
+        JsonRpcTaskResultRequest(
+          id: 2,
+          resultParams: const TaskResultRequestParams(taskId: 'task123'),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages
+          .whereType<JsonRpcResponse>()
+          .firstWhere((r) => r.id == 2);
+      final meta = response.result['_meta'] as Map<String, dynamic>;
+      expect(meta['source'], 'handler');
+      expect(meta[relatedTaskMetadataKey]?['taskId'], 'task123');
+      expect(meta[legacyRelatedTaskMetadataKey]?['taskId'], 'task123');
     });
 
     test('CancelTaskResultHandler legacy method delegates to result method',

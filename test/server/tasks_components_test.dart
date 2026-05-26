@@ -204,6 +204,43 @@ void main() {
       expect((result.content.first as TextContent).text, 'Done');
     });
 
+    test('handle preserves result metadata and adds related task metadata',
+        () async {
+      final task = await store.createTask(
+        const TaskCreationParams(),
+        123,
+        {'name': 'test_tool'},
+        'session1',
+      );
+
+      final future = handler.handle(task.taskId);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      await store.storeTaskResult(
+        task.taskId,
+        TaskStatus.completed,
+        const CallToolResult(
+          content: [TextContent(text: 'Done')],
+          meta: {
+            'source': 'handler',
+            relatedTaskMetadataKey: {'taskId': 'stale-task'},
+            legacyRelatedTaskMetadataKey: {'taskId': 'stale-task'},
+          },
+        ),
+      );
+
+      final result = await future;
+      expect(result.meta?['source'], 'handler');
+      expect(
+        result.meta?[relatedTaskMetadataKey]?['taskId'],
+        task.taskId,
+      );
+      expect(
+        result.meta?[legacyRelatedTaskMetadataKey]?['taskId'],
+        task.taskId,
+      );
+    });
+
     test('handle processes queued requests (elicit)', () async {
       final task = await store.createTask(
         const TaskCreationParams(),

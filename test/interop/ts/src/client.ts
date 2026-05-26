@@ -18,6 +18,13 @@ type TaskWireShape = {
   lastUpdatedAt?: unknown;
 };
 
+type RelatedTaskMetaShape = {
+  _meta?: {
+    'io.modelcontextprotocol/related-task'?: { taskId?: unknown };
+    relatedTask?: { taskId?: unknown };
+  };
+};
+
 function assertTaskWireShape(task: unknown, label: string): void {
   if (typeof task !== 'object' || task === null) {
     throw new Error(`${label} was not an object: ${JSON.stringify(task)}`);
@@ -54,6 +61,31 @@ function assertTaskWireShape(task: unknown, label: string): void {
   if (typeof taskShape.lastUpdatedAt !== 'string') {
     throw new Error(
       `${label} missing string lastUpdatedAt: ${JSON.stringify(task)}`
+    );
+  }
+}
+
+function assertRelatedTaskMeta(
+  result: unknown,
+  expectedTaskId: string,
+  label: string
+): void {
+  if (typeof result !== 'object' || result === null) {
+    throw new Error(`${label} was not an object: ${JSON.stringify(result)}`);
+  }
+
+  const meta = (result as RelatedTaskMetaShape)._meta;
+  const relatedTask = meta?.['io.modelcontextprotocol/related-task'];
+  const legacyRelatedTask = meta?.relatedTask;
+
+  if (relatedTask?.taskId !== expectedTaskId) {
+    throw new Error(
+      `${label} missing related-task metadata for ${expectedTaskId}: ${JSON.stringify(result)}`
+    );
+  }
+  if (legacyRelatedTask?.taskId !== expectedTaskId) {
+    throw new Error(
+      `${label} missing legacy relatedTask metadata for ${expectedTaskId}: ${JSON.stringify(result)}`
     );
   }
 }
@@ -289,10 +321,12 @@ async function main() {
     );
 
     let taskRawResult;
+    let createdTaskId: string | undefined;
     for await (const message of stream) {
       switch (message.type) {
         case 'taskCreated':
           assertTaskWireShape(message.task, 'taskCreated message task');
+          createdTaskId = message.task.taskId;
           console.log(`Task created: ${message.task.taskId}`);
           break;
         case 'taskStatus':
@@ -312,6 +346,10 @@ async function main() {
     if (!taskRawResult) {
       throw new Error('Did not receive a result from callToolStream');
     }
+    if (!createdTaskId) {
+      throw new Error('Did not receive a taskCreated message');
+    }
+    assertRelatedTaskMeta(taskRawResult, createdTaskId, 'tasks/result result');
 
     // @ts-expect-error - content is a union type, text property not guaranteed
     const resultText = taskRawResult.content?.[0]?.text;

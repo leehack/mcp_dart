@@ -264,6 +264,37 @@ void main() {
       expect(msg3, isA<JsonRpcResponse>());
     });
 
+    test('RequestHandlerExtra rejects non-increasing progress', () async {
+      final sentNotifications = <JsonRpcNotification>[];
+      final extra = RequestHandlerExtra(
+        signal: BasicAbortController().signal,
+        requestId: 101,
+        meta: const {'progressToken': 101},
+        sendNotification: (notification, {relatedTask}) async {
+          sentNotifications.add(notification);
+        },
+        sendRequest: <T extends BaseResultData>(
+          JsonRpcRequest request,
+          T Function(Map<String, dynamic>) resultFactory,
+          RequestOptions options,
+        ) async {
+          return resultFactory({});
+        },
+      );
+
+      await extra.sendProgress(10);
+
+      await expectLater(
+        extra.sendProgress(10),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        extra.sendProgress(5),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(sentNotifications, hasLength(1));
+    });
+
     test('Server ignores sendProgress if no token provided', () async {
       // 1. Setup server handler
       protocol.setRequestHandler<JsonRpcRequest>(
