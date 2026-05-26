@@ -843,6 +843,10 @@ void main() {
         () => ElicitResult.fromJson(const {'action': 'later'}),
         throwsA(isA<FormatException>()),
       );
+      expect(
+        () => const ElicitResult(action: 'later').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('ElicitResult parses legacy URL fields but does not emit them', () {

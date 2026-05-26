@@ -1509,6 +1509,16 @@ void main() {
         expect(challenge?.error, 'insufficient_scope');
       });
 
+      test('ignores invalid bearer challenge resource metadata', () {
+        final challenge = OAuthBearerChallengeParameters.fromHeader(
+          r'Bearer resource_metadata="http://[", scope="tools:read"',
+        );
+
+        expect(challenge, isNotNull);
+        expect(challenge?.resourceMetadata, isNull);
+        expect(challenge?.scope, 'tools:read');
+      });
+
       test('discovers metadata, redirects with PKCE, and exchanges tokens',
           () async {
         final oauthServer = await HttpServer.bind(
@@ -1595,7 +1605,7 @@ void main() {
                     'access_token': 'exchanged-token',
                     'refresh_token': 'refresh-token',
                     'token_type': 'Bearer',
-                    'expires_in': 3600,
+                    'expires_in': 3600.0,
                     'scope': 'tools:read',
                   }),
                 );

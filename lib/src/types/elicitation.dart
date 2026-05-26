@@ -221,7 +221,13 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
 /// Result data for a successful `elicitation/create` response
 class ElicitResult implements BaseResultData {
   /// The action taken by the user: 'accept', 'decline', or 'cancel'
-  final String action;
+  final String _action;
+
+  /// The action taken by the user: 'accept', 'decline', or 'cancel'
+  String get action {
+    _validateElicitAction(_action);
+    return _action;
+  }
 
   /// The submitted form data (only present when action is 'accept')
   final Map<String, dynamic>? content;
@@ -246,15 +252,12 @@ class ElicitResult implements BaseResultData {
   final Map<String, dynamic>? meta;
 
   const ElicitResult({
-    required this.action,
+    required String action,
     this.content,
     this.url,
     this.elicitationId,
     this.meta,
-  }) : assert(
-          action == 'accept' || action == 'decline' || action == 'cancel',
-          'ElicitResult.action must be accept, decline, or cancel.',
-        );
+  }) : _action = action;
 
   factory ElicitResult.fromJson(Map<String, dynamic> json) {
     final action = json['action'];
@@ -295,6 +298,16 @@ class ElicitResult implements BaseResultData {
 
 bool _isValidElicitAction(String action) =>
     action == 'accept' || action == 'decline' || action == 'cancel';
+
+void _validateElicitAction(String action) {
+  if (!_isValidElicitAction(action)) {
+    throw ArgumentError.value(
+      action,
+      'action',
+      'ElicitResult.action must be accept, decline, or cancel.',
+    );
+  }
+}
 
 /// Parameters for the `notifications/elicitation/complete` notification.
 ///

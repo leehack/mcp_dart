@@ -463,11 +463,21 @@ class StreamableHttpClientTransport
       accessToken: accessToken,
       refreshToken: json['refresh_token'] as String?,
       tokenType: json['token_type'] as String? ?? 'Bearer',
-      expiresIn: json['expires_in'] as int?,
+      expiresIn: _parseExpiresIn(json['expires_in']),
       scope: json['scope'] as String?,
     );
     await provider.saveTokens(tokens);
     return tokens;
+  }
+
+  int? _parseExpiresIn(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is num && value.isFinite) {
+      return value.toInt();
+    }
+    throw UnauthorizedError('Token response expires_in must be a number');
   }
 
   String _generatePkceCodeVerifier() =>
@@ -1240,9 +1250,15 @@ class OAuthBearerChallengeParameters {
       'error_description',
     };
     final resourceMetadata = parameters['resource_metadata'];
+    Uri? parsedResourceMetadata;
+    if (resourceMetadata != null) {
+      final uri = Uri.tryParse(resourceMetadata);
+      if (uri != null && uri.hasScheme) {
+        parsedResourceMetadata = uri;
+      }
+    }
     return OAuthBearerChallengeParameters(
-      resourceMetadata:
-          resourceMetadata == null ? null : Uri.parse(resourceMetadata),
+      resourceMetadata: parsedResourceMetadata,
       scope: parameters['scope'],
       error: parameters['error'],
       errorDescription: parameters['error_description'],
