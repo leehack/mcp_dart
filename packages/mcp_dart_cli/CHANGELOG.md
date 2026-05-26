@@ -1,6 +1,8 @@
 ## Unreleased
 
 - Add `mcp_dart conformance` with built-in JSON-RPC and protocol-version fixture checks, deterministic JSON-RPC fuzz cases, exact-case filtering, and JSON output for CI/scripts.
+- Add `mcp_dart conformance --suite spec` for MCP 2025-11-25 lifecycle,
+  capability, elicitation, task-metadata, and progress-token raw-wire checks.
 
 ## 0.1.7
 

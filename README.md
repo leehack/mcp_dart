@@ -106,6 +106,7 @@ It's also backward compatible with previous versions including `2025-06-18`, `20
 ### Recipes and Compatibility
 
 - 🧪 **[SDK Interoperability Matrix](https://github.com/leehack/mcp_dart/blob/main/doc/interoperability.md)** - Verified Dart/TypeScript and documented cross-SDK scenarios
+- ✅ **[MCP 2025-11-25 Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/main/doc/spec-coverage-2025-11-25.md)** - Auditable coverage map with CLI conformance cases and known gaps
 - 📱 **[Flutter Recipes](https://github.com/leehack/mcp_dart/blob/main/doc/flutter-recipes.md)** - Flutter Web, mobile, and desktop host/client guidance
 - 🔁 **[Migration Cookbooks](https://github.com/leehack/mcp_dart/blob/main/doc/migration-cookbooks.md)** - TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migration paths
 

@@ -1,15 +1,28 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+const String _fixtureSuite = 'fixture';
+const String _specSuite = 'spec';
+const String _allSuites = 'all';
+
+const List<String> conformanceSuiteNames = <String>[
+  _fixtureSuite,
+  _specSuite,
+  _allSuites,
+];
+
 /// Result of running one conformance case.
 class ConformanceCaseResult {
+  final String suite;
   final String name;
   final String description;
   final bool passed;
   final String? diagnostic;
 
   const ConformanceCaseResult({
+    required this.suite,
     required this.name,
     required this.description,
     required this.passed,
@@ -17,6 +30,7 @@ class ConformanceCaseResult {
   });
 
   Map<String, dynamic> toJson() => {
+        'suite': suite,
         'name': name,
         'description': description,
         'passed': passed,
@@ -48,11 +62,13 @@ class ConformanceSuiteResult {
 typedef _ConformanceCheck = Future<void> Function();
 
 class _ConformanceCase {
+  final String suite;
   final String name;
   final String description;
   final _ConformanceCheck check;
 
   const _ConformanceCase({
+    required this.suite,
     required this.name,
     required this.description,
     required this.check,
@@ -62,49 +78,126 @@ class _ConformanceCase {
 /// Runs the built-in MCP conformance fixture checks.
 class ConformanceRunner {
   final List<_ConformanceCase> _fixtureCases;
+  final List<_ConformanceCase> _specCases;
 
   ConformanceRunner()
       : _fixtureCases = <_ConformanceCase>[
           _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.rejects-invalid-version',
             description:
                 'Rejects JSON-RPC messages whose jsonrpc version is not 2.0.',
             check: _rejectsInvalidJsonRpcVersion,
           ),
           _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.rejects-malformed-message',
             description:
                 'Rejects JSON-RPC envelopes without a method, result, or error member.',
             check: _rejectsMalformedJsonRpcMessage,
           ),
           _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.preserves-string-response-id',
             description:
                 'Parses and serializes successful responses with string JSON-RPC IDs.',
             check: _preservesStringResponseId,
           ),
           _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.preserves-string-progress-token',
             description:
                 'Parses and serializes progress notifications with string progress tokens.',
             check: _preservesStringProgressToken,
           ),
           _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'protocol-version.advertises-latest-2025-11-25',
             description:
                 'Advertises MCP 2025-11-25 as the latest supported protocol version.',
             check: _advertisesLatestProtocolVersion,
           ),
+        ],
+        _specCases = <_ConformanceCase>[
+          _ConformanceCase(
+            suite: _specSuite,
+            name: 'lifecycle.rejects-pre-initialize-request',
+            description:
+                'Rejects operation requests before the initialize handshake.',
+            check: _rejectsPreInitializeRequest,
+          ),
+          _ConformanceCase(
+            suite: _specSuite,
+            name: 'capabilities.rejects-unnegotiated-sampling-tools',
+            description:
+                'Rejects sampling/createMessage tool-use when sampling.tools was not negotiated.',
+            check: _rejectsUnnegotiatedSamplingTools,
+          ),
+          _ConformanceCase(
+            suite: _specSuite,
+            name: 'elicitation.rejects-invalid-form-url-union',
+            description:
+                'Rejects elicitation/create payloads that mix form and URL variants.',
+            check: _rejectsInvalidElicitationVariantPayload,
+          ),
+          _ConformanceCase(
+            suite: _specSuite,
+            name: 'tasks.strips-unnegotiated-related-task-metadata',
+            description:
+                'Strips related-task metadata from non-task tool calls when task augmentation was not negotiated.',
+            check: _stripsUnnegotiatedRelatedTaskMetadata,
+          ),
+          _ConformanceCase(
+            suite: _specSuite,
+            name: 'progress.rejects-malformed-progress-token',
+            description:
+                'Rejects progress notifications whose progressToken is not a string or integer.',
+            check: _rejectsMalformedProgressToken,
+          ),
         ];
+
+  /// Runs one named conformance suite.
+  Future<ConformanceSuiteResult> runSuite({
+    required String suite,
+    String? filter,
+  }) {
+    return switch (suite) {
+      _fixtureSuite => runFixtureSuite(filter: filter),
+      _specSuite => runSpecSuite(filter: filter),
+      _allSuites => runAllSuites(filter: filter),
+      _ => throw ArgumentError.value(
+          suite,
+          'suite',
+          'Expected one of: ${conformanceSuiteNames.join(', ')}',
+        ),
+    };
+  }
 
   /// Runs the built-in fixture suite.
   ///
   /// When [filter] is provided, only exact case-name matches run. Exact matching
   /// keeps CI diagnostics deterministic and prevents accidental broad filters.
   Future<ConformanceSuiteResult> runFixtureSuite({String? filter}) async {
+    return _runCases(_fixtureCases, filter: filter);
+  }
+
+  /// Runs MCP 2025-11-25 spec-critical raw-wire behavior checks.
+  Future<ConformanceSuiteResult> runSpecSuite({String? filter}) {
+    return _runCases(_specCases, filter: filter);
+  }
+
+  /// Runs all non-fuzz conformance cases.
+  Future<ConformanceSuiteResult> runAllSuites({String? filter}) {
+    return _runCases([..._fixtureCases, ..._specCases], filter: filter);
+  }
+
+  Future<ConformanceSuiteResult> _runCases(
+    List<_ConformanceCase> cases, {
+    String? filter,
+  }) async {
     final selectedCases = filter == null
-        ? _fixtureCases
-        : _fixtureCases.where((testCase) => testCase.name == filter).toList();
+        ? cases
+        : cases.where((testCase) => testCase.name == filter).toList();
 
     final results = <ConformanceCaseResult>[];
     for (final testCase in selectedCases) {
@@ -112,6 +205,7 @@ class ConformanceRunner {
         await testCase.check();
         results.add(
           ConformanceCaseResult(
+            suite: testCase.suite,
             name: testCase.name,
             description: testCase.description,
             passed: true,
@@ -120,6 +214,7 @@ class ConformanceRunner {
       } catch (error) {
         results.add(
           ConformanceCaseResult(
+            suite: testCase.suite,
             name: testCase.name,
             description: testCase.description,
             passed: false,
@@ -149,6 +244,7 @@ class ConformanceRunner {
         fixture.expectation(fixture.message);
         results.add(
           ConformanceCaseResult(
+            suite: 'fuzz',
             name: fixture.name,
             description: fixture.description,
             passed: true,
@@ -157,6 +253,7 @@ class ConformanceRunner {
       } catch (error) {
         results.add(
           ConformanceCaseResult(
+            suite: 'fuzz',
             name: fixture.name,
             description: fixture.description,
             passed: false,
@@ -264,6 +361,270 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
   };
 }
 
+class _ConformanceTransport extends Transport {
+  final List<JsonRpcMessage> sentMessages = <JsonRpcMessage>[];
+  bool closed = false;
+  bool started = false;
+
+  @override
+  String? get sessionId => null;
+
+  @override
+  Future<void> start() async {
+    started = true;
+  }
+
+  @override
+  Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
+    sentMessages.add(message);
+  }
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    onclose?.call();
+  }
+
+  void emit(JsonRpcMessage message) {
+    onmessage?.call(message);
+  }
+}
+
+Future<void> _settle() => Future<void>.delayed(Duration.zero);
+
+JsonRpcInitializeRequest _initializeRequest({
+  RequestId id = 1,
+  ClientCapabilities capabilities = const ClientCapabilities(),
+}) {
+  return JsonRpcInitializeRequest(
+    id: id,
+    initParams: InitializeRequest(
+      protocolVersion: latestProtocolVersion,
+      capabilities: capabilities,
+      clientInfo: const Implementation(
+        name: 'conformance-client',
+        version: '1.0.0',
+      ),
+    ),
+  );
+}
+
+JsonRpcResponse _initializeResponse({
+  required RequestId id,
+  ServerCapabilities capabilities = const ServerCapabilities(),
+}) {
+  return JsonRpcResponse(
+    id: id,
+    result: InitializeResult(
+      protocolVersion: latestProtocolVersion,
+      capabilities: capabilities,
+      serverInfo: const Implementation(
+        name: 'conformance-server',
+        version: '1.0.0',
+      ),
+    ).toJson(),
+  );
+}
+
+Future<void> _initializeMcpServer(
+  McpServer server,
+  _ConformanceTransport transport, {
+  ClientCapabilities clientCapabilities = const ClientCapabilities(),
+}) async {
+  await server.connect(transport);
+  transport.emit(_initializeRequest(capabilities: clientCapabilities));
+  await _settle();
+  _expectSingleErrorFreeResponse(transport.sentMessages, id: 1);
+  transport.sentMessages.clear();
+  transport.emit(const JsonRpcInitializedNotification());
+  await _settle();
+  transport.sentMessages.clear();
+}
+
+Future<void> _initializeClient(
+  McpClient client,
+  _ConformanceTransport transport,
+) async {
+  final connectFuture = client.connect(transport);
+  await _settle();
+
+  final initializeRequests = transport.sentMessages
+      .whereType<JsonRpcRequest>()
+      .where((request) => request.method == Method.initialize)
+      .toList();
+  if (initializeRequests.length != 1) {
+    throw StateError('Expected client to send exactly one initialize request.');
+  }
+  final initializeRequest = initializeRequests.single;
+
+  transport.emit(_initializeResponse(id: initializeRequest.id));
+  await connectFuture.timeout(const Duration(seconds: 1));
+  transport.sentMessages.clear();
+}
+
+Future<void> _rejectsPreInitializeRequest() async {
+  final transport = _ConformanceTransport();
+  final server = McpServer(
+    const Implementation(name: 'server', version: '1.0.0'),
+    options: const McpServerOptions(
+      capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
+    ),
+  );
+  server.registerTool(
+    'probe',
+    callback: (args, extra) async {
+      throw StateError('tools/list reached normal operation handlers.');
+    },
+  );
+
+  await server.connect(transport);
+  transport.emit(const JsonRpcListToolsRequest(id: 100));
+  await _settle();
+
+  _expectSingleError(
+    transport.sentMessages,
+    id: 100,
+    code: ErrorCode.invalidRequest.value,
+    messageContains: 'before initialize',
+  );
+  await server.close();
+}
+
+Future<void> _rejectsUnnegotiatedSamplingTools() async {
+  final transport = _ConformanceTransport();
+  final client = McpClient(
+    const Implementation(name: 'client', version: '1.0.0'),
+    options: const McpClientOptions(
+      capabilities: ClientCapabilities(
+        sampling: ClientCapabilitiesSampling(),
+      ),
+    ),
+  );
+  var handlerCalled = false;
+  client.onSamplingRequest = (params) async {
+    handlerCalled = true;
+    return const CreateMessageResult(
+      model: 'conformance-model',
+      role: SamplingMessageRole.assistant,
+      content: SamplingTextContent(text: 'unexpected'),
+    );
+  };
+
+  await _initializeClient(client, transport);
+  transport.emit(
+    JsonRpcCreateMessageRequest(
+      id: 101,
+      createParams: const CreateMessageRequest(
+        messages: <SamplingMessage>[
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Use a tool'),
+          ),
+        ],
+        maxTokens: 4,
+        tools: <Tool>[
+          Tool(name: 'search', inputSchema: JsonObject()),
+        ],
+      ),
+    ),
+  );
+  await _settle();
+
+  if (handlerCalled) {
+    throw StateError('sampling handler ran without sampling.tools capability.');
+  }
+  _expectSingleError(
+    transport.sentMessages,
+    id: 101,
+    code: ErrorCode.invalidRequest.value,
+    messageContains: 'sampling.tools',
+  );
+  await client.close();
+}
+
+Future<void> _rejectsInvalidElicitationVariantPayload() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(const <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 102,
+      'method': Method.elicitationCreate,
+      'params': <String, dynamic>{
+        'mode': 'form',
+        'message': 'Choose an account',
+        'requestedSchema': <String, dynamic>{'type': 'object'},
+        'url': 'https://example.com/collect',
+      },
+    }),
+  );
+}
+
+Future<void> _stripsUnnegotiatedRelatedTaskMetadata() async {
+  final transport = _ConformanceTransport();
+  final server = McpServer(
+    const Implementation(name: 'server', version: '1.0.0'),
+    options: const McpServerOptions(
+      capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
+    ),
+  );
+  RequestHandlerExtra? receivedExtra;
+  server.registerTool(
+    'metadata_probe',
+    callback: (args, extra) async {
+      receivedExtra = extra;
+      return const CallToolResult(
+        content: <Content>[TextContent(text: 'ok')],
+      );
+    },
+  );
+
+  await _initializeMcpServer(server, transport);
+  transport.emit(
+    const JsonRpcCallToolRequest(
+      id: 103,
+      params: <String, dynamic>{
+        'name': 'metadata_probe',
+        'arguments': <String, dynamic>{},
+        '_meta': <String, dynamic>{
+          relatedTaskMetadataKey: <String, dynamic>{'taskId': 'task-1'},
+          'progressToken': 'progress-1',
+        },
+      },
+    ),
+  );
+  await _settle();
+
+  if (receivedExtra == null) {
+    throw StateError('Expected metadata_probe handler to run.');
+  }
+  if (receivedExtra!.taskId != null ||
+      receivedExtra!.taskRequestedTtl != null) {
+    throw StateError('Unnegotiated task metadata affected handler task state.');
+  }
+  if (receivedExtra!.meta?[relatedTaskMetadataKey] != null ||
+      receivedExtra!.meta?.containsKey('relatedTask') == true) {
+    throw StateError(
+        'Unnegotiated related-task metadata reached handler meta.');
+  }
+  if (receivedExtra!.meta?['progressToken'] != 'progress-1') {
+    throw StateError('Non-task request metadata was not preserved.');
+  }
+  _expectSingleErrorFreeResponse(transport.sentMessages, id: 103);
+  await server.close();
+}
+
+Future<void> _rejectsMalformedProgressToken() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(const <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'method': Method.notificationsProgress,
+      'params': <String, dynamic>{
+        'progressToken': <String, dynamic>{'bad': true},
+        'progress': 1,
+      },
+    }),
+  );
+}
+
 Future<void> _rejectsInvalidJsonRpcVersion() async {
   _expectThrowsFormatException(
     () => JsonRpcMessage.fromJson(const <String, dynamic>{
@@ -299,6 +660,51 @@ Future<void> _preservesStringResponseId() async {
   if (message.toJson()['id'] != 'request-1') {
     throw StateError('Expected serialized response ID to stay a string.');
   }
+}
+
+JsonRpcResponse _expectSingleErrorFreeResponse(
+  List<JsonRpcMessage> messages, {
+  required RequestId id,
+}) {
+  if (messages.length != 1) {
+    throw StateError('Expected one response, got ${messages.length}.');
+  }
+  final message = messages.single;
+  if (message is! JsonRpcResponse) {
+    throw StateError('Expected JsonRpcResponse, got ${message.runtimeType}.');
+  }
+  if (message.id != id) {
+    throw StateError('Expected response ID $id, got ${message.id}.');
+  }
+  return message;
+}
+
+JsonRpcError _expectSingleError(
+  List<JsonRpcMessage> messages, {
+  required RequestId id,
+  required int code,
+  required String messageContains,
+}) {
+  if (messages.length != 1) {
+    throw StateError('Expected one error response, got ${messages.length}.');
+  }
+  final message = messages.single;
+  if (message is! JsonRpcError) {
+    throw StateError('Expected JsonRpcError, got ${message.runtimeType}.');
+  }
+  if (message.id != id) {
+    throw StateError('Expected error ID $id, got ${message.id}.');
+  }
+  if (message.error.code != code) {
+    throw StateError('Expected error code $code, got ${message.error.code}.');
+  }
+  if (!message.error.message.contains(messageContains)) {
+    throw StateError(
+      "Expected error message to contain '$messageContains', got "
+      "'${message.error.message}'.",
+    );
+  }
+  return message;
 }
 
 Future<void> _preservesStringProgressToken() async {

@@ -23,6 +23,17 @@ class ConformanceCommand extends Command<int> {
         _runner = runner ?? ConformanceRunner() {
     argParser
       ..addOption(
+        'suite',
+        help: 'Conformance suite to run.',
+        defaultsTo: 'fixture',
+        allowed: conformanceSuiteNames,
+        allowedHelp: const <String, String>{
+          'fixture': 'JSON-RPC and protocol-version fixture checks.',
+          'spec': 'MCP 2025-11-25 spec-critical raw-wire checks.',
+          'all': 'All non-fuzz conformance checks.',
+        },
+      )
+      ..addOption(
         'case',
         help: 'Run one built-in conformance case by exact name.',
       )
@@ -45,6 +56,7 @@ class ConformanceCommand extends Command<int> {
 
   @override
   Future<int> run() async {
+    final suite = argResults?['suite'] as String? ?? 'fixture';
     final filter = argResults?['case'] as String?;
     final fuzz = argResults?['fuzz'] as bool? ?? false;
     final iterations = int.tryParse(argResults?['iterations'] as String? ?? '');
@@ -58,18 +70,22 @@ class ConformanceCommand extends Command<int> {
       _logger.err('--case cannot be combined with --fuzz.');
       return ExitCode.usage.code;
     }
+    if (fuzz && (argResults?.wasParsed('suite') ?? false)) {
+      _logger.err('--suite cannot be combined with --fuzz.');
+      return ExitCode.usage.code;
+    }
 
     if (!json) {
       _logger.info(
         fuzz
             ? 'Running MCP conformance fuzz suite...'
-            : 'Running MCP conformance fixture suite...',
+            : 'Running MCP conformance $suite suite...',
       );
     }
 
     final result = fuzz
         ? await _runner.runFuzzSuite(iterations: iterations)
-        : await _runner.runFixtureSuite(filter: filter);
+        : await _runner.runSuite(suite: suite, filter: filter);
     if (result.total == 0) {
       _logger.err('No conformance cases matched: $filter');
       return ExitCode.usage.code;

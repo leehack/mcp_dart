@@ -27,6 +27,38 @@ void main() {
       );
     });
 
+    test('spec suite covers MCP 2025-11-25 high-risk wire cases', () async {
+      final result = await ConformanceRunner().runSpecSuite();
+
+      expect(result.passed, isTrue);
+      expect(result.total, greaterThanOrEqualTo(5));
+      expect(
+        result.caseNames,
+        containsAll(<String>[
+          'lifecycle.rejects-pre-initialize-request',
+          'capabilities.rejects-unnegotiated-sampling-tools',
+          'elicitation.rejects-invalid-form-url-union',
+          'tasks.strips-unnegotiated-related-task-metadata',
+          'progress.rejects-malformed-progress-token',
+        ]),
+      );
+      expect(
+        result.cases.map((testCase) => testCase.suite),
+        everyElement('spec'),
+      );
+    });
+
+    test('all suite combines fixture and spec cases', () async {
+      final result = await ConformanceRunner().runAllSuites();
+
+      expect(result.passed, isTrue);
+      expect(result.caseNames, contains('jsonrpc.rejects-invalid-version'));
+      expect(
+        result.caseNames,
+        contains('lifecycle.rejects-pre-initialize-request'),
+      );
+    });
+
     test('can filter fixture cases by exact name', () async {
       final result = await ConformanceRunner().runFixtureSuite(
         filter: 'jsonrpc.preserves-string-response-id',
@@ -61,6 +93,7 @@ void main() {
 
     test('has expected name and options', () {
       expect(command.name, 'conformance');
+      expect(command.argParser.options.containsKey('suite'), isTrue);
       expect(command.argParser.options.containsKey('case'), isTrue);
       expect(command.argParser.options.containsKey('fuzz'), isTrue);
       expect(command.argParser.options.containsKey('iterations'), isTrue);
@@ -75,6 +108,20 @@ void main() {
       expect(exitCode, ExitCode.success.code);
       verify(
         () => logger.info('Running MCP conformance fixture suite...'),
+      ).called(1);
+      verify(
+        () => logger.success(any(that: contains('Conformance passed:'))),
+      ).called(1);
+    });
+
+    test('runs spec suite and reports success summary', () async {
+      final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
+
+      final exitCode = await runner.run(['conformance', '--suite', 'spec']);
+
+      expect(exitCode, ExitCode.success.code);
+      verify(
+        () => logger.info('Running MCP conformance spec suite...'),
       ).called(1);
       verify(
         () => logger.success(any(that: contains('Conformance passed:'))),
@@ -122,6 +169,22 @@ void main() {
 
       expect(exitCode, ExitCode.usage.code);
       verify(() => logger.err('--case cannot be combined with --fuzz.'))
+          .called(1);
+    });
+
+    test('returns usage code when --suite is combined with fuzz mode',
+        () async {
+      final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
+
+      final exitCode = await runner.run([
+        'conformance',
+        '--fuzz',
+        '--suite',
+        'spec',
+      ]);
+
+      expect(exitCode, ExitCode.usage.code);
+      verify(() => logger.err('--suite cannot be combined with --fuzz.'))
           .called(1);
     });
 

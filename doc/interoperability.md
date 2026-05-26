@@ -2,6 +2,9 @@
 
 This page tracks the interoperability evidence that `mcp_dart` currently carries against other MCP SDKs and hosts. It is intentionally conservative: a row is marked as verified only when it links to a test, example, or reproducible command in this repository.
 
+For requirement-level MCP 2025-11-25 coverage, see the
+[`spec-coverage-2025-11-25.md`](spec-coverage-2025-11-25.md) matrix.
+
 ## How to read the matrix
 
 - **Verified** means the scenario is covered by an automated test or checked-in runnable example.
@@ -38,6 +41,15 @@ dart test --tags interop
 ```
 
 If the compiled fixtures are missing, local test runs skip the interop groups; CI should fail when required fixtures are unavailable.
+
+The CLI spec conformance gate covers raw-wire negative cases that do not need a
+cross-SDK fixture:
+
+```bash
+cd packages/mcp_dart_cli
+dart pub get
+dart run bin/mcp_dart.dart conformance --suite spec --json
+```
 
 ## Adding a new matrix row
 
