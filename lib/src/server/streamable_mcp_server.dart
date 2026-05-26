@@ -10,6 +10,136 @@ import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
 
+String _quoteHeaderValue(String value) {
+  return value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+}
+
+/// OAuth 2.0 Protected Resource Metadata advertised by a Streamable HTTP server.
+///
+/// This metadata follows the MCP authorization profile for HTTP transports and
+/// is served from the OAuth protected-resource well-known endpoint when
+/// [StreamableMcpServer.oauthProtectedResource] is configured.
+class OAuthProtectedResourceMetadata {
+  /// Canonical MCP resource URI that access tokens are issued for.
+  final Uri resource;
+
+  /// Authorization server issuer URLs that can issue tokens for [resource].
+  final List<Uri> authorizationServers;
+
+  /// Supported bearer token presentation methods.
+  final List<String> bearerMethodsSupported;
+
+  /// Scopes the resource server can advertise to clients.
+  final List<String>? scopesSupported;
+
+  /// Additional metadata fields to include in the protected-resource document.
+  final Map<String, Object?> additionalFields;
+
+  /// Creates OAuth protected-resource metadata.
+  const OAuthProtectedResourceMetadata({
+    required this.resource,
+    required this.authorizationServers,
+    this.bearerMethodsSupported = const ['header'],
+    this.scopesSupported,
+    this.additionalFields = const {},
+  });
+
+  /// Converts this metadata to its wire JSON shape.
+  Map<String, Object?> toJson() => {
+        ...additionalFields,
+        'resource': resource.toString(),
+        'authorization_servers':
+            authorizationServers.map((uri) => uri.toString()).toList(),
+        'bearer_methods_supported': bearerMethodsSupported,
+        if (scopesSupported != null) 'scopes_supported': scopesSupported,
+      };
+}
+
+/// Bearer `WWW-Authenticate` challenge parameters for OAuth resource servers.
+class OAuthBearerChallenge {
+  /// Protected-resource metadata URL advertised through `resource_metadata`.
+  final Uri? resourceMetadata;
+
+  /// Scope required for the failed request.
+  final String? scope;
+
+  /// OAuth bearer error code, such as `insufficient_scope`.
+  final String? error;
+
+  /// Optional human-readable bearer error description.
+  final String? errorDescription;
+
+  /// Additional bearer challenge parameters.
+  final Map<String, String> additionalParameters;
+
+  /// Creates a bearer challenge.
+  const OAuthBearerChallenge({
+    this.resourceMetadata,
+    this.scope,
+    this.error,
+    this.errorDescription,
+    this.additionalParameters = const {},
+  });
+
+  /// Creates the challenge recommended for insufficient-scope responses.
+  const OAuthBearerChallenge.insufficientScope({
+    required Uri resourceMetadata,
+    required String scope,
+    String? errorDescription,
+    Map<String, String> additionalParameters = const {},
+  }) : this(
+          resourceMetadata: resourceMetadata,
+          scope: scope,
+          error: 'insufficient_scope',
+          errorDescription: errorDescription,
+          additionalParameters: additionalParameters,
+        );
+
+  /// Converts this challenge to a `WWW-Authenticate` header value.
+  String toHeaderValue() {
+    final parameters = <String, String>{
+      ...additionalParameters,
+      if (resourceMetadata != null)
+        'resource_metadata': resourceMetadata.toString(),
+      if (scope != null) 'scope': scope!,
+      if (error != null) 'error': error!,
+      if (errorDescription != null) 'error_description': errorDescription!,
+    };
+    final serializedParameters = parameters.entries
+        .map((entry) => '${entry.key}="${_quoteHeaderValue(entry.value)}"')
+        .join(', ');
+    return serializedParameters.isEmpty
+        ? 'Bearer'
+        : 'Bearer $serializedParameters';
+  }
+}
+
+/// OAuth protected-resource behavior for [StreamableMcpServer].
+class OAuthProtectedResourceOptions {
+  /// Metadata returned from protected-resource well-known endpoints.
+  final OAuthProtectedResourceMetadata metadata;
+
+  /// Optional scope challenge returned on unauthorized requests.
+  final String? scope;
+
+  /// Optional endpoint-specific metadata path.
+  ///
+  /// Defaults to `/.well-known/oauth-protected-resource` plus the MCP endpoint
+  /// path, for example `/.well-known/oauth-protected-resource/mcp`.
+  final String? metadataPath;
+
+  /// Also serve metadata at the root protected-resource well-known endpoint.
+  final bool serveRootMetadata;
+
+  /// Creates OAuth protected-resource server options.
+  const OAuthProtectedResourceOptions({
+    required this.metadata,
+    this.scope,
+    this.metadataPath,
+    this.serveRootMetadata = true,
+  });
+}
+
 /// A high-level server implementation that manages multiple MCP sessions over Streamable HTTP.
 ///
 /// This server handles:
@@ -55,6 +185,14 @@ class StreamableMcpServer {
   /// Returns true if the request is allowed, false otherwise.
   final FutureOr<bool> Function(HttpRequest request)? authenticator;
 
+  /// Optional OAuth protected-resource metadata and challenge behavior.
+  ///
+  /// When configured, the server serves OAuth Protected Resource Metadata and
+  /// failed [authenticator] checks return a `401 Unauthorized` bearer challenge
+  /// with a `resource_metadata` URL. Without this option, failed authentication
+  /// preserves the historical generic `403 Forbidden` response.
+  final OAuthProtectedResourceOptions? oauthProtectedResource;
+
   /// Enables host/origin validation to mitigate DNS rebinding attacks.
   final bool enableDnsRebindingProtection;
 
@@ -84,6 +222,7 @@ class StreamableMcpServer {
     this.path = '/mcp',
     this.eventStore,
     this.authenticator,
+    this.oauthProtectedResource,
     this.enableDnsRebindingProtection = true,
     this.allowedHosts,
     this.allowedOrigins,
@@ -149,6 +288,11 @@ class StreamableMcpServer {
       return;
     }
 
+    if (_isProtectedResourceMetadataRequest(request)) {
+      await _handleProtectedResourceMetadataRequest(request);
+      return;
+    }
+
     if (request.uri.path != path) {
       request.response
         ..statusCode = HttpStatus.notFound
@@ -171,10 +315,7 @@ class StreamableMcpServer {
       }
 
       if (!allowed) {
-        request.response
-          ..statusCode = HttpStatus.forbidden
-          ..write('Forbidden')
-          ..close();
+        await _respondUnauthorized(request);
         return;
       }
     }
@@ -401,6 +542,106 @@ class StreamableMcpServer {
       }
     }
     return false;
+  }
+
+  bool _isProtectedResourceMetadataRequest(HttpRequest request) {
+    final options = oauthProtectedResource;
+    if (options == null) {
+      return false;
+    }
+
+    final metadataPath = _protectedResourceMetadataPath(options);
+    return request.uri.path == metadataPath ||
+        (options.serveRootMetadata &&
+            request.uri.path == '/.well-known/oauth-protected-resource');
+  }
+
+  Future<void> _handleProtectedResourceMetadataRequest(
+    HttpRequest request,
+  ) async {
+    if (request.method != 'GET') {
+      request.response
+        ..statusCode = HttpStatus.methodNotAllowed
+        ..headers.set(HttpHeaders.allowHeader, 'GET, OPTIONS')
+        ..write('Method Not Allowed');
+      await request.response.close();
+      return;
+    }
+
+    final options = oauthProtectedResource;
+    if (options == null) {
+      request.response
+        ..statusCode = HttpStatus.notFound
+        ..write('Not Found');
+      await request.response.close();
+      return;
+    }
+
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.json
+      ..write(jsonEncode(options.metadata.toJson()));
+    await request.response.close();
+  }
+
+  Future<void> _respondUnauthorized(HttpRequest request) async {
+    final options = oauthProtectedResource;
+    if (options == null) {
+      request.response
+        ..statusCode = HttpStatus.forbidden
+        ..write('Forbidden');
+      await request.response.close();
+      return;
+    }
+
+    request.response
+      ..statusCode = HttpStatus.unauthorized
+      ..headers.set(
+        HttpHeaders.wwwAuthenticateHeader,
+        _wwwAuthenticateHeaderValue(request, options),
+      )
+      ..write('Unauthorized');
+    await request.response.close();
+  }
+
+  String _wwwAuthenticateHeaderValue(
+    HttpRequest request,
+    OAuthProtectedResourceOptions options,
+  ) {
+    final metadataUri = _absoluteUriForRequest(
+      request,
+      _protectedResourceMetadataPath(options),
+    );
+    return OAuthBearerChallenge(
+      resourceMetadata: metadataUri,
+      scope: options.scope,
+    ).toHeaderValue();
+  }
+
+  String _protectedResourceMetadataPath(
+    OAuthProtectedResourceOptions options,
+  ) {
+    final configuredPath = options.metadataPath;
+    if (configuredPath != null) {
+      return configuredPath.startsWith('/')
+          ? configuredPath
+          : '/$configuredPath';
+    }
+
+    if (path == '/' || path.isEmpty) {
+      return '/.well-known/oauth-protected-resource';
+    }
+    return '/.well-known/oauth-protected-resource${path.startsWith('/') ? path : '/$path'}';
+  }
+
+  Uri _absoluteUriForRequest(HttpRequest request, String path) {
+    final requestedUri = request.requestedUri;
+    return Uri(
+      scheme: requestedUri.scheme,
+      host: requestedUri.host,
+      port: requestedUri.hasPort ? requestedUri.port : null,
+      path: path,
+    );
   }
 
   Future<Uint8List> _collectBytes(HttpRequest request) async {

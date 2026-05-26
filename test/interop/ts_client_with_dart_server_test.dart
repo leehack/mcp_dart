@@ -448,6 +448,106 @@ void main() {
     );
 
     test(
+      'official TS Streamable HTTP client completes OAuth with StreamableMcpServer helper',
+      () async {
+        final port = await _findAvailablePort();
+        final mcpUrl = 'http://127.0.0.1:$port/mcp';
+        final authorizationServer =
+            await _OAuthAuthorizationServer.start(expectedResource: mcpUrl);
+        var unauthenticatedRequests = 0;
+        var authenticatedRequests = 0;
+
+        final streamableServer = StreamableMcpServer(
+          serverFactory: (_) => createServer(),
+          host: '127.0.0.1',
+          port: port,
+          authenticator: (request) {
+            final authorized = request.headers.value(
+                  HttpHeaders.authorizationHeader,
+                ) ==
+                'Bearer ts-access-token';
+            if (authorized) {
+              authenticatedRequests += 1;
+            } else {
+              unauthenticatedRequests += 1;
+            }
+            return authorized;
+          },
+          oauthProtectedResource: OAuthProtectedResourceOptions(
+            metadata: OAuthProtectedResourceMetadata(
+              resource: Uri.parse(mcpUrl),
+              authorizationServers: [Uri.parse(authorizationServer.baseUrl)],
+              scopesSupported: const ['tools:read'],
+            ),
+            scope: 'tools:read',
+          ),
+        );
+
+        await streamableServer.start();
+        try {
+          final result = await Process.run(
+            'node',
+            [
+              tsOAuthClientPath,
+              '--url',
+              mcpUrl,
+            ],
+            runInShell: true,
+          );
+
+          if (result.exitCode != 0) {
+            print('TS OAuth helper stdout: ${result.stdout}');
+            print('TS OAuth helper stderr: ${result.stderr}');
+          }
+
+          expect(
+            result.exitCode,
+            equals(0),
+            reason: 'Official TS OAuth interop failed against helper',
+          );
+          expect(unauthenticatedRequests, greaterThanOrEqualTo(1));
+          expect(authenticatedRequests, greaterThanOrEqualTo(1));
+          expect(
+            authorizationServer.authorizationMetadataRequests,
+            greaterThanOrEqualTo(1),
+          );
+          expect(authorizationServer.lastTokenForm, isNotNull);
+          expect(
+            authorizationServer.lastTokenForm,
+            containsPair('grant_type', 'authorization_code'),
+          );
+          expect(
+            authorizationServer.lastTokenForm,
+            containsPair('code', 'valid-code'),
+          );
+          expect(
+            authorizationServer.lastTokenForm,
+            containsPair('client_id', 'ts-oauth-client'),
+          );
+          expect(
+            authorizationServer.lastTokenForm,
+            containsPair(
+              'redirect_uri',
+              'http://127.0.0.1:9876/oauth/callback',
+            ),
+          );
+          expect(
+            authorizationServer.lastTokenForm!['code_verifier'],
+            isNotEmpty,
+          );
+          expect(
+            authorizationServer.lastTokenForm,
+            containsPair('resource', mcpUrl),
+          );
+        } finally {
+          await streamableServer.stop();
+          await authorizationServer.stop();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test(
       'Dart Streamable HTTP server rejects operations before initialized',
       () async {
         final port = await _findAvailablePort();
@@ -875,5 +975,106 @@ class _ProtectedMcpServer {
       await transport.close();
       await mcpServer.close();
     }
+  }
+}
+
+class _OAuthAuthorizationServer {
+  final HttpServer _httpServer;
+  final String expectedResource;
+  Map<String, String>? lastTokenForm;
+  int authorizationMetadataRequests = 0;
+
+  _OAuthAuthorizationServer._(this._httpServer, this.expectedResource);
+
+  String get baseUrl => 'http://127.0.0.1:${_httpServer.port}';
+
+  static Future<_OAuthAuthorizationServer> start({
+    required String expectedResource,
+  }) async {
+    final httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final server = _OAuthAuthorizationServer._(httpServer, expectedResource);
+    httpServer.listen(server._handleRequest);
+    return server;
+  }
+
+  Future<void> stop() async {
+    await _httpServer.close(force: true);
+  }
+
+  Future<void> _handleRequest(HttpRequest request) async {
+    if (request.uri.path == '/.well-known/oauth-authorization-server') {
+      await _handleAuthorizationServerMetadata(request);
+      return;
+    }
+    if (request.uri.path == '/token') {
+      await _handleTokenRequest(request);
+      return;
+    }
+
+    request.response
+      ..statusCode = HttpStatus.notFound
+      ..write('Not Found');
+    await request.response.close();
+  }
+
+  Future<void> _handleAuthorizationServerMetadata(HttpRequest request) async {
+    authorizationMetadataRequests += 1;
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.json
+      ..write(
+        jsonEncode({
+          'issuer': baseUrl,
+          'authorization_endpoint': '$baseUrl/authorize',
+          'token_endpoint': '$baseUrl/token',
+          'response_types_supported': ['code'],
+          'grant_types_supported': ['authorization_code', 'refresh_token'],
+          'code_challenge_methods_supported': ['S256'],
+          'token_endpoint_auth_methods_supported': ['none'],
+          'scopes_supported': ['tools:read'],
+        }),
+      );
+    await request.response.close();
+  }
+
+  Future<void> _handleTokenRequest(HttpRequest request) async {
+    if (request.method != 'POST') {
+      request.response.statusCode = HttpStatus.methodNotAllowed;
+      await request.response.close();
+      return;
+    }
+
+    final body = await utf8.decodeStream(request);
+    lastTokenForm = Uri.splitQueryString(body);
+    if (lastTokenForm!['code'] != 'valid-code' ||
+        lastTokenForm!['resource'] != expectedResource ||
+        lastTokenForm!['code_verifier'] == null ||
+        lastTokenForm!['code_verifier']!.isEmpty) {
+      request.response
+        ..statusCode = HttpStatus.badRequest
+        ..headers.contentType = ContentType.json
+        ..write(
+          jsonEncode({
+            'error': 'invalid_request',
+            'error_description': 'Invalid OAuth token request',
+          }),
+        );
+      await request.response.close();
+      return;
+    }
+
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.json
+      ..write(
+        jsonEncode({
+          'access_token': 'ts-access-token',
+          'refresh_token': 'ts-refresh-token',
+          'token_type': 'Bearer',
+          'expires_in': 3600,
+          'scope': 'tools:read',
+        }),
+      );
+    await request.response.close();
   }
 }

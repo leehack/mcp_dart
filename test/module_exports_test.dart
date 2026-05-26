@@ -16,11 +16,17 @@ void main() {
     test('server module symbols are available', () {
       server_module.McpServer? server;
       server_module.StreamableMcpServer? streamableServer;
+      server_module.OAuthProtectedResourceOptions? oauthOptions;
+      server_module.OAuthProtectedResourceMetadata? oauthMetadata;
+      server_module.OAuthBearerChallenge? oauthChallenge;
       server_module.CancelTaskResultHandler? cancelTaskResultHandler;
       final registerAppTool = server_module.registerAppTool;
 
       expect(server, isNull);
       expect(streamableServer, isNull);
+      expect(oauthOptions, isNull);
+      expect(oauthMetadata, isNull);
+      expect(oauthChallenge, isNull);
       expect(cancelTaskResultHandler, isNull);
       expect(registerAppTool, isNotNull);
     });
