@@ -141,6 +141,8 @@ void main() {
   );
   final tsReplayClientPath =
       p.join(Directory.current.path, 'test/interop/ts/dist/replay_client.js');
+  final tsOAuthClientPath =
+      p.join(Directory.current.path, 'test/interop/ts/dist/oauth_client.js');
   final dartServerPath =
       p.join(Directory.current.path, 'test/interop/test_dart_server.dart');
 
@@ -148,6 +150,7 @@ void main() {
   final skipTests = !File(tsClientPath).existsSync() ||
       !File(tsLifecycleClientPath).existsSync() ||
       !File(tsReplayClientPath).existsSync() ||
+      !File(tsOAuthClientPath).existsSync() ||
       !File(dartServerPath).existsSync();
   final isCi = Platform.environment['CI'] == 'true';
 
@@ -390,6 +393,61 @@ void main() {
     );
 
     test(
+      'official TS Streamable HTTP client completes OAuth PKCE flow',
+      () async {
+        final server = await _ProtectedMcpServer.start();
+        try {
+          final result = await Process.run(
+            'node',
+            [
+              tsOAuthClientPath,
+              '--url',
+              server.mcpUrl,
+            ],
+            runInShell: true,
+          );
+
+          if (result.exitCode != 0) {
+            print('TS OAuth client stdout: ${result.stdout}');
+            print('TS OAuth client stderr: ${result.stderr}');
+          }
+
+          expect(
+            result.exitCode,
+            equals(0),
+            reason: 'Official TS Streamable HTTP OAuth interop failed',
+          );
+          expect(server.unauthenticatedMcpRequests, greaterThanOrEqualTo(1));
+          expect(server.authenticatedMcpRequests, greaterThanOrEqualTo(1));
+          expect(server.resourceMetadataRequests, greaterThanOrEqualTo(1));
+          expect(server.authorizationMetadataRequests, greaterThanOrEqualTo(1));
+          expect(server.lastTokenForm, isNotNull);
+          expect(
+            server.lastTokenForm,
+            containsPair('grant_type', 'authorization_code'),
+          );
+          expect(server.lastTokenForm, containsPair('code', 'valid-code'));
+          expect(
+            server.lastTokenForm,
+            containsPair('client_id', 'ts-oauth-client'),
+          );
+          expect(
+            server.lastTokenForm,
+            containsPair(
+              'redirect_uri',
+              'http://127.0.0.1:9876/oauth/callback',
+            ),
+          );
+          expect(server.lastTokenForm!['code_verifier'], isNotEmpty);
+          expect(server.lastTokenForm, containsPair('resource', server.mcpUrl));
+        } finally {
+          await server.stop();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test(
       'Dart Streamable HTTP server rejects operations before initialized',
       () async {
         final port = await _findAvailablePort();
@@ -614,4 +672,208 @@ void main() {
       timeout: const Timeout(Duration(seconds: 30)),
     );
   });
+}
+
+class _ProtectedMcpServer {
+  final HttpServer _httpServer;
+  final Map<String, StreamableHTTPServerTransport> _transports = {};
+  final Map<String, McpServer> _servers = {};
+  Map<String, String>? lastTokenForm;
+  int unauthenticatedMcpRequests = 0;
+  int authenticatedMcpRequests = 0;
+  int resourceMetadataRequests = 0;
+  int authorizationMetadataRequests = 0;
+
+  _ProtectedMcpServer._(this._httpServer);
+
+  int get port => _httpServer.port;
+  String get baseUrl => 'http://127.0.0.1:$port';
+  String get mcpUrl => '$baseUrl/mcp';
+  String get protectedResourceMetadataUrl =>
+      '$baseUrl/.well-known/oauth-protected-resource/mcp';
+
+  static Future<_ProtectedMcpServer> start() async {
+    final httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final server = _ProtectedMcpServer._(httpServer);
+    httpServer.listen(server._handleRequest);
+    return server;
+  }
+
+  Future<void> stop() async {
+    await _httpServer.close(force: true);
+    for (final transport in _transports.values) {
+      await transport.close();
+    }
+    for (final server in _servers.values) {
+      await server.close();
+    }
+    _transports.clear();
+    _servers.clear();
+  }
+
+  Future<void> _handleRequest(HttpRequest request) async {
+    try {
+      if (request.uri.path == '/.well-known/oauth-protected-resource' ||
+          request.uri.path == '/.well-known/oauth-protected-resource/mcp') {
+        await _handleProtectedResourceMetadata(request);
+        return;
+      }
+      if (request.uri.path == '/.well-known/oauth-authorization-server') {
+        await _handleAuthorizationServerMetadata(request);
+        return;
+      }
+      if (request.uri.path == '/token') {
+        await _handleTokenRequest(request);
+        return;
+      }
+      if (request.uri.path == '/mcp') {
+        await _handleMcpRequest(request);
+        return;
+      }
+
+      request.response
+        ..statusCode = HttpStatus.notFound
+        ..write('Not Found');
+      await request.response.close();
+    } catch (error, stack) {
+      print('Protected OAuth interop server error: $error\n$stack');
+      try {
+        request.response
+          ..statusCode = HttpStatus.internalServerError
+          ..write('Internal Server Error');
+        await request.response.close();
+      } catch (_) {
+        // The transport may already have started or closed the response.
+      }
+    }
+  }
+
+  Future<void> _handleProtectedResourceMetadata(HttpRequest request) async {
+    resourceMetadataRequests += 1;
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.json
+      ..write(
+        jsonEncode({
+          'resource': mcpUrl,
+          'authorization_servers': [baseUrl],
+          'bearer_methods_supported': ['header'],
+          'scopes_supported': ['tools:read'],
+        }),
+      );
+    await request.response.close();
+  }
+
+  Future<void> _handleAuthorizationServerMetadata(HttpRequest request) async {
+    authorizationMetadataRequests += 1;
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.json
+      ..write(
+        jsonEncode({
+          'issuer': baseUrl,
+          'authorization_endpoint': '$baseUrl/authorize',
+          'token_endpoint': '$baseUrl/token',
+          'response_types_supported': ['code'],
+          'grant_types_supported': ['authorization_code', 'refresh_token'],
+          'code_challenge_methods_supported': ['S256'],
+          'token_endpoint_auth_methods_supported': ['none'],
+          'scopes_supported': ['tools:read'],
+        }),
+      );
+    await request.response.close();
+  }
+
+  Future<void> _handleTokenRequest(HttpRequest request) async {
+    if (request.method != 'POST') {
+      request.response.statusCode = HttpStatus.methodNotAllowed;
+      await request.response.close();
+      return;
+    }
+
+    final body = await utf8.decodeStream(request);
+    lastTokenForm = Uri.splitQueryString(body);
+    if (lastTokenForm!['code'] != 'valid-code' ||
+        lastTokenForm!['resource'] != mcpUrl ||
+        lastTokenForm!['code_verifier'] == null ||
+        lastTokenForm!['code_verifier']!.isEmpty) {
+      request.response
+        ..statusCode = HttpStatus.badRequest
+        ..headers.contentType = ContentType.json
+        ..write(
+          jsonEncode({
+            'error': 'invalid_request',
+            'error_description': 'Invalid OAuth token request',
+          }),
+        );
+      await request.response.close();
+      return;
+    }
+
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.json
+      ..write(
+        jsonEncode({
+          'access_token': 'ts-access-token',
+          'refresh_token': 'ts-refresh-token',
+          'token_type': 'Bearer',
+          'expires_in': 3600,
+          'scope': 'tools:read',
+        }),
+      );
+    await request.response.close();
+  }
+
+  Future<void> _handleMcpRequest(HttpRequest request) async {
+    final authorization =
+        request.headers.value(HttpHeaders.authorizationHeader);
+    if (authorization != 'Bearer ts-access-token') {
+      unauthenticatedMcpRequests += 1;
+      request.response
+        ..statusCode = HttpStatus.unauthorized
+        ..headers.set(
+          HttpHeaders.wwwAuthenticateHeader,
+          'Bearer resource_metadata="$protectedResourceMetadataUrl", scope="tools:read"',
+        )
+        ..write('Unauthorized');
+      await request.response.close();
+      return;
+    }
+
+    authenticatedMcpRequests += 1;
+    final sessionId = request.headers.value('mcp-session-id');
+    if (sessionId != null) {
+      final transport = _transports[sessionId];
+      if (transport == null) {
+        request.response
+          ..statusCode = HttpStatus.notFound
+          ..write('Session not found');
+        await request.response.close();
+        return;
+      }
+      await transport.handleRequest(request);
+      return;
+    }
+
+    final mcpServer = createServer();
+    late StreamableHTTPServerTransport transport;
+    transport = StreamableHTTPServerTransport(
+      options: StreamableHTTPServerTransportOptions(
+        sessionIdGenerator: generateUUID,
+        onsessioninitialized: (createdSessionId) {
+          _transports[createdSessionId] = transport;
+          _servers[createdSessionId] = mcpServer;
+        },
+      ),
+    );
+    await mcpServer.connect(transport);
+    await transport.handleRequest(request);
+
+    final createdSessionId = transport.sessionId;
+    if (createdSessionId == null) {
+      await transport.close();
+      await mcpServer.close();
+    }
+  }
 }
