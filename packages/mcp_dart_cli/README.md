@@ -126,11 +126,17 @@ The CLI supports `sampling/createMessage` requests from the server (often used b
 
 ### Conformance
 
-Run built-in fixture checks and deterministic fuzz checks for MCP protocol edge cases. The initial suite covers JSON-RPC malformed-message handling, string request IDs, string progress tokens, and advertised protocol-version support.
+Run built-in fixture checks, MCP 2025-11-25 spec-critical checks, and deterministic fuzz checks for MCP protocol edge cases. The fixture suite covers JSON-RPC malformed-message handling, string request IDs, string progress tokens, and advertised protocol-version support. The spec suite covers raw-wire lifecycle, capability, elicitation, task-metadata, and progress-token negative cases.
 
 ```bash
 # Run all built-in fixture cases
 mcp_dart conformance
+
+# Run MCP 2025-11-25 spec-critical cases
+mcp_dart conformance --suite spec
+
+# Run all non-fuzz suites
+mcp_dart conformance --suite all
 
 # Run one case by exact name
 mcp_dart conformance --case jsonrpc.preserves-string-response-id
@@ -176,4 +182,3 @@ dart test
 ## Contributing
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this project.
-

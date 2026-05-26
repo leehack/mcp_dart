@@ -40,6 +40,9 @@ jobs:
       - name: Run tests
         run: dart test
 
+      - name: Run MCP spec conformance gate
+        run: dart run bin/mcp_dart.dart conformance --suite spec --json
+
       - name: Run pana (package analysis)
         run: |
           dart pub global activate pana

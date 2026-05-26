@@ -3,6 +3,9 @@
 ### Documentation
 
 - Added interoperability, Flutter recipe, and migration cookbook guides, and expanded MCP Apps example guidance with host compatibility notes.
+- Added an MCP 2025-11-25 spec coverage matrix that maps high-risk
+  requirements to unit tests, TypeScript interop tests, CLI conformance cases,
+  and known follow-up gaps.
 
 ### Spec Alignment
 
@@ -114,6 +117,9 @@
 ### Tooling
 
 - Added `mcp_dart conformance` with built-in JSON-RPC and protocol-version fixture checks, deterministic JSON-RPC fuzz cases, exact-case filtering, and JSON output for CI/scripts.
+- Added a `mcp_dart conformance --suite spec` gate for MCP 2025-11-25
+  lifecycle, capability, elicitation, task-metadata, and progress-token
+  raw-wire checks.
 
 ## 2.1.1
 
