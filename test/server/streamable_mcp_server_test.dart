@@ -78,6 +78,20 @@ void main() {
     expect(challenge, contains('error_description="Need tools:read"'));
   });
 
+  test('OAuthBearerChallenge escapes quoted-string values', () {
+    final challenge = const OAuthBearerChallenge(
+      scope: r'tools:"read"\admin',
+      errorDescription: r'Need "read" scope \ admin',
+    ).toHeaderValue();
+
+    expect(challenge, startsWith('Bearer '));
+    expect(challenge, contains(r'scope="tools:\"read\"\\admin"'));
+    expect(
+      challenge,
+      contains(r'error_description="Need \"read\" scope \\ admin"'),
+    );
+  });
+
   group('StreamableMcpServer', () {
     late StreamableMcpServer server;
     final port = 8081;

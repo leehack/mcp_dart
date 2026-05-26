@@ -11,7 +11,13 @@ import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
 
 String _quoteHeaderValue(String value) {
-  return value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+  const backslash = '\\';
+  const escapedBackslash = '\\\\';
+  const quote = '"';
+  const escapedQuote = r'\"';
+  return value
+      .replaceAll(backslash, escapedBackslash)
+      .replaceAll(quote, escapedQuote);
 }
 
 /// OAuth 2.0 Protected Resource Metadata advertised by a Streamable HTTP server.
