@@ -817,6 +817,46 @@ void main() {
       expect(allowed.statusCode, HttpStatus.ok);
     });
 
+    test('OAuth challenge can use configured public metadata URL', () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) => McpServer(
+          const Implementation(name: 'PublicOAuthServer', version: '1.0'),
+        ),
+        host: host,
+        port: port,
+        authenticator: (req) => false,
+        oauthProtectedResource: OAuthProtectedResourceOptions(
+          metadata: OAuthProtectedResourceMetadata(
+            resource: Uri.parse('https://mcp.example.com/mcp'),
+            authorizationServers: [Uri.parse('https://auth.example.com')],
+            scopesSupported: const ['tools:read'],
+          ),
+          metadataUri: Uri.parse(
+            'https://mcp.example.com/.well-known/oauth-protected-resource/mcp',
+          ),
+          scope: 'tools:read',
+        ),
+      );
+      await server.start();
+
+      final denied = await postInitialize();
+
+      expect(denied.statusCode, HttpStatus.unauthorized);
+      final challenge = denied.headers[HttpHeaders.wwwAuthenticateHeader];
+      expect(
+        challenge,
+        contains(
+          'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"',
+        ),
+      );
+      expect(
+        challenge,
+        isNot(contains('http://localhost:$port')),
+      );
+    });
+
     test('dns rebinding protection blocks disallowed host header', () async {
       await server.stop();
 

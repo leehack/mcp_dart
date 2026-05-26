@@ -21,7 +21,8 @@
 - Added optional `StreamableMcpServer` OAuth protected-resource support that
   serves OAuth Protected Resource Metadata and returns spec-shaped
   `WWW-Authenticate: Bearer ... resource_metadata=...` challenges for failed
-  authentication while preserving legacy generic-auth `403` behavior when the
+  authentication, including an explicit public metadata URL for reverse-proxy
+  deployments, while preserving legacy generic-auth `403` behavior when the
   option is not configured.
 - Enforced MCP task related-metadata and progress rules by overwriting
   reserved related-task metadata from the SDK's source task id, preserving

@@ -311,6 +311,9 @@ final server = StreamableMcpServer(
       authorizationServers: [Uri.parse('https://auth.example.com')],
       scopesSupported: const ['tools:read'],
     ),
+    metadataUri: Uri.parse(
+      'https://mcp.example.com/.well-known/oauth-protected-resource/mcp',
+    ),
     scope: 'tools:read',
   ),
 );
@@ -322,7 +325,9 @@ endpoint-specific well-known path, such as
 `/.well-known/oauth-protected-resource/mcp`, and also at the root
 `/.well-known/oauth-protected-resource` by default. Without
 `oauthProtectedResource`, the generic `authenticator` hook keeps its historical
-`403 Forbidden` response.
+`403 Forbidden` response. Set `metadataUri` to the public metadata URL when a
+reverse proxy or TLS terminator rewrites the scheme, host, or port observed by
+the Dart server.
 
 Executable coverage for these recipes lives in
 [`test/server/streamable_security_harness_test.dart`](../test/server/streamable_security_harness_test.dart).

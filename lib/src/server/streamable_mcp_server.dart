@@ -119,6 +119,13 @@ class OAuthProtectedResourceOptions {
   /// Metadata returned from protected-resource well-known endpoints.
   final OAuthProtectedResourceMetadata metadata;
 
+  /// Public protected-resource metadata URL advertised in bearer challenges.
+  ///
+  /// Defaults to the request-derived URL for [metadataPath]. Set this when the
+  /// server is behind a reverse proxy or TLS terminator that rewrites the
+  /// scheme, host, or port seen by Dart.
+  final Uri? metadataUri;
+
   /// Optional scope challenge returned on unauthorized requests.
   final String? scope;
 
@@ -134,6 +141,7 @@ class OAuthProtectedResourceOptions {
   /// Creates OAuth protected-resource server options.
   const OAuthProtectedResourceOptions({
     required this.metadata,
+    this.metadataUri,
     this.scope,
     this.metadataPath,
     this.serveRootMetadata = true,
@@ -608,10 +616,11 @@ class StreamableMcpServer {
     HttpRequest request,
     OAuthProtectedResourceOptions options,
   ) {
-    final metadataUri = _absoluteUriForRequest(
-      request,
-      _protectedResourceMetadataPath(options),
-    );
+    final metadataUri = options.metadataUri ??
+        _absoluteUriForRequest(
+          request,
+          _protectedResourceMetadataPath(options),
+        );
     return OAuthBearerChallenge(
       resourceMetadata: metadataUri,
       scope: options.scope,
