@@ -127,6 +127,7 @@ void main() {
       );
       await Future.delayed(Duration.zero);
       transport.receiveMessage(const JsonRpcInitializedNotification());
+      await Future.delayed(Duration.zero);
 
       // Send setLevel request
       transport.receiveMessage(
@@ -201,6 +202,9 @@ void main() {
           ),
         ),
       );
+      await Future.delayed(Duration.zero);
+      transport.receiveMessage(const JsonRpcInitializedNotification());
+      await Future.delayed(Duration.zero);
 
       // Send tool call
       transport.receiveMessage(

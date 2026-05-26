@@ -69,7 +69,7 @@ void main() {
       );
 
       await mcpServer.connect(transport);
-      _sendInit(transport);
+      await _sendInit(transport);
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
@@ -101,7 +101,7 @@ void main() {
       );
 
       await mcpServer.connect(transport);
-      _sendInit(transport);
+      await _sendInit(transport);
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
@@ -134,7 +134,7 @@ void main() {
       );
 
       await mcpServer.connect(transport);
-      _sendInit(transport);
+      await _sendInit(transport);
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
@@ -169,7 +169,7 @@ void main() {
       );
 
       await mcpServer.connect(transport);
-      _sendInit(transport);
+      await _sendInit(transport);
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
@@ -208,7 +208,7 @@ void main() {
       );
 
       await mcpServer.connect(transport);
-      _sendInit(transport);
+      await _sendInit(transport);
 
       final callRequest = JsonRpcCallToolRequest(
         id: 2,
@@ -226,7 +226,7 @@ void main() {
   });
 }
 
-void _sendInit(MockTransport transport) {
+Future<void> _sendInit(MockTransport transport) async {
   final initRequest = JsonRpcInitializeRequest(
     id: 1,
     initParams: const InitializeRequestParams(
@@ -236,4 +236,7 @@ void _sendInit(MockTransport transport) {
     ),
   );
   transport.receiveMessage(initRequest);
+  await Future<void>.delayed(Duration.zero);
+  transport.receiveMessage(const JsonRpcInitializedNotification());
+  await Future<void>.delayed(Duration.zero);
 }

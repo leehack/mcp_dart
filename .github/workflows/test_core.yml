@@ -39,6 +39,14 @@ jobs:
       - name: Install dependencies
         run: dart pub get
 
+      - name: Install CLI dependencies
+        working-directory: packages/mcp_dart_cli
+        run: dart pub get
+
+      - name: Run MCP spec conformance gate
+        working-directory: packages/mcp_dart_cli
+        run: dart run bin/mcp_dart.dart conformance --suite spec --json
+
       - name: Run interop test suite
         run: dart test -t interop
 

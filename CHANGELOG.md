@@ -3,6 +3,12 @@
 ### Documentation
 
 - Added interoperability, Flutter recipe, and migration cookbook guides, and expanded MCP Apps example guidance with host compatibility notes.
+- Added an MCP 2025-11-25 spec coverage matrix that maps high-risk
+  requirements to unit tests, TypeScript interop tests, CLI conformance cases,
+  and known follow-up gaps.
+- Added deployment-oriented security coverage for Streamable HTTP Host/Origin
+  allowlists, auth gating, compatibility-toggle trade-offs, and OAuth PKCE S256
+  example flow, including TypeScript SDK OAuth interop coverage.
 
 ### Spec Alignment
 
@@ -17,9 +23,23 @@
   task-based tool calls require `tasks.requests.tools.call`, server-initiated
   task sampling requires `tasks.requests.sampling.createMessage`, and
   server-initiated task elicitation requires `tasks.requests.elicitation.create`.
+- Enforced MCP lifecycle ordering for incoming protocol messages: servers now
+  reject operation requests before `initialize` and before
+  `notifications/initialized`, and clients now reject server-initiated operation
+  requests before sending `notifications/initialized`.
+- Validated `elicitation/create` parameters as the MCP 2025-11-25 form/URL
+  union, including URL-only client handler registration and unsupported
+  elicitation-mode rejection.
 
 ### Compatibility Notes (Potentially Breaking)
 
+- **Lifecycle and elicitation validation are stricter**:
+  - Peers that send operation requests before initialization completes now
+    receive `invalidRequest` errors instead of reaching request handlers.
+  - Invalid form/URL `elicitation/create` parameter combinations now fail during
+    parsing or serialization.
+  - No public API signatures were removed or renamed; this is a behavioral
+    wire-protocol compatibility change.
 - **Task cancellation now returns the final task state**:
   - `tasks/cancel` responses now serialize the cancelled `Task` required by MCP
     2025-11-25 instead of an empty result object.
@@ -100,6 +120,9 @@
 ### Tooling
 
 - Added `mcp_dart conformance` with built-in JSON-RPC and protocol-version fixture checks, deterministic JSON-RPC fuzz cases, exact-case filtering, and JSON output for CI/scripts.
+- Added a `mcp_dart conformance --suite spec` gate for MCP 2025-11-25
+  lifecycle, capability, elicitation, task-metadata, and progress-token
+  raw-wire checks.
 
 ## 2.1.1
 

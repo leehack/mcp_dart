@@ -287,6 +287,15 @@ bearer-token layer. The examples in `example/authentication/` show the MCP OAuth
 flow and PKCE shape; production clients should use PKCE S256 with cryptographic
 randomness and keep redirect URIs/origins explicit.
 
+Executable coverage for these recipes lives in
+[`test/server/streamable_security_harness_test.dart`](../test/server/streamable_security_harness_test.dart).
+It verifies that local-development and production allowlists reject untrusted
+Host/Origin headers before authentication runs, and that authentication still
+gates requests after transport-level checks pass. The OAuth client PKCE flow is
+covered by
+[`test/example/oauth_client_example_test.dart`](../test/example/oauth_client_example_test.dart)
+with a local token endpoint.
+
 ### Streamable HTTP Strict Defaults
 
 By default, Streamable HTTP server transports also enforce:
@@ -330,7 +339,9 @@ final transport = StreamableHTTPServerTransport(
 Avoid disabling `enableDnsRebindingProtection` on browser-exposed or remote
 servers. If you must disable it for an internal compatibility test, bind to
 loopback/private networking and put the exception behind a short-lived migration
-plan.
+plan. The compatibility-toggle harness keeps Host/Origin protection enabled
+while selectively disabling protocol-version or batch rejection checks, so
+legacy-client migration does not silently weaken DNS rebinding defenses.
 
 ### Server Setup (Streamable HTTP)
 

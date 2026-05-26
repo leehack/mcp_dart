@@ -1,9 +1,11 @@
 /// Example: MCP Server with OAuth 2.0 Authentication
 ///
-/// **COMPLIES WITH MCP OAUTH SPECIFICATION (2025-06-18)**
+/// **DEMONSTRATES MCP OAUTH AUTHORIZATION PATTERNS (2025-11-25)**
 ///
-/// This example demonstrates a fully compliant MCP server with OAuth 2.0
-/// authentication as specified in the Model Context Protocol specification.
+/// This example demonstrates OAuth 2.0 authentication patterns for an MCP
+/// server. Production deployments should also expose OAuth Protected Resource
+/// Metadata as required by the current Model Context Protocol authorization
+/// specification.
 ///
 /// ## MCP Specification Compliance
 ///
@@ -23,7 +25,7 @@
 ///    - Validates redirect URIs against allowed list
 ///    - Requires exact URI matching
 ///
-/// ✅ **OAuth Metadata Discovery**
+/// ✅ **Authorization Server Metadata Discovery**
 ///    - Implements /.well-known/oauth-authorization-server endpoint
 ///    - Provides OAuth 2.0 Authorization Server Metadata
 ///
@@ -96,7 +98,7 @@
 ///
 /// ## References
 ///
-/// - MCP OAuth Specification: https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+/// - MCP Authorization Specification: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
 /// - OAuth 2.1: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1
 /// - PKCE (RFC 7636): https://datatracker.ietf.org/doc/html/rfc7636
 library;

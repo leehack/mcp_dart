@@ -104,19 +104,19 @@ dart run example/authentication/github_pat_example.dart
 
 **File**: [`oauth_client_example.dart`](oauth_client_example.dart)
 
-**✅ COMPLIANT with MCP OAuth Specification (2025-06-18)**
+**✅ COMPLIANT with MCP OAuth Specification (2025-11-25)**
 
 Complete OAuth 2.0 authorization code flow implementation:
 
 **MCP Specification Compliance:**
 
 - ✅ PKCE Support - Generates code_verifier and code_challenge
-- ✅ Resource Parameter - Includes resource parameter in token requests
+- ✅ Resource Parameter - Includes resource parameter in authorization and token requests
 - ✅ Proper Authorization - Uses body parameters (OAuth standard)
 
 **Features:**
 
-- Authorization URL generation with PKCE
+- Authorization URL generation with PKCE S256
 - Token exchange and storage
 - Automatic token refresh with resource parameter
 - Secure token management
@@ -145,7 +145,7 @@ final transport = StreamableHttpClientTransport(
 
 **Key Features**:
 
-- Full OAuth 2.0 flow with PKCE (RFC 7636)
+- Full OAuth 2.0 flow with PKCE S256 (RFC 7636)
 - Resource parameter for audience validation
 - Token expiration tracking
 - Automatic refresh using refresh tokens
@@ -153,7 +153,7 @@ final transport = StreamableHttpClientTransport(
 - Authorization callback handling
 - Compatible with oauth_server_example.dart
 
-**Note**: The example uses PKCE "plain" method for simplicity. For production, add the `crypto` package to `pubspec.yaml` and use S256 method for better security.
+The example uses PKCE `S256` with cryptographically secure verifier and state generation, matching OAuth 2.1 and MCP authorization requirements.
 
 **Run Example**:
 
@@ -169,17 +169,17 @@ dart run example/authentication/oauth_client_example.dart
 
 **File**: [`oauth_server_example.dart`](oauth_server_example.dart)
 
-**✅ FULLY COMPLIANT with MCP OAuth Specification (2025-06-18)**
+**MCP OAuth server pattern (2025-11-25)**
 
-Production-ready MCP server with OAuth 2.0 authentication that meets all MCP security requirements:
+MCP server example with OAuth 2.0 authentication patterns. Production deployments should pair this with protected-resource metadata and the deployment allowlists described in [`doc/transports.md`](../../doc/transports.md#dns-rebinding-protection).
 
-**MCP Specification Compliance:**
+**Covered Patterns:**
 
 - ✅ PKCE Support (RFC 7636) - Requires code_verifier in authorization code exchange
 - ✅ Resource Parameter - Includes resource parameter in all token requests for audience validation
 - ✅ Token Audience Validation - Validates tokens are specific to this MCP server
 - ✅ Redirect URI Validation - Validates redirect URIs against allowed list
-- ✅ OAuth Metadata Discovery - Implements /.well-known/oauth-authorization-server endpoint
+- ✅ Authorization Server Metadata Discovery - Implements /.well-known/oauth-authorization-server endpoint
 - ✅ WWW-Authenticate Header - Returns proper 401 responses with authorization server location
 - ⚠️ HTTPS Support - Optional HTTPS with self-signed cert (use reverse proxy for production)
 
@@ -463,7 +463,7 @@ final transport = StreamableHttpClientTransport(
 
 ## Additional Resources
 
-- [MCP OAuth Specification](https://spec.modelcontextprotocol.io/specification/2025-11-05/basic/authentication/)
+- [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
 - [OAuth 2.0 Specification](https://oauth.net/2/)
 - [PKCE (RFC 7636)](https://tools.ietf.org/html/rfc7636)
 - [MCP Dart SDK Documentation](https://pub.dev/packages/mcp_dart)

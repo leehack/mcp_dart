@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/shared/logging.dart';
-import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/shared/task_interfaces.dart';
+import 'package:mcp_dart/src/types.dart';
+import 'package:meta/meta.dart';
 
 import 'transport.dart';
 
@@ -793,6 +794,8 @@ abstract class Protocol {
     _earlyTerminalTaskIds.clear();
     _transport = null;
 
+    onConnectionClosed();
+
     pendingTimeouts.forEach((_, info) => info.timeoutTimer.cancel());
     pendingRequestHandlers.forEach((_, controller) => controller.abort());
     pendingTaskRequests
@@ -838,8 +841,46 @@ abstract class Protocol {
     }
   }
 
+  /// Returns an MCP error when an incoming request is not valid for the
+  /// current protocol state.
+  McpError? validateIncomingRequest(JsonRpcRequest request) => null;
+
+  /// Returns an MCP error when an incoming notification is not valid for the
+  /// current protocol state.
+  McpError? validateIncomingNotification(JsonRpcNotification notification) =>
+      null;
+
+  /// Subclass hook called after an incoming request has passed validation and
+  /// will be handled.
+  @protected
+  void onIncomingRequestAccepted(JsonRpcRequest request) {}
+
+  /// Subclass hook called after an incoming request handler has completed and
+  /// its response has been sent or enqueued.
+  @protected
+  void onIncomingRequestHandled(
+    JsonRpcRequest request,
+    BaseResultData result,
+  ) {}
+
+  /// Subclass hook called when an incoming request handler or response send
+  /// fails.
+  @protected
+  void onIncomingRequestFailed(JsonRpcRequest request, Object error) {}
+
+  /// Subclass hook called after protocol-owned state has been cleared for a
+  /// closed transport.
+  @protected
+  void onConnectionClosed() {}
+
   /// Handles incoming JSON-RPC notifications.
   void _onnotification(JsonRpcNotification notification) {
+    final validationError = validateIncomingNotification(notification);
+    if (validationError != null) {
+      _onerror(validationError);
+      return;
+    }
+
     if (notification is JsonRpcTaskStatusNotification) {
       _onTaskStatusNotification(notification);
     }
@@ -850,17 +891,24 @@ abstract class Protocol {
       return;
     }
 
-    Future.microtask(() => handler(notification)).catchError((
-      error,
-      stackTrace,
-    ) {
+    // Start notification handlers immediately so lifecycle notifications affect
+    // subsequent messages that arrive in the same transport turn.
+    try {
+      handler(notification).catchError((error, stackTrace) {
+        _onerror(
+          StateError(
+            "Uncaught error in notification handler for ${notification.method}: $error\n$stackTrace",
+          ),
+        );
+        return null;
+      });
+    } catch (error, stackTrace) {
       _onerror(
         StateError(
           "Uncaught error in notification handler for ${notification.method}: $error\n$stackTrace",
         ),
       );
-      return null;
-    });
+    }
   }
 
   bool _containsTaskMetadata(Map<dynamic, dynamic>? value) {
@@ -956,6 +1004,17 @@ abstract class Protocol {
 
   /// Handles incoming JSON-RPC requests.
   void _onrequest(JsonRpcRequest request) {
+    final validationError = validateIncomingRequest(request);
+    if (validationError != null) {
+      _sendErrorResponse(
+        request.id,
+        validationError.code,
+        validationError.message,
+        validationError.data,
+      );
+      return;
+    }
+
     final handler = _requestHandlers[request.method] ?? fallbackRequestHandler;
 
     if (_hasTaskAugmentation(request) &&
@@ -1050,6 +1109,8 @@ abstract class Protocol {
       }
     }
 
+    onIncomingRequestAccepted(request);
+
     if (relatedTaskId != null && _taskStore != null) {
       _taskStore!.updateTaskStatus(
         relatedTaskId,
@@ -1084,11 +1145,13 @@ abstract class Protocol {
         } else {
           await _transport?.send(response);
         }
+        onIncomingRequestHandled(request, result);
       },
       onError: (error, stackTrace) {
         if (abortController.signal.aborted) {
           return Future.value(null);
         }
+        onIncomingRequestFailed(request, error);
 
         int code = ErrorCode.internalError.value;
         String message = "Internal server error processing ${request.method}";
@@ -1114,6 +1177,7 @@ abstract class Protocol {
         );
       },
     ).catchError((sendError) {
+      onIncomingRequestFailed(request, sendError);
       _onerror(
         StateError(
           "Failed to send response/error for request ${request.id}: $sendError",

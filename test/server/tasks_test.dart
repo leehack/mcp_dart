@@ -37,6 +37,11 @@ class MockTransport extends Transport {
   /// Simulate receiving a message from the client
   void receiveMessage(JsonRpcMessage message) {
     onmessage?.call(message);
+    if (message is JsonRpcInitializeRequest) {
+      Future<void>.delayed(Duration.zero, () {
+        onmessage?.call(const JsonRpcInitializedNotification());
+      });
+    }
   }
 }
 

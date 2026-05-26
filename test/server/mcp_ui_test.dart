@@ -41,6 +41,19 @@ class _TestTransport implements Transport {
     if (_closed) {
       throw StateError('Cannot start closed transport');
     }
+    onmessage?.call(
+      JsonRpcInitializeRequest(
+        id: 0,
+        initParams: const InitializeRequest(
+          protocolVersion: latestProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
+        ),
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    onmessage?.call(const JsonRpcInitializedNotification());
+    await Future<void>.delayed(Duration.zero);
   }
 }
 
