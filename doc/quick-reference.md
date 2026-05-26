@@ -600,7 +600,7 @@ try {
 )
 ```
 
-`JsonSchema.string(enumValues: ...)` and `JsonEnum` serialize as standard JSON Schema using `enum`; `JsonEnum` also emits `enumNames` when values include titles. Legacy `type: 'enum'` / `values` input is still accepted when parsing.
+`JsonSchema.string(enumValues: ...)` and untitled `JsonEnum` values serialize as standard JSON Schema using `enum`. Titled `JsonEnum` values serialize with `oneOf` or, for array items, `anyOf` const/title entries. Legacy `type: 'enum'` / `values` and `enumNames` input is still accepted when parsing.
 
 ### Array
 

@@ -124,7 +124,7 @@ String enum schemas serialize as standard JSON Schema:
 }
 ```
 
-`JsonEnum` uses the same standard output. When enum values include display titles, it emits `enumNames` for compatibility with clients that understand title metadata; mixed primitive enums without titles emit an `enum` array without a `type`. Legacy serialized input using `type: 'enum'` / `values` is still accepted by parsers.
+`JsonEnum` uses the same standard output. When enum values include display titles, it emits JSON Schema `oneOf` entries with `const` and `title`; when a titled enum is used as array items, it emits `anyOf` entries. Mixed primitive enums without titles emit an `enum` array without a `type`. Legacy serialized input using `type: 'enum'` / `values` or `enumNames` is still accepted by parsers.
 
 ### Const Values
 

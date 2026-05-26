@@ -600,6 +600,12 @@ void main() {
     test('includes meta when present', () {
       final result = const EmptyResult(meta: {'key': 'value'});
       expect(result.meta, equals({'key': 'value'}));
+      expect(
+        result.toJson(),
+        equals({
+          '_meta': {'key': 'value'},
+        }),
+      );
     });
   });
 

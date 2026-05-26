@@ -44,6 +44,32 @@ McpServer createServer() {
     },
   );
 
+  server.registerTool(
+    'choose_mode',
+    description: 'Exposes titled enum schemas for cross-SDK inspection',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'mode': const JsonEnum([
+          'simple',
+          {'value': 'complex', 'title': 'Complex Option'},
+        ]),
+        'permissions': const JsonArray(
+          items: JsonEnum([
+            {'value': 'read', 'title': 'Read'},
+            {'value': 'write', 'title': 'Write'},
+          ]),
+          uniqueItems: true,
+        ),
+      },
+      required: ['mode'],
+    ),
+    callback: (args, extra) async {
+      return CallToolResult(
+        content: [TextContent(text: jsonEncode(args))],
+      );
+    },
+  );
+
   // Resources
   server.registerResource(
     'Test Resource',

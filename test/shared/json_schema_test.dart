@@ -179,7 +179,7 @@ void main() {
       });
     });
 
-    test('JsonEnum serializes titled string values compatibly', () {
+    test('JsonEnum serializes titled string values as const choices', () {
       const schema = JsonEnum([
         'simple',
         {'value': 'complex', 'title': 'Complex Option'},
@@ -187,8 +187,32 @@ void main() {
 
       expect(schema.toJson(), {
         'type': 'string',
-        'enum': ['simple', 'complex'],
-        'enumNames': ['simple', 'Complex Option'],
+        'oneOf': [
+          {'const': 'simple'},
+          {'const': 'complex', 'title': 'Complex Option'},
+        ],
+      });
+    });
+
+    test('JsonArray serializes titled enum items with anyOf choices', () {
+      const schema = JsonArray(
+        items: JsonEnum([
+          {'value': 'read', 'title': 'Read'},
+          {'value': 'write', 'title': 'Write'},
+        ]),
+        uniqueItems: true,
+      );
+
+      expect(schema.toJson(), {
+        'type': 'array',
+        'items': {
+          'type': 'string',
+          'anyOf': [
+            {'const': 'read', 'title': 'Read'},
+            {'const': 'write', 'title': 'Write'},
+          ],
+        },
+        'uniqueItems': true,
       });
     });
 

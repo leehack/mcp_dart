@@ -8,7 +8,9 @@ class EmptyResult implements BaseResultData {
   const EmptyResult({this.meta});
 
   @override
-  Map<String, dynamic> toJson() => {};
+  Map<String, dynamic> toJson() => {
+        if (meta != null) '_meta': meta,
+      };
 }
 
 /// Parameters for the `notifications/cancelled` notification.

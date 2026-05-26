@@ -548,6 +548,91 @@ void main() {
     );
 
     test(
+      'official TS Streamable HTTP client handles insufficient-scope challenge',
+      () async {
+        final port = await _findAvailablePort();
+        final mcpUrl = 'http://127.0.0.1:$port/mcp';
+        final authorizationServer =
+            await _OAuthAuthorizationServer.start(expectedResource: mcpUrl);
+        var unauthorizedRequests = 0;
+        var insufficientScopeRequests = 0;
+        var authenticatedRequests = 0;
+
+        final streamableServer = StreamableMcpServer(
+          serverFactory: (_) => createServer(),
+          host: '127.0.0.1',
+          port: port,
+          authenticationHandler: (request) {
+            final authorization = request.headers.value(
+              HttpHeaders.authorizationHeader,
+            );
+            if (authorization == 'Bearer ts-upscope-token') {
+              authenticatedRequests += 1;
+              return const StreamableMcpAuthenticationResult.allow();
+            }
+            if (authorization == 'Bearer ts-access-token') {
+              insufficientScopeRequests += 1;
+              return const StreamableMcpAuthenticationResult.insufficientScope(
+                scope: 'tools:write',
+                errorDescription: 'Need tools:write',
+              );
+            }
+            unauthorizedRequests += 1;
+            return const StreamableMcpAuthenticationResult.unauthorized();
+          },
+          oauthProtectedResource: OAuthProtectedResourceOptions(
+            metadata: OAuthProtectedResourceMetadata(
+              resource: Uri.parse(mcpUrl),
+              authorizationServers: [Uri.parse(authorizationServer.baseUrl)],
+              scopesSupported: const ['tools:read', 'tools:write'],
+            ),
+            scope: 'tools:read',
+          ),
+        );
+
+        await streamableServer.start();
+        try {
+          final result = await Process.run(
+            'node',
+            [
+              tsOAuthClientPath,
+              '--url',
+              mcpUrl,
+              '--expect-upscope',
+            ],
+            runInShell: true,
+          );
+
+          if (result.exitCode != 0) {
+            print('TS OAuth upscope stdout: ${result.stdout}');
+            print('TS OAuth upscope stderr: ${result.stderr}');
+          }
+
+          expect(
+            result.exitCode,
+            equals(0),
+            reason: 'Official TS OAuth interop failed for insufficient scope',
+          );
+          expect(unauthorizedRequests, greaterThanOrEqualTo(1));
+          expect(insufficientScopeRequests, greaterThanOrEqualTo(1));
+          expect(authenticatedRequests, greaterThanOrEqualTo(1));
+          expect(
+            authorizationServer.tokenForms.map((form) => form['code']),
+            containsAll(['valid-code', 'upscope-code']),
+          );
+          expect(
+            authorizationServer.tokenForms.last,
+            containsPair('resource', mcpUrl),
+          );
+        } finally {
+          await streamableServer.stop();
+          await authorizationServer.stop();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test(
       'Dart Streamable HTTP server rejects operations before initialized',
       () async {
         final port = await _findAvailablePort();
@@ -982,6 +1067,7 @@ class _OAuthAuthorizationServer {
   final HttpServer _httpServer;
   final String expectedResource;
   Map<String, String>? lastTokenForm;
+  final List<Map<String, String>> tokenForms = [];
   int authorizationMetadataRequests = 0;
 
   _OAuthAuthorizationServer._(this._httpServer, this.expectedResource);
@@ -1031,7 +1117,7 @@ class _OAuthAuthorizationServer {
           'grant_types_supported': ['authorization_code', 'refresh_token'],
           'code_challenge_methods_supported': ['S256'],
           'token_endpoint_auth_methods_supported': ['none'],
-          'scopes_supported': ['tools:read'],
+          'scopes_supported': ['tools:read', 'tools:write'],
         }),
       );
     await request.response.close();
@@ -1046,7 +1132,9 @@ class _OAuthAuthorizationServer {
 
     final body = await utf8.decodeStream(request);
     lastTokenForm = Uri.splitQueryString(body);
-    if (lastTokenForm!['code'] != 'valid-code' ||
+    tokenForms.add(lastTokenForm!);
+    final code = lastTokenForm!['code'];
+    if ((code != 'valid-code' && code != 'upscope-code') ||
         lastTokenForm!['resource'] != expectedResource ||
         lastTokenForm!['code_verifier'] == null ||
         lastTokenForm!['code_verifier']!.isEmpty) {
@@ -1063,16 +1151,16 @@ class _OAuthAuthorizationServer {
       return;
     }
 
+    final upscope = code == 'upscope-code';
     request.response
       ..statusCode = HttpStatus.ok
       ..headers.contentType = ContentType.json
       ..write(
         jsonEncode({
-          'access_token': 'ts-access-token',
-          'refresh_token': 'ts-refresh-token',
+          'access_token': upscope ? 'ts-upscope-token' : 'ts-access-token',
           'token_type': 'Bearer',
           'expires_in': 3600,
-          'scope': 'tools:read',
+          'scope': upscope ? 'tools:write' : 'tools:read',
         }),
       );
     await request.response.close();

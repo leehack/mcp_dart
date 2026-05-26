@@ -455,11 +455,7 @@ void main() {
       ElicitRequest? receivedParams;
       client.onElicitRequest = (params) async {
         receivedParams = params;
-        return const ElicitResult(
-          action: 'accept',
-          url: 'https://oauth.example.com/authorize',
-          elicitationId: 'oauth-123',
-        );
+        return const ElicitResult(action: 'accept');
       };
 
       await client.connect(transport);
@@ -480,7 +476,9 @@ void main() {
       expect(receivedParams, isNotNull);
       expect(receivedParams!.isUrlMode, isTrue);
       expect(transport.sentMessages.single, isA<JsonRpcResponse>());
-      expect((transport.sentMessages.single as JsonRpcResponse).id, 7);
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.id, 7);
+      expect(response.result, equals({'action': 'accept'}));
 
       await client.close();
     });

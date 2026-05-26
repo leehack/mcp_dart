@@ -38,6 +38,49 @@ class MockOAuthClientProvider implements OAuthClientProvider {
   }
 }
 
+class DiscoveryOAuthClientProvider implements OAuthAuthorizationCodeProvider {
+  @override
+  final String clientId;
+
+  @override
+  final Uri redirectUri;
+
+  @override
+  final String? clientSecret;
+
+  @override
+  final List<String> scopes;
+
+  OAuthTokens? storedTokens;
+  Uri? authorizationUri;
+  int legacyRedirects = 0;
+
+  DiscoveryOAuthClientProvider({
+    this.clientId = 'client-1',
+    required this.redirectUri,
+    this.clientSecret,
+    this.scopes = const ['tools:read'],
+  });
+
+  @override
+  Future<OAuthTokens?> tokens() async => storedTokens;
+
+  @override
+  Future<void> redirectToAuthorization() async {
+    legacyRedirects += 1;
+  }
+
+  @override
+  Future<void> redirectToAuthorizationUrl(Uri authorizationUri) async {
+    this.authorizationUri = authorizationUri;
+  }
+
+  @override
+  Future<void> saveTokens(OAuthTokens tokens) async {
+    storedTokens = tokens;
+  }
+}
+
 void main() {
   late HttpServer testServer;
   late int serverPort;
@@ -1451,6 +1494,178 @@ void main() {
       },
       timeout: const Timeout(Duration(seconds: 10)),
     );
+
+    group('OAuth Discovery', () {
+      test('parses bearer challenge parameters', () {
+        final challenge = OAuthBearerChallengeParameters.fromHeader(
+          r'Bearer resource_metadata="https://mcp.example/.well-known/oauth-protected-resource/mcp", scope="tools:\"read\"\\admin", error="insufficient_scope"',
+        );
+
+        expect(
+          challenge?.resourceMetadata.toString(),
+          'https://mcp.example/.well-known/oauth-protected-resource/mcp',
+        );
+        expect(challenge?.scope, r'tools:"read"\admin');
+        expect(challenge?.error, 'insufficient_scope');
+      });
+
+      test('discovers metadata, redirects with PKCE, and exchanges tokens',
+          () async {
+        final oauthServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        addTearDown(() => oauthServer.close(force: true));
+        final oauthPort = oauthServer.port;
+        final oauthUrl = Uri.parse('http://localhost:$oauthPort/mcp');
+        var tokenExchangeSeen = false;
+
+        oauthServer.listen((request) async {
+          switch (request.uri.path) {
+            case '/mcp':
+              if (request.headers.value(HttpHeaders.authorizationHeader) ==
+                  'Bearer exchanged-token') {
+                request.response
+                  ..statusCode = HttpStatus.ok
+                  ..headers.contentType = ContentType.json
+                  ..write(
+                    jsonEncode(
+                      const JsonRpcResponse(
+                        id: 77,
+                        result: {'ok': true},
+                      ).toJson(),
+                    ),
+                  );
+              } else {
+                request.response
+                  ..statusCode = HttpStatus.unauthorized
+                  ..headers.set(
+                    HttpHeaders.wwwAuthenticateHeader,
+                    'Bearer resource_metadata="http://localhost:$oauthPort/.well-known/oauth-protected-resource/mcp", scope="tools:read"',
+                  )
+                  ..write('Unauthorized');
+              }
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-protected-resource/mcp':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'resource': 'http://localhost:$oauthPort/mcp',
+                    'authorization_servers': [
+                      'http://localhost:$oauthPort/auth',
+                    ],
+                    'scopes_supported': ['tools:read'],
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-authorization-server/auth':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'issuer': 'http://localhost:$oauthPort/auth',
+                    'authorization_endpoint':
+                        'http://localhost:$oauthPort/authorize',
+                    'token_endpoint': 'http://localhost:$oauthPort/token',
+                    'code_challenge_methods_supported': ['S256'],
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/token':
+              final body = await utf8.decoder.bind(request).join();
+              final form = Uri.splitQueryString(body);
+              expect(form['grant_type'], 'authorization_code');
+              expect(form['code'], 'auth-code');
+              expect(form['client_id'], 'client-1');
+              expect(form['redirect_uri'], 'http://localhost/callback');
+              expect(form['resource'], 'http://localhost:$oauthPort/mcp');
+              expect(form['code_verifier'], isNotEmpty);
+              tokenExchangeSeen = true;
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'access_token': 'exchanged-token',
+                    'refresh_token': 'refresh-token',
+                    'token_type': 'Bearer',
+                    'expires_in': 3600,
+                    'scope': 'tools:read',
+                  }),
+                );
+              await request.response.close();
+              break;
+            default:
+              request.response.statusCode = HttpStatus.notFound;
+              await request.response.close();
+          }
+        });
+
+        final authProvider = DiscoveryOAuthClientProvider(
+          redirectUri: Uri.parse('http://localhost/callback'),
+        );
+        final oauthTransport = StreamableHttpClientTransport(
+          oauthUrl,
+          opts: StreamableHttpClientTransportOptions(
+            authProvider: authProvider,
+          ),
+        );
+        addTearDown(oauthTransport.close);
+        await oauthTransport.start();
+
+        final request = const JsonRpcRequest(id: 77, method: 'test/method');
+        await expectLater(
+          oauthTransport.send(request),
+          throwsA(isA<UnauthorizedError>()),
+        );
+
+        final authorizationUri = authProvider.authorizationUri;
+        expect(authorizationUri, isNotNull);
+        expect(authorizationUri!.path, '/authorize');
+        expect(authorizationUri.queryParameters['response_type'], 'code');
+        expect(authorizationUri.queryParameters['client_id'], 'client-1');
+        expect(
+          authorizationUri.queryParameters['redirect_uri'],
+          'http://localhost/callback',
+        );
+        expect(
+          authorizationUri.queryParameters['resource'],
+          oauthUrl.toString(),
+        );
+        expect(authorizationUri.queryParameters['scope'], 'tools:read');
+        expect(
+          authorizationUri.queryParameters['code_challenge_method'],
+          'S256',
+        );
+        expect(authorizationUri.queryParameters['code_challenge'], isNotEmpty);
+        expect(authProvider.legacyRedirects, 0);
+
+        await oauthTransport.finishAuth('auth-code');
+        expect(tokenExchangeSeen, isTrue);
+        expect(authProvider.storedTokens?.accessToken, 'exchanged-token');
+        expect(authProvider.storedTokens, isA<OAuthAuthorizationCodeTokens>());
+        final storedTokens =
+            authProvider.storedTokens as OAuthAuthorizationCodeTokens;
+        expect(storedTokens.tokenType, 'Bearer');
+        expect(storedTokens.expiresIn, 3600);
+        expect(storedTokens.scope, 'tools:read');
+
+        final completer = Completer<JsonRpcMessage>();
+        oauthTransport.onmessage = completer.complete;
+        await oauthTransport.send(request);
+        final response = await completer.future.timeout(
+          const Duration(seconds: 3),
+        );
+        expect(response, isA<JsonRpcResponse>());
+        expect((response as JsonRpcResponse).result['ok'], isTrue);
+      });
+    });
 
     group('Error Handling and Edge Cases', () {
       test('handles finishAuth without auth provider', () async {

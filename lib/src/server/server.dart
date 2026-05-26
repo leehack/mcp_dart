@@ -403,9 +403,14 @@ class Server extends Protocol {
         break;
 
       case Method.notificationsCompletionsListChanged:
-        if (!(_capabilities.completions?.listChanged ?? false)) {
+        throw StateError(
+          "$method is not part of stable MCP 2025-11-25. Use ${Method.notificationsExperimentalCompletionsListChanged} for extension behavior.",
+        );
+
+      case Method.notificationsExperimentalCompletionsListChanged:
+        if (_capabilities.completions == null) {
           throw StateError(
-            "Server does not support completion list changed notifications capability (required for sending $method)",
+            "Server does not support completions capability (required for sending $method)",
           );
         }
         break;
@@ -755,7 +760,13 @@ class Server extends Protocol {
     return notification(notif);
   }
 
-  /// Sends a `notifications/completions/list_changed` notification to the client.
+  /// Sends an experimental completion list-changed notification to the client.
+  ///
+  /// Stable MCP 2025-11-25 does not define a completion list-changed
+  /// notification or capability flag.
+  @Deprecated(
+    'Stable MCP 2025-11-25 does not define completion list-changed notifications.',
+  )
   Future<void> sendCompletionListChanged() {
     const notif = JsonRpcCompletionListChangedNotification();
     return notification(notif);

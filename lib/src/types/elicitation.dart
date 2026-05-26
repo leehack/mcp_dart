@@ -226,10 +226,19 @@ class ElicitResult implements BaseResultData {
   /// The submitted form data (only present when action is 'accept')
   final Map<String, dynamic>? content;
 
-  /// The URL that the user should navigate to (only present when action is 'accept' in URL mode)
+  /// Legacy URL-mode response echo.
+  ///
+  /// MCP 2025-11-25 keeps URL and elicitation id on the request and completion
+  /// notification, not on successful URL-mode accept results.
+  @Deprecated(
+    'URL-mode elicitation results no longer emit url; use the original request or completion notification.',
+  )
   final String? url;
 
-  /// A unique identifier for the elicitation (only present when action is 'accept' in URL mode)
+  /// Legacy URL-mode response echo.
+  @Deprecated(
+    'URL-mode elicitation results no longer emit elicitationId; use the original request or completion notification.',
+  )
   final String? elicitationId;
 
   /// Optional metadata
@@ -242,16 +251,28 @@ class ElicitResult implements BaseResultData {
     this.url,
     this.elicitationId,
     this.meta,
-  });
+  }) : assert(
+          action == 'accept' || action == 'decline' || action == 'cancel',
+          'ElicitResult.action must be accept, decline, or cancel.',
+        );
 
   factory ElicitResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final action = json['action'];
+    if (action is! String || !_isValidElicitAction(action)) {
+      throw FormatException('Invalid elicitation action: $action');
+    }
+
+    final content = json['content'];
+    if (content != null && content is! Map) {
+      throw const FormatException('ElicitResult content must be an object.');
+    }
+
     return ElicitResult(
-      action: json['action'] as String,
-      content: json['content'] as Map<String, dynamic>?,
+      action: action,
+      content: content?.cast<String, dynamic>(),
       url: json['url'] as String?,
       elicitationId: json['elicitationId'] as String?,
-      meta: meta,
+      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
     );
   }
 
@@ -259,8 +280,7 @@ class ElicitResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'action': action,
         if (content != null) 'content': content,
-        if (url != null) 'url': url,
-        if (elicitationId != null) 'elicitationId': elicitationId,
+        if (meta != null) '_meta': meta,
       };
 
   /// Helper to check if the user accepted the input
@@ -272,6 +292,9 @@ class ElicitResult implements BaseResultData {
   /// Helper to check if the user cancelled the input
   bool get cancelled => action == 'cancel';
 }
+
+bool _isValidElicitAction(String action) =>
+    action == 'accept' || action == 'decline' || action == 'cancel';
 
 /// Parameters for the `notifications/elicitation/complete` notification.
 ///

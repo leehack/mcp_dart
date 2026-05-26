@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
@@ -137,6 +138,7 @@ class StreamableHttpClientTransport
   bool _staleSessionDetected = false;
   final StreamableHttpReconnectionOptions _reconnectionOptions;
   bool _isClosed = false;
+  _PendingOAuthAuthorization? _pendingOAuthAuthorization;
 
   @override
   void Function()? onclose;
@@ -160,29 +162,331 @@ class StreamableHttpClientTransport
             _defaultStreamableHttpReconnectionOptions,
         _httpClient = http.Client();
 
-  Future<void> _authThenStart() async {
-    if (_authProvider == null) {
-      throw UnauthorizedError("No auth provider");
+  bool _isAuthorizationRequiredResponse(
+    int statusCode,
+    Map<String, String> headers,
+  ) {
+    if (statusCode == 401) {
+      return true;
     }
-
-    AuthResult result;
-    try {
-      result = await auth(_authProvider!, serverUrl: _url);
-    } catch (error) {
-      if (error is Error) {
-        onerror?.call(error);
-      } else {
-        onerror?.call(McpError(0, error.toString()));
-      }
-      rethrow;
+    if (statusCode != 403) {
+      return false;
     }
-
-    if (result != "AUTHORIZED") {
-      throw UnauthorizedError();
-    }
-
-    return await _startOrAuthSse(const StartSseOptions());
+    final challenge =
+        OAuthBearerChallengeParameters.fromHeader(headers['www-authenticate']);
+    return challenge?.error == 'insufficient_scope';
   }
+
+  Future<void> _handleAuthorizationRequired(
+    http.StreamedResponse response,
+  ) async {
+    final authProvider = _authProvider;
+    if (authProvider == null) {
+      await response.stream.drain<void>();
+      throw UnauthorizedError('Authentication required');
+    }
+
+    final challenge = OAuthBearerChallengeParameters.fromHeader(
+      response.headers['www-authenticate'],
+    );
+    await response.stream.drain<void>();
+
+    if (authProvider is OAuthAuthorizationCodeProvider) {
+      final authorizationRequest = await _prepareAuthorizationRequest(
+        authProvider,
+        challenge,
+      );
+      await authProvider.redirectToAuthorizationUrl(
+        authorizationRequest.authorizationUri,
+      );
+      throw UnauthorizedError('Authentication required');
+    }
+
+    await authProvider.redirectToAuthorization();
+    throw UnauthorizedError('Authentication required');
+  }
+
+  Future<OAuthAuthorizationRequest> _prepareAuthorizationRequest(
+    OAuthAuthorizationCodeProvider provider,
+    OAuthBearerChallengeParameters? challenge,
+  ) async {
+    final protectedResourceMetadata =
+        await _discoverProtectedResourceMetadata(challenge);
+    final authorizationServerUri =
+        protectedResourceMetadata.authorizationServers.isEmpty
+            ? null
+            : protectedResourceMetadata.authorizationServers.first;
+    if (authorizationServerUri == null) {
+      throw UnauthorizedError(
+        'Protected resource metadata did not include authorization_servers',
+      );
+    }
+
+    final authorizationServerMetadata =
+        await _discoverAuthorizationServerMetadata(authorizationServerUri);
+    final authorizationEndpoint =
+        authorizationServerMetadata.authorizationEndpoint;
+    final tokenEndpoint = authorizationServerMetadata.tokenEndpoint;
+    if (authorizationEndpoint == null || tokenEndpoint == null) {
+      throw UnauthorizedError(
+        'Authorization server metadata is missing authorization_endpoint or token_endpoint',
+      );
+    }
+
+    final methods = authorizationServerMetadata.codeChallengeMethodsSupported;
+    if (methods != null && !methods.contains('S256')) {
+      throw UnauthorizedError(
+        'Authorization server does not advertise PKCE S256 support',
+      );
+    }
+
+    final scope = challenge?.scope ??
+        (provider.scopes.isEmpty ? null : provider.scopes.join(' ')) ??
+        protectedResourceMetadata.scopesSupported?.join(' ');
+    final codeVerifier = _generatePkceCodeVerifier();
+    final codeChallenge = _generatePkceS256Challenge(codeVerifier);
+    final state = _generateOAuthState();
+
+    final authorizationUri = authorizationEndpoint.replace(
+      queryParameters: {
+        ...authorizationEndpoint.queryParameters,
+        'response_type': 'code',
+        'client_id': provider.clientId,
+        'redirect_uri': provider.redirectUri.toString(),
+        'code_challenge': codeChallenge,
+        'code_challenge_method': 'S256',
+        'state': state,
+        'resource': protectedResourceMetadata.resource.toString(),
+        if (scope != null && scope.isNotEmpty) 'scope': scope,
+      },
+    );
+
+    final authorizationRequest = OAuthAuthorizationRequest(
+      authorizationUri: authorizationUri,
+      codeVerifier: codeVerifier,
+      codeChallenge: codeChallenge,
+      state: state,
+      resource: protectedResourceMetadata.resource,
+      scope: scope,
+    );
+
+    _pendingOAuthAuthorization = _PendingOAuthAuthorization(
+      tokenEndpoint: tokenEndpoint,
+      codeVerifier: codeVerifier,
+      clientId: provider.clientId,
+      clientSecret: provider.clientSecret,
+      redirectUri: provider.redirectUri,
+      resource: protectedResourceMetadata.resource,
+    );
+
+    return authorizationRequest;
+  }
+
+  Future<OAuthProtectedResourceMetadataDocument>
+      _discoverProtectedResourceMetadata(
+    OAuthBearerChallengeParameters? challenge,
+  ) async {
+    final resourceMetadata = challenge?.resourceMetadata;
+    if (resourceMetadata != null) {
+      return _fetchProtectedResourceMetadata(resourceMetadata);
+    }
+
+    final errors = <Object>[];
+    for (final uri in _protectedResourceMetadataCandidates()) {
+      try {
+        return await _fetchProtectedResourceMetadata(uri);
+      } catch (error) {
+        errors.add(error);
+      }
+    }
+
+    throw UnauthorizedError(
+      'Failed to discover OAuth protected-resource metadata: $errors',
+    );
+  }
+
+  List<Uri> _protectedResourceMetadataCandidates() {
+    final candidates = <Uri>[];
+    final endpointPath = _url.path.isEmpty ? '/' : _url.path;
+    if (endpointPath != '/') {
+      candidates.add(
+        _url.replace(
+          path: '/.well-known/oauth-protected-resource$endpointPath',
+          queryParameters: const {},
+          fragment: null,
+        ),
+      );
+    }
+    candidates.add(
+      _url.replace(
+        path: '/.well-known/oauth-protected-resource',
+        queryParameters: const {},
+        fragment: null,
+      ),
+    );
+
+    final seen = <String>{};
+    return [
+      for (final candidate in candidates)
+        if (seen.add(candidate.toString())) candidate,
+    ];
+  }
+
+  Future<OAuthProtectedResourceMetadataDocument>
+      _fetchProtectedResourceMetadata(Uri uri) async {
+    final response = await _httpClient.get(
+      uri,
+      headers: const {'Accept': 'application/json'},
+    );
+    if (response.statusCode != 200) {
+      throw UnauthorizedError(
+        'Protected-resource metadata request failed with HTTP ${response.statusCode}',
+      );
+    }
+    final json = jsonDecode(response.body);
+    if (json is! Map<String, dynamic>) {
+      throw UnauthorizedError(
+        'Protected-resource metadata must be a JSON object',
+      );
+    }
+    return OAuthProtectedResourceMetadataDocument.fromJson(json);
+  }
+
+  Future<OAuthAuthorizationServerMetadataDocument>
+      _discoverAuthorizationServerMetadata(Uri issuer) async {
+    final errors = <Object>[];
+    for (final uri in _authorizationServerMetadataCandidates(issuer)) {
+      try {
+        return await _fetchAuthorizationServerMetadata(uri);
+      } catch (error) {
+        errors.add(error);
+      }
+    }
+    throw UnauthorizedError(
+      'Failed to discover OAuth authorization-server metadata: $errors',
+    );
+  }
+
+  List<Uri> _authorizationServerMetadataCandidates(Uri issuer) {
+    final issuerPath = issuer.path.isEmpty ? '' : issuer.path;
+    final pathPrefix = issuerPath == '/' ? '' : issuerPath;
+    final candidates = [
+      issuer.replace(
+        path: '/.well-known/oauth-authorization-server$pathPrefix',
+        queryParameters: const {},
+        fragment: null,
+      ),
+      issuer.replace(
+        path: '/.well-known/openid-configuration$pathPrefix',
+        queryParameters: const {},
+        fragment: null,
+      ),
+      issuer.replace(
+        path:
+            '${pathPrefix.isEmpty ? '' : pathPrefix}/.well-known/oauth-authorization-server',
+        queryParameters: const {},
+        fragment: null,
+      ),
+      issuer.replace(
+        path:
+            '${pathPrefix.isEmpty ? '' : pathPrefix}/.well-known/openid-configuration',
+        queryParameters: const {},
+        fragment: null,
+      ),
+    ];
+
+    final seen = <String>{};
+    return [
+      for (final candidate in candidates)
+        if (seen.add(candidate.toString())) candidate,
+    ];
+  }
+
+  Future<OAuthAuthorizationServerMetadataDocument>
+      _fetchAuthorizationServerMetadata(Uri uri) async {
+    final response = await _httpClient.get(
+      uri,
+      headers: const {'Accept': 'application/json'},
+    );
+    if (response.statusCode != 200) {
+      throw UnauthorizedError(
+        'Authorization-server metadata request failed with HTTP ${response.statusCode}',
+      );
+    }
+    final json = jsonDecode(response.body);
+    if (json is! Map<String, dynamic>) {
+      throw UnauthorizedError(
+        'Authorization-server metadata must be a JSON object',
+      );
+    }
+    return OAuthAuthorizationServerMetadataDocument.fromJson(json);
+  }
+
+  Future<OAuthTokens> _exchangeAuthorizationCode(
+    OAuthAuthorizationCodeProvider provider,
+    String authorizationCode,
+    _PendingOAuthAuthorization pendingAuthorization,
+  ) async {
+    final response = await _httpClient.post(
+      pendingAuthorization.tokenEndpoint,
+      headers: const {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      },
+      body: {
+        'grant_type': 'authorization_code',
+        'code': authorizationCode,
+        'redirect_uri': pendingAuthorization.redirectUri.toString(),
+        'client_id': pendingAuthorization.clientId,
+        if (pendingAuthorization.clientSecret != null)
+          'client_secret': pendingAuthorization.clientSecret!,
+        'code_verifier': pendingAuthorization.codeVerifier,
+        'resource': pendingAuthorization.resource.toString(),
+      },
+    );
+    if (response.statusCode != 200) {
+      throw UnauthorizedError(
+        'Token exchange failed with HTTP ${response.statusCode}',
+      );
+    }
+
+    final json = jsonDecode(response.body);
+    if (json is! Map<String, dynamic>) {
+      throw UnauthorizedError('Token response must be a JSON object');
+    }
+    final accessToken = json['access_token'];
+    if (accessToken is! String || accessToken.isEmpty) {
+      throw UnauthorizedError('Token response did not include access_token');
+    }
+
+    final tokens = OAuthAuthorizationCodeTokens(
+      accessToken: accessToken,
+      refreshToken: json['refresh_token'] as String?,
+      tokenType: json['token_type'] as String? ?? 'Bearer',
+      expiresIn: json['expires_in'] as int?,
+      scope: json['scope'] as String?,
+    );
+    await provider.saveTokens(tokens);
+    return tokens;
+  }
+
+  String _generatePkceCodeVerifier() =>
+      _base64UrlNoPadding(_secureRandomBytes(32));
+
+  String _generatePkceS256Challenge(String verifier) {
+    final digest = crypto.sha256.convert(utf8.encode(verifier));
+    return _base64UrlNoPadding(digest.bytes);
+  }
+
+  String _generateOAuthState() => _base64UrlNoPadding(_secureRandomBytes(16));
+
+  List<int> _secureRandomBytes(int length) {
+    final random = math.Random.secure();
+    return List<int>.generate(length, (_) => random.nextInt(256));
+  }
+
+  String _base64UrlNoPadding(List<int> bytes) =>
+      base64UrlEncode(bytes).replaceAll('=', '');
 
   Future<Map<String, String>> _commonHeaders() async {
     final headers = <String, String>{};
@@ -243,9 +547,12 @@ class StreamableHttpClientTransport
       final response = await _httpClient.send(request);
 
       if (response.statusCode != 200) {
-        if (response.statusCode == 401 && _authProvider != null) {
-          // Need to authenticate
-          return await _authThenStart();
+        if (_authProvider != null &&
+            _isAuthorizationRequiredResponse(
+              response.statusCode,
+              response.headers,
+            )) {
+          return await _handleAuthorizationRequired(response);
         }
 
         // 405 indicates that the server does not offer an SSE stream at GET endpoint
@@ -558,8 +865,21 @@ class StreamableHttpClientTransport
       throw UnauthorizedError("No auth provider");
     }
 
+    final authProvider = _authProvider!;
+    final pendingAuthorization = _pendingOAuthAuthorization;
+    if (authProvider is OAuthAuthorizationCodeProvider &&
+        pendingAuthorization != null) {
+      await _exchangeAuthorizationCode(
+        authProvider,
+        authorizationCode,
+        pendingAuthorization,
+      );
+      _pendingOAuthAuthorization = null;
+      return;
+    }
+
     final result = await auth(
-      _authProvider!,
+      authProvider,
       serverUrl: _url,
       authorizationCode: authorizationCode,
     );
@@ -630,9 +950,14 @@ class StreamableHttpClientTransport
       if (_authProvider != null) {
         final tokens = await _authProvider!.tokens();
         if (tokens == null) {
-          // No tokens available - trigger authentication flow
-          await _authProvider!.redirectToAuthorization();
-          throw UnauthorizedError('Authentication required');
+          if (_authProvider is OAuthAuthorizationCodeProvider) {
+            // Let the server return a challenge so discovery can follow MCP
+            // protected-resource metadata before redirecting.
+          } else {
+            // No tokens available - trigger authentication flow
+            await _authProvider!.redirectToAuthorization();
+            throw UnauthorizedError('Authentication required');
+          }
         }
       }
 
@@ -648,10 +973,12 @@ class StreamableHttpClientTransport
       final response = await _httpClient.send(request);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        if (response.statusCode == 401 && _authProvider != null) {
-          // Authentication failed with the server - try to refresh or redirect
-          await _authProvider!.redirectToAuthorization();
-          throw UnauthorizedError('Authentication failed with the server');
+        if (_authProvider != null &&
+            _isAuthorizationRequiredResponse(
+              response.statusCode,
+              response.headers,
+            )) {
+          return await _handleAuthorizationRequired(response);
         }
 
         final text = await response.stream.transform(utf8.decoder).join();
@@ -866,12 +1193,309 @@ abstract class OAuthClientProvider {
   Future<void> redirectToAuthorization();
 }
 
+/// Optional OAuth provider interface for first-class MCP authorization-code flow.
+abstract class OAuthAuthorizationCodeProvider implements OAuthClientProvider {
+  /// OAuth client id.
+  String get clientId;
+
+  /// Redirect URI registered for the client.
+  Uri get redirectUri;
+
+  /// Optional client secret for confidential clients.
+  String? get clientSecret;
+
+  /// Requested scopes when a bearer challenge does not provide one.
+  List<String> get scopes;
+
+  /// Redirect the user agent to [authorizationUri].
+  Future<void> redirectToAuthorizationUrl(Uri authorizationUri);
+
+  /// Persist exchanged OAuth tokens.
+  Future<void> saveTokens(OAuthTokens tokens);
+}
+
+/// Parsed Bearer `WWW-Authenticate` challenge parameters.
+class OAuthBearerChallengeParameters {
+  final Uri? resourceMetadata;
+  final String? scope;
+  final String? error;
+  final String? errorDescription;
+  final Map<String, String> additionalParameters;
+
+  const OAuthBearerChallengeParameters({
+    this.resourceMetadata,
+    this.scope,
+    this.error,
+    this.errorDescription,
+    this.additionalParameters = const {},
+  });
+
+  factory OAuthBearerChallengeParameters.fromParameters(
+    Map<String, String> parameters,
+  ) {
+    final knownKeys = {
+      'resource_metadata',
+      'scope',
+      'error',
+      'error_description',
+    };
+    final resourceMetadata = parameters['resource_metadata'];
+    return OAuthBearerChallengeParameters(
+      resourceMetadata:
+          resourceMetadata == null ? null : Uri.parse(resourceMetadata),
+      scope: parameters['scope'],
+      error: parameters['error'],
+      errorDescription: parameters['error_description'],
+      additionalParameters: Map<String, String>.from(parameters)
+        ..removeWhere((key, value) => knownKeys.contains(key)),
+    );
+  }
+
+  static OAuthBearerChallengeParameters? fromHeader(String? header) {
+    if (header == null) {
+      return null;
+    }
+
+    final trimmed = header.trim();
+    if (!trimmed.toLowerCase().startsWith('bearer')) {
+      return null;
+    }
+
+    final parameters = _parseAuthenticateParameters(
+      trimmed.substring('bearer'.length).trim(),
+    );
+    return OAuthBearerChallengeParameters.fromParameters(parameters);
+  }
+}
+
+/// OAuth Protected Resource Metadata discovered by the client transport.
+class OAuthProtectedResourceMetadataDocument {
+  final Uri resource;
+  final List<Uri> authorizationServers;
+  final List<String>? bearerMethodsSupported;
+  final List<String>? scopesSupported;
+  final Map<String, dynamic> additionalFields;
+
+  const OAuthProtectedResourceMetadataDocument({
+    required this.resource,
+    required this.authorizationServers,
+    this.bearerMethodsSupported,
+    this.scopesSupported,
+    this.additionalFields = const {},
+  });
+
+  factory OAuthProtectedResourceMetadataDocument.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final resource = json['resource'];
+    final authorizationServers = json['authorization_servers'];
+    if (resource is! String || authorizationServers is! List) {
+      throw const FormatException(
+        'Protected-resource metadata requires resource and authorization_servers.',
+      );
+    }
+
+    return OAuthProtectedResourceMetadataDocument(
+      resource: Uri.parse(resource),
+      authorizationServers: authorizationServers
+          .map((value) => Uri.parse(value as String))
+          .toList(),
+      bearerMethodsSupported:
+          (json['bearer_methods_supported'] as List?)?.cast<String>(),
+      scopesSupported: (json['scopes_supported'] as List?)?.cast<String>(),
+      additionalFields: Map<String, dynamic>.from(json)
+        ..removeWhere(
+          (key, value) => {
+            'resource',
+            'authorization_servers',
+            'bearer_methods_supported',
+            'scopes_supported',
+          }.contains(key),
+        ),
+    );
+  }
+}
+
+/// OAuth Authorization Server Metadata discovered by the client transport.
+class OAuthAuthorizationServerMetadataDocument {
+  final Uri issuer;
+  final Uri? authorizationEndpoint;
+  final Uri? tokenEndpoint;
+  final List<String>? codeChallengeMethodsSupported;
+  final Map<String, dynamic> additionalFields;
+
+  const OAuthAuthorizationServerMetadataDocument({
+    required this.issuer,
+    this.authorizationEndpoint,
+    this.tokenEndpoint,
+    this.codeChallengeMethodsSupported,
+    this.additionalFields = const {},
+  });
+
+  factory OAuthAuthorizationServerMetadataDocument.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final issuer = json['issuer'];
+    if (issuer is! String) {
+      throw const FormatException(
+        'Authorization-server metadata requires issuer.',
+      );
+    }
+
+    final authorizationEndpoint = json['authorization_endpoint'];
+    final tokenEndpoint = json['token_endpoint'];
+    return OAuthAuthorizationServerMetadataDocument(
+      issuer: Uri.parse(issuer),
+      authorizationEndpoint: authorizationEndpoint is String
+          ? Uri.parse(authorizationEndpoint)
+          : null,
+      tokenEndpoint: tokenEndpoint is String ? Uri.parse(tokenEndpoint) : null,
+      codeChallengeMethodsSupported:
+          (json['code_challenge_methods_supported'] as List?)?.cast<String>(),
+      additionalFields: Map<String, dynamic>.from(json)
+        ..removeWhere(
+          (key, value) => {
+            'issuer',
+            'authorization_endpoint',
+            'token_endpoint',
+            'code_challenge_methods_supported',
+          }.contains(key),
+        ),
+    );
+  }
+}
+
+/// Authorization request built from MCP OAuth discovery metadata.
+class OAuthAuthorizationRequest {
+  final Uri authorizationUri;
+  final String codeVerifier;
+  final String codeChallenge;
+  final String state;
+  final Uri resource;
+  final String? scope;
+
+  const OAuthAuthorizationRequest({
+    required this.authorizationUri,
+    required this.codeVerifier,
+    required this.codeChallenge,
+    required this.state,
+    required this.resource,
+    this.scope,
+  });
+}
+
 /// Represents OAuth tokens
 class OAuthTokens {
   final String accessToken;
   final String? refreshToken;
 
-  OAuthTokens({required this.accessToken, this.refreshToken});
+  OAuthTokens({
+    required this.accessToken,
+    this.refreshToken,
+  });
+}
+
+/// OAuth authorization-code token response metadata.
+///
+/// The transport passes this subtype to [OAuthAuthorizationCodeProvider.saveTokens]
+/// after exchanging an authorization code. It keeps [OAuthTokens] source-compatible
+/// for existing subclasses while exposing standard token response fields.
+class OAuthAuthorizationCodeTokens extends OAuthTokens {
+  final String tokenType;
+  final int? expiresIn;
+  final String? scope;
+
+  OAuthAuthorizationCodeTokens({
+    required super.accessToken,
+    super.refreshToken,
+    this.tokenType = 'Bearer',
+    this.expiresIn,
+    this.scope,
+  });
+}
+
+class _PendingOAuthAuthorization {
+  final Uri tokenEndpoint;
+  final String codeVerifier;
+  final String clientId;
+  final String? clientSecret;
+  final Uri redirectUri;
+  final Uri resource;
+
+  const _PendingOAuthAuthorization({
+    required this.tokenEndpoint,
+    required this.codeVerifier,
+    required this.clientId,
+    required this.clientSecret,
+    required this.redirectUri,
+    required this.resource,
+  });
+}
+
+Map<String, String> _parseAuthenticateParameters(String input) {
+  final parameters = <String, String>{};
+  var index = 0;
+
+  void skipSeparators() {
+    while (index < input.length &&
+        (input.codeUnitAt(index) == 0x20 || input[index] == ',')) {
+      index += 1;
+    }
+  }
+
+  while (index < input.length) {
+    skipSeparators();
+    if (index >= input.length) {
+      break;
+    }
+
+    final keyStart = index;
+    while (index < input.length && input[index] != '=' && input[index] != ',') {
+      index += 1;
+    }
+    if (index >= input.length || input[index] != '=') {
+      break;
+    }
+
+    final key = input.substring(keyStart, index).trim();
+    index += 1;
+
+    String value;
+    if (index < input.length && input[index] == '"') {
+      index += 1;
+      final buffer = StringBuffer();
+      while (index < input.length) {
+        final char = input[index];
+        if (char == '\\') {
+          index += 1;
+          if (index < input.length) {
+            buffer.write(input[index]);
+            index += 1;
+          }
+          continue;
+        }
+        if (char == '"') {
+          index += 1;
+          break;
+        }
+        buffer.write(char);
+        index += 1;
+      }
+      value = buffer.toString();
+    } else {
+      final valueStart = index;
+      while (index < input.length && input[index] != ',') {
+        index += 1;
+      }
+      value = input.substring(valueStart, index).trim();
+    }
+
+    if (key.isNotEmpty) {
+      parameters[key] = value;
+    }
+  }
+
+  return parameters;
 }
 
 /// Result of an authentication attempt

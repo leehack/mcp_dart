@@ -16,6 +16,10 @@ function getArg(name: string): string {
   throw new Error(`Missing required argument: ${name}`);
 }
 
+function hasFlag(name: string): boolean {
+  return process.argv.includes(name);
+}
+
 class TestOAuthProvider implements OAuthClientProvider {
   private _tokens?: OAuthTokens;
   private _codeVerifier?: string;
@@ -69,7 +73,10 @@ class TestOAuthProvider implements OAuthClientProvider {
     return this._codeVerifier;
   }
 
-  assertAuthorizationRedirect(expectedResource: string): void {
+  assertAuthorizationRedirect(
+    expectedResource: string,
+    expectedScope = 'tools:read'
+  ): void {
     if (!this._authorizationUrl) {
       throw new Error('Authorization redirect was not requested');
     }
@@ -96,6 +103,9 @@ class TestOAuthProvider implements OAuthClientProvider {
     if (params.get('resource') !== expectedResource) {
       throw new Error(`Unexpected resource: ${params.get('resource')}`);
     }
+    if (params.get('scope') !== expectedScope) {
+      throw new Error(`Unexpected scope: ${params.get('scope')}`);
+    }
     if (params.get('state') !== 'ts-oauth-state') {
       throw new Error(`Unexpected state: ${params.get('state')}`);
     }
@@ -119,38 +129,73 @@ async function connectAndListTools(
     }
   );
 
-  await client.connect(transport);
+  let connected = false;
   try {
+    await client.connect(transport);
+    connected = true;
     const result = await client.listTools();
     return result.tools.map((tool) => tool.name);
   } finally {
-    await client.close();
+    if (connected) {
+      await client.close();
+    } else {
+      await transport.close();
+    }
   }
 }
 
-async function main(): Promise<void> {
-  const url = getArg('--url');
-  const provider = new TestOAuthProvider();
-
+async function expectAuthorizationRequired(
+  operation: () => Promise<unknown>,
+  label: string
+): Promise<void> {
   try {
-    await connectAndListTools(url, provider);
-    throw new Error('Initial protected request unexpectedly succeeded');
+    await operation();
   } catch (error) {
-    if (!(error instanceof UnauthorizedError)) {
-      throw error;
+    if (error instanceof UnauthorizedError) {
+      return;
     }
+    throw error;
   }
+  throw new Error(`${label} unexpectedly succeeded`);
+}
 
-  provider.assertAuthorizationRedirect(url);
-
+async function finishAuthorization(
+  url: string,
+  provider: TestOAuthProvider,
+  code: string
+): Promise<void> {
   const authTransport = new StreamableHTTPClientTransport(new URL(url), {
     authProvider: provider,
   });
   await authTransport.start();
   try {
-    await authTransport.finishAuth('valid-code');
+    await authTransport.finishAuth(code);
   } finally {
     await authTransport.close();
+  }
+}
+
+async function main(): Promise<void> {
+  const url = getArg('--url');
+  const expectUpscope = hasFlag('--expect-upscope');
+  const provider = new TestOAuthProvider();
+
+  await expectAuthorizationRequired(
+    () => connectAndListTools(url, provider),
+    'Initial protected request'
+  );
+
+  provider.assertAuthorizationRedirect(url, 'tools:read');
+
+  await finishAuthorization(url, provider, 'valid-code');
+
+  if (expectUpscope) {
+    await expectAuthorizationRequired(
+      () => connectAndListTools(url, provider),
+      'Insufficient-scope protected request'
+    );
+    provider.assertAuthorizationRedirect(url, 'tools:write');
+    await finishAuthorization(url, provider, 'upscope-code');
   }
 
   const toolNames = await connectAndListTools(url, provider);

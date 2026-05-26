@@ -1298,7 +1298,7 @@ class McpServer {
     server.assertCanSetRequestHandler(Method.completionComplete);
     server.registerCapabilities(
       const ServerCapabilities(
-        completions: ServerCapabilitiesCompletions(listChanged: true),
+        completions: ServerCapabilitiesCompletions(),
       ),
     );
     server.setRequestHandler<JsonRpcCompleteRequest>(

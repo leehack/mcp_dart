@@ -149,7 +149,7 @@ The Flutter example service at [`example/flutter_http_client/lib/services/stream
 
 For OAuth-protected remote servers, keep the OAuth flow outside widget code:
 
-1. Create an `OAuthClientProvider` implementation or reuse one of the patterns in [`example/authentication/`](../example/authentication/).
+1. Create an `OAuthClientProvider` implementation or reuse one of the patterns in [`example/authentication/`](../example/authentication/). For MCP OAuth discovery, also implement `OAuthAuthorizationCodeProvider` so the transport can build the authorization URL and token exchange from server metadata.
 2. Store tokens through a platform-appropriate secure storage layer.
 3. Pass the provider to `StreamableHttpClientTransportOptions(authProvider: ...)`.
 4. Extract the authorization `code` from the browser/deep-link callback, call `await transport.finishAuth(code);`, then retry the MCP connection. If you disposed the transport after the failed attempt, recreate it with the same `authProvider` first.

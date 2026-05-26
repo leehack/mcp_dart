@@ -18,7 +18,7 @@ void main() {
       expect(caps.completions, isA<ServerCapabilitiesCompletions>());
     });
 
-    test('Server declares completions capability with listChanged', () {
+    test('legacy listChanged flag is retained in memory only', () {
       final mcpServer = McpServer(
         const Implementation(name: "test-server", version: "1.0.0"),
         options: const ServerOptions(
@@ -31,6 +31,7 @@ void main() {
       final caps = mcpServer.server.getCapabilities();
       expect(caps.completions, isNotNull);
       expect(caps.completions?.listChanged, equals(true));
+      expect(caps.toJson()['completions'], isEmpty);
     });
 
     test('Server without completions capability returns null', () {
@@ -82,7 +83,7 @@ void main() {
 
       final caps = mcpServer.server.getCapabilities();
       expect(caps.completions, isNotNull);
-      expect(caps.completions?.listChanged, equals(true));
+      expect(caps.toJson()['completions'], isEmpty);
       expect(caps.tools, isNotNull);
       expect(caps.resources, isNotNull);
       expect(caps.prompts, isNotNull);
@@ -98,8 +99,19 @@ void main() {
       final deserializedCaps = ServerCapabilities.fromJson(json);
 
       expect(deserializedCaps.completions, isNotNull);
-      expect(deserializedCaps.completions?.listChanged, equals(true));
+      expect(json['completions'], isEmpty);
       expect(deserializedCaps.experimental?['test'], equals(true));
+    });
+
+    test('legacy completions listChanged payload still parses', () {
+      final caps = ServerCapabilities.fromJson(
+        const {
+          'completions': {'listChanged': true},
+        },
+      );
+
+      expect(caps.completions?.listChanged, isTrue);
+      expect(caps.toJson()['completions'], isEmpty);
     });
   });
 }

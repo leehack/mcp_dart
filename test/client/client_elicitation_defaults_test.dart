@@ -208,11 +208,7 @@ void main() {
       Map<String, dynamic>? receivedContent;
       client.onElicitRequest = (params) async {
         receivedContent = {}; // No content for URL elicitation typically
-        return const ElicitResult(
-          action: 'accept',
-          url: 'http://example.com/form',
-          elicitationId: '123',
-        );
+        return const ElicitResult(action: 'accept');
       };
 
       final elicitRequest = JsonRpcElicitRequest(

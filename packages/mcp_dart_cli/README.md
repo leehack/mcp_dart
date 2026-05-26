@@ -132,11 +132,11 @@ Run built-in fixture checks, MCP 2025-11-25 spec-critical checks, and determinis
 # Run all built-in fixture cases
 mcp_dart conformance
 
-# Run MCP 2025-11-25 spec-critical cases
-mcp_dart conformance --suite spec
-
-# Run all non-fuzz suites
+# Run all stable non-fuzz suites
 mcp_dart conformance --suite all
+
+# Run only MCP 2025-11-25 raw-wire spec cases
+mcp_dart conformance --suite spec
 
 # Run one case by exact name
 mcp_dart conformance --case jsonrpc.preserves-string-response-id

@@ -12,7 +12,10 @@ class _RawResult implements BaseResultData {
   _RawResult(this.data, {this.meta});
 
   @override
-  Map<String, dynamic> toJson() => data;
+  Map<String, dynamic> toJson() => {
+        ...data,
+        if (meta != null) '_meta': meta,
+      };
 }
 
 /// Helper to handle task-augmented tool calls and interactions.

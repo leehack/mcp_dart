@@ -747,12 +747,22 @@ class JsonArray extends JsonSchema {
 
   @override
   Map<String, dynamic> toJson() {
+    final itemSchema = items;
+    final serializedItems = itemSchema == null
+        ? null
+        : switch (itemSchema) {
+            final JsonEnum enumItems => enumItems._toJson(
+                titledStringConstListKeyword: 'anyOf',
+              ),
+            final JsonSchema schema => schema.toJson(),
+          };
+
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (_hasDefault) 'default': defaultValue,
       'type': 'array',
-      if (items != null) 'items': items!.toJson(),
+      if (serializedItems != null) 'items': serializedItems,
       if (minItems != null) 'minItems': minItems,
       if (maxItems != null) 'maxItems': maxItems,
       if (uniqueItems != null) 'uniqueItems': uniqueItems,
@@ -1351,7 +1361,11 @@ class JsonEnum extends JsonSchema {
   }
 
   @override
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson() => _toJson();
+
+  Map<String, dynamic> _toJson({
+    String titledStringConstListKeyword = 'oneOf',
+  }) {
     final normalizedEntries =
         values.map((value) => _normalizeEntry(value)).toList(growable: false);
     final hasTitles = normalizedEntries.any((entry) => entry.title != null);
@@ -1383,29 +1397,11 @@ class JsonEnum extends JsonSchema {
       };
     }
 
-    final enumValuesKeyword = _enumValuesKeyword;
-    if (enumValuesKeyword != null) {
+    if (hasTitles) {
       return {
         ...annotations,
-        if (_enumTypeKeyword != null) 'type': _enumTypeKeyword,
-        enumValuesKeyword:
-            normalizedEntries.map((entry) => entry.value).toList(),
-        if (hasTitles)
-          'enumNames': normalizedEntries
-              .map((entry) => entry.title ?? '${entry.value}')
-              .toList(),
-      };
-    }
-
-    return {
-      ...annotations,
-      if (allStrings) 'type': 'string',
-      if (allStrings)
-        'enum': normalizedEntries.map((entry) => entry.value as String).toList()
-      else if (!hasTitles)
-        'enum': normalizedEntries.map((entry) => entry.value).toList()
-      else
-        'oneOf': normalizedEntries
+        if (allStrings) 'type': 'string',
+        titledStringConstListKeyword: normalizedEntries
             .map(
               (entry) => {
                 'const': entry.value,
@@ -1415,10 +1411,26 @@ class JsonEnum extends JsonSchema {
               },
             )
             .toList(),
-      if (allStrings && hasTitles)
-        'enumNames': normalizedEntries
-            .map((entry) => entry.title ?? entry.value as String)
-            .toList(),
+      };
+    }
+
+    final enumValuesKeyword = _enumValuesKeyword;
+    if (enumValuesKeyword != null) {
+      return {
+        ...annotations,
+        if (_enumTypeKeyword != null) 'type': _enumTypeKeyword,
+        enumValuesKeyword:
+            normalizedEntries.map((entry) => entry.value).toList(),
+      };
+    }
+
+    return {
+      ...annotations,
+      if (allStrings) 'type': 'string',
+      if (allStrings)
+        'enum': normalizedEntries.map((entry) => entry.value as String).toList()
+      else
+        'enum': normalizedEntries.map((entry) => entry.value).toList(),
     };
   }
 

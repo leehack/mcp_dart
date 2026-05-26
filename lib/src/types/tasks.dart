@@ -243,6 +243,7 @@ class ListTasksResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'tasks': tasks.map((t) => t.toJson()).toList(),
         if (nextCursor != null) 'nextCursor': nextCursor,
+        if (meta != null) '_meta': meta,
       };
 }
 
@@ -397,6 +398,7 @@ class CreateTaskResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'task': task.toJson(),
+        if (meta != null) '_meta': meta,
       };
 }
 

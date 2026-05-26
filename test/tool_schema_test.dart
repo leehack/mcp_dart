@@ -161,15 +161,20 @@ void main() {
           json['inputSchema']['properties']['mode'] as Map<String, dynamic>;
 
       expect(modeSchema['type'], equals('string'));
-      expect(modeSchema['enum'], equals(['simple', 'complex']));
-      expect(modeSchema['enumNames'], equals(['simple', 'Complex Option']));
+      expect(
+        modeSchema['oneOf'],
+        equals([
+          {'const': 'simple'},
+          {'const': 'complex', 'title': 'Complex Option'},
+        ]),
+      );
       expect(modeSchema.containsKey('values'), isFalse);
 
       final restored = Tool.fromJson(json);
-      final restoredMode = (restored.inputSchema as JsonObject)
-          .properties!['mode'] as JsonString;
-      expect(restoredMode.enumValues, equals(['simple', 'complex']));
-      expect(restoredMode.enumNames, equals(['simple', 'Complex Option']));
+      final restoredMode =
+          (restored.inputSchema as JsonObject).properties!['mode'] as JsonEnum;
+      expect(restoredMode.normalizedValues, equals(['simple', 'complex']));
+      expect((restoredMode.values[1] as Map)['title'], 'Complex Option');
     });
 
     test('ListToolsResult preserves tool required fields', () {

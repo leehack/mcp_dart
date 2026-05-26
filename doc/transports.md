@@ -329,6 +329,44 @@ endpoint-specific well-known path, such as
 reverse proxy or TLS terminator rewrites the scheme, host, or port observed by
 the Dart server.
 
+Use `authenticationHandler` when authorization needs to distinguish invalid
+credentials from insufficient scope:
+
+```dart
+authenticationHandler: (request) {
+  final authorization = request.headers.value('Authorization');
+  if (authorization == 'Bearer token-with-tools-write') {
+    return const StreamableMcpAuthenticationResult.allow();
+  }
+  if (authorization == 'Bearer token-without-tools-write') {
+    return const StreamableMcpAuthenticationResult.insufficientScope(
+      scope: 'tools:write',
+      errorDescription: 'Need tools:write',
+    );
+  }
+  return const StreamableMcpAuthenticationResult.unauthorized();
+},
+```
+
+With `oauthProtectedResource` configured, `insufficientScope` returns
+`403 Forbidden` plus a bearer challenge containing
+`error="insufficient_scope"`, `scope="..."`, and `resource_metadata="..."`.
+The existing bool `authenticator` callback remains source-compatible for simple
+allow/deny checks.
+
+On the client side, `StreamableHttpClientTransport` keeps existing
+`OAuthClientProvider` implementations working. Providers that also implement
+`OAuthAuthorizationCodeProvider` let the transport perform MCP OAuth discovery:
+it parses bearer challenges, fetches OAuth Protected Resource Metadata, falls
+back to the endpoint/root well-known protected-resource paths when needed,
+discovers OAuth Authorization Server Metadata or OpenID Connect Discovery
+metadata, builds a PKCE S256 authorization URL with the MCP `resource`
+parameter, and exchanges the authorization code with `code_verifier` and
+`resource` when `finishAuth(code)` is called. The exchanged value passed to
+`saveTokens` is an `OAuthAuthorizationCodeTokens` instance, so providers that
+want `tokenType`, `expiresIn`, or granted `scope` can read them by type-checking
+that subtype while older `OAuthTokens` implementations stay source-compatible.
+
 Executable coverage for these recipes lives in
 [`test/server/streamable_security_harness_test.dart`](../test/server/streamable_security_harness_test.dart).
 It verifies that local-development and production allowlists reject untrusted
@@ -336,11 +374,13 @@ Host/Origin headers before authentication runs, and that authentication still
 gates requests after transport-level checks pass. The OAuth client PKCE flow is
 covered by
 [`test/example/oauth_client_example_test.dart`](../test/example/oauth_client_example_test.dart)
-with a local token endpoint. The first-class OAuth protected-resource helper is
-covered by
+with a local token endpoint, and the client transport discovery path is covered
+by [`test/client/streamable_https_test.dart`](../test/client/streamable_https_test.dart).
+The first-class OAuth protected-resource helper is covered by
 [`test/server/streamable_mcp_server_test.dart`](../test/server/streamable_mcp_server_test.dart)
 and the official TypeScript SDK OAuth interop path in
-[`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart).
+[`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart),
+including insufficient-scope upscoping from `tools:read` to `tools:write`.
 
 ### Streamable HTTP Strict Defaults
 
