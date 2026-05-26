@@ -16,6 +16,10 @@
   cancellation request IDs, and sampling tool-use capability gating so malformed
   wire values and unsupported `sampling.tools` requests fail before handler code
   runs.
+- Enforced MCP task related-metadata and progress rules by overwriting
+  reserved related-task metadata from the SDK's source task id, preserving
+  unrelated handler metadata, and rejecting repeated/decreasing progress values
+  before sending invalid progress notifications.
 - Added MCP `completion/complete` wire support for
   `context.arguments` and `PromptReference.title`, including context-aware
   server completion callbacks for prompt and resource-template completions.
