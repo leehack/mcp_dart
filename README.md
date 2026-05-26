@@ -60,7 +60,7 @@ dart pub get
 - ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation, Tasks
 - ✅ **Extension Support** - Generic `extensions` negotiation with typed MCP Apps helpers and TypeScript-style `registerAppTool` / `registerAppResource`
 - ✅ **Latest Content/Metadata Types** - `resource_link`, themed `icons`, and `annotations.lastModified`
-- ✅ **OAuth Authentication Hooks** - `OAuthClientProvider`, server authenticators, and OAuth2/PKCE examples
+- ✅ **OAuth Authentication Hooks** - `OAuthClientProvider`, MCP OAuth discovery helpers, server authenticators, and OAuth2/PKCE examples
 - ✅ **Transport Security Controls** - DNS rebinding protection and strict Streamable HTTP validation with compatibility toggles
 - ✅ **Type-Safe** - Comprehensive type definitions with null safety
 - ✅ **Cross-Platform** - Works on Linux, Windows, macOS, Web, and Flutter
@@ -172,7 +172,7 @@ Configure your server with AI hosts like Claude Desktop:
 
 ## Authentication
 
-This library provides OAuth-aware client and server authentication hooks, including `OAuthClientProvider` for StreamableHTTP clients and server-side `authenticator` callbacks. For OAuth2/PKCE guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/tree/main/example/authentication).
+This library provides OAuth-aware client and server authentication hooks, including `OAuthClientProvider` for StreamableHTTP clients, optional `OAuthAuthorizationCodeProvider` discovery support, and server-side `authenticator` / `authenticationHandler` callbacks. For OAuth2/PKCE guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/tree/main/example/authentication) and [transport authentication docs](https://github.com/leehack/mcp_dart/blob/main/doc/transports.md#streamable-http-authentication).
 
 ## Platform Support
 

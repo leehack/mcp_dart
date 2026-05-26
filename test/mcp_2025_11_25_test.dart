@@ -247,8 +247,10 @@ void main() {
 
       final json = schema.toJson();
       expect(json['type'], 'string');
-      expect(json['enum'], ['simple', 'complex']);
-      expect(json['enumNames'], ['simple', 'Complex Option']);
+      expect(json['oneOf'], [
+        {'const': 'simple'},
+        {'const': 'complex', 'title': 'Complex Option'},
+      ]);
       expect(json.containsKey('values'), isFalse);
 
       final deserialized = JsonEnum.fromJson(json);

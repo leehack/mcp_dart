@@ -64,6 +64,7 @@ class ListRootsResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'roots': roots.map((r) => r.toJson()).toList(),
+        if (meta != null) '_meta': meta,
       };
 }
 

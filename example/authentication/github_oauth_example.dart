@@ -53,20 +53,20 @@ class GitHubOAuthConfig {
 class GitHubOAuthTokens extends OAuthTokens {
   final DateTime issuedAt;
   final String tokenType;
-  final List<String> scope;
+  final List<String> grantedScopes;
 
   GitHubOAuthTokens({
     required super.accessToken,
     super.refreshToken,
     required this.tokenType,
-    required this.scope,
+    required this.grantedScopes,
   }) : issuedAt = DateTime.now();
 
   Map<String, dynamic> toJson() => {
         'access_token': accessToken,
         'refresh_token': refreshToken,
         'token_type': tokenType,
-        'scope': scope.join(' '),
+        'scope': grantedScopes.join(' '),
         'issued_at': issuedAt.toIso8601String(),
       };
 
@@ -75,8 +75,16 @@ class GitHubOAuthTokens extends OAuthTokens {
       accessToken: json['access_token'],
       refreshToken: json['refresh_token'],
       tokenType: json['token_type'] ?? 'bearer',
-      scope: (json['scope'] as String?)?.split(' ') ?? [],
+      grantedScopes: _parseScopes(json['scope'] as String?),
     );
+  }
+
+  static List<String> _parseScopes(String? rawScopes) {
+    return rawScopes
+            ?.split(RegExp(r'[\s,]+'))
+            .where((scope) => scope.isNotEmpty)
+            .toList() ??
+        [];
   }
 }
 
@@ -265,7 +273,10 @@ class GitHubOAuthProvider implements OAuthClientProvider {
         accessToken: data['access_token'],
         refreshToken: data['refresh_token'],
         tokenType: data['token_type'] ?? 'bearer',
-        scope: (data['scope'] as String?)?.split(',') ?? config.scopes,
+        grantedScopes:
+            GitHubOAuthTokens._parseScopes(data['scope'] as String?).isEmpty
+                ? config.scopes
+                : GitHubOAuthTokens._parseScopes(data['scope'] as String?),
       );
 
       await storage.saveTokens(tokens);
@@ -418,7 +429,7 @@ Future<void> main(List<String> args) async {
       final tokens = await authProvider.waitForAuthorization();
       print('\n✓ Authorization successful!');
       print('  Access token: ${tokens.accessToken.substring(0, 20)}...');
-      print('  Scopes: ${tokens.scope.join(', ')}\n');
+      print('  Scopes: ${tokens.grantedScopes.join(', ')}\n');
     } else {
       print('✓ Using existing tokens from storage\n');
     }

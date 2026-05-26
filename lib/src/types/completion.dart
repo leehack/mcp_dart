@@ -228,13 +228,22 @@ class CompleteResult implements BaseResultData {
   }
 
   @override
-  Map<String, dynamic> toJson() => {'completion': completion.toJson()};
+  Map<String, dynamic> toJson() => {
+        'completion': completion.toJson(),
+        if (meta != null) '_meta': meta,
+      };
 }
 
-/// Notification from server indicating the list of available completions has changed.
+/// Experimental notification indicating available completions have changed.
+///
+/// Stable MCP 2025-11-25 does not define a completion list changed
+/// notification. This class emits an explicit experimental method namespace.
+@Deprecated(
+  'Stable MCP 2025-11-25 does not define completion list-changed notifications.',
+)
 class JsonRpcCompletionListChangedNotification extends JsonRpcNotification {
   const JsonRpcCompletionListChangedNotification()
-      : super(method: Method.notificationsCompletionsListChanged);
+      : super(method: Method.notificationsExperimentalCompletionsListChanged);
 
   factory JsonRpcCompletionListChangedNotification.fromJson(
     Map<String, dynamic> json,

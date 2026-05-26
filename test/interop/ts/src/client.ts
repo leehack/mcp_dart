@@ -90,6 +90,73 @@ function assertRelatedTaskMeta(
   }
 }
 
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`${label} was not an object: ${JSON.stringify(value)}`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertTitledEnumSchema(tools: unknown): void {
+  const toolsResult = requireRecord(tools, 'tools/list result');
+  const toolList = toolsResult.tools;
+  if (!Array.isArray(toolList)) {
+    throw new Error(`tools/list result missing tools array: ${JSON.stringify(tools)}`);
+  }
+
+  const chooseModeTool = toolList
+    .map((tool) => requireRecord(tool, 'tool'))
+    .find((tool) => tool.name === 'choose_mode');
+  if (!chooseModeTool) {
+    throw new Error('choose_mode tool was not listed');
+  }
+
+  const inputSchema = requireRecord(
+    chooseModeTool.inputSchema,
+    'choose_mode inputSchema'
+  );
+  const properties = requireRecord(
+    inputSchema.properties,
+    'choose_mode properties'
+  );
+  const mode = requireRecord(properties.mode, 'choose_mode mode schema');
+  const modeChoices = mode.oneOf;
+  if (!Array.isArray(modeChoices)) {
+    throw new Error(`mode schema missing oneOf: ${JSON.stringify(mode)}`);
+  }
+  const complexChoice = modeChoices
+    .map((choice) => requireRecord(choice, 'mode choice'))
+    .find((choice) => choice.const === 'complex');
+  if (complexChoice?.title !== 'Complex Option') {
+    throw new Error(
+      `mode schema missing const/title choice: ${JSON.stringify(mode)}`
+    );
+  }
+
+  const permissions = requireRecord(
+    properties.permissions,
+    'choose_mode permissions schema'
+  );
+  const permissionItems = requireRecord(
+    permissions.items,
+    'choose_mode permissions items schema'
+  );
+  const permissionChoices = permissionItems.anyOf;
+  if (!Array.isArray(permissionChoices)) {
+    throw new Error(
+      `permissions item schema missing anyOf: ${JSON.stringify(permissionItems)}`
+    );
+  }
+  const writeChoice = permissionChoices
+    .map((choice) => requireRecord(choice, 'permission choice'))
+    .find((choice) => choice.const === 'write');
+  if (writeChoice?.title !== 'Write') {
+    throw new Error(
+      `permissions schema missing const/title choice: ${JSON.stringify(permissionItems)}`
+    );
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   let transportType = 'stdio';
@@ -244,9 +311,14 @@ async function main() {
     // 1. List Tools
     const tools = await client.listTools();
     const toolNames = tools.tools.map((t) => t.name);
-    if (!toolNames.includes('echo') || !toolNames.includes('add')) {
+    if (
+      !toolNames.includes('echo') ||
+      !toolNames.includes('add') ||
+      !toolNames.includes('choose_mode')
+    ) {
       throw new Error(`Missing tools. Found: ${toolNames}`);
     }
+    assertTitledEnumSchema(tools);
 
     // 2. Call Tool 'echo'
     const echoResult = await client.callTool({

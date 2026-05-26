@@ -831,6 +831,76 @@ void main() {
       expect(allowed.statusCode, HttpStatus.ok);
     });
 
+    test('OAuth insufficient-scope auth returns forbidden bearer challenge',
+        () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) => McpServer(
+          const Implementation(name: 'OAuthScopeServer', version: '1.0'),
+        ),
+        host: host,
+        port: port,
+        authenticationHandler: (req) {
+          final authorization =
+              req.headers.value(HttpHeaders.authorizationHeader);
+          if (authorization == 'Bearer good') {
+            return const StreamableMcpAuthenticationResult.allow();
+          }
+          if (authorization == 'Bearer missing-scope') {
+            return const StreamableMcpAuthenticationResult.insufficientScope(
+              scope: 'tools:write',
+              errorDescription: 'Need tools:write',
+            );
+          }
+          return const StreamableMcpAuthenticationResult.unauthorized();
+        },
+        oauthProtectedResource: OAuthProtectedResourceOptions(
+          metadata: OAuthProtectedResourceMetadata(
+            resource: Uri.parse(baseUrl),
+            authorizationServers: [Uri.parse('https://auth.example.com')],
+            scopesSupported: const ['tools:read', 'tools:write'],
+          ),
+          scope: 'tools:read',
+        ),
+      );
+      await server.start();
+
+      final missingScope = await postInitializeWithHeaders(
+        headers: {
+          HttpHeaders.authorizationHeader: 'Bearer missing-scope',
+        },
+      );
+
+      expect(missingScope.statusCode, HttpStatus.forbidden);
+      expect(missingScope.body, 'Forbidden');
+      final scopeChallenge =
+          missingScope.headers[HttpHeaders.wwwAuthenticateHeader];
+      expect(scopeChallenge, contains('error="insufficient_scope"'));
+      expect(scopeChallenge, contains('scope="tools:write"'));
+      expect(scopeChallenge, contains('error_description="Need tools:write"'));
+      expect(
+        scopeChallenge,
+        contains(
+          'resource_metadata="http://localhost:$port/.well-known/oauth-protected-resource/mcp"',
+        ),
+      );
+
+      final unauthorized = await postInitialize();
+      expect(unauthorized.statusCode, HttpStatus.unauthorized);
+      expect(
+        unauthorized.headers[HttpHeaders.wwwAuthenticateHeader],
+        isNot(contains('insufficient_scope')),
+      );
+
+      final allowed = await postInitializeWithHeaders(
+        headers: {
+          HttpHeaders.authorizationHeader: 'Bearer good',
+        },
+      );
+      expect(allowed.statusCode, HttpStatus.ok);
+    });
+
     test('OAuth challenge can use configured public metadata URL', () async {
       await server.stop();
 

@@ -154,6 +154,61 @@ class OAuthProtectedResourceOptions {
   });
 }
 
+/// Result returned by [StreamableMcpServer.authenticationHandler].
+class StreamableMcpAuthenticationResult {
+  final _StreamableMcpAuthenticationStatus _status;
+
+  /// Scope required for an insufficient-scope response.
+  final String? scope;
+
+  /// Optional human-readable bearer error description.
+  final String? errorDescription;
+
+  /// Additional bearer challenge parameters.
+  final Map<String, String> additionalChallengeParameters;
+
+  const StreamableMcpAuthenticationResult._(
+    this._status, {
+    this.scope,
+    this.errorDescription,
+    this.additionalChallengeParameters = const {},
+  });
+
+  /// Allows the request to proceed.
+  const StreamableMcpAuthenticationResult.allow()
+      : this._(_StreamableMcpAuthenticationStatus.allow);
+
+  /// Rejects the request as unauthenticated or invalidly authenticated.
+  const StreamableMcpAuthenticationResult.unauthorized({
+    String? errorDescription,
+    Map<String, String> additionalChallengeParameters = const {},
+  }) : this._(
+          _StreamableMcpAuthenticationStatus.unauthorized,
+          errorDescription: errorDescription,
+          additionalChallengeParameters: additionalChallengeParameters,
+        );
+
+  /// Rejects the request because the presented token lacks required scope.
+  const StreamableMcpAuthenticationResult.insufficientScope({
+    required String scope,
+    String? errorDescription,
+    Map<String, String> additionalChallengeParameters = const {},
+  }) : this._(
+          _StreamableMcpAuthenticationStatus.insufficientScope,
+          scope: scope,
+          errorDescription: errorDescription,
+          additionalChallengeParameters: additionalChallengeParameters,
+        );
+
+  bool get _allowed => _status == _StreamableMcpAuthenticationStatus.allow;
+}
+
+enum _StreamableMcpAuthenticationStatus {
+  allow,
+  unauthorized,
+  insufficientScope,
+}
+
 /// A high-level server implementation that manages multiple MCP sessions over Streamable HTTP.
 ///
 /// This server handles:
@@ -199,6 +254,14 @@ class StreamableMcpServer {
   /// Returns true if the request is allowed, false otherwise.
   final FutureOr<bool> Function(HttpRequest request)? authenticator;
 
+  /// Optional callback that can return detailed authentication failures.
+  ///
+  /// Use this instead of [authenticator] when a server needs to distinguish
+  /// invalid/missing credentials from OAuth insufficient-scope failures.
+  final FutureOr<StreamableMcpAuthenticationResult> Function(
+    HttpRequest request,
+  )? authenticationHandler;
+
   /// Optional OAuth protected-resource metadata and challenge behavior.
   ///
   /// When configured, the server serves OAuth Protected Resource Metadata and
@@ -236,6 +299,7 @@ class StreamableMcpServer {
     this.path = '/mcp',
     this.eventStore,
     this.authenticator,
+    this.authenticationHandler,
     this.oauthProtectedResource,
     this.enableDnsRebindingProtection = true,
     this.allowedHosts,
@@ -315,7 +379,25 @@ class StreamableMcpServer {
       return;
     }
 
-    if (authenticator != null) {
+    final authenticationHandler = this.authenticationHandler;
+    if (authenticationHandler != null) {
+      StreamableMcpAuthenticationResult authResult;
+      try {
+        authResult = await authenticationHandler(request);
+      } catch (e) {
+        _logger.error('Authentication error: $e');
+        request.response
+          ..statusCode = HttpStatus.internalServerError
+          ..write('Authentication Error')
+          ..close();
+        return;
+      }
+
+      if (!authResult._allowed) {
+        await _respondAuthenticationFailure(request, authResult);
+        return;
+      }
+    } else if (authenticator != null) {
       bool allowed = false;
       try {
         allowed = await authenticator!(request);
@@ -599,6 +681,16 @@ class StreamableMcpServer {
   }
 
   Future<void> _respondUnauthorized(HttpRequest request) async {
+    await _respondAuthenticationFailure(
+      request,
+      const StreamableMcpAuthenticationResult.unauthorized(),
+    );
+  }
+
+  Future<void> _respondAuthenticationFailure(
+    HttpRequest request,
+    StreamableMcpAuthenticationResult result,
+  ) async {
     final options = oauthProtectedResource;
     if (options == null) {
       request.response
@@ -608,28 +700,44 @@ class StreamableMcpServer {
       return;
     }
 
+    final insufficientScope =
+        result._status == _StreamableMcpAuthenticationStatus.insufficientScope;
     request.response
-      ..statusCode = HttpStatus.unauthorized
+      ..statusCode =
+          insufficientScope ? HttpStatus.forbidden : HttpStatus.unauthorized
       ..headers.set(
         HttpHeaders.wwwAuthenticateHeader,
-        _wwwAuthenticateHeaderValue(request, options),
+        _wwwAuthenticateHeaderValue(request, options, result),
       )
-      ..write('Unauthorized');
+      ..write(insufficientScope ? 'Forbidden' : 'Unauthorized');
     await request.response.close();
   }
 
   String _wwwAuthenticateHeaderValue(
     HttpRequest request,
     OAuthProtectedResourceOptions options,
+    StreamableMcpAuthenticationResult result,
   ) {
     final metadataUri = options.metadataUri ??
         _absoluteUriForRequest(
           request,
           _protectedResourceMetadataPath(options),
         );
+    if (result._status ==
+        _StreamableMcpAuthenticationStatus.insufficientScope) {
+      return OAuthBearerChallenge.insufficientScope(
+        resourceMetadata: metadataUri,
+        scope: result.scope!,
+        errorDescription: result.errorDescription,
+        additionalParameters: result.additionalChallengeParameters,
+      ).toHeaderValue();
+    }
+
     return OAuthBearerChallenge(
       resourceMetadata: metadataUri,
       scope: options.scope,
+      errorDescription: result.errorDescription,
+      additionalParameters: result.additionalChallengeParameters,
     ).toHeaderValue();
   }
 

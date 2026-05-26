@@ -59,8 +59,14 @@ class Method {
       "notifications/prompts/list_changed";
   static const notificationsToolsListChanged =
       "notifications/tools/list_changed";
+  @Deprecated(
+    'notifications/completions/list_changed is not part of stable MCP 2025-11-25. '
+    'Use notifications/experimental/completions/list_changed for extension behavior.',
+  )
   static const notificationsCompletionsListChanged =
       "notifications/completions/list_changed";
+  static const notificationsExperimentalCompletionsListChanged =
+      "notifications/experimental/completions/list_changed";
   static const notificationsMessage = "notifications/message";
   static const notificationsRootsListChanged =
       "notifications/roots/list_changed";
@@ -227,7 +233,7 @@ sealed class JsonRpcMessage {
             JsonRpcPromptListChangedNotification.fromJson(json),
           Method.notificationsToolsListChanged =>
             JsonRpcToolListChangedNotification.fromJson(json),
-          Method.notificationsCompletionsListChanged =>
+          Method.notificationsExperimentalCompletionsListChanged =>
             JsonRpcCompletionListChangedNotification.fromJson(json),
           Method.notificationsMessage =>
             JsonRpcLoggingMessageNotification.fromJson(
@@ -431,7 +437,10 @@ abstract class BaseResultData {
   /// Optional metadata associated with the result.
   Map<String, dynamic>? get meta;
 
-  /// Converts the result data (excluding meta) to its JSON representation.
+  /// Converts the result data to its JSON representation.
+  ///
+  /// Implementations must include `_meta` when [meta] is non-null so typed
+  /// results preserve the MCP `Result._meta` field during direct serialization.
   Map<String, dynamic> toJson();
 }
 

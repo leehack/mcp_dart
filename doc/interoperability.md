@@ -48,7 +48,7 @@ cross-SDK fixture:
 ```bash
 cd packages/mcp_dart_cli
 dart pub get
-dart run bin/mcp_dart.dart conformance --suite spec --json
+dart run bin/mcp_dart.dart conformance --suite all --json
 ```
 
 ## Adding a new matrix row

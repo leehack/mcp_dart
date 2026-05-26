@@ -169,6 +169,7 @@ class ListPromptsResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'prompts': prompts.map((p) => p.toJson()).toList(),
         if (nextCursor != null) 'nextCursor': nextCursor,
+        if (meta != null) '_meta': meta,
       };
 }
 
@@ -280,6 +281,7 @@ class GetPromptResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         if (description != null) 'description': description,
         'messages': messages.map((m) => m.toJson()).toList(),
+        if (meta != null) '_meta': meta,
       };
 }
 

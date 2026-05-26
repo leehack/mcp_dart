@@ -277,6 +277,7 @@ class ListResourcesResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'resources': resources.map((r) => r.toJson()).toList(),
         if (nextCursor != null) 'nextCursor': nextCursor,
+        if (meta != null) '_meta': meta,
       };
 }
 
@@ -355,6 +356,7 @@ class ListResourceTemplatesResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'resourceTemplates': resourceTemplates.map((t) => t.toJson()).toList(),
         if (nextCursor != null) 'nextCursor': nextCursor,
+        if (meta != null) '_meta': meta,
       };
 }
 
@@ -420,6 +422,7 @@ class ReadResourceResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'contents': contents.map((c) => c.toJson()).toList(),
+        if (meta != null) '_meta': meta,
       };
 }
 

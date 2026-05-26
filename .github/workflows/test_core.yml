@@ -45,7 +45,7 @@ jobs:
 
       - name: Run MCP spec conformance gate
         working-directory: packages/mcp_dart_cli
-        run: dart run bin/mcp_dart.dart conformance --suite spec --json
+        run: dart run bin/mcp_dart.dart conformance --suite all --json
 
       - name: Run interop test suite
         run: dart test -t interop

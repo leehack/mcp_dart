@@ -14,6 +14,32 @@
 
 ### Spec Alignment
 
+- Preserved the MCP `Result._meta` field across typed result serializers,
+  including initialization, roots, resources, prompts, completion, elicitation,
+  tools, tasks, sampling, and empty results.
+- Aligned stable completions support with MCP 2025-11-25 by advertising
+  `{"completions": {}}` and moving the old completion list-changed helper to an
+  explicit experimental notification namespace.
+- Aligned URL-mode elicitation responses with MCP 2025-11-25: URL accept
+  results now serialize only the user `action`, while completion still uses
+  `notifications/elicitation/complete`. `ElicitResult.fromJson()` now rejects
+  actions outside `accept`, `decline`, and `cancel`.
+- Changed titled `JsonEnum` output to JSON Schema 2020-12-native `oneOf` or
+  array-item `anyOf` const/title entries while continuing to parse legacy
+  `enumNames` payloads.
+- Added first-class MCP OAuth client discovery for
+  `StreamableHttpClientTransport` through optional
+  `OAuthAuthorizationCodeProvider` support: bearer challenge parsing,
+  protected-resource metadata discovery, authorization-server/OIDC metadata
+  discovery, PKCE S256 authorization URLs with `resource`, and token exchange
+  with `code_verifier` and `resource`.
+- Added `OAuthAuthorizationCodeTokens` for token response metadata returned by
+  the authorization-code exchange path without changing the base `OAuthTokens`
+  API shape used by existing providers and subclasses.
+- Added `StreamableMcpAuthenticationResult` for high-level Streamable HTTP
+  servers that need to distinguish allow, unauthorized, and OAuth
+  `insufficient_scope` 403 responses while preserving the existing bool
+  `authenticator` path.
 - Tightened MCP/JSON-RPC boundary validation for request IDs, progress tokens,
   cancellation request IDs, and sampling tool-use capability gating so malformed
   wire values and unsupported `sampling.tools` requests fail before handler code
@@ -45,6 +71,17 @@
 
 ### Compatibility Notes (Potentially Breaking)
 
+- **Stable completion list-changed wire behavior is removed**:
+  - `ServerCapabilitiesCompletions(listChanged: true)` remains source-compatible
+    and still parses legacy payloads, but serializes as the stable MCP
+    `completions: {}` capability.
+  - `sendCompletionListChanged()` is deprecated and emits
+    `notifications/experimental/completions/list_changed` instead of the
+    non-spec stable method.
+- **URL-mode elicitation result echoes are no longer emitted**:
+  - Deprecated `ElicitResult.url` and `ElicitResult.elicitationId` fields remain
+    parse-compatible for legacy payloads, but `toJson()` omits them.
+  - Invalid `ElicitResult.action` values now fail during parsing.
 - **Lifecycle and elicitation validation are stricter**:
   - Peers that send operation requests before initialization completes now
     receive `invalidRequest` errors instead of reaching request handlers.
@@ -135,6 +172,8 @@
 - Added a `mcp_dart conformance --suite spec` gate for MCP 2025-11-25
   lifecycle, capability, elicitation, task-metadata, and progress-token
   raw-wire checks.
+- CI now runs `mcp_dart conformance --suite all --json` so JSON-RPC and
+  protocol-version fixtures are checked with the spec suite.
 
 ## 2.1.1
 

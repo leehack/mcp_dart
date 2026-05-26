@@ -625,7 +625,13 @@ class ServerCapabilitiesTools {
 
 /// Describes capabilities related to completions.
 class ServerCapabilitiesCompletions {
-  /// Whether the server supports `notifications/completions/list_changed`.
+  /// Legacy non-standard completion list changed flag.
+  ///
+  /// MCP 2025-11-25 defines `completions` as an empty capability object and
+  /// does not define a stable `notifications/completions/list_changed` method.
+  @Deprecated(
+    'MCP 2025-11-25 completions capability is an empty object; listChanged is ignored when serializing.',
+  )
   final bool? listChanged;
 
   const ServerCapabilitiesCompletions({
@@ -638,9 +644,7 @@ class ServerCapabilitiesCompletions {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        if (listChanged != null) 'listChanged': listChanged,
-      };
+  Map<String, dynamic> toJson() => {};
 }
 
 /// Describes capabilities related to tasks.
@@ -870,6 +874,7 @@ class InitializeResult implements BaseResultData {
         'capabilities': capabilities.toJson(),
         'serverInfo': serverInfo.toJson(),
         if (instructions != null) 'instructions': instructions,
+        if (meta != null) '_meta': meta,
       };
 }
 
