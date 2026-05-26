@@ -125,8 +125,8 @@ class TaskResultHandler {
         // Add related task meta
         final relatedTaskJson = {'taskId': taskId};
         final meta = Map<String, dynamic>.from(toolResult.meta ?? {});
-        meta.putIfAbsent(relatedTaskMetaKey, () => relatedTaskJson);
-        meta.putIfAbsent(legacyRelatedTaskMetadataKey, () => relatedTaskJson);
+        meta[relatedTaskMetaKey] = relatedTaskJson;
+        meta[legacyRelatedTaskMetadataKey] = relatedTaskJson;
 
         return CallToolResult(
           content: toolResult.content,

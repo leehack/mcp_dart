@@ -432,12 +432,17 @@ void main() {
       expect(errorResponse.error.message, contains('mismatched taskId'));
     });
 
-    test('tasks/result preserves result metadata and adds related task metadata',
+    test(
+        'tasks/result preserves result metadata and adds related task metadata',
         () async {
       mcpServer.experimental.onTaskResult(
         (taskId, extra) async => const CallToolResult(
           content: [TextContent(text: 'Done')],
-          meta: {'source': 'handler'},
+          meta: {
+            'source': 'handler',
+            relatedTaskMetadataKey: {'taskId': 'stale-task'},
+            legacyRelatedTaskMetadataKey: {'taskId': 'stale-task'},
+          },
         ),
       );
 

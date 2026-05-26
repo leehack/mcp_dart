@@ -10,6 +10,8 @@ final _logger = Logger("mcp_dart.shared.protocol");
 
 bool _isProgressToken(Object? token) => token is int || token is String;
 
+final _lastProgressByExtra = Expando<double>();
+
 /// Callback for progress notifications.
 typedef ProgressCallback = void Function(Progress progress);
 
@@ -132,10 +134,8 @@ class RequestHandlerExtra {
   /// Closes the standalone SSE stream (if supported).
   final void Function()? closeStandaloneSSEStream;
 
-  double? _lastProgress;
-
   /// Creates extra data for request handlers.
-  RequestHandlerExtra({
+  const RequestHandlerExtra({
     required this.signal,
     this.sessionId,
     required this.requestId,
@@ -176,14 +176,14 @@ class RequestHandlerExtra {
       return;
     }
 
-    final lastProgress = _lastProgress;
+    final lastProgress = _lastProgressByExtra[this];
     if (lastProgress != null && progress <= lastProgress) {
       throw ArgumentError(
         "Progress values must increase monotonically for request $requestId: "
         "$progress <= $lastProgress.",
       );
     }
-    _lastProgress = progress;
+    _lastProgressByExtra[this] = progress;
 
     final notification = JsonRpcProgressNotification(
       progressParams: ProgressNotification(
@@ -732,8 +732,8 @@ abstract class Protocol {
     if (relatedTaskJson == null) return meta;
 
     final finalMeta = Map<String, dynamic>.from(meta ?? {});
-    finalMeta.putIfAbsent(relatedTaskMetadataKey, () => relatedTaskJson);
-    finalMeta.putIfAbsent(legacyRelatedTaskMetadataKey, () => relatedTaskJson);
+    finalMeta[relatedTaskMetadataKey] = relatedTaskJson;
+    finalMeta[legacyRelatedTaskMetadataKey] = relatedTaskJson;
     return finalMeta;
   }
 

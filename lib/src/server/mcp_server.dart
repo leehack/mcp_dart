@@ -211,8 +211,8 @@ Map<String, dynamic> _relatedTaskMeta(String taskId) => {'taskId': taskId};
 CallToolResult _withRelatedTaskMeta(CallToolResult result, String taskId) {
   final relatedTaskJson = _relatedTaskMeta(taskId);
   final meta = Map<String, dynamic>.from(result.meta ?? {});
-  meta.putIfAbsent(relatedTaskMetadataKey, () => relatedTaskJson);
-  meta.putIfAbsent(legacyRelatedTaskMetadataKey, () => relatedTaskJson);
+  meta[relatedTaskMetadataKey] = relatedTaskJson;
+  meta[legacyRelatedTaskMetadataKey] = relatedTaskJson;
 
   return CallToolResult(
     content: result.content,

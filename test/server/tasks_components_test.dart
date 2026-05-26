@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:mcp_dart/mcp_dart.dart';
-import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:test/test.dart';
 
 // Mock Transport
@@ -222,7 +221,11 @@ void main() {
         TaskStatus.completed,
         const CallToolResult(
           content: [TextContent(text: 'Done')],
-          meta: {'source': 'handler'},
+          meta: {
+            'source': 'handler',
+            relatedTaskMetadataKey: {'taskId': 'stale-task'},
+            legacyRelatedTaskMetadataKey: {'taskId': 'stale-task'},
+          },
         ),
       );
 

@@ -585,7 +585,11 @@ void main() {
       protocol.setRequestHandler<JsonRpcRequest>(
         'test/related-response',
         (request, extra) async => const EmptyResult(
-          meta: {'source': 'handler'},
+          meta: {
+            'source': 'handler',
+            relatedTaskMetadataKey: {'taskId': 'stale-task'},
+            legacyRelatedTaskMetadataKey: {'taskId': 'stale-task'},
+          },
         ),
         (id, params, meta) => JsonRpcRequest(
           id: id,
@@ -596,10 +600,10 @@ void main() {
       );
 
       transport.receiveMessage(
-        JsonRpcRequest(
+        const JsonRpcRequest(
           id: 20,
           method: 'test/related-response',
-          meta: const {
+          meta: {
             relatedTaskMetadataKey: {'taskId': 'task-1'},
           },
         ),
