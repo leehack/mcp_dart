@@ -40,7 +40,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.1.1
+  mcp_dart: ^2.2.0
 ```
 
 Then install dependencies:
