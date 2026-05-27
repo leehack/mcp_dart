@@ -7,6 +7,11 @@ McpServer createServer() {
   final server = McpServer(
     const Implementation(name: 'dart-test-server', version: '1.0.0'),
   );
+  const metadataIcon = ImageContent(
+    data: 'iVBORw0KGgo=',
+    mimeType: 'image/png',
+    theme: 'dark',
+  );
 
   // Tools
   server.registerTool(
@@ -47,6 +52,11 @@ McpServer createServer() {
   server.registerTool(
     'choose_mode',
     description: 'Exposes titled enum schemas for cross-SDK inspection',
+    annotations: const ToolAnnotations(
+      title: 'Mode chooser',
+      priority: 0.5,
+      audience: ['user', 'assistant'],
+    ),
     inputSchema: JsonSchema.object(
       properties: {
         'mode': const JsonEnum([
@@ -88,6 +98,30 @@ McpServer createServer() {
     },
   );
 
+  // Exercises legacy icon compatibility while preserving stable `icons` output.
+  // ignore: deprecated_member_use
+  server.resource(
+    'Legacy Icon Resource',
+    'resource://legacy-icon',
+    (uri, extra) async {
+      return ReadResourceResult(
+        contents: [
+          TextResourceContents(
+            uri: uri.toString(),
+            text: 'This resource advertises a stable icon',
+            mimeType: 'text/plain',
+          ),
+        ],
+      );
+    },
+    metadata: (
+      description: 'Resource with icon metadata',
+      mimeType: 'text/plain',
+    ),
+    title: 'Legacy Icon Resource Title',
+    icon: metadataIcon,
+  );
+
   // Prompts
   server.registerPrompt(
     'test_prompt',
@@ -100,6 +134,25 @@ McpServer createServer() {
           PromptMessage(
             role: PromptMessageRole.user,
             content: TextContent(text: 'Test Prompt'),
+          ),
+        ],
+      );
+    },
+  );
+
+  // Exercises legacy prompt icon compatibility while preserving stable `icons`.
+  // ignore: deprecated_member_use
+  server.prompt(
+    'legacy_icon_prompt',
+    description: 'Prompt with icon metadata',
+    icon: metadataIcon,
+    callback: (args, extra) async {
+      return const GetPromptResult(
+        description: 'Prompt with icon metadata',
+        messages: [
+          PromptMessage(
+            role: PromptMessageRole.user,
+            content: TextContent(text: 'Prompt with icon metadata'),
           ),
         ],
       );
@@ -155,8 +208,7 @@ McpServer createServer() {
     callback: (args, extra) async {
       try {
         final result = await server.server.listRoots();
-        final rootsJson =
-            result.roots.map((r) => {'uri': r.uri, 'name': r.name}).toList();
+        final rootsJson = result.roots.map((r) => r.toJson()).toList();
         return CallToolResult(
           content: [TextContent(text: jsonEncode(rootsJson))],
         );
