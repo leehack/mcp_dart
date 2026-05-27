@@ -458,6 +458,8 @@ class StreamableHTTPServerTransport
 
     if (!await _primeSseStream(streamId, req.response)) {
       _removeStandaloneSseResponse(streamId, req.response);
+      _ownedStreamIds.remove(streamId);
+      await _safeClose(req.response);
       return;
     }
 
@@ -611,19 +613,28 @@ class StreamableHTTPServerTransport
   }
 
   Future<bool> _primeSseStream(StreamId streamId, HttpResponse res) async {
-    final store = _eventStore;
-    if (store == null) {
-      await res.flush();
-      return true;
-    }
+    try {
+      final store = _eventStore;
+      if (store == null) {
+        await res.flush();
+        return true;
+      }
 
-    final eventId = await store.storeEvent(streamId, _ssePrimingMessage);
-    _validateSseEventId(eventId);
-    final sent = await _writeSSEPrimingEvent(res, eventId);
-    if (!sent) {
-      onerror?.call(StateError('Failed to send initial SSE event ID'));
+      final eventId = await store.storeEvent(streamId, _ssePrimingMessage);
+      _validateSseEventId(eventId);
+      final sent = await _writeSSEPrimingEvent(res, eventId);
+      if (!sent) {
+        onerror?.call(StateError('Failed to send initial SSE event ID'));
+      }
+      return sent;
+    } catch (error) {
+      if (error is Error) {
+        onerror?.call(error);
+      } else {
+        onerror?.call(StateError(error.toString()));
+      }
+      return false;
     }
-    return sent;
   }
 
   /// Handles unsupported requests (PUT, PATCH, etc.)
@@ -914,11 +925,15 @@ class StreamableHTTPServerTransport
         if (!_enableJsonResponse &&
             !await _primeSseStream(streamId, req.response)) {
           _streamMapping.remove(streamId);
+          _ownedStreamIds.remove(streamId);
           for (final message in messages) {
             if (_isJsonRpcRequest(message)) {
-              _requestToStreamMapping.remove((message as JsonRpcRequest).id);
+              final reqId = (message as JsonRpcRequest).id;
+              _requestToStreamMapping.remove(reqId);
+              _requestResponseMap.remove(reqId);
             }
           }
+          await _safeClose(req.response);
           return;
         }
 

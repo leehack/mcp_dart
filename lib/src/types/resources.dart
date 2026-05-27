@@ -1,5 +1,6 @@
 import '../types.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Additional properties describing a Resource to clients.
 class ResourceAnnotations {
@@ -33,13 +34,13 @@ class ResourceAnnotations {
       title: json['title'] as String?,
       audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
       priority:
-          _readUnitDouble(json['priority'], 'ResourceAnnotations.priority'),
+          readUnitDouble(json['priority'], 'ResourceAnnotations.priority'),
       lastModified: json['lastModified'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
-    _validateUnitDouble(priority, 'ResourceAnnotations.priority');
+    validateUnitDouble(priority, 'ResourceAnnotations.priority');
     return {
       if (audience != null) 'audience': audience,
       if (priority != null) 'priority': priority,
@@ -110,7 +111,7 @@ class Resource {
       icons: (json['icons'] as List<dynamic>?)
           ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
           .toList(),
-      size: _readOptionalInt(json['size'], 'Resource.size'),
+      size: readOptionalInteger(json['size'], 'Resource.size'),
       annotations: json['annotations'] != null
           ? ResourceAnnotations.fromJson(
               json['annotations'] as Map<String, dynamic>,
@@ -609,36 +610,3 @@ typedef UnsubscribeRequestParams = UnsubscribeRequest;
 /// Deprecated alias for [ResourceUpdatedNotification].
 @Deprecated('Use ResourceUpdatedNotification instead')
 typedef ResourceUpdatedNotificationParams = ResourceUpdatedNotification;
-
-double? _readUnitDouble(Object? value, String field) {
-  if (value == null) {
-    return null;
-  }
-  if (value is! num) {
-    throw FormatException('$field must be a number between 0 and 1');
-  }
-  final result = value.toDouble();
-  if (result < 0 || result > 1) {
-    throw FormatException('$field must be between 0 and 1');
-  }
-  return result;
-}
-
-void _validateUnitDouble(double? value, String field) {
-  if (value == null) {
-    return;
-  }
-  if (value < 0 || value > 1) {
-    throw ArgumentError.value(value, field, 'must be between 0 and 1');
-  }
-}
-
-int? _readOptionalInt(Object? value, String field) {
-  if (value == null) {
-    return null;
-  }
-  if (value is int) {
-    return value;
-  }
-  throw FormatException('$field must be an integer');
-}

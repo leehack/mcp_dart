@@ -4,6 +4,7 @@ import '../shared/json_schema/json_schema.dart';
 
 import 'content.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Legacy alias for [JsonObject] used as tool input schema.
 typedef ToolInputSchema = JsonObject;
@@ -78,13 +79,13 @@ class ToolAnnotations {
       destructiveHint: json['destructiveHint'] as bool? ?? true,
       idempotentHint: json['idempotentHint'] as bool? ?? false,
       openWorldHint: json['openWorldHint'] as bool? ?? true,
-      priority: _readUnitDouble(json['priority'], 'ToolAnnotations.priority'),
+      priority: readUnitDouble(json['priority'], 'ToolAnnotations.priority'),
       audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
     );
   }
 
   Map<String, dynamic> toJson() {
-    _validateUnitDouble(priority, 'ToolAnnotations.priority');
+    validateUnitDouble(priority, 'ToolAnnotations.priority');
     return {
       if (title != null) 'title': title,
       'readOnlyHint': readOnlyHint,
@@ -438,28 +439,5 @@ void _validateObjectRootSchema(
       field,
       'MCP tool schemas must have root type "object"',
     );
-  }
-}
-
-double? _readUnitDouble(Object? value, String field) {
-  if (value == null) {
-    return null;
-  }
-  if (value is! num) {
-    throw FormatException('$field must be a number between 0 and 1');
-  }
-  final result = value.toDouble();
-  if (result < 0 || result > 1) {
-    throw FormatException('$field must be between 0 and 1');
-  }
-  return result;
-}
-
-void _validateUnitDouble(double? value, String field) {
-  if (value == null) {
-    return;
-  }
-  if (value < 0 || value > 1) {
-    throw ArgumentError.value(value, field, 'must be between 0 and 1');
   }
 }

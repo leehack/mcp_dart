@@ -2,6 +2,7 @@ import 'content.dart';
 import 'json_rpc.dart';
 import 'tasks.dart';
 import 'tools.dart';
+import 'validation.dart';
 
 Map<String, dynamic>? _asJsonObjectOrNull(dynamic value) {
   if (value == null) {
@@ -227,15 +228,15 @@ class ModelPreferences {
       hints: (json['hints'] as List<dynamic>?)
           ?.map((h) => ModelHint.fromJson(_asJsonObject(h)))
           .toList(),
-      costPriority: _readUnitDouble(
+      costPriority: readUnitDouble(
         json['costPriority'],
         'ModelPreferences.costPriority',
       ),
-      speedPriority: _readUnitDouble(
+      speedPriority: readUnitDouble(
         json['speedPriority'],
         'ModelPreferences.speedPriority',
       ),
-      intelligencePriority: _readUnitDouble(
+      intelligencePriority: readUnitDouble(
         json['intelligencePriority'],
         'ModelPreferences.intelligencePriority',
       ),
@@ -243,9 +244,9 @@ class ModelPreferences {
   }
 
   Map<String, dynamic> toJson() {
-    _validateUnitDouble(costPriority, 'ModelPreferences.costPriority');
-    _validateUnitDouble(speedPriority, 'ModelPreferences.speedPriority');
-    _validateUnitDouble(
+    validateUnitDouble(costPriority, 'ModelPreferences.costPriority');
+    validateUnitDouble(speedPriority, 'ModelPreferences.speedPriority');
+    validateUnitDouble(
       intelligencePriority,
       'ModelPreferences.intelligencePriority',
     );
@@ -759,26 +760,3 @@ class CreateMessageResult implements BaseResultData {
 /// Deprecated alias for [CreateMessageRequest].
 @Deprecated('Use CreateMessageRequest instead')
 typedef CreateMessageRequestParams = CreateMessageRequest;
-
-double? _readUnitDouble(Object? value, String field) {
-  if (value == null) {
-    return null;
-  }
-  if (value is! num) {
-    throw FormatException('$field must be a number between 0 and 1');
-  }
-  final result = value.toDouble();
-  if (result < 0 || result > 1) {
-    throw FormatException('$field must be between 0 and 1');
-  }
-  return result;
-}
-
-void _validateUnitDouble(double? value, String field) {
-  if (value == null) {
-    return;
-  }
-  if (value < 0 || value > 1) {
-    throw ArgumentError.value(value, field, 'must be between 0 and 1');
-  }
-}

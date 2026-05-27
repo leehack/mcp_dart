@@ -1,3 +1,5 @@
+import 'validation.dart';
+
 Map<String, dynamic>? _asJsonObjectOrNull(dynamic value) {
   if (value == null) {
     return null;
@@ -50,13 +52,13 @@ class Annotations {
       audience: (json['audience'] as List<dynamic>?)
           ?.map((value) => AnnotationAudience.values.byName(value as String))
           .toList(),
-      priority: _readUnitDouble(json['priority'], 'Annotations.priority'),
+      priority: readUnitDouble(json['priority'], 'Annotations.priority'),
       lastModified: json['lastModified'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
-    _validateUnitDouble(priority, 'Annotations.priority');
+    validateUnitDouble(priority, 'Annotations.priority');
     return {
       if (audience != null)
         'audience': audience!.map((value) => value.name).toList(),
@@ -487,27 +489,4 @@ class ResourceLink extends Content {
 /// Represents unknown or passthrough content types.
 class UnknownContent extends Content {
   const UnknownContent({required super.type});
-}
-
-double? _readUnitDouble(Object? value, String field) {
-  if (value == null) {
-    return null;
-  }
-  if (value is! num) {
-    throw FormatException('$field must be a number between 0 and 1');
-  }
-  final result = value.toDouble();
-  if (result < 0 || result > 1) {
-    throw FormatException('$field must be between 0 and 1');
-  }
-  return result;
-}
-
-void _validateUnitDouble(double? value, String field) {
-  if (value == null) {
-    return;
-  }
-  if (value < 0 || value > 1) {
-    throw ArgumentError.value(value, field, 'must be between 0 and 1');
-  }
 }
