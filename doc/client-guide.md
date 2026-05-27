@@ -224,6 +224,7 @@ for (final resource in response.resources) {
   print('  URI: ${resource.uri}');
   print('  Description: ${resource.description}');
   print('  MIME: ${resource.mimeType}');
+  print('  Size: ${resource.size ?? "unknown"}');
   print('  Last modified: ${resource.annotations?.lastModified}');
   print('  Icons: ${resource.icons?.length ?? 0}');
 }
@@ -543,6 +544,7 @@ client.onListRoots = () async {
       Root(
         uri: 'file:///home/user/projects',
         name: 'Projects',
+        meta: {'workspace': 'primary'},
       ),
       Root(
         uri: 'file:///home/user/documents',

@@ -192,18 +192,36 @@ class CompletionResultData {
   }) : assert(values.length <= 100);
 
   factory CompletionResultData.fromJson(Map<String, dynamic> json) {
+    final values = json['values'];
+    if (values is! List) {
+      throw const FormatException('CompletionResultData.values is required');
+    }
+    if (values.length > 100) {
+      throw const FormatException(
+        'CompletionResultData.values must not exceed 100 items',
+      );
+    }
     return CompletionResultData(
-      values: (json['values'] as List<dynamic>?)?.cast<String>() ?? [],
+      values: values.cast<String>(),
       total: json['total'] as int?,
       hasMore: json['hasMore'] as bool?,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'values': values,
-        if (total != null) 'total': total,
-        if (hasMore != null) 'hasMore': hasMore,
-      };
+  Map<String, dynamic> toJson() {
+    if (values.length > 100) {
+      throw ArgumentError.value(
+        values.length,
+        'values.length',
+        'CompletionResultData.values must not exceed 100 items',
+      );
+    }
+    return {
+      'values': values,
+      if (total != null) 'total': total,
+      if (hasMore != null) 'hasMore': hasMore,
+    };
+  }
 }
 
 /// Result data for a successful `completion/complete` request.

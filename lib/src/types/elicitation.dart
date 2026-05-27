@@ -132,6 +132,7 @@ class ElicitRequest {
     if (requestedSchemaJson is! Map<String, dynamic>) {
       throw const FormatException('Form elicitation requires requestedSchema.');
     }
+    _validateFormRequestedSchemaJson(requestedSchemaJson);
     if (url != null) {
       throw const FormatException('Form elicitation must not include url.');
     }
@@ -167,6 +168,7 @@ class ElicitRequest {
     if (requestedSchema == null) {
       throw ArgumentError('Form elicitation requires requestedSchema.');
     }
+    _validateFormRequestedSchema(requestedSchema!);
     if (url != null) {
       throw ArgumentError('Form elicitation must not include url.');
     }
@@ -265,14 +267,9 @@ class ElicitResult implements BaseResultData {
       throw FormatException('Invalid elicitation action: $action');
     }
 
-    final content = json['content'];
-    if (content != null && content is! Map) {
-      throw const FormatException('ElicitResult content must be an object.');
-    }
-
     return ElicitResult(
       action: action,
-      content: content?.cast<String, dynamic>(),
+      content: _parseElicitResultContent(json['content']),
       url: json['url'] as String?,
       elicitationId: json['elicitationId'] as String?,
       meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
@@ -280,11 +277,14 @@ class ElicitResult implements BaseResultData {
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'action': action,
-        if (content != null) 'content': content,
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    _validateElicitResultContent(content);
+    return {
+      'action': action,
+      if (content != null) 'content': content,
+      if (meta != null) '_meta': meta,
+    };
+  }
 
   /// Helper to check if the user accepted the input
   bool get accepted => action == 'accept';
@@ -377,17 +377,25 @@ class URLElicitationRequiredErrorData {
   const URLElicitationRequiredErrorData({required this.elicitations});
 
   factory URLElicitationRequiredErrorData.fromJson(Map<String, dynamic> json) {
-    final elicitationsList = json['elicitations'] as List<dynamic>? ?? [];
-    return URLElicitationRequiredErrorData(
-      elicitations: elicitationsList
-          .map((e) => ElicitRequest.fromJson(e as Map<String, dynamic>))
-          .toList(),
-    );
+    final elicitationsList = json['elicitations'];
+    if (elicitationsList is! List) {
+      throw const FormatException(
+        'URLElicitationRequiredErrorData.elicitations is required',
+      );
+    }
+    final elicitations = elicitationsList
+        .map((e) => ElicitRequest.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _validateUrlElicitations(elicitations, formatException: true);
+    return URLElicitationRequiredErrorData(elicitations: elicitations);
   }
 
-  Map<String, dynamic> toJson() => {
-        'elicitations': elicitations.map((e) => e.toJson()).toList(),
-      };
+  Map<String, dynamic> toJson() {
+    _validateUrlElicitations(elicitations);
+    return {
+      'elicitations': elicitations.map((e) => e.toJson()).toList(),
+    };
+  }
 }
 
 /// Deprecated alias for [ElicitRequest].
@@ -397,3 +405,248 @@ typedef ElicitRequestParams = ElicitRequest;
 /// Deprecated alias for [ElicitationCompleteNotification].
 @Deprecated('Use ElicitationCompleteNotification instead')
 typedef ElicitationCompleteParams = ElicitationCompleteNotification;
+
+void _validateFormRequestedSchema(ElicitationInputSchema schema) {
+  _validateFormRequestedSchemaJson(schema.toJson());
+}
+
+void _validateFormRequestedSchemaJson(Map<String, dynamic> json) {
+  _ensureAllowedKeys(
+    json,
+    const {r'$schema', 'type', 'properties', 'required'},
+    'ElicitRequest.requestedSchema',
+  );
+  if (json['type'] != 'object') {
+    throw const FormatException(
+      'Form elicitation requestedSchema must have type object.',
+    );
+  }
+  final properties = json['properties'];
+  if (properties is! Map) {
+    throw const FormatException(
+      'Form elicitation requestedSchema.properties is required.',
+    );
+  }
+  for (final entry in properties.entries) {
+    if (entry.key is! String || entry.value is! Map) {
+      throw const FormatException(
+        'Form elicitation requestedSchema properties must be schema objects.',
+      );
+    }
+    _validatePrimitiveSchema(
+      (entry.value as Map).cast<String, dynamic>(),
+      'ElicitRequest.requestedSchema.properties.${entry.key}',
+    );
+  }
+  final required = json['required'];
+  if (required != null &&
+      (required is! List || required.any((value) => value is! String))) {
+    throw const FormatException(
+      'Form elicitation requestedSchema.required must be a string array.',
+    );
+  }
+}
+
+void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
+  final type = json['type'];
+  switch (type) {
+    case 'string':
+      _validateStringOrSingleEnumSchema(json, context);
+    case 'number':
+    case 'integer':
+      _ensureAllowedKeys(
+        json,
+        const {
+          'type',
+          'title',
+          'description',
+          'minimum',
+          'maximum',
+          'default',
+        },
+        context,
+      );
+    case 'boolean':
+      _ensureAllowedKeys(
+        json,
+        const {'type', 'title', 'description', 'default'},
+        context,
+      );
+    case 'array':
+      _validateMultiSelectEnumSchema(json, context);
+    default:
+      throw FormatException(
+        '$context must be a primitive elicitation schema.',
+      );
+  }
+}
+
+void _validateStringOrSingleEnumSchema(
+  Map<String, dynamic> json,
+  String context,
+) {
+  if (json.containsKey('oneOf')) {
+    _ensureAllowedKeys(
+      json,
+      const {'type', 'title', 'description', 'oneOf', 'default'},
+      context,
+    );
+    final oneOf = json['oneOf'];
+    if (oneOf is! List ||
+        oneOf.any(
+          (value) =>
+              value is! Map ||
+              value['const'] is! String ||
+              value['title'] is! String,
+        )) {
+      throw FormatException('$context.oneOf must contain const/title strings.');
+    }
+    return;
+  }
+
+  _ensureAllowedKeys(
+    json,
+    const {
+      'type',
+      'title',
+      'description',
+      'minLength',
+      'maxLength',
+      'format',
+      'default',
+      'enum',
+      'enumNames',
+    },
+    context,
+  );
+  final enumValues = json['enum'];
+  if (enumValues != null &&
+      (enumValues is! List || enumValues.any((value) => value is! String))) {
+    throw FormatException('$context.enum must be a string array.');
+  }
+  final enumNames = json['enumNames'];
+  if (enumNames != null &&
+      (enumNames is! List || enumNames.any((value) => value is! String))) {
+    throw FormatException('$context.enumNames must be a string array.');
+  }
+  final format = json['format'];
+  if (format != null &&
+      !const {'email', 'uri', 'date', 'date-time'}.contains(format)) {
+    throw FormatException('$context.format is not allowed for elicitation.');
+  }
+}
+
+void _validateMultiSelectEnumSchema(
+  Map<String, dynamic> json,
+  String context,
+) {
+  _ensureAllowedKeys(
+    json,
+    const {
+      'type',
+      'title',
+      'description',
+      'minItems',
+      'maxItems',
+      'items',
+      'default',
+    },
+    context,
+  );
+  final items = json['items'];
+  if (items is! Map) {
+    throw FormatException('$context.items is required for array schemas.');
+  }
+  final itemMap = items.cast<String, dynamic>();
+  if (itemMap['type'] == 'string' && itemMap['enum'] is List) {
+    final enumValues = itemMap['enum'] as List;
+    if (enumValues.any((value) => value is! String)) {
+      throw FormatException('$context.items.enum must be a string array.');
+    }
+    return;
+  }
+  final anyOf = itemMap['anyOf'];
+  if (anyOf is List &&
+      anyOf.every(
+        (value) =>
+            value is Map &&
+            value['const'] is String &&
+            value['title'] is String,
+      )) {
+    return;
+  }
+  throw FormatException('$context.items must define a string enum.');
+}
+
+void _ensureAllowedKeys(
+  Map<String, dynamic> json,
+  Set<String> allowed,
+  String context,
+) {
+  final unsupported = json.keys.where((key) => !allowed.contains(key)).toList();
+  if (unsupported.isNotEmpty) {
+    throw FormatException(
+      '$context contains unsupported fields: ${unsupported.join(', ')}',
+    );
+  }
+}
+
+Map<String, dynamic>? _parseElicitResultContent(Object? content) {
+  if (content == null) {
+    return null;
+  }
+  if (content is! Map) {
+    throw const FormatException('ElicitResult.content must be an object.');
+  }
+  final result = content.cast<String, dynamic>();
+  _validateElicitResultContent(result, formatException: true);
+  return result;
+}
+
+void _validateElicitResultContent(
+  Map<String, dynamic>? content, {
+  bool formatException = false,
+}) {
+  if (content == null) {
+    return;
+  }
+  for (final entry in content.entries) {
+    final value = entry.value;
+    if (value is String || value is num || value is bool) {
+      continue;
+    }
+    if (value is List && value.every((item) => item is String)) {
+      continue;
+    }
+    if (formatException) {
+      throw FormatException(
+        'ElicitResult.content.${entry.key} must be string, number, boolean, or string[]',
+      );
+    }
+    throw ArgumentError.value(
+      value,
+      'content.${entry.key}',
+      'ElicitResult content values must be string, number, boolean, or string[]',
+    );
+  }
+}
+
+void _validateUrlElicitations(
+  List<ElicitRequest> elicitations, {
+  bool formatException = false,
+}) {
+  for (final elicitation in elicitations) {
+    if (!elicitation.isUrlMode) {
+      if (formatException) {
+        throw const FormatException(
+          'URLElicitationRequiredErrorData only accepts URL-mode elicitations',
+        );
+      }
+      throw ArgumentError.value(
+        elicitation,
+        'elicitations',
+        'URLElicitationRequiredErrorData only accepts URL-mode elicitations',
+      );
+    }
+  }
+}

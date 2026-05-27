@@ -72,8 +72,12 @@ void main() {
         icons: icons,
       );
       expect(tool.icon?.data, 'base64');
-      expect(tool.toJson()['icon']['data'], 'base64');
+      expect(tool.toJson().containsKey('icon'), isFalse);
       expect((tool.toJson()['icons'] as List).first['theme'], 'dark');
+      expect(
+        Tool.fromJson({...tool.toJson(), 'icon': icon.toJson()}).icon?.data,
+        'base64',
+      );
 
       final resource = Resource(
         uri: 'file://test',
@@ -82,8 +86,14 @@ void main() {
         icons: icons,
       );
       expect(resource.icon?.data, 'base64');
-      expect(resource.toJson()['icon']['data'], 'base64');
+      expect(resource.toJson().containsKey('icon'), isFalse);
       expect((resource.toJson()['icons'] as List).first['theme'], 'dark');
+      expect(
+        Resource.fromJson(
+          {...resource.toJson(), 'icon': icon.toJson()},
+        ).icon?.data,
+        'base64',
+      );
 
       final prompt = Prompt(
         name: 'test-prompt',
@@ -91,8 +101,12 @@ void main() {
         icons: icons,
       );
       expect(prompt.icon?.data, 'base64');
-      expect(prompt.toJson()['icon']['data'], 'base64');
+      expect(prompt.toJson().containsKey('icon'), isFalse);
       expect((prompt.toJson()['icons'] as List).first['theme'], 'dark');
+      expect(
+        Prompt.fromJson({...prompt.toJson(), 'icon': icon.toJson()}).icon?.data,
+        'base64',
+      );
 
       final template = ResourceTemplate(
         uriTemplate: 'file:///test/{id}',
@@ -101,8 +115,14 @@ void main() {
         icons: icons,
       );
       expect(template.icon?.data, 'base64');
-      expect(template.toJson()['icon']['data'], 'base64');
+      expect(template.toJson().containsKey('icon'), isFalse);
       expect((template.toJson()['icons'] as List).first['theme'], 'dark');
+      expect(
+        ResourceTemplate.fromJson(
+          {...template.toJson(), 'icon': icon.toJson()},
+        ).icon?.data,
+        'base64',
+      );
     });
 
     test('BaseMetadata title fields are supported', () {
@@ -269,10 +289,14 @@ void main() {
       expect(annotations.audience, contains('user'));
 
       final json = annotations.toJson();
-      expect(json['priority'], 0.5);
-      expect(json['audience'], contains('assistant'));
+      expect(json.containsKey('priority'), isFalse);
+      expect(json.containsKey('audience'), isFalse);
 
-      final deserialized = ToolAnnotations.fromJson(json);
+      final deserialized = ToolAnnotations.fromJson({
+        ...json,
+        'priority': 0.5,
+        'audience': ['user', 'assistant'],
+      });
       expect(deserialized.priority, 0.5);
       expect(deserialized.audience, contains('user'));
     });
@@ -1026,6 +1050,241 @@ void main() {
         expect(deserialized.taskId, 'full-task');
         expect(deserialized.statusMessage, 'Processing data');
         expect(deserialized.meta, {'custom': 'value'});
+      });
+    });
+
+    group('Spec gap regressions', () {
+      test('metadata helpers emit stable 2025-11-25 shapes', () {
+        final root = Root(
+          uri: 'file:///workspace',
+          name: 'workspace',
+          meta: {'scope': 'repo'},
+        );
+        expect(root.toJson()['_meta'], {'scope': 'repo'});
+
+        final resource = const Resource(
+          uri: 'file:///workspace/file.txt',
+          name: 'file',
+          size: 123,
+          annotations: ResourceAnnotations(title: 'legacy-title'),
+        );
+        final resourceJson = resource.toJson();
+        expect(resourceJson['size'], 123);
+        expect(resourceJson['annotations'], isNot(contains('title')));
+        expect(
+          ResourceAnnotations.fromJson({
+            'title': 'legacy-title',
+            'priority': 0.5,
+          }).title,
+          'legacy-title',
+        );
+      });
+
+      test('server capabilities omit non-stable fields while parsing legacy',
+          () {
+        final capabilities = const ServerCapabilities(
+          tasks: ServerCapabilitiesTasks(listChanged: true),
+          elicitation: ServerCapabilitiesElicitation.formOnly(),
+        );
+
+        final json = capabilities.toJson();
+        expect(json['tasks'], isNot(contains('listChanged')));
+        expect(json.containsKey('elicitation'), isFalse);
+
+        final parsed = ServerCapabilities.fromJson({
+          'tasks': {'listChanged': true},
+          'elicitation': {
+            'form': {},
+          },
+        });
+        expect(parsed.tasks?.listChanged, isTrue);
+        expect(parsed.elicitation?.form, isNotNull);
+      });
+
+      test('JSON-RPC response id follows MCP result/error schema', () {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': '2.0',
+            'id': null,
+            'result': {},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+
+        final error = JsonRpcError(
+          id: null,
+          error: JsonRpcErrorData(
+            code: ErrorCode.invalidRequest.value,
+            message: 'Invalid request',
+          ),
+        ).toJson();
+        expect(error.containsKey('id'), isFalse);
+
+        final parsed = JsonRpcError.fromJson({
+          'jsonrpc': '2.0',
+          'error': {
+            'code': ErrorCode.invalidRequest.value,
+            'message': 'Invalid request',
+          },
+        });
+        expect(parsed.id, isNull);
+      });
+
+      test('tool schemas must be object-root JSON Schema objects', () {
+        expect(
+          () => const Tool(
+            name: 'bad-tool',
+            inputSchema: JsonString(),
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+
+        expect(
+          () => Tool.fromJson({
+            'name': 'bad-tool',
+            'inputSchema': {'type': 'string'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('elicitation validates restricted form and result wire shapes', () {
+        final request = ElicitRequest.form(
+          message: 'Choose',
+          requestedSchema: JsonObject(
+            properties: {
+              'size': JsonSchema.string(enumValues: ['small', 'large']),
+            },
+            required: const ['size'],
+          ),
+        );
+        expect(request.toJson()['requestedSchema']['type'], 'object');
+
+        expect(
+          () => const ElicitRequest.form(
+            message: 'Nested',
+            requestedSchema: JsonObject(
+              properties: {'nested': JsonObject()},
+            ),
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ElicitResult.fromJson({
+            'action': 'accept',
+            'content': {
+              'bad': ['ok', 1],
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const ElicitResult(
+            action: 'accept',
+            content: {
+              'bad': ['ok', 1],
+            },
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          () => URLElicitationRequiredErrorData.fromJson({
+            'elicitations': [
+              request.toJson(),
+            ],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('runtime value constraints are enforced without asserts', () {
+        expect(
+          () => Annotations(priority: 2).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+        expect(
+          () => Annotations.fromJson({'priority': -0.1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CompletionResultData(
+            values: List.generate(101, (index) => '$index'),
+          ).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+        expect(
+          () => CompletionResultData.fromJson({
+            'values': List.generate(101, (index) => '$index'),
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Root(uri: 'https://example.com'),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          () => ModelPreferences(costPriority: 2).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+        expect(
+          () => ModelPreferences.fromJson({'costPriority': -1}),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('bare task containers strip task metadata', () {
+        const task = Task(
+          taskId: 'task-1',
+          status: TaskStatus.working,
+          ttl: null,
+          createdAt: '2025-01-15T10:00:00Z',
+          lastUpdatedAt: '2025-01-15T10:01:00Z',
+          meta: {'trace': 'result-only'},
+        );
+
+        expect(task.toJson(), contains('_meta'));
+        expect(
+          const ListTasksResult(tasks: [task]).toJson()['tasks'].single,
+          isNot(contains('_meta')),
+        );
+        expect(
+          const CreateTaskResult(task: task).toJson()['task'],
+          isNot(contains('_meta')),
+        );
+      });
+
+      test('strict incoming result arrays reject missing required lists', () {
+        expect(
+          () => ListRootsResult.fromJson({}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ListResourcesResult.fromJson({}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ListPromptsResult.fromJson({}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ListToolsResult.fromJson({}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ListTasksResult.fromJson({}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequest.fromJson({'maxTokens': 1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'toolUseId': 'tool-use-1',
+            'content': {'type': 'text', 'text': 'legacy'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
   });

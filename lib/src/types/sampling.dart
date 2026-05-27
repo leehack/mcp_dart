@@ -165,6 +165,17 @@ List<Content> _parseToolResultContent(dynamic rawContent) {
   return [TextContent(text: rawContent.toString())];
 }
 
+List<Content> _parseToolResultWireContent(dynamic rawContent) {
+  if (rawContent is! List) {
+    throw const FormatException(
+      'SamplingToolResultContent.content must be a ContentBlock array',
+    );
+  }
+  return rawContent
+      .map((item) => Content.fromJson(_asJsonObject(item)))
+      .toList();
+}
+
 /// Hints for model selection during sampling.
 class ModelHint {
   /// Hint for a model name.
@@ -216,19 +227,36 @@ class ModelPreferences {
       hints: (json['hints'] as List<dynamic>?)
           ?.map((h) => ModelHint.fromJson(_asJsonObject(h)))
           .toList(),
-      costPriority: (json['costPriority'] as num?)?.toDouble(),
-      speedPriority: (json['speedPriority'] as num?)?.toDouble(),
-      intelligencePriority: (json['intelligencePriority'] as num?)?.toDouble(),
+      costPriority: _readUnitDouble(
+        json['costPriority'],
+        'ModelPreferences.costPriority',
+      ),
+      speedPriority: _readUnitDouble(
+        json['speedPriority'],
+        'ModelPreferences.speedPriority',
+      ),
+      intelligencePriority: _readUnitDouble(
+        json['intelligencePriority'],
+        'ModelPreferences.intelligencePriority',
+      ),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        if (hints != null) 'hints': hints!.map((h) => h.toJson()).toList(),
-        if (costPriority != null) 'costPriority': costPriority,
-        if (speedPriority != null) 'speedPriority': speedPriority,
-        if (intelligencePriority != null)
-          'intelligencePriority': intelligencePriority,
-      };
+  Map<String, dynamic> toJson() {
+    _validateUnitDouble(costPriority, 'ModelPreferences.costPriority');
+    _validateUnitDouble(speedPriority, 'ModelPreferences.speedPriority');
+    _validateUnitDouble(
+      intelligencePriority,
+      'ModelPreferences.intelligencePriority',
+    );
+    return {
+      if (hints != null) 'hints': hints!.map((h) => h.toJson()).toList(),
+      if (costPriority != null) 'costPriority': costPriority,
+      if (speedPriority != null) 'speedPriority': speedPriority,
+      if (intelligencePriority != null)
+        'intelligencePriority': intelligencePriority,
+    };
+  }
 }
 
 /// Represents content parts within sampling messages.
@@ -424,7 +452,7 @@ class SamplingToolResultContent extends SamplingContent {
   factory SamplingToolResultContent.fromJson(Map<String, dynamic> json) {
     return SamplingToolResultContent(
       toolUseId: json['toolUseId'] as String,
-      content: _parseToolResultContent(json['content']),
+      content: _parseToolResultWireContent(json['content']),
       structuredContent: _asJsonObjectOrNull(json['structuredContent']),
       isError: json['isError'] as bool?,
       meta: _asJsonObjectOrNull(json['_meta']),
@@ -571,11 +599,14 @@ class CreateMessageRequest {
     final ctxStr = json['includeContext'] as String?;
     final task = _asJsonObjectOrNull(json['task']);
     final toolChoice = _asJsonObjectOrNull(json['toolChoice']);
+    final messages = json['messages'];
+    if (messages is! List) {
+      throw const FormatException('CreateMessageRequest.messages is required');
+    }
     return CreateMessageRequest(
-      messages: (json['messages'] as List<dynamic>?)
-              ?.map((m) => SamplingMessage.fromJson(_asJsonObject(m)))
-              .toList() ??
-          [],
+      messages: messages
+          .map((m) => SamplingMessage.fromJson(_asJsonObject(m)))
+          .toList(),
       task: task == null ? null : TaskCreation.fromJson(task),
       systemPrompt: json['systemPrompt'] as String?,
       includeContext:
@@ -690,6 +721,10 @@ class CreateMessageResult implements BaseResultData {
       try {
         reason = StopReason.values.byName(reason);
       } catch (_) {}
+    } else if (reason != null) {
+      throw const FormatException(
+        'CreateMessageResult.stopReason must be a string',
+      );
     }
     return CreateMessageResult(
       model: json['model'] as String,
@@ -701,18 +736,49 @@ class CreateMessageResult implements BaseResultData {
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'model': model,
-        if (stopReason != null)
-          'stopReason': (stopReason is StopReason)
-              ? (stopReason as StopReason).name
-              : stopReason,
-        'role': role.name,
-        'content': _samplingMessageContentToJson(content),
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    final reason = stopReason;
+    if (reason != null && reason is! StopReason && reason is! String) {
+      throw ArgumentError.value(
+        reason,
+        'stopReason',
+        'CreateMessageResult.stopReason must be a StopReason or string',
+      );
+    }
+    return {
+      'model': model,
+      if (reason != null)
+        'stopReason': reason is StopReason ? reason.name : reason,
+      'role': role.name,
+      'content': _samplingMessageContentToJson(content),
+      if (meta != null) '_meta': meta,
+    };
+  }
 }
 
 /// Deprecated alias for [CreateMessageRequest].
 @Deprecated('Use CreateMessageRequest instead')
 typedef CreateMessageRequestParams = CreateMessageRequest;
+
+double? _readUnitDouble(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! num) {
+    throw FormatException('$field must be a number between 0 and 1');
+  }
+  final result = value.toDouble();
+  if (result < 0 || result > 1) {
+    throw FormatException('$field must be between 0 and 1');
+  }
+  return result;
+}
+
+void _validateUnitDouble(double? value, String field) {
+  if (value == null) {
+    return;
+  }
+  if (value < 0 || value > 1) {
+    throw ArgumentError.value(value, field, 'must be between 0 and 1');
+  }
+}

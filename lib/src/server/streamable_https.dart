@@ -176,6 +176,8 @@ class StreamableHTTPServerTransport
   final bool _strictProtocolVersionHeaderValidation;
   final bool _rejectBatchJsonRpcPayloads;
   final int _maxReplayedEvents;
+  static const JsonRpcNotification _ssePrimingMessage =
+      JsonRpcNotification(method: 'notifications/experimental/sse/priming');
 
   @override
   String? sessionId;
@@ -454,7 +456,10 @@ class StreamableHTTPServerTransport
     // to ensure it's available if a task tries to send a message immediately
     _addStandaloneSseResponse(streamId, req.response);
 
-    await req.response.flush();
+    if (!await _primeSseStream(streamId, req.response)) {
+      _removeStandaloneSseResponse(streamId, req.response);
+      return;
+    }
 
     // Set up close handler for client disconnects
     req.response.done.then((_) {
@@ -517,6 +522,11 @@ class StreamableHTTPServerTransport
           await _safeClose(res);
           return;
         }
+      }
+
+      if (!await _primeSseStream(streamId, res)) {
+        await _safeClose(res);
+        return;
       }
 
       if (_isStandaloneSseStreamId(streamId)) {
@@ -584,6 +594,36 @@ class StreamableHTTPServerTransport
     } catch (e) {
       return false;
     }
+  }
+
+  Future<bool> _writeSSEPrimingEvent(
+    HttpResponse res,
+    EventId eventId,
+  ) async {
+    try {
+      _validateSseEventId(eventId);
+      res.add(utf8.encode('id: $eventId\ndata:\n\n'));
+      await res.flush();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> _primeSseStream(StreamId streamId, HttpResponse res) async {
+    final store = _eventStore;
+    if (store == null) {
+      await res.flush();
+      return true;
+    }
+
+    final eventId = await store.storeEvent(streamId, _ssePrimingMessage);
+    _validateSseEventId(eventId);
+    final sent = await _writeSSEPrimingEvent(res, eventId);
+    if (!sent) {
+      onerror?.call(StateError('Failed to send initial SSE event ID'));
+    }
+    return sent;
   }
 
   /// Handles unsupported requests (PUT, PATCH, etc.)
@@ -869,6 +909,17 @@ class StreamableHTTPServerTransport
             _streamMapping[streamId] = req.response;
             _requestToStreamMapping[reqId] = streamId;
           }
+        }
+
+        if (!_enableJsonResponse &&
+            !await _primeSseStream(streamId, req.response)) {
+          _streamMapping.remove(streamId);
+          for (final message in messages) {
+            if (_isJsonRpcRequest(message)) {
+              _requestToStreamMapping.remove((message as JsonRpcRequest).id);
+            }
+          }
+          return;
         }
 
         // Set up close handler for client disconnects

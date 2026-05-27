@@ -181,8 +181,9 @@ void main() {
         expect(params.message, equals("Enter your name"));
 
         final schema = params.requestedSchema!;
-        expect(schema, isA<JsonString>());
-        final stringSchema = schema as JsonString;
+        expect(schema, isA<JsonObject>());
+        final objectSchema = schema as JsonObject;
+        final stringSchema = objectSchema.properties!['name'] as JsonString;
 
         expect(stringSchema.minLength, equals(1));
 
@@ -199,7 +200,10 @@ void main() {
         id: 1,
         elicitParams: ElicitRequestParams(
           message: "Enter your name",
-          requestedSchema: JsonSchema.string(minLength: 1),
+          requestedSchema: JsonObject(
+            properties: {'name': JsonSchema.string(minLength: 1)},
+            required: const ['name'],
+          ),
         ),
       );
 
@@ -238,7 +242,9 @@ void main() {
         expect(params.message, equals("Confirm action"));
 
         final schema = params.requestedSchema!;
-        expect(schema, isA<JsonBoolean>());
+        expect(schema, isA<JsonObject>());
+        final objectSchema = schema as JsonObject;
+        expect(objectSchema.properties!['confirmed'], isA<JsonBoolean>());
 
         return const ElicitResult(
           action: 'accept',
@@ -252,7 +258,12 @@ void main() {
         id: 2,
         elicitParams: ElicitRequestParams(
           message: "Confirm action",
-          requestedSchema: JsonSchema.boolean(defaultValue: false),
+          requestedSchema: JsonObject(
+            properties: {
+              'confirmed': JsonSchema.boolean(defaultValue: false),
+            },
+            required: const ['confirmed'],
+          ),
         ),
       );
 
@@ -286,8 +297,9 @@ void main() {
         expect(params.message, equals("Enter age"));
 
         final schema = params.requestedSchema!;
-        expect(schema, isA<JsonNumber>());
-        final numberSchema = schema as JsonNumber;
+        expect(schema, isA<JsonObject>());
+        final objectSchema = schema as JsonObject;
+        final numberSchema = objectSchema.properties!['age'] as JsonNumber;
 
         expect(numberSchema.minimum, equals(0));
         expect(numberSchema.maximum, equals(120));
@@ -304,7 +316,12 @@ void main() {
         id: 3,
         elicitParams: ElicitRequestParams(
           message: "Enter age",
-          requestedSchema: JsonSchema.number(minimum: 0, maximum: 120),
+          requestedSchema: JsonObject(
+            properties: {
+              'age': JsonSchema.number(minimum: 0, maximum: 120),
+            },
+            required: const ['age'],
+          ),
         ),
       );
 
@@ -338,8 +355,9 @@ void main() {
         expect(params.message, equals("Choose size"));
 
         final schema = params.requestedSchema!;
-        expect(schema, isA<JsonString>());
-        final stringSchema = schema as JsonString;
+        expect(schema, isA<JsonObject>());
+        final objectSchema = schema as JsonObject;
+        final stringSchema = objectSchema.properties!['size'] as JsonString;
         expect(stringSchema.enumValues, equals(['small', 'medium', 'large']));
 
         return const ElicitResult(
@@ -354,9 +372,14 @@ void main() {
         id: 4,
         elicitParams: ElicitRequestParams(
           message: "Choose size",
-          requestedSchema: JsonSchema.string(
-            enumValues: ['small', 'medium', 'large'],
-            defaultValue: 'medium',
+          requestedSchema: JsonObject(
+            properties: {
+              'size': JsonSchema.string(
+                enumValues: ['small', 'medium', 'large'],
+                defaultValue: 'medium',
+              ),
+            },
+            required: const ['size'],
           ),
         ),
       );
@@ -398,7 +421,10 @@ void main() {
         id: 5,
         elicitParams: ElicitRequestParams(
           message: "Enter name",
-          requestedSchema: JsonSchema.string(minLength: 1),
+          requestedSchema: JsonObject(
+            properties: {'name': JsonSchema.string(minLength: 1)},
+            required: const ['name'],
+          ),
         ),
       );
 
@@ -556,7 +582,10 @@ void main() {
           id: 9,
           elicitParams: ElicitRequest.form(
             message: 'Enter your name',
-            requestedSchema: JsonSchema.string(),
+            requestedSchema: JsonObject(
+              properties: {'name': JsonSchema.string()},
+              required: const ['name'],
+            ),
           ),
         ),
       );
@@ -671,7 +700,10 @@ void main() {
     test('ElicitRequestParams form mode', () {
       final params = ElicitRequestParams.form(
         message: 'Enter your name',
-        requestedSchema: JsonSchema.string(minLength: 1),
+        requestedSchema: JsonObject(
+          properties: {'name': JsonSchema.string(minLength: 1)},
+          required: const ['name'],
+        ),
       );
 
       expect(params.isFormMode, isTrue);
@@ -687,7 +719,12 @@ void main() {
         () => ElicitRequestParams.fromJson({
           'mode': 'oauth',
           'message': 'Please authenticate',
-          'requestedSchema': {'type': 'object'},
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'name': {'type': 'string'},
+            },
+          },
         }),
         throwsA(isA<FormatException>()),
       );
@@ -711,14 +748,19 @@ void main() {
           'message': 'Please authenticate',
           'url': 'https://oauth.example.com/authorize',
           'elicitationId': 'oauth-123',
-          'requestedSchema': {'type': 'object'},
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'name': {'type': 'string'},
+            },
+          },
         }),
         throwsA(isA<FormatException>()),
       );
       expect(
         () => ElicitRequestParams(
           message: 'Please authenticate',
-          requestedSchema: const JsonObject(),
+          requestedSchema: const JsonObject(properties: {}),
           url: 'https://oauth.example.com/authorize',
         ),
         throwsA(isA<AssertionError>()),

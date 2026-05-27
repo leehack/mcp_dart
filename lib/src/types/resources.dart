@@ -4,6 +4,9 @@ import 'json_rpc.dart';
 /// Additional properties describing a Resource to clients.
 class ResourceAnnotations {
   /// A human-readable title for the resource.
+  @Deprecated(
+    'MCP 2025-11-25 uses Resource.title at top level; annotations.title is parsed only for legacy compatibility.',
+  )
   final String? title;
 
   /// The intended audience for the resource (e.g., `["user", "assistant"]`).
@@ -20,23 +23,29 @@ class ResourceAnnotations {
     this.audience,
     this.priority,
     this.lastModified,
-  });
+  }) : assert(
+          priority == null || (priority >= 0 && priority <= 1),
+          'priority must be between 0 and 1',
+        );
 
   factory ResourceAnnotations.fromJson(Map<String, dynamic> json) {
     return ResourceAnnotations(
       title: json['title'] as String?,
       audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
-      priority: (json['priority'] as num?)?.toDouble(),
+      priority:
+          _readUnitDouble(json['priority'], 'ResourceAnnotations.priority'),
       lastModified: json['lastModified'] as String?,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        if (title != null) 'title': title,
-        if (audience != null) 'audience': audience,
-        if (priority != null) 'priority': priority,
-        if (lastModified != null) 'lastModified': lastModified,
-      };
+  Map<String, dynamic> toJson() {
+    _validateUnitDouble(priority, 'ResourceAnnotations.priority');
+    return {
+      if (audience != null) 'audience': audience,
+      if (priority != null) 'priority': priority,
+      if (lastModified != null) 'lastModified': lastModified,
+    };
+  }
 }
 
 /// A known resource offered by the server.
@@ -57,10 +66,16 @@ class Resource {
   final String? mimeType;
 
   /// Optional icon for the resource.
+  @Deprecated(
+    'MCP 2025-11-25 uses icons; singular icon is parsed only for legacy compatibility and is not serialized.',
+  )
   final ImageContent? icon;
 
   /// Optional set of icons for the resource.
   final List<McpIcon>? icons;
+
+  /// Raw resource size in bytes, if known.
+  final int? size;
 
   /// Optional additional properties describing the resource.
   final ResourceAnnotations? annotations;
@@ -76,6 +91,7 @@ class Resource {
     this.mimeType,
     this.icon,
     this.icons,
+    this.size,
     this.annotations,
     this.meta,
   });
@@ -94,6 +110,7 @@ class Resource {
       icons: (json['icons'] as List<dynamic>?)
           ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
           .toList(),
+      size: _readOptionalInt(json['size'], 'Resource.size'),
       annotations: json['annotations'] != null
           ? ResourceAnnotations.fromJson(
               json['annotations'] as Map<String, dynamic>,
@@ -110,9 +127,9 @@ class Resource {
         if (title != null) 'title': title,
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
-        if (icon != null) 'icon': icon!.toJson(),
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
+        if (size != null) 'size': size,
         if (annotations != null) 'annotations': annotations!.toJson(),
         if (meta != null) '_meta': meta,
       };
@@ -136,6 +153,9 @@ class ResourceTemplate {
   final String? mimeType;
 
   /// Optional icon for the resource template.
+  @Deprecated(
+    'MCP 2025-11-25 uses icons; singular icon is parsed only for legacy compatibility and is not serialized.',
+  )
   final ImageContent? icon;
 
   /// Optional set of icons for the resource template.
@@ -190,7 +210,6 @@ class ResourceTemplate {
         if (title != null) 'title': title,
         if (description != null) 'description': description,
         if (mimeType != null) 'mimeType': mimeType,
-        if (icon != null) 'icon': icon!.toJson(),
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
         if (annotations != null) 'annotations': annotations!.toJson(),
@@ -262,11 +281,14 @@ class ListResourcesResult implements BaseResultData {
   /// Creates from JSON.
   factory ListResourcesResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
+    final resources = json['resources'];
+    if (resources is! List) {
+      throw const FormatException('ListResourcesResult.resources is required');
+    }
     return ListResourcesResult(
-      resources: (json['resources'] as List<dynamic>?)
-              ?.map((e) => Resource.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      resources: resources
+          .map((e) => Resource.fromJson(e as Map<String, dynamic>))
+          .toList(),
       nextCursor: json['nextCursor'] as String?,
       meta: meta,
     );
@@ -342,11 +364,16 @@ class ListResourceTemplatesResult implements BaseResultData {
 
   factory ListResourceTemplatesResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
+    final resourceTemplates = json['resourceTemplates'];
+    if (resourceTemplates is! List) {
+      throw const FormatException(
+        'ListResourceTemplatesResult.resourceTemplates is required',
+      );
+    }
     return ListResourceTemplatesResult(
-      resourceTemplates: (json['resourceTemplates'] as List<dynamic>?)
-              ?.map((e) => ResourceTemplate.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      resourceTemplates: resourceTemplates
+          .map((e) => ResourceTemplate.fromJson(e as Map<String, dynamic>))
+          .toList(),
       nextCursor: json['nextCursor'] as String?,
       meta: meta,
     );
@@ -410,11 +437,14 @@ class ReadResourceResult implements BaseResultData {
 
   factory ReadResourceResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
+    final contents = json['contents'];
+    if (contents is! List) {
+      throw const FormatException('ReadResourceResult.contents is required');
+    }
     return ReadResourceResult(
-      contents: (json['contents'] as List<dynamic>?)
-              ?.map((e) => ResourceContents.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      contents: contents
+          .map((e) => ResourceContents.fromJson(e as Map<String, dynamic>))
+          .toList(),
       meta: meta,
     );
   }
@@ -579,3 +609,36 @@ typedef UnsubscribeRequestParams = UnsubscribeRequest;
 /// Deprecated alias for [ResourceUpdatedNotification].
 @Deprecated('Use ResourceUpdatedNotification instead')
 typedef ResourceUpdatedNotificationParams = ResourceUpdatedNotification;
+
+double? _readUnitDouble(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! num) {
+    throw FormatException('$field must be a number between 0 and 1');
+  }
+  final result = value.toDouble();
+  if (result < 0 || result > 1) {
+    throw FormatException('$field must be between 0 and 1');
+  }
+  return result;
+}
+
+void _validateUnitDouble(double? value, String field) {
+  if (value == null) {
+    return;
+  }
+  if (value < 0 || value > 1) {
+    throw ArgumentError.value(value, field, 'must be between 0 and 1');
+  }
+}
+
+int? _readOptionalInt(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is int) {
+    return value;
+  }
+  throw FormatException('$field must be an integer');
+}

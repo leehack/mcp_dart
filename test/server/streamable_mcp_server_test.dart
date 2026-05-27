@@ -56,6 +56,15 @@ Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
   throw StateError('SSE stream ended before an event was received');
 }
 
+Future<_SseEvent> _readSseJsonEvent(StreamIterator<String> lines) async {
+  while (true) {
+    final event = await _readSseEvent(lines);
+    if (event.data.isNotEmpty) {
+      return event;
+    }
+  }
+}
+
 void main() {
   test('OAuthBearerChallenge builds insufficient-scope challenge', () {
     final challenge = OAuthBearerChallenge.insufficientScope(
@@ -639,8 +648,8 @@ void main() {
       );
       addTearDown(lines.cancel);
 
-      final first = await _readSseEvent(lines);
-      final second = await _readSseEvent(lines);
+      final first = await _readSseJsonEvent(lines);
+      final second = await _readSseJsonEvent(lines);
       expect(first.id, isNotNull);
       expect(second.id, isNotNull);
       expect(first.json['params'], containsPair('seq', 1));
@@ -654,12 +663,12 @@ void main() {
       );
       addTearDown(replayLines.cancel);
 
-      final replayed = await _readSseEvent(replayLines);
+      final replayed = await _readSseJsonEvent(replayLines);
       expect(replayed.id, second.id);
       expect(replayed.json['params'], containsPair('seq', 2));
 
       await sendServerNotification(mcpServer, {'seq': 3});
-      final replayThird = await _readSseEvent(replayLines);
+      final replayThird = await _readSseJsonEvent(replayLines);
       expect(replayThird.json['params'], containsPair('seq', 3));
 
       final deleteRes = await deleteSession(sessionId);

@@ -413,16 +413,20 @@ void main() {
       }
     });
 
-    test('handles response with null id', () {
+    test('rejects result response with null id', () {
       final json = {
         'jsonrpc': '2.0',
         'id': null,
         'result': {'data': 'test'},
       };
 
-      final message = JsonRpcMessage.fromJson(json);
-      expect(message, isA<JsonRpcResponse>());
-      expect((message as JsonRpcResponse).id, isNull);
+      expect(
+        () => JsonRpcMessage.fromJson(json),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('id')),
+        ),
+      );
     });
 
     test('rejects malformed response id wire values', () {

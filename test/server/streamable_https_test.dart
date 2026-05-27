@@ -193,6 +193,15 @@ Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
   throw StateError('SSE stream ended before an event was received');
 }
 
+Future<_SseEvent> _readSseJsonEvent(StreamIterator<String> lines) async {
+  while (true) {
+    final event = await _readSseEvent(lines);
+    if (event.data.trim().isNotEmpty) {
+      return event;
+    }
+  }
+}
+
 Future<_SseEvent?> _readOptionalSseEvent(StreamIterator<String> lines) async {
   try {
     return await _readSseEvent(lines).timeout(
@@ -1233,8 +1242,12 @@ void main() {
       );
       addTearDown(lines.cancel);
 
-      final first = await _readSseEvent(lines);
-      final second = await _readSseEvent(lines);
+      final initial = await _readSseEvent(lines);
+      expect(initial.id, isNotNull);
+      expect(initial.data, isEmpty);
+
+      final first = await _readSseJsonEvent(lines);
+      final second = await _readSseJsonEvent(lines);
       expect(first.id, isNotNull);
       expect(second.id, isNotNull);
       expect(first.json['params'], containsPair('seq', 1));
@@ -1255,7 +1268,10 @@ void main() {
         otherStream.transform(utf8.decoder).transform(const LineSplitter()),
       );
       addTearDown(otherLines.cancel);
-      final other = await _readSseEvent(otherLines);
+      final otherInitial = await _readSseEvent(otherLines);
+      expect(otherInitial.id, isNotNull);
+      expect(otherInitial.data, isEmpty);
+      final other = await _readSseJsonEvent(otherLines);
       expect(other.id, isNotNull);
       expect(other.json['params'], containsPair('seq', 'other-stream'));
 
@@ -1265,9 +1281,12 @@ void main() {
         replay.transform(utf8.decoder).transform(const LineSplitter()),
       );
       addTearDown(replayLines.cancel);
-      final replayed = await _readSseEvent(replayLines);
+      final replayed = await _readSseJsonEvent(replayLines);
       expect(replayed.id, second.id);
       expect(replayed.json['params'], containsPair('seq', 2));
+      final replayInitial = await _readSseEvent(replayLines);
+      expect(replayInitial.id, isNotNull);
+      expect(replayInitial.data, isEmpty);
       expect(await _readOptionalSseEvent(replayLines), isNull);
 
       final foreignEventId = await eventStore.storeEvent(

@@ -114,7 +114,7 @@ class Task implements BaseResultData {
   }
 
   @override
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({bool includeMeta = true}) => {
         'taskId': taskId,
         'status': status.name,
         if (statusMessage != null) 'statusMessage': statusMessage,
@@ -122,8 +122,11 @@ class Task implements BaseResultData {
         if (pollInterval != null) 'pollInterval': pollInterval,
         'createdAt': createdAt,
         'lastUpdatedAt': lastUpdatedAt,
-        if (meta != null) '_meta': meta,
+        if (includeMeta && meta != null) '_meta': meta,
       };
+
+  /// Serializes this task where MCP expects the bare `Task` schema.
+  Map<String, dynamic> toBareJson() => toJson(includeMeta: false);
 }
 
 String _readRequiredTaskString(
@@ -229,11 +232,13 @@ class ListTasksResult implements BaseResultData {
 
   factory ListTasksResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
+    final tasks = json['tasks'];
+    if (tasks is! List) {
+      throw const FormatException('ListTasksResult.tasks is required');
+    }
     return ListTasksResult(
-      tasks: (json['tasks'] as List<dynamic>?)
-              ?.map((e) => Task.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      tasks:
+          tasks.map((e) => Task.fromJson(e as Map<String, dynamic>)).toList(),
       nextCursor: json['nextCursor'] as String?,
       meta: meta,
     );
@@ -241,7 +246,7 @@ class ListTasksResult implements BaseResultData {
 
   @override
   Map<String, dynamic> toJson() => {
-        'tasks': tasks.map((t) => t.toJson()).toList(),
+        'tasks': tasks.map((t) => t.toBareJson()).toList(),
         if (nextCursor != null) 'nextCursor': nextCursor,
         if (meta != null) '_meta': meta,
       };
@@ -397,7 +402,7 @@ class CreateTaskResult implements BaseResultData {
 
   @override
   Map<String, dynamic> toJson() => {
-        'task': task.toJson(),
+        'task': task.toBareJson(),
         if (meta != null) '_meta': meta,
       };
 }
