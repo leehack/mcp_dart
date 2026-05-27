@@ -786,6 +786,303 @@ void main() {
       expect(ErrorCode.urlElicitationRequired.value, equals(-32042));
     });
 
+    test('Form elicitation accepts spec primitive schema variants', () {
+      final request = ElicitRequestParams.fromJson({
+        'mode': 'form',
+        'message': 'Configure deployment',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': {
+            'email': {
+              'type': 'string',
+              'format': 'email',
+              'title': 'Email',
+              'description': 'Contact address',
+              'default': 'ops@example.com',
+            },
+            'size': {
+              'type': 'string',
+              'oneOf': [
+                {'const': 'small', 'title': 'Small'},
+                {'const': 'large', 'title': 'Large'},
+              ],
+            },
+            'region': {
+              'type': 'string',
+              'enum': ['iad', 'sfo'],
+              'enumNames': ['Virginia', 'California'],
+            },
+            'replicas': {
+              'type': 'integer',
+              'minimum': 1,
+              'maximum': 10,
+              'default': 2,
+            },
+            'ratio': {
+              'type': 'number',
+              'minimum': 0,
+              'maximum': 1,
+            },
+            'confirmed': {
+              'type': 'boolean',
+              'default': false,
+            },
+            'features': {
+              'type': 'array',
+              'items': {
+                'type': 'string',
+                'enum': ['logs', 'metrics'],
+              },
+            },
+            'permissions': {
+              'type': 'array',
+              'items': {
+                'anyOf': [
+                  {'const': 'read', 'title': 'Read'},
+                  {'const': 'write', 'title': 'Write'},
+                ],
+              },
+            },
+          },
+          'required': ['email', 'region'],
+        },
+      });
+
+      expect(request.isFormMode, isTrue);
+      expect(request.toJson()['requestedSchema'], isA<Map<String, dynamic>>());
+    });
+
+    test('Form elicitation rejects non-spec schema shapes', () {
+      Map<String, dynamic> requestWithProperty(
+        String name,
+        Object? property, {
+        Object? required = const <String>['value'],
+      }) =>
+          {
+            'message': 'Invalid schema',
+            'requestedSchema': {
+              'type': 'object',
+              'properties': {name: property},
+              if (required != null) 'required': required,
+            },
+          };
+
+      expect(
+        () => ElicitRequestParams.form(
+          message: 'Bad root',
+          requestedSchema: JsonSchema.string(),
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'message': 'Missing properties',
+          'requestedSchema': {'type': 'object'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', 'not-a-schema'),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'message': 'Bad required',
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'value': {'type': 'string'},
+            },
+            'required': ['value', 1],
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'object',
+            'properties': {},
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'string',
+            'pattern': '^x',
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'string',
+            'format': 'uuid',
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'string',
+            'enum': ['ok', 1],
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'string',
+            'enumNames': ['Ok', 1],
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'string',
+            'oneOf': [
+              {'const': 'ok'},
+            ],
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'array',
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'array',
+            'items': {
+              'type': 'string',
+              'enum': ['ok', 1],
+            },
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'array',
+            'items': {
+              'anyOf': [
+                {'const': 'ok'},
+              ],
+            },
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('ElicitResult validates accepted content wire values', () {
+      final parsed = ElicitResult.fromJson({
+        'action': 'accept',
+        'content': {
+          'text': 'value',
+          'count': 3,
+          'confirmed': true,
+          'selections': ['a', 'b'],
+        },
+        '_meta': {'trace': 'abc'},
+      });
+
+      expect(parsed.toJson()['content'], containsPair('count', 3));
+      expect(parsed.toJson()['_meta'], containsPair('trace', 'abc'));
+
+      expect(
+        () => ElicitResult.fromJson({
+          'action': 'accept',
+          'content': ['not', 'an', 'object'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitResult.fromJson({
+          'action': 'accept',
+          'content': {
+            'nested': {'value': true},
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'accept',
+          content: {
+            'values': [1, 2],
+          },
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('URLElicitationRequiredErrorData validates URL-only entries', () {
+      final data = URLElicitationRequiredErrorData.fromJson({
+        'elicitations': [
+          {
+            'mode': 'url',
+            'message': 'Authenticate',
+            'url': 'https://oauth.example.com/authorize',
+            'elicitationId': 'oauth-123',
+          },
+        ],
+      });
+
+      expect(data.elicitations.single.isUrlMode, isTrue);
+      expect(data.toJson()['elicitations'], hasLength(1));
+
+      expect(
+        () => URLElicitationRequiredErrorData.fromJson({}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => URLElicitationRequiredErrorData.fromJson({
+          'elicitations': [
+            {
+              'message': 'Enter value',
+              'requestedSchema': {
+                'type': 'object',
+                'properties': {
+                  'value': {'type': 'string'},
+                },
+              },
+            },
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => URLElicitationRequiredErrorData(
+          elicitations: [
+            ElicitRequestParams.form(
+              message: 'Enter value',
+              requestedSchema: JsonObject(
+                properties: {'value': JsonSchema.string()},
+              ),
+            ),
+          ],
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     // Note: enumNames is not standard JSON Schema 2020-12, usually handled via oneOf with const/title
     // or custom extensions. Assuming simple enum for now.
   });
