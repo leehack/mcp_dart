@@ -1146,6 +1146,43 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        expect(
+          () => Tool.fromJson({'name': 'missing-schema'}),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('Tool.inputSchema is required'),
+            ),
+          ),
+        );
+        expect(
+          () => Tool.fromJson({
+            'name': 'bad-input-schema',
+            'inputSchema': 'not-an-object',
+          }),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('Tool.inputSchema must be an object'),
+            ),
+          ),
+        );
+        expect(
+          () => Tool.fromJson({
+            'name': 'bad-output-schema',
+            'inputSchema': {'type': 'object'},
+            'outputSchema': 'not-an-object',
+          }),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('Tool.outputSchema must be an object'),
+            ),
+          ),
+        );
       });
 
       test('elicitation validates restricted form and result wire shapes', () {

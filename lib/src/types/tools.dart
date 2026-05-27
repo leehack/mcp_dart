@@ -185,7 +185,7 @@ class Tool {
 
   factory Tool.fromJson(Map<String, dynamic> json) {
     final inputSchema = JsonSchema.fromJson(
-      json['inputSchema'] as Map<String, dynamic>,
+      _readRequiredJsonObject(json['inputSchema'], 'Tool.inputSchema'),
     );
     _validateObjectRootSchema(
       inputSchema,
@@ -193,9 +193,10 @@ class Tool {
       formatException: true,
     );
 
-    final outputSchema = json['outputSchema'] == null
-        ? null
-        : JsonSchema.fromJson(json['outputSchema'] as Map<String, dynamic>);
+    final outputSchemaJson =
+        _readOptionalJsonObject(json['outputSchema'], 'Tool.outputSchema');
+    final outputSchema =
+        outputSchemaJson == null ? null : JsonSchema.fromJson(outputSchemaJson);
     if (outputSchema != null) {
       _validateObjectRootSchema(
         outputSchema,
@@ -440,4 +441,31 @@ void _validateObjectRootSchema(
       'MCP tool schemas must have root type "object"',
     );
   }
+}
+
+Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
+  if (value == null) {
+    throw FormatException('$field is required');
+  }
+  return _readJsonObject(value, field);
+}
+
+Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return _readJsonObject(value, field);
+}
+
+Map<String, dynamic> _readJsonObject(Object? value, String field) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    if (value.keys.any((key) => key is! String)) {
+      throw FormatException('$field must be an object with string keys');
+    }
+    return value.cast<String, dynamic>();
+  }
+  throw FormatException('$field must be an object');
 }

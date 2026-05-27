@@ -452,6 +452,7 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
   switch (type) {
     case 'string':
       _validateStringOrSingleEnumSchema(json, context);
+      return;
     case 'number':
     case 'integer':
       _ensureAllowedKeys(
@@ -466,14 +467,17 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
         },
         context,
       );
+      return;
     case 'boolean':
       _ensureAllowedKeys(
         json,
         const {'type', 'title', 'description', 'default'},
         context,
       );
+      return;
     case 'array':
       _validateMultiSelectEnumSchema(json, context);
+      return;
     default:
       throw FormatException(
         '$context must be a primitive elicitation schema.',
