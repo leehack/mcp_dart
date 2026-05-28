@@ -153,6 +153,9 @@ mcp_dart inspect --tool add --json-args '{"a": 1, "b": 2}'   # Call a tool
 | `serve` | Run your server (stdio or HTTP) |
 | `doctor` | Check project health and connectivity |
 | `inspect` | Test and debug server capabilities |
+| `inspect-server` | Produce a structured live server inspection report |
+| `inspect-client` | Run a stdio harness that inspects a connecting client |
+| `trace` | Proxy stdio client/server traffic and write a JSON trace |
 
 📖 **[Full CLI Documentation](https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli)**
 

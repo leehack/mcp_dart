@@ -91,5 +91,33 @@ void main() {
       verify(() => pubUpdater.update(packageName: 'mcp_dart_cli')).called(1);
       verify(() => progress.complete('Updated to 9.9.9')).called(1);
     });
+
+    test('detects standalone executable names for current platform', () {
+      expect(
+        isRunningAsStandaloneExecutable(
+          executablePath: '/tmp/$binaryExecutableName',
+        ),
+        isTrue,
+      );
+      expect(
+        isRunningAsStandaloneExecutable(executablePath: '/tmp/dart'),
+        isFalse,
+      );
+    });
+
+    test('resolves a release asset name for supported host platforms', () {
+      expect(
+        releaseAssetNameForCurrentPlatform(),
+        anyOf(
+          equals('mcp_dart-linux-x64'),
+          equals('mcp_dart-linux-arm64'),
+          equals('mcp_dart-macos-x64'),
+          equals('mcp_dart-macos-arm64'),
+          equals('mcp_dart-windows-x64.exe'),
+          equals('mcp_dart-windows-arm64.exe'),
+          isNull,
+        ),
+      );
+    });
   });
 }

@@ -94,6 +94,21 @@ function createInteropServer(): McpServer {
     }
   );
 
+  server.registerTool(
+    'structured_echo',
+    {
+      description: 'Echoes structured content for output schema validation',
+      inputSchema: { message: z.string() },
+      outputSchema: { message: z.string() },
+    },
+    async ({ message }) => {
+      return {
+        structuredContent: { message },
+        content: [{ type: 'text', text: message }],
+      };
+    }
+  );
+
   server.registerResource(
     'test-resource',
     'resource://test',

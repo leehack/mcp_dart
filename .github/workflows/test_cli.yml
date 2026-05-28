@@ -7,12 +7,22 @@ on:
   pull_request:
     paths:
       - 'packages/mcp_dart_cli/**'
+      - 'test/interop/python/**'
+      - 'test/interop/ts/**'
+      - 'tool/install.sh'
+      - 'tool/install.ps1'
+      - '.github/workflows/cli_binaries.yml'
       - '.github/workflows/test_cli.yml'
   push:
     branches:
       - main
     paths:
       - 'packages/mcp_dart_cli/**'
+      - 'test/interop/python/**'
+      - 'test/interop/ts/**'
+      - 'tool/install.sh'
+      - 'tool/install.ps1'
+      - '.github/workflows/cli_binaries.yml'
       - '.github/workflows/test_cli.yml'
 
 jobs:
@@ -31,14 +41,44 @@ jobs:
         with:
           sdk: stable
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install TS interop dependencies
+        working-directory: test/interop/ts
+        run: npm ci
+
+      - name: Build TS interop fixtures
+        working-directory: test/interop/ts
+        run: npm run build
+
+      - name: Install Python interop dependencies
+        working-directory: .
+        run: python -m pip install -r test/interop/python/requirements.txt
+
       - name: Install dependencies
         run: dart pub get
+
+      - name: Validate standalone installers
+        working-directory: .
+        run: |
+          sh -n tool/install.sh
+          pwsh -NoLogo -NoProfile -Command "\$ErrorActionPreference = 'Stop'; \$errors = \$null; [void][System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw tool/install.ps1), [ref]\$errors); if (\$errors) { throw \$errors[0] }"
 
       - name: Analyze project
         run: dart analyze
 
-      - name: Run tests
-        run: dart test
+      - name: Run tests with coverage
+        run: |
+          dart pub global activate coverage
+          dart pub global run coverage:test_with_coverage
 
       - name: Run MCP spec conformance gate
         run: dart run bin/mcp_dart.dart conformance --suite all --json
@@ -72,3 +112,13 @@ jobs:
             exit 1
           fi
           echo "✓ Package achieves perfect score"
+
+      - name: Upload coverage to Codecov
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]' }}
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: packages/mcp_dart_cli/coverage/lcov.info
+          flags: cli
+          name: codecov-cli
+          fail_ci_if_error: true
