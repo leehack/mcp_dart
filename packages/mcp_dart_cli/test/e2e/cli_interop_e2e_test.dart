@@ -591,10 +591,15 @@ Future<String?> _pythonWithMcpSdk() async {
     'python3',
     'python',
   ].whereType<String>()) {
-    final result = await Process.run(
-      candidate,
-      ['-c', 'import mcp, sys; print(sys.executable)'],
-    );
+    final ProcessResult result;
+    try {
+      result = await Process.run(
+        candidate,
+        ['-c', 'import mcp, sys; print(sys.executable)'],
+      );
+    } on ProcessException {
+      continue;
+    }
     if (result.exitCode == 0) {
       return (result.stdout as String).trim();
     }

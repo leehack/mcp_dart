@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:mcp_dart_cli/src/version.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_updater/pub_updater.dart';
 
@@ -142,6 +143,18 @@ class GitHubBinaryUpdater {
     checkProgress.complete('Checked GitHub releases');
 
     final target = _targetBinaryFile(installDir);
+    if (Platform.isWindows &&
+        p.equals(
+          p.normalize(target.absolute.path),
+          p.normalize(File(Platform.resolvedExecutable).absolute.path),
+        )) {
+      _logger.err(
+        'Windows cannot replace the running executable in place. '
+        'Run update with --install-dir pointing at a non-running install copy.',
+      );
+      return ExitCode.unavailable.code;
+    }
+
     final updateProgress = _logger.progress('Updating to $latestVersion');
     try {
       await _downloadAsset(
@@ -359,11 +372,25 @@ String? releaseAssetNameForCurrentPlatform() {
   final arch = _normalizedArchitecture();
   if (arch == null) return null;
 
-  if (Platform.isLinux) return 'mcp_dart-linux-$arch';
-  if (Platform.isMacOS) return 'mcp_dart-macos-$arch';
-  if (Platform.isWindows) return 'mcp_dart-windows-$arch.exe';
-  return null;
+  return releaseAssetNameForHost(
+    operatingSystem: Platform.operatingSystem,
+    architecture: arch,
+  );
 }
+
+/// GitHub release asset name for a supported host tuple.
+@visibleForTesting
+String? releaseAssetNameForHost({
+  required String operatingSystem,
+  required String architecture,
+}) =>
+    switch ('$operatingSystem-$architecture') {
+      'linux-x64' => 'mcp_dart-linux-x64',
+      'macos-x64' => 'mcp_dart-macos-x64',
+      'macos-arm64' => 'mcp_dart-macos-arm64',
+      'windows-x64' => 'mcp_dart-windows-x64.exe',
+      _ => null,
+    };
 
 String? _normalizedArchitecture() {
   final processor = Platform.environment['PROCESSOR_ARCHITECTURE']

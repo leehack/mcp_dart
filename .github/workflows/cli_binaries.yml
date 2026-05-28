@@ -3,7 +3,7 @@ name: Build CLI Binaries
 on:
   push:
     tags:
-      - 'mcp_dart_cli-v[0-9]+.[0-9]+.[0-9]+*'
+      - 'mcp_dart_cli-v*'
   workflow_dispatch:
     inputs:
       tag:

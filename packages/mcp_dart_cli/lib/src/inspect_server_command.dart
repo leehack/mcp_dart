@@ -80,6 +80,7 @@ class InspectServerCommand extends Command<int> {
     final inspector = McpServerInspector(
       logger: _logger,
       probeConfig: probeConfig,
+      silentHandlers: jsonOutput,
     );
     final report = await inspector.inspect(target);
 
@@ -230,6 +231,7 @@ class McpServerInspector {
   McpServerInspector({
     Logger? logger,
     this.probeConfig = const InspectionProbeConfig(),
+    this.silentHandlers = false,
   }) : _logger = logger ?? Logger();
 
   final Logger _logger;
@@ -237,10 +239,13 @@ class McpServerInspector {
   /// Explicit probes requested by the user.
   final InspectionProbeConfig probeConfig;
 
+  /// Whether notification/request handlers should avoid logging to stdout.
+  final bool silentHandlers;
+
   /// Inspects [target].
   Future<InspectionReport> inspect(ServerInspectionTarget target) async {
     final checks = InspectionCheckBuilder();
-    final handlers = InspectHandlers(_logger);
+    final handlers = InspectHandlers(_logger, silent: silentHandlers);
     final inventory = <String, dynamic>{};
     final metadata = <String, dynamic>{
       'transport': target.transport,
@@ -536,16 +541,8 @@ class McpServerInspector {
           'tools.call.${probe.name}',
           'Configured tool probe ${probe.name} completed successfully.',
         );
-        if (tool.outputSchema != null) {
-          checks.pass(
-            'tools.output-schema.${probe.name}',
-            'Structured output for ${probe.name} matched its outputSchema.',
-          );
-        } else {
-          checks.info(
-            'tools.output-schema.${probe.name}',
-            'Tool ${probe.name} does not advertise outputSchema.',
-          );
+        if (!_validateConfiguredToolOutput(checks, tool, result)) {
+          failures += 1;
         }
       } catch (error) {
         failures += 1;
@@ -558,6 +555,13 @@ class McpServerInspector {
           'tools.call.${probe.name}',
           'Configured tool probe ${probe.name} failed: $error',
         );
+        if (tool.outputSchema != null &&
+            error.toString().contains('Structured content does not match')) {
+          checks.fail(
+            'tools.output-schema.${probe.name}',
+            'Structured output for ${probe.name} did not match outputSchema: $error',
+          );
+        }
       }
     }
 
@@ -567,6 +571,35 @@ class McpServerInspector {
         'tools.call.configured',
         'All configured tool call probes completed successfully.',
       );
+    }
+  }
+
+  bool _validateConfiguredToolOutput(
+    InspectionCheckBuilder checks,
+    Tool tool,
+    CallToolResult result,
+  ) {
+    if (tool.outputSchema == null) {
+      checks.info(
+        'tools.output-schema.${tool.name}',
+        'Tool ${tool.name} does not advertise outputSchema.',
+      );
+      return true;
+    }
+
+    try {
+      tool.outputSchema!.validate(result.structuredContent);
+      checks.pass(
+        'tools.output-schema.${tool.name}',
+        'Structured output for ${tool.name} matched its outputSchema.',
+      );
+      return true;
+    } catch (error) {
+      checks.fail(
+        'tools.output-schema.${tool.name}',
+        'Structured output for ${tool.name} did not match outputSchema: $error',
+      );
+      return false;
     }
   }
 

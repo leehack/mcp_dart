@@ -36,16 +36,38 @@ detect_arch() {
 
 latest_cli_tag() {
   curl -fsSL "https://api.github.com/repos/$repo/releases?per_page=50" |
-    sed -n 's/.*"tag_name": *"\(mcp_dart_cli-v[^"]*\)".*/\1/p' |
-    head -n 1
+    awk '
+      /"tag_name":/ {
+        tag = $0
+        sub(/.*"tag_name": *"/, "", tag)
+        sub(/".*/, "", tag)
+      }
+      /"prerelease":/ {
+        prerelease = $0
+        gsub(/[ ,]/, "", prerelease)
+        if (tag ~ /^mcp_dart_cli-v/ && prerelease ~ /"prerelease":false/) {
+          print tag
+          exit
+        }
+      }
+    '
 }
 
 require curl
 require sed
 require uname
+require awk
 
 platform="$(detect_platform)"
 arch="$(detect_arch)"
+
+case "$platform-$arch" in
+  linux-x64 | macos-x64 | macos-arm64) ;;
+  *)
+    echo "No standalone mcp_dart binary is published for $platform-$arch." >&2
+    exit 1
+    ;;
+esac
 
 if [ "$version" = "latest" ]; then
   tag="$(latest_cli_tag)"

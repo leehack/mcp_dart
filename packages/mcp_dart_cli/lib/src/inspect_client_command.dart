@@ -84,7 +84,10 @@ class ClientInspectorHarness {
     required this.reportFile,
     required this.idleTimeout,
     required this.maxRuntime,
-  });
+    Stream<String>? clientLines,
+    FutureOr<void> Function(String line)? writeLine,
+  })  : _clientLines = clientLines,
+        _writeLine = writeLine;
 
   /// Report destination.
   final File reportFile;
@@ -94,6 +97,9 @@ class ClientInspectorHarness {
 
   /// Maximum runtime for the harness.
   final Duration maxRuntime;
+
+  final Stream<String>? _clientLines;
+  final FutureOr<void> Function(String line)? _writeLine;
 
   final InspectionCheckBuilder _checks = InspectionCheckBuilder();
   final List<Map<String, dynamic>> _messages = <Map<String, dynamic>>[];
@@ -126,8 +132,9 @@ class ClientInspectorHarness {
     _stopwatch.start();
     _maxTimer = Timer(maxRuntime, _finish);
 
-    _stdinSubscription =
-        stdin.transform(utf8.decoder).transform(const LineSplitter()).listen(
+    final clientLines = _clientLines ??
+        stdin.transform(utf8.decoder).transform(const LineSplitter());
+    _stdinSubscription = clientLines.listen(
       _handleLine,
       onError: (Object error) {
         _malformedMessage = true;
@@ -501,7 +508,7 @@ class ClientInspectorHarness {
   void _sendError(Object? id, int code, String message) {
     _send(<String, dynamic>{
       'jsonrpc': jsonRpcVersion,
-      if (id != null) 'id': id,
+      'id': id,
       'error': <String, dynamic>{
         'code': code,
         'message': message,
@@ -513,8 +520,13 @@ class ClientInspectorHarness {
     final encoded = jsonEncode(message);
     _stdoutWriteQueue = _stdoutWriteQueue.then((_) async {
       try {
-        stdout.writeln(encoded);
-        await stdout.flush();
+        final writeLine = _writeLine;
+        if (writeLine == null) {
+          stdout.writeln(encoded);
+          await stdout.flush();
+        } else {
+          await writeLine(encoded);
+        }
       } catch (error) {
         _messages.add(<String, dynamic>{
           'direction': 'server_to_client',

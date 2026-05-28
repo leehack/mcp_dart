@@ -110,13 +110,47 @@ void main() {
         releaseAssetNameForCurrentPlatform(),
         anyOf(
           equals('mcp_dart-linux-x64'),
-          equals('mcp_dart-linux-arm64'),
           equals('mcp_dart-macos-x64'),
           equals('mcp_dart-macos-arm64'),
           equals('mcp_dart-windows-x64.exe'),
-          equals('mcp_dart-windows-arm64.exe'),
           isNull,
         ),
+      );
+
+      expect(
+        releaseAssetNameForHost(
+          operatingSystem: 'linux',
+          architecture: 'x64',
+        ),
+        equals('mcp_dart-linux-x64'),
+      );
+      expect(
+        releaseAssetNameForHost(
+          operatingSystem: 'macos',
+          architecture: 'arm64',
+        ),
+        equals('mcp_dart-macos-arm64'),
+      );
+      expect(
+        releaseAssetNameForHost(
+          operatingSystem: 'windows',
+          architecture: 'x64',
+        ),
+        equals('mcp_dart-windows-x64.exe'),
+      );
+      expect(
+        releaseAssetNameForHost(
+          operatingSystem: 'linux',
+          architecture: 'arm64',
+        ),
+        isNull,
+      );
+      expect(
+        releaseAssetNameForHost(
+          operatingSystem: 'windows',
+          architecture: 'arm64',
+        ),
+        isNull,
       );
     });
   });

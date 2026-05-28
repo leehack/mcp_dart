@@ -35,7 +35,7 @@ class ListToolsCommand extends _ToolCommand {
     McpConnection? connection;
     try {
       connection = await _connect(target);
-      registerHandlers(connection.client);
+      registerHandlers(connection.client, silent: jsonOutput);
 
       final capabilities = connection.client.getServerCapabilities();
       if (capabilities?.tools == null) {
@@ -118,7 +118,7 @@ class CallToolCommand extends _ToolCommand {
     McpConnection? connection;
     try {
       connection = await _connect(target);
-      registerHandlers(connection.client);
+      registerHandlers(connection.client, silent: jsonOutput);
 
       final capabilities = connection.client.getServerCapabilities();
       if (capabilities?.tools == null) {
@@ -157,7 +157,11 @@ abstract class _ToolCommand extends Command<int> {
   late final InspectPrinter printer;
   late final InspectHandlers _handlers;
 
-  void registerHandlers(McpClient client) {
+  void registerHandlers(McpClient client, {bool silent = false}) {
+    if (silent) {
+      InspectHandlers(logger, silent: true).registerHandlers(client);
+      return;
+    }
     _handlers.registerHandlers(client);
   }
 

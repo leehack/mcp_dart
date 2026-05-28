@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:args/command_runner.dart';
 import 'package:mason/mason.dart';
 import 'package:mcp_dart_cli/src/tool_commands.dart';
@@ -40,6 +43,50 @@ void main() {
         () => logger.info('  - echo: Echoes text.'),
       ).called(1);
     });
+
+    test('json output stays parseable when server sends notifications',
+        () async {
+      final result = await Process.run(
+        'dart',
+        <String>[
+          'run',
+          'bin/mcp_dart.dart',
+          'list-tools',
+          '--json',
+          '--wait',
+          '50',
+          '--',
+          'dart',
+          'run',
+          'test/fixtures/raw_stdio_server.dart',
+          '--notify-after-list',
+        ],
+        workingDirectory: Directory.current.path,
+      );
+
+      expect(result.exitCode, equals(ExitCode.success.code));
+      final json = jsonDecode(result.stdout as String) as Map<String, dynamic>;
+      expect(json['tools'], isA<List<dynamic>>());
+    });
+
+    test('json mode runs in-process with silent handlers', () async {
+      final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
+
+      final result = await runner.run([
+        'list-tools',
+        '--json',
+        '--',
+        'dart',
+        'run',
+        'test/fixtures/raw_stdio_server.dart',
+        '--notify-after-list',
+      ]);
+
+      expect(result, equals(ExitCode.success.code));
+      verifyNever(() => logger.info(any()));
+      verifyNever(() => logger.warn(any()));
+      verifyNever(() => logger.err(any()));
+    });
   });
 
   group('CallToolCommand', () {
@@ -81,6 +128,57 @@ void main() {
           any(that: contains('Echo: hello')),
         ),
       ).called(1);
+    });
+
+    test('json output stays parseable when tool call sends notifications',
+        () async {
+      final result = await Process.run(
+        'dart',
+        <String>[
+          'run',
+          'bin/mcp_dart.dart',
+          'call-tool',
+          'echo',
+          '--json',
+          '--wait',
+          '50',
+          '--json-args',
+          '{"message":"hello"}',
+          '--',
+          'dart',
+          'run',
+          'test/fixtures/raw_stdio_server.dart',
+          '--notify-after-call',
+        ],
+        workingDirectory: Directory.current.path,
+      );
+
+      expect(result.exitCode, equals(ExitCode.success.code));
+      final json = jsonDecode(result.stdout as String) as Map<String, dynamic>;
+      final content = json['content'] as List<dynamic>;
+      expect((content.single as Map<String, dynamic>)['text'], equals('ok'));
+    });
+
+    test('json mode runs in-process with silent handlers', () async {
+      final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
+
+      final result = await runner.run([
+        'call-tool',
+        'echo',
+        '--json',
+        '--json-args',
+        '{"message":"hello"}',
+        '--',
+        'dart',
+        'run',
+        'test/fixtures/raw_stdio_server.dart',
+        '--notify-after-call',
+      ]);
+
+      expect(result, equals(ExitCode.success.code));
+      verifyNever(() => logger.info(any()));
+      verifyNever(() => logger.warn(any()));
+      verifyNever(() => logger.err(any()));
     });
   });
 }

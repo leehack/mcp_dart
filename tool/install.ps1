@@ -11,7 +11,7 @@ $InstallDir = if ($env:MCP_DART_INSTALL_DIR) {
 $Arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
 switch ($Arch) {
   "x64" { $AssetArch = "x64" }
-  "arm64" { $AssetArch = "arm64" }
+  "arm64" { throw "No standalone mcp_dart binary is published for windows-arm64." }
   default { throw "Unsupported architecture: $Arch" }
 }
 

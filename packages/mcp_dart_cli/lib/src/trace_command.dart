@@ -85,9 +85,7 @@ class TraceCommand extends Command<int> {
 
     try {
       await proxy.run();
-      return proxy.hadMalformedTraffic
-          ? ExitCode.software.code
-          : ExitCode.success.code;
+      return proxy.failed ? ExitCode.software.code : ExitCode.success.code;
     } catch (error) {
       _logger.err('trace failed: $error');
       return ExitCode.software.code;
@@ -120,7 +118,8 @@ class StdioTraceProxy {
     required this.reportFile,
     required this.maxRuntime,
     required this.pretty,
-  });
+    Stream<String>? clientLines,
+  }) : _clientLines = clientLines;
 
   /// Proxied server executable.
   final String command;
@@ -143,6 +142,8 @@ class StdioTraceProxy {
   /// Whether to pretty-print the report JSON.
   final bool pretty;
 
+  final Stream<String>? _clientLines;
+
   final Stopwatch _stopwatch = Stopwatch();
   final List<Map<String, dynamic>> _events = <Map<String, dynamic>>[];
   final Map<String, int> _methodCounts = <String, int>{};
@@ -156,10 +157,17 @@ class StdioTraceProxy {
   StreamSubscription<List<int>>? _serverStderrSubscription;
   Timer? _maxTimer;
   bool _hadMalformedTraffic = false;
+  bool _timedOut = false;
   int? _serverExitCode;
 
   /// Whether any malformed JSON-RPC traffic was observed.
   bool get hadMalformedTraffic => _hadMalformedTraffic;
+
+  /// Whether the trace ended because the runtime limit fired.
+  bool get timedOut => _timedOut;
+
+  /// Whether the trace should be treated as failed.
+  bool get failed => _hadMalformedTraffic || _timedOut;
 
   /// Runs the proxy until the client closes, the server exits, or timeout fires.
   Future<void> run() async {
@@ -177,6 +185,7 @@ class StdioTraceProxy {
     }));
 
     _maxTimer = Timer(maxRuntime, () {
+      _timedOut = true;
       _recordEvent(
         direction: 'proxy',
         raw: 'max runtime reached',
@@ -185,8 +194,9 @@ class StdioTraceProxy {
       _finish();
     });
 
-    _clientSubscription =
-        stdin.transform(utf8.decoder).transform(const LineSplitter()).listen(
+    final clientLines = _clientLines ??
+        stdin.transform(utf8.decoder).transform(const LineSplitter());
+    _clientSubscription = clientLines.listen(
       (line) => _forwardClientToServer(line),
       onError: (Object error) {
         _recordEvent(
@@ -322,10 +332,11 @@ class StdioTraceProxy {
       'target': [command, ...args].join(' '),
       'durationMs': _stopwatch.elapsedMilliseconds,
       'serverExitCode': _serverExitCode,
-      'passed': !_hadMalformedTraffic,
+      'passed': !failed,
       'summary': <String, dynamic>{
         'eventCount': _events.length,
         'malformedTraffic': _hadMalformedTraffic,
+        'timedOut': _timedOut,
         'methods': _methodCounts,
       },
       'events': _events,
