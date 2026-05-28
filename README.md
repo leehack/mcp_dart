@@ -4,6 +4,11 @@
 [![Pub Version](https://img.shields.io/pub/v/mcp_dart?color=blueviolet)](https://pub.dev/packages/mcp_dart)
 [![likes](https://img.shields.io/pub/likes/mcp_dart?logo=dart)](https://pub.dev/packages/mcp_dart/score)
 
+`mcp_dart` is a Dart and Flutter SDK for building Model Context Protocol
+(MCP) servers, clients, and AI host integrations. Use it to expose Dart tools
+over stdio or Streamable HTTP, connect Flutter apps to MCP servers, and validate
+real deployments with the companion CLI.
+
 The Model Context Protocol (MCP) is a standardized protocol for communication between AI applications and external services. It enables:
 
 - **Tools**: Allow AI to execute actions (API calls, computations, etc.)

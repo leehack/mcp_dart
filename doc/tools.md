@@ -494,12 +494,12 @@ await server.connect(transport);
 ```
 
 If a task-based tool must be registered after `connect()`, pre-advertise the
-capability in `ServerOptions` before connecting:
+capability in `McpServerOptions` before connecting:
 
 ```dart
 final server = McpServer(
   const Implementation(name: 'task-server', version: '1.0.0'),
-  options: const ServerOptions(
+  options: const McpServerOptions(
     capabilities: ServerCapabilities(
       tasks: ServerCapabilitiesTasks(
         requests: ServerCapabilitiesTasksRequests(
@@ -536,40 +536,50 @@ await for (final message in taskClient.callToolStream(
 ### API Integration
 
 ```dart
+const nwsApiBase = 'https://api.weather.gov';
+
 server.registerTool(
-  'get-weather',
-  description: 'Get current weather for a city',
+  'get-alerts',
+  description: 'Get weather alerts for a US state',
   inputSchema: JsonSchema.object(
     properties: {
-      'city': JsonSchema.string(description: 'City name'),
-      'units': JsonSchema.string(
-        enumValues: ['metric', 'imperial'],
-        defaultValue: 'metric',
+      'state': JsonSchema.string(
+        description: 'Two-letter state code, for example CA or NY',
       ),
     },
-    required: ['city'],
+    required: ['state'],
   ),
   callback: (args, extra) async {
-    final city = args['city'] as String;
-    final units = args['units'] as String? ?? 'metric';
+    final state = (args['state'] as String?)?.toUpperCase();
+    if (state == null || state.length != 2) {
+      return const CallToolResult(
+        content: [TextContent(text: 'Invalid state code provided.')],
+        isError: true,
+      );
+    }
 
-    final weather = await weatherApi.getCurrent(
-      city: city,
-      units: units,
-    );
+    final alertsData = await makeNWSRequest('$nwsApiBase/alerts?area=$state');
+    if (alertsData == null) {
+      return CallToolResult.fromContent(
+        [const TextContent(text: 'Failed to retrieve alerts data.')],
+      );
+    }
 
-    return CallToolResult(
-      content: [
-        TextContent(
-          text: 'Weather in $city:\n'
-                'Temperature: ${weather.temp}°\n'
-                'Conditions: ${weather.description}',
-        ),
-      ],
+    final features = alertsData['features'] as List<dynamic>? ?? [];
+    if (features.isEmpty) {
+      return CallToolResult.fromContent(
+        [TextContent(text: 'No active alerts for $state.')],
+      );
+    }
+
+    return CallToolResult.fromContent(
+      [TextContent(text: 'Active alerts for $state: ${features.length}')],
     );
   },
 );
 ```
+
+See [`example/weather.dart`](../example/weather.dart) for the complete National Weather Service example, including request headers, forecast lookup, and alert formatting.
 
 ### Database Query
 

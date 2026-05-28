@@ -500,14 +500,20 @@ await client.callTool(
 );
 ```
 
-### Connection Timeout
+### Request Timeout
 
-Increase timeout for slow operations:
+Increase timeout for a slow request with `RequestOptions`:
 
 ```dart
 final client = McpClient(
   Implementation(name: 'client', version: '1.0.0'),
-  requestTimeout: Duration(seconds: 30),  // Default is 10 seconds
+);
+
+final result = await client.callTool(
+  CallToolRequest(name: 'slow-tool', arguments: {}),
+  options: RequestOptions(
+    timeout: Duration(seconds: 30),
+  ),
 );
 ```
 

@@ -6,6 +6,7 @@ library;
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:mcp_dart/mcp_dart.dart';
+import 'package:web/web.dart' as web;
 
 /// A panel displaying available tools with call buttons.
 class ToolsPanel extends StatefulComponent {
@@ -144,21 +145,21 @@ class _ToolsPanelState extends State<ToolsPanel> {
           inputType == InputType.checkbox ? 'change' : 'input': (e) {
             setState(() {
               if (inputType == InputType.number) {
-                final val = (e.target as dynamic).value;
-                if (val == null || val.toString().isEmpty) {
+                final val = (e.target as web.HTMLInputElement).value;
+                if (val.isEmpty) {
                   currentArgs.remove(argName);
                 } else {
                   if (argSchema is JsonInteger) {
-                    currentArgs[argName] = int.tryParse(val.toString());
+                    currentArgs[argName] = int.tryParse(val);
                   } else {
-                    currentArgs[argName] = num.tryParse(val.toString());
+                    currentArgs[argName] = num.tryParse(val);
                   }
                 }
               } else if (inputType == InputType.checkbox) {
-                final checked = (e.target as dynamic).checked;
+                final checked = (e.target as web.HTMLInputElement).checked;
                 currentArgs[argName] = checked;
               } else {
-                currentArgs[argName] = (e.target as dynamic).value;
+                currentArgs[argName] = (e.target as web.HTMLInputElement).value;
               }
             });
           },

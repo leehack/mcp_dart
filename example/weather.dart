@@ -75,8 +75,9 @@ void main() async {
       final alertsData = await makeNWSRequest(alertsUrl);
 
       if (alertsData == null) {
-        return CallToolResult.fromContent(
-          [const TextContent(text: "Failed to retrieve alerts data.")],
+        return const CallToolResult(
+          isError: true,
+          content: [TextContent(text: "Failed to retrieve alerts data.")],
         );
       }
 
@@ -128,8 +129,9 @@ void main() async {
       final pointsData = await makeNWSRequest(pointsUrl);
 
       if (pointsData == null) {
-        return CallToolResult.fromContent(
-          [
+        return CallToolResult(
+          isError: true,
+          content: [
             TextContent(
               text:
                   "Failed to retrieve grid point data for coordinates: $latitude, $longitude. This location may not be supported by the NWS API (only US locations are supported).",
@@ -140,9 +142,10 @@ void main() async {
 
       final forecastUrl = pointsData['properties']?['forecast'] as String?;
       if (forecastUrl == null) {
-        return CallToolResult.fromContent(
-          [
-            const TextContent(
+        return const CallToolResult(
+          isError: true,
+          content: [
+            TextContent(
               text: "Failed to get forecast URL from grid point data.",
             ),
           ],
@@ -151,9 +154,10 @@ void main() async {
 
       final forecastData = await makeNWSRequest(forecastUrl);
       if (forecastData == null) {
-        return CallToolResult.fromContent(
-          [
-            const TextContent(text: "Failed to retrieve forecast data."),
+        return const CallToolResult(
+          isError: true,
+          content: [
+            TextContent(text: "Failed to retrieve forecast data."),
           ],
         );
       }

@@ -57,6 +57,7 @@ The server provides two demo tools:
 
 #### `confirm_delete` (Elicitation Demo)
 
+- Enter a filename, for example `test.txt`
 - Click **Call** on the `confirm_delete` tool
 - A modal dialog will appear asking for confirmation
 - Click **Yes** or **No** to respond
@@ -64,6 +65,7 @@ The server provides two demo tools:
 
 #### `write_haiku` (Sampling Demo)
 
+- Enter a topic, for example `autumn leaves`
 - Click **Call** on the `write_haiku` tool
 - A modal dialog will appear requesting an LLM response
 - Choose to use the mock haiku response or enter your own

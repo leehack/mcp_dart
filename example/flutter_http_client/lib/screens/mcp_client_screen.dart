@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_http_client/services/streamable_mcp_service.dart';
+import 'package:mcp_dart/mcp_dart.dart';
 
 class McpClientScreen extends StatefulWidget {
   final StreamableMcpService mcpService;
@@ -271,7 +272,24 @@ class McpClientScreenState extends State<McpClientScreen> {
     _showLoading(true);
     try {
       final inputText = _inputController.text.trim();
-      final args = {'text': inputText};
+      Prompt? prompt;
+      for (final candidate
+          in widget.mcpService.availablePrompts ?? <Prompt>[]) {
+        if (candidate.name == _selectedPrompt) {
+          prompt = candidate;
+          break;
+        }
+      }
+      final promptArgs = prompt?.arguments ?? [];
+      final args = <String, String>{};
+
+      if (promptArgs.isNotEmpty) {
+        final primaryArg = promptArgs.firstWhere(
+          (arg) => arg.required == true,
+          orElse: () => promptArgs.first,
+        );
+        args[primaryArg.name] = inputText.isEmpty ? 'MCP User' : inputText;
+      }
 
       final result = await widget.mcpService.getPrompt(_selectedPrompt, args);
 

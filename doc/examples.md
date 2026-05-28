@@ -22,37 +22,37 @@ For task-focused guidance, also see:
 Complete stdio-based server with tools, resources, and prompts:
 
 ```bash
-# Run server
-dart run example/server_stdio.dart
-
-# Run client (in another terminal)
+# The client starts example/server_stdio.dart over stdio.
 dart run example/client_stdio.dart
 ```
 
 **Features**:
 
-- Multiple tools (echo, add, longRunningOperation)
-- Static and template-based resources
-- Prompt templates with arguments
-- Progress notifications
-- Comprehensive error handling
+- Tool invocation with the `calculate` arithmetic tool
+- Static resource reading from `file:///logs`
+- Prompt retrieval with the `analyze-code` prompt
+- Ping, capability discovery, and clean stdio shutdown
 
 ### Weather API Integration
 
 **Location**: [`example/weather.dart`](../example/weather.dart)
 
-Real-world API integration example:
+Real-world API integration example using the US National Weather Service API:
 
 ```bash
-dart run example/weather.dart
+dart run packages/mcp_dart_cli/bin/mcp_dart.dart inspect \
+  --tool get-alerts \
+  --json-args '{"state":"CA"}' \
+  dart run example/weather.dart
 ```
 
 **Features**:
 
-- External API calls (OpenWeatherMap)
-- Environment variable configuration
+- External API calls to `api.weather.gov`
+- No API key required
+- US alert lookup by two-letter state code
+- US forecast lookup by latitude and longitude
 - Error handling for API failures
-- JSON response formatting
 - Type-safe parameter validation
 
 ## Transport Examples
@@ -74,7 +74,7 @@ dart run example/server_sse.dart
 - Session management
 - Multiple concurrent connections
 
-### Streamable HTTPS
+### Streamable HTTP
 
 **Location**: [`example/streamable_https/`](../example/streamable_https/)
 
@@ -93,7 +93,7 @@ dart run example/streamable_https/client_streamable_https.dart
 - Session persistence
 - Connection resumption
 - Stateful and stateless modes
-- CORS support
+- CORS support for browser examples
 
 ### High-Level Streamable Server
 
@@ -237,6 +237,13 @@ Low-level MCP Apps metadata wiring without helper wrappers:
 dart run example/mcp_apps_metadata_server.dart
 ```
 
+**Features**:
+
+- Manual `_meta` payloads for MCP Apps resources and tools
+- `ui://weather/dashboard` HTML resource registration
+- `ResourceLink` output from a tool result
+- Host-facing `io.modelcontextprotocol/ui` metadata
+
 ### Argument Completions
 
 **Location**: [`example/completions_capability_demo.dart`](../example/completions_capability_demo.dart)
@@ -337,8 +344,10 @@ dart run
 Flutter mobile app with MCP integration:
 
 ```bash
+dart run example/streamable_https/server_streamable_https.dart
+
 cd example/flutter_http_client
-flutter run
+flutter run -d chrome
 ```
 
 **Features**:
@@ -351,6 +360,28 @@ flutter run
 
 See [Flutter Host and Client Recipes](flutter-recipes.md) for platform-specific transport, lifecycle, authentication, and testing guidance.
 
+### Jaspr MCP Client
+
+**Location**: [`example/jaspr-client/`](../example/jaspr-client/)
+
+Browser client focused on elicitation, sampling, and task-aware tool flows:
+
+```bash
+dart run example/simple_task_interactive_server.dart
+
+cd example/jaspr-client
+dart pub get
+jaspr serve
+```
+
+**Features**:
+
+- Browser-compatible Streamable HTTP transport
+- Tool discovery and form-based argument input
+- Elicitation dialog handling for `confirm_delete`
+- Sampling dialog handling for `write_haiku`
+- Console-style event log for connection and task events
+
 ## Common Patterns
 
 ### Error Handling Pattern
@@ -358,33 +389,43 @@ See [Flutter Host and Client Recipes](flutter-recipes.md) for platform-specific 
 ```dart
 // From weather.dart
 server.registerTool(
-  'get-weather',
+  'get-alerts',
+  description: 'Get weather alerts for a state',
   inputSchema: JsonSchema.object(
     properties: {
-      'city': JsonSchema.string(),
+      'state': JsonSchema.string(
+        description: 'Two-letter state code (e.g. CA, NY)',
+      ),
     },
-    required: ['city'],
+    required: ['state'],
   ),
   callback: (args, extra) async {
-    try {
-      final weather = await weatherApi.getCurrent(
-        city: args['city'] as String,
-      );
-
-      return CallToolResult(
-        content: [TextContent(text: jsonEncode(weather))],
-      );
-    } on HttpException catch (e) {
-      return CallToolResult(
+    final state = (args['state'] as String?)?.toUpperCase();
+    if (state == null || state.length != 2) {
+      return const CallToolResult(
         isError: true,
-        content: [TextContent(text: 'API error: ${e.message}')],
-      );
-    } catch (e) {
-      return CallToolResult(
-        isError: true,
-        content: [TextContent(text: 'Unexpected error: $e')],
+        content: [TextContent(text: 'Invalid state code provided.')],
       );
     }
+
+    final alertsData = await makeNWSRequest('$nwsApiBase/alerts?area=$state');
+    if (alertsData == null) {
+      return const CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Failed to retrieve alerts data.')],
+      );
+    }
+
+    final features = alertsData['features'] as List<dynamic>? ?? [];
+    if (features.isEmpty) {
+      return CallToolResult.fromContent(
+        [TextContent(text: 'No active alerts for $state.')],
+      );
+    }
+
+    return CallToolResult.fromContent(
+      [TextContent(text: 'Active alerts for $state: ...')],
+    );
   },
 );
 ```
@@ -392,27 +433,21 @@ server.registerTool(
 ### Progress Tracking Pattern
 
 ```dart
-// From server_stdio.dart
 server.registerTool(
-  'longRunningOperation',
+  'long-running-operation',
   inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
-    final progressToken = extra.progressToken;
-
     for (var i = 0; i <= 100; i += 10) {
       await Future.delayed(Duration(milliseconds: 100));
-
-      if (progressToken != null) {
-        await server.sendProgress(
-          progressToken: progressToken,
-          progress: i,
-          total: 100,
-        );
-      }
+      await extra.sendProgress(
+        i.toDouble(),
+        total: 100,
+        message: 'Processing $i%',
+      );
     }
 
-    return CallToolResult(
-      content: [TextContent(text: 'Operation complete')],
+    return CallToolResult.fromContent(
+      [const TextContent(text: 'Operation complete')],
     );
   },
 );
@@ -421,7 +456,6 @@ server.registerTool(
 ### Resource Template Pattern
 
 ```dart
-// URI template for dynamic resources
 // URI template for dynamic resources
 server.registerResourceTemplate(
   'User Profile',
@@ -576,12 +610,9 @@ flutter pub get
 
 ### Environment Variables
 
-Many examples require environment variables:
+Credentialed examples require environment variables:
 
 ```bash
-# Weather example
-export OPENWEATHER_API_KEY=your_key
-
 # GitHub examples
 export GITHUB_CLIENT_ID=your_id
 export GITHUB_CLIENT_SECRET=your_secret
@@ -612,8 +643,12 @@ dart run example/completions_capability_demo.dart
 dart run example/elicitation_http_server.dart
 
 # Flutter example
+dart run example/streamable_https/server_streamable_https.dart
 cd example/flutter_http_client
-flutter run
+flutter run -d chrome
+
+# Non-credentialed smoke checks used by CI/local release validation
+dart test test/example/non_credentialed_examples_smoke_test.dart
 ```
 
 ## Next Steps
