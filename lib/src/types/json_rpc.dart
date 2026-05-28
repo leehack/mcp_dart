@@ -107,7 +107,7 @@ typedef RequestId = dynamic;
 ///
 /// JSON-RPC/MCP request IDs are JSON strings or integers for SDK request
 /// boundaries. Notifications omit the `id` member entirely, and responses may
-/// still carry `null` IDs for JSON-RPC error cases.
+/// omit the `id` member for JSON-RPC error cases.
 RequestId parseRequestId(Object? value, {String fieldName = 'id'}) {
   if (value is String || value is int) {
     return value;
@@ -117,13 +117,15 @@ RequestId parseRequestId(Object? value, {String fieldName = 'id'}) {
   );
 }
 
-RequestId? _parseResponseId(Object? value) {
-  if (value == null || value is String || value is int) {
-    return value;
+RequestId _parseResultResponseId(Object? value) {
+  return parseRequestId(value);
+}
+
+RequestId? _parseErrorResponseId(Map<String, dynamic> json) {
+  if (!json.containsKey('id') || json['id'] == null) {
+    return null;
   }
-  throw FormatException(
-    'Invalid id: expected string, integer, or null, got ${value.runtimeType}',
-  );
+  return parseRequestId(json['id']);
 }
 
 /// Validates request metadata that can affect protocol behavior.
@@ -255,7 +257,7 @@ sealed class JsonRpcMessage {
         };
       }
     } else if (json.containsKey('result')) {
-      final id = _parseResponseId(json['id']);
+      final id = _parseResultResponseId(json['id']);
       final resultData = json['result'] as Map<String, dynamic>;
       final meta = resultData['_meta'] as Map<String, dynamic>?;
       final actualResult = Map<String, dynamic>.from(resultData)
@@ -414,20 +416,20 @@ class JsonRpcErrorData {
 
 /// Represents a response indicating an error occurred during a request.
 class JsonRpcError extends JsonRpcMessage {
-  final RequestId id;
+  final RequestId? id;
   final JsonRpcErrorData error;
 
   const JsonRpcError({required this.id, required this.error});
 
   factory JsonRpcError.fromJson(Map<String, dynamic> json) => JsonRpcError(
-        id: _parseResponseId(json['id']),
+        id: _parseErrorResponseId(json),
         error: JsonRpcErrorData.fromJson(json['error'] as Map<String, dynamic>),
       );
 
   @override
   Map<String, dynamic> toJson() => {
         'jsonrpc': jsonrpc,
-        'id': id,
+        if (id != null) 'id': id,
         'error': error.toJson(),
       };
 }

@@ -36,16 +36,16 @@ void main() {
       );
 
       final json = annotations.toJson();
-      expect(json['title'], equals('My Title'));
+      expect(json.containsKey('title'), isFalse);
       expect(json['audience'], equals(['user']));
       expect(json['priority'], equals(0.5));
       expect(json['lastModified'], equals('2025-01-12T15:00:58Z'));
     });
 
-    test('toJson excludes null fields', () {
+    test('toJson does not emit legacy title field', () {
       const annotations = ResourceAnnotations(title: 'Only Title');
       final json = annotations.toJson();
-      expect(json.containsKey('title'), isTrue);
+      expect(json.containsKey('title'), isFalse);
       expect(json.containsKey('audience'), isFalse);
       expect(json.containsKey('priority'), isFalse);
       expect(json.containsKey('lastModified'), isFalse);
@@ -122,6 +122,34 @@ void main() {
       final resource = Resource.fromJson(json);
       expect(resource.meta, isNotNull);
       expect(resource.meta!['ui']['prefersBorder'], isTrue);
+    });
+
+    test('fromJson accepts whole-number JSON size values', () {
+      final resource = Resource.fromJson({
+        'uri': 'file:///test.txt',
+        'name': 'Test File',
+        'size': 123.0,
+      });
+
+      expect(resource.size, 123);
+      expect(resource.toJson()['size'], 123);
+
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'size': 123.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'size': '123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('toJson serializes correctly with all fields', () {
@@ -373,7 +401,7 @@ void main() {
     });
 
     test('fromJson with empty resources', () {
-      final json = <String, dynamic>{};
+      final json = {'resources': <dynamic>[]};
       final result = ListResourcesResult.fromJson(json);
       expect(result.resources, isEmpty);
       expect(result.nextCursor, isNull);
@@ -454,7 +482,7 @@ void main() {
     });
 
     test('fromJson with empty templates', () {
-      final json = <String, dynamic>{};
+      final json = {'resourceTemplates': <dynamic>[]};
       final result = ListResourceTemplatesResult.fromJson(json);
       expect(result.resourceTemplates, isEmpty);
     });
@@ -538,7 +566,7 @@ void main() {
     });
 
     test('fromJson with empty contents', () {
-      final json = <String, dynamic>{};
+      final json = {'contents': <dynamic>[]};
       final result = ReadResourceResult.fromJson(json);
       expect(result.contents, isEmpty);
     });

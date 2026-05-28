@@ -30,6 +30,12 @@ server.registerTool(
 
 mcp_dart implements a pragmatic JSON Schema subset for MCP tool input/output and elicitation schemas; it is not a complete JSON Schema 2020-12 validator.
 
+MCP 2025-11-25 requires both `inputSchema` and `outputSchema` on a `Tool` to be
+object-root JSON Schema values. Use `JsonSchema.object(...)` or
+`JsonObject.fromJson(...)` at the root and put primitive values under named
+properties. Primitive root schemas such as `JsonSchema.string()` are rejected at
+the MCP wire boundary for tools and form elicitation.
+
 ### Basic Types
 
 ```dart
@@ -158,7 +164,7 @@ Provide behavioral hints to clients:
 server.registerTool(
   'get-user-stats',
   description: 'Get user statistics',
-  annotations: ToolAnnotations(readOnly: true), // No side effects
+  annotations: ToolAnnotations(readOnlyHint: true), // No side effects
   inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     final stats = await database.getUserStats();
@@ -176,8 +182,8 @@ server.registerTool(
   'delete-all-data',
   description: 'Permanently delete all data',
   annotations: ToolAnnotations(
-    readOnly: false,
-    destructive: true, // Warn users!
+    readOnlyHint: false,
+    destructiveHint: true, // Warn users!
   ),
   inputSchema: JsonSchema.object(
     properties: {
@@ -200,7 +206,7 @@ server.registerTool(
 server.registerTool(
   'update-cache',
   description: 'Update cache entry',
-  annotations: ToolAnnotations(idempotent: true), // Safe to retry
+  annotations: ToolAnnotations(idempotentHint: true), // Safe to retry
   inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     await cache.set(args['key'], args['value']);
@@ -217,7 +223,7 @@ server.registerTool(
 server.registerTool(
   'search-web',
   description: 'Search the internet',
-  annotations: ToolAnnotations(openWorld: true), // Results vary over time
+  annotations: ToolAnnotations(openWorldHint: true), // Results vary over time
   inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
     final results = await webSearch(args['query']);
@@ -227,6 +233,11 @@ server.registerTool(
   },
 );
 ```
+
+Stable MCP tool annotations are `title`, `readOnlyHint`, `destructiveHint`,
+`idempotentHint`, and `openWorldHint`. Legacy `priority` and `audience` payloads
+still parse into deprecated Dart fields for compatibility, but they are not
+emitted by `ToolAnnotations.toJson()`.
 
 ## Content Types
 
@@ -611,7 +622,7 @@ server.registerTool(
 server.registerTool(
   'read-file',
   description: 'Read file contents',
-  annotations: ToolAnnotations(readOnly: true),
+  annotations: ToolAnnotations(readOnlyHint: true),
   inputSchema: JsonSchema.object(
     properties: {
       'path': JsonSchema.string(description: 'File path'),

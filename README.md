@@ -59,7 +59,7 @@ dart pub get
 - ✅ **Multiple Transport Options** - Stdio, StreamableHTTP, IOStream, or custom transports
 - ✅ **All Capabilities** - Tools, Resources, Prompts, Sampling, Roots, Completions, Elicitation, Tasks
 - ✅ **Extension Support** - Generic `extensions` negotiation with typed MCP Apps helpers and TypeScript-style `registerAppTool` / `registerAppResource`
-- ✅ **Latest Content/Metadata Types** - `resource_link`, themed `icons`, and `annotations.lastModified`
+- ✅ **Latest Content/Metadata Types** - `resource_link`, themed `icons`, `Resource.size`, `Root._meta`, and `annotations.lastModified`
 - ✅ **OAuth Authentication Hooks** - `OAuthClientProvider`, MCP OAuth discovery helpers, server authenticators, and OAuth2/PKCE examples
 - ✅ **Transport Security Controls** - DNS rebinding protection and strict Streamable HTTP validation with compatibility toggles
 - ✅ **Type-Safe** - Comprehensive type definitions with null safety

@@ -366,6 +366,9 @@ parameter, and exchanges the authorization code with `code_verifier` and
 `saveTokens` is an `OAuthAuthorizationCodeTokens` instance, so providers that
 want `tokenType`, `expiresIn`, or granted `scope` can read them by type-checking
 that subtype while older `OAuthTokens` implementations stay source-compatible.
+Authorization server metadata must explicitly advertise
+`code_challenge_methods_supported` with `S256`; missing metadata is treated as
+no PKCE support and the transport refuses the authorization-code flow.
 
 Executable coverage for these recipes lives in
 [`test/server/streamable_security_harness_test.dart`](../test/server/streamable_security_harness_test.dart).
@@ -539,6 +542,10 @@ owning live transport/session stream, and unknown or foreign event IDs are
 rejected instead of replaying unrelated stream history. Concurrent standalone
 GET SSE streams are not fan-out subscriptions: each server-originated JSON-RPC
 message is routed to one active stream, not broadcast to every open GET stream.
+When a server opens an SSE stream and an event store is configured, the SDK
+writes an initial SSE frame with an `id` and empty `data` field so reconnecting
+clients can resume from a concrete stream event even before JSON-RPC messages
+are available.
 
 When using `StreamableHttpClientTransport` through `McpClient.request`, a
 stateful `404 Session not found` clears the stale session, starts a fresh

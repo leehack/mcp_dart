@@ -105,7 +105,14 @@ void main() {
     });
 
     test('elicit enqueues request and waits', () async {
-      final future = session.elicit('message', JsonSchema.string());
+      final future = session.elicit(
+        'message',
+        JsonSchema.object(
+          properties: {
+            'value': JsonSchema.string(),
+          },
+        ),
+      );
 
       // Allow async code to run
       await Future.delayed(Duration.zero);

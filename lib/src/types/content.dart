@@ -1,3 +1,5 @@
+import 'validation.dart';
+
 Map<String, dynamic>? _asJsonObjectOrNull(dynamic value) {
   if (value == null) {
     return null;
@@ -50,17 +52,20 @@ class Annotations {
       audience: (json['audience'] as List<dynamic>?)
           ?.map((value) => AnnotationAudience.values.byName(value as String))
           .toList(),
-      priority: (json['priority'] as num?)?.toDouble(),
+      priority: readUnitDouble(json['priority'], 'Annotations.priority'),
       lastModified: json['lastModified'] as String?,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        if (audience != null)
-          'audience': audience!.map((value) => value.name).toList(),
-        if (priority != null) 'priority': priority,
-        if (lastModified != null) 'lastModified': lastModified,
-      };
+  Map<String, dynamic> toJson() {
+    validateUnitDouble(priority, 'Annotations.priority');
+    return {
+      if (audience != null)
+        'audience': audience!.map((value) => value.name).toList(),
+      if (priority != null) 'priority': priority,
+      if (lastModified != null) 'lastModified': lastModified,
+    };
+  }
 }
 
 /// Sealed class representing the contents of a specific resource or sub-resource.

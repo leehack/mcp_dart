@@ -68,9 +68,52 @@
 - Validated `elicitation/create` parameters as the MCP 2025-11-25 form/URL
   union, including URL-only client handler registration and unsupported
   elicitation-mode rejection.
+- Added MCP 2025-11-25 stable metadata coverage for `Resource.size`,
+  `Root._meta`, stable `icons`, resource annotations, and tool annotations.
+  Legacy singular `icon` fields and non-stable annotation helper fields remain
+  parse-compatible but are no longer emitted on stable schema objects.
+- Enforced stable `Tool.inputSchema` and `Tool.outputSchema` root-object shapes
+  at parse and serialization boundaries while preserving the existing
+  `JsonSchema`-typed public fields for source compatibility.
+- Aligned JSON-RPC response ID handling with the MCP schema: result responses
+  require a string or integer `id`, error responses may omit `id`, and malformed
+  response IDs fail during parsing.
+- Stopped serializing non-stable server capability fields such as top-level
+  `elicitation` and `tasks.listChanged`; legacy payloads still parse for
+  compatibility.
+- Tightened MCP form elicitation validation to require object-root
+  `requestedSchema` values with primitive property schemas, restricted
+  `ElicitResult.content` to spec-supported primitive values, and validated
+  URL-required error data.
+- Kept task `_meta` only where MCP permits result or notification metadata:
+  bare nested `Task` values in task lists and task creation results no longer
+  serialize `_meta`.
+- Refused OAuth authorization-code discovery when the authorization server
+  metadata omits `code_challenge_methods_supported` or does not advertise
+  `S256`.
+- Added Streamable HTTP resumability priming events so server-initiated SSE
+  streams with an `EventStore` begin with an event `id` and empty `data` frame,
+  matching the MCP `Last-Event-ID` reconnection guidance.
 
 ### Compatibility Notes (Potentially Breaking)
 
+- **MCP 2025-11-25 wire validation is stricter**:
+  - Stable metadata serializers no longer emit legacy singular `icon` fields,
+    `ResourceAnnotations.title`, `ToolAnnotations.priority`, or
+    `ToolAnnotations.audience`; those fields still parse into deprecated Dart
+    accessors for one compatibility window.
+  - Missing required result arrays such as `resources`, `resourceTemplates`,
+    `contents`, `prompts`, `tools`, `roots`, and `tasks` now fail during
+    parsing. Empty arrays remain valid when the required key is present.
+  - `Tool.inputSchema`, `Tool.outputSchema`, and form elicitation
+    `requestedSchema` values must serialize as root JSON objects. Primitive
+    root schemas are rejected at the MCP wire boundary.
+  - Successful JSON-RPC responses with `id: null` are rejected. Error responses
+    may omit `id`; legacy `id: null` error payloads still parse, but serialize
+    by omitting the field.
+  - OAuth authorization-code discovery now requires advertised PKCE `S256`
+    support; clients refuse servers that omit
+    `code_challenge_methods_supported`.
 - **Stable completion list-changed wire behavior is removed**:
   - `ServerCapabilitiesCompletions(listChanged: true)` remains source-compatible
     and still parses legacy payloads, but serializes as the stable MCP

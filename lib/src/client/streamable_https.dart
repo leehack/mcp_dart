@@ -234,7 +234,7 @@ class StreamableHttpClientTransport
     }
 
     final methods = authorizationServerMetadata.codeChallengeMethodsSupported;
-    if (methods != null && !methods.contains('S256')) {
+    if (methods == null || !methods.contains('S256')) {
       throw UnauthorizedError(
         'Authorization server does not advertise PKCE S256 support',
       );
