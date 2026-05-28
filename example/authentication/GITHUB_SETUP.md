@@ -246,5 +246,5 @@ You can extend the example to:
 
 If you encounter issues:
 1. Check the [GitHub MCP Server Issues](https://github.com/github/github-mcp-server/issues)
-2. Review [MCP Dart SDK Examples](../README.md)
+2. Review [MCP Dart SDK Examples](../../doc/examples.md)
 3. Open an issue with detailed error messages and steps to reproduce

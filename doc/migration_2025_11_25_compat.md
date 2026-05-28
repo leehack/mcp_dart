@@ -269,7 +269,7 @@ server options before connecting:
 ```dart
 final server = McpServer(
   const Implementation(name: 'server', version: '1.0.0'),
-  options: const ServerOptions(
+  options: const McpServerOptions(
     capabilities: ServerCapabilities(
       tasks: ServerCapabilitiesTasks(
         requests: ServerCapabilitiesTasksRequests(

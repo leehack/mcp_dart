@@ -5,6 +5,7 @@ library;
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:web/web.dart' as web;
 
 /// A modal dialog for sampling requests.
 class SamplingDialog extends StatefulComponent {
@@ -87,7 +88,7 @@ Spring whispers goodbye''';
                 },
                 events: {
                   'input': (event) {
-                    _response = (event.target as dynamic).value as String;
+                    _response = (event.target as web.HTMLTextAreaElement).value;
                   },
                 },
                 [],

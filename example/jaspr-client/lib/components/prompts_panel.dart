@@ -4,6 +4,7 @@ library;
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:mcp_dart/mcp_dart.dart';
+import 'package:web/web.dart' as web;
 
 class PromptsPanel extends StatefulComponent {
   final List<Prompt> prompts;
@@ -130,7 +131,7 @@ class _PromptsPanelState extends State<PromptsPanel> {
                 type: InputType.text,
                 events: {
                   'input': (e) {
-                    _argValues[arg.name] = (e.target as dynamic).value;
+                    _argValues[arg.name] = (e.target as web.HTMLInputElement).value;
                   },
                 },
               ),

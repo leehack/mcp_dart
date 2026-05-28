@@ -43,10 +43,18 @@ This will launch the application in Chrome. You can also use other browsers by s
 
 4. Once connected, you can use various buttons to interact with the server:
    - List Tools: See available tools on the server
-   - Call Tool: Execute a tool with arguments
+   - Call Tool: Execute the selected tool with the text input mapped to its primary required argument
    - List Prompts: View available prompts
+   - Get Prompt: Retrieve the selected prompt using its advertised prompt argument schema
    - List Resources: See available resources
    - Start Notifications: Begin receiving server notifications
+
+### Local Smoke Flow
+
+The default server exposes a `greet` tool and a `greeting-template` prompt.
+After connecting to `http://localhost:3000/mcp`, enter a name in the text field,
+then run `List Tools`, `Call Tool`, `List Prompts`, `Get Prompt`, and
+`List Resources`.
 
 ## Project Structure
 

@@ -261,7 +261,7 @@ void setCorsHeaders(HttpRequest request) {
       .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   request.response.headers.set(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+    'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, mcp-protocol-version, Last-Event-ID, Authorization',
   );
   request.response.headers.set('Access-Control-Allow-Credentials', 'true');
   request.response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours

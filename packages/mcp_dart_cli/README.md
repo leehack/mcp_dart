@@ -1,6 +1,7 @@
 # mcp_dart_cli
 
-CLI for creating Model Context Protocol (MCP) servers in Dart.
+Command-line tools for creating, serving, inspecting, and testing Model Context
+Protocol (MCP) servers written in Dart.
 
 ## Installation
 

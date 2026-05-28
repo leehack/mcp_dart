@@ -266,9 +266,16 @@ class InspectCommand extends Command<int> {
 
   Future<void> _listCapabilities(McpClient client) async {
     try {
-      final tools = await client.listTools();
-      final resources = await client.listResources();
-      final prompts = await client.listPrompts();
+      final capabilities = client.getServerCapabilities();
+      final tools = capabilities?.tools != null
+          ? await client.listTools()
+          : const ListToolsResult(tools: []);
+      final resources = capabilities?.resources != null
+          ? await client.listResources()
+          : const ListResourcesResult(resources: []);
+      final prompts = capabilities?.prompts != null
+          ? await client.listPrompts()
+          : const ListPromptsResult(prompts: []);
       _printer.printCapabilities(tools, resources, prompts);
     } catch (e) {
       _logger.err('Failed to list capabilities: $e');

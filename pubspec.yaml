@@ -1,16 +1,23 @@
 name: mcp_dart
-description: Dart Implementation of Model Context Protocol (MCP) SDK.
+description: Dart and Flutter SDK for building Model Context Protocol (MCP) servers, clients, hosts, and AI tools.
 version: 2.2.0
 repository: https://github.com/leehack/mcp_dart
 homepage: https://github.com/leehack/mcp_dart
 issue_tracker: https://github.com/leehack/mcp_dart/issues
-documentation: https://pub.dev/documentation/mcp_dart/latest/
+documentation: https://github.com/leehack/mcp_dart/tree/main/doc
 topics:
   - mcp
   - ai
   - llm
-  - server
-  - client
+  - api
+  - dart
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  web:
+  windows:
 
 environment:
   sdk: ^3.0.0

@@ -11,6 +11,14 @@
   example flow, including TypeScript SDK OAuth interop coverage.
 - Documented first-class OAuth protected-resource metadata and bearer challenge
   support for `StreamableMcpServer`.
+- Refreshed example documentation for current stdio, weather, Streamable HTTP,
+  Flutter, Jaspr, and MCP Apps flows, including non-credentialed smoke commands.
+- Refreshed additional guide snippets for request timeouts, task capability
+  pre-advertisement, progress reporting, local documentation links, and
+  documented `dart run` targets.
+- Improved pub.dev discoverability metadata with a clearer package
+  description, documentation link, topics, platform declarations, and package
+  page summary copy.
 
 ### Spec Alignment
 
@@ -208,6 +216,9 @@
 - Improved JSON Schema parsing and validation for `const`, enum-only schemas,
   titled enum `const` entries, and simple `type` array unions such as nullable
   schemas.
+- Fixed browser example interoperability by allowing the MCP protocol-version
+  header in CORS preflight responses, mapping Flutter prompt input to advertised
+  prompt arguments, and using typed DOM inputs in the Jaspr client.
 
 ### Tooling
 
@@ -217,6 +228,11 @@
   raw-wire checks.
 - CI now runs `mcp_dart conformance --suite all --json` so JSON-RPC and
   protocol-version fixtures are checked with the spec suite.
+- Added local non-credentialed example smoke tests for stdio, iostream,
+  required-field schema preservation, CLI inspect, completions, and MCP Apps
+  metadata examples.
+- Added Markdown documentation guards for broken local links and documented
+  `dart run` targets.
 
 ## 2.1.1
 

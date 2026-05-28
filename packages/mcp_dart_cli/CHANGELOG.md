@@ -1,5 +1,10 @@
-## Unreleased
+## 0.1.8
 
+- Make `mcp_dart inspect` capability listing respect the server's advertised
+  capabilities instead of probing unsupported list methods.
+- Improve pub.dev metadata with a clearer description, documentation and issue
+  links, topics, platform declarations, and package page summary copy.
+- Update the CLI dependency constraint to `mcp_dart ^2.2.0`.
 - Add `mcp_dart conformance` with built-in JSON-RPC and protocol-version fixture checks, deterministic JSON-RPC fuzz cases, exact-case filtering, and JSON output for CI/scripts.
 - Add `mcp_dart conformance --suite spec` for MCP 2025-11-25 lifecycle,
   capability, elicitation, task-metadata, and progress-token raw-wire checks.

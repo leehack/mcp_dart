@@ -5,6 +5,7 @@ library;
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:web/web.dart' as web;
 
 import '../services/mcp_service.dart';
 
@@ -73,7 +74,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
           },
           events: {
             'input': (event) {
-              _serverUrl = (event.target as dynamic).value as String;
+              _serverUrl = (event.target as web.HTMLInputElement).value;
             },
           },
         ),
