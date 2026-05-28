@@ -87,11 +87,19 @@ class GitHubBinaryUpdater {
   GitHubBinaryUpdater({
     required Logger logger,
     HttpClient? httpClient,
+    Uri? releasesUri,
   })  : _logger = logger,
-        _httpClient = httpClient ?? HttpClient();
+        _httpClient = httpClient ?? HttpClient(),
+        _releasesUri = releasesUri ??
+            Uri.https(
+              'api.github.com',
+              '/repos/$_repository/releases',
+              {'per_page': '50'},
+            );
 
   final Logger _logger;
   final HttpClient _httpClient;
+  final Uri _releasesUri;
 
   /// Updates the current standalone binary from the latest CLI GitHub release.
   Future<int> update({
@@ -179,12 +187,7 @@ class GitHubBinaryUpdater {
   }
 
   Future<_CliRelease> _findLatestCliRelease() async {
-    final uri = Uri.https(
-      'api.github.com',
-      '/repos/$_repository/releases',
-      {'per_page': '50'},
-    );
-    final releasesJson = await _getJson(uri);
+    final releasesJson = await _getJson(_releasesUri);
     if (releasesJson is! List) {
       throw const FormatException('GitHub releases response was not a list.');
     }

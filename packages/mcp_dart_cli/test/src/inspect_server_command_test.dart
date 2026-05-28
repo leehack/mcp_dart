@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,6 +7,7 @@ import 'package:mason/mason.dart';
 import 'package:mcp_dart_cli/src/inspect_server_command.dart';
 import 'package:mcp_dart_cli/src/inspectors/inspection_report.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 class MockLogger extends Mock implements Logger {}
@@ -213,5 +215,206 @@ void main() {
 
       expect(report.passed, isTrue);
     });
+
+    test('inspects a full TypeScript SDK stdio server in-process', () async {
+      final tsServer = _typescriptServerFixture();
+      if (!_requireFile(tsServer, 'compiled TypeScript server fixture')) {
+        return;
+      }
+
+      final report = await McpServerInspector(
+        logger: MockLogger(),
+        probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
+          'tools': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'name': 'structured_echo',
+              'arguments': <String, dynamic>{'message': 'configured probe'},
+            },
+          ],
+          'resource': <String, dynamic>{'uri': 'resource://test'},
+          'prompt': <String, dynamic>{
+            'name': 'greeting',
+            'arguments': <String, dynamic>{'language': 'English'},
+          },
+          'completion': <String, dynamic>{
+            'prompt': 'greeting',
+            'argument': 'language',
+            'value': 'E',
+          },
+          'task': <String, dynamic>{
+            'tool': 'long_running',
+            'arguments': <String, dynamic>{'duration': 20},
+            'ttl': 60000,
+          },
+        }),
+      ).inspect(
+        ServerInspectionTarget(
+          command: 'node',
+          serverArgs: <String>[
+            tsServer.path,
+            '--transport',
+            'stdio',
+          ],
+          url: null,
+          env: const <String, String>{},
+        ),
+      );
+
+      expect(report.passed, isTrue);
+      final checksById = <String, InspectionCheck>{
+        for (final check in report.checks) check.id: check,
+      };
+      for (final id in <String>[
+        'tools.call.structured_echo',
+        'tools.output-schema.structured_echo',
+        'resources.read',
+        'prompts.get',
+        'completion.complete',
+        'tasks.tools.call',
+        'tasks.lifecycle.created',
+        'tasks.lifecycle.terminal',
+      ]) {
+        expect(checksById[id]?.status, equals('pass'), reason: id);
+      }
+    });
+
+    test('inspects a TypeScript SDK Streamable HTTP server in-process',
+        () async {
+      final tsServer = _typescriptServerFixture();
+      if (!_requireFile(tsServer, 'compiled TypeScript server fixture')) {
+        return;
+      }
+
+      final port = await _findOpenPort();
+      final server = await _ManagedProcess.start('node', <String>[
+        tsServer.path,
+        '--transport',
+        'http',
+        '--port',
+        '$port',
+      ]);
+      addTearDown(server.stop);
+      final url = Uri.parse('http://127.0.0.1:$port/mcp');
+      await _waitForHttpEndpoint(url);
+
+      final report = await McpServerInspector(logger: MockLogger()).inspect(
+        ServerInspectionTarget(
+          command: null,
+          serverArgs: const <String>[],
+          url: url,
+          env: const <String, String>{},
+        ),
+      );
+
+      expect(report.passed, isTrue);
+      expect(report.metadata['transport'], equals('streamable-http'));
+      final checksById = <String, InspectionCheck>{
+        for (final check in report.checks) check.id: check,
+      };
+      for (final id in <String>[
+        'transport.streamable-http.session',
+        'transport.streamable-http.get-without-session',
+        'transport.streamable-http.bogus-session',
+        'transport.streamable-http.delete-session',
+      ]) {
+        expect(checksById[id]?.status, equals('pass'), reason: id);
+      }
+    });
   });
+}
+
+File _typescriptServerFixture() {
+  final repoRoot = _findRepoRoot(Directory.current);
+  return File(
+    p.join(repoRoot.path, 'test', 'interop', 'ts', 'dist', 'server.js'),
+  );
+}
+
+Directory _findRepoRoot(Directory start) {
+  var current = start.absolute;
+  while (current.path != current.parent.path) {
+    if (File(p.join(current.path, 'AGENTS.md')).existsSync() &&
+        Directory(p.join(current.path, 'packages', 'mcp_dart_cli'))
+            .existsSync()) {
+      return current;
+    }
+    current = current.parent;
+  }
+  throw StateError('Could not locate repository root from ${start.path}.');
+}
+
+bool _requireFile(File file, String description) {
+  if (file.existsSync()) return true;
+  markTestSkipped('$description is missing at ${file.path}.');
+  return false;
+}
+
+Future<int> _findOpenPort() async {
+  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = socket.port;
+  await socket.close();
+  return port;
+}
+
+Future<void> _waitForHttpEndpoint(Uri uri) async {
+  for (var attempt = 0; attempt < 50; attempt += 1) {
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(uri).timeout(
+            const Duration(milliseconds: 500),
+          );
+      final response = await request.close().timeout(
+            const Duration(milliseconds: 500),
+          );
+      await response.drain<void>();
+      client.close(force: true);
+      return;
+    } catch (_) {
+      client.close(force: true);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+  fail('Timed out waiting for HTTP MCP endpoint $uri.');
+}
+
+class _ManagedProcess {
+  _ManagedProcess._(
+    this.process,
+    this._stdoutSubscription,
+    this._stderrSubscription,
+  );
+
+  final Process process;
+  final StreamSubscription<String> _stdoutSubscription;
+  final StreamSubscription<String> _stderrSubscription;
+
+  static Future<_ManagedProcess> start(
+    String executable,
+    List<String> arguments,
+  ) async {
+    final process = await Process.start(executable, arguments);
+    final stdoutSubscription = process.stdout.transform(utf8.decoder).listen(
+          (_) {},
+        );
+    final stderrSubscription = process.stderr.transform(utf8.decoder).listen(
+          (_) {},
+        );
+    return _ManagedProcess._(
+      process,
+      stdoutSubscription,
+      stderrSubscription,
+    );
+  }
+
+  Future<void> stop() async {
+    process.kill();
+    try {
+      await process.exitCode.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      await process.exitCode;
+    }
+    await _stdoutSubscription.cancel();
+    await _stderrSubscription.cancel();
+  }
 }

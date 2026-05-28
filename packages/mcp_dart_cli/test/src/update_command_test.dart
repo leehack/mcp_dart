@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:mason_logger/mason_logger.dart';
@@ -153,5 +154,131 @@ void main() {
         isNull,
       );
     });
+
+    test('standalone updater downloads binary and bundled skill', () async {
+      final assetName = releaseAssetNameForCurrentPlatform();
+      if (assetName == null) {
+        markTestSkipped('No standalone asset is published for this platform.');
+        return;
+      }
+
+      final tempDir = await Directory.systemTemp.createTemp('mcp_update_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final server = await _ReleaseFixtureServer.start(assetName);
+      addTearDown(server.close);
+      final installDir = Directory('${tempDir.path}/bin');
+      final updater = GitHubBinaryUpdater(
+        logger: logger,
+        releasesUri: server.releasesUri,
+      );
+
+      final result = await updater.update(
+        currentVersion: '0.0.0',
+        installDir: installDir.path,
+      );
+
+      expect(result, equals(ExitCode.success.code));
+      expect(
+        await File('${installDir.path}/$binaryExecutableName').readAsString(),
+        equals('binary payload'),
+      );
+      expect(
+        await File(
+          '${tempDir.path}/share/mcp_dart/skills/mcp-developer/SKILL.md',
+        ).readAsString(),
+        equals('skill payload'),
+      );
+    });
+
+    test('standalone updater installs missing skill when already current',
+        () async {
+      final assetName = releaseAssetNameForCurrentPlatform();
+      if (assetName == null) {
+        markTestSkipped('No standalone asset is published for this platform.');
+        return;
+      }
+
+      final tempDir = await Directory.systemTemp.createTemp('mcp_update_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final server = await _ReleaseFixtureServer.start(assetName);
+      addTearDown(server.close);
+      final installDir = Directory('${tempDir.path}/bin');
+      final updater = GitHubBinaryUpdater(
+        logger: logger,
+        releasesUri: server.releasesUri,
+      );
+
+      final result = await updater.update(
+        currentVersion: '9.9.9',
+        installDir: installDir.path,
+      );
+
+      expect(result, equals(ExitCode.success.code));
+      expect(
+        File('${installDir.path}/$binaryExecutableName').existsSync(),
+        isFalse,
+      );
+      expect(
+        await File(
+          '${tempDir.path}/share/mcp_dart/skills/mcp-developer/SKILL.md',
+        ).readAsString(),
+        equals('skill payload'),
+      );
+    });
   });
+}
+
+class _ReleaseFixtureServer {
+  _ReleaseFixtureServer._(this._server, this._assetName);
+
+  final HttpServer _server;
+  final String _assetName;
+
+  Uri get releasesUri => Uri.parse('http://${_server.address.host}:'
+      '${_server.port}/repos/leehack/mcp_dart/releases?per_page=50');
+
+  static Future<_ReleaseFixtureServer> start(String assetName) async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final fixture = _ReleaseFixtureServer._(server, assetName);
+    server.listen(fixture._handle);
+    return fixture;
+  }
+
+  Future<void> close() => _server.close(force: true);
+
+  Future<void> _handle(HttpRequest request) async {
+    final origin = 'http://${_server.address.host}:${_server.port}';
+    if (request.uri.path == '/repos/leehack/mcp_dart/releases') {
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode(<Map<String, dynamic>>[
+        <String, dynamic>{
+          'tag_name': 'mcp_dart_cli-v10.0.0-dev.1',
+          'prerelease': true,
+          'assets': <Map<String, dynamic>>[],
+        },
+        <String, dynamic>{
+          'tag_name': 'mcp_dart_cli-v9.9.9',
+          'prerelease': false,
+          'assets': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'name': _assetName,
+              'browser_download_url': '$origin/assets/$_assetName',
+            },
+            <String, dynamic>{
+              'name': 'mcp-developer.SKILL.md',
+              'browser_download_url': '$origin/assets/mcp-developer.SKILL.md',
+            },
+          ],
+        },
+      ]));
+    } else if (request.uri.path == '/assets/$_assetName') {
+      request.response.write('binary payload');
+    } else if (request.uri.path == '/assets/mcp-developer.SKILL.md') {
+      request.response.write('skill payload');
+    } else {
+      request.response.statusCode = HttpStatus.notFound;
+      request.response.write('missing');
+    }
+    await request.response.close();
+  }
 }

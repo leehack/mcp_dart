@@ -153,6 +153,140 @@ void main() {
       );
     });
 
+    test('records resources, prompts, and active client capability probes',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('client_harness_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final report = File('${tempDir.path}/report.json');
+      final clientLines = StreamController<String>();
+      final outputLines = <String>[];
+      final harness = ClientInspectorHarness(
+        reportFile: report,
+        idleTimeout: const Duration(milliseconds: 100),
+        maxRuntime: const Duration(seconds: 2),
+        clientLines: clientLines.stream,
+        writeLine: outputLines.add,
+      );
+
+      final runFuture = harness.run();
+      clientLines
+        ..add(jsonEncode(<String, dynamic>{
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.initialize,
+          'params': <String, dynamic>{
+            'protocolVersion': latestProtocolVersion,
+            'capabilities': <String, dynamic>{
+              'roots': <String, dynamic>{},
+              'sampling': <String, dynamic>{},
+              'elicitation': <String, dynamic>{},
+            },
+            'clientInfo': <String, dynamic>{
+              'name': 'active-client',
+              'version': '1.0.0',
+            },
+          },
+        }))
+        ..add(jsonEncode(<String, dynamic>{
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsInitialized,
+        }))
+        ..add(jsonEncode(<String, dynamic>{
+          'jsonrpc': jsonRpcVersion,
+          'id': 2,
+          'method': Method.resourcesList,
+        }))
+        ..add(jsonEncode(<String, dynamic>{
+          'jsonrpc': jsonRpcVersion,
+          'id': 3,
+          'method': Method.resourcesTemplatesList,
+        }))
+        ..add(jsonEncode(<String, dynamic>{
+          'jsonrpc': jsonRpcVersion,
+          'id': 4,
+          'method': Method.resourcesRead,
+          'params': <String, dynamic>{'uri': 'inspector://status'},
+        }))
+        ..add(jsonEncode(<String, dynamic>{
+          'jsonrpc': jsonRpcVersion,
+          'id': 5,
+          'method': Method.promptsList,
+        }))
+        ..add(jsonEncode(<String, dynamic>{
+          'jsonrpc': jsonRpcVersion,
+          'id': 6,
+          'method': Method.promptsGet,
+          'params': <String, dynamic>{
+            'name': 'inspector-summary',
+            'arguments': <String, dynamic>{'topic': 'interop'},
+          },
+        }));
+
+      await _waitForOutputLines(outputLines, 9);
+      final probeRequests = outputLines
+          .map(jsonDecode)
+          .cast<Map<String, dynamic>>()
+          .where((message) =>
+              message['method'] == Method.rootsList ||
+              message['method'] == Method.samplingCreateMessage ||
+              message['method'] == Method.elicitationCreate)
+          .toList();
+      expect(probeRequests, hasLength(3));
+      for (final request in probeRequests) {
+        final method = request['method'];
+        clientLines.add(jsonEncode(<String, dynamic>{
+          'jsonrpc': jsonRpcVersion,
+          'id': request['id'],
+          'result': switch (method) {
+            Method.rootsList => <String, dynamic>{
+                'roots': <Map<String, dynamic>>[
+                  <String, dynamic>{'uri': 'file:///tmp', 'name': 'tmp'},
+                ],
+              },
+            Method.samplingCreateMessage => <String, dynamic>{
+                'role': 'assistant',
+                'content': <String, dynamic>{
+                  'type': 'text',
+                  'text': 'sampled',
+                },
+                'model': 'fixture',
+                'stopReason': 'endTurn',
+              },
+            _ => <String, dynamic>{
+                'action': 'accept',
+                'content': <String, dynamic>{'confirmed': true},
+              },
+          },
+        }));
+      }
+      await clientLines.close();
+      await runFuture;
+
+      final json =
+          jsonDecode(await report.readAsString()) as Map<String, dynamic>;
+      expect(json['passed'], isTrue);
+      final checks =
+          (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+      for (final id in <String>[
+        'resources.list',
+        'prompts.list',
+        'client.roots.list',
+        'client.sampling.create-message',
+        'client.elicitation.create',
+      ]) {
+        expect(
+          checks,
+          contains(
+            allOf(
+              containsPair('id', id),
+              containsPair('status', 'pass'),
+            ),
+          ),
+          reason: id,
+        );
+      }
+    });
+
     test('sends JSON-RPC errors with explicit null id for malformed input',
         () async {
       final tempDir = await Directory.systemTemp.createTemp('client_harness_');
@@ -188,4 +322,12 @@ void main() {
       );
     });
   });
+}
+
+Future<void> _waitForOutputLines(List<String> outputLines, int count) async {
+  for (var attempt = 0; attempt < 50; attempt += 1) {
+    if (outputLines.length >= count) return;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  fail('Timed out waiting for $count harness output lines.');
 }
