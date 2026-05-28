@@ -542,8 +542,8 @@ class ServerCapabilitiesElicitation {
         url = const ServerElicitationUrl();
 
   factory ServerCapabilitiesElicitation.fromJson(Map<String, dynamic> json) {
-    final formMap = json['form'] as Map<String, dynamic>?;
-    final urlMap = json['url'] as Map<String, dynamic>?;
+    final formMap = _asJsonObject(json['form']);
+    final urlMap = _asJsonObject(json['url']);
 
     return ServerCapabilitiesElicitation(
       form: formMap == null ? null : ServerElicitationForm.fromJson(formMap),
@@ -707,6 +707,9 @@ class ServerCapabilitiesTasks {
   final ServerCapabilitiesTasksRequests? requests;
 
   /// Legacy non-spec field retained for compatibility.
+  @Deprecated(
+    'MCP 2025-11-25 ServerCapabilities.tasks does not include listChanged; this is parsed only for legacy compatibility.',
+  )
   final bool? listChanged;
 
   const ServerCapabilitiesTasks({
@@ -736,7 +739,6 @@ class ServerCapabilitiesTasks {
       if (listCapability != null) 'list': listCapability,
       if (cancelCapability != null) 'cancel': cancelCapability,
       if (requests != null) 'requests': requests!.toJson(),
-      if (listChanged != null) 'listChanged': listChanged,
     };
   }
 }
@@ -765,6 +767,9 @@ class ServerCapabilities {
   final ServerCapabilitiesTasks? tasks;
 
   /// Present if the server offers elicitation (`elicitation/create`).
+  @Deprecated(
+    'MCP 2025-11-25 advertises elicitation support on client capabilities; server-side elicitation is parsed only for legacy compatibility.',
+  )
   final ServerCapabilitiesElicitation? elicitation;
 
   /// Optional MCP extension capabilities (SEP-1724).
@@ -822,7 +827,6 @@ class ServerCapabilities {
         if (tools != null) 'tools': tools!.toJson(),
         if (completions != null) 'completions': completions!.toJson(),
         if (tasks != null) 'tasks': tasks!.toJson(),
-        if (elicitation != null) 'elicitation': elicitation!.toJson(),
         if (extensions != null) 'extensions': extensions,
       };
 }

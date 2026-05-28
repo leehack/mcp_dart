@@ -8,21 +8,31 @@ class Root {
   /// Optional name for the root.
   final String? name;
 
+  /// Optional metadata.
+  final Map<String, dynamic>? meta;
+
   Root({
     required this.uri,
     this.name,
-  }) : assert(uri.startsWith("file://"));
+    this.meta,
+  }) {
+    if (!uri.startsWith('file://')) {
+      throw ArgumentError.value(uri, 'uri', 'Root.uri must start with file://');
+    }
+  }
 
   factory Root.fromJson(Map<String, dynamic> json) {
     return Root(
       uri: json['uri'] as String,
       name: json['name'] as String?,
+      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
     );
   }
 
   Map<String, dynamic> toJson() => {
         'uri': uri,
         if (name != null) 'name': name,
+        if (meta != null) '_meta': meta,
       };
 }
 
@@ -52,11 +62,13 @@ class ListRootsResult implements BaseResultData {
 
   factory ListRootsResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
+    final roots = json['roots'];
+    if (roots is! List) {
+      throw const FormatException('ListRootsResult.roots is required');
+    }
     return ListRootsResult(
-      roots: (json['roots'] as List<dynamic>?)
-              ?.map((r) => Root.fromJson(r as Map<String, dynamic>))
-              .toList() ??
-          [],
+      roots:
+          roots.map((r) => Root.fromJson(r as Map<String, dynamic>)).toList(),
       meta: meta,
     );
   }

@@ -4,6 +4,7 @@ import '../shared/json_schema/json_schema.dart';
 
 import 'content.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Legacy alias for [JsonObject] used as tool input schema.
 typedef ToolInputSchema = JsonObject;
@@ -47,9 +48,15 @@ class ToolAnnotations {
   final bool openWorldHint;
 
   /// The priority of the tool (0.0 to 1.0).
+  @Deprecated(
+    'MCP 2025-11-25 ToolAnnotations do not include priority; this is parsed only for legacy compatibility.',
+  )
   final double? priority;
 
   /// The intended audience for the tool (e.g., `["user", "assistant"]`).
+  @Deprecated(
+    'MCP 2025-11-25 ToolAnnotations do not include audience; this is parsed only for legacy compatibility.',
+  )
   final List<String>? audience;
 
   const ToolAnnotations({
@@ -60,7 +67,10 @@ class ToolAnnotations {
     this.openWorldHint = true,
     this.priority,
     this.audience,
-  });
+  }) : assert(
+          priority == null || (priority >= 0 && priority <= 1),
+          'priority must be between 0 and 1',
+        );
 
   factory ToolAnnotations.fromJson(Map<String, dynamic> json) {
     return ToolAnnotations(
@@ -69,20 +79,21 @@ class ToolAnnotations {
       destructiveHint: json['destructiveHint'] as bool? ?? true,
       idempotentHint: json['idempotentHint'] as bool? ?? false,
       openWorldHint: json['openWorldHint'] as bool? ?? true,
-      priority: (json['priority'] as num?)?.toDouble(),
+      priority: readUnitDouble(json['priority'], 'ToolAnnotations.priority'),
       audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        if (title != null) 'title': title,
-        'readOnlyHint': readOnlyHint,
-        'destructiveHint': destructiveHint,
-        'idempotentHint': idempotentHint,
-        'openWorldHint': openWorldHint,
-        if (priority != null) 'priority': priority,
-        if (audience != null) 'audience': audience,
-      };
+  Map<String, dynamic> toJson() {
+    validateUnitDouble(priority, 'ToolAnnotations.priority');
+    return {
+      if (title != null) 'title': title,
+      'readOnlyHint': readOnlyHint,
+      'destructiveHint': destructiveHint,
+      'idempotentHint': idempotentHint,
+      'openWorldHint': openWorldHint,
+    };
+  }
 }
 
 /// Describes how the tool should be executed.
@@ -151,6 +162,9 @@ class Tool {
   final ToolExecution? execution;
 
   /// Optional icon content.
+  @Deprecated(
+    'MCP 2025-11-25 uses icons; singular icon is parsed only for legacy compatibility and is not serialized.',
+  )
   final ImageContent? icon;
 
   /// Optional set of icons.
@@ -170,16 +184,33 @@ class Tool {
   });
 
   factory Tool.fromJson(Map<String, dynamic> json) {
+    final inputSchema = JsonSchema.fromJson(
+      _readRequiredJsonObject(json['inputSchema'], 'Tool.inputSchema'),
+    );
+    _validateObjectRootSchema(
+      inputSchema,
+      'Tool.inputSchema',
+      formatException: true,
+    );
+
+    final outputSchemaJson =
+        _readOptionalJsonObject(json['outputSchema'], 'Tool.outputSchema');
+    final outputSchema =
+        outputSchemaJson == null ? null : JsonSchema.fromJson(outputSchemaJson);
+    if (outputSchema != null) {
+      _validateObjectRootSchema(
+        outputSchema,
+        'Tool.outputSchema',
+        formatException: true,
+      );
+    }
+
     return Tool(
       name: json['name'] as String,
       title: json['title'] as String?,
       description: json['description'] as String?,
-      inputSchema: JsonSchema.fromJson(
-        json['inputSchema'] as Map<String, dynamic>,
-      ),
-      outputSchema: json['outputSchema'] != null
-          ? JsonSchema.fromJson(json['outputSchema'] as Map<String, dynamic>)
-          : null,
+      inputSchema: inputSchema,
+      outputSchema: outputSchema,
       annotations: json['annotations'] != null
           ? ToolAnnotations.fromJson(
               json['annotations'] as Map<String, dynamic>,
@@ -198,19 +229,24 @@ class Tool {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        if (title != null) 'title': title,
-        if (description != null) 'description': description,
-        'inputSchema': inputSchema.toJson(),
-        if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
-        if (annotations != null) 'annotations': annotations!.toJson(),
-        if (meta != null) '_meta': meta,
-        if (execution != null) 'execution': execution!.toJson(),
-        if (icon != null) 'icon': icon!.toJson(),
-        if (icons != null)
-          'icons': icons!.map((icon) => icon.toJson()).toList(),
-      };
+  Map<String, dynamic> toJson() {
+    _validateObjectRootSchema(inputSchema, 'Tool.inputSchema');
+    if (outputSchema != null) {
+      _validateObjectRootSchema(outputSchema!, 'Tool.outputSchema');
+    }
+
+    return {
+      'name': name,
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      'inputSchema': inputSchema.toJson(),
+      if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
+      if (annotations != null) 'annotations': annotations!.toJson(),
+      if (meta != null) '_meta': meta,
+      if (execution != null) 'execution': execution!.toJson(),
+      if (icons != null) 'icons': icons!.map((icon) => icon.toJson()).toList(),
+    };
+  }
 }
 
 /// A request to list available tools.
@@ -253,10 +289,13 @@ class ListToolsResult implements BaseResultData {
   });
 
   factory ListToolsResult.fromJson(Map<String, dynamic> json) {
+    final tools = json['tools'];
+    if (tools is! List) {
+      throw const FormatException('ListToolsResult.tools is required');
+    }
     return ListToolsResult(
-      tools: (json['tools'] as List<dynamic>)
-          .map((e) => Tool.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      tools:
+          tools.map((e) => Tool.fromJson(e as Map<String, dynamic>)).toList(),
       nextCursor: json['nextCursor'] as String?,
       meta: json['_meta'] as Map<String, dynamic>?,
     );
@@ -349,12 +388,15 @@ class CallToolResult implements BaseResultData {
     final knownKeys = {'content', 'isError', '_meta', 'structuredContent'};
     final extra = Map<String, dynamic>.from(json)
       ..removeWhere((key, value) => knownKeys.contains(key));
+    final content = json['content'];
+    if (content is! List) {
+      throw const FormatException('CallToolResult.content is required');
+    }
 
     return CallToolResult(
-      content: (json['content'] as List<dynamic>?)
-              ?.map((e) => Content.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      content: content
+          .map((e) => Content.fromJson(e as Map<String, dynamic>))
+          .toList(),
       isError: json['isError'] as bool? ?? false,
       structuredContent: json['structuredContent'] as Map<String, dynamic>?,
       meta: json['_meta'] as Map<String, dynamic>?,
@@ -381,4 +423,49 @@ class JsonRpcToolListChangedNotification extends JsonRpcNotification {
     Map<String, dynamic> json,
   ) =>
       const JsonRpcToolListChangedNotification();
+}
+
+void _validateObjectRootSchema(
+  JsonSchema schema,
+  String field, {
+  bool formatException = false,
+}) {
+  final json = schema.toJson();
+  if (json['type'] != 'object') {
+    if (formatException) {
+      throw FormatException('$field must have root type "object"');
+    }
+    throw ArgumentError.value(
+      json,
+      field,
+      'MCP tool schemas must have root type "object"',
+    );
+  }
+}
+
+Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
+  if (value == null) {
+    throw FormatException('$field is required');
+  }
+  return _readJsonObject(value, field);
+}
+
+Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return _readJsonObject(value, field);
+}
+
+Map<String, dynamic> _readJsonObject(Object? value, String field) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    if (value.keys.any((key) => key is! String)) {
+      throw FormatException('$field must be an object with string keys');
+    }
+    return value.cast<String, dynamic>();
+  }
+  throw FormatException('$field must be an object');
 }

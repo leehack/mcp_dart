@@ -7,7 +7,7 @@ Fast lookup guide for common MCP Dart SDK operations.
 ```yaml
 # pubspec.yaml
 dependencies:
-  mcp_dart: ^2.1.1
+  mcp_dart: ^2.2.0
 ```
 
 ```bash
@@ -343,6 +343,7 @@ print(result.content.first.text);
 final result = await client.listResources();
 for (final resource in result.resources) {
   print('${resource.name}: ${resource.uri}');
+  print('size: ${resource.size ?? "unknown"}');
   print('lastModified: ${resource.annotations?.lastModified}');
 }
 ```
@@ -437,11 +438,10 @@ server.registerTool(
 
 ```dart
 // Read-only
-// Read-only
 server.registerTool(
   'get-data',
   inputSchema: JsonSchema.object(properties: {}),
-  annotations: ToolAnnotations(readOnly: true), // Updated for annotations
+  annotations: ToolAnnotations(readOnlyHint: true),
   callback: (args, extra) async => CallToolResult(content: []),
 );
 
@@ -449,10 +449,10 @@ server.registerTool(
 server.registerTool(
   'delete-all',
   inputSchema: JsonSchema.object(properties: {}),
-  description: 'Delete all data', // hints deprecated?
+  description: 'Delete all data',
+  annotations: ToolAnnotations(destructiveHint: true),
   callback: (args, extra) async => CallToolResult(content: []),
 );
-// Note: hints were part of deprecated signature. Use ToolAnnotations!
 ```
 
 ## Content Types

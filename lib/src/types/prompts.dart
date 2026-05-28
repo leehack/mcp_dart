@@ -54,6 +54,9 @@ class Prompt {
   final List<PromptArgument>? arguments;
 
   /// Optional icon for the prompt.
+  @Deprecated(
+    'MCP 2025-11-25 uses icons; singular icon is parsed only for legacy compatibility and is not serialized.',
+  )
   final ImageContent? icon;
 
   /// Optional set of icons for the prompt.
@@ -96,7 +99,6 @@ class Prompt {
         if (description != null) 'description': description,
         if (arguments != null)
           'arguments': arguments!.map((a) => a.toJson()).toList(),
-        if (icon != null) 'icon': icon!.toJson(),
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
         if (meta != null) '_meta': meta,
@@ -155,11 +157,14 @@ class ListPromptsResult implements BaseResultData {
 
   factory ListPromptsResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
+    final prompts = json['prompts'];
+    if (prompts is! List) {
+      throw const FormatException('ListPromptsResult.prompts is required');
+    }
     return ListPromptsResult(
-      prompts: (json['prompts'] as List<dynamic>?)
-              ?.map((p) => Prompt.fromJson(p as Map<String, dynamic>))
-              .toList() ??
-          [],
+      prompts: prompts
+          .map((p) => Prompt.fromJson(p as Map<String, dynamic>))
+          .toList(),
       nextCursor: json['nextCursor'] as String?,
       meta: meta,
     );
@@ -267,12 +272,15 @@ class GetPromptResult implements BaseResultData {
 
   factory GetPromptResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
+    final messages = json['messages'];
+    if (messages is! List) {
+      throw const FormatException('GetPromptResult.messages is required');
+    }
     return GetPromptResult(
       description: json['description'] as String?,
-      messages: (json['messages'] as List<dynamic>?)
-              ?.map((m) => PromptMessage.fromJson(m as Map<String, dynamic>))
-              .toList() ??
-          [],
+      messages: messages
+          .map((m) => PromptMessage.fromJson(m as Map<String, dynamic>))
+          .toList(),
       meta: meta,
     );
   }

@@ -85,6 +85,15 @@ Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
   throw StateError('SSE stream ended before an event was received');
 }
 
+Future<_SseEvent> _readSseJsonEvent(StreamIterator<String> lines) async {
+  while (true) {
+    final event = await _readSseEvent(lines);
+    if (event.data.isNotEmpty) {
+      return event;
+    }
+  }
+}
+
 Future<_SseConnection> _openGetSse(
   String baseUrl,
   String sessionId, {
@@ -121,7 +130,7 @@ Future<_PostSseResult> _postJsonForSseEvent(
       response.transform(utf8.decoder).transform(const LineSplitter()),
     );
     try {
-      final event = await _readSseEvent(lines);
+      final event = await _readSseJsonEvent(lines);
       return _PostSseResult(statusCode: response.statusCode, event: event);
     } finally {
       await lines.cancel();
@@ -812,8 +821,8 @@ void main() {
                 .transform(const LineSplitter()),
           );
 
-          final first = await _readSseEvent(lines);
-          final second = await _readSseEvent(lines);
+          final first = await _readSseJsonEvent(lines);
+          final second = await _readSseJsonEvent(lines);
 
           expect(first.json['params'], containsPair('seq', 1));
           expect(second.json['params'], containsPair('seq', 2));

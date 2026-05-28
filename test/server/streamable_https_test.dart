@@ -115,6 +115,24 @@ class InvalidEventIdStore implements EventStore {
   }
 }
 
+class InvalidPrimingEventStore implements EventStore {
+  int storeCalls = 0;
+
+  @override
+  Future<String> storeEvent(String streamId, JsonRpcMessage message) async {
+    storeCalls++;
+    return 'bad event id';
+  }
+
+  @override
+  Future<String> replayEventsAfter(
+    String lastEventId, {
+    required Future<void> Function(String eventId, JsonRpcMessage message) send,
+  }) async {
+    throw StateError('Replay is not expected');
+  }
+}
+
 List<Map<String, dynamic>> _decodeSseJsonMessages(String body) {
   final messages = <Map<String, dynamic>>[];
   for (final event in body.trim().split('\n\n')) {
@@ -191,6 +209,15 @@ Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
   }
 
   throw StateError('SSE stream ended before an event was received');
+}
+
+Future<_SseEvent> _readSseJsonEvent(StreamIterator<String> lines) async {
+  while (true) {
+    final event = await _readSseEvent(lines);
+    if (event.data.trim().isNotEmpty) {
+      return event;
+    }
+  }
 }
 
 Future<_SseEvent?> _readOptionalSseEvent(StreamIterator<String> lines) async {
@@ -822,6 +849,135 @@ void main() {
       expect(body, contains('Invalid SSE event ID'));
     });
 
+    test('GET SSE priming failure closes the response', () async {
+      final eventStore = InvalidPrimingEventStore();
+      final errors = <Error>[];
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'get-priming-failure-session-id',
+          eventStore: eventStore,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      transport.onerror = errors.add;
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcRequest && message.method == 'initialize') {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const {
+                  'protocolVersion': latestProtocolVersion,
+                  'capabilities': {},
+                  'serverInfo': {
+                    'name': 'PrimingFailureServer',
+                    'version': '1.0.0',
+                  },
+                },
+              ),
+            ),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      final initRequest = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      initRequest.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        );
+      initRequest.write(
+        jsonEncode(
+          JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+            params: const InitializeRequestParams(
+              protocolVersion: latestProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'Client', version: '1.0'),
+            ).toJson(),
+          ).toJson(),
+        ),
+      );
+      final initResponse = await initRequest.close();
+      expect(initResponse.statusCode, HttpStatus.ok);
+      final sessionId = initResponse.headers.value('mcp-session-id');
+      await initResponse.drain<void>();
+      expect(sessionId, 'get-priming-failure-session-id');
+
+      final request = await client.getUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..set(HttpHeaders.acceptHeader, 'text/event-stream')
+        ..set('mcp-session-id', sessionId!);
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.ok);
+      await response.drain<void>().timeout(const Duration(seconds: 3));
+
+      expect(eventStore.storeCalls, 1);
+      expect(errors.single.toString(), contains('Invalid SSE event ID'));
+    });
+
+    test('POST SSE priming failure closes the response and skips messages',
+        () async {
+      final eventStore = InvalidPrimingEventStore();
+      final errors = <Error>[];
+      var onMessageCalled = false;
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          eventStore: eventStore,
+        ),
+      );
+      addTearDown(transport.close);
+      transport.onerror = errors.add;
+      transport.onmessage = (_) {
+        onMessageCalled = true;
+      };
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        );
+      request.write(
+        jsonEncode(
+          JsonRpcRequest(
+            id: 1,
+            method: 'initialize',
+            params: const InitializeRequestParams(
+              protocolVersion: latestProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'Client', version: '1.0'),
+            ).toJson(),
+          ).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.ok);
+      await response.drain<void>().timeout(const Duration(seconds: 3));
+
+      expect(eventStore.storeCalls, 1);
+      expect(errors.single.toString(), contains('Invalid SSE event ID'));
+      expect(onMessageCalled, isFalse);
+    });
+
     test('terminated stateful sessions reject subsequent requests with 404',
         () async {
       final transport = StreamableHTTPServerTransport(
@@ -1233,8 +1389,12 @@ void main() {
       );
       addTearDown(lines.cancel);
 
-      final first = await _readSseEvent(lines);
-      final second = await _readSseEvent(lines);
+      final initial = await _readSseEvent(lines);
+      expect(initial.id, isNotNull);
+      expect(initial.data, isEmpty);
+
+      final first = await _readSseJsonEvent(lines);
+      final second = await _readSseJsonEvent(lines);
       expect(first.id, isNotNull);
       expect(second.id, isNotNull);
       expect(first.json['params'], containsPair('seq', 1));
@@ -1255,7 +1415,10 @@ void main() {
         otherStream.transform(utf8.decoder).transform(const LineSplitter()),
       );
       addTearDown(otherLines.cancel);
-      final other = await _readSseEvent(otherLines);
+      final otherInitial = await _readSseEvent(otherLines);
+      expect(otherInitial.id, isNotNull);
+      expect(otherInitial.data, isEmpty);
+      final other = await _readSseJsonEvent(otherLines);
       expect(other.id, isNotNull);
       expect(other.json['params'], containsPair('seq', 'other-stream'));
 
@@ -1265,9 +1428,12 @@ void main() {
         replay.transform(utf8.decoder).transform(const LineSplitter()),
       );
       addTearDown(replayLines.cancel);
-      final replayed = await _readSseEvent(replayLines);
+      final replayed = await _readSseJsonEvent(replayLines);
       expect(replayed.id, second.id);
       expect(replayed.json['params'], containsPair('seq', 2));
+      final replayInitial = await _readSseEvent(replayLines);
+      expect(replayInitial.id, isNotNull);
+      expect(replayInitial.data, isEmpty);
       expect(await _readOptionalSseEvent(replayLines), isNull);
 
       final foreignEventId = await eventStore.storeEvent(

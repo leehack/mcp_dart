@@ -8,6 +8,7 @@ import {
   ElicitRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Progress } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 type TaskWireShape = {
   taskId?: unknown;
@@ -101,7 +102,9 @@ function assertTitledEnumSchema(tools: unknown): void {
   const toolsResult = requireRecord(tools, 'tools/list result');
   const toolList = toolsResult.tools;
   if (!Array.isArray(toolList)) {
-    throw new Error(`tools/list result missing tools array: ${JSON.stringify(tools)}`);
+    throw new Error(
+      `tools/list result missing tools array: ${JSON.stringify(tools)}`
+    );
   }
 
   const chooseModeTool = toolList
@@ -155,6 +158,150 @@ function assertTitledEnumSchema(tools: unknown): void {
       `permissions schema missing const/title choice: ${JSON.stringify(permissionItems)}`
     );
   }
+}
+
+function requireArray(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} was not an array: ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function assertNoField(
+  value: Record<string, unknown>,
+  key: string,
+  label: string
+): void {
+  if (hasOwn(value, key)) {
+    throw new Error(
+      `${label} unexpectedly included ${key}: ${JSON.stringify(value)}`
+    );
+  }
+}
+
+function assertIconList(value: unknown, label: string): void {
+  const icons = requireArray(value, `${label} icons`);
+  if (icons.length === 0) {
+    throw new Error(`${label} icons was empty`);
+  }
+
+  const icon = requireRecord(icons[0], `${label} icon`);
+  if (
+    typeof icon.src !== 'string' ||
+    !icon.src.startsWith('data:image/png;base64,')
+  ) {
+    throw new Error(
+      `${label} icon src was not a data URI: ${JSON.stringify(icon)}`
+    );
+  }
+  if (icon.mimeType !== 'image/png') {
+    throw new Error(`${label} icon mimeType mismatch: ${JSON.stringify(icon)}`);
+  }
+  if (icon.theme !== 'dark') {
+    throw new Error(`${label} icon theme mismatch: ${JSON.stringify(icon)}`);
+  }
+}
+
+async function assertRawDartServerWireShapes(client: Client): Promise<void> {
+  const capabilities = client.getServerCapabilities() as
+    | Record<string, unknown>
+    | undefined;
+  if (capabilities) {
+    assertNoField(capabilities, 'elicitation', 'server capabilities');
+    const taskCapabilities = capabilities.tasks;
+    if (taskCapabilities !== undefined) {
+      assertNoField(
+        requireRecord(taskCapabilities, 'server task capabilities'),
+        'listChanged',
+        'server task capabilities'
+      );
+    }
+  }
+
+  const rawTools = (await client.request(
+    { method: 'tools/list' } as any,
+    z.any()
+  )) as unknown;
+  const toolList = requireArray(
+    requireRecord(rawTools, 'raw tools/list result').tools,
+    'raw tools/list tools'
+  ).map((tool) => requireRecord(tool, 'raw tool'));
+  for (const tool of toolList) {
+    const inputSchema = requireRecord(tool.inputSchema, 'raw tool inputSchema');
+    if (inputSchema.type !== 'object') {
+      throw new Error(
+        `tool inputSchema was not object-root: ${JSON.stringify(tool)}`
+      );
+    }
+    if (tool.outputSchema !== undefined) {
+      const outputSchema = requireRecord(
+        tool.outputSchema,
+        'raw tool outputSchema'
+      );
+      if (outputSchema.type !== 'object') {
+        throw new Error(
+          `tool outputSchema was not object-root: ${JSON.stringify(tool)}`
+        );
+      }
+    }
+  }
+
+  const chooseModeTool = toolList.find((tool) => tool.name === 'choose_mode');
+  if (!chooseModeTool) {
+    throw new Error('raw tools/list missing choose_mode');
+  }
+  const annotations = requireRecord(
+    chooseModeTool.annotations,
+    'choose_mode annotations'
+  );
+  if (annotations.title !== 'Mode chooser') {
+    throw new Error(
+      `choose_mode title missing: ${JSON.stringify(annotations)}`
+    );
+  }
+  assertNoField(annotations, 'priority', 'choose_mode annotations');
+  assertNoField(annotations, 'audience', 'choose_mode annotations');
+
+  const rawResources = (await client.request(
+    { method: 'resources/list' } as any,
+    z.any()
+  )) as unknown;
+  const resources = requireArray(
+    requireRecord(rawResources, 'raw resources/list result').resources,
+    'raw resources/list resources'
+  ).map((resource) => requireRecord(resource, 'raw resource'));
+  const iconResource = resources.find(
+    (resource) => resource.uri === 'resource://legacy-icon'
+  );
+  if (!iconResource) {
+    throw new Error('raw resources/list missing legacy icon resource');
+  }
+  if (iconResource.title !== 'Legacy Icon Resource Title') {
+    throw new Error(`resource title missing: ${JSON.stringify(iconResource)}`);
+  }
+  assertIconList(iconResource.icons, 'legacy icon resource');
+  assertNoField(iconResource, 'icon', 'legacy icon resource');
+
+  const rawPrompts = (await client.request(
+    { method: 'prompts/list' } as any,
+    z.any()
+  )) as unknown;
+  const prompts = requireArray(
+    requireRecord(rawPrompts, 'raw prompts/list result').prompts,
+    'raw prompts/list prompts'
+  ).map((prompt) => requireRecord(prompt, 'raw prompt'));
+  const iconPrompt = prompts.find(
+    (prompt) => prompt.name === 'legacy_icon_prompt'
+  );
+  if (!iconPrompt) {
+    throw new Error('raw prompts/list missing legacy icon prompt');
+  }
+  assertIconList(iconPrompt.icons, 'legacy icon prompt');
+  assertNoField(iconPrompt, 'icon', 'legacy icon prompt');
 }
 
 async function main() {
@@ -225,7 +372,11 @@ async function main() {
   client.setRequestHandler(ListRootsRequestSchema, async () => {
     return {
       roots: [
-        { uri: 'file:///home/user/documents', name: 'Documents' },
+        {
+          uri: 'file:///home/user/documents',
+          name: 'Documents',
+          _meta: { source: 'ts-client' },
+        },
         { uri: 'file:///home/user/projects', name: 'Projects' },
       ],
     };
@@ -319,6 +470,7 @@ async function main() {
       throw new Error(`Missing tools. Found: ${toolNames}`);
     }
     assertTitledEnumSchema(tools);
+    await assertRawDartServerWireShapes(client);
 
     // 2. Call Tool 'echo'
     const echoResult = await client.callTool({
@@ -447,6 +599,9 @@ async function main() {
     const roots = JSON.parse(rootsText);
     if (!Array.isArray(roots) || roots.length !== 2) {
       throw new Error(`get_roots failed. Expected 2 roots, got: ${rootsText}`);
+    }
+    if (roots[0]?._meta?.source !== 'ts-client') {
+      throw new Error(`get_roots did not preserve Root._meta: ${rootsText}`);
     }
     console.log('get_roots passed!');
 

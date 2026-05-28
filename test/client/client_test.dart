@@ -800,9 +800,12 @@ void _addCriticalPathTests() {
       // Simulate server sending elicitation request
       final elicitRequest = JsonRpcElicitRequest(
         id: 100,
-        elicitParams: ElicitRequest(
+        elicitParams: const ElicitRequest(
           message: 'Please provide input',
-          requestedSchema: JsonSchema.string(),
+          requestedSchema: JsonObject(
+            properties: {'input': JsonString()},
+            required: ['input'],
+          ),
         ),
       );
 

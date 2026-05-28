@@ -89,12 +89,7 @@ void main() {
             properties: {
               'name': JsonSchema.string(defaultValue: 'John Doe'),
               'age': JsonSchema.integer(defaultValue: 30),
-              'address': JsonSchema.object(
-                defaultValue: const <String, dynamic>{},
-                properties: {
-                  'street': JsonSchema.string(defaultValue: 'Main St'),
-                },
-              ),
+              'addressStreet': JsonSchema.string(defaultValue: 'Main St'),
             },
           ),
         ),
@@ -109,8 +104,7 @@ void main() {
       expect(receivedContent, isNotNull);
       expect(receivedContent!['name'], equals('John Doe'));
       expect(receivedContent!['age'], equals(30));
-      expect(receivedContent!['address'], isA<Map>());
-      expect(receivedContent!['address']['street'], equals('Main St'));
+      expect(receivedContent!['addressStreet'], equals('Main St'));
     });
 
     test('does not override existing values with defaults', () async {

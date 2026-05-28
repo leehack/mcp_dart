@@ -770,16 +770,20 @@ void main() {
     test('ElicitRequestParams serialization', () {
       final params = ElicitRequestParams(
         message: "Enter your name",
-        requestedSchema: JsonSchema.string(minLength: 1),
+        requestedSchema: JsonObject(
+          properties: {'name': JsonSchema.string(minLength: 1)},
+          required: const ['name'],
+        ),
       );
 
       final json = params.toJson();
       expect(json['message'], equals("Enter your name"));
-      expect(json['requestedSchema']['type'], equals('string'));
+      expect(json['requestedSchema']['type'], equals('object'));
+      expect(json['requestedSchema']['properties']['name']['type'], 'string');
 
       final restored = ElicitRequestParams.fromJson(json);
       expect(restored.message, equals("Enter your name"));
-      expect(restored.requestedSchema!.toJson()['type'], equals('string'));
+      expect(restored.requestedSchema!.toJson()['type'], equals('object'));
     });
 
     test('JsonRpcElicitRequest serialization and deserialization', () {
@@ -787,7 +791,12 @@ void main() {
         id: 42,
         elicitParams: ElicitRequestParams(
           message: "Choose option",
-          requestedSchema: JsonSchema.string(enumValues: ['yes', 'no']),
+          requestedSchema: JsonObject(
+            properties: {
+              'option': JsonSchema.string(enumValues: ['yes', 'no']),
+            },
+            required: const ['option'],
+          ),
         ),
       );
 
@@ -802,7 +811,7 @@ void main() {
       expect(restored.elicitParams.message, equals('Choose option'));
       expect(
         restored.elicitParams.requestedSchema!.toJson()['type'],
-        equals('string'),
+        equals('object'),
       );
     });
 

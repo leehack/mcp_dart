@@ -46,6 +46,28 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
 - `elicitation/create` parameters are validated as the MCP 2025-11-25 form/URL
   union. Form mode requires `requestedSchema`; URL mode requires `mode: "url"`,
   `url`, and `elicitationId`.
+- Form elicitation schemas must now be object-root schemas whose properties are
+  primitive string, number, integer, boolean, enum, or multiselect schemas.
+- Tool `inputSchema` and `outputSchema` values must serialize as root JSON
+  objects. Non-object root schemas now fail at parse/serialization boundaries.
+- Stable metadata serializers no longer emit legacy singular `icon` fields,
+  `ResourceAnnotations.title`, `ToolAnnotations.priority`, or
+  `ToolAnnotations.audience`. Those fields still parse into deprecated Dart
+  accessors for legacy peers.
+- Stable server capabilities no longer emit top-level `elicitation` or
+  `tasks.listChanged`; legacy payloads still parse for compatibility.
+- Required result arrays are strict at incoming wire boundaries. Empty arrays
+  remain valid when the required key is present, but missing `resources`,
+  `resourceTemplates`, `contents`, `prompts`, `tools`, `roots`, `messages`,
+  `values`, or `tasks` fields are rejected.
+- Successful JSON-RPC responses require a string or integer `id`. Error
+  responses may omit `id`; legacy error payloads with `id: null` still parse but
+  serialize by omitting the field.
+- OAuth authorization-code discovery now refuses authorization servers that
+  omit `code_challenge_methods_supported` or do not advertise PKCE `S256`.
+- Streamable HTTP resumability now writes an initial empty SSE event with an
+  `id` when an event store is configured, so clients can reconnect using
+  `Last-Event-ID` even before JSON-RPC data has been sent.
 
 ## Capability enforcement
 
@@ -184,6 +206,45 @@ final cancelledTask = await taskClient.cancelTaskWithResult(taskId);
 Returned cancelled tasks should include the MCP-required task fields:
 `taskId`, `status`, `createdAt`, `lastUpdatedAt`, and `ttl` (`null` is valid
 for `ttl`).
+
+### Tool and elicitation schemas
+
+Before, some code used primitive root schemas for a single value:
+
+```dart
+Tool(
+  name: 'set-enabled',
+  inputSchema: JsonSchema.boolean(),
+);
+```
+
+Use an object-root schema instead:
+
+```dart
+Tool(
+  name: 'set-enabled',
+  inputSchema: JsonSchema.object(
+    properties: {
+      'enabled': JsonSchema.boolean(),
+    },
+    required: ['enabled'],
+  ),
+);
+```
+
+The same rule applies to form elicitation:
+
+```dart
+ElicitRequest(
+  message: 'Choose a display name',
+  requestedSchema: JsonSchema.object(
+    properties: {
+      'displayName': JsonSchema.string(),
+    },
+    required: ['displayName'],
+  ),
+);
+```
 
 ### Task request capability negotiation
 
