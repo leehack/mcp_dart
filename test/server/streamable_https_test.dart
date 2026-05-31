@@ -2113,6 +2113,7 @@ void main() {
             'rounded': 'Rounded',
             'ratio': 'Ratio',
             'region': 'Region',
+            'sentinel': 'Sentinel',
           },
         },
       );
@@ -2252,6 +2253,24 @@ void main() {
       );
       expect(statusCode, HttpStatus.ok);
       expect(body['id'], 35);
+      expect(body['result']['content'], isEmpty);
+
+      (statusCode, body) = await postToolCall(
+        id: 36,
+        arguments: const {
+          'dryRun': false,
+          'region': 'us-east1',
+          'sentinel': '=?base64?YWJj?=',
+        },
+        headers: {
+          'Mcp-Param-Dry-Run': 'false',
+          'Mcp-Param-Region': 'us-east1',
+          'Mcp-Param-Sentinel':
+              '=?base64?${base64Encode(utf8.encode('=?base64?YWJj?='))}?=',
+        },
+      );
+      expect(statusCode, HttpStatus.ok);
+      expect(body['id'], 36);
       expect(body['result']['content'], isEmpty);
 
       (statusCode, body) = await postToolCall(

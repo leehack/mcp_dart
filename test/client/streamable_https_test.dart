@@ -1263,6 +1263,8 @@ void main() {
         capturedHeaders['dryRun'] = request.headers.value('mcp-param-dry-run');
         capturedHeaders['text'] = request.headers.value('mcp-param-text');
         capturedHeaders['payload'] = request.headers.value('mcp-param-payload');
+        capturedHeaders['sentinel'] =
+            request.headers.value('mcp-param-sentinel');
         await request.drain<void>();
         request.response
           ..statusCode = HttpStatus.ok
@@ -1294,6 +1296,7 @@ void main() {
               'dryRun': 'Dry-Run',
               'text': 'Text',
               'payload': 'Payload',
+              'sentinel': 'Sentinel',
             },
           },
         );
@@ -1317,6 +1320,7 @@ void main() {
               'dryRun': false,
               'text': ' padded ',
               'payload': {'nested': true},
+              'sentinel': '=?base64?YWJj?=',
             },
           },
           meta: _statelessMeta(),
@@ -1336,6 +1340,10 @@ void main() {
       expect(capturedHeaders['dryRun'], 'false');
       expect(capturedHeaders['text'], '=?base64?IHBhZGRlZCA=?=');
       expect(capturedHeaders['payload'], isNull);
+      expect(
+        capturedHeaders['sentinel'],
+        '=?base64?${base64Encode(utf8.encode('=?base64?YWJj?='))}?=',
+      );
     });
 
     test('send with initialized notification triggers SSE establishment',

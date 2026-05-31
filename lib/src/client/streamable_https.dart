@@ -634,10 +634,15 @@ class StreamableHttpClientTransport
   }
 
   bool _isPlainToolParameterHeaderValue(String value) {
-    return value.trim() == value &&
+    return !_isBase64ToolParameterHeaderSentinel(value) &&
+        value.trim() == value &&
         value.codeUnits.every(
           (unit) => unit == 0x09 || (unit >= 0x20 && unit <= 0x7E),
         );
+  }
+
+  bool _isBase64ToolParameterHeaderSentinel(String value) {
+    return value.startsWith('=?base64?') && value.endsWith('?=');
   }
 
   String? _methodFrom(JsonRpcMessage message) {

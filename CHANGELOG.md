@@ -33,6 +33,8 @@
 - Rejected server-initiated JSON-RPC requests on 2026 stateless Streamable HTTP
   response streams so client input is routed through MRTR input-required
   results instead.
+- Escaped sentinel-shaped `Mcp-Param-*` values with Base64 encoding so literal
+  values beginning with `=?base64?` and ending with `?=` round-trip correctly.
 - Sorted 2026 stateless high-level `tools/list` responses by tool name for
   deterministic list results while preserving legacy registration-order output.
 - Gated 2026 stateless task extension methods on advertised server extension
