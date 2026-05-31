@@ -15,11 +15,15 @@ class SubscriptionFilter {
   /// Subscribe to `notifications/resources/updated` for the given URIs.
   final List<String>? resourceSubscriptions;
 
+  /// Subscribe to `notifications/tasks` for the given task ids.
+  final List<String>? taskIds;
+
   const SubscriptionFilter({
     this.toolsListChanged,
     this.promptsListChanged,
     this.resourcesListChanged,
     this.resourceSubscriptions,
+    this.taskIds,
   });
 
   factory SubscriptionFilter.fromJson(Map<String, dynamic> json) {
@@ -39,6 +43,10 @@ class SubscriptionFilter {
       resourceSubscriptions: _readOptionalStringList(
         json['resourceSubscriptions'],
         'SubscriptionFilter.resourceSubscriptions',
+      ),
+      taskIds: _readOptionalStringList(
+        json['taskIds'],
+        'SubscriptionFilter.taskIds',
       ),
     );
   }
@@ -62,6 +70,9 @@ class SubscriptionFilter {
           resourceSubscriptions != null && capabilities.resources != null
               ? List<String>.unmodifiable(resourceSubscriptions!)
               : null,
+      taskIds: taskIds != null && capabilities.supportsTasksExtension
+          ? List<String>.unmodifiable(taskIds!)
+          : null,
     );
   }
 
@@ -73,6 +84,7 @@ class SubscriptionFilter {
           'resourcesListChanged': resourcesListChanged,
         if (resourceSubscriptions != null)
           'resourceSubscriptions': resourceSubscriptions,
+        if (taskIds != null) 'taskIds': taskIds,
       };
 }
 

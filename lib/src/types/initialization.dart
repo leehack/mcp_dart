@@ -37,6 +37,19 @@ Map<String, dynamic>? _serializeCapabilityObject(bool? declared) {
   return null;
 }
 
+/// MCP Tasks extension identifier.
+const mcpTasksExtensionId = 'io.modelcontextprotocol/tasks';
+
+/// Returns [extensions] with the MCP Tasks extension capability declared.
+Map<String, Map<String, dynamic>> withMcpTasksExtension([
+  Map<String, Map<String, dynamic>>? extensions,
+]) {
+  return {
+    ...?extensions,
+    mcpTasksExtensionId: <String, dynamic>{},
+  };
+}
+
 /// Describes an MCP implementation (client or server).
 class Implementation {
   /// The name of the implementation.
@@ -429,6 +442,10 @@ class ClientCapabilities {
         if (tasks != null) 'tasks': tasks!.toJson(),
         if (extensions != null) 'extensions': extensions,
       };
+
+  /// Whether the MCP Tasks extension is declared.
+  bool get supportsTasksExtension =>
+      extensions?.containsKey(mcpTasksExtensionId) ?? false;
 }
 
 /// Parameters for the `initialize` request.
@@ -844,6 +861,10 @@ class ServerCapabilities {
         if (tasks != null) 'tasks': tasks!.toJson(),
         if (extensions != null) 'extensions': extensions,
       };
+
+  /// Whether the MCP Tasks extension is declared.
+  bool get supportsTasksExtension =>
+      extensions?.containsKey(mcpTasksExtensionId) ?? false;
 }
 
 /// Result data for a successful `initialize` request.

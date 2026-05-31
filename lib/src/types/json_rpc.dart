@@ -118,6 +118,7 @@ class Method {
   static const tasksCancel = "tasks/cancel";
   static const tasksGet = "tasks/get";
   static const tasksResult = "tasks/result";
+  static const tasksUpdate = "tasks/update";
 
   static const notificationsInitialized = "notifications/initialized";
   static const notificationsCancelled = "notifications/cancelled";
@@ -144,6 +145,7 @@ class Method {
   static const notificationsRootsListChanged =
       "notifications/roots/list_changed";
   static const notificationsTasksStatus = "notifications/tasks/status";
+  static const notificationsTasks = "notifications/tasks";
   static const notificationsElicitationComplete =
       "notifications/elicitation/complete";
 
@@ -285,6 +287,7 @@ sealed class JsonRpcMessage {
           Method.tasksCancel => JsonRpcCancelTaskRequest.fromJson(json),
           Method.tasksGet => JsonRpcGetTaskRequest.fromJson(json),
           Method.tasksResult => JsonRpcTaskResultRequest.fromJson(json),
+          Method.tasksUpdate => JsonRpcUpdateTaskRequest.fromJson(json),
           _ => JsonRpcRequest(
               id: parseRequestId(json['id']),
               method: method,
@@ -323,6 +326,7 @@ sealed class JsonRpcMessage {
             JsonRpcRootsListChangedNotification.fromJson(json),
           Method.notificationsTasksStatus =>
             JsonRpcTaskStatusNotification.fromJson(json),
+          Method.notificationsTasks => JsonRpcTaskNotification.fromJson(json),
           Method.notificationsElicitationComplete =>
             JsonRpcElicitationCompleteNotification.fromJson(json),
           _ => JsonRpcNotification(
@@ -541,6 +545,9 @@ const resultTypeComplete = 'complete';
 
 /// Result type for MCP multi round-trip requests needing more input.
 const resultTypeInputRequired = 'input_required';
+
+/// Result type for MCP task extension task creation results.
+const resultTypeTask = 'task';
 
 /// Map of server-assigned input request keys to requested inputs.
 typedef InputRequests = Map<String, InputRequest>;

@@ -525,6 +525,21 @@ class McpClient extends Protocol {
         supported = serverCaps.tools != null;
         requiredCapability = 'tools';
         break;
+      case Method.tasksGet:
+      case Method.tasksCancel:
+        supported =
+            serverCaps.tasks != null || serverCaps.supportsTasksExtension;
+        requiredCapability = 'tasks or $mcpTasksExtensionId';
+        break;
+      case Method.tasksUpdate:
+        supported = serverCaps.supportsTasksExtension;
+        requiredCapability = mcpTasksExtensionId;
+        break;
+      case Method.tasksList:
+      case Method.tasksResult:
+        supported = serverCaps.tasks != null;
+        requiredCapability = 'tasks';
+        break;
       case Method.completionComplete:
         supported = serverCaps.completions != null;
         requiredCapability = 'completions';

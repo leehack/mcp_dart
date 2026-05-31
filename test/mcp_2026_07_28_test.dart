@@ -141,11 +141,14 @@ class LegacyFallbackTransport extends Transport
   Future<void> start() async {}
 }
 
-Map<String, dynamic> _clientMeta({String? protocolVersion}) {
+Map<String, dynamic> _clientMeta({
+  String? protocolVersion,
+  ClientCapabilities clientCapabilities = const ClientCapabilities(),
+}) {
   return buildProtocolRequestMeta(
     protocolVersion: protocolVersion ?? draftProtocolVersion2026_07_28,
     clientInfo: const Implementation(name: 'client', version: '1.0.0'),
-    clientCapabilities: const ClientCapabilities(),
+    clientCapabilities: clientCapabilities,
   );
 }
 
@@ -454,6 +457,51 @@ void main() {
         },
       );
       expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+    });
+
+    test('server rejects task subscriptions without task extension capability',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
+        Method.subscriptionsListen,
+        (request, extra) async => const EmptyResult(),
+        (id, params, meta) => JsonRpcSubscriptionsListenRequest(
+          id: id,
+          listenParams: SubscriptionsListenRequest.fromJson(params!),
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcSubscriptionsListenRequest(
+          id: 'sub-task',
+          listenParams: const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(taskIds: ['task-1']),
+          ),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(
+        response.error.code,
+        ErrorCode.missingRequiredClientCapability.value,
+      );
+      expect(
+        response.error.data['requiredCapabilities']['extensions']
+            [mcpTasksExtensionId],
+        isEmpty,
+      );
     });
 
     test('server handles server/discover before legacy initialization',

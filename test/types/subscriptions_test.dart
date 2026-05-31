@@ -8,18 +8,21 @@ void main() {
         toolsListChanged: true,
         promptsListChanged: false,
         resourceSubscriptions: ['file:///project/config.json'],
+        taskIds: ['task-1'],
       );
 
       final json = filter.toJson();
       expect(json['toolsListChanged'], isTrue);
       expect(json['promptsListChanged'], isFalse);
       expect(json['resourceSubscriptions'], ['file:///project/config.json']);
+      expect(json['taskIds'], ['task-1']);
       expect(json.containsKey('resourcesListChanged'), isFalse);
 
       final parsed = SubscriptionFilter.fromJson(json);
       expect(parsed.toolsListChanged, isTrue);
       expect(parsed.promptsListChanged, isFalse);
       expect(parsed.resourceSubscriptions, ['file:///project/config.json']);
+      expect(parsed.taskIds, ['task-1']);
     });
 
     test('acknowledgedBy returns only supported requested filters', () {
@@ -28,8 +31,10 @@ void main() {
         promptsListChanged: true,
         resourcesListChanged: true,
         resourceSubscriptions: ['file:///project/config.json'],
+        taskIds: ['task-1'],
       );
       const capabilities = ServerCapabilities(
+        extensions: {mcpTasksExtensionId: {}},
         tools: ServerCapabilitiesTools(listChanged: true),
         resources: ServerCapabilitiesResources(),
       );
@@ -38,7 +43,16 @@ void main() {
       expect(acknowledged.toJson(), {
         'toolsListChanged': true,
         'resourceSubscriptions': ['file:///project/config.json'],
+        'taskIds': ['task-1'],
       });
+    });
+
+    test('acknowledgedBy omits task filters without task extension support',
+        () {
+      const requested = SubscriptionFilter(taskIds: ['task-1']);
+
+      final acknowledged = requested.acknowledgedBy(const ServerCapabilities());
+      expect(acknowledged.toJson(), isEmpty);
     });
 
     test('rejects malformed filters', () {
@@ -52,6 +66,14 @@ void main() {
         () => SubscriptionFilter.fromJson(
           const {
             'resourceSubscriptions': [1],
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => SubscriptionFilter.fromJson(
+          const {
+            'taskIds': [1],
           },
         ),
         throwsFormatException,

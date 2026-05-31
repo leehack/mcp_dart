@@ -184,10 +184,52 @@ class Server extends Protocol {
     return null;
   }
 
+  McpError? _validateTaskSubscriptionCapabilities(JsonRpcRequest request) {
+    if (request is! JsonRpcSubscriptionsListenRequest ||
+        request.listenParams.notifications.taskIds == null) {
+      return null;
+    }
+
+    final clientCapabilitiesValue =
+        request.meta?[McpMetaKey.clientCapabilities];
+    final ClientCapabilities? clientCapabilities;
+    try {
+      clientCapabilities = clientCapabilitiesValue is Map
+          ? ClientCapabilities.fromJson(
+              clientCapabilitiesValue.cast<String, dynamic>(),
+            )
+          : _clientCapabilities;
+    } catch (error) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Invalid request client capabilities metadata.',
+        error.toString(),
+      );
+    }
+
+    if (clientCapabilities?.supportsTasksExtension ?? false) {
+      return null;
+    }
+
+    return McpError(
+      ErrorCode.missingRequiredClientCapability.value,
+      'Missing required client capability',
+      {
+        'requiredCapabilities': {
+          'extensions': {mcpTasksExtensionId: <String, dynamic>{}},
+        },
+      },
+    );
+  }
+
   @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
     if (request.method == Method.serverDiscover) {
-      return _validateStatelessRequestMetadata(request);
+      final metadataError = _validateStatelessRequestMetadata(request);
+      if (metadataError != null) {
+        return metadataError;
+      }
+      return null;
     }
 
     final requestedProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
@@ -198,7 +240,11 @@ class Server extends Protocol {
     }
     if (requestedProtocolVersion is String &&
         isStatelessProtocolVersion(requestedProtocolVersion)) {
-      return _validateStatelessRequestMetadata(request);
+      final metadataError = _validateStatelessRequestMetadata(request);
+      if (metadataError != null) {
+        return metadataError;
+      }
+      return _validateTaskSubscriptionCapabilities(request);
     }
 
     if (request.method == Method.initialize) {
@@ -229,7 +275,7 @@ class Server extends Protocol {
       );
     }
 
-    return null;
+    return _validateTaskSubscriptionCapabilities(request);
   }
 
   @override
@@ -514,6 +560,14 @@ class Server extends Protocol {
         }
         break;
 
+      case Method.notificationsTasks:
+        if (!_capabilities.supportsTasksExtension) {
+          throw StateError(
+            "Server does not support the $mcpTasksExtensionId extension (required for sending $method)",
+          );
+        }
+        break;
+
       case Method.notificationsElicitationComplete:
         if (!(_clientCapabilities?.elicitation?.url != null)) {
           throw StateError(
@@ -590,12 +644,21 @@ class Server extends Protocol {
         break;
 
       case Method.tasksList:
-      case Method.tasksCancel:
-      case Method.tasksGet:
       case Method.tasksResult:
         if (!(_capabilities.tasks != null)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'tasks' capability",
+          );
+        }
+        break;
+
+      case Method.tasksCancel:
+      case Method.tasksGet:
+      case Method.tasksUpdate:
+        if (!(_capabilities.tasks != null ||
+            _capabilities.supportsTasksExtension)) {
+          throw StateError(
+            "Server setup error: Cannot handle '$method' without 'tasks' capability or '$mcpTasksExtensionId' extension",
           );
         }
         break;
