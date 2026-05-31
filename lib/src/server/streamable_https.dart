@@ -169,6 +169,7 @@ class StreamableHTTPServerTransport
   final Set<StreamId> _ownedStreamIds = {};
   final Map<dynamic, String> _requestToStreamMapping = {};
   final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
+  final Set<dynamic> _statelessRequestIds = {};
   bool _initialized = false;
   bool _terminated = false;
   final bool _enableJsonResponse;
@@ -1401,6 +1402,9 @@ class StreamableHTTPServerTransport
             _ownedStreamIds.add(streamId);
             _streamMapping[streamId] = req.response;
             _requestToStreamMapping[reqId] = streamId;
+            if (_isStatelessJsonRpcRequest(message)) {
+              _statelessRequestIds.add(reqId);
+            }
           }
         }
 
@@ -1413,6 +1417,7 @@ class StreamableHTTPServerTransport
               final reqId = (message as JsonRpcRequest).id;
               _requestToStreamMapping.remove(reqId);
               _requestResponseMap.remove(reqId);
+              _statelessRequestIds.remove(reqId);
             }
           }
           await _safeClose(req.response);
@@ -1568,6 +1573,7 @@ class StreamableHTTPServerTransport
     // Clear any pending responses
     _requestResponseMap.clear();
     _requestToStreamMapping.clear(); // Also clear this map
+    _statelessRequestIds.clear();
     onclose?.call();
   }
 
@@ -1585,6 +1591,15 @@ class StreamableHTTPServerTransport
     if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
       // If the message is a response, use the request ID from the message
       requestId = _getMessageId(message);
+    }
+
+    if (message is JsonRpcRequest &&
+        requestId != null &&
+        _statelessRequestIds.contains(requestId)) {
+      throw StateError(
+        "Cannot send JSON-RPC requests on stateless MCP response streams; "
+        "return an InputRequiredResult for client input instead.",
+      );
     }
 
     // Check if this message should be sent on the standalone SSE stream (no request ID)
@@ -1699,6 +1714,7 @@ class StreamableHTTPServerTransport
         for (final id in relatedIds) {
           _requestResponseMap.remove(id);
           _requestToStreamMapping.remove(id);
+          _statelessRequestIds.remove(id);
         }
       }
     }

@@ -30,6 +30,9 @@
 - Enforced 2026 stateless Streamable HTTP POST-only behavior by skipping
   legacy client GET/DELETE session paths and returning `Allow: POST` for
   stateless non-POST server requests.
+- Rejected server-initiated JSON-RPC requests on 2026 stateless Streamable HTTP
+  response streams so client input is routed through MRTR input-required
+  results instead.
 - Sorted 2026 stateless high-level `tools/list` responses by tool name for
   deterministic list results while preserving legacy registration-order output.
 - Gated 2026 stateless task extension methods on advertised server extension

@@ -2027,6 +2027,77 @@ void main() {
       expect(body['result']['content'], isEmpty);
     });
 
+    test('2026 stateless HTTP rejects server requests on response streams',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final sendError = Completer<Object>();
+      transport.onmessage = (message) {
+        if (message is JsonRpcListToolsRequest) {
+          final requestSend = transport.send(
+            const JsonRpcListRootsRequest(id: 99),
+            relatedRequestId: message.id,
+          );
+          unawaited(
+            requestSend.then(
+              (_) {},
+              onError: (Object error) {
+                if (!sendError.isCompleted) {
+                  sendError.complete(error);
+                }
+              },
+            ),
+          );
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const ListToolsResult(tools: []).toJson(),
+              ),
+            ),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Method', Method.toolsList);
+      request.write(
+        jsonEncode(
+          JsonRpcListToolsRequest(id: 10, meta: _statelessMeta()).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      final messages =
+          _decodeSseJsonMessages(await utf8.decodeStream(response));
+      final error = await sendError.future.timeout(
+        const Duration(seconds: 1),
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(messages, hasLength(1));
+      expect(messages.single['id'], 10);
+      expect(messages.single['result']['tools'], isEmpty);
+      expect(error, isA<StateError>());
+      expect(
+        error.toString(),
+        contains('stateless MCP response streams'),
+      );
+    });
+
     test('2026 stateless HTTP validates mapped tool parameter headers',
         () async {
       final transport = StreamableHTTPServerTransport(
