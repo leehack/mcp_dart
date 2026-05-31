@@ -517,6 +517,9 @@ class McpClient extends Protocol {
         supported = serverCaps.resources?.subscribe ?? false;
         requiredCapability = 'resources.subscribe';
         break;
+      case Method.subscriptionsListen:
+        supported = true;
+        break;
       case Method.toolsCall:
       case Method.toolsList:
         supported = serverCaps.tools != null;

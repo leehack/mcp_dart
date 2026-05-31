@@ -390,6 +390,72 @@ void main() {
       );
     });
 
+    test('server acknowledges subscriptions/listen with subscription id',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(listChanged: true),
+            resources: ServerCapabilitiesResources(),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
+        Method.subscriptionsListen,
+        (request, extra) async {
+          await extra.sendSubscriptionAcknowledged(
+            request.listenParams.notifications.acknowledgedBy(
+              const ServerCapabilities(
+                tools: ServerCapabilitiesTools(listChanged: true),
+                resources: ServerCapabilitiesResources(),
+              ),
+            ),
+          );
+          return const EmptyResult();
+        },
+        (id, params, meta) => JsonRpcSubscriptionsListenRequest(
+          id: id,
+          listenParams: SubscriptionsListenRequest.fromJson(params!),
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcSubscriptionsListenRequest(
+          id: 'sub-1',
+          listenParams: const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(
+              toolsListChanged: true,
+              promptsListChanged: true,
+              resourceSubscriptions: ['file:///project/config.json'],
+            ),
+          ),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final acknowledged = JsonRpcMessage.fromJson(
+        transport.sentMessages.first.toJson(),
+      ) as JsonRpcSubscriptionsAcknowledgedNotification;
+      expect(
+        acknowledged.method,
+        Method.notificationsSubscriptionsAcknowledged,
+      );
+      expect(acknowledged.meta?[McpMetaKey.subscriptionId], 'sub-1');
+      expect(
+        acknowledged.acknowledgedParams.notifications.toJson(),
+        {
+          'toolsListChanged': true,
+          'resourceSubscriptions': ['file:///project/config.json'],
+        },
+      );
+      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+    });
+
     test('server handles server/discover before legacy initialization',
         () async {
       final server = Server(

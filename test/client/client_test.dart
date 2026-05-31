@@ -167,6 +167,10 @@ void main() {
         () => client.assertCapabilityForMethod("tools/call"),
         returnsNormally,
       );
+      expect(
+        () => client.assertCapabilityForMethod(Method.subscriptionsListen),
+        returnsNormally,
+      );
 
       // Create a client with limited capabilities
       final limitedClient = Client(clientInfo);
@@ -186,6 +190,12 @@ void main() {
       expect(
         () => limitedClient.assertCapabilityForMethod("prompts/list"),
         throwsA(isA<McpError>()),
+      );
+      expect(
+        () => limitedClient.assertCapabilityForMethod(
+          Method.subscriptionsListen,
+        ),
+        returnsNormally,
       );
     });
 

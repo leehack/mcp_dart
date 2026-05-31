@@ -197,6 +197,37 @@ class RequestHandlerExtra {
 
     await sendNotification(notification);
   }
+
+  /// Sends the required first acknowledgment for a `subscriptions/listen` stream.
+  Future<void> sendSubscriptionAcknowledged(
+    SubscriptionFilter notifications,
+  ) {
+    return sendSubscriptionNotification(
+      JsonRpcSubscriptionsAcknowledgedNotification(
+        acknowledgedParams: SubscriptionsAcknowledgedNotification(
+          notifications: notifications,
+        ),
+      ),
+    );
+  }
+
+  /// Sends a notification on a `subscriptions/listen` stream with subscription metadata.
+  Future<void> sendSubscriptionNotification(
+    JsonRpcNotification notification,
+  ) {
+    final meta = <String, dynamic>{
+      ...?notification.meta,
+      McpMetaKey.subscriptionId: requestId,
+    };
+
+    return sendNotification(
+      JsonRpcNotification(
+        method: notification.method,
+        params: notification.params,
+        meta: meta,
+      ),
+    );
+  }
 }
 
 /// Internal class holding timeout state for a request.

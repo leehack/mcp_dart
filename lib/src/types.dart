@@ -1,5 +1,6 @@
 export 'types/content.dart';
 export 'types/resources.dart';
+export 'types/subscriptions.dart';
 export 'types/prompts.dart';
 export 'types/tools.dart';
 export 'types/tasks.dart';

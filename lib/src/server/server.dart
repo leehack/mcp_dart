@@ -524,6 +524,7 @@ class Server extends Protocol {
 
       case Method.notificationsCancelled:
       case Method.notificationsProgress:
+      case Method.notificationsSubscriptionsAcknowledged:
         break;
 
       default:
@@ -540,6 +541,7 @@ class Server extends Protocol {
       case Method.initialize:
       case Method.ping:
       case Method.completionComplete:
+      case Method.subscriptionsListen:
         break;
 
       case Method.loggingSetLevel:

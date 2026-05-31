@@ -8,6 +8,7 @@ import 'logging.dart';
 import 'sampling.dart';
 import 'completion.dart';
 import 'roots.dart';
+import 'subscriptions.dart';
 import 'tasks.dart';
 import 'validation.dart';
 
@@ -68,6 +69,7 @@ class McpMetaKey {
   static const clientCapabilities =
       'io.modelcontextprotocol/clientCapabilities';
   static const logLevel = 'io.modelcontextprotocol/logLevel';
+  static const subscriptionId = 'io.modelcontextprotocol/subscriptionId';
 
   const McpMetaKey._();
 }
@@ -102,6 +104,7 @@ class Method {
   static const resourcesTemplatesList = "resources/templates/list";
   static const resourcesSubscribe = "resources/subscribe";
   static const resourcesUnsubscribe = "resources/unsubscribe";
+  static const subscriptionsListen = "subscriptions/listen";
   static const promptsList = "prompts/list";
   static const promptsGet = "prompts/get";
   static const elicitationCreate = "elicitation/create";
@@ -123,6 +126,8 @@ class Method {
       "notifications/resources/list_changed";
   static const notificationsResourcesUpdated =
       "notifications/resources/updated";
+  static const notificationsSubscriptionsAcknowledged =
+      "notifications/subscriptions/acknowledged";
   static const notificationsPromptsListChanged =
       "notifications/prompts/list_changed";
   static const notificationsToolsListChanged =
@@ -263,6 +268,8 @@ sealed class JsonRpcMessage {
           Method.resourcesSubscribe => JsonRpcSubscribeRequest.fromJson(json),
           Method.resourcesUnsubscribe =>
             JsonRpcUnsubscribeRequest.fromJson(json),
+          Method.subscriptionsListen =>
+            JsonRpcSubscriptionsListenRequest.fromJson(json),
           Method.promptsList => JsonRpcListPromptsRequest.fromJson(json),
           Method.promptsGet => JsonRpcGetPromptRequest.fromJson(json),
           Method.elicitationCreate => JsonRpcElicitRequest.fromJson(json),
@@ -300,6 +307,8 @@ sealed class JsonRpcMessage {
             JsonRpcResourceListChangedNotification.fromJson(json),
           Method.notificationsResourcesUpdated =>
             JsonRpcResourceUpdatedNotification.fromJson(json),
+          Method.notificationsSubscriptionsAcknowledged =>
+            JsonRpcSubscriptionsAcknowledgedNotification.fromJson(json),
           Method.notificationsPromptsListChanged =>
             JsonRpcPromptListChangedNotification.fromJson(json),
           Method.notificationsToolsListChanged =>

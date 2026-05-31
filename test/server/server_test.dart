@@ -964,7 +964,8 @@ void _addCriticalPathTests() {
       );
     });
 
-    test('initialize, ping, completion/complete always allowed', () {
+    test('initialize, ping, completion/complete, subscriptions/listen allowed',
+        () {
       server = Server(
         const Implementation(name: 'TestServer', version: '1.0.0'),
         // No special capabilities
@@ -980,6 +981,10 @@ void _addCriticalPathTests() {
       );
       expect(
         () => server.assertRequestHandlerCapability('completion/complete'),
+        returnsNormally,
+      );
+      expect(
+        () => server.assertRequestHandlerCapability(Method.subscriptionsListen),
         returnsNormally,
       );
     });
