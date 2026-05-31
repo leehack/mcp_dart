@@ -1247,6 +1247,94 @@ void main() {
       expect(capturedHeaders['name'], 'task-1');
     });
 
+    test('stateless SSE responses reject server-initiated requests', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        final serverRequest = const JsonRpcRequest(
+          id: 99,
+          method: Method.rootsList,
+        );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..write('data: ${jsonEncode(serverRequest.toJson())}\n\n');
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = draftProtocolVersion2026_07_28;
+      await transport.start();
+
+      final errorCompleter = Completer<Error>();
+      final messages = <JsonRpcMessage>[];
+      transport
+        ..onmessage = messages.add
+        ..onerror = (error) {
+          if (!errorCompleter.isCompleted) {
+            errorCompleter.complete(error);
+          }
+        };
+
+      await transport.send(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+
+      final error = await errorCompleter.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(error, isA<McpError>());
+      expect((error as McpError).code, ErrorCode.invalidRequest.value);
+      expect(error.message, contains('input_required'));
+      expect(messages, isEmpty);
+    });
+
+    test('stateless JSON responses reject server-initiated requests', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        final serverRequest = const JsonRpcRequest(
+          id: 99,
+          method: Method.rootsList,
+        );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode([serverRequest.toJson()]));
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = draftProtocolVersion2026_07_28;
+      await transport.start();
+
+      final errorCompleter = Completer<Error>();
+      final messages = <JsonRpcMessage>[];
+      transport
+        ..onmessage = messages.add
+        ..onerror = (error) {
+          if (!errorCompleter.isCompleted) {
+            errorCompleter.complete(error);
+          }
+        };
+
+      await transport.send(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+
+      final error = await errorCompleter.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(error, isA<McpError>());
+      expect((error as McpError).code, ErrorCode.invalidRequest.value);
+      expect(error.message, contains('inputRequests'));
+      expect(messages, isEmpty);
+    });
+
     test('send mirrors mapped tool parameters into 2026 stateless headers',
         () async {
       final capturedHeaders = <String, String?>{};

@@ -51,11 +51,15 @@ class StartSseOptions {
   /// Default is true.
   final bool shouldReconnect;
 
+  /// Whether JSON-RPC requests received on this stream should be rejected.
+  final bool rejectServerRequests;
+
   const StartSseOptions({
     this.resumptionToken,
     this.onResumptionToken,
     this.replayMessageId,
     this.shouldReconnect = true,
+    this.rejectServerRequests = false,
   });
 }
 
@@ -942,9 +946,15 @@ class StreamableHttpClientTransport
             result: message.result,
             meta: message.meta,
           );
-          onmessage?.call(newMessage);
+          _dispatchReceivedMessage(
+            newMessage,
+            rejectServerRequests: options.rejectServerRequests,
+          );
         } else {
-          onmessage?.call(message);
+          _dispatchReceivedMessage(
+            message,
+            rejectServerRequests: options.rejectServerRequests,
+          );
         }
       } catch (error) {
         if (error is Error) {
@@ -1065,6 +1075,25 @@ class StreamableHttpClientTransport
     _abortController?.stream.listen((_) {
       subscription.cancel();
     });
+  }
+
+  void _dispatchReceivedMessage(
+    JsonRpcMessage message, {
+    required bool rejectServerRequests,
+  }) {
+    if (rejectServerRequests && message is JsonRpcRequest) {
+      onerror?.call(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'Server-initiated JSON-RPC requests are not supported on 2026 '
+          'stateless MCP response streams; return input_required with '
+          'inputRequests instead.',
+        ),
+      );
+      return;
+    }
+
+    onmessage?.call(message);
   }
 
   @override
@@ -1300,6 +1329,7 @@ class StreamableHttpClientTransport
             StartSseOptions(
               onResumptionToken: onResumptionToken,
               shouldReconnect: false, // Do not reconnect for POST responses
+              rejectServerRequests: isStatelessRequest,
             ),
           );
         } else if (contentType?.contains('application/json') ?? false) {
@@ -1310,11 +1340,17 @@ class StreamableHttpClientTransport
           if (data is List) {
             for (final item in data) {
               final msg = JsonRpcMessage.fromJson(item);
-              onmessage?.call(msg);
+              _dispatchReceivedMessage(
+                msg,
+                rejectServerRequests: isStatelessRequest,
+              );
             }
           } else {
             final msg = JsonRpcMessage.fromJson(data);
-            onmessage?.call(msg);
+            _dispatchReceivedMessage(
+              msg,
+              rejectServerRequests: isStatelessRequest,
+            );
           }
         } else {
           throw StreamableHttpError(

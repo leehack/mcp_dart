@@ -58,6 +58,9 @@
   HTTP field-name token syntax.
 - Removed invalid `x-mcp-header` annotations from 2026 stateless `tools/list`
   responses when the server has already rejected those header mappings.
+- Rejected server-initiated JSON-RPC requests received on 2026 stateless
+  Streamable HTTP client response streams; servers must use MRTR
+  `input_required` results instead.
 
 ## 2.2.0
 
