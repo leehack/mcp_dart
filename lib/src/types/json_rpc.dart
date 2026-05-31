@@ -437,6 +437,12 @@ enum ErrorCode {
   connectionClosed(-32000),
   requestTimeout(-32001),
 
+  /// HTTP request metadata headers do not match the JSON-RPC body.
+  ///
+  /// This is the MCP 2026-07-28 meaning of the shared -32001 server-error
+  /// code. [requestTimeout] is retained for older SDK behavior.
+  headerMismatch(-32001),
+
   /// Required per-request client capabilities were not declared.
   missingRequiredClientCapability(-32003),
 

@@ -294,6 +294,13 @@ class McpClient extends Protocol {
   }
 
   Future<DiscoverResult> discoverServer() async {
+    final activeTransport = transport;
+    final ProtocolVersionAwareTransport? versionedTransport =
+        activeTransport is ProtocolVersionAwareTransport
+            ? activeTransport as ProtocolVersionAwareTransport
+            : null;
+    versionedTransport?.protocolVersion = _preferredProtocolVersion;
+
     final result = await super.request<DiscoverResult>(
       JsonRpcServerDiscoverRequest(
         id: -1,
@@ -328,11 +335,7 @@ class McpClient extends Protocol {
     _usesStatelessProtocol = isStatelessProtocolVersion(protocolVersion);
     _sentInitialized = true;
 
-    final activeTransport = transport;
-    if (activeTransport is ProtocolVersionAwareTransport) {
-      (activeTransport as ProtocolVersionAwareTransport).protocolVersion =
-          protocolVersion;
-    }
+    versionedTransport?.protocolVersion = protocolVersion;
 
     _logger.debug(
       "MCP Server Discovered. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: $protocolVersion",

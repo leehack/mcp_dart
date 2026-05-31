@@ -65,6 +65,21 @@ Future<_SseEvent> _readSseJsonEvent(StreamIterator<String> lines) async {
   }
 }
 
+List<Map<String, dynamic>> _decodeSseJsonMessages(String body) {
+  final messages = <Map<String, dynamic>>[];
+  for (final event in body.trim().split('\n\n')) {
+    final data = event
+        .split('\n')
+        .where((line) => line.startsWith('data: '))
+        .map((line) => line.substring('data: '.length))
+        .join('\n');
+    if (data.isNotEmpty) {
+      messages.add(jsonDecode(data) as Map<String, dynamic>);
+    }
+  }
+  return messages;
+}
+
 void main() {
   test('OAuthBearerChallenge builds insufficient-scope challenge', () {
     final challenge = OAuthBearerChallenge.insufficientScope(
@@ -100,6 +115,12 @@ void main() {
       contains(r'error_description="Need \"read\" scope \\ admin"'),
     );
   });
+
+  Map<String, dynamic> statelessMeta() => buildProtocolRequestMeta(
+        protocolVersion: draftProtocolVersion2026_07_28,
+        clientInfo: const Implementation(name: 'Client', version: '1.0'),
+        clientCapabilities: const ClientCapabilities(),
+      );
 
   group('StreamableMcpServer', () {
     late StreamableMcpServer server;
@@ -279,6 +300,90 @@ void main() {
       );
 
       expect(res.statusCode, HttpStatus.badRequest);
+    });
+
+    test('handles 2026 stateless request without session ID', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcListToolsRequest(id: 1, meta: statelessMeta()).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['mcp-session-id'], isNull);
+      final messages = _decodeSseJsonMessages(response.body);
+      expect(messages.single['result']['tools'][0]['name'], 'echo');
+    });
+
+    test('detects 2026 stateless requests from body metadata', () async {
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcListToolsRequest(id: 10, meta: statelessMeta()).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(
+        body['error']['message'],
+        contains('MCP-Protocol-Version header is required'),
+      );
+    });
+
+    test('routes 2026 stateless GET and DELETE without a session ID', () async {
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      final getRequest = await client.getUrl(Uri.parse(baseUrl));
+      getRequest.headers.set(
+        'MCP-Protocol-Version',
+        draftProtocolVersion2026_07_28,
+      );
+      final getResponse = await getRequest.close();
+      expect(getResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(getResponse.headers.value(HttpHeaders.allowHeader), 'POST');
+      await getResponse.drain<void>();
+
+      final deleteRequest = await client.deleteUrl(Uri.parse(baseUrl));
+      deleteRequest.headers.set(
+        'MCP-Protocol-Version',
+        draftProtocolVersion2026_07_28,
+      );
+      final deleteResponse = await deleteRequest.close();
+      expect(deleteResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(deleteResponse.headers.value(HttpHeaders.allowHeader), 'POST');
+      await deleteResponse.drain<void>();
     });
 
     test('rejects unsupported MCP-Protocol-Version header by default',

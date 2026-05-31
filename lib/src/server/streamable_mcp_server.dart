@@ -455,15 +455,6 @@ class StreamableMcpServer {
     // To support the routing logic (new vs existing session), we must read it here.
 
     final sessionId = request.headers.value('mcp-session-id');
-    if (sessionId != null && !_transports.containsKey(sessionId)) {
-      await _respondWithJsonRpcError(
-        request.response,
-        httpStatus: HttpStatus.notFound,
-        errorCode: ErrorCode.connectionClosed,
-        message: 'Session not found',
-      );
-      return;
-    }
 
     final bodyBytes = await _collectBytes(request);
     final bodyString = utf8.decode(bodyBytes);
@@ -471,6 +462,17 @@ class StreamableMcpServer {
     try {
       body = jsonDecode(bodyString);
     } catch (e) {
+      if (sessionId != null &&
+          !_transports.containsKey(sessionId) &&
+          !_isStatelessProtocolVersionRequest(request)) {
+        await _respondWithJsonRpcError(
+          request.response,
+          httpStatus: HttpStatus.notFound,
+          errorCode: ErrorCode.connectionClosed,
+          message: 'Session not found',
+        );
+        return;
+      }
       await _respondWithJsonRpcError(
         request.response,
         httpStatus: HttpStatus.badRequest,
@@ -501,9 +503,28 @@ class StreamableMcpServer {
       return;
     }
 
+    final isStatelessRequest = _isStatelessRequest(request, body);
+    if (sessionId != null &&
+        !_transports.containsKey(sessionId) &&
+        !isStatelessRequest) {
+      await _respondWithJsonRpcError(
+        request.response,
+        httpStatus: HttpStatus.notFound,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Session not found',
+      );
+      return;
+    }
+
     StreamableHTTPServerTransport? transport;
 
-    if (sessionId != null) {
+    if (isStatelessRequest) {
+      transport = _createStatelessTransport();
+      final server = _serverFactory('');
+      await server.connect(transport);
+      await transport.handleRequest(request, body);
+      return;
+    } else if (sessionId != null) {
       transport = _transports[sessionId]!;
     } else if (_isInitializeRequest(body)) {
       // New initialization request
@@ -528,6 +549,11 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleGetRequest(HttpRequest request) async {
+    if (_isStatelessProtocolVersionRequest(request)) {
+      await _createStatelessTransport().handleRequest(request);
+      return;
+    }
+
     final sessionId = request.headers.value('mcp-session-id');
     if (sessionId == null) {
       request.response
@@ -549,6 +575,11 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleDeleteRequest(HttpRequest request) async {
+    if (_isStatelessProtocolVersionRequest(request)) {
+      await _createStatelessTransport().handleRequest(request);
+      return;
+    }
+
     final sessionId = request.headers.value('mcp-session-id');
     if (sessionId == null) {
       request.response
@@ -619,6 +650,67 @@ class StreamableMcpServer {
     };
 
     return transport;
+  }
+
+  StreamableHTTPServerTransport _createStatelessTransport() {
+    return StreamableHTTPServerTransport(
+      options: StreamableHTTPServerTransportOptions(
+        sessionIdGenerator: () => null,
+        eventStore: eventStore,
+        enableDnsRebindingProtection: enableDnsRebindingProtection,
+        allowedHosts: allowedHosts ?? {host},
+        allowedOrigins: allowedOrigins,
+        strictProtocolVersionHeaderValidation:
+            strictProtocolVersionHeaderValidation,
+        rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
+      ),
+    );
+  }
+
+  bool _isStatelessProtocolVersionRequest(HttpRequest request) {
+    final versionHeader = request.headers.value('mcp-protocol-version');
+    return versionHeader != null &&
+        isStatelessProtocolVersion(versionHeader.trim());
+  }
+
+  bool _isStatelessRequest(HttpRequest request, dynamic body) {
+    if (_isStatelessProtocolVersionRequest(request)) {
+      return true;
+    }
+    if (body is Map<String, dynamic>) {
+      final version = _bodyProtocolVersion(body);
+      return version != null && isStatelessProtocolVersion(version);
+    }
+    if (body is List) {
+      return body.whereType<Map<String, dynamic>>().any((item) {
+        final version = _bodyProtocolVersion(item);
+        return version != null && isStatelessProtocolVersion(version);
+      });
+    }
+    return false;
+  }
+
+  String? _bodyProtocolVersion(Map<String, dynamic> body) {
+    final topLevelMeta = body['_meta'];
+    if (topLevelMeta is Map) {
+      final version = topLevelMeta[McpMetaKey.protocolVersion];
+      if (version is String) {
+        return version;
+      }
+    }
+
+    final params = body['params'];
+    if (params is Map) {
+      final meta = params['_meta'];
+      if (meta is Map) {
+        final version = meta[McpMetaKey.protocolVersion];
+        if (version is String) {
+          return version;
+        }
+      }
+    }
+
+    return null;
   }
 
   bool _isInitializeRequest(dynamic body) {

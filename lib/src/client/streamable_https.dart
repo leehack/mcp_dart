@@ -526,6 +526,86 @@ class StreamableHttpClientTransport
     return headers;
   }
 
+  Map<String, String> _headersForMessage(JsonRpcMessage message) {
+    final headers = <String, String>{};
+    final protocolVersion = _protocolVersion ?? _protocolVersionFrom(message);
+    if (protocolVersion != null) {
+      headers['MCP-Protocol-Version'] = protocolVersion;
+    }
+
+    if (protocolVersion == null ||
+        !isStatelessProtocolVersion(protocolVersion)) {
+      return headers;
+    }
+
+    final method = _methodFrom(message);
+    if (method == null) {
+      return headers;
+    }
+
+    headers['Mcp-Method'] = method;
+
+    final params = _paramsFrom(message);
+    final name = _standardNameHeaderValue(method, params);
+    if (name != null) {
+      headers['Mcp-Name'] = name;
+    }
+
+    return headers;
+  }
+
+  String? _methodFrom(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      return message.method;
+    }
+    if (message is JsonRpcNotification) {
+      return message.method;
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _paramsFrom(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      return message.params;
+    }
+    if (message is JsonRpcNotification) {
+      return message.params;
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _metaFrom(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      return message.meta;
+    }
+    if (message is JsonRpcNotification) {
+      return message.meta;
+    }
+    return null;
+  }
+
+  String? _protocolVersionFrom(JsonRpcMessage message) {
+    final version = _metaFrom(message)?[McpMetaKey.protocolVersion];
+    return version is String ? version : null;
+  }
+
+  String? _standardNameHeaderValue(
+    String method,
+    Map<String, dynamic>? params,
+  ) {
+    if (params == null) {
+      return null;
+    }
+
+    final nameField = switch (method) {
+      Method.toolsCall => params['name'],
+      Method.resourcesRead => params['uri'],
+      Method.promptsGet => params['name'],
+      _ => null,
+    };
+    return nameField is String ? nameField : null;
+  }
+
   String? _clearStaleSession() {
     final staleSessionId = _sessionId;
     _sessionId = null;
@@ -972,6 +1052,7 @@ class StreamableHttpClientTransport
       }
 
       final headers = await _commonHeaders();
+      headers.addAll(_headersForMessage(message));
       final requestSessionId = headers['mcp-session-id'];
       headers['content-type'] = 'application/json';
       headers['accept'] = 'application/json, text/event-stream';
