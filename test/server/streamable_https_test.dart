@@ -1931,6 +1931,40 @@ void main() {
       expect(body['error']['message'], contains('Mcp-Name header is required'));
     });
 
+    test('2026 stateless HTTP rejects session header', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Method', Method.toolsList)
+        ..set('Mcp-Session-Id', 'legacy-session');
+      request.write(
+        jsonEncode(JsonRpcListToolsRequest(id: 6, meta: _statelessMeta())),
+      );
+
+      final response = await request.close();
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 6);
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
+      expect(body['error']['message'], contains('Mcp-Session-Id header'));
+    });
+
     test('2026 stateless HTTP accepts matching standard and parameter headers',
         () async {
       final transport = StreamableHTTPServerTransport(

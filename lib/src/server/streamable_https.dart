@@ -688,6 +688,15 @@ class StreamableHTTPServerTransport
       );
       return false;
     }
+    if (isStatelessProtocolVersion(protocolHeader) &&
+        req.headers.value('mcp-session-id') != null) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        'Mcp-Session-Id header is not part of MCP stateless protocol versions',
+      );
+      return false;
+    }
 
     final method = _messageMethod(message);
     if (method == null) {

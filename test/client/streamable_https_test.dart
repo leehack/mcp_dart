@@ -1069,9 +1069,11 @@ void main() {
             request.headers.value('mcp-protocol-version');
         capturedHeaders['method'] = request.headers.value('mcp-method');
         capturedHeaders['name'] = request.headers.value('mcp-name');
+        capturedHeaders['session'] = request.headers.value('mcp-session-id');
         await request.drain<void>();
         request.response
           ..statusCode = HttpStatus.ok
+          ..headers.set('mcp-session-id', 'ignored-stateless-session')
           ..headers.contentType = ContentType.json
           ..write(
             jsonEncode(
@@ -1086,6 +1088,9 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          sessionId: 'legacy-session',
+        ),
       )..protocolVersion = draftProtocolVersion2026_07_28;
       await transport.start();
 
@@ -1110,6 +1115,8 @@ void main() {
       );
       expect(capturedHeaders['method'], Method.toolsCall);
       expect(capturedHeaders['name'], 'echo');
+      expect(capturedHeaders['session'], isNull);
+      expect(transport.sessionId, 'legacy-session');
     });
 
     test('send maps 2026 stateless headers for standard request types',

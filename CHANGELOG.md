@@ -22,6 +22,8 @@
 - Synced registered tool `x-mcp-header` metadata into Streamable HTTP server
   transports so 2026 stateless `tools/call` requests reject missing or
   mismatched `Mcp-Param-*` argument headers.
+- Removed `Mcp-Session-Id` from 2026 stateless Streamable HTTP requests by
+  stripping it from client sends and rejecting it on stateless server POSTs.
 - Gated 2026 stateless task extension methods on advertised server extension
   support and rejected legacy task result shapes on extension `tasks/get`,
   `tasks/update`, and `tasks/cancel` handlers.

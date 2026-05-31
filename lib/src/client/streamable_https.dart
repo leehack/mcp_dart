@@ -1117,6 +1117,12 @@ class StreamableHttpClientTransport
 
       final headers = await _commonHeaders();
       headers.addAll(_headersForMessage(message));
+      final protocolVersion = _protocolVersion ?? _protocolVersionFrom(message);
+      final isStatelessRequest = protocolVersion != null &&
+          isStatelessProtocolVersion(protocolVersion);
+      if (isStatelessRequest) {
+        headers.remove('mcp-session-id');
+      }
       final requestSessionId = headers['mcp-session-id'];
       headers['content-type'] = 'application/json';
       headers['accept'] = 'application/json, text/event-stream';
@@ -1174,7 +1180,7 @@ class StreamableHttpClientTransport
 
       // Handle session ID received from successful stateful responses.
       final sessionId = response.headers['mcp-session-id'];
-      if (sessionId != null) {
+      if (sessionId != null && !isStatelessRequest) {
         _sessionId = sessionId;
         _staleSessionDetected = false;
       }
