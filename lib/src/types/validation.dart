@@ -88,3 +88,31 @@ void validateCacheScope(String? value, String field) {
     );
   }
 }
+
+Object? readJsonValue(Object? value, String field) {
+  if (value == null || value is String || value is bool) {
+    return value;
+  }
+  if (value is num) {
+    if (!value.isFinite) {
+      throw FormatException('$field must be a finite JSON number');
+    }
+    return value;
+  }
+  if (value is List) {
+    return value.map((item) => readJsonValue(item, '$field[]')).toList();
+  }
+  if (value is Map) {
+    if (value.keys.any((key) => key is! String)) {
+      throw FormatException('$field must be a JSON object with string keys');
+    }
+    return {
+      for (final entry in value.entries)
+        entry.key as String: readJsonValue(
+          entry.value,
+          '$field.${entry.key}',
+        ),
+    };
+  }
+  throw FormatException('$field must be a JSON value');
+}

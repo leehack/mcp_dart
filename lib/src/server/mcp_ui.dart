@@ -10,7 +10,7 @@ class McpUiAppToolConfig {
   final String? title;
   final String? description;
   final ToolInputSchema? inputSchema;
-  final ToolOutputSchema? outputSchema;
+  final JsonSchema? outputSchema;
   final ToolAnnotations? annotations;
   final Map<String, dynamic> meta;
 

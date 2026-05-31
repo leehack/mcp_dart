@@ -82,7 +82,137 @@ void main() {
       expect(response, isA<JsonRpcResponse>());
       final successResponse = response as JsonRpcResponse;
       final result = CallToolResult.fromJson(successResponse.result);
-      expect(result.structuredContent?['result'], equals('success'));
+      final structured = result.structuredContent as Map<String, dynamic>;
+      expect(structured['result'], equals('success'));
+    });
+
+    test('non-object output schema validates for MCP 2026 calls', () async {
+      mcpServer.registerTool(
+        'array_tool',
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      final callRequest = JsonRpcCallToolRequest(
+        id: 2,
+        params: const CallToolRequest(name: 'array_tool').toJson(),
+        meta: _statelessMeta(),
+      );
+      transport.receiveMessage(callRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages.last;
+      expect(response, isA<JsonRpcResponse>());
+      final successResponse = response as JsonRpcResponse;
+      final result = CallToolResult.fromJson(successResponse.result);
+      expect(result.structuredContent, equals(['alpha', 'beta']));
+    });
+
+    test('non-object output schema validation failures are rejected', () async {
+      mcpServer.registerTool(
+        'invalid_array_tool',
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent(['alpha', 1]);
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      final callRequest = JsonRpcCallToolRequest(
+        id: 2,
+        params: const CallToolRequest(name: 'invalid_array_tool').toJson(),
+        meta: _statelessMeta(),
+      );
+      transport.receiveMessage(callRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages.last;
+      expect(response, isA<JsonRpcError>());
+      final errorResponse = response as JsonRpcError;
+      expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
+      expect(errorResponse.error.message, contains('Output validation error'));
+    });
+
+    test('stable tools/list omits non-object output schemas', () async {
+      mcpServer.registerTool(
+        'array_tool',
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+        },
+      );
+
+      await mcpServer.connect(transport);
+      await _sendInit(transport);
+
+      transport.receiveMessage(const JsonRpcListToolsRequest(id: 2));
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages.last;
+      expect(response, isA<JsonRpcResponse>());
+      final successResponse = response as JsonRpcResponse;
+      final tools = successResponse.result['tools'] as List<dynamic>;
+      final tool = tools.single as Map<String, dynamic>;
+      expect(tool.containsKey('outputSchema'), isFalse);
+    });
+
+    test('MCP 2026 tools/list includes non-object output schemas', () async {
+      mcpServer.registerTool(
+        'array_tool',
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+        },
+      );
+
+      await mcpServer.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcListToolsRequest(
+          id: 2,
+          meta: _statelessMeta(),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages.last;
+      expect(response, isA<JsonRpcResponse>());
+      final successResponse = response as JsonRpcResponse;
+      final tools = successResponse.result['tools'] as List<dynamic>;
+      final tool = tools.single as Map<String, dynamic>;
+      expect(tool['outputSchema']['type'], equals('array'));
+      expect(tool['outputSchema']['items']['type'], equals('string'));
+    });
+
+    test('stable tool calls omit non-object structured content', () async {
+      mcpServer.registerTool(
+        'array_tool',
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+        },
+      );
+
+      await mcpServer.connect(transport);
+      await _sendInit(transport);
+
+      final callRequest = JsonRpcCallToolRequest(
+        id: 2,
+        params: const CallToolRequest(name: 'array_tool').toJson(),
+      );
+      transport.receiveMessage(callRequest);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages.last;
+      expect(response, isA<JsonRpcResponse>());
+      final successResponse = response as JsonRpcResponse;
+      expect(successResponse.result.containsKey('structuredContent'), isFalse);
+      expect(successResponse.result['content'], isA<List<dynamic>>());
     });
 
     test('invalid output fails validation', () async {
@@ -225,6 +355,13 @@ void main() {
     });
   });
 }
+
+Map<String, dynamic> _statelessMeta() => {
+      McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+      McpMetaKey.clientInfo:
+          const Implementation(name: 'TestClient', version: '1.0.0').toJson(),
+      McpMetaKey.clientCapabilities: const ClientCapabilities().toJson(),
+    };
 
 Future<void> _sendInit(MockTransport transport) async {
   final initRequest = JsonRpcInitializeRequest(

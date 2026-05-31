@@ -310,8 +310,11 @@ sealed class SamplingContent {
           final SamplingToolResultContent c => {
               'toolUseId': c.toolUseId,
               'content': c.contentBlocks.map((item) => item.toJson()).toList(),
-              if (c.structuredContent != null)
-                'structuredContent': c.structuredContent,
+              if (c.hasStructuredContent)
+                'structuredContent': readJsonValue(
+                  c.structuredContent,
+                  'SamplingToolResultContent.structuredContent',
+                ),
               if (c.isError != null) 'isError': c.isError,
               if (c.meta != null) '_meta': c.meta,
             },
@@ -431,7 +434,8 @@ class SamplingToolUseContent extends SamplingContent {
 class SamplingToolResultContent extends SamplingContent {
   final String toolUseId;
   final dynamic content;
-  final Map<String, dynamic>? structuredContent;
+  final Object? structuredContent;
+  final bool hasStructuredContent;
   final bool? isError;
   final Map<String, dynamic>? meta;
 
@@ -439,9 +443,12 @@ class SamplingToolResultContent extends SamplingContent {
     required this.toolUseId,
     required this.content,
     this.structuredContent,
+    bool? hasStructuredContent,
     this.isError,
     this.meta,
-  }) : super(type: 'tool_result');
+  })  : hasStructuredContent =
+            hasStructuredContent ?? structuredContent != null,
+        super(type: 'tool_result');
 
   /// Normalized content blocks for tool results.
   List<Content> get contentBlocks => _parseToolResultContent(content);
@@ -454,7 +461,13 @@ class SamplingToolResultContent extends SamplingContent {
     return SamplingToolResultContent(
       toolUseId: json['toolUseId'] as String,
       content: _parseToolResultWireContent(json['content']),
-      structuredContent: _asJsonObjectOrNull(json['structuredContent']),
+      structuredContent: json.containsKey('structuredContent')
+          ? readJsonValue(
+              json['structuredContent'],
+              'SamplingToolResultContent.structuredContent',
+            )
+          : null,
+      hasStructuredContent: json.containsKey('structuredContent'),
       isError: json['isError'] as bool?,
       meta: _asJsonObjectOrNull(json['_meta']),
     );

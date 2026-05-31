@@ -69,6 +69,9 @@
 - Added client-side `subscriptions/listen` handles that correlate stream
   notifications by `io.modelcontextprotocol/subscriptionId`, validate the
   acknowledgment, and cancel long-lived streams with `notifications/cancelled`.
+- Allowed MCP 2026 tool `outputSchema` declarations to use any JSON Schema and
+  `structuredContent` results to carry any JSON value, while omitting non-object
+  structured output from stable 2025 responses.
 
 ## 2.2.0
 
