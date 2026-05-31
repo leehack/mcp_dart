@@ -984,11 +984,20 @@ class McpServer {
   bool get isConnected => server.transport != null;
 
   /// Sends a logging message to the client, if connected.
+  ///
+  /// For stateless MCP requests, pass [requestMeta] from
+  /// [RequestHandlerExtra.meta] so log notifications honor the request-scoped
+  /// `io.modelcontextprotocol/logLevel` opt-in.
   Future<void> sendLoggingMessage(
     LoggingMessageNotification params, {
     String? sessionId,
+    Map<String, dynamic>? requestMeta,
   }) async {
-    return server.sendLoggingMessage(params, sessionId: sessionId);
+    return server.sendLoggingMessage(
+      params,
+      sessionId: sessionId,
+      requestMeta: requestMeta,
+    );
   }
 
   /// Sets the error handler for the server.

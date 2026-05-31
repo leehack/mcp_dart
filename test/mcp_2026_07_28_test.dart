@@ -189,11 +189,13 @@ class CompletedTaskHandler extends CancelTaskResultHandler {
 Map<String, dynamic> _clientMeta({
   String? protocolVersion,
   ClientCapabilities clientCapabilities = const ClientCapabilities(),
+  Object? logLevel,
 }) {
   return buildProtocolRequestMeta(
     protocolVersion: protocolVersion ?? draftProtocolVersion2026_07_28,
     clientInfo: const Implementation(name: 'client', version: '1.0.0'),
     clientCapabilities: clientCapabilities,
+    logLevel: logLevel,
   );
 }
 
@@ -1255,6 +1257,208 @@ void main() {
           contains('Invalid stateless request metadata.'),
         ),
       );
+      expect(
+        validateToolRequest(_clientMeta(logLevel: 'verbose')),
+        isA<McpError>().having(
+          (error) => error.message,
+          'message',
+          contains(McpMetaKey.logLevel),
+        ),
+      );
+    });
+
+    test('server rejects core RPCs removed from stateless MCP', () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      final removedRequests = <JsonRpcRequest>[
+        JsonRpcRequest(
+          id: 1,
+          method: Method.initialize,
+          params: const {
+            'protocolVersion': draftProtocolVersion2026_07_28,
+            'capabilities': <String, dynamic>{},
+            'clientInfo': {'name': 'client', 'version': '1.0.0'},
+          },
+          meta: _clientMeta(),
+        ),
+        JsonRpcRequest(
+          id: 2,
+          method: Method.ping,
+          meta: _clientMeta(),
+        ),
+        JsonRpcRequest(
+          id: 3,
+          method: Method.loggingSetLevel,
+          params: const {'level': 'info'},
+          meta: _clientMeta(),
+        ),
+        JsonRpcRequest(
+          id: 4,
+          method: Method.resourcesSubscribe,
+          params: const {'uri': 'file:///tmp/example.txt'},
+          meta: _clientMeta(),
+        ),
+        JsonRpcRequest(
+          id: 5,
+          method: Method.resourcesUnsubscribe,
+          params: const {'uri': 'file:///tmp/example.txt'},
+          meta: _clientMeta(),
+        ),
+      ];
+
+      for (final request in removedRequests) {
+        transport.sentMessages.clear();
+
+        transport.receive(request);
+        await _pump();
+
+        final response = transport.sentMessages.single as JsonRpcError;
+        expect(response.id, request.id);
+        expect(response.error.code, ErrorCode.methodNotFound.value);
+        expect(response.error.message, contains(request.method));
+      }
+    });
+
+    test('server rejects notifications removed from stateless MCP', () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      final errors = <Error>[];
+      server.onerror = errors.add;
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      final initialized = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsInitialized,
+        'params': {'_meta': _clientMeta()},
+      }) as JsonRpcNotification;
+      final rootsListChanged = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsRootsListChanged,
+        'params': {'_meta': _clientMeta()},
+      }) as JsonRpcNotification;
+
+      expect(
+        initialized.meta?[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(
+        rootsListChanged.meta?[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
+      );
+
+      for (final notification in [initialized, rootsListChanged]) {
+        errors.clear();
+
+        transport.receive(notification);
+        await _pump();
+
+        final error = errors.single as McpError;
+        expect(error.code, ErrorCode.methodNotFound.value);
+        expect(error.message, contains(notification.method));
+      }
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test('server gates stateless logging by request metadata', () async {
+      late Server server;
+      server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            logging: {},
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcListToolsRequest>(
+        Method.toolsList,
+        (request, extra) async {
+          await server.sendLoggingMessage(
+            const LoggingMessageNotification(
+              level: LoggingLevel.debug,
+              data: 'skip',
+            ),
+            requestMeta: extra.meta,
+          );
+          await server.sendLoggingMessage(
+            const LoggingMessageNotification(
+              level: LoggingLevel.warning,
+              data: 'emit',
+            ),
+            requestMeta: extra.meta,
+          );
+          return const ListToolsResult(tools: []);
+        },
+        (id, params, meta) => JsonRpcListToolsRequest(
+          id: id,
+          params: params,
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcListToolsRequest(
+          id: 1,
+          meta: _clientMeta(logLevel: 'warning'),
+        ),
+      );
+      await _pump();
+
+      expect(transport.sentMessages, hasLength(2));
+      final loggingNotification =
+          transport.sentMessages.first as JsonRpcNotification;
+      expect(loggingNotification.method, Method.notificationsMessage);
+      expect(loggingNotification.params?['level'], LoggingLevel.warning.name);
+      expect(loggingNotification.params?['data'], 'emit');
+      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+    });
+
+    test('server does not send stateless logging without request logLevel',
+        () async {
+      late Server server;
+      server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            logging: {},
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcListToolsRequest>(
+        Method.toolsList,
+        (request, extra) async {
+          await server.sendLoggingMessage(
+            const LoggingMessageNotification(
+              level: LoggingLevel.error,
+              data: 'skip',
+            ),
+            requestMeta: extra.meta,
+          );
+          return const ListToolsResult(tools: []);
+        },
+        (id, params, meta) => JsonRpcListToolsRequest(
+          id: id,
+          params: params,
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(JsonRpcListToolsRequest(id: 1, meta: _clientMeta()));
+      await _pump();
+
+      expect(transport.sentMessages, hasLength(1));
+      expect(transport.sentMessages.single, isA<JsonRpcResponse>());
     });
 
     test('client can opt in to server/discover and sends stateless metadata',

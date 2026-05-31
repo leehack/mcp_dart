@@ -15,6 +15,13 @@
   `resources/list`, `resources/templates/list`, and `resources/read`, including
   stateless server defaults for `resultType`, `ttlMs`, and `cacheScope` while
   keeping legacy result serialization unchanged unless cache hints are set.
+- Rejected core RPCs removed from stateless MCP 2026 requests
+  (`initialize`, `ping`, `logging/setLevel`, `resources/subscribe`,
+  `resources/unsubscribe`, `notifications/initialized`, and
+  `notifications/roots/list_changed`) while preserving legacy session behavior.
+- Added request-scoped stateless logging gating via
+  `io.modelcontextprotocol/logLevel` metadata so 2026 log notifications are
+  emitted only when the current request opts in.
 
 ## 2.2.0
 
