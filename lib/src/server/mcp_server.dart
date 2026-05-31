@@ -592,7 +592,7 @@ class _RegisteredToolImpl implements RegisteredTool {
     _server._registeredTools[name] = this;
   }
 
-  Tool toTool() {
+  Tool toTool({bool includeExecution = true}) {
     return Tool(
       name: name,
       title: title,
@@ -602,7 +602,7 @@ class _RegisteredToolImpl implements RegisteredTool {
       annotations: annotations,
       icon: icon,
       icons: _iconsFromLegacyImage(icon),
-      execution: execution,
+      execution: includeExecution ? execution : null,
       meta: meta,
     );
   }
@@ -1156,12 +1156,22 @@ class McpServer {
 
     server.setRequestHandler<JsonRpcListToolsRequest>(
       Method.toolsList,
-      (request, extra) async => ListToolsResult(
-        tools: _registeredTools.values
-            .where((t) => t.enabled)
-            .map((e) => e.toTool())
-            .toList(),
-      ),
+      (request, extra) async {
+        final protocolVersion = request.meta?[McpMetaKey.protocolVersion];
+        final includeLegacyTaskExecution = protocolVersion is! String ||
+            !isStatelessProtocolVersion(protocolVersion);
+
+        return ListToolsResult(
+          tools: _registeredTools.values
+              .where((t) => t.enabled)
+              .map(
+                (e) => e.toTool(
+                  includeExecution: includeLegacyTaskExecution,
+                ),
+              )
+              .toList(),
+        );
+      },
       (id, params, meta) => JsonRpcListToolsRequest.fromJson({
         'id': id,
         'params': params,
@@ -1201,7 +1211,10 @@ class McpServer {
         }
 
         try {
-          final isTaskRequest = request.isTaskAugmented;
+          final protocolVersion = request.meta?[McpMetaKey.protocolVersion];
+          final isStatelessRequest = protocolVersion is String &&
+              isStatelessProtocolVersion(protocolVersion);
+          final isTaskRequest = !isStatelessRequest && request.isTaskAugmented;
           final taskSupport =
               registeredTool.execution?.taskSupport ?? 'forbidden';
 
@@ -1220,14 +1233,23 @@ class McpServer {
           dynamic result;
           if (taskSupport == 'required') {
             if (!isTaskRequest) {
-              throw McpError(
-                ErrorCode.methodNotFound.value,
-                "Tool '$toolName' requires task augmentation (taskSupport: 'required')",
-              );
+              if (isStatelessRequest) {
+                result = await _handleAutomaticTaskPolling(
+                  registeredTool,
+                  toolArgs,
+                  extra,
+                );
+              } else {
+                throw McpError(
+                  ErrorCode.methodNotFound.value,
+                  "Tool '$toolName' requires task augmentation (taskSupport: 'required')",
+                );
+              }
+            } else {
+              final InterfaceToolCallback taskHandler =
+                  registeredTool.callback as InterfaceToolCallback;
+              result = await taskHandler.handler.createTask(toolArgs, extra);
             }
-            final InterfaceToolCallback taskHandler =
-                registeredTool.callback as InterfaceToolCallback;
-            result = await taskHandler.handler.createTask(toolArgs, extra);
           } else if (taskSupport == 'optional') {
             if (!isTaskRequest) {
               // Ensure we have a task handler for automatic polling (checked above, but safe cast)

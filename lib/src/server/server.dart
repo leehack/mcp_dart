@@ -184,33 +184,30 @@ class Server extends Protocol {
     return null;
   }
 
-  McpError? _validateTaskSubscriptionCapabilities(JsonRpcRequest request) {
-    if (request is! JsonRpcSubscriptionsListenRequest ||
-        request.listenParams.notifications.taskIds == null) {
-      return null;
-    }
-
+  ({ClientCapabilities? capabilities, McpError? error})
+      _clientCapabilitiesForRequest(JsonRpcRequest request) {
     final clientCapabilitiesValue =
         request.meta?[McpMetaKey.clientCapabilities];
-    final ClientCapabilities? clientCapabilities;
     try {
-      clientCapabilities = clientCapabilitiesValue is Map
+      final clientCapabilities = clientCapabilitiesValue is Map
           ? ClientCapabilities.fromJson(
               clientCapabilitiesValue.cast<String, dynamic>(),
             )
           : _clientCapabilities;
+      return (capabilities: clientCapabilities, error: null);
     } catch (error) {
-      return McpError(
-        ErrorCode.invalidRequest.value,
-        'Invalid request client capabilities metadata.',
-        error.toString(),
+      return (
+        capabilities: null,
+        error: McpError(
+          ErrorCode.invalidRequest.value,
+          'Invalid request client capabilities metadata.',
+          error.toString(),
+        ),
       );
     }
+  }
 
-    if (clientCapabilities?.supportsTasksExtension ?? false) {
-      return null;
-    }
-
+  McpError _missingTasksExtensionCapabilityError() {
     return McpError(
       ErrorCode.missingRequiredClientCapability.value,
       'Missing required client capability',
@@ -220,6 +217,101 @@ class Server extends Protocol {
         },
       },
     );
+  }
+
+  bool _isStatelessRequest(JsonRpcRequest request) {
+    final requestedProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
+    return requestedProtocolVersion is String &&
+        isStatelessProtocolVersion(requestedProtocolVersion);
+  }
+
+  McpError? _validateDraftTaskMethods(JsonRpcRequest request) {
+    if (!_isStatelessRequest(request)) {
+      return null;
+    }
+
+    switch (request.method) {
+      case Method.tasksList:
+      case Method.tasksResult:
+        return McpError(
+          ErrorCode.methodNotFound.value,
+          '${request.method} is not part of the MCP Tasks extension.',
+        );
+    }
+
+    return null;
+  }
+
+  McpError? _validateTasksExtensionCapabilities(JsonRpcRequest request) {
+    final requiresTasksExtension =
+        (request is JsonRpcSubscriptionsListenRequest &&
+                request.listenParams.notifications.taskIds != null) ||
+            (_isStatelessRequest(request) &&
+                (request.method == Method.tasksGet ||
+                    request.method == Method.tasksCancel ||
+                    request.method == Method.tasksUpdate));
+
+    if (!requiresTasksExtension) {
+      return null;
+    }
+
+    final parsed = _clientCapabilitiesForRequest(request);
+    if (parsed.error != null) {
+      return parsed.error;
+    }
+
+    if (parsed.capabilities?.supportsTasksExtension ?? false) {
+      return null;
+    }
+
+    return _missingTasksExtensionCapabilityError();
+  }
+
+  void _assertTasksExtensionClientCapability(JsonRpcRequest request) {
+    final parsed = _clientCapabilitiesForRequest(request);
+    if (parsed.error != null) {
+      throw parsed.error!;
+    }
+    if (!(parsed.capabilities?.supportsTasksExtension ?? false)) {
+      throw _missingTasksExtensionCapabilityError();
+    }
+  }
+
+  McpError? _validateRequestTaskSemantics(JsonRpcRequest request) {
+    final removedMethodError = _validateDraftTaskMethods(request);
+    if (removedMethodError != null) {
+      return removedMethodError;
+    }
+
+    final extensionCapabilityError =
+        _validateTasksExtensionCapabilities(request);
+    if (extensionCapabilityError != null) {
+      return extensionCapabilityError;
+    }
+
+    return null;
+  }
+
+  bool _allowsToolCallResult(BaseResultData result, JsonRpcRequest request) {
+    if (result is CallToolResult) {
+      return true;
+    }
+    if (result is InputRequiredResult && _isStatelessRequest(request)) {
+      return true;
+    }
+    if (result is CreateTaskExtensionResult && _isStatelessRequest(request)) {
+      _assertTasksExtensionClientCapability(request);
+      return true;
+    }
+
+    return false;
+  }
+
+  bool _isLegacyTaskAugmentedRequest(JsonRpcCallToolRequest request) {
+    if (_isStatelessRequest(request)) {
+      return false;
+    }
+    return request.isTaskAugmented;
   }
 
   @override
@@ -244,7 +336,7 @@ class Server extends Protocol {
       if (metadataError != null) {
         return metadataError;
       }
-      return _validateTaskSubscriptionCapabilities(request);
+      return _validateRequestTaskSemantics(request);
     }
 
     if (request.method == Method.initialize) {
@@ -275,7 +367,7 @@ class Server extends Protocol {
       );
     }
 
-    return _validateTaskSubscriptionCapabilities(request);
+    return _validateRequestTaskSemantics(request);
   }
 
   @override
@@ -393,8 +485,10 @@ class Server extends Protocol {
         // Run the original handler
         final result = await handler(request, extra);
 
-        // Validate the result based on whether it's a task-augmented request
-        if (request is JsonRpcCallToolRequest && request.isTaskAugmented) {
+        // Validate the result based on whether it's a legacy task-augmented
+        // request. The stateless task extension ignores the old `task` hint.
+        if (request is JsonRpcCallToolRequest &&
+            _isLegacyTaskAugmentedRequest(request)) {
           if (result is! CreateTaskResult) {
             throw McpError(
               ErrorCode.invalidParams.value,
@@ -402,7 +496,7 @@ class Server extends Protocol {
             );
           }
         } else {
-          if (result is! CallToolResult) {
+          if (!_allowsToolCallResult(result, request)) {
             throw McpError(
               ErrorCode.invalidParams.value,
               "Invalid tools/call result: Expected CallToolResult",
@@ -437,11 +531,17 @@ class Server extends Protocol {
     );
   }
 
+  ServerCapabilities _discoveryCapabilities() {
+    final json = getCapabilities().toJson();
+    json.remove('tasks');
+    return ServerCapabilities.fromJson(json);
+  }
+
   /// Handles the client's `server/discover` request.
   Future<DiscoverResult> _onDiscover() async {
     return DiscoverResult(
       supportedVersions: supportedProtocolVersionsWithDraft,
-      capabilities: getCapabilities(),
+      capabilities: _discoveryCapabilities(),
       serverInfo: _serverInfo,
       instructions: _instructions,
     );
@@ -654,11 +754,18 @@ class Server extends Protocol {
 
       case Method.tasksCancel:
       case Method.tasksGet:
-      case Method.tasksUpdate:
         if (!(_capabilities.tasks != null ||
             _capabilities.supportsTasksExtension)) {
           throw StateError(
             "Server setup error: Cannot handle '$method' without 'tasks' capability or '$mcpTasksExtensionId' extension",
+          );
+        }
+        break;
+
+      case Method.tasksUpdate:
+        if (!_capabilities.supportsTasksExtension) {
+          throw StateError(
+            "Server setup error: Cannot handle '$method' without '$mcpTasksExtensionId' extension",
           );
         }
         break;

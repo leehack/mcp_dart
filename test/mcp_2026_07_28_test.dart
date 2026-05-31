@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/client/client.dart';
+import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/server.dart';
+import 'package:mcp_dart/src/server/tasks/handler.dart';
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -139,6 +142,48 @@ class LegacyFallbackTransport extends Transport
 
   @override
   Future<void> start() async {}
+}
+
+class CompletedTaskHandler extends CancelTaskResultHandler {
+  @override
+  Future<CreateTaskResult> createTask(
+    Map<String, dynamic>? args,
+    RequestHandlerExtra? extra,
+  ) async =>
+      const CreateTaskResult(
+        task: Task(
+          taskId: 'task-1',
+          status: TaskStatus.completed,
+          ttl: null,
+          createdAt: '2026-07-28T00:00:00Z',
+          lastUpdatedAt: '2026-07-28T00:01:00Z',
+        ),
+      );
+
+  @override
+  Future<Task> getTask(String taskId, RequestHandlerExtra? extra) async => Task(
+        taskId: taskId,
+        status: TaskStatus.completed,
+        ttl: null,
+        createdAt: '2026-07-28T00:00:00Z',
+        lastUpdatedAt: '2026-07-28T00:01:00Z',
+      );
+
+  @override
+  Future<Task> cancelTaskWithResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) =>
+      getTask(taskId, extra);
+
+  @override
+  Future<CallToolResult> getTaskResult(
+    String taskId,
+    RequestHandlerExtra? extra,
+  ) async =>
+      const CallToolResult(
+        content: [TextContent(text: 'task complete')],
+      );
 }
 
 Map<String, dynamic> _clientMeta({
@@ -501,6 +546,363 @@ void main() {
         response.error.data['requiredCapabilities']['extensions']
             [mcpTasksExtensionId],
         isEmpty,
+      );
+    });
+
+    test('server rejects task extension methods without client capability',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport
+        ..receive(
+          JsonRpcGetTaskRequest(
+            id: 'get-task',
+            getParams: const GetTaskRequest(taskId: 'task-1'),
+            meta: _clientMeta(),
+          ),
+        )
+        ..receive(
+          JsonRpcCancelTaskRequest(
+            id: 'cancel-task',
+            cancelParams: const CancelTaskRequest(taskId: 'task-1'),
+            meta: _clientMeta(),
+          ),
+        )
+        ..receive(
+          JsonRpcUpdateTaskRequest(
+            id: 'update-task',
+            updateParams: const UpdateTaskRequest(
+              taskId: 'task-1',
+              inputResponses: {},
+            ),
+            meta: _clientMeta(),
+          ),
+        );
+      await _pump();
+
+      final errors = transport.sentMessages.cast<JsonRpcError>();
+      expect(
+        errors.map((response) => response.error.code),
+        everyElement(ErrorCode.missingRequiredClientCapability.value),
+      );
+      expect(
+        errors.first.error.data['requiredCapabilities']['extensions']
+            [mcpTasksExtensionId],
+        isEmpty,
+      );
+    });
+
+    test('server rejects removed legacy task methods in stateless protocol',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tasks: ServerCapabilitiesTasks(list: true),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+      final taskExtensionMeta = _clientMeta(
+        clientCapabilities: const ClientCapabilities(
+          extensions: {mcpTasksExtensionId: {}},
+        ),
+      );
+
+      transport
+        ..receive(
+          JsonRpcListTasksRequest(id: 'list-tasks', meta: taskExtensionMeta),
+        )
+        ..receive(
+          JsonRpcTaskResultRequest(
+            id: 'task-result',
+            resultParams: const TaskResultRequest(taskId: 'task-1'),
+            meta: taskExtensionMeta,
+          ),
+        );
+      await _pump();
+
+      final errors = transport.sentMessages.cast<JsonRpcError>();
+      expect(
+        errors.map((response) => response.error.code),
+        everyElement(ErrorCode.methodNotFound.value),
+      );
+      expect(errors.first.error.message, contains('MCP Tasks extension'));
+    });
+
+    test('server/discover omits legacy task capabilities', () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tasks: ServerCapabilitiesTasks(
+              list: true,
+              requests: ServerCapabilitiesTasksRequests(
+                tools: ServerCapabilitiesTasksTools(
+                  call: ServerCapabilitiesTasksToolsCall(),
+                ),
+              ),
+            ),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcServerDiscoverRequest(id: 'discover-1', meta: _clientMeta()),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      final capabilities = response.result['capabilities'] as Map;
+      expect(capabilities, isNot(contains('tasks')));
+      expect(
+        (capabilities['extensions'] as Map)[mcpTasksExtensionId],
+        isEmpty,
+      );
+    });
+
+    test('stateless tools/call ignores legacy task parameter', () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      server.registerTool(
+        'echo',
+        callback: (args, extra) => const CallToolResult(
+          content: [TextContent(text: 'ok')],
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: {
+            ...const CallToolRequest(name: 'echo').toJson(),
+            'task': {'ttl': 1000},
+          },
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['content'][0]['text'], 'ok');
+    });
+
+    test('stateless tools/call permits extension task creation results',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async => const CreateTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'long').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              extensions: {mcpTasksExtensionId: {}},
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeTask);
+      expect(response.result['taskId'], 'task-1');
+    });
+
+    test(
+        'stateless tools/call rejects task extension result without capability',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async => const CreateTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'long').toJson(),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(
+        response.error.code,
+        ErrorCode.missingRequiredClientCapability.value,
+      );
+    });
+
+    test('stateless tools/call permits input required results', () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async =>
+            const InputRequiredResult(requestState: 'retry-state'),
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'needs-input').toJson(),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeInputRequired);
+      expect(response.result['requestState'], 'retry-state');
+    });
+
+    test('stateless required legacy task tool resolves to final result',
+        () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      server.experimental.registerToolTask(
+        'long',
+        handler: CompletedTaskHandler(),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'long').toJson(),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['content'][0]['text'], 'task complete');
+    });
+
+    test('stateless tools/list omits legacy task execution metadata', () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      server.registerTool(
+        'echo',
+        callback: (args, extra) => const CallToolResult(
+          content: [TextContent(text: 'ok')],
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport
+          .receive(JsonRpcListToolsRequest(id: 'tools', meta: _clientMeta()));
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      final tool = (response.result['tools'] as List).single as Map;
+      expect(tool, isNot(contains('execution')));
+    });
+
+    test('tasks/update handler requires task extension capability', () {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tasks: ServerCapabilitiesTasks(),
+          ),
+        ),
+      );
+
+      expect(
+        () => server.setRequestHandler<JsonRpcUpdateTaskRequest>(
+          Method.tasksUpdate,
+          (request, extra) async => const TaskExtensionAcknowledgementResult(),
+          (id, params, meta) => JsonRpcUpdateTaskRequest.fromJson({
+            'id': id,
+            'params': params,
+            if (meta != null) '_meta': meta,
+          }),
+        ),
+        throwsStateError,
       );
     });
 
