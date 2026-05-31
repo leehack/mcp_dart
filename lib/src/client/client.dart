@@ -296,19 +296,56 @@ class McpClient extends Protocol {
     );
   }
 
-  Future<DiscoverResult> discoverServer() async {
+  String? _retryableDiscoveryProtocolVersion(
+    McpError error,
+    String attemptedVersion,
+  ) {
+    if (error.code != ErrorCode.unsupportedProtocolVersion.value) {
+      return null;
+    }
+
+    final data = error.data;
+    if (data is! Map) {
+      return null;
+    }
+
+    final supported = data['supported'];
+    if (supported is! Iterable) {
+      return null;
+    }
+
+    final advertisedVersions = <String>[];
+    for (final version in supported) {
+      if (version is String) {
+        advertisedVersions.add(version);
+      }
+    }
+
+    final retryVersion = negotiateProtocolVersion(
+      advertisedVersions,
+      localSupportedVersions: statelessProtocolVersions,
+    );
+    if (retryVersion == null || retryVersion == attemptedVersion) {
+      return null;
+    }
+    return retryVersion;
+  }
+
+  Future<DiscoverResult> _discoverServerWithVersion(
+    String protocolVersion,
+  ) async {
     final activeTransport = transport;
     final ProtocolVersionAwareTransport? versionedTransport =
         activeTransport is ProtocolVersionAwareTransport
             ? activeTransport as ProtocolVersionAwareTransport
             : null;
-    versionedTransport?.protocolVersion = _preferredProtocolVersion;
+    versionedTransport?.protocolVersion = protocolVersion;
 
     final result = await super.request<DiscoverResult>(
       JsonRpcServerDiscoverRequest(
         id: -1,
         meta: buildProtocolRequestMeta(
-          protocolVersion: _preferredProtocolVersion,
+          protocolVersion: protocolVersion,
           clientInfo: _clientInfo,
           clientCapabilities: _capabilities,
         ),
@@ -316,17 +353,17 @@ class McpClient extends Protocol {
       (json) => DiscoverResult.fromJson(json),
     );
 
-    final protocolVersion = negotiateProtocolVersion(
+    final negotiatedProtocolVersion = negotiateProtocolVersion(
       result.supportedVersions,
       localSupportedVersions: supportedProtocolVersionsWithDraft,
     );
-    if (protocolVersion == null) {
+    if (negotiatedProtocolVersion == null) {
       throw McpError(
         ErrorCode.unsupportedProtocolVersion.value,
         "Server does not support a compatible MCP protocol version.",
         {
           'supported': result.supportedVersions,
-          'requested': _preferredProtocolVersion,
+          'requested': protocolVersion,
         },
       );
     }
@@ -334,17 +371,43 @@ class McpClient extends Protocol {
     _serverCapabilities = result.capabilities;
     _serverVersion = result.serverInfo;
     _instructions = result.instructions;
-    _negotiatedProtocolVersion = protocolVersion;
-    _usesStatelessProtocol = isStatelessProtocolVersion(protocolVersion);
+    _negotiatedProtocolVersion = negotiatedProtocolVersion;
+    _usesStatelessProtocol = isStatelessProtocolVersion(
+      negotiatedProtocolVersion,
+    );
     _sentInitialized = true;
 
-    versionedTransport?.protocolVersion = protocolVersion;
+    versionedTransport?.protocolVersion = negotiatedProtocolVersion;
 
     _logger.debug(
-      "MCP Server Discovered. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: $protocolVersion",
+      "MCP Server Discovered. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: $negotiatedProtocolVersion",
     );
 
     return result;
+  }
+
+  Future<DiscoverResult> discoverServer() async {
+    try {
+      return await _discoverServerWithVersion(_preferredProtocolVersion);
+    } catch (error) {
+      if (error is! McpError) {
+        rethrow;
+      }
+
+      final retryVersion = _retryableDiscoveryProtocolVersion(
+        error,
+        _preferredProtocolVersion,
+      );
+      if (retryVersion == null) {
+        rethrow;
+      }
+
+      _logger.debug(
+        "server/discover rejected protocol $_preferredProtocolVersion; "
+        "retrying with $retryVersion.",
+      );
+      return await _discoverServerWithVersion(retryVersion);
+    }
   }
 
   /// Connects to the server using the given [transport].

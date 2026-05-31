@@ -63,6 +63,9 @@
   `input_required` results instead.
 - Enforced `subscriptions/listen` stream ordering and filters for 2026
   subscription notifications.
+- Retried `server/discover` with an advertised compatible stateless protocol
+  version after `UnsupportedProtocolVersionError` instead of falling back to
+  legacy initialization.
 
 ## 2.2.0
 

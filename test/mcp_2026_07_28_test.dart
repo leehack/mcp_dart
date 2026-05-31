@@ -42,6 +42,8 @@ class DiscoveringClientTransport extends Transport
     implements ProtocolVersionAwareTransport {
   DiscoveringClientTransport({
     this.discoverVersions = const [draftProtocolVersion2026_07_28],
+    this.unsupportedDiscoverProtocolVersions = const [],
+    this.unsupportedDiscoverData,
     this.capabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
@@ -49,6 +51,8 @@ class DiscoveringClientTransport extends Transport
   });
 
   final List<String> discoverVersions;
+  final List<String> unsupportedDiscoverProtocolVersions;
+  final Object? unsupportedDiscoverData;
   final ServerCapabilities capabilities;
   final Map<String, dynamic> toolsListResult;
   final List<JsonRpcMessage> sentMessages = [];
@@ -69,6 +73,28 @@ class DiscoveringClientTransport extends Transport
     sentMessages.add(message);
 
     if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      final requestedProtocolVersion =
+          message.meta?[McpMetaKey.protocolVersion];
+      if (unsupportedDiscoverProtocolVersions.contains(
+        requestedProtocolVersion,
+      )) {
+        onmessage?.call(
+          JsonRpcError(
+            id: message.id,
+            error: JsonRpcErrorData(
+              code: ErrorCode.unsupportedProtocolVersion.value,
+              message: 'Unsupported protocol version',
+              data: unsupportedDiscoverData ??
+                  {
+                    'supported': discoverVersions,
+                    'requested': requestedProtocolVersion,
+                  },
+            ),
+          ),
+        );
+        return;
+      }
+
       onmessage?.call(
         JsonRpcResponse(
           id: message.id,
@@ -1959,6 +1985,109 @@ void main() {
         ),
       );
     });
+
+    test(
+        'client retries discovery with advertised compatible stateless version',
+        () async {
+      final transport = DiscoveringClientTransport(
+        unsupportedDiscoverProtocolVersions: const ['1900-01-01'],
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocolVersion: '1900-01-01',
+          useServerDiscover: true,
+        ),
+      );
+
+      await client.connect(transport);
+
+      final discoverRequests = transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .where((message) => message.method == Method.serverDiscover)
+          .toList();
+      expect(discoverRequests, hasLength(2));
+      expect(
+        discoverRequests.map(
+          (request) => request.meta?[McpMetaKey.protocolVersion],
+        ),
+        ['1900-01-01', draftProtocolVersion2026_07_28],
+      );
+      expect(client.getProtocolVersion(), draftProtocolVersion2026_07_28);
+      expect(transport.protocolVersion, draftProtocolVersion2026_07_28);
+      expect(
+        transport.sentMessages.whereType<JsonRpcRequest>().map(
+              (message) => message.method,
+            ),
+        isNot(contains(Method.initialize)),
+      );
+    });
+
+    for (final scenario in [
+      (
+        name: 'malformed error data',
+        requested: '1900-01-01',
+        discoverVersions: const [draftProtocolVersion2026_07_28],
+        data: 'not-an-object',
+      ),
+      (
+        name: 'missing supported versions',
+        requested: '1900-01-01',
+        discoverVersions: const [draftProtocolVersion2026_07_28],
+        data: const {'requested': '1900-01-01'},
+      ),
+      (
+        name: 'no compatible stateless version',
+        requested: '1900-01-01',
+        discoverVersions: const ['1900-01-01'],
+        data: null,
+      ),
+      (
+        name: 'advertised version matches rejected request',
+        requested: draftProtocolVersion2026_07_28,
+        discoverVersions: const [draftProtocolVersion2026_07_28],
+        data: const {
+          'supported': [draftProtocolVersion2026_07_28],
+          'requested': draftProtocolVersion2026_07_28,
+        },
+      ),
+    ]) {
+      test(
+        'client does not fall back to initialize after unsupported discovery '
+        '${scenario.name}',
+        () async {
+          final transport = DiscoveringClientTransport(
+            discoverVersions: scenario.discoverVersions,
+            unsupportedDiscoverProtocolVersions: [scenario.requested],
+            unsupportedDiscoverData: scenario.data,
+          );
+          final client = McpClient(
+            const Implementation(name: 'client', version: '1.0.0'),
+            options: McpClientOptions(
+              protocolVersion: scenario.requested,
+              useServerDiscover: true,
+            ),
+          );
+
+          await expectLater(
+            client.connect(transport),
+            throwsA(
+              isA<McpError>().having(
+                (error) => error.code,
+                'code',
+                ErrorCode.unsupportedProtocolVersion.value,
+              ),
+            ),
+          );
+          expect(
+            transport.sentMessages.whereType<JsonRpcRequest>().map(
+                  (message) => message.method,
+                ),
+            isNot(contains(Method.initialize)),
+          );
+        },
+      );
+    }
 
     test('client falls back to initialize when discovery is unavailable',
         () async {
