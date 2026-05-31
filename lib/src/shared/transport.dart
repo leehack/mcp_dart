@@ -93,7 +93,10 @@ abstract class ProtocolVersionAwareTransport {
   set protocolVersion(String? value);
 }
 
-/// Maps tool names to argument names and their `Mcp-Param-*` header suffixes.
+/// Maps tool names to argument selectors and their `Mcp-Param-*` header suffixes.
+///
+/// Top-level arguments use their argument name as the selector. Nested
+/// arguments use JSON Pointer selectors such as `/auth/tenant`.
 typedef ToolParameterHeaderMappings = Map<String, Map<String, String>>;
 
 /// Optional capability for transports that can mirror tool arguments into

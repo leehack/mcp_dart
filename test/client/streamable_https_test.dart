@@ -1265,6 +1265,7 @@ void main() {
         capturedHeaders['payload'] = request.headers.value('mcp-param-payload');
         capturedHeaders['sentinel'] =
             request.headers.value('mcp-param-sentinel');
+        capturedHeaders['tenant'] = request.headers.value('mcp-param-tenant');
         await request.drain<void>();
         request.response
           ..statusCode = HttpStatus.ok
@@ -1297,6 +1298,7 @@ void main() {
               'text': 'Text',
               'payload': 'Payload',
               'sentinel': 'Sentinel',
+              '/auth/tenant': 'Tenant',
             },
           },
         );
@@ -1321,6 +1323,7 @@ void main() {
               'text': ' padded ',
               'payload': {'nested': true},
               'sentinel': '=?base64?YWJj?=',
+              'auth': {'tenant': 'acme'},
             },
           },
           meta: _statelessMeta(),
@@ -1344,6 +1347,7 @@ void main() {
         capturedHeaders['sentinel'],
         '=?base64?${base64Encode(utf8.encode('=?base64?YWJj?='))}?=',
       );
+      expect(capturedHeaders['tenant'], 'acme');
     });
 
     test('send with initialized notification triggers SSE establishment',

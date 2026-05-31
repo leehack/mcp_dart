@@ -35,6 +35,8 @@
   results instead.
 - Escaped sentinel-shaped `Mcp-Param-*` values with Base64 encoding so literal
   values beginning with `=?base64?` and ending with `?=` round-trip correctly.
+- Synced nested 2026 `x-mcp-header` mappings into Streamable HTTP transports
+  using JSON Pointer selectors for nested tool arguments.
 - Sorted 2026 stateless high-level `tools/list` responses by tool name for
   deterministic list results while preserving legacy registration-order output.
 - Gated 2026 stateless task extension methods on advertised server extension

@@ -1081,51 +1081,99 @@ class McpServer {
 
     final mappings = <String, String>{};
     final seenHeaders = <String>{};
+    final ignoredReason = _collectToolParameterHeaderMappings(
+      toolName: tool.name,
+      properties: properties,
+      path: const [],
+      mappings: mappings,
+      seenHeaders: seenHeaders,
+    );
+
+    if (ignoredReason != null) {
+      _logger.warn(ignoredReason);
+      return const {};
+    }
+
+    return mappings;
+  }
+
+  String? _collectToolParameterHeaderMappings({
+    required String toolName,
+    required Map<String, JsonSchema> properties,
+    required List<String> path,
+    required Map<String, String> mappings,
+    required Set<String> seenHeaders,
+  }) {
     for (final entry in properties.entries) {
+      final parameterPath = [...path, entry.key];
+      final parameterName = _toolParameterHeaderParameterName(parameterPath);
       final propertyJson = entry.value.toJson();
       if (!propertyJson.containsKey('x-mcp-header')) {
+        if (entry.value is JsonObject) {
+          final childProperties = (entry.value as JsonObject).properties;
+          if (childProperties != null && childProperties.isNotEmpty) {
+            final ignoredReason = _collectToolParameterHeaderMappings(
+              toolName: toolName,
+              properties: childProperties,
+              path: parameterPath,
+              mappings: mappings,
+              seenHeaders: seenHeaders,
+            );
+            if (ignoredReason != null) {
+              return ignoredReason;
+            }
+          }
+        }
         continue;
       }
 
       final rawHeader = propertyJson['x-mcp-header'];
       if (rawHeader is! String || rawHeader.isEmpty) {
-        _logger.warn(
-          'Ignoring x-mcp-header mapping for tool "${tool.name}" parameter '
-          '"${entry.key}": value must be a non-empty string.',
-        );
-        return const {};
+        return 'Ignoring x-mcp-header mapping for tool "$toolName" parameter '
+            '"$parameterName": value must be a non-empty string.';
       }
 
       if (!_isValidMcpHeaderNameSuffix(rawHeader)) {
-        _logger.warn(
-          'Ignoring x-mcp-header mapping for tool "${tool.name}" parameter '
-          '"${entry.key}": "$rawHeader" is not a valid Mcp-Param suffix.',
-        );
-        return const {};
+        return 'Ignoring x-mcp-header mapping for tool "$toolName" parameter '
+            '"$parameterName": "$rawHeader" is not a valid Mcp-Param suffix.';
       }
 
       final normalizedHeader = rawHeader.toLowerCase();
       if (!seenHeaders.add(normalizedHeader)) {
-        _logger.warn(
-          'Ignoring x-mcp-header mappings for tool "${tool.name}": '
-          '"$rawHeader" is not unique.',
-        );
-        return const {};
+        return 'Ignoring x-mcp-header mappings for tool "$toolName": '
+            '"$rawHeader" is not unique.';
       }
 
       if (!_isToolParameterHeaderPrimitive(entry.value)) {
-        _logger.warn(
-          'Ignoring x-mcp-header mapping for tool "${tool.name}" parameter '
-          '"${entry.key}": only string, integer, and boolean schemas can be '
-          'mirrored.',
-        );
-        return const {};
+        return 'Ignoring x-mcp-header mapping for tool "$toolName" parameter '
+            '"$parameterName": only string, integer, and boolean schemas can '
+            'be mirrored.';
       }
 
-      mappings[entry.key] = rawHeader;
+      mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;
     }
 
-    return mappings;
+    return null;
+  }
+
+  String _toolParameterHeaderSelector(List<String> path) {
+    if (path.length == 1) {
+      return path.single;
+    }
+
+    return '/${path.map(_escapeJsonPointerSegment).join('/')}';
+  }
+
+  String _toolParameterHeaderParameterName(List<String> path) {
+    if (path.length == 1) {
+      return path.single;
+    }
+
+    return _toolParameterHeaderSelector(path);
+  }
+
+  String _escapeJsonPointerSegment(String segment) {
+    return segment.replaceAll('~', '~0').replaceAll('/', '~1');
   }
 
   bool _isValidMcpHeaderNameSuffix(String value) {

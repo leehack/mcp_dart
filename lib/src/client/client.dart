@@ -879,50 +879,96 @@ class McpClient extends Protocol {
 
     final mappings = <String, String>{};
     final seenHeaders = <String>{};
+    final rejectionReason = _collectToolParameterHeaderMappings(
+      properties: properties,
+      path: const [],
+      mappings: mappings,
+      seenHeaders: seenHeaders,
+    );
+
+    if (rejectionReason != null) {
+      return _ToolParameterHeaderValidation.invalid(rejectionReason);
+    }
+
+    return _ToolParameterHeaderValidation.valid(mappings);
+  }
+
+  String? _collectToolParameterHeaderMappings({
+    required Map<String, JsonSchema> properties,
+    required List<String> path,
+    required Map<String, String> mappings,
+    required Set<String> seenHeaders,
+  }) {
     for (final entry in properties.entries) {
+      final parameterPath = [...path, entry.key];
+      final parameterName = _toolParameterHeaderParameterName(parameterPath);
       final propertyJson = entry.value.toJson();
       if (!propertyJson.containsKey('x-mcp-header')) {
+        if (entry.value is JsonObject) {
+          final childProperties = (entry.value as JsonObject).properties;
+          if (childProperties != null && childProperties.isNotEmpty) {
+            final rejectionReason = _collectToolParameterHeaderMappings(
+              properties: childProperties,
+              path: parameterPath,
+              mappings: mappings,
+              seenHeaders: seenHeaders,
+            );
+            if (rejectionReason != null) {
+              return rejectionReason;
+            }
+          }
+        }
         continue;
       }
 
       final rawHeader = propertyJson['x-mcp-header'];
       if (rawHeader is! String) {
-        return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" has a non-string x-mcp-header value',
-        );
+        return 'parameter "$parameterName" has a non-string x-mcp-header value';
       }
 
       if (rawHeader.isEmpty) {
-        return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" has an empty x-mcp-header value',
-        );
+        return 'parameter "$parameterName" has an empty x-mcp-header value';
       }
 
       if (!_isValidMcpHeaderNameSuffix(rawHeader)) {
-        return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" has invalid x-mcp-header value '
-          '"$rawHeader"',
-        );
+        return 'parameter "$parameterName" has invalid x-mcp-header value '
+            '"$rawHeader"';
       }
 
       final normalizedHeader = rawHeader.toLowerCase();
       if (!seenHeaders.add(normalizedHeader)) {
-        return _ToolParameterHeaderValidation.invalid(
-          'x-mcp-header value "$rawHeader" is not unique',
-        );
+        return 'x-mcp-header value "$rawHeader" is not unique';
       }
 
       if (!_isToolParameterHeaderPrimitive(entry.value)) {
-        return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" uses x-mcp-header on a schema that is not '
-          'string, integer, or boolean',
-        );
+        return 'parameter "$parameterName" uses x-mcp-header on a schema that '
+            'is not string, integer, or boolean';
       }
 
-      mappings[entry.key] = rawHeader;
+      mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;
     }
 
-    return _ToolParameterHeaderValidation.valid(mappings);
+    return null;
+  }
+
+  String _toolParameterHeaderSelector(List<String> path) {
+    if (path.length == 1) {
+      return path.single;
+    }
+
+    return '/${path.map(_escapeJsonPointerSegment).join('/')}';
+  }
+
+  String _toolParameterHeaderParameterName(List<String> path) {
+    if (path.length == 1) {
+      return path.single;
+    }
+
+    return _toolParameterHeaderSelector(path);
+  }
+
+  String _escapeJsonPointerSegment(String segment) {
+    return segment.replaceAll('~', '~0').replaceAll('/', '~1');
   }
 
   bool _isValidMcpHeaderNameSuffix(String value) {

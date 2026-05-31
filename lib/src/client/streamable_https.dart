@@ -578,11 +578,12 @@ class StreamableHttpClientTransport
     final argumentMap = arguments.cast<String, dynamic>();
     final headers = <String, String>{};
     for (final entry in mappings.entries) {
-      if (!argumentMap.containsKey(entry.key)) {
+      final argument = _toolParameterHeaderArgument(argumentMap, entry.key);
+      if (!argument.exists) {
         continue;
       }
 
-      final value = _toolParameterHeaderString(argumentMap[entry.key]);
+      final value = _toolParameterHeaderString(argument.value);
       if (value == null) {
         continue;
       }
@@ -591,6 +592,37 @@ class StreamableHttpClientTransport
           _encodeToolParameterHeaderValue(value);
     }
     return headers;
+  }
+
+  ({bool exists, Object? value}) _toolParameterHeaderArgument(
+    Map<String, dynamic> arguments,
+    String selector,
+  ) {
+    if (!selector.startsWith('/')) {
+      return (
+        exists: arguments.containsKey(selector),
+        value: arguments[selector],
+      );
+    }
+
+    Object? current = arguments;
+    for (final segment in _jsonPointerSegments(selector)) {
+      if (current is! Map || !current.containsKey(segment)) {
+        return (exists: false, value: null);
+      }
+      current = current[segment];
+    }
+    return (exists: true, value: current);
+  }
+
+  Iterable<String> _jsonPointerSegments(String selector) {
+    if (selector == '/') {
+      return const [''];
+    }
+    return selector
+        .substring(1)
+        .split('/')
+        .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
   }
 
   String? _toolParameterHeaderString(Object? value) {

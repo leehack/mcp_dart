@@ -153,6 +153,11 @@ void main() {
                 'limit': JsonSchema.integer(mcpHeader: 'Limit'),
                 'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
                 'count': JsonSchema.integer(mcpHeader: 'Count'),
+                'auth': JsonSchema.object(
+                  properties: {
+                    'tenant': JsonSchema.string(mcpHeader: 'Tenant'),
+                  },
+                ),
               },
             ),
           ),
@@ -218,6 +223,7 @@ void main() {
           'limit': 'Limit',
           'dryRun': 'Dry-Run',
           'count': 'Count',
+          '/auth/tenant': 'Tenant',
         },
       });
       expect(

@@ -590,8 +590,9 @@ class StreamableHTTPServerTransport
         final argumentName = entry.key;
         final headerSuffix = entry.value;
         final header = headers[headerSuffix.toLowerCase()];
-        final hasArgument = argumentMap.containsKey(argumentName);
-        final bodyArgument = hasArgument ? argumentMap[argumentName] : null;
+        final argument = _toolParameterHeaderArgument(argumentMap, entry.key);
+        final hasArgument = argument.exists;
+        final bodyArgument = argument.value;
         final bodyValue =
             hasArgument ? _primitiveHeaderString(bodyArgument) : null;
 
@@ -668,6 +669,37 @@ class StreamableHTTPServerTransport
     }
 
     return true;
+  }
+
+  ({bool exists, Object? value}) _toolParameterHeaderArgument(
+    Map<String, dynamic> arguments,
+    String selector,
+  ) {
+    if (!selector.startsWith('/')) {
+      return (
+        exists: arguments.containsKey(selector),
+        value: arguments[selector],
+      );
+    }
+
+    Object? current = arguments;
+    for (final segment in _jsonPointerSegments(selector)) {
+      if (current is! Map || !current.containsKey(segment)) {
+        return (exists: false, value: null);
+      }
+      current = current[segment];
+    }
+    return (exists: true, value: current);
+  }
+
+  Iterable<String> _jsonPointerSegments(String selector) {
+    if (selector == '/') {
+      return const [''];
+    }
+    return selector
+        .substring(1)
+        .split('/')
+        .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
   }
 
   Future<bool> _validateStatelessHttpHeaders(

@@ -122,6 +122,11 @@ void main() {
           properties: {
             'dryRun': JsonBoolean(mcpHeader: 'Dry-Run'),
             'region': JsonString(mcpHeader: 'Region'),
+            'auth': JsonObject(
+              properties: {
+                'tenant': JsonString(mcpHeader: 'Tenant'),
+              },
+            ),
           },
         ),
         callback: (args, extra) async => const CallToolResult(content: []),
@@ -137,6 +142,7 @@ void main() {
             'header-tool': {
               'dryRun': 'Dry-Run',
               'region': 'Region',
+              '/auth/tenant': 'Tenant',
             },
           },
         ),
