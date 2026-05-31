@@ -37,6 +37,9 @@
   values beginning with `=?base64?` and ending with `?=` round-trip correctly.
 - Synced nested 2026 `x-mcp-header` mappings into Streamable HTTP transports
   using JSON Pointer selectors for nested tool arguments.
+- Returned HTTP 404 with JSON-RPC `Method not found` for unsupported or removed
+  2026 stateless Streamable HTTP request methods before opening response
+  streams.
 - Sorted 2026 stateless high-level `tools/list` responses by tool name for
   deterministic list results while preserving legacy registration-order output.
 - Gated 2026 stateless task extension methods on advertised server extension

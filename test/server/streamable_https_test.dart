@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
@@ -2483,6 +2484,66 @@ void main() {
         },
       );
       expect(body['error']['message'], contains('must contain one'));
+    });
+
+    test('2026 stateless HTTP returns 404 for method not found', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+        ),
+      );
+      final server = Server(
+        const Implementation(name: 'StatelessServer', version: '1.0.0'),
+      );
+      addTearDown(server.close);
+      await server.connect(transport);
+      transports['/mcp'] = transport;
+
+      Future<Map<String, dynamic>> postStatelessRequest(
+        JsonRpcRequest message,
+      ) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          )
+          ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+          ..set('Mcp-Method', message.method);
+        request.write(jsonEncode(message.toJson()));
+
+        final response = await request.close();
+        expect(response.statusCode, HttpStatus.notFound);
+        final body = jsonDecode(await utf8.decodeStream(response))
+            as Map<String, dynamic>;
+        expect(body['id'], message.id);
+        expect(body['error']['code'], ErrorCode.methodNotFound.value);
+        return body;
+      }
+
+      var body = await postStatelessRequest(
+        JsonRpcRequest(
+          id: 20,
+          method: 'experimental/unknown',
+          meta: _statelessMeta(),
+        ),
+      );
+      expect(body['error']['message'], contains('experimental/unknown'));
+
+      body = await postStatelessRequest(
+        JsonRpcRequest(
+          id: 21,
+          method: Method.ping,
+          meta: _statelessMeta(),
+        ),
+      );
+      expect(
+        body['error']['message'],
+        contains('not part of MCP stateless protocol versions'),
+      );
     });
 
     test('stateless mode allows initialization with session header', () async {

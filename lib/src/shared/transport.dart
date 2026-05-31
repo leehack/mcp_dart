@@ -107,3 +107,15 @@ abstract class ToolParameterHeaderAwareTransport {
     ToolParameterHeaderMappings mappings,
   );
 }
+
+/// Optional capability for transports that can validate incoming requests
+/// before committing transport-level response details.
+abstract class IncomingRequestValidationAwareTransport {
+  /// Supplies the protocol-level request validator.
+  void setIncomingRequestValidator(
+    McpError? Function(JsonRpcRequest request) validator,
+  );
+
+  /// Supplies a live request-method support predicate.
+  void setRequestMethodSupported(bool Function(String method) isSupported);
+}

@@ -506,6 +506,15 @@ abstract class Protocol {
       throw StateError("Protocol already connected to a transport.");
     }
     _transport = transport;
+    if (transport is IncomingRequestValidationAwareTransport) {
+      final validationAwareTransport =
+          transport as IncomingRequestValidationAwareTransport;
+      validationAwareTransport.setIncomingRequestValidator(
+        validateIncomingRequest,
+      );
+      validationAwareTransport
+          .setRequestMethodSupported(_supportsRequestMethod);
+    }
     _transport!.onclose = _onclose;
     _transport!.onerror = _onerror;
     _transport!.onmessage = (message) {
@@ -541,6 +550,9 @@ abstract class Protocol {
       rethrow;
     }
   }
+
+  bool _supportsRequestMethod(String method) =>
+      _requestHandlers.containsKey(method) || fallbackRequestHandler != null;
 
   /// Gets the currently attached transport, or null if not connected.
   Transport? get transport => _transport;

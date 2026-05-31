@@ -159,6 +159,7 @@ class StreamableHTTPServerTransport
     implements
         Transport,
         RequestIdAwareTransport,
+        IncomingRequestValidationAwareTransport,
         ToolParameterHeaderAwareTransport {
   // when sessionId is not set (null), it means the transport is in stateless mode
   final String? Function()? _sessionIdGenerator;
@@ -184,6 +185,8 @@ class StreamableHTTPServerTransport
   final bool _rejectBatchJsonRpcPayloads;
   final int _maxReplayedEvents;
   ToolParameterHeaderMappings _toolParameterHeaderMappings = const {};
+  McpError? Function(JsonRpcRequest request)? _incomingRequestValidator;
+  bool Function(String method)? _isRequestMethodSupported;
   static const JsonRpcNotification _ssePrimingMessage =
       JsonRpcNotification(method: 'notifications/experimental/sse/priming');
 
@@ -232,6 +235,18 @@ class StreamableHTTPServerTransport
       for (final entry in mappings.entries)
         entry.key: Map.unmodifiable(Map<String, String>.from(entry.value)),
     };
+  }
+
+  @override
+  void setIncomingRequestValidator(
+    McpError? Function(JsonRpcRequest request) validator,
+  ) {
+    _incomingRequestValidator = validator;
+  }
+
+  @override
+  void setRequestMethodSupported(bool Function(String method) isSupported) {
+    _isRequestMethodSupported = isSupported;
   }
 
   /// Handles an incoming HTTP request, whether GET or POST
@@ -342,6 +357,24 @@ class StreamableHTTPServerTransport
     required String message,
     RequestId? id,
     Object? data,
+  }) {
+    return _writeJsonRpcErrorCodeResponse(
+      response,
+      httpStatus: httpStatus,
+      errorCode: errorCode.value,
+      message: message,
+      id: id,
+      data: data,
+    );
+  }
+
+  Future<void> _writeJsonRpcErrorCodeResponse(
+    HttpResponse response, {
+    required int httpStatus,
+    required int errorCode,
+    required String message,
+    RequestId? id,
+    Object? data,
   }) async {
     response.statusCode = httpStatus;
     response.write(
@@ -349,7 +382,7 @@ class StreamableHTTPServerTransport
         JsonRpcError(
           id: id,
           error: JsonRpcErrorData(
-            code: errorCode.value,
+            code: errorCode,
             message: message,
             data: data,
           ),
@@ -357,6 +390,14 @@ class StreamableHTTPServerTransport
       ),
     );
     await _safeClose(response);
+  }
+
+  int _statelessHttpStatusForErrorCode(int code) {
+    if (code == ErrorCode.methodNotFound.value) {
+      return HttpStatus.notFound;
+    }
+
+    return HttpStatus.badRequest;
   }
 
   Future<void> _writeHeaderMismatchResponse(
@@ -811,7 +852,39 @@ class StreamableHTTPServerTransport
       }
     }
 
-    return _validateMcpParamHeaders(req, req.response, message);
+    if (!await _validateMcpParamHeaders(req, req.response, message)) {
+      return false;
+    }
+
+    if (message is JsonRpcRequest) {
+      final validationError = _incomingRequestValidator?.call(message);
+      if (validationError != null) {
+        await _writeJsonRpcErrorCodeResponse(
+          req.response,
+          httpStatus: _statelessHttpStatusForErrorCode(validationError.code),
+          errorCode: validationError.code,
+          id: message.id,
+          message: validationError.message,
+          data: validationError.data,
+        );
+        return false;
+      }
+
+      final isRequestMethodSupported = _isRequestMethodSupported;
+      if (isRequestMethodSupported != null &&
+          !isRequestMethodSupported(message.method)) {
+        await _writeJsonRpcErrorResponse(
+          req.response,
+          httpStatus: HttpStatus.notFound,
+          errorCode: ErrorCode.methodNotFound,
+          id: message.id,
+          message: 'Method not found: ${message.method}',
+        );
+        return false;
+      }
+    }
+
+    return true;
   }
 
   bool _isStandaloneSseStreamId(StreamId streamId) {
