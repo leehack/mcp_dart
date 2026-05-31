@@ -6,8 +6,10 @@ import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
 /// Mock transport for McpServer tests
-class McpServerTestTransport implements Transport {
+class McpServerTestTransport
+    implements Transport, ToolParameterHeaderAwareTransport {
   final List<JsonRpcMessage> sentMessages = [];
+  final List<ToolParameterHeaderMappings> toolParameterHeaderMappings = [];
   bool _closed = false;
 
   @override
@@ -36,6 +38,13 @@ class McpServerTestTransport implements Transport {
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     if (_closed) throw StateError('Transport is closed');
     sentMessages.add(message);
+  }
+
+  @override
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  ) {
+    toolParameterHeaderMappings.add(mappings);
   }
 
   @override
@@ -103,6 +112,116 @@ void main() {
       final tools = response.result['tools'] as List;
       expect(tools.length, equals(1));
       expect(tools.first['name'], equals('test-tool'));
+    });
+
+    test('connect syncs tool parameter header mappings to transports',
+        () async {
+      server.registerTool(
+        'header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'dryRun': JsonBoolean(mcpHeader: 'Dry-Run'),
+            'region': JsonString(mcpHeader: 'Region'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      await server.connect(transport);
+
+      expect(transport.toolParameterHeaderMappings, isNotEmpty);
+      expect(
+        transport.toolParameterHeaderMappings.last,
+        equals(
+          const {
+            'header-tool': {
+              'dryRun': 'Dry-Run',
+              'region': 'Region',
+            },
+          },
+        ),
+      );
+    });
+
+    test('tool updates refresh parameter header mappings on transports',
+        () async {
+      final registeredTool = server.registerTool(
+        'header-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      await server.connect(transport);
+      transport.toolParameterHeaderMappings.clear();
+
+      registeredTool.update(
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'dryRun': JsonBoolean(mcpHeader: 'Dry-Run'),
+          },
+        ),
+      );
+
+      expect(transport.toolParameterHeaderMappings, isNotEmpty);
+      expect(
+        transport.toolParameterHeaderMappings.last,
+        equals(
+          const {
+            'header-tool': {'dryRun': 'Dry-Run'},
+          },
+        ),
+      );
+
+      registeredTool.disable();
+
+      expect(transport.toolParameterHeaderMappings.last, isEmpty);
+    });
+
+    test('invalid tool parameter header metadata is not synced', () async {
+      server.registerTool(
+        'non-string-header-tool',
+        inputSchema: ToolInputSchema(
+          properties: {
+            'value': JsonSchema.fromJson(
+              {'type': 'string', 'x-mcp-header': 1},
+            ),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
+        'invalid-header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'value': JsonString(mcpHeader: 'Bad:Header'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
+        'duplicate-header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'primary': JsonString(mcpHeader: 'Region'),
+            'secondary': JsonString(mcpHeader: 'region'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
+        'non-primitive-header-tool',
+        inputSchema: ToolInputSchema(
+          properties: {
+            'value': JsonSchema.fromJson(
+              {'type': 'object', 'x-mcp-header': 'Value'},
+            ),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      await server.connect(transport);
+
+      expect(transport.toolParameterHeaderMappings, isNotEmpty);
+      expect(transport.toolParameterHeaderMappings.last, isEmpty);
     });
 
     test('registerTool can be updated', () async {

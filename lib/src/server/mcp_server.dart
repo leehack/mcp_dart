@@ -972,6 +972,7 @@ class McpServer {
 
   /// Connects the server to a communication [transport].
   Future<void> connect(Transport transport) async {
+    _syncToolParameterHeaderMappings(transport);
     return await server.connect(transport);
   }
 
@@ -1035,8 +1036,108 @@ class McpServer {
   /// Notifies clients that the list of available tools has changed.
   void sendToolListChanged() {
     if (server.transport != null) {
+      _syncToolParameterHeaderMappings();
       server.sendToolListChanged();
     }
+  }
+
+  void _syncToolParameterHeaderMappings([Transport? target]) {
+    final activeTransport = target ?? server.transport;
+    final headerAwareTransport =
+        activeTransport is ToolParameterHeaderAwareTransport
+            ? activeTransport as ToolParameterHeaderAwareTransport
+            : null;
+    if (headerAwareTransport != null) {
+      headerAwareTransport.setToolParameterHeaderMappings(
+        _buildToolParameterHeaderMappings(),
+      );
+    }
+  }
+
+  ToolParameterHeaderMappings _buildToolParameterHeaderMappings() {
+    final mappings = <String, Map<String, String>>{};
+
+    for (final tool in _registeredTools.values) {
+      if (!tool.enabled) {
+        continue;
+      }
+
+      final toolMappings = _toolParameterHeaderMappingsFor(tool);
+      if (toolMappings.isNotEmpty) {
+        mappings[tool.name] = toolMappings;
+      }
+    }
+
+    return mappings;
+  }
+
+  Map<String, String> _toolParameterHeaderMappingsFor(
+    _RegisteredToolImpl tool,
+  ) {
+    final properties = tool.inputSchema?.properties;
+    if (properties == null || properties.isEmpty) {
+      return const {};
+    }
+
+    final mappings = <String, String>{};
+    final seenHeaders = <String>{};
+    for (final entry in properties.entries) {
+      final propertyJson = entry.value.toJson();
+      if (!propertyJson.containsKey('x-mcp-header')) {
+        continue;
+      }
+
+      final rawHeader = propertyJson['x-mcp-header'];
+      if (rawHeader is! String || rawHeader.isEmpty) {
+        _logger.warn(
+          'Ignoring x-mcp-header mapping for tool "${tool.name}" parameter '
+          '"${entry.key}": value must be a non-empty string.',
+        );
+        return const {};
+      }
+
+      if (!_isValidMcpHeaderNameSuffix(rawHeader)) {
+        _logger.warn(
+          'Ignoring x-mcp-header mapping for tool "${tool.name}" parameter '
+          '"${entry.key}": "$rawHeader" is not a valid Mcp-Param suffix.',
+        );
+        return const {};
+      }
+
+      final normalizedHeader = rawHeader.toLowerCase();
+      if (!seenHeaders.add(normalizedHeader)) {
+        _logger.warn(
+          'Ignoring x-mcp-header mappings for tool "${tool.name}": '
+          '"$rawHeader" is not unique.',
+        );
+        return const {};
+      }
+
+      if (!_isToolParameterHeaderPrimitive(entry.value)) {
+        _logger.warn(
+          'Ignoring x-mcp-header mapping for tool "${tool.name}" parameter '
+          '"${entry.key}": only primitive schemas can be mirrored.',
+        );
+        return const {};
+      }
+
+      mappings[entry.key] = rawHeader;
+    }
+
+    return mappings;
+  }
+
+  bool _isValidMcpHeaderNameSuffix(String value) {
+    return value.codeUnits.every(
+      (unit) => unit >= 0x21 && unit <= 0x7E && unit != 0x3A,
+    );
+  }
+
+  bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
+    return schema is JsonString ||
+        schema is JsonNumber ||
+        schema is JsonInteger ||
+        schema is JsonBoolean;
   }
 
   /// Notifies clients that the list of available prompts has changed.

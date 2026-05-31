@@ -153,7 +153,10 @@ class StreamableHTTPServerTransportOptions {
 /// - Session ID is only included in initialization responses
 /// - No session validation is performed
 class StreamableHTTPServerTransport
-    implements Transport, RequestIdAwareTransport {
+    implements
+        Transport,
+        RequestIdAwareTransport,
+        ToolParameterHeaderAwareTransport {
   // when sessionId is not set (null), it means the transport is in stateless mode
   final String? Function()? _sessionIdGenerator;
   bool _started = false;
@@ -176,6 +179,7 @@ class StreamableHTTPServerTransport
   final bool _strictProtocolVersionHeaderValidation;
   final bool _rejectBatchJsonRpcPayloads;
   final int _maxReplayedEvents;
+  ToolParameterHeaderMappings _toolParameterHeaderMappings = const {};
   static const JsonRpcNotification _ssePrimingMessage =
       JsonRpcNotification(method: 'notifications/experimental/sse/priming');
 
@@ -214,6 +218,16 @@ class StreamableHTTPServerTransport
       throw StateError("Transport already started");
     }
     _started = true;
+  }
+
+  @override
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  ) {
+    _toolParameterHeaderMappings = {
+      for (final entry in mappings.entries)
+        entry.key: Map.unmodifiable(Map<String, String>.from(entry.value)),
+    };
   }
 
   /// Handles an incoming HTTP request, whether GET or POST
@@ -446,55 +460,171 @@ class StreamableHTTPServerTransport
     };
   }
 
+  String? _toolName(JsonRpcMessage message) {
+    if (_messageMethod(message) != Method.toolsCall) {
+      return null;
+    }
+
+    final name = _messageParams(message)?['name'];
+    return name is String ? name : null;
+  }
+
   Future<bool> _validateMcpParamHeaders(
     HttpRequest req,
     HttpResponse res,
     JsonRpcMessage message,
   ) async {
-    final params = _messageParams(message);
-    final arguments = params?['arguments'];
-    if (arguments is! Map) {
-      return true;
-    }
-    final argumentMap = arguments.cast<String, dynamic>();
-
-    final headerNames = <String>[];
+    final headers = <String, _McpParamHeader>{};
     req.headers.forEach((name, values) {
-      headerNames.add(name);
-    });
-
-    for (final headerName in headerNames) {
       const prefix = 'mcp-param-';
-      if (!headerName.toLowerCase().startsWith(prefix)) {
-        continue;
+      final lowerName = name.toLowerCase();
+      if (!lowerName.startsWith(prefix)) {
+        return;
       }
 
-      final headerSuffix = headerName.substring(prefix.length);
+      final headerSuffix = name.substring(prefix.length);
       if (headerSuffix.isEmpty ||
           !headerSuffix.codeUnits.every(
             (unit) => unit >= 0x21 && unit <= 0x7E && unit != 0x3A,
           )) {
+        headers[lowerName] = _McpParamHeader.invalidName(
+          name: name,
+          suffix: headerSuffix,
+        );
+        return;
+      }
+
+      final headerValue = req.headers.value(name);
+      final decodedValue =
+          headerValue == null ? null : _decodeMcpParamHeaderValue(headerValue);
+      if (decodedValue == null) {
+        headers[lowerName] = _McpParamHeader.invalidValue(
+          name: name,
+          suffix: headerSuffix,
+        );
+        return;
+      }
+
+      headers[headerSuffix.toLowerCase()] = _McpParamHeader(
+        name: name,
+        suffix: headerSuffix,
+        value: decodedValue,
+      );
+    });
+
+    _McpParamHeader? invalidHeader;
+    for (final header in headers.values) {
+      if (header.validationError != null) {
+        invalidHeader = header;
+        break;
+      }
+    }
+    if (invalidHeader != null) {
+      final messageText =
+          invalidHeader.validationError == _McpParamHeaderValidationError.name
+              ? '${invalidHeader.name} header name is malformed'
+              : '${invalidHeader.name} header value is malformed';
+      await _writeHeaderMismatchResponse(res, message, messageText);
+      return false;
+    }
+
+    final params = _messageParams(message);
+    final arguments = params?['arguments'];
+    if (arguments is! Map) {
+      if (headers.isEmpty) {
+        return true;
+      }
+      await _writeHeaderMismatchResponse(
+        res,
+        message,
+        '${headers.values.first.name} header has no matching body arguments',
+      );
+      return false;
+    }
+
+    final argumentMap = arguments.cast<String, dynamic>();
+    final consumedHeaders = <String>{};
+    final toolName = _toolName(message);
+    final headerMappings =
+        toolName == null ? null : _toolParameterHeaderMappings[toolName];
+
+    if (headerMappings != null) {
+      for (final entry in headerMappings.entries) {
+        final argumentName = entry.key;
+        final headerSuffix = entry.value;
+        final header = headers[headerSuffix.toLowerCase()];
+        final hasArgument = argumentMap.containsKey(argumentName);
+        final bodyValue = hasArgument
+            ? _primitiveHeaderString(argumentMap[argumentName])
+            : null;
+
+        if (!hasArgument || bodyValue == null) {
+          if (header != null) {
+            await _writeHeaderMismatchResponse(
+              res,
+              message,
+              '${header.name} header has no matching primitive body argument '
+              "'$argumentName'",
+            );
+            return false;
+          }
+          continue;
+        }
+
+        if (header == null) {
+          await _writeHeaderMismatchResponse(
+            res,
+            message,
+            'Mcp-Param-$headerSuffix header is required for body argument '
+            "'$argumentName'",
+          );
+          return false;
+        }
+
+        consumedHeaders.add(header.suffix.toLowerCase());
+        if (header.value != bodyValue) {
+          await _writeHeaderMismatchResponse(
+            res,
+            message,
+            '${header.name} header value does not match body argument '
+            "'$argumentName'",
+          );
+          return false;
+        }
+      }
+    }
+
+    final argumentNamesByLowercase = <String, String>{};
+    for (final argumentName in argumentMap.keys) {
+      argumentNamesByLowercase.putIfAbsent(
+        argumentName.toLowerCase(),
+        () => argumentName,
+      );
+    }
+
+    for (final header in headers.values) {
+      if (consumedHeaders.contains(header.suffix.toLowerCase())) {
+        continue;
+      }
+
+      final argumentName = argumentMap.containsKey(header.suffix)
+          ? header.suffix
+          : argumentNamesByLowercase[header.suffix.toLowerCase()];
+      if (argumentName == null) {
         await _writeHeaderMismatchResponse(
           res,
           message,
-          "$headerName header name is malformed",
+          '${header.name} header has no matching body argument',
         );
         return false;
       }
 
-      if (!argumentMap.containsKey(headerSuffix)) {
-        continue;
-      }
-
-      final headerValue = req.headers.value(headerName);
-      final decodedValue =
-          headerValue == null ? null : _decodeMcpParamHeaderValue(headerValue);
-      final bodyValue = _primitiveHeaderString(argumentMap[headerSuffix]);
-      if (decodedValue == null || decodedValue != bodyValue) {
+      final bodyValue = _primitiveHeaderString(argumentMap[argumentName]);
+      if (bodyValue == null || header.value != bodyValue) {
         await _writeHeaderMismatchResponse(
           res,
           message,
-          "$headerName header value does not match body argument '$headerSuffix'",
+          "${header.name} header value does not match body argument '$argumentName'",
         );
         return false;
       }
@@ -1570,4 +1700,31 @@ class StreamableHTTPServerTransport
     }
     return null;
   }
+}
+
+enum _McpParamHeaderValidationError { name, value }
+
+class _McpParamHeader {
+  final String name;
+  final String suffix;
+  final String? value;
+  final _McpParamHeaderValidationError? validationError;
+
+  const _McpParamHeader({
+    required this.name,
+    required this.suffix,
+    required String this.value,
+  }) : validationError = null;
+
+  const _McpParamHeader.invalidName({
+    required this.name,
+    required this.suffix,
+  })  : value = null,
+        validationError = _McpParamHeaderValidationError.name;
+
+  const _McpParamHeader.invalidValue({
+    required this.name,
+    required this.suffix,
+  })  : value = null,
+        validationError = _McpParamHeaderValidationError.value;
 }

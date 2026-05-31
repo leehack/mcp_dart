@@ -1965,14 +1965,18 @@ void main() {
         ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.toolsCall)
         ..set('Mcp-Name', 'execute')
-        ..set('Mcp-Param-region', 'us-east1');
+        ..set('Mcp-Param-region', 'us-east1')
+        ..set('Mcp-Param-dryRun', 'false');
       request.write(
         jsonEncode(
           JsonRpcCallToolRequest(
             id: 3,
             params: const {
               'name': 'execute',
-              'arguments': {'region': 'us-east1'},
+              'arguments': {
+                'region': 'us-east1',
+                'dryRun': false,
+              },
             },
             meta: _statelessMeta(),
           ),
@@ -1986,6 +1990,135 @@ void main() {
       final body =
           jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
       expect(body['id'], 3);
+      expect(body['result']['content'], isEmpty);
+    });
+
+    test('2026 stateless HTTP validates mapped tool parameter headers',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      transport.setToolParameterHeaderMappings(
+        const {
+          'execute': {
+            'dryRun': 'Dry-Run',
+            'region': 'Region',
+          },
+        },
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcCallToolRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const CallToolResult(content: []).toJson(),
+              ),
+            ),
+          );
+        }
+      };
+
+      Future<(int, Map<String, dynamic>)> postToolCall({
+        required int id,
+        required Map<String, Object> headers,
+        Map<String, Object?> arguments = const {
+          'dryRun': false,
+          'region': 'us-east1',
+        },
+      }) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+          ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+          ..set('Mcp-Method', Method.toolsCall)
+          ..set('Mcp-Name', 'execute');
+        headers.forEach(request.headers.set);
+        request.write(
+          jsonEncode(
+            JsonRpcCallToolRequest(
+              id: id,
+              params: {
+                'name': 'execute',
+                'arguments': arguments,
+              },
+              meta: _statelessMeta(),
+            ),
+          ),
+        );
+
+        final response = await request.close();
+        return (
+          response.statusCode,
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>,
+        );
+      }
+
+      var (statusCode, body) = await postToolCall(
+        id: 30,
+        headers: const {
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.badRequest);
+      expect(body['id'], 30);
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
+      expect(
+        body['error']['message'],
+        contains('Mcp-Param-Dry-Run header is required'),
+      );
+
+      (statusCode, body) = await postToolCall(
+        id: 31,
+        headers: const {
+          'Mcp-Param-Dry-Run': 'true',
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.badRequest);
+      expect(body['id'], 31);
+      expect(
+        body['error']['message'],
+        contains("body argument 'dryRun'"),
+      );
+
+      (statusCode, body) = await postToolCall(
+        id: 32,
+        arguments: const {
+          'dryRun': {'nested': true},
+          'region': 'us-east1',
+        },
+        headers: const {
+          'Mcp-Param-Dry-Run': 'false',
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.badRequest);
+      expect(body['id'], 32);
+      expect(
+        body['error']['message'],
+        contains('no matching primitive body argument'),
+      );
+
+      (statusCode, body) = await postToolCall(
+        id: 33,
+        headers: const {
+          'Mcp-Param-Dry-Run': 'false',
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.ok);
+      expect(body['id'], 33);
       expect(body['result']['content'], isEmpty);
     });
 
@@ -2062,6 +2195,85 @@ void main() {
       );
       expect(body['id'], 6);
       expect(body['error']['message'], contains('mcp-param-enabled'));
+
+      body = await postJson(
+        JsonRpcCallToolRequest(
+          id: 16,
+          params: const {
+            'name': 'execute',
+            'arguments': {'region': 'us-east1'},
+          },
+          meta: _statelessMeta(),
+        ).toJson(),
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'execute',
+          'Mcp-Param-': 'us-east1',
+        },
+      );
+      expect(body['id'], 16);
+      expect(body['error']['message'], contains('header name is malformed'));
+
+      body = await postJson(
+        JsonRpcCallToolRequest(
+          id: 17,
+          params: const {
+            'name': 'execute',
+            'arguments': {'region': 'us-east1'},
+          },
+          meta: _statelessMeta(),
+        ).toJson(),
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'execute',
+          'Mcp-Param-region': '=?base64?%%%?=',
+        },
+      );
+      expect(body['id'], 17);
+      expect(body['error']['message'], contains('header value is malformed'));
+
+      body = await postJson(
+        JsonRpcCallToolRequest(
+          id: 18,
+          params: const {'name': 'execute'},
+          meta: _statelessMeta(),
+        ).toJson(),
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'execute',
+          'Mcp-Param-region': 'us-east1',
+        },
+      );
+      expect(body['id'], 18);
+      expect(
+        body['error']['message'],
+        contains('header has no matching body arguments'),
+      );
+
+      body = await postJson(
+        JsonRpcCallToolRequest(
+          id: 19,
+          params: const {
+            'name': 'execute',
+            'arguments': {'region': 'us-east1'},
+          },
+          meta: _statelessMeta(),
+        ).toJson(),
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'execute',
+          'Mcp-Param-zone': 'us-east1-b',
+        },
+      );
+      expect(body['id'], 19);
+      expect(
+        body['error']['message'],
+        contains('header has no matching body argument'),
+      );
 
       body = await postJson(
         JsonRpcCallToolRequest(
