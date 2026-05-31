@@ -77,6 +77,12 @@ class Server extends Protocol {
     Method.notificationsRootsListChanged,
   };
 
+  static const Set<String> _inputRequiredResultMethods = {
+    Method.toolsCall,
+    Method.promptsGet,
+    Method.resourcesRead,
+  };
+
   /// Callback to be notified when the server is fully initialized.
   void Function()? oninitialized;
 
@@ -419,7 +425,7 @@ class Server extends Protocol {
     if (result is CallToolResult) {
       return true;
     }
-    if (result is InputRequiredResult && _isStatelessRequest(request)) {
+    if (_allowsInputRequiredResult(result, request)) {
       return true;
     }
     if (result is CreateTaskExtensionResult && _isStatelessRequest(request)) {
@@ -428,6 +434,43 @@ class Server extends Protocol {
     }
 
     return false;
+  }
+
+  bool _allowsPromptGetResult(BaseResultData result, JsonRpcRequest request) {
+    return result is GetPromptResult ||
+        _allowsInputRequiredResult(result, request);
+  }
+
+  bool _allowsResourceReadResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    return result is ReadResourceResult ||
+        _allowsInputRequiredResult(result, request);
+  }
+
+  bool _allowsInputRequiredResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    return result is InputRequiredResult &&
+        _isStatelessRequest(request) &&
+        _inputRequiredResultMethods.contains(request.method);
+  }
+
+  void _validateUnsupportedInputRequiredResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    if (result is! InputRequiredResult) {
+      return;
+    }
+
+    throw McpError(
+      ErrorCode.invalidParams.value,
+      'Invalid ${request.method} result: InputRequiredResult is only supported '
+      'by ${_inputRequiredResultMethods.join(', ')} in MCP stateless requests.',
+    );
   }
 
   bool _allowsTaskExtensionResult(
@@ -708,6 +751,38 @@ class Server extends Protocol {
       }
 
       super.setRequestHandler(method, wrappedHandler, requestFactory);
+    } else if (method == Method.promptsGet) {
+      Future<BaseResultData> wrappedHandler(
+        ReqT request,
+        RequestHandlerExtra extra,
+      ) async {
+        final result = await handler(request, extra);
+        if (!_allowsPromptGetResult(result, request)) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'Invalid prompts/get result: Expected GetPromptResult',
+          );
+        }
+        return result;
+      }
+
+      super.setRequestHandler(method, wrappedHandler, requestFactory);
+    } else if (method == Method.resourcesRead) {
+      Future<BaseResultData> wrappedHandler(
+        ReqT request,
+        RequestHandlerExtra extra,
+      ) async {
+        final result = await handler(request, extra);
+        if (!_allowsResourceReadResult(result, request)) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'Invalid resources/read result: Expected ReadResourceResult',
+          );
+        }
+        return result;
+      }
+
+      super.setRequestHandler(method, wrappedHandler, requestFactory);
     } else if (method == Method.tasksGet ||
         method == Method.tasksCancel ||
         method == Method.tasksUpdate) {
@@ -727,7 +802,16 @@ class Server extends Protocol {
 
       super.setRequestHandler(method, wrappedHandler, requestFactory);
     } else {
-      super.setRequestHandler(method, handler, requestFactory);
+      Future<BaseResultData> wrappedHandler(
+        ReqT request,
+        RequestHandlerExtra extra,
+      ) async {
+        final result = await handler(request, extra);
+        _validateUnsupportedInputRequiredResult(result, request);
+        return result;
+      }
+
+      super.setRequestHandler(method, wrappedHandler, requestFactory);
     }
   }
 

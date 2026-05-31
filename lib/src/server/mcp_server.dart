@@ -157,7 +157,7 @@ final class InterfaceToolCallback extends ToolCallback {
 }
 
 /// Callback signature for prompts.
-typedef PromptCallback = FutureOr<GetPromptResult> Function(
+typedef PromptCallback = FutureOr<BaseResultData> Function(
   Map<String, dynamic>? args,
   RequestHandlerExtra? extra,
 );
@@ -196,13 +196,13 @@ typedef ListResourcesCallback = FutureOr<ListResourcesResult> Function(
 );
 
 /// Callback to read a specific resource.
-typedef ReadResourceCallback = FutureOr<ReadResourceResult> Function(
+typedef ReadResourceCallback = FutureOr<BaseResultData> Function(
   Uri uri,
   RequestHandlerExtra extra,
 );
 
 /// Callback to read a resource template.
-typedef ReadResourceTemplateCallback = FutureOr<ReadResourceResult> Function(
+typedef ReadResourceTemplateCallback = FutureOr<BaseResultData> Function(
   Uri uri,
   TemplateVariables variables,
   RequestHandlerExtra extra,

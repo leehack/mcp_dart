@@ -1356,6 +1356,95 @@ void main() {
       expect(response.result['requestState'], 'retry-state');
     });
 
+    test('stateless prompts/get permits input required results', () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      server.registerPrompt(
+        'needs_input',
+        callback: (args, extra) =>
+            const InputRequiredResult(requestState: 'prompt-state'),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcGetPromptRequest(
+          id: 'prompt-1',
+          getParams: const GetPromptRequest(name: 'needs_input'),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeInputRequired);
+      expect(response.result['requestState'], 'prompt-state');
+    });
+
+    test('stateless resources/read permits input required results', () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      server.registerResource(
+        'needs_input',
+        'memory://needs-input',
+        null,
+        (uri, extra) =>
+            const InputRequiredResult(requestState: 'resource-state'),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcReadResourceRequest(
+          id: 'resource-1',
+          readParams: const ReadResourceRequest(uri: 'memory://needs-input'),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeInputRequired);
+      expect(response.result['requestState'], 'resource-state');
+    });
+
+    test('stateless unsupported methods reject input required results',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities:
+              ServerCapabilities(prompts: ServerCapabilitiesPrompts()),
+        ),
+      );
+      server.setRequestHandler<JsonRpcListPromptsRequest>(
+        Method.promptsList,
+        (request, extra) async =>
+            const InputRequiredResult(requestState: 'list-state'),
+        (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcListPromptsRequest(id: 'prompts', meta: _clientMeta()),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, contains('InputRequiredResult'));
+      expect(response.error.message, contains(Method.promptsGet));
+      expect(response.error.message, contains(Method.resourcesRead));
+      expect(response.error.message, contains(Method.toolsCall));
+    });
+
     test('stateless required legacy task tool resolves to final result',
         () async {
       final server = McpServer(

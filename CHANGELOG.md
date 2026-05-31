@@ -72,6 +72,9 @@
 - Allowed MCP 2026 tool `outputSchema` declarations to use any JSON Schema and
   `structuredContent` results to carry any JSON value, while omitting non-object
   structured output from stable 2025 responses.
+- Allowed MCP 2026 `prompts/get` and `resources/read` handlers to return
+  `InputRequiredResult`, and rejected MRTR input-required results on unsupported
+  request methods.
 
 ## 2.2.0
 
