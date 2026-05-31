@@ -1,5 +1,26 @@
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
+
+Future<T> _unusedRequest<T extends BaseResultData>(
+  JsonRpcRequest request,
+  T Function(Map<String, dynamic> resultJson) resultFactory,
+  RequestOptions options,
+) {
+  throw StateError('Unexpected request from subscription helper test');
+}
+
+RequestHandlerExtra _subscriptionExtra(List<JsonRpcNotification> sent) {
+  final abort = BasicAbortController();
+  return RequestHandlerExtra(
+    signal: abort.signal,
+    requestId: 'sub-1',
+    sendNotification: (notification, {relatedTask}) async {
+      sent.add(notification);
+    },
+    sendRequest: _unusedRequest,
+  );
+}
 
 void main() {
   group('SubscriptionFilter', () {
@@ -172,6 +193,117 @@ void main() {
           },
         ),
         throwsFormatException,
+      );
+    });
+  });
+
+  group('RequestHandlerExtra subscription helpers', () {
+    test('require acknowledgment before stream notifications', () async {
+      final sent = <JsonRpcNotification>[];
+      final extra = _subscriptionExtra(sent);
+
+      expect(
+        () => extra.sendSubscriptionNotification(
+          const JsonRpcToolListChangedNotification(),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains(Method.notificationsSubscriptionsAcknowledged),
+          ),
+        ),
+      );
+      expect(sent, isEmpty);
+    });
+
+    test('allow only acknowledged notification filters', () async {
+      final sent = <JsonRpcNotification>[];
+      final extra = _subscriptionExtra(sent);
+
+      await extra.sendSubscriptionAcknowledged(
+        const SubscriptionFilter(
+          toolsListChanged: true,
+          resourcesListChanged: true,
+          resourceSubscriptions: ['file:///project/config.json'],
+          taskIds: ['task-1'],
+        ),
+      );
+      expect(sent.single.method, Method.notificationsSubscriptionsAcknowledged);
+      sent.clear();
+
+      await extra.sendSubscriptionNotification(
+        const JsonRpcToolListChangedNotification(),
+      );
+      await extra.sendSubscriptionNotification(
+        JsonRpcResourceUpdatedNotification(
+          updatedParams: const ResourceUpdatedNotification(
+            uri: 'file:///project/config.json',
+          ),
+        ),
+      );
+      await extra.sendSubscriptionNotification(
+        const JsonRpcResourceListChangedNotification(),
+      );
+      await extra.sendSubscriptionNotification(
+        JsonRpcTaskNotification(
+          task: const TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:01:00Z',
+            ttlMs: 300000,
+          ),
+        ),
+      );
+
+      expect(sent, hasLength(4));
+      expect(
+        sent.map(
+          (notification) => notification.meta?[McpMetaKey.subscriptionId],
+        ),
+        everyElement('sub-1'),
+      );
+
+      expect(
+        () => extra.sendSubscriptionNotification(
+          const JsonRpcPromptListChangedNotification(),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('not requested or acknowledged'),
+          ),
+        ),
+      );
+      expect(
+        () => extra.sendSubscriptionNotification(
+          JsonRpcResourceUpdatedNotification(
+            updatedParams: const ResourceUpdatedNotification(
+              uri: 'file:///project/other.json',
+            ),
+          ),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('not requested or acknowledged'),
+          ),
+        ),
+      );
+      expect(
+        () => extra.sendSubscriptionNotification(
+          const JsonRpcNotification(method: 'notifications/custom'),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('not requested or acknowledged'),
+          ),
+        ),
       );
     });
   });

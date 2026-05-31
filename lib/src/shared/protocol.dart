@@ -12,6 +12,12 @@ final _logger = Logger("mcp_dart.shared.protocol");
 bool _isProgressToken(Object? token) => token is int || token is String;
 
 final _lastProgressByExtra = Expando<double>();
+final _subscriptionStateByExtra = Expando<_SubscriptionStreamState>();
+
+class _SubscriptionStreamState {
+  bool acknowledgmentSent = false;
+  SubscriptionFilter acknowledgedNotifications = const SubscriptionFilter();
+}
 
 /// Callback for progress notifications.
 typedef ProgressCallback = void Function(Progress progress);
@@ -152,6 +158,16 @@ class RequestHandlerExtra {
     this.closeStandaloneSSEStream,
   });
 
+  _SubscriptionStreamState get _activeSubscriptionState =>
+      (_subscriptionStateByExtra[this] ??= _SubscriptionStreamState());
+
+  void _validateSubscriptionNotification(JsonRpcNotification notification) {
+    _recordOrValidateSubscriptionNotification(
+      _activeSubscriptionState,
+      notification,
+    );
+  }
+
   /// Sends a progress notification for the current request.
   ///
   /// This method automatically retrieves the `progressToken` from the request metadata.
@@ -215,18 +231,96 @@ class RequestHandlerExtra {
   Future<void> sendSubscriptionNotification(
     JsonRpcNotification notification,
   ) {
-    final meta = <String, dynamic>{
-      ...?notification.meta,
-      McpMetaKey.subscriptionId: requestId,
-    };
+    final subscriptionNotification =
+        _withSubscriptionId(notification, requestId);
 
-    return sendNotification(
-      JsonRpcNotification(
-        method: notification.method,
-        params: notification.params,
-        meta: meta,
-      ),
+    _validateSubscriptionNotification(subscriptionNotification);
+
+    return sendNotification(subscriptionNotification);
+  }
+}
+
+JsonRpcNotification _withSubscriptionId(
+  JsonRpcNotification notification,
+  RequestId requestId,
+) {
+  final meta = <String, dynamic>{
+    ...?notification.meta,
+    McpMetaKey.subscriptionId: requestId,
+  };
+  return JsonRpcNotification(
+    method: notification.method,
+    params: notification.params,
+    meta: meta,
+  );
+}
+
+void _recordOrValidateSubscriptionNotification(
+  _SubscriptionStreamState state,
+  JsonRpcNotification notification,
+) {
+  if (notification.method == Method.notificationsSubscriptionsAcknowledged) {
+    state
+      ..acknowledgmentSent = true
+      ..acknowledgedNotifications =
+          _acknowledgedSubscriptionFilter(notification);
+    return;
+  }
+
+  if (!state.acknowledgmentSent) {
+    throw McpError(
+      ErrorCode.invalidRequest.value,
+      'subscriptions/listen streams must send '
+      '${Method.notificationsSubscriptionsAcknowledged} before '
+      '${notification.method}.',
     );
+  }
+
+  if (!_subscriptionFilterAllowsNotification(
+    state.acknowledgedNotifications,
+    notification,
+  )) {
+    throw McpError(
+      ErrorCode.invalidRequest.value,
+      '${notification.method} was not requested or acknowledged for this '
+      'subscriptions/listen stream.',
+    );
+  }
+}
+
+SubscriptionFilter _acknowledgedSubscriptionFilter(
+  JsonRpcNotification notification,
+) {
+  final params = notification.params;
+  if (params == null) {
+    throw const FormatException(
+      'subscriptions acknowledged notification params are required',
+    );
+  }
+
+  return SubscriptionsAcknowledgedNotification.fromJson(params).notifications;
+}
+
+bool _subscriptionFilterAllowsNotification(
+  SubscriptionFilter filter,
+  JsonRpcNotification notification,
+) {
+  switch (notification.method) {
+    case Method.notificationsToolsListChanged:
+      return filter.toolsListChanged == true;
+    case Method.notificationsPromptsListChanged:
+      return filter.promptsListChanged == true;
+    case Method.notificationsResourcesListChanged:
+      return filter.resourcesListChanged == true;
+    case Method.notificationsResourcesUpdated:
+      final uri = notification.params?['uri'];
+      return uri is String &&
+          (filter.resourceSubscriptions?.contains(uri) ?? false);
+    case Method.notificationsTasks:
+      final taskId = notification.params?['taskId'];
+      return taskId is String && (filter.taskIds?.contains(taskId) ?? false);
+    default:
+      return false;
   }
 }
 
@@ -1137,6 +1231,9 @@ abstract class Protocol {
 
     final abortController = BasicAbortController();
     _requestHandlerAbortControllers[request.id] = abortController;
+    final subscriptionState = request is JsonRpcSubscriptionsListenRequest
+        ? _SubscriptionStreamState()
+        : null;
 
     final extra = RequestHandlerExtra(
       signal: abortController.signal,
@@ -1154,12 +1251,22 @@ abstract class Protocol {
           : null,
       taskRequestedTtl:
           (request.params?['task'] as Map<String, dynamic>?)?['ttl'] as int?,
-      sendNotification: (notification, {relatedTask}) =>
-          _notificationWithRequestId(
-        notification,
-        relatedTask: relatedTask,
-        relatedRequestId: request.id,
-      ),
+      sendNotification: (notification, {relatedTask}) {
+        var outgoingNotification = notification;
+        if (subscriptionState != null) {
+          outgoingNotification = _withSubscriptionId(notification, request.id);
+          _recordOrValidateSubscriptionNotification(
+            subscriptionState,
+            outgoingNotification,
+          );
+        }
+
+        return _notificationWithRequestId(
+          outgoingNotification,
+          relatedTask: relatedTask,
+          relatedRequestId: request.id,
+        );
+      },
       sendRequest: <T extends BaseResultData>(
         JsonRpcRequest req,
         T Function(Map<String, dynamic>) resultFactory,
@@ -1185,6 +1292,9 @@ abstract class Protocol {
         );
       },
     );
+    if (subscriptionState != null) {
+      _subscriptionStateByExtra[extra] = subscriptionState;
+    }
 
     // If task creation is requested, check capability
     if (extra.taskRequestedTtl != null ||

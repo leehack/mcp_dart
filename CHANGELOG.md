@@ -61,6 +61,8 @@
 - Rejected server-initiated JSON-RPC requests received on 2026 stateless
   Streamable HTTP client response streams; servers must use MRTR
   `input_required` results instead.
+- Enforced `subscriptions/listen` stream ordering and filters for 2026
+  subscription notifications.
 
 ## 2.2.0
 

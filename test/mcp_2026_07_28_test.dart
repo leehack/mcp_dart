@@ -610,6 +610,117 @@ void main() {
       expect(transport.sentMessages.last, isA<JsonRpcResponse>());
     });
 
+    test('server rejects subscription notifications before acknowledgment',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(listChanged: true),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
+        Method.subscriptionsListen,
+        (request, extra) async {
+          await extra.sendNotification(
+            const JsonRpcToolListChangedNotification(),
+          );
+          return const EmptyResult();
+        },
+        (id, params, meta) => JsonRpcSubscriptionsListenRequest(
+          id: id,
+          listenParams: SubscriptionsListenRequest.fromJson(params!),
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcSubscriptionsListenRequest(
+          id: 'sub-1',
+          listenParams: const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(toolsListChanged: true),
+          ),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidRequest.value);
+      expect(
+        response.error.message,
+        contains(Method.notificationsSubscriptionsAcknowledged),
+      );
+    });
+
+    test('server tags direct subscription notifications with subscription id',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(listChanged: true),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
+        Method.subscriptionsListen,
+        (request, extra) async {
+          await extra.sendSubscriptionAcknowledged(
+            request.listenParams.notifications.acknowledgedBy(
+              const ServerCapabilities(
+                tools: ServerCapabilitiesTools(listChanged: true),
+              ),
+            ),
+          );
+          await extra.sendNotification(
+            const JsonRpcToolListChangedNotification(),
+          );
+          return const EmptyResult();
+        },
+        (id, params, meta) => JsonRpcSubscriptionsListenRequest(
+          id: id,
+          listenParams: SubscriptionsListenRequest.fromJson(params!),
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcSubscriptionsListenRequest(
+          id: 'sub-1',
+          listenParams: const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(toolsListChanged: true),
+          ),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      expect(transport.sentMessages, hasLength(3));
+      expect(
+        transport.sentMessages.take(2).map((message) => message.toJson()),
+        everyElement(
+          containsPair(
+            'params',
+            containsPair(
+              '_meta',
+              containsPair(McpMetaKey.subscriptionId, 'sub-1'),
+            ),
+          ),
+        ),
+      );
+      expect(
+        (transport.sentMessages[1] as JsonRpcNotification).method,
+        Method.notificationsToolsListChanged,
+      );
+      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+    });
+
     test('stateless server responses add complete result and cache defaults',
         () async {
       final server = Server(
