@@ -1268,14 +1268,18 @@ class McpServer {
       Method.toolsList,
       (request, extra) async {
         final protocolVersion = request.meta?[McpMetaKey.protocolVersion];
-        final includeLegacyTaskExecution = protocolVersion is! String ||
-            !isStatelessProtocolVersion(protocolVersion);
+        final isStatelessRequest = protocolVersion is String &&
+            isStatelessProtocolVersion(protocolVersion);
+        final includeLegacyTaskExecution = !isStatelessRequest;
+        final tools = _registeredTools.values.where((t) => t.enabled).toList();
+        if (isStatelessRequest) {
+          tools.sort((a, b) => a.name.compareTo(b.name));
+        }
 
         return ListToolsResult(
-          tools: _registeredTools.values
-              .where((t) => t.enabled)
+          tools: tools
               .map(
-                (e) => e.toTool(
+                (tool) => tool.toTool(
                   includeExecution: includeLegacyTaskExecution,
                 ),
               )

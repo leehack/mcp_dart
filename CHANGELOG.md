@@ -24,6 +24,8 @@
   mismatched `Mcp-Param-*` argument headers.
 - Removed `Mcp-Session-Id` from 2026 stateless Streamable HTTP requests by
   stripping it from client sends and rejecting it on stateless server POSTs.
+- Sorted 2026 stateless high-level `tools/list` responses by tool name for
+  deterministic list results while preserving legacy registration-order output.
 - Gated 2026 stateless task extension methods on advertised server extension
   support and rejected legacy task result shapes on extension `tasks/get`,
   `tasks/update`, and `tasks/cancel` handlers.

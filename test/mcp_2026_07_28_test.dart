@@ -1247,6 +1247,30 @@ void main() {
       expect(tool, isNot(contains('execution')));
     });
 
+    test('stateless tools/list returns tools sorted by name', () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      for (final name in ['zeta', 'alpha', 'middle']) {
+        server.registerTool(
+          name,
+          callback: (args, extra) => const CallToolResult(
+            content: [TextContent(text: 'ok')],
+          ),
+        );
+      }
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport
+          .receive(JsonRpcListToolsRequest(id: 'tools', meta: _clientMeta()));
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      expect(tools.map((tool) => tool['name']), ['alpha', 'middle', 'zeta']);
+    });
+
     test('tasks/update handler requires task extension capability', () {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
