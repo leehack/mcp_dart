@@ -42,9 +42,15 @@ class DiscoveringClientTransport extends Transport
     implements ProtocolVersionAwareTransport {
   DiscoveringClientTransport({
     this.discoverVersions = const [draftProtocolVersion2026_07_28],
+    this.capabilities = const ServerCapabilities(
+      tools: ServerCapabilitiesTools(),
+    ),
+    this.toolsListResult = const {'tools': []},
   });
 
   final List<String> discoverVersions;
+  final ServerCapabilities capabilities;
+  final Map<String, dynamic> toolsListResult;
   final List<JsonRpcMessage> sentMessages = [];
 
   @override
@@ -68,9 +74,7 @@ class DiscoveringClientTransport extends Transport
           id: message.id,
           result: DiscoverResult(
             supportedVersions: discoverVersions,
-            capabilities: const ServerCapabilities(
-              tools: ServerCapabilitiesTools(),
-            ),
+            capabilities: capabilities,
             serverInfo: const Implementation(name: 'server', version: '1.0.0'),
           ).toJson(),
         ),
@@ -82,7 +86,7 @@ class DiscoveringClientTransport extends Transport
       onmessage?.call(
         JsonRpcResponse(
           id: message.id,
-          result: const ListToolsResult(tools: []).toJson(),
+          result: toolsListResult,
         ),
       );
     }
@@ -94,6 +98,11 @@ class DiscoveringClientTransport extends Transport
 
 class LegacyFallbackTransport extends Transport
     implements ProtocolVersionAwareTransport {
+  LegacyFallbackTransport({
+    this.toolsListResult = const {'tools': []},
+  });
+
+  final Map<String, dynamic> toolsListResult;
   final List<JsonRpcMessage> sentMessages = [];
 
   @override
@@ -135,6 +144,16 @@ class LegacyFallbackTransport extends Transport
             ),
             serverInfo: Implementation(name: 'server', version: '1.0.0'),
           ).toJson(),
+        ),
+      );
+      return;
+    }
+
+    if (message is JsonRpcRequest && message.method == Method.toolsList) {
+      onmessage?.call(
+        JsonRpcResponse(
+          id: message.id,
+          result: toolsListResult,
         ),
       );
     }
@@ -1694,6 +1713,118 @@ void main() {
         'version': '1.0.0',
       });
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
+    });
+
+    test('client rejects unrecognized stateless resultType values', () async {
+      final transport = DiscoveringClientTransport(
+        toolsListResult: const {
+          'resultType': 'future_extension',
+          'tools': [],
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+
+      await client.connect(transport);
+
+      await expectLater(
+        client.listTools(),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('Failed to parse result for ${Method.toolsList}'),
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains('Unrecognized MCP resultType "future_extension"'),
+              ),
+        ),
+      );
+    });
+
+    test('client rejects non-string stateless resultType values', () async {
+      final transport = DiscoveringClientTransport(
+        toolsListResult: const {
+          'resultType': 42,
+          'tools': [],
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+
+      await client.connect(transport);
+
+      await expectLater(
+        client.listTools(),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains('MCP resultType must be a string'),
+              ),
+        ),
+      );
+    });
+
+    test('client accepts advertised task extension resultType values',
+        () async {
+      final transport = DiscoveringClientTransport(
+        capabilities: ServerCapabilities(
+          tools: const ServerCapabilitiesTools(),
+          extensions: withMcpTasksExtension(null),
+        ),
+        toolsListResult: const {
+          'resultType': resultTypeTask,
+          'tools': [],
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+
+      await client.connect(transport);
+
+      final result = await client.listTools();
+      expect(result.tools, isEmpty);
+    });
+
+    test('stable client sessions do not validate future resultType values',
+        () async {
+      final transport = LegacyFallbackTransport(
+        toolsListResult: const {
+          'resultType': 'future_extension',
+          'tools': [],
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+
+      await client.connect(transport);
+
+      final result = await client.listTools();
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(result.tools, isEmpty);
     });
 
     test('client rejects discovery when no compatible version is offered',

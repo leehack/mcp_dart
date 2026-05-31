@@ -399,6 +399,50 @@ abstract class Protocol {
     }
   }
 
+  /// Returns whether [resultType] is recognized for result parsing.
+  @protected
+  bool isRecognizedResultType(String resultType) {
+    return resultType == resultTypeComplete ||
+        resultType == resultTypeInputRequired;
+  }
+
+  bool _usesStatelessResultTypes(JsonRpcRequest request) {
+    final requestProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
+    if (requestProtocolVersion is String &&
+        isStatelessProtocolVersion(requestProtocolVersion)) {
+      return true;
+    }
+
+    final Object? activeTransport = _transport;
+    if (activeTransport is! ProtocolVersionAwareTransport) {
+      return false;
+    }
+
+    final transportProtocolVersion = activeTransport.protocolVersion;
+    return transportProtocolVersion != null &&
+        isStatelessProtocolVersion(transportProtocolVersion);
+  }
+
+  void _validateResponseResultType(
+    JsonRpcRequest request,
+    Map<String, dynamic> resultJson,
+  ) {
+    if (!_usesStatelessResultTypes(request)) {
+      return;
+    }
+
+    final resultType = resultJson['resultType'];
+    if (resultType == null) {
+      return;
+    }
+    if (resultType is! String) {
+      throw const FormatException('MCP resultType must be a string');
+    }
+    if (!isRecognizedResultType(resultType)) {
+      throw FormatException('Unrecognized MCP resultType "$resultType"');
+    }
+  }
+
   void _registerTaskHandlers() {
     setRequestHandler<JsonRpcGetTaskRequest>(
       Method.tasksGet,
@@ -1674,8 +1718,10 @@ abstract class Protocol {
       Object? taskCancellationError;
       late final T result;
       try {
+        final resultJson = response.toJson()['result'] as Map<String, dynamic>;
+        _validateResponseResultType(jsonrpcRequest, resultJson);
         result = resultFactory(
-          response.toJson()['result'] as Map<String, dynamic>,
+          resultJson,
         );
         final state = taskRequestState;
         if (state != null) {

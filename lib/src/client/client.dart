@@ -454,6 +454,16 @@ class McpClient extends Protocol {
   String? getProtocolVersion() => _negotiatedProtocolVersion;
 
   @override
+  bool isRecognizedResultType(String resultType) {
+    if (super.isRecognizedResultType(resultType)) {
+      return true;
+    }
+
+    return resultType == resultTypeTask &&
+        (_serverCapabilities?.supportsTasksExtension ?? false);
+  }
+
+  @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
     if (_sentInitialized || request.method == Method.ping) {
       return null;

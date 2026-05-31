@@ -50,6 +50,8 @@
 - Added request-scoped stateless logging gating via
   `io.modelcontextprotocol/logLevel` metadata so 2026 log notifications are
   emitted only when the current request opts in.
+- Rejected unrecognized 2026 stateless response `resultType` values on the
+  client while keeping absent `resultType` compatible with stable result parsing.
 
 ## 2.2.0
 
