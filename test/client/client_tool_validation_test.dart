@@ -150,9 +150,17 @@ void main() {
             inputSchema: JsonSchema.object(
               properties: {
                 'region': JsonSchema.string(mcpHeader: 'Region'),
-                'limit': JsonSchema.number(mcpHeader: 'Limit'),
+                'limit': JsonSchema.integer(mcpHeader: 'Limit'),
                 'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
                 'count': JsonSchema.integer(mcpHeader: 'Count'),
+              },
+            ),
+          ),
+          Tool(
+            name: 'number_header',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'ratio': JsonSchema.number(mcpHeader: 'Ratio'),
               },
             ),
           ),
@@ -214,7 +222,7 @@ void main() {
       });
       expect(
         warnings.where((message) => message.contains('Rejecting tool')),
-        hasLength(4),
+        hasLength(5),
       );
     });
 

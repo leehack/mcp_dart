@@ -22,6 +22,9 @@
 - Synced registered tool `x-mcp-header` metadata into Streamable HTTP server
   transports so 2026 stateless `tools/call` requests reject missing or
   mismatched `Mcp-Param-*` argument headers.
+- Rejected `x-mcp-header` usage on JSON Schema `number` parameters, keeping
+  mirrored tool headers limited to string, JavaScript-safe integer, and boolean
+  parameters.
 - Removed `Mcp-Session-Id` from 2026 stateless Streamable HTTP requests by
   stripping it from client sends and rejecting it on stateless server POSTs.
 - Sorted 2026 stateless high-level `tools/list` responses by tool name for

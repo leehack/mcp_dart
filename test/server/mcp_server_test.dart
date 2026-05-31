@@ -197,6 +197,15 @@ void main() {
         callback: (args, extra) async => const CallToolResult(content: []),
       );
       server.registerTool(
+        'number-header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'value': JsonNumber(mcpHeader: 'Value'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
         'duplicate-header-tool',
         inputSchema: const ToolInputSchema(
           properties: {

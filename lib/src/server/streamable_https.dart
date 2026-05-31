@@ -9,6 +9,9 @@ import '../shared/transport.dart';
 import '../types.dart';
 import 'dns_rebinding_protection.dart';
 
+const int _maxSafeHeaderInteger = 9007199254740991;
+const int _minSafeHeaderInteger = -9007199254740991;
+
 /// ID for SSE streams
 typedef StreamId = String;
 
@@ -451,13 +454,47 @@ class StreamableHTTPServerTransport
   }
 
   String? _primitiveHeaderString(Object? value) {
+    final integer = _safeHeaderInteger(value);
+    if (integer != null) {
+      return integer.toString();
+    }
+
     return switch (value) {
       null => null,
       String() => value,
-      num() => value.toString(),
       bool() => value.toString(),
       _ => null,
     };
+  }
+
+  int? _safeHeaderInteger(Object? value) {
+    if (value is int) {
+      if (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger) {
+        return null;
+      }
+      return value;
+    }
+
+    if (value is double &&
+        value.isFinite &&
+        value.truncateToDouble() == value &&
+        value >= _minSafeHeaderInteger &&
+        value <= _maxSafeHeaderInteger) {
+      return value.toInt();
+    }
+
+    return null;
+  }
+
+  bool _headerValueMatchesPrimitive(Object? bodyValue, String headerValue) {
+    final integer = _safeHeaderInteger(bodyValue);
+    if (integer != null) {
+      final headerInteger = _safeHeaderInteger(num.tryParse(headerValue));
+      return headerInteger != null && headerInteger == integer;
+    }
+
+    final value = _primitiveHeaderString(bodyValue);
+    return value != null && headerValue == value;
   }
 
   String? _toolName(JsonRpcMessage message) {
@@ -554,9 +591,9 @@ class StreamableHTTPServerTransport
         final headerSuffix = entry.value;
         final header = headers[headerSuffix.toLowerCase()];
         final hasArgument = argumentMap.containsKey(argumentName);
-        final bodyValue = hasArgument
-            ? _primitiveHeaderString(argumentMap[argumentName])
-            : null;
+        final bodyArgument = hasArgument ? argumentMap[argumentName] : null;
+        final bodyValue =
+            hasArgument ? _primitiveHeaderString(bodyArgument) : null;
 
         if (!hasArgument || bodyValue == null) {
           if (header != null) {
@@ -582,7 +619,7 @@ class StreamableHTTPServerTransport
         }
 
         consumedHeaders.add(header.suffix.toLowerCase());
-        if (header.value != bodyValue) {
+        if (!_headerValueMatchesPrimitive(bodyArgument, header.value!)) {
           await _writeHeaderMismatchResponse(
             res,
             message,
@@ -619,8 +656,8 @@ class StreamableHTTPServerTransport
         return false;
       }
 
-      final bodyValue = _primitiveHeaderString(argumentMap[argumentName]);
-      if (bodyValue == null || header.value != bodyValue) {
+      final bodyArgument = argumentMap[argumentName];
+      if (!_headerValueMatchesPrimitive(bodyArgument, header.value!)) {
         await _writeHeaderMismatchResponse(
           res,
           message,

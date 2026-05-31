@@ -16,6 +16,9 @@ const _defaultStreamableHttpReconnectionOptions =
   maxRetries: 2,
 );
 
+const int _maxSafeHeaderInteger = 9007199254740991;
+const int _minSafeHeaderInteger = -9007199254740991;
+
 /// Error thrown for Streamable HTTP issues
 class StreamableHttpError extends Error {
   /// HTTP status code if applicable
@@ -591,12 +594,35 @@ class StreamableHttpClientTransport
   }
 
   String? _toolParameterHeaderString(Object? value) {
+    final integer = _safeHeaderInteger(value);
+    if (integer != null) {
+      return integer.toString();
+    }
+
     return switch (value) {
       String() => value,
-      num() => value.toString(),
       bool() => value.toString(),
       _ => null,
     };
+  }
+
+  int? _safeHeaderInteger(Object? value) {
+    if (value is int) {
+      if (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger) {
+        return null;
+      }
+      return value;
+    }
+
+    if (value is double &&
+        value.isFinite &&
+        value.truncateToDouble() == value &&
+        value >= _minSafeHeaderInteger &&
+        value <= _maxSafeHeaderInteger) {
+      return value.toInt();
+    }
+
+    return null;
   }
 
   String _encodeToolParameterHeaderValue(String value) {

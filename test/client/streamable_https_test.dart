@@ -1257,6 +1257,9 @@ void main() {
         capturedHeaders['greeting'] =
             request.headers.value('mcp-param-greeting');
         capturedHeaders['limit'] = request.headers.value('mcp-param-limit');
+        capturedHeaders['rounded'] = request.headers.value('mcp-param-rounded');
+        capturedHeaders['unsafe'] = request.headers.value('mcp-param-unsafe');
+        capturedHeaders['ratio'] = request.headers.value('mcp-param-ratio');
         capturedHeaders['dryRun'] = request.headers.value('mcp-param-dry-run');
         capturedHeaders['text'] = request.headers.value('mcp-param-text');
         capturedHeaders['payload'] = request.headers.value('mcp-param-payload');
@@ -1285,6 +1288,9 @@ void main() {
               'region': 'Region',
               'greeting': 'Greeting',
               'limit': 'Limit',
+              'rounded': 'Rounded',
+              'unsafe': 'Unsafe',
+              'ratio': 'Ratio',
               'dryRun': 'Dry-Run',
               'text': 'Text',
               'payload': 'Payload',
@@ -1305,6 +1311,9 @@ void main() {
               'region': 'us-west1',
               'greeting': 'Hello, 世界',
               'limit': 42,
+              'rounded': 42.0,
+              'unsafe': 9007199254740992,
+              'ratio': 1.5,
               'dryRun': false,
               'text': ' padded ',
               'payload': {'nested': true},
@@ -1321,6 +1330,9 @@ void main() {
         '=?base64?${base64Encode(utf8.encode('Hello, 世界'))}?=',
       );
       expect(capturedHeaders['limit'], '42');
+      expect(capturedHeaders['rounded'], '42');
+      expect(capturedHeaders['unsafe'], isNull);
+      expect(capturedHeaders['ratio'], isNull);
       expect(capturedHeaders['dryRun'], 'false');
       expect(capturedHeaders['text'], '=?base64?IHBhZGRlZCA=?=');
       expect(capturedHeaders['payload'], isNull);

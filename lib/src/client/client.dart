@@ -914,7 +914,8 @@ class McpClient extends Protocol {
 
       if (!_isToolParameterHeaderPrimitive(entry.value)) {
         return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" uses x-mcp-header on a non-primitive type',
+          'parameter "${entry.key}" uses x-mcp-header on a schema that is not '
+          'string, integer, or boolean',
         );
       }
 
@@ -932,7 +933,6 @@ class McpClient extends Protocol {
 
   bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
     return schema is JsonString ||
-        schema is JsonNumber ||
         schema is JsonInteger ||
         schema is JsonBoolean;
   }

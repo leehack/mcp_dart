@@ -2039,6 +2039,8 @@ void main() {
         const {
           'execute': {
             'dryRun': 'Dry-Run',
+            'rounded': 'Rounded',
+            'ratio': 'Ratio',
             'region': 'Region',
           },
         },
@@ -2143,6 +2145,43 @@ void main() {
         body['error']['message'],
         contains('no matching primitive body argument'),
       );
+
+      (statusCode, body) = await postToolCall(
+        id: 34,
+        arguments: const {
+          'dryRun': false,
+          'ratio': 1.5,
+          'region': 'us-east1',
+        },
+        headers: const {
+          'Mcp-Param-Dry-Run': 'false',
+          'Mcp-Param-Ratio': '1.5',
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.badRequest);
+      expect(body['id'], 34);
+      expect(
+        body['error']['message'],
+        contains('no matching primitive body argument'),
+      );
+
+      (statusCode, body) = await postToolCall(
+        id: 35,
+        arguments: const {
+          'dryRun': false,
+          'rounded': 42.0,
+          'region': 'us-east1',
+        },
+        headers: const {
+          'Mcp-Param-Dry-Run': 'false',
+          'Mcp-Param-Rounded': '42.0',
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.ok);
+      expect(body['id'], 35);
+      expect(body['result']['content'], isEmpty);
 
       (statusCode, body) = await postToolCall(
         id: 33,
