@@ -11,6 +11,7 @@ import 'dns_rebinding_protection.dart';
 
 const int _maxSafeHeaderInteger = 9007199254740991;
 const int _minSafeHeaderInteger = -9007199254740991;
+const String _xAccelBufferingHeader = 'X-Accel-Buffering';
 
 /// ID for SSE streams
 typedef StreamId = String;
@@ -342,6 +343,15 @@ class StreamableHTTPServerTransport
     return _isValidVisibleAsciiToken(sessionId);
   }
 
+  Map<String, String> _sseResponseHeaders() {
+    return {
+      HttpHeaders.contentTypeHeader: 'text/event-stream; charset=utf-8',
+      HttpHeaders.cacheControlHeader: 'no-cache, no-transform',
+      HttpHeaders.connectionHeader: 'keep-alive',
+      _xAccelBufferingHeader: 'no',
+    };
+  }
+
   void _validateSseEventId(EventId eventId) {
     if (!_isValidVisibleAsciiToken(eventId)) {
       throw StateError(
@@ -378,6 +388,7 @@ class StreamableHTTPServerTransport
     Object? data,
   }) async {
     response.statusCode = httpStatus;
+    response.headers.contentType = ContentType.json;
     response.write(
       jsonEncode(
         JsonRpcError(
@@ -953,20 +964,12 @@ class StreamableHTTPServerTransport
     // The client MUST include an Accept header, listing text/event-stream as a supported content type.
     final acceptedMediaTypes = _parseAcceptedMediaTypes(req);
     if (!_acceptsMediaType(acceptedMediaTypes, 'text/event-stream')) {
-      req.response
-        ..statusCode = HttpStatus.notAcceptable
-        ..write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.connectionClosed.value,
-                message: 'Not Acceptable: Client must accept text/event-stream',
-              ),
-            ).toJson(),
-          ),
-        );
-      await _safeClose(req.response);
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.notAcceptable,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Not Acceptable: Client must accept text/event-stream',
+      );
       return;
     }
 
@@ -988,11 +991,7 @@ class StreamableHTTPServerTransport
 
     // The server MUST either return Content-Type: text/event-stream in response to this HTTP GET,
     // or else return HTTP 405 Method Not Allowed
-    final headers = {
-      HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
-      HttpHeaders.cacheControlHeader: "no-cache, no-transform",
-      HttpHeaders.connectionHeader: "keep-alive",
-    };
+    final headers = _sseResponseHeaders();
 
     // After initialization, always include the session ID if we have one
     if (sessionId != null) {
@@ -1059,11 +1058,7 @@ class StreamableHTTPServerTransport
         return;
       }
 
-      final headers = {
-        HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
-        HttpHeaders.cacheControlHeader: "no-cache, no-transform",
-        HttpHeaders.connectionHeader: "keep-alive",
-      };
+      final headers = _sseResponseHeaders();
 
       if (sessionId != null) {
         headers["mcp-session-id"] = sessionId!;
@@ -1257,37 +1252,23 @@ class StreamableHTTPServerTransport
 
   /// Handles unsupported requests (PUT, PATCH, etc.)
   Future<void> _handleUnsupportedRequest(HttpResponse res) async {
-    res.statusCode = HttpStatus.methodNotAllowed;
     res.headers.set(HttpHeaders.allowHeader, "GET, POST, DELETE");
-    res.write(
-      jsonEncode(
-        JsonRpcError(
-          id: null,
-          error: JsonRpcErrorData(
-            code: ErrorCode.connectionClosed.value,
-            message: 'Method not allowed.',
-          ),
-        ).toJson(),
-      ),
+    await _writeJsonRpcErrorResponse(
+      res,
+      httpStatus: HttpStatus.methodNotAllowed,
+      errorCode: ErrorCode.connectionClosed,
+      message: 'Method not allowed.',
     );
-    await _safeClose(res);
   }
 
   Future<void> _handleStatelessUnsupportedRequest(HttpResponse res) async {
-    res.statusCode = HttpStatus.methodNotAllowed;
     res.headers.set(HttpHeaders.allowHeader, "POST");
-    res.write(
-      jsonEncode(
-        JsonRpcError(
-          id: null,
-          error: JsonRpcErrorData(
-            code: ErrorCode.connectionClosed.value,
-            message: 'Method not allowed for stateless MCP requests.',
-          ),
-        ).toJson(),
-      ),
+    await _writeJsonRpcErrorResponse(
+      res,
+      httpStatus: HttpStatus.methodNotAllowed,
+      errorCode: ErrorCode.connectionClosed,
+      message: 'Method not allowed for stateless MCP requests.',
     );
-    await _safeClose(res);
   }
 
   /// Handles POST requests containing JSON-RPC messages
@@ -1298,39 +1279,25 @@ class StreamableHTTPServerTransport
       // The client MUST include an Accept header, listing both application/json and text/event-stream as supported content types.
       if (!_acceptsMediaType(acceptedMediaTypes, 'application/json') ||
           !_acceptsMediaType(acceptedMediaTypes, 'text/event-stream')) {
-        req.response.statusCode = HttpStatus.notAcceptable;
-        req.response.write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.connectionClosed.value,
-                message:
-                    'Not Acceptable: Client must accept both application/json and text/event-stream',
-              ),
-            ).toJson(),
-          ),
+        await _writeJsonRpcErrorResponse(
+          req.response,
+          httpStatus: HttpStatus.notAcceptable,
+          errorCode: ErrorCode.connectionClosed,
+          message:
+              'Not Acceptable: Client must accept both application/json and text/event-stream',
         );
-        await _safeClose(req.response);
         return;
       }
 
       final contentType = req.headers.contentType?.value ?? '';
       if (!contentType.contains("application/json")) {
-        req.response.statusCode = HttpStatus.unsupportedMediaType;
-        req.response.write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.connectionClosed.value,
-                message:
-                    'Unsupported Media Type: Content-Type must be application/json',
-              ),
-            ).toJson(),
-          ),
+        await _writeJsonRpcErrorResponse(
+          req.response,
+          httpStatus: HttpStatus.unsupportedMediaType,
+          errorCode: ErrorCode.connectionClosed,
+          message:
+              'Unsupported Media Type: Content-Type must be application/json',
         );
-        await _safeClose(req.response);
         return;
       }
 
@@ -1437,36 +1404,22 @@ class StreamableHTTPServerTransport
             return;
           }
 
-          req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(
-            jsonEncode(
-              JsonRpcError(
-                id: null,
-                error: JsonRpcErrorData(
-                  code: ErrorCode.invalidRequest.value,
-                  message: 'Invalid Request: Server already initialized',
-                ),
-              ).toJson(),
-            ),
+          await _writeJsonRpcErrorResponse(
+            req.response,
+            httpStatus: HttpStatus.badRequest,
+            errorCode: ErrorCode.invalidRequest,
+            message: 'Invalid Request: Server already initialized',
           );
-          await _safeClose(req.response);
           return;
         }
         if (messages.length > 1) {
-          req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(
-            jsonEncode(
-              JsonRpcError(
-                id: null,
-                error: JsonRpcErrorData(
-                  code: ErrorCode.invalidRequest.value,
-                  message:
-                      'Invalid Request: Only one initialization request is allowed',
-                ),
-              ).toJson(),
-            ),
+          await _writeJsonRpcErrorResponse(
+            req.response,
+            httpStatus: HttpStatus.badRequest,
+            errorCode: ErrorCode.invalidRequest,
+            message:
+                'Invalid Request: Only one initialization request is allowed',
           );
-          await _safeClose(req.response);
           return;
         }
 
@@ -1536,11 +1489,7 @@ class StreamableHTTPServerTransport
         final streamId = generateUUID();
         Socket? responseSocket;
         if (!_enableJsonResponse) {
-          final headers = {
-            HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
-            HttpHeaders.cacheControlHeader: "no-cache",
-            HttpHeaders.connectionHeader: "keep-alive",
-          };
+          final headers = _sseResponseHeaders();
 
           // After initialization, always include the session ID if we have one
           if (sessionId != null) {
@@ -1688,19 +1637,12 @@ class StreamableHTTPServerTransport
   Future<bool> _validateSession(HttpRequest req, HttpResponse res) async {
     if (!_initialized) {
       // If the server has not been initialized yet, reject all requests
-      res.statusCode = HttpStatus.badRequest;
-      res.write(
-        jsonEncode(
-          JsonRpcError(
-            id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.connectionClosed.value,
-              message: 'Bad Request: Server not initialized',
-            ),
-          ).toJson(),
-        ),
+      await _writeJsonRpcErrorResponse(
+        res,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Bad Request: Server not initialized',
       );
-      await _safeClose(res);
       return false;
     }
 
@@ -1714,35 +1656,21 @@ class StreamableHTTPServerTransport
 
     if (requestSessionId == null) {
       // Non-initialization requests without a session ID should return 400 Bad Request
-      res.statusCode = HttpStatus.badRequest;
-      res.write(
-        jsonEncode(
-          JsonRpcError(
-            id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.connectionClosed.value,
-              message: 'Bad Request: Mcp-Session-Id header is required',
-            ),
-          ).toJson(),
-        ),
+      await _writeJsonRpcErrorResponse(
+        res,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Bad Request: Mcp-Session-Id header is required',
       );
-      await _safeClose(res);
       return false;
     } else if (_terminated || requestSessionId != sessionId) {
       // Reject terminated or invalid session IDs with 404 Not Found.
-      res.statusCode = HttpStatus.notFound;
-      res.write(
-        jsonEncode(
-          JsonRpcError(
-            id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.connectionClosed.value,
-              message: 'Session not found',
-            ),
-          ).toJson(),
-        ),
+      await _writeJsonRpcErrorResponse(
+        res,
+        httpStatus: HttpStatus.notFound,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Session not found',
       );
-      await _safeClose(res);
       return false;
     }
 

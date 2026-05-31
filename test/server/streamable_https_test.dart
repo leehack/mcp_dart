@@ -317,6 +317,105 @@ void main() {
 
     // Helper to manually trigger initialization of the transport
 
+    test('JSON-RPC preflight errors advertise JSON content type', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'preflight-session-id',
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      Future<HttpClientResponse> send(
+        String method, {
+        Map<String, String> headers = const {},
+        Object? body,
+        ContentType? contentType,
+      }) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.openUrl(
+          method,
+          Uri.parse('$serverUrlBase/mcp'),
+        );
+        request.headers.contentType = contentType;
+        headers.forEach(request.headers.set);
+        if (body != null) {
+          request.write(jsonEncode(body));
+        }
+        return request.close();
+      }
+
+      final getWithoutSseAccept = await send(
+        'GET',
+        headers: {HttpHeaders.acceptHeader: 'application/json'},
+      );
+      expect(getWithoutSseAccept.statusCode, HttpStatus.notAcceptable);
+      expect(
+        getWithoutSseAccept.headers.contentType?.mimeType,
+        'application/json',
+      );
+      expect(
+        await utf8.decodeStream(getWithoutSseAccept),
+        contains('Client must accept text/event-stream'),
+      );
+
+      final unsupportedMethod = await send('PUT');
+      expect(unsupportedMethod.statusCode, HttpStatus.methodNotAllowed);
+      expect(
+        unsupportedMethod.headers.contentType?.mimeType,
+        'application/json',
+      );
+      expect(
+        unsupportedMethod.headers.value(HttpHeaders.allowHeader),
+        'GET, POST, DELETE',
+      );
+      expect(
+        await utf8.decodeStream(unsupportedMethod),
+        contains('Method not allowed.'),
+      );
+
+      final postWithoutSseAccept = await send(
+        'POST',
+        headers: {HttpHeaders.acceptHeader: 'application/json'},
+        contentType: ContentType.json,
+        body: const JsonRpcRequest(id: 1, method: 'ping').toJson(),
+      );
+      expect(postWithoutSseAccept.statusCode, HttpStatus.notAcceptable);
+      expect(
+        postWithoutSseAccept.headers.contentType?.mimeType,
+        'application/json',
+      );
+      expect(
+        await utf8.decodeStream(postWithoutSseAccept),
+        contains(
+          'Client must accept both application/json and text/event-stream',
+        ),
+      );
+
+      final postWithWrongContentType = await send(
+        'POST',
+        headers: {
+          HttpHeaders.acceptHeader: 'application/json, text/event-stream',
+        },
+        contentType: ContentType.text,
+        body: const JsonRpcRequest(id: 2, method: 'ping').toJson(),
+      );
+      expect(
+        postWithWrongContentType.statusCode,
+        HttpStatus.unsupportedMediaType,
+      );
+      expect(
+        postWithWrongContentType.headers.contentType?.mimeType,
+        'application/json',
+      );
+      expect(
+        await utf8.decodeStream(postWithWrongContentType),
+        contains('Content-Type must be application/json'),
+      );
+    });
+
     test('initialization with stateful session management', () async {
       // Create a new transport with session management
       final transport = StreamableHTTPServerTransport(
@@ -496,6 +595,7 @@ void main() {
           ),
         );
         expect(initResponse.statusCode, HttpStatus.ok);
+        expect(initResponse.headers.value('X-Accel-Buffering'), 'no');
         final initMessages = _decodeSseJsonMessages(
           await utf8.decodeStream(initResponse),
         );
@@ -512,6 +612,7 @@ void main() {
           response.headers.contentType?.mimeType,
           'text/event-stream',
         );
+        expect(response.headers.value('X-Accel-Buffering'), 'no');
 
         final messages =
             _decodeSseJsonMessages(await utf8.decodeStream(response));
@@ -705,6 +806,182 @@ void main() {
 
       expect(response.statusCode, HttpStatus.notFound);
       expect(body, contains('Session not found'));
+    });
+
+    test('stateful session JSON-RPC errors advertise JSON content type',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'json-error-session-id',
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcRequest && message.method == 'initialize') {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const {
+                  'protocolVersion': latestProtocolVersion,
+                  'capabilities': {},
+                  'serverInfo': {
+                    'name': 'JsonErrorServer',
+                    'version': '1.0.0',
+                  },
+                },
+              ),
+            ),
+          );
+        }
+      };
+
+      Future<HttpClientResponse> postJsonRpc(
+        JsonRpcMessage message, {
+        String? sessionId,
+      }) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        if (sessionId != null) {
+          request.headers.set('mcp-session-id', sessionId);
+        }
+        request.write(jsonEncode(message.toJson()));
+        return request.close();
+      }
+
+      final initialize = await postJsonRpc(
+        JsonRpcRequest(
+          id: 1,
+          method: 'initialize',
+          params: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'Client', version: '1.0'),
+          ).toJson(),
+        ),
+      );
+      expect(initialize.statusCode, HttpStatus.ok);
+      expect(
+        initialize.headers.value('mcp-session-id'),
+        'json-error-session-id',
+      );
+      await initialize.drain<void>();
+
+      final missingSession = await postJsonRpc(
+        const JsonRpcRequest(id: 2, method: 'ping'),
+      );
+      expect(missingSession.statusCode, HttpStatus.badRequest);
+      expect(missingSession.headers.contentType?.mimeType, 'application/json');
+      expect(
+        await utf8.decodeStream(missingSession),
+        contains('Mcp-Session-Id header is required'),
+      );
+
+      final invalidSession = await postJsonRpc(
+        const JsonRpcRequest(id: 3, method: 'ping'),
+        sessionId: 'wrong-session-id',
+      );
+      expect(invalidSession.statusCode, HttpStatus.notFound);
+      expect(invalidSession.headers.contentType?.mimeType, 'application/json');
+      expect(
+        await utf8.decodeStream(invalidSession),
+        contains('Session not found'),
+      );
+    });
+
+    test('initialization JSON-RPC errors advertise JSON content type',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'duplicate-init-session-id',
+          rejectBatchJsonRpcPayloads: false,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcRequest && message.method == 'initialize') {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const {
+                  'protocolVersion': latestProtocolVersion,
+                  'capabilities': {},
+                  'serverInfo': {
+                    'name': 'DuplicateInitServer',
+                    'version': '1.0.0',
+                  },
+                },
+              ),
+            ),
+          );
+        }
+      };
+
+      Future<HttpClientResponse> postJson(Object body) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        request.write(jsonEncode(body));
+        return request.close();
+      }
+
+      Map<String, dynamic> initializeBody(int id) {
+        return JsonRpcRequest(
+          id: id,
+          method: 'initialize',
+          params: const InitializeRequestParams(
+            protocolVersion: latestProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'Client', version: '1.0'),
+          ).toJson(),
+        ).toJson();
+      }
+
+      final duplicateBatch = await postJson([
+        initializeBody(1),
+        initializeBody(2),
+      ]);
+      expect(duplicateBatch.statusCode, HttpStatus.badRequest);
+      expect(duplicateBatch.headers.contentType?.mimeType, 'application/json');
+      expect(
+        await utf8.decodeStream(duplicateBatch),
+        contains('Only one initialization request is allowed'),
+      );
+
+      final initialize = await postJson(initializeBody(3));
+      expect(initialize.statusCode, HttpStatus.ok);
+      await initialize.drain<void>();
+
+      final alreadyInitialized = await postJson(initializeBody(4));
+      expect(alreadyInitialized.statusCode, HttpStatus.badRequest);
+      expect(
+        alreadyInitialized.headers.contentType?.mimeType,
+        'application/json',
+      );
+      expect(
+        await utf8.decodeStream(alreadyInitialized),
+        contains('Server already initialized'),
+      );
     });
 
     test('rejects generated session IDs outside visible ASCII', () async {
@@ -1263,6 +1540,7 @@ void main() {
       final first = await firstFuture.timeout(const Duration(seconds: 3));
       expect(first.statusCode, HttpStatus.ok);
       expect(first.headers.contentType?.mimeType, 'text/event-stream');
+      expect(first.headers.value('X-Accel-Buffering'), 'no');
       final firstLines = StreamIterator(
         first.transform(utf8.decoder).transform(const LineSplitter()),
       );
@@ -1281,6 +1559,7 @@ void main() {
       final second = await secondFuture.timeout(const Duration(seconds: 3));
       expect(second.statusCode, HttpStatus.ok);
       expect(second.headers.contentType?.mimeType, 'text/event-stream');
+      expect(second.headers.value('X-Accel-Buffering'), 'no');
       final secondLines = StreamIterator(
         second.transform(utf8.decoder).transform(const LineSplitter()),
       );
@@ -1391,6 +1670,7 @@ void main() {
 
       final stream = await streamFuture.timeout(const Duration(seconds: 3));
       expect(stream.statusCode, HttpStatus.ok);
+      expect(stream.headers.value('X-Accel-Buffering'), 'no');
       final lines = StreamIterator(
         stream.transform(utf8.decoder).transform(const LineSplitter()),
       );
@@ -1418,6 +1698,7 @@ void main() {
       final otherStream =
           await otherStreamFuture.timeout(const Duration(seconds: 3));
       expect(otherStream.statusCode, HttpStatus.ok);
+      expect(otherStream.headers.value('X-Accel-Buffering'), 'no');
       final otherLines = StreamIterator(
         otherStream.transform(utf8.decoder).transform(const LineSplitter()),
       );
@@ -1431,6 +1712,7 @@ void main() {
 
       final replay = await openGetSse(sessionId, lastEventId: first.id);
       expect(replay.statusCode, HttpStatus.ok);
+      expect(replay.headers.value('X-Accel-Buffering'), 'no');
       final replayLines = StreamIterator(
         replay.transform(utf8.decoder).transform(const LineSplitter()),
       );
@@ -1822,6 +2104,7 @@ void main() {
       });
 
       expect(response.statusCode, HttpStatus.badRequest);
+      expect(response.headers.contentType?.mimeType, 'application/json');
       final body =
           jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
       expect(body['id'], 1);
@@ -2102,6 +2385,7 @@ void main() {
       );
 
       expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers.value('X-Accel-Buffering'), 'no');
       expect(messages, hasLength(1));
       expect(messages.single['id'], 10);
       expect(messages.single['result']['tools'], isEmpty);
@@ -2177,6 +2461,7 @@ void main() {
       );
       expect(responseText, contains('200 OK'));
       expect(responseText.toLowerCase(), contains('text/event-stream'));
+      expect(responseText.toLowerCase(), contains('x-accel-buffering: no'));
       expect(
         (await receivedRequest.future.timeout(const Duration(seconds: 3))).id,
         11,
@@ -2725,6 +3010,7 @@ void main() {
           jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
 
       expect(response.statusCode, HttpStatus.methodNotAllowed);
+      expect(response.headers.contentType?.mimeType, 'application/json');
       expect(response.headers.value(HttpHeaders.allowHeader), 'POST');
       expect(body['error']['code'], ErrorCode.connectionClosed.value);
       expect(
@@ -2747,6 +3033,7 @@ void main() {
       ) as Map<String, dynamic>;
 
       expect(patchResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(patchResponse.headers.contentType?.mimeType, 'application/json');
       expect(patchResponse.headers.value(HttpHeaders.allowHeader), 'POST');
       expect(patchBody['error']['code'], ErrorCode.connectionClosed.value);
       expect(

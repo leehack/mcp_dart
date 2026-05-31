@@ -52,6 +52,8 @@
   emitted only when the current request opts in.
 - Rejected unrecognized 2026 stateless response `resultType` values on the
   client while keeping absent `resultType` compatible with stable result parsing.
+- Added `X-Accel-Buffering: no` to Streamable HTTP SSE responses and marked
+  JSON-RPC error bodies with `Content-Type: application/json`.
 
 ## 2.2.0
 
