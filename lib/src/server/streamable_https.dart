@@ -171,6 +171,7 @@ class StreamableHTTPServerTransport
   final Map<dynamic, String> _requestToStreamMapping = {};
   final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
   final Set<dynamic> _statelessRequestIds = {};
+  final Map<StreamId, Socket> _responseStreamSockets = {};
   bool _initialized = false;
   bool _terminated = false;
   final bool _enableJsonResponse;
@@ -1001,6 +1002,7 @@ class StreamableHTTPServerTransport
     // We need to send headers immediately as messages will arrive much later,
     // otherwise the client will just wait for the first message
     req.response.statusCode = HttpStatus.ok;
+    req.response.bufferOutput = false;
     headers.forEach((key, value) {
       req.response.headers.set(key, value);
     });
@@ -1130,6 +1132,14 @@ class StreamableHTTPServerTransport
     }
   }
 
+  Future<void> _safeCloseSocket(Socket socket) async {
+    try {
+      await socket.close().timeout(const Duration(milliseconds: 100));
+    } catch (e) {
+      socket.destroy();
+    }
+  }
+
   /// Writes an event to the SSE stream with proper formatting
   Future<bool> _writeSSEEvent(
     HttpResponse res,
@@ -1153,6 +1163,41 @@ class StreamableHTTPServerTransport
     }
   }
 
+  Future<Socket> _detachSseSocket(
+    HttpRequest req,
+    Map<String, String> headers,
+  ) async {
+    final socket = await req.response.detachSocket(writeHeaders: false);
+    final responseHeaders = {
+      ...headers,
+      HttpHeaders.connectionHeader: 'close',
+    };
+    final responseHead = StringBuffer('HTTP/1.1 200 OK\r\n');
+    responseHeaders.forEach((key, value) {
+      responseHead.write('$key: $value\r\n');
+    });
+    responseHead.write('\r\n');
+    socket.add(utf8.encode(responseHead.toString()));
+    await socket.flush();
+    return socket;
+  }
+
+  Future<bool> _writeSSEEventToSocket(
+    Socket socket,
+    JsonRpcMessage message,
+  ) async {
+    try {
+      var eventData = "event: message\n";
+      eventData += "data: ${jsonEncode(message.toJson())}\n\n";
+
+      socket.add(utf8.encode(eventData));
+      await socket.flush();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> _writeSSEPrimingEvent(
     HttpResponse res,
     EventId eventId,
@@ -1161,6 +1206,16 @@ class StreamableHTTPServerTransport
       _validateSseEventId(eventId);
       res.add(utf8.encode('id: $eventId\ndata:\n\n'));
       await res.flush();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> _writeSSECommentToSocket(Socket socket) async {
+    try {
+      socket.add(utf8.encode(':\n\n'));
+      await socket.flush();
       return true;
     } catch (e) {
       return false;
@@ -1190,6 +1245,14 @@ class StreamableHTTPServerTransport
       }
       return false;
     }
+  }
+
+  Future<bool> _primeSseSocket(Socket socket) async {
+    final sent = await _writeSSECommentToSocket(socket);
+    if (!sent) {
+      onerror?.call(StateError('Failed to send initial SSE comment'));
+    }
+    return sent;
   }
 
   /// Handles unsupported requests (PUT, PATCH, etc.)
@@ -1471,6 +1534,7 @@ class StreamableHTTPServerTransport
         // The default behavior is to use SSE streaming
         // but in some cases server will return JSON responses
         final streamId = generateUUID();
+        Socket? responseSocket;
         if (!_enableJsonResponse) {
           final headers = {
             HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
@@ -1483,10 +1547,15 @@ class StreamableHTTPServerTransport
             headers["mcp-session-id"] = sessionId!;
           }
 
-          req.response.statusCode = HttpStatus.ok;
-          headers.forEach((key, value) {
-            req.response.headers.set(key, value);
-          });
+          if (isStatelessRequest) {
+            responseSocket = await _detachSseSocket(req, headers);
+          } else {
+            req.response.statusCode = HttpStatus.ok;
+            req.response.bufferOutput = false;
+            headers.forEach((key, value) {
+              req.response.headers.set(key, value);
+            });
+          }
         }
 
         // Store the response for this request to send messages back through this connection
@@ -1495,7 +1564,11 @@ class StreamableHTTPServerTransport
           if (_isJsonRpcRequest(message)) {
             final reqId = (message as JsonRpcRequest).id;
             _ownedStreamIds.add(streamId);
-            _streamMapping[streamId] = req.response;
+            if (responseSocket == null) {
+              _streamMapping[streamId] = req.response;
+            } else {
+              _responseStreamSockets[streamId] = responseSocket;
+            }
             _requestToStreamMapping[reqId] = streamId;
             if (_isStatelessJsonRpcRequest(message)) {
               _statelessRequestIds.add(reqId);
@@ -1503,9 +1576,18 @@ class StreamableHTTPServerTransport
           }
         }
 
-        if (!_enableJsonResponse &&
-            !await _primeSseStream(streamId, req.response)) {
+        final ssePrimed = _enableJsonResponse ||
+            (responseSocket == null
+                ? await _primeSseStream(
+                    streamId,
+                    req.response,
+                  )
+                : await _primeSseSocket(
+                    responseSocket,
+                  ));
+        if (!ssePrimed) {
           _streamMapping.remove(streamId);
+          _responseStreamSockets.remove(streamId)?.destroy();
           _ownedStreamIds.remove(streamId);
           for (final message in messages) {
             if (_isJsonRpcRequest(message)) {
@@ -1519,10 +1601,33 @@ class StreamableHTTPServerTransport
           return;
         }
 
+        var responseDoneHandled = false;
+        void handleResponseDone() {
+          if (responseDoneHandled) {
+            return;
+          }
+          responseDoneHandled = true;
+          if (_enableJsonResponse) {
+            _streamMapping.remove(streamId);
+          } else {
+            _handleResponseStreamClosed(streamId);
+          }
+        }
+
         // Set up close handler for client disconnects
-        req.response.done.then((_) {
-          _streamMapping.remove(streamId);
-        });
+        if (responseSocket == null) {
+          req.response.done.then(
+            (_) => handleResponseDone(),
+            onError: (Object _, StackTrace __) => handleResponseDone(),
+          );
+        } else {
+          responseSocket.listen(
+            null,
+            onDone: handleResponseDone,
+            onError: (Object _, StackTrace __) => handleResponseDone(),
+            cancelOnError: true,
+          );
+        }
 
         // Handle each message
         for (final message in messages) {
@@ -1660,6 +1765,11 @@ class StreamableHTTPServerTransport
     for (final response in responses) {
       await _safeClose(response);
     }
+    final sockets = _responseStreamSockets.values.toList();
+    for (final socket in sockets) {
+      await _safeCloseSocket(socket);
+    }
+    _responseStreamSockets.clear();
     _streamMapping.clear();
     _standaloneSseStreamIds.clear();
     _standaloneSseResponses.clear();
@@ -1741,25 +1851,52 @@ class StreamableHTTPServerTransport
     }
 
     final response = _streamMapping[streamId];
+    final responseSocket = _responseStreamSockets[streamId];
+    final isStatelessRequestStream =
+        requestId != null && _statelessRequestIds.contains(requestId);
 
     if (!_enableJsonResponse) {
+      if (response == null && responseSocket == null) {
+        if (isStatelessRequestStream) {
+          _handleResponseStreamClosed(streamId);
+          return;
+        }
+      }
+
       // For SSE responses, generate event ID if event store is provided
       String? eventId;
 
-      if (_eventStore != null) {
+      if (_eventStore != null && !isStatelessRequestStream) {
         eventId = await _eventStore!.storeEvent(streamId, message);
       }
 
-      if (response != null) {
+      if (responseSocket != null) {
+        final sent = await _writeSSEEventToSocket(
+          responseSocket,
+          message,
+        );
+        if (!sent && isStatelessRequestStream) {
+          _handleResponseStreamClosed(streamId);
+          return;
+        }
+      } else if (response != null) {
         // Write the event to the response stream
-        await _writeSSEEvent(response, message, eventId);
+        final sent = await _writeSSEEvent(response, message, eventId);
+        if (!sent && isStatelessRequestStream) {
+          _handleResponseStreamClosed(streamId);
+          return;
+        }
       }
     }
 
     if (_isJsonRpcResponse(message)) {
+      if (!_requestToStreamMapping.containsKey(requestId)) {
+        return;
+      }
+
       _requestResponseMap[requestId] = message;
       final relatedIds = _requestToStreamMapping.entries
-          .where((entry) => _streamMapping[entry.value] == response)
+          .where((entry) => entry.value == streamId)
           .map((entry) => entry.key)
           .toList();
 
@@ -1769,7 +1906,7 @@ class StreamableHTTPServerTransport
       );
 
       if (allResponsesReady) {
-        if (response == null) {
+        if (response == null && responseSocket == null) {
           throw StateError(
             "No connection established for request ID: $requestId",
           );
@@ -1789,29 +1926,76 @@ class StreamableHTTPServerTransport
               relatedIds.map((id) => _requestResponseMap[id]!).toList();
 
           headers.forEach((key, value) {
-            response.headers.set(key, value);
+            response!.headers.set(key, value);
           });
 
           if (responses.length == 1) {
-            response.write(jsonEncode(responses[0].toJson()));
+            response!.write(jsonEncode(responses[0].toJson()));
           } else {
-            response.write(
+            response!.write(
               jsonEncode(responses.map((r) => r.toJson()).toList()),
             );
           }
           await _safeClose(response);
+        } else if (responseSocket != null) {
+          await _safeCloseSocket(responseSocket);
         } else {
           // End the SSE stream
-          await _safeClose(response);
+          await _safeClose(response!);
         }
 
         // Clean up
+        _responseStreamSockets.remove(streamId);
         for (final id in relatedIds) {
           _requestResponseMap.remove(id);
           _requestToStreamMapping.remove(id);
           _statelessRequestIds.remove(id);
         }
       }
+    }
+  }
+
+  void _handleResponseStreamClosed(StreamId streamId) {
+    _responseStreamSockets.remove(streamId)?.destroy();
+    final relatedIds = _requestToStreamMapping.entries
+        .where((entry) => entry.value == streamId)
+        .map((entry) => entry.key)
+        .toList();
+
+    _streamMapping.remove(streamId);
+
+    final statelessIds = relatedIds
+        .where((requestId) => _statelessRequestIds.contains(requestId))
+        .toList();
+    if (statelessIds.isEmpty) {
+      return;
+    }
+
+    for (final requestId in statelessIds) {
+      if (_requestResponseMap.containsKey(requestId)) {
+        continue;
+      }
+
+      try {
+        onmessage?.call(
+          JsonRpcCancelledNotification(
+            cancelParams: CancelledNotification(
+              requestId: requestId,
+              reason: 'SSE response stream closed by client',
+            ),
+          ),
+        );
+      } catch (error) {
+        onerror?.call(
+          error is Error ? error : StateError(error.toString()),
+        );
+      }
+    }
+
+    for (final requestId in statelessIds) {
+      _requestResponseMap.remove(requestId);
+      _requestToStreamMapping.remove(requestId);
+      _statelessRequestIds.remove(requestId);
     }
   }
 

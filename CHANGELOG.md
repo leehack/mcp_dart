@@ -40,6 +40,8 @@
 - Returned HTTP 404 with JSON-RPC `Method not found` for unsupported or removed
   2026 stateless Streamable HTTP request methods before opening response
   streams.
+- Treated client closure of a 2026 stateless Streamable HTTP SSE response stream
+  as cancellation of that pending request.
 - Sorted 2026 stateless high-level `tools/list` responses by tool name for
   deterministic list results while preserving legacy registration-order output.
 - Gated 2026 stateless task extension methods on advertised server extension

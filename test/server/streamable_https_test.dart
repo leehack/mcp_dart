@@ -2112,6 +2112,88 @@ void main() {
       );
     });
 
+    test('2026 stateless HTTP cancels pending request when SSE response closes',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final receivedRequest = Completer<JsonRpcListToolsRequest>();
+      final cancellation = Completer<JsonRpcCancelledNotification>();
+      transport.onmessage = (message) {
+        if (message is JsonRpcListToolsRequest) {
+          if (!receivedRequest.isCompleted) {
+            receivedRequest.complete(message);
+          }
+          return;
+        }
+
+        if (message is JsonRpcCancelledNotification) {
+          if (!cancellation.isCompleted) {
+            cancellation.complete(message);
+          }
+        }
+      };
+
+      final body = jsonEncode(
+        JsonRpcListToolsRequest(id: 11, meta: _statelessMeta()).toJson(),
+      );
+      final bodyBytes = utf8.encode(body);
+      final socket =
+          await Socket.connect(InternetAddress.loopbackIPv4, serverPort);
+      addTearDown(socket.destroy);
+      final responseBytes = <int>[];
+      final responseStarted = Completer<String>();
+      final socketSubscription = socket.listen((chunk) {
+        responseBytes.addAll(chunk);
+        final responseText = latin1.decode(responseBytes, allowInvalid: true);
+        if (!responseStarted.isCompleted && responseText.contains('\r\n\r\n')) {
+          responseStarted.complete(responseText);
+        }
+      });
+
+      socket.add(
+        utf8.encode(
+          'POST /mcp HTTP/1.1\r\n'
+          'Host: localhost:$serverPort\r\n'
+          'Content-Type: application/json\r\n'
+          'Accept: application/json, text/event-stream\r\n'
+          'MCP-Protocol-Version: $draftProtocolVersion2026_07_28\r\n'
+          'Mcp-Method: ${Method.toolsList}\r\n'
+          'Content-Length: ${bodyBytes.length}\r\n'
+          '\r\n',
+        ),
+      );
+      socket.add(bodyBytes);
+      await socket.flush();
+
+      final responseText = await responseStarted.future.timeout(
+        const Duration(seconds: 3),
+      );
+      expect(responseText, contains('200 OK'));
+      expect(responseText.toLowerCase(), contains('text/event-stream'));
+      expect(
+        (await receivedRequest.future.timeout(const Duration(seconds: 3))).id,
+        11,
+      );
+
+      socket.destroy();
+      await socketSubscription.cancel();
+      final notification = await cancellation.future.timeout(
+        const Duration(seconds: 3),
+      );
+      expect(notification.cancelParams.requestId, 11);
+      expect(
+        notification.cancelParams.reason,
+        contains('SSE response stream closed'),
+      );
+    });
+
     test('2026 stateless HTTP validates mapped tool parameter headers',
         () async {
       final transport = StreamableHTTPServerTransport(
