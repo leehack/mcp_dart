@@ -56,6 +56,8 @@
   JSON-RPC error bodies with `Content-Type: application/json`.
 - Tightened `x-mcp-header` and `Mcp-Param-*` suffix validation to RFC 9110
   HTTP field-name token syntax.
+- Removed invalid `x-mcp-header` annotations from 2026 stateless `tools/list`
+  responses when the server has already rejected those header mappings.
 
 ## 2.2.0
 

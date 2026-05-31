@@ -593,12 +593,16 @@ class _RegisteredToolImpl implements RegisteredTool {
     _server._registeredTools[name] = this;
   }
 
-  Tool toTool({bool includeExecution = true}) {
+  Tool toTool({
+    bool includeExecution = true,
+    ToolInputSchema? inputSchemaOverride,
+  }) {
     return Tool(
       name: name,
       title: title,
       description: description,
-      inputSchema: inputSchema ?? const ToolInputSchema(),
+      inputSchema:
+          inputSchemaOverride ?? inputSchema ?? const ToolInputSchema(),
       outputSchema: outputSchema,
       annotations: annotations,
       icon: icon,
@@ -1072,6 +1076,95 @@ class McpServer {
     return mappings;
   }
 
+  ToolInputSchema _toolInputSchemaForStatelessList(
+    _RegisteredToolImpl tool,
+  ) {
+    final inputSchema = tool.inputSchema ?? const ToolInputSchema();
+    final properties = inputSchema.properties;
+    if (properties == null || properties.isEmpty) {
+      return inputSchema;
+    }
+
+    final ignoredReason = _collectToolParameterHeaderMappings(
+      toolName: tool.name,
+      properties: properties,
+      path: const [],
+      mappings: <String, String>{},
+      seenHeaders: <String>{},
+    );
+    if (ignoredReason == null) {
+      return inputSchema;
+    }
+
+    return _stripToolParameterHeaderMetadata(inputSchema);
+  }
+
+  ToolInputSchema _stripToolParameterHeaderMetadata(ToolInputSchema schema) {
+    return JsonSchema.fromJson(
+      _stripToolParameterHeaderMetadataFromJson(schema.toJson()),
+    ) as ToolInputSchema;
+  }
+
+  Map<String, dynamic> _stripToolParameterHeaderMetadataFromJson(
+    Map<String, dynamic> json,
+  ) {
+    final stripped = Map<String, dynamic>.from(json)..remove('x-mcp-header');
+
+    final properties = stripped['properties'];
+    if (properties is Map) {
+      final strippedProperties = <String, dynamic>{};
+      for (final entry in properties.entries) {
+        final propertyName = entry.key as String;
+        final propertyValue = entry.value;
+        strippedProperties[propertyName] = propertyValue is Map
+            ? _stripToolParameterHeaderMetadataFromJson(
+                Map<String, dynamic>.from(propertyValue),
+              )
+            : propertyValue;
+      }
+      stripped['properties'] = strippedProperties;
+    }
+
+    final items = stripped['items'];
+    if (items is Map) {
+      stripped['items'] = _stripToolParameterHeaderMetadataFromJson(
+        Map<String, dynamic>.from(items),
+      );
+    }
+
+    final additionalProperties = stripped['additionalProperties'];
+    if (additionalProperties is Map) {
+      stripped['additionalProperties'] =
+          _stripToolParameterHeaderMetadataFromJson(
+        Map<String, dynamic>.from(additionalProperties),
+      );
+    }
+
+    for (final keyword in const ['allOf', 'anyOf', 'oneOf']) {
+      final schemas = stripped[keyword];
+      if (schemas is List) {
+        stripped[keyword] = [
+          for (final schema in schemas)
+            if (schema is Map)
+              _stripToolParameterHeaderMetadataFromJson(
+                Map<String, dynamic>.from(schema),
+              )
+            else
+              schema,
+        ];
+      }
+    }
+
+    final notSchema = stripped['not'];
+    if (notSchema is Map) {
+      stripped['not'] = _stripToolParameterHeaderMetadataFromJson(
+        Map<String, dynamic>.from(notSchema),
+      );
+    }
+
+    return stripped;
+  }
+
   Map<String, String> _toolParameterHeaderMappingsFor(
     _RegisteredToolImpl tool,
   ) {
@@ -1328,6 +1421,9 @@ class McpServer {
               .map(
                 (tool) => tool.toTool(
                   includeExecution: includeLegacyTaskExecution,
+                  inputSchemaOverride: isStatelessRequest
+                      ? _toolInputSchemaForStatelessList(tool)
+                      : null,
                 ),
               )
               .toList(),

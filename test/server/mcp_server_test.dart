@@ -66,6 +66,23 @@ class McpServerTestTransport
   }
 }
 
+Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
+      protocolVersion: draftProtocolVersion2026_07_28,
+      clientInfo: const Implementation(name: 'test-client', version: '1.0.0'),
+      clientCapabilities: const ClientCapabilities(),
+    );
+
+bool _containsMcpHeader(Object? value) {
+  if (value is Map) {
+    return value.containsKey('x-mcp-header') ||
+        value.values.any(_containsMcpHeader);
+  }
+  if (value is Iterable) {
+    return value.any(_containsMcpHeader);
+  }
+  return false;
+}
+
 void main() {
   group('McpServer Tool Registration', () {
     late McpServer server;
@@ -147,6 +164,20 @@ void main() {
           },
         ),
       );
+
+      transport.receiveMessage(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      final tool = tools.single as Map;
+      final inputSchema = tool['inputSchema'] as Map;
+      final properties = inputSchema['properties'] as Map;
+      final authProperties = (properties['auth'] as Map)['properties'] as Map;
+      expect((properties['region'] as Map)['x-mcp-header'], 'Region');
+      expect((authProperties['tenant'] as Map)['x-mcp-header'], 'Tenant');
     });
 
     test('tool updates refresh parameter header mappings on transports',
@@ -246,6 +277,122 @@ void main() {
 
       expect(transport.toolParameterHeaderMappings, isNotEmpty);
       expect(transport.toolParameterHeaderMappings.last, isEmpty);
+
+      transport.receiveMessage(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      expect(tools, hasLength(6));
+      for (final tool in tools.cast<Map>()) {
+        expect(_containsMcpHeader(tool['inputSchema']), isFalse);
+      }
+    });
+
+    test('invalid stateless header metadata is stripped from nested schemas',
+        () async {
+      server.registerTool(
+        'nested-header-tool',
+        inputSchema: ToolInputSchema.fromJson({
+          'type': 'object',
+          'properties': {
+            'invalidArray': {
+              'type': 'array',
+              'x-mcp-header': 'Invalid',
+              'items': {
+                'type': 'string',
+                'x-mcp-header': 'Item',
+              },
+            },
+            'objectMap': {
+              'type': 'object',
+              'additionalProperties': {
+                'type': 'string',
+                'x-mcp-header': 'Additional',
+              },
+            },
+            'combined': {
+              'allOf': [
+                true,
+                {
+                  'type': 'string',
+                  'x-mcp-header': 'All',
+                },
+              ],
+              'anyOf': [
+                false,
+                {
+                  'type': 'integer',
+                  'x-mcp-header': 'Any',
+                },
+              ],
+              'oneOf': [
+                {
+                  'type': 'boolean',
+                  'x-mcp-header': 'One',
+                },
+              ],
+              'not': {
+                'type': 'string',
+                'x-mcp-header': 'Not',
+              },
+            },
+            'literalData': {
+              'default': {
+                'x-mcp-header': 'not schema metadata',
+              },
+            },
+            'preservedAny': {
+              'properties': {
+                'flag': true,
+              },
+            },
+          },
+        }),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      final tool = tools.single as Map;
+      final inputSchema = tool['inputSchema'] as Map;
+      final properties = inputSchema['properties'] as Map;
+      final invalidArray = properties['invalidArray'] as Map;
+      final objectMap = properties['objectMap'] as Map;
+      final combined = properties['combined'] as Map;
+      final allOf = combined['allOf'] as List;
+      final anyOf = combined['anyOf'] as List;
+      final oneOf = combined['oneOf'] as List;
+      final literalData = properties['literalData'] as Map;
+      final preservedAny = properties['preservedAny'] as Map;
+
+      expect(invalidArray.containsKey('x-mcp-header'), isFalse);
+      expect(
+        (invalidArray['items'] as Map).containsKey('x-mcp-header'),
+        isFalse,
+      );
+      expect(
+        (objectMap['additionalProperties'] as Map).containsKey('x-mcp-header'),
+        isFalse,
+      );
+      expect((allOf[1] as Map).containsKey('x-mcp-header'), isFalse);
+      expect((anyOf[1] as Map).containsKey('x-mcp-header'), isFalse);
+      expect((oneOf.single as Map).containsKey('x-mcp-header'), isFalse);
+      expect((combined['not'] as Map).containsKey('x-mcp-header'), isFalse);
+      expect(
+        (literalData['default'] as Map)['x-mcp-header'],
+        'not schema metadata',
+      );
+      expect(((preservedAny['properties'] as Map)['flag'] as bool), isTrue);
     });
 
     test('registerTool can be updated', () async {
