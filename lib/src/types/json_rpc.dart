@@ -9,6 +9,7 @@ import 'sampling.dart';
 import 'completion.dart';
 import 'roots.dart';
 import 'tasks.dart';
+import 'validation.dart';
 
 /// The draft/RC MCP protocol version being prepared for the next major release.
 const draftProtocolVersion2026_07_28 = "2026-07-28";
@@ -524,6 +525,260 @@ abstract class BaseResultData {
   /// Implementations must include `_meta` when [meta] is non-null so typed
   /// results preserve the MCP `Result._meta` field during direct serialization.
   Map<String, dynamic> toJson();
+}
+
+/// Result type for completed MCP requests.
+const resultTypeComplete = 'complete';
+
+/// Result type for MCP multi round-trip requests needing more input.
+const resultTypeInputRequired = 'input_required';
+
+/// Map of server-assigned input request keys to requested inputs.
+typedef InputRequests = Map<String, InputRequest>;
+
+/// Map of server-assigned input request keys to client responses.
+typedef InputResponses = Map<String, InputResponse>;
+
+/// A server-to-client request embedded in an MRTR `InputRequiredResult`.
+class InputRequest {
+  /// Request method. Must be one of the MRTR-supported server request methods.
+  final String method;
+
+  /// Request params, when present.
+  final Map<String, dynamic>? params;
+
+  const InputRequest._({required this.method, this.params});
+
+  /// Creates an embedded `elicitation/create` input request.
+  factory InputRequest.elicit(ElicitRequest params) {
+    return InputRequest._(
+      method: Method.elicitationCreate,
+      params: params.toJson(),
+    );
+  }
+
+  /// Creates an embedded `sampling/createMessage` input request.
+  factory InputRequest.createMessage(CreateMessageRequest params) {
+    return InputRequest._(
+      method: Method.samplingCreateMessage,
+      params: params.toJson(),
+    );
+  }
+
+  /// Creates an embedded `roots/list` input request.
+  factory InputRequest.listRoots({Map<String, dynamic>? params}) {
+    return InputRequest._(
+      method: Method.rootsList,
+      params: params,
+    );
+  }
+
+  factory InputRequest.fromJson(Map<String, dynamic> json) {
+    final method = json['method'];
+    if (method is! String) {
+      throw const FormatException('InputRequest.method is required');
+    }
+
+    switch (method) {
+      case Method.elicitationCreate:
+        final params = _readRequiredJsonObject(
+          json['params'],
+          'InputRequest.params',
+        );
+        ElicitRequest.fromJson(params);
+        return InputRequest._(method: method, params: params);
+      case Method.samplingCreateMessage:
+        final params = _readRequiredJsonObject(
+          json['params'],
+          'InputRequest.params',
+        );
+        CreateMessageRequest.fromJson(params);
+        return InputRequest._(method: method, params: params);
+      case Method.rootsList:
+        return InputRequest._(
+          method: method,
+          params: _readOptionalJsonObject(
+            json['params'],
+            'InputRequest.params',
+          ),
+        );
+      default:
+        throw const FormatException(
+          'InputRequest.method must be one of '
+          '${Method.elicitationCreate}, ${Method.samplingCreateMessage}, '
+          'or ${Method.rootsList}',
+        );
+    }
+  }
+
+  /// Parses an input request map.
+  static InputRequests? mapFromJson(Object? value, String field) {
+    if (value == null) {
+      return null;
+    }
+    final json = _readRequiredJsonObject(value, field);
+    return json.map(
+      (key, value) => MapEntry(
+        key,
+        InputRequest.fromJson(_readRequiredJsonObject(value, '$field.$key')),
+      ),
+    );
+  }
+
+  /// Converts an input request map to JSON.
+  static Map<String, dynamic> mapToJson(InputRequests requests) {
+    return requests.map(
+      (key, value) => MapEntry(key, value.toJson()),
+    );
+  }
+
+  /// The typed params for an embedded `elicitation/create` request.
+  ElicitRequest get elicitParams {
+    if (method != Method.elicitationCreate || params == null) {
+      throw StateError('InputRequest is not an elicitation/create request');
+    }
+    return ElicitRequest.fromJson(params!);
+  }
+
+  /// The typed params for an embedded `sampling/createMessage` request.
+  CreateMessageRequest get createMessageParams {
+    if (method != Method.samplingCreateMessage || params == null) {
+      throw StateError('InputRequest is not a sampling/createMessage request');
+    }
+    return CreateMessageRequest.fromJson(params!);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'method': method,
+        if (params != null) 'params': params,
+      };
+}
+
+/// A client response to an MRTR [InputRequest].
+class InputResponse {
+  /// Raw result object for the embedded request.
+  final Map<String, dynamic> value;
+
+  const InputResponse.raw(this.value);
+
+  /// Creates an input response from a typed MCP result.
+  factory InputResponse.fromResult(BaseResultData result) {
+    return InputResponse.raw(result.toJson());
+  }
+
+  factory InputResponse.fromJson(Map<String, dynamic> json) {
+    return InputResponse.raw(Map<String, dynamic>.from(json));
+  }
+
+  /// Parses an input response map.
+  static InputResponses? mapFromJson(Object? value, String field) {
+    if (value == null) {
+      return null;
+    }
+    final json = _readRequiredJsonObject(value, field);
+    return json.map(
+      (key, value) => MapEntry(
+        key,
+        InputResponse.fromJson(_readRequiredJsonObject(value, '$field.$key')),
+      ),
+    );
+  }
+
+  /// Converts an input response map to JSON.
+  static Map<String, dynamic> mapToJson(InputResponses responses) {
+    return responses.map(
+      (key, value) => MapEntry(key, value.toJson()),
+    );
+  }
+
+  Map<String, dynamic> toJson() => Map<String, dynamic>.from(value);
+}
+
+/// Result returned when a request needs extra client input before retry.
+class InputRequiredResult implements BaseResultData {
+  /// Server-to-client requests the client must fulfill before retry.
+  final InputRequests? inputRequests;
+
+  /// Opaque server state to echo exactly on retry.
+  final String? requestState;
+
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const InputRequiredResult({
+    this.inputRequests,
+    this.requestState,
+    this.meta,
+  }) : assert(
+          inputRequests != null || requestState != null,
+          'InputRequiredResult requires inputRequests or requestState',
+        );
+
+  factory InputRequiredResult.fromJson(Map<String, dynamic> json) {
+    if (json['resultType'] != resultTypeInputRequired) {
+      throw const FormatException(
+        'InputRequiredResult.resultType must be input_required',
+      );
+    }
+
+    final inputRequests = InputRequest.mapFromJson(
+      json['inputRequests'],
+      'InputRequiredResult.inputRequests',
+    );
+    final requestState = readOptionalString(
+      json['requestState'],
+      'InputRequiredResult.requestState',
+    );
+    if (inputRequests == null && requestState == null) {
+      throw const FormatException(
+        'InputRequiredResult requires inputRequests or requestState',
+      );
+    }
+
+    return InputRequiredResult(
+      inputRequests: inputRequests,
+      requestState: requestState,
+      meta: _readOptionalJsonObject(json['_meta'], 'InputRequiredResult._meta'),
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    if (inputRequests == null && requestState == null) {
+      throw StateError(
+        'InputRequiredResult requires inputRequests or requestState',
+      );
+    }
+
+    return {
+      'resultType': resultTypeInputRequired,
+      if (inputRequests != null)
+        'inputRequests': InputRequest.mapToJson(inputRequests!),
+      if (requestState != null) 'requestState': requestState,
+      if (meta != null) '_meta': meta,
+    };
+  }
+}
+
+Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    if (value.keys.any((key) => key is! String)) {
+      throw FormatException('$field must be an object with string keys');
+    }
+    return value.cast<String, dynamic>();
+  }
+  throw FormatException('$field must be an object');
+}
+
+Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return _readRequiredJsonObject(value, field);
 }
 
 /// Custom error class for MCP specific errors.

@@ -220,6 +220,176 @@ void main() {
       );
     });
 
+    test('serializes MRTR input required results', () {
+      final result = InputRequiredResult(
+        inputRequests: {
+          'github_login': InputRequest.elicit(
+            ElicitRequest.form(
+              message: 'Please provide your GitHub username',
+              requestedSchema: JsonSchema.object(
+                properties: {'name': JsonSchema.string()},
+                required: ['name'],
+              ),
+            ),
+          ),
+          'capital_of_france': InputRequest.createMessage(
+            const CreateMessageRequest(
+              messages: [
+                SamplingMessage(
+                  role: SamplingMessageRole.user,
+                  content: SamplingTextContent(
+                    text: 'What is the capital of France?',
+                  ),
+                ),
+              ],
+              maxTokens: 100,
+            ),
+          ),
+          'roots': InputRequest.listRoots(),
+        },
+        requestState: 'AEAD-protected blob',
+        meta: const {'trace': 'abc'},
+      );
+
+      final json = result.toJson();
+      expect(json['resultType'], resultTypeInputRequired);
+      expect(json['requestState'], 'AEAD-protected blob');
+      expect(json['_meta'], {'trace': 'abc'});
+      expect(
+        json['inputRequests']['github_login']['method'],
+        Method.elicitationCreate,
+      );
+      expect(
+        json['inputRequests']['capital_of_france']['method'],
+        Method.samplingCreateMessage,
+      );
+      expect(json['inputRequests']['roots'], {'method': Method.rootsList});
+
+      final parsed = InputRequiredResult.fromJson(json);
+      expect(parsed.requestState, 'AEAD-protected blob');
+      expect(
+        parsed.inputRequests!['github_login']!.elicitParams.message,
+        'Please provide your GitHub username',
+      );
+      expect(
+        parsed
+            .inputRequests!['capital_of_france']!.createMessageParams.maxTokens,
+        100,
+      );
+    });
+
+    test('serializes MRTR retry fields on supported client requests', () {
+      final inputResponses = {
+        'github_login': InputResponse.fromResult(
+          const ElicitResult(
+            action: 'accept',
+            content: {'name': 'octocat'},
+          ),
+        ),
+        'roots': InputResponse.fromResult(
+          ListRootsResult(roots: [Root(uri: 'file:///repo')]),
+        ),
+      };
+
+      final toolRequest = CallToolRequest(
+        name: 'deploy',
+        arguments: const {'service': 'api'},
+        inputResponses: inputResponses,
+        requestState: 'opaque-state',
+      );
+      final toolJson = toolRequest.toJson();
+      expect(toolJson['inputResponses']['github_login']['action'], 'accept');
+      expect(toolJson['requestState'], 'opaque-state');
+
+      final parsedToolRequest = CallToolRequest.fromJson(toolJson);
+      expect(parsedToolRequest.requestState, 'opaque-state');
+      expect(
+        parsedToolRequest.inputResponses!['roots']!.toJson()['roots'][0]['uri'],
+        'file:///repo',
+      );
+
+      final promptJson = GetPromptRequest(
+        name: 'summary',
+        inputResponses: inputResponses,
+        requestState: 'prompt-state',
+      ).toJson();
+      expect(promptJson['inputResponses']['github_login']['content'], {
+        'name': 'octocat',
+      });
+      expect(
+        GetPromptRequest.fromJson(promptJson).requestState,
+        'prompt-state',
+      );
+
+      final resourceJson = ReadResourceRequest(
+        uri: 'file:///repo/README.md',
+        inputResponses: inputResponses,
+        requestState: 'resource-state',
+      ).toJson();
+      expect(
+        resourceJson['inputResponses']['roots']['roots'][0]['uri'],
+        'file:///repo',
+      );
+      expect(
+        ReadResourceRequest.fromJson(resourceJson).requestState,
+        'resource-state',
+      );
+    });
+
+    test('rejects malformed MRTR wire shapes', () {
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {'resultType': resultTypeInputRequired},
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'requestState': 1,
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'requestState': 'state',
+            '_meta': false,
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'inputRequests': {
+              'unsupported': {'method': Method.toolsCall},
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolRequest.fromJson(
+          const {'name': 'deploy', 'requestState': 1},
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => ReadResourceRequest.fromJson(
+          const {
+            'uri': 'file:///repo/README.md',
+            'inputResponses': {'roots': []},
+          },
+        ),
+        throwsFormatException,
+      );
+    });
+
     test('server handles server/discover before legacy initialization',
         () async {
       final server = Server(
