@@ -27,6 +27,9 @@
   parameters.
 - Removed `Mcp-Session-Id` from 2026 stateless Streamable HTTP requests by
   stripping it from client sends and rejecting it on stateless server POSTs.
+- Enforced 2026 stateless Streamable HTTP POST-only behavior by skipping
+  legacy client GET/DELETE session paths and returning `Allow: POST` for
+  stateless non-POST server requests.
 - Sorted 2026 stateless high-level `tools/list` responses by tool name for
   deterministic list results while preserving legacy registration-order output.
 - Gated 2026 stateless task extension methods on advertised server extension

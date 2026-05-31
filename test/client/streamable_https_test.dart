@@ -2009,6 +2009,72 @@ void main() {
         expect(true, isTrue);
       });
 
+      test('stateless protocol does not send DELETE for session termination',
+          () async {
+        var deleteRequests = 0;
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(() => server.close(force: true));
+        server.listen((request) async {
+          if (request.method == 'DELETE') {
+            deleteRequests += 1;
+          }
+          request.response.statusCode = HttpStatus.ok;
+          await request.response.close();
+        });
+
+        transport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:${server.port}/mcp'),
+          opts: const StreamableHttpClientTransportOptions(
+            sessionId: 'legacy-session',
+          ),
+        );
+        transport.protocolVersion = draftProtocolVersion2026_07_28;
+        await transport.start();
+
+        await transport.terminateSession();
+
+        expect(deleteRequests, 0);
+        expect(transport.sessionId, isNull);
+      });
+
+      test('stateless protocol does not open legacy GET SSE after initialized',
+          () async {
+        var getRequests = 0;
+        var postRequests = 0;
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(() => server.close(force: true));
+        server.listen((request) async {
+          if (request.method == 'GET') {
+            getRequests += 1;
+            request.response.statusCode = HttpStatus.methodNotAllowed;
+            await request.response.close();
+            return;
+          }
+
+          if (request.method == 'POST') {
+            postRequests += 1;
+            request.response.statusCode = HttpStatus.accepted;
+            await request.response.close();
+            return;
+          }
+
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+        });
+
+        transport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:${server.port}/mcp'),
+        );
+        transport.protocolVersion = draftProtocolVersion2026_07_28;
+        await transport.start();
+
+        await transport.send(const JsonRpcInitializedNotification());
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        expect(postRequests, 1);
+        expect(getRequests, 0);
+      });
+
       test('handles error callback configuration', () async {
         transport = StreamableHttpClientTransport(serverUrl);
 

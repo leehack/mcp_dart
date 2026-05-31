@@ -2437,7 +2437,8 @@ void main() {
       expect(transport.sessionId, isNull);
     });
 
-    test('2026 stateless GET requests return method not allowed', () async {
+    test('2026 stateless non-POST requests return method not allowed',
+        () async {
       final transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
           sessionIdGenerator: () => null,
@@ -2464,6 +2465,28 @@ void main() {
       expect(body['error']['code'], ErrorCode.connectionClosed.value);
       expect(
         body['error']['message'],
+        'Method not allowed for stateless MCP requests.',
+      );
+
+      final patchRequest = await client.openUrl(
+        'PATCH',
+        Uri.parse('$serverUrlBase/mcp'),
+      );
+      patchRequest.headers.set(
+        'MCP-Protocol-Version',
+        draftProtocolVersion2026_07_28,
+      );
+
+      final patchResponse = await patchRequest.close();
+      final patchBody = jsonDecode(
+        await utf8.decodeStream(patchResponse),
+      ) as Map<String, dynamic>;
+
+      expect(patchResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(patchResponse.headers.value(HttpHeaders.allowHeader), 'POST');
+      expect(patchBody['error']['code'], ErrorCode.connectionClosed.value);
+      expect(
+        patchBody['error']['message'],
         'Method not allowed for stateless MCP requests.',
       );
     });

@@ -255,8 +255,7 @@ class StreamableHTTPServerTransport
 
     if (req.method == "POST") {
       await _handlePostRequest(req, parsedBody);
-    } else if (_isStatelessProtocolVersionRequest(req) &&
-        (req.method == "GET" || req.method == "DELETE")) {
+    } else if (_isStatelessProtocolVersionRequest(req)) {
       await _handleStatelessUnsupportedRequest(req.response);
     } else if (req.method == "GET") {
       await _handleGetRequest(req);

@@ -709,6 +709,11 @@ class StreamableHttpClientTransport
   }
 
   Future<void> _startOrAuthSse(StartSseOptions options) async {
+    if (_protocolVersion != null &&
+        isStatelessProtocolVersion(_protocolVersion!)) {
+      return;
+    }
+
     final resumptionToken = options.resumptionToken;
     try {
       // Try to open an initial SSE stream with GET to listen for server messages
@@ -1324,6 +1329,13 @@ class StreamableHttpClientTransport
   /// The server MAY respond with HTTP 405 Method Not Allowed, indicating that
   /// the server does not allow clients to terminate sessions.
   Future<void> terminateSession() async {
+    if (_protocolVersion != null &&
+        isStatelessProtocolVersion(_protocolVersion!)) {
+      _sessionId = null;
+      _staleSessionDetected = false;
+      return;
+    }
+
     if (_sessionId == null) {
       return; // No session to terminate
     }
