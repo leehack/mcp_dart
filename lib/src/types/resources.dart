@@ -261,12 +261,20 @@ class JsonRpcListResourcesRequest extends JsonRpcRequest {
 }
 
 /// Result data for a successful `resources/list` request.
-class ListResourcesResult implements BaseResultData {
+class ListResourcesResult implements CacheableResultData {
   /// The list of resources found.
   final List<Resource> resources;
 
   /// Opaque token for pagination, indicating more results might be available.
   final Cursor? nextCursor;
+
+  /// How long, in milliseconds, the client may consider this result fresh.
+  @override
+  final int? ttlMs;
+
+  /// Intended cache visibility: `public` or `private`.
+  @override
+  final String? cacheScope;
 
   /// Optional metadata.
   @override
@@ -276,6 +284,8 @@ class ListResourcesResult implements BaseResultData {
   const ListResourcesResult({
     required this.resources,
     this.nextCursor,
+    this.ttlMs,
+    this.cacheScope,
     this.meta,
   });
 
@@ -291,17 +301,28 @@ class ListResourcesResult implements BaseResultData {
           .map((e) => Resource.fromJson(e as Map<String, dynamic>))
           .toList(),
       nextCursor: json['nextCursor'] as String?,
+      ttlMs: readOptionalTtlMs(json['ttlMs'], 'ListResourcesResult.ttlMs'),
+      cacheScope: readOptionalCacheScope(
+        json['cacheScope'],
+        'ListResourcesResult.cacheScope',
+      ),
       meta: meta,
     );
   }
 
   /// Converts to JSON (excluding meta).
   @override
-  Map<String, dynamic> toJson() => {
-        'resources': resources.map((r) => r.toJson()).toList(),
-        if (nextCursor != null) 'nextCursor': nextCursor,
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    validateTtlMs(ttlMs, 'ListResourcesResult.ttlMs');
+    validateCacheScope(cacheScope, 'ListResourcesResult.cacheScope');
+    return {
+      'resources': resources.map((r) => r.toJson()).toList(),
+      if (nextCursor != null) 'nextCursor': nextCursor,
+      if (ttlMs != null) 'ttlMs': ttlMs,
+      if (cacheScope != null) 'cacheScope': cacheScope,
+      if (meta != null) '_meta': meta,
+    };
+  }
 }
 
 /// Parameters for the `resources/templates/list` request. Includes pagination.
@@ -347,12 +368,20 @@ class JsonRpcListResourceTemplatesRequest extends JsonRpcRequest {
 }
 
 /// Result data for a successful `resources/templates/list` request.
-class ListResourceTemplatesResult implements BaseResultData {
+class ListResourceTemplatesResult implements CacheableResultData {
   /// The list of resource templates found.
   final List<ResourceTemplate> resourceTemplates;
 
   /// Opaque token for pagination.
   final Cursor? nextCursor;
+
+  /// How long, in milliseconds, the client may consider this result fresh.
+  @override
+  final int? ttlMs;
+
+  /// Intended cache visibility: `public` or `private`.
+  @override
+  final String? cacheScope;
 
   @override
   final Map<String, dynamic>? meta;
@@ -360,6 +389,8 @@ class ListResourceTemplatesResult implements BaseResultData {
   const ListResourceTemplatesResult({
     required this.resourceTemplates,
     this.nextCursor,
+    this.ttlMs,
+    this.cacheScope,
     this.meta,
   });
 
@@ -376,16 +407,30 @@ class ListResourceTemplatesResult implements BaseResultData {
           .map((e) => ResourceTemplate.fromJson(e as Map<String, dynamic>))
           .toList(),
       nextCursor: json['nextCursor'] as String?,
+      ttlMs: readOptionalTtlMs(
+        json['ttlMs'],
+        'ListResourceTemplatesResult.ttlMs',
+      ),
+      cacheScope: readOptionalCacheScope(
+        json['cacheScope'],
+        'ListResourceTemplatesResult.cacheScope',
+      ),
       meta: meta,
     );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'resourceTemplates': resourceTemplates.map((t) => t.toJson()).toList(),
-        if (nextCursor != null) 'nextCursor': nextCursor,
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    validateTtlMs(ttlMs, 'ListResourceTemplatesResult.ttlMs');
+    validateCacheScope(cacheScope, 'ListResourceTemplatesResult.cacheScope');
+    return {
+      'resourceTemplates': resourceTemplates.map((t) => t.toJson()).toList(),
+      if (nextCursor != null) 'nextCursor': nextCursor,
+      if (ttlMs != null) 'ttlMs': ttlMs,
+      if (cacheScope != null) 'cacheScope': cacheScope,
+      if (meta != null) '_meta': meta,
+    };
+  }
 }
 
 /// Parameters for the `resources/read` request.
@@ -452,14 +497,27 @@ class JsonRpcReadResourceRequest extends JsonRpcRequest {
 }
 
 /// Result data for a successful `resources/read` request.
-class ReadResourceResult implements BaseResultData {
+class ReadResourceResult implements CacheableResultData {
   /// The contents of the resource (can be multiple parts).
   final List<ResourceContents> contents;
+
+  /// How long, in milliseconds, the client may consider this result fresh.
+  @override
+  final int? ttlMs;
+
+  /// Intended cache visibility: `public` or `private`.
+  @override
+  final String? cacheScope;
 
   @override
   final Map<String, dynamic>? meta;
 
-  const ReadResourceResult({required this.contents, this.meta});
+  const ReadResourceResult({
+    required this.contents,
+    this.ttlMs,
+    this.cacheScope,
+    this.meta,
+  });
 
   factory ReadResourceResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
@@ -471,15 +529,26 @@ class ReadResourceResult implements BaseResultData {
       contents: contents
           .map((e) => ResourceContents.fromJson(e as Map<String, dynamic>))
           .toList(),
+      ttlMs: readOptionalTtlMs(json['ttlMs'], 'ReadResourceResult.ttlMs'),
+      cacheScope: readOptionalCacheScope(
+        json['cacheScope'],
+        'ReadResourceResult.cacheScope',
+      ),
       meta: meta,
     );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'contents': contents.map((c) => c.toJson()).toList(),
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    validateTtlMs(ttlMs, 'ReadResourceResult.ttlMs');
+    validateCacheScope(cacheScope, 'ReadResourceResult.cacheScope');
+    return {
+      'contents': contents.map((c) => c.toJson()).toList(),
+      if (ttlMs != null) 'ttlMs': ttlMs,
+      if (cacheScope != null) 'cacheScope': cacheScope,
+      if (meta != null) '_meta': meta,
+    };
+  }
 }
 
 /// Notification from server indicating the list of available resources has changed.

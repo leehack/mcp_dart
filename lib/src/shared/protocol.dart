@@ -899,6 +899,14 @@ abstract class Protocol {
   @protected
   void onIncomingRequestFailed(JsonRpcRequest request, Object error) {}
 
+  /// Converts a handler result into the JSON object sent on the wire.
+  @protected
+  Map<String, dynamic> serializeIncomingResult(
+    JsonRpcRequest request,
+    BaseResultData result,
+  ) =>
+      result.toJson();
+
   /// Subclass hook called after protocol-owned state has been cleared for a
   /// closed transport.
   @protected
@@ -1159,7 +1167,7 @@ abstract class Protocol {
 
         final response = JsonRpcResponse(
           id: request.id,
-          result: result.toJson(),
+          result: serializeIncomingResult(request, result),
           meta: _mergeRelatedTaskMeta(result.meta, relatedTaskJson),
         );
 

@@ -436,6 +436,45 @@ class Server extends Protocol {
     }
   }
 
+  bool _requiresCacheableResult(String method) {
+    return switch (method) {
+      Method.toolsList ||
+      Method.promptsList ||
+      Method.resourcesList ||
+      Method.resourcesTemplatesList ||
+      Method.resourcesRead =>
+        true,
+      _ => false,
+    };
+  }
+
+  @override
+  Map<String, dynamic> serializeIncomingResult(
+    JsonRpcRequest request,
+    BaseResultData result,
+  ) {
+    final json = super.serializeIncomingResult(request, result);
+    if (!_isStatelessRequest(request)) {
+      return json;
+    }
+
+    json.putIfAbsent('resultType', () => resultTypeComplete);
+    if (_requiresCacheableResult(request.method)) {
+      json.putIfAbsent(
+        'ttlMs',
+        () => result is CacheableResultData ? result.ttlMs ?? 0 : 0,
+      );
+      json.putIfAbsent(
+        'cacheScope',
+        () => result is CacheableResultData
+            ? result.cacheScope ?? CacheScope.private
+            : CacheScope.private,
+      );
+    }
+
+    return json;
+  }
+
   @override
   void onConnectionClosed() {
     _resetSessionState();

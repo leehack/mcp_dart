@@ -11,6 +11,10 @@
 - Added opt-in client discovery via `McpClientOptions(useServerDiscover: true)`
   while keeping the stable `initialize` flow as the default until the 2026
   stateless transport and MRTR implementation is complete.
+- Added 2026 cacheable result support for `tools/list`, `prompts/list`,
+  `resources/list`, `resources/templates/list`, and `resources/read`, including
+  stateless server defaults for `resultType`, `ttlMs`, and `cacheScope` while
+  keeping legacy result serialization unchanged unless cache hints are set.
 
 ## 2.2.0
 

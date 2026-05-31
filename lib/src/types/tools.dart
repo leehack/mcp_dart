@@ -271,12 +271,20 @@ class ListToolsRequest {
 typedef ListToolsRequestParams = ListToolsRequest;
 
 /// The server's response to a [ListToolsRequest].
-class ListToolsResult implements BaseResultData {
+class ListToolsResult implements CacheableResultData {
   /// A list of tools.
   final List<Tool> tools;
 
   /// An opaque token for pagination.
   final String? nextCursor;
+
+  /// How long, in milliseconds, the client may consider this result fresh.
+  @override
+  final int? ttlMs;
+
+  /// Intended cache visibility: `public` or `private`.
+  @override
+  final String? cacheScope;
 
   /// Optional metadata.
   @override
@@ -285,6 +293,8 @@ class ListToolsResult implements BaseResultData {
   const ListToolsResult({
     required this.tools,
     this.nextCursor,
+    this.ttlMs,
+    this.cacheScope,
     this.meta,
   });
 
@@ -297,16 +307,27 @@ class ListToolsResult implements BaseResultData {
       tools:
           tools.map((e) => Tool.fromJson(e as Map<String, dynamic>)).toList(),
       nextCursor: json['nextCursor'] as String?,
+      ttlMs: readOptionalTtlMs(json['ttlMs'], 'ListToolsResult.ttlMs'),
+      cacheScope: readOptionalCacheScope(
+        json['cacheScope'],
+        'ListToolsResult.cacheScope',
+      ),
       meta: json['_meta'] as Map<String, dynamic>?,
     );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'tools': tools.map((e) => e.toJson()).toList(),
-        if (nextCursor != null) 'nextCursor': nextCursor,
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    validateTtlMs(ttlMs, 'ListToolsResult.ttlMs');
+    validateCacheScope(cacheScope, 'ListToolsResult.cacheScope');
+    return {
+      'tools': tools.map((e) => e.toJson()).toList(),
+      if (nextCursor != null) 'nextCursor': nextCursor,
+      if (ttlMs != null) 'ttlMs': ttlMs,
+      if (cacheScope != null) 'cacheScope': cacheScope,
+      if (meta != null) '_meta': meta,
+    };
+  }
 }
 
 @Deprecated('Use [CallToolRequest] instead.')

@@ -268,6 +268,91 @@ void main() {
       );
     });
 
+    test('serializes cacheable result hints without changing legacy defaults',
+        () {
+      final toolsJson = const ListToolsResult(
+        tools: [],
+        ttlMs: 300000,
+        cacheScope: CacheScope.public,
+      ).toJson();
+      expect(toolsJson['ttlMs'], 300000);
+      expect(toolsJson['cacheScope'], CacheScope.public);
+      expect(toolsJson, isNot(contains('resultType')));
+      final parsedTools = ListToolsResult.fromJson(toolsJson);
+      expect(parsedTools.ttlMs, 300000);
+      expect(parsedTools.cacheScope, CacheScope.public);
+
+      final promptsJson = const ListPromptsResult(
+        prompts: [],
+        ttlMs: 600000,
+        cacheScope: CacheScope.private,
+      ).toJson();
+      expect(ListPromptsResult.fromJson(promptsJson).ttlMs, 600000);
+      expect(
+        ListPromptsResult.fromJson(promptsJson).cacheScope,
+        CacheScope.private,
+      );
+
+      final resourcesJson = const ListResourcesResult(
+        resources: [],
+        ttlMs: 120000,
+        cacheScope: CacheScope.public,
+      ).toJson();
+      expect(ListResourcesResult.fromJson(resourcesJson).ttlMs, 120000);
+      expect(
+        ListResourcesResult.fromJson(resourcesJson).cacheScope,
+        CacheScope.public,
+      );
+
+      final templatesJson = const ListResourceTemplatesResult(
+        resourceTemplates: [],
+        ttlMs: 30000,
+        cacheScope: CacheScope.public,
+      ).toJson();
+      expect(
+        ListResourceTemplatesResult.fromJson(templatesJson).ttlMs,
+        30000,
+      );
+      expect(
+        ListResourceTemplatesResult.fromJson(templatesJson).cacheScope,
+        CacheScope.public,
+      );
+
+      final readJson = const ReadResourceResult(
+        contents: [TextResourceContents(uri: 'file:///a.txt', text: 'a')],
+        ttlMs: 60000,
+        cacheScope: CacheScope.private,
+      ).toJson();
+      expect(ReadResourceResult.fromJson(readJson).ttlMs, 60000);
+      expect(
+        ReadResourceResult.fromJson(readJson).cacheScope,
+        CacheScope.private,
+      );
+
+      expect(const ListToolsResult(tools: []).toJson(), {'tools': []});
+      expect(
+        ListToolsResult.fromJson(const {'tools': [], 'ttlMs': -1}).ttlMs,
+        0,
+      );
+      expect(
+        () => ListToolsResult.fromJson(
+          const {'tools': [], 'cacheScope': 'shared'},
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => const ListToolsResult(tools: [], ttlMs: -1).toJson(),
+        throwsArgumentError,
+      );
+      expect(
+        () => const ListToolsResult(
+          tools: [],
+          cacheScope: 'shared',
+        ).toJson(),
+        throwsArgumentError,
+      );
+    });
+
     test('serializes MRTR input required results', () {
       final result = InputRequiredResult(
         inputRequests: {
@@ -502,6 +587,105 @@ void main() {
         },
       );
       expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+    });
+
+    test('stateless server responses add complete result and cache defaults',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            prompts: ServerCapabilitiesPrompts(),
+            resources: ServerCapabilitiesResources(),
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcListToolsRequest>(
+        Method.toolsList,
+        (request, extra) async => const ListToolsResult(
+          tools: [],
+          ttlMs: 300000,
+          cacheScope: CacheScope.public,
+        ),
+        (id, params, meta) => JsonRpcListToolsRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      server.setRequestHandler<JsonRpcListPromptsRequest>(
+        Method.promptsList,
+        (request, extra) async => const ListPromptsResult(prompts: []),
+        (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      server.setRequestHandler<JsonRpcListResourcesRequest>(
+        Method.resourcesList,
+        (request, extra) async => const ListResourcesResult(resources: []),
+        (id, params, meta) => JsonRpcListResourcesRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      server.setRequestHandler<JsonRpcListResourceTemplatesRequest>(
+        Method.resourcesTemplatesList,
+        (request, extra) async =>
+            const ListResourceTemplatesResult(resourceTemplates: []),
+        (id, params, meta) => JsonRpcListResourceTemplatesRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      server.setRequestHandler<JsonRpcReadResourceRequest>(
+        Method.resourcesRead,
+        (request, extra) async => const ReadResourceResult(
+          contents: [TextResourceContents(uri: 'file:///a.txt', text: 'a')],
+        ),
+        (id, params, meta) => JsonRpcReadResourceRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      final requests = [
+        JsonRpcListToolsRequest(id: 'tools', meta: _clientMeta()),
+        JsonRpcListPromptsRequest(id: 'prompts', meta: _clientMeta()),
+        JsonRpcListResourcesRequest(id: 'resources', meta: _clientMeta()),
+        JsonRpcListResourceTemplatesRequest(
+          id: 'templates',
+          meta: _clientMeta(),
+        ),
+        JsonRpcReadResourceRequest(
+          id: 'read',
+          readParams: const ReadResourceRequest(uri: 'file:///a.txt'),
+          meta: _clientMeta(),
+        ),
+      ];
+      for (final request in requests) {
+        transport.receive(request);
+        await _pump();
+      }
+
+      final responses = transport.sentMessages.cast<JsonRpcResponse>().toList();
+      final tools = responses[0].result;
+      expect(tools['resultType'], resultTypeComplete);
+      expect(tools['ttlMs'], 300000);
+      expect(tools['cacheScope'], CacheScope.public);
+
+      for (final response in responses.skip(1)) {
+        expect(response.result['resultType'], resultTypeComplete);
+        expect(response.result['ttlMs'], 0);
+        expect(response.result['cacheScope'], CacheScope.private);
+      }
     });
 
     test('server rejects task subscriptions without task extension capability',

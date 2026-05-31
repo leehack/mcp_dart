@@ -143,18 +143,32 @@ class JsonRpcListPromptsRequest extends JsonRpcRequest {
 }
 
 /// Result data for a successful `prompts/list` request.
-class ListPromptsResult implements BaseResultData {
+class ListPromptsResult implements CacheableResultData {
   /// The list of prompts/templates found.
   final List<Prompt> prompts;
 
   /// Opaque token for pagination.
   final Cursor? nextCursor;
 
+  /// How long, in milliseconds, the client may consider this result fresh.
+  @override
+  final int? ttlMs;
+
+  /// Intended cache visibility: `public` or `private`.
+  @override
+  final String? cacheScope;
+
   /// Optional metadata.
   @override
   final Map<String, dynamic>? meta;
 
-  const ListPromptsResult({required this.prompts, this.nextCursor, this.meta});
+  const ListPromptsResult({
+    required this.prompts,
+    this.nextCursor,
+    this.ttlMs,
+    this.cacheScope,
+    this.meta,
+  });
 
   factory ListPromptsResult.fromJson(Map<String, dynamic> json) {
     final meta = json['_meta'] as Map<String, dynamic>?;
@@ -167,16 +181,27 @@ class ListPromptsResult implements BaseResultData {
           .map((p) => Prompt.fromJson(p as Map<String, dynamic>))
           .toList(),
       nextCursor: json['nextCursor'] as String?,
+      ttlMs: readOptionalTtlMs(json['ttlMs'], 'ListPromptsResult.ttlMs'),
+      cacheScope: readOptionalCacheScope(
+        json['cacheScope'],
+        'ListPromptsResult.cacheScope',
+      ),
       meta: meta,
     );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'prompts': prompts.map((p) => p.toJson()).toList(),
-        if (nextCursor != null) 'nextCursor': nextCursor,
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    validateTtlMs(ttlMs, 'ListPromptsResult.ttlMs');
+    validateCacheScope(cacheScope, 'ListPromptsResult.cacheScope');
+    return {
+      'prompts': prompts.map((p) => p.toJson()).toList(),
+      if (nextCursor != null) 'nextCursor': nextCursor,
+      if (ttlMs != null) 'ttlMs': ttlMs,
+      if (cacheScope != null) 'cacheScope': cacheScope,
+      if (meta != null) '_meta': meta,
+    };
+  }
 }
 
 /// Parameters for the `prompts/get` request.
