@@ -73,6 +73,12 @@ class Server extends Protocol {
       : _capabilities = options?.capabilities ?? const ServerCapabilities(),
         _instructions = options?.instructions,
         super(options) {
+    setRequestHandler<JsonRpcServerDiscoverRequest>(
+      Method.serverDiscover,
+      (request, extra) async => _onDiscover(),
+      (id, params, meta) => JsonRpcServerDiscoverRequest(id: id, meta: meta),
+    );
+
     setRequestHandler<JsonRpcInitializeRequest>(
       Method.initialize,
       (request, extra) async => _oninitialize(request.initParams),
@@ -118,8 +124,83 @@ class Server extends Protocol {
     _loggingLevels.clear();
   }
 
+  McpError _unsupportedProtocolVersionError(String requestedVersion) {
+    return McpError(
+      ErrorCode.unsupportedProtocolVersion.value,
+      'Unsupported protocol version',
+      {
+        'supported': supportedProtocolVersionsWithDraft,
+        'requested': requestedVersion,
+      },
+    );
+  }
+
+  McpError? _validateStatelessRequestMetadata(JsonRpcRequest request) {
+    final meta = request.meta;
+    final requestedVersion = meta?[McpMetaKey.protocolVersion];
+    if (requestedVersion is! String || requestedVersion.isEmpty) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Missing required request metadata: ${McpMetaKey.protocolVersion}',
+      );
+    }
+    if (!supportedProtocolVersionsWithDraft.contains(requestedVersion)) {
+      return _unsupportedProtocolVersionError(requestedVersion);
+    }
+    if (!isStatelessProtocolVersion(requestedVersion)) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'server/discover and stateless requests require a stateless protocol version.',
+      );
+    }
+
+    final clientInfo = meta?[McpMetaKey.clientInfo];
+    if (clientInfo is! Map) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Missing required request metadata: ${McpMetaKey.clientInfo}',
+      );
+    }
+
+    final clientCapabilities = meta?[McpMetaKey.clientCapabilities];
+    if (clientCapabilities is! Map) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Missing required request metadata: ${McpMetaKey.clientCapabilities}',
+      );
+    }
+
+    try {
+      Implementation.fromJson(clientInfo.cast<String, dynamic>());
+      ClientCapabilities.fromJson(clientCapabilities.cast<String, dynamic>());
+    } catch (error) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Invalid stateless request metadata.',
+        error.toString(),
+      );
+    }
+
+    return null;
+  }
+
   @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
+    if (request.method == Method.serverDiscover) {
+      return _validateStatelessRequestMetadata(request);
+    }
+
+    final requestedProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
+    if (requestedProtocolVersion is String &&
+        !supportedProtocolVersionsWithDraft
+            .contains(requestedProtocolVersion)) {
+      return _unsupportedProtocolVersionError(requestedProtocolVersion);
+    }
+    if (requestedProtocolVersion is String &&
+        isStatelessProtocolVersion(requestedProtocolVersion)) {
+      return _validateStatelessRequestMetadata(request);
+    }
+
     if (request.method == Method.initialize) {
       if (_lifecycleState != _ServerLifecycleState.uninitialized) {
         return McpError(
@@ -310,6 +391,16 @@ class Server extends Protocol {
     );
   }
 
+  /// Handles the client's `server/discover` request.
+  Future<DiscoverResult> _onDiscover() async {
+    return DiscoverResult(
+      supportedVersions: supportedProtocolVersionsWithDraft,
+      capabilities: getCapabilities(),
+      serverInfo: _serverInfo,
+      instructions: _instructions,
+    );
+  }
+
   /// Gets the client's reported capabilities, available after initialization.
   ClientCapabilities? getClientCapabilities() => _clientCapabilities;
 
@@ -445,6 +536,7 @@ class Server extends Protocol {
   @override
   void assertRequestHandlerCapability(String method) {
     switch (method) {
+      case Method.serverDiscover:
       case Method.initialize:
       case Method.ping:
       case Method.completionComplete:

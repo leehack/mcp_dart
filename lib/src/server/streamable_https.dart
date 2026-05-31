@@ -238,6 +238,9 @@ class StreamableHTTPServerTransport
 
     if (req.method == "POST") {
       await _handlePostRequest(req, parsedBody);
+    } else if (_isStatelessProtocolVersionRequest(req) &&
+        (req.method == "GET" || req.method == "DELETE")) {
+      await _handleStatelessUnsupportedRequest(req.response);
     } else if (req.method == "GET") {
       await _handleGetRequest(req);
     } else if (req.method == "DELETE") {
@@ -261,21 +264,27 @@ class StreamableHTTPServerTransport
     }
 
     final requestedVersion = versionHeader.trim();
-    if (supportedProtocolVersions.contains(requestedVersion)) {
+    if (supportedProtocolVersionsWithDraft.contains(requestedVersion)) {
       return true;
     }
 
     await _writeJsonRpcErrorResponse(
       res,
       httpStatus: HttpStatus.badRequest,
-      errorCode: ErrorCode.invalidRequest,
-      message: 'Invalid MCP-Protocol-Version header',
+      errorCode: ErrorCode.unsupportedProtocolVersion,
+      message: 'Unsupported protocol version',
       data: {
         'requested': requestedVersion,
-        'supported': supportedProtocolVersions,
+        'supported': supportedProtocolVersionsWithDraft,
       },
     );
     return false;
+  }
+
+  bool _isStatelessProtocolVersionRequest(HttpRequest req) {
+    final versionHeader = req.headers.value('mcp-protocol-version');
+    return versionHeader != null &&
+        isStatelessProtocolVersion(versionHeader.trim());
   }
 
   bool _isValidVisibleAsciiToken(String value) {
@@ -655,6 +664,23 @@ class StreamableHTTPServerTransport
     await _safeClose(res);
   }
 
+  Future<void> _handleStatelessUnsupportedRequest(HttpResponse res) async {
+    res.statusCode = HttpStatus.methodNotAllowed;
+    res.headers.set(HttpHeaders.allowHeader, "POST");
+    res.write(
+      jsonEncode(
+        JsonRpcError(
+          id: null,
+          error: JsonRpcErrorData(
+            code: ErrorCode.connectionClosed.value,
+            message: 'Method not allowed for stateless MCP requests.',
+          ),
+        ).toJson(),
+      ),
+    );
+    await _safeClose(res);
+  }
+
   /// Handles POST requests containing JSON-RPC messages
   Future<void> _handlePostRequest(HttpRequest req, [dynamic parsedBody]) async {
     try {
@@ -779,6 +805,7 @@ class StreamableHTTPServerTransport
       // Check if this is an initialization request
       // https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle/
       final isInitializationRequest = messages.any(_isInitializeRequest);
+      final isStatelessRequest = messages.any(_isStatelessJsonRpcRequest);
       if (isInitializationRequest) {
         final requestSessionId = req.headers.value('mcp-session-id');
 
@@ -868,6 +895,7 @@ class StreamableHTTPServerTransport
       // clients using the Streamable HTTP transport MUST include it
       // in the Mcp-Session-Id header on all of their subsequent HTTP requests.
       if (!isInitializationRequest &&
+          !isStatelessRequest &&
           !await _validateSession(req, req.response)) {
         return;
       }
@@ -1225,7 +1253,16 @@ class StreamableHTTPServerTransport
   /// Checks if a message is an initialize request
   bool _isInitializeRequest(JsonRpcMessage message) {
     if (message is JsonRpcRequest) {
-      return message.method == "initialize";
+      return message.method == Method.initialize;
+    }
+    return false;
+  }
+
+  /// Checks if a message uses the stateless 2026 protocol metadata.
+  bool _isStatelessJsonRpcRequest(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      final version = message.meta?[McpMetaKey.protocolVersion];
+      return version is String && isStatelessProtocolVersion(version);
     }
     return false;
   }

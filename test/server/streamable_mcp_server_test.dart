@@ -305,7 +305,7 @@ void main() {
 
       expect(res.statusCode, HttpStatus.badRequest);
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-      expect(body['error']['code'], ErrorCode.invalidRequest.value);
+      expect(body['error']['code'], ErrorCode.unsupportedProtocolVersion.value);
     });
 
     test(

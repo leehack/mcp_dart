@@ -491,6 +491,21 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
   }
 }
 
+/// Request sent by a 2026 client to discover server protocol support.
+class JsonRpcServerDiscoverRequest extends JsonRpcRequest {
+  JsonRpcServerDiscoverRequest({
+    required super.id,
+    super.meta,
+  }) : super(method: Method.serverDiscover);
+
+  factory JsonRpcServerDiscoverRequest.fromJson(Map<String, dynamic> json) {
+    return JsonRpcServerDiscoverRequest(
+      id: parseRequestId(json['id']),
+      meta: extractRequestMeta(json),
+    );
+  }
+}
+
 /// Describes capabilities related to elicitation > form mode for the server.
 class ServerElicitationForm {
   const ServerElicitationForm();
@@ -875,6 +890,69 @@ class InitializeResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'protocolVersion': protocolVersion,
+        'capabilities': capabilities.toJson(),
+        'serverInfo': serverInfo.toJson(),
+        if (instructions != null) 'instructions': instructions,
+        if (meta != null) '_meta': meta,
+      };
+}
+
+/// Result data for a successful `server/discover` request.
+class DiscoverResult implements BaseResultData {
+  /// Result discriminator used by the 2026 result model.
+  final String resultType;
+
+  /// Protocol versions supported by the server.
+  final List<String> supportedVersions;
+
+  /// Capabilities the server supports.
+  final ServerCapabilities capabilities;
+
+  /// Information about the server implementation.
+  final Implementation serverInfo;
+
+  /// Instructions describing how to use the server and its features.
+  final String? instructions;
+
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const DiscoverResult({
+    this.resultType = 'complete',
+    required this.supportedVersions,
+    required this.capabilities,
+    required this.serverInfo,
+    this.instructions,
+    this.meta,
+  });
+
+  factory DiscoverResult.fromJson(Map<String, dynamic> json) {
+    final supportedVersions = json['supportedVersions'];
+    if (supportedVersions is! List) {
+      throw const FormatException(
+        'Missing or invalid supportedVersions for discover result',
+      );
+    }
+
+    return DiscoverResult(
+      resultType: json['resultType'] as String? ?? 'complete',
+      supportedVersions: supportedVersions.cast<String>(),
+      capabilities: ServerCapabilities.fromJson(
+        json['capabilities'] as Map<String, dynamic>,
+      ),
+      serverInfo: Implementation.fromJson(
+        json['serverInfo'] as Map<String, dynamic>,
+      ),
+      instructions: json['instructions'] as String?,
+      meta: json['_meta'] as Map<String, dynamic>?,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'resultType': resultType,
+        'supportedVersions': supportedVersions,
         'capabilities': capabilities.toJson(),
         'serverInfo': serverInfo.toJson(),
         if (instructions != null) 'instructions': instructions,

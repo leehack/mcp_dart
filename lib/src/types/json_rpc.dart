@@ -10,8 +10,17 @@ import 'completion.dart';
 import 'roots.dart';
 import 'tasks.dart';
 
-/// The latest version of the Model Context Protocol supported.
-const latestProtocolVersion = "2025-11-25";
+/// The draft/RC MCP protocol version being prepared for the next major release.
+const draftProtocolVersion2026_07_28 = "2026-07-28";
+
+/// The latest stable version of the Model Context Protocol supported.
+const stableProtocolVersion2025_11_25 = "2025-11-25";
+
+/// The latest stable version of the Model Context Protocol supported.
+const latestProtocolVersion = stableProtocolVersion2025_11_25;
+
+/// The latest draft/RC protocol version implemented behind opt-in paths.
+const latestDraftProtocolVersion = draftProtocolVersion2026_07_28;
 
 /// List of supported Model Context Protocol versions.
 const supportedProtocolVersions = [
@@ -22,11 +31,69 @@ const supportedProtocolVersions = [
   "2024-10-07",
 ];
 
+/// Protocol versions supported by the 2026 RC development branch.
+const supportedProtocolVersionsWithDraft = [
+  latestDraftProtocolVersion,
+  ...supportedProtocolVersions,
+];
+
+/// Protocol versions that use per-request metadata instead of initialization.
+const statelessProtocolVersions = [
+  draftProtocolVersion2026_07_28,
+];
+
+/// Returns true when [version] uses the 2026 stateless request model.
+bool isStatelessProtocolVersion(String version) =>
+    statelessProtocolVersions.contains(version);
+
+/// Selects the first locally preferred version supported by a peer.
+String? negotiateProtocolVersion(
+  Iterable<String> peerSupportedVersions, {
+  Iterable<String> localSupportedVersions = supportedProtocolVersionsWithDraft,
+}) {
+  final peerVersions = peerSupportedVersions.toSet();
+  for (final version in localSupportedVersions) {
+    if (peerVersions.contains(version)) {
+      return version;
+    }
+  }
+  return null;
+}
+
+/// MCP-reserved `_meta` keys used by the 2026 stateless request model.
+class McpMetaKey {
+  static const protocolVersion = 'io.modelcontextprotocol/protocolVersion';
+  static const clientInfo = 'io.modelcontextprotocol/clientInfo';
+  static const clientCapabilities =
+      'io.modelcontextprotocol/clientCapabilities';
+  static const logLevel = 'io.modelcontextprotocol/logLevel';
+
+  const McpMetaKey._();
+}
+
+/// Builds request metadata required by the 2026 stateless request model.
+Map<String, dynamic> buildProtocolRequestMeta({
+  required String protocolVersion,
+  required Implementation clientInfo,
+  required ClientCapabilities clientCapabilities,
+  Map<String, dynamic>? meta,
+  Object? logLevel,
+}) {
+  return <String, dynamic>{
+    ...?meta,
+    McpMetaKey.protocolVersion: protocolVersion,
+    McpMetaKey.clientInfo: clientInfo.toJson(),
+    McpMetaKey.clientCapabilities: clientCapabilities.toJson(),
+    if (logLevel != null) McpMetaKey.logLevel: logLevel,
+  };
+}
+
 /// JSON-RPC protocol version string.
 const jsonRpcVersion = "2.0";
 
 /// Standard MCP JSON-RPC methods.
 class Method {
+  static const serverDiscover = "server/discover";
   static const initialize = "initialize";
   static const ping = "ping";
   static const resourcesList = "resources/list";
@@ -185,6 +252,7 @@ sealed class JsonRpcMessage {
 
       if (hasId) {
         return switch (method) {
+          Method.serverDiscover => JsonRpcServerDiscoverRequest.fromJson(json),
           Method.initialize => JsonRpcInitializeRequest.fromJson(json),
           Method.ping => JsonRpcPingRequest.fromJson(json),
           Method.resourcesList => JsonRpcListResourcesRequest.fromJson(json),
@@ -368,6 +436,12 @@ class JsonRpcResponse extends JsonRpcMessage {
 enum ErrorCode {
   connectionClosed(-32000),
   requestTimeout(-32001),
+
+  /// Required per-request client capabilities were not declared.
+  missingRequiredClientCapability(-32003),
+
+  /// The requested protocol version is unsupported by the receiver.
+  unsupportedProtocolVersion(-32004),
 
   /// URL mode elicitation is required before the request can be processed.
   /// The error data contains elicitations that must be completed.

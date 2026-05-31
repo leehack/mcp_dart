@@ -12,9 +12,25 @@ class McpClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
+  /// Preferred protocol version for opt-in `server/discover` negotiation.
+  ///
+  /// The current default keeps existing clients on the stable initialization
+  /// flow unless [useServerDiscover] is enabled.
+  final String protocolVersion;
+
+  /// Whether [McpClient.connect] should probe with `server/discover` first.
+  final bool useServerDiscover;
+
+  /// Whether a `server/discover` method-not-found response should fall back to
+  /// the legacy `initialize` handshake.
+  final bool allowLegacyInitializationFallback;
+
   const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
+    this.protocolVersion = latestDraftProtocolVersion,
+    this.useServerDiscover = false,
+    this.allowLegacyInitializationFallback = true,
   });
 }
 
@@ -69,8 +85,13 @@ class McpClient extends Protocol {
   Implementation? _serverVersion;
   ClientCapabilities _capabilities;
   final Implementation _clientInfo;
+  final String _preferredProtocolVersion;
+  final bool _useServerDiscover;
+  final bool _allowLegacyInitializationFallback;
   String? _instructions;
   Future<void>? _sessionRefresh;
+  String? _negotiatedProtocolVersion;
+  bool _usesStatelessProtocol = false;
   bool _sentInitialized = false;
 
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
@@ -99,6 +120,11 @@ class McpClient extends Protocol {
   /// - [options]: Optional configuration settings including client capabilities.
   McpClient(this._clientInfo, {McpClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
+        _preferredProtocolVersion =
+            options?.protocolVersion ?? latestDraftProtocolVersion,
+        _useServerDiscover = options?.useServerDiscover ?? false,
+        _allowLegacyInitializationFallback =
+            options?.allowLegacyInitializationFallback ?? true,
         super(options) {
     // Register elicit handler if any elicitation mode is advertised.
     if (_capabilities.elicitation != null) {
@@ -209,6 +235,7 @@ class McpClient extends Protocol {
 
   Future<void> _initializeSession(Transport transport) async {
     _sentInitialized = false;
+    _usesStatelessProtocol = false;
 
     final initParams = InitializeRequest(
       protocolVersion: latestProtocolVersion,
@@ -236,6 +263,7 @@ class McpClient extends Protocol {
     _serverCapabilities = result.capabilities;
     _serverVersion = result.serverInfo;
     _instructions = result.instructions;
+    _negotiatedProtocolVersion = result.protocolVersion;
 
     if (transport is ProtocolVersionAwareTransport) {
       (transport as ProtocolVersionAwareTransport).protocolVersion =
@@ -256,6 +284,63 @@ class McpClient extends Protocol {
     );
   }
 
+  Map<String, dynamic> _statelessRequestMeta(Map<String, dynamic>? meta) {
+    return buildProtocolRequestMeta(
+      protocolVersion: _negotiatedProtocolVersion ?? _preferredProtocolVersion,
+      clientInfo: _clientInfo,
+      clientCapabilities: _capabilities,
+      meta: meta,
+    );
+  }
+
+  Future<DiscoverResult> discoverServer() async {
+    final result = await super.request<DiscoverResult>(
+      JsonRpcServerDiscoverRequest(
+        id: -1,
+        meta: buildProtocolRequestMeta(
+          protocolVersion: _preferredProtocolVersion,
+          clientInfo: _clientInfo,
+          clientCapabilities: _capabilities,
+        ),
+      ),
+      (json) => DiscoverResult.fromJson(json),
+    );
+
+    final protocolVersion = negotiateProtocolVersion(
+      result.supportedVersions,
+      localSupportedVersions: supportedProtocolVersionsWithDraft,
+    );
+    if (protocolVersion == null) {
+      throw McpError(
+        ErrorCode.unsupportedProtocolVersion.value,
+        "Server does not support a compatible MCP protocol version.",
+        {
+          'supported': result.supportedVersions,
+          'requested': _preferredProtocolVersion,
+        },
+      );
+    }
+
+    _serverCapabilities = result.capabilities;
+    _serverVersion = result.serverInfo;
+    _instructions = result.instructions;
+    _negotiatedProtocolVersion = protocolVersion;
+    _usesStatelessProtocol = isStatelessProtocolVersion(protocolVersion);
+    _sentInitialized = true;
+
+    final activeTransport = transport;
+    if (activeTransport is ProtocolVersionAwareTransport) {
+      (activeTransport as ProtocolVersionAwareTransport).protocolVersion =
+          protocolVersion;
+    }
+
+    _logger.debug(
+      "MCP Server Discovered. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: $protocolVersion",
+    );
+
+    return result;
+  }
+
   /// Connects to the server using the given [transport].
   ///
   /// Initiates the MCP initialization handshake and processes the result.
@@ -264,6 +349,23 @@ class McpClient extends Protocol {
     await super.connect(transport);
 
     try {
+      if (_useServerDiscover) {
+        try {
+          await discoverServer();
+          return;
+        } catch (error) {
+          final canFallback = _allowLegacyInitializationFallback &&
+              error is McpError &&
+              error.code == ErrorCode.methodNotFound.value;
+          if (!canFallback) {
+            rethrow;
+          }
+          _logger.debug(
+            "server/discover not available; falling back to initialize.",
+          );
+        }
+      }
+
       await _initializeSession(transport);
     } catch (error) {
       _logger.error("MCP Client Initialization Failed: $error");
@@ -279,15 +381,26 @@ class McpClient extends Protocol {
     RequestOptions? options,
     int? relatedRequestId,
   ]) async {
+    final outboundRequest =
+        _usesStatelessProtocol && requestData.method != Method.serverDiscover
+            ? JsonRpcRequest(
+                id: requestData.id,
+                method: requestData.method,
+                params: requestData.params,
+                meta: _statelessRequestMeta(requestData.meta),
+              )
+            : requestData;
+
     try {
       return await super.request<T>(
-        requestData,
+        outboundRequest,
         resultFactory,
         options,
         relatedRequestId,
       );
     } catch (error) {
-      if (error is! StaleSessionError || requestData.method == 'initialize') {
+      if (error is! StaleSessionError ||
+          outboundRequest.method == 'initialize') {
         rethrow;
       }
 
@@ -316,7 +429,7 @@ class McpClient extends Protocol {
       }
 
       return await super.request<T>(
-        requestData,
+        outboundRequest,
         resultFactory,
         options,
         relatedRequestId,
@@ -332,6 +445,9 @@ class McpClient extends Protocol {
 
   /// Gets the server's instructions provided during initialization, if any.
   String? getInstructions() => _instructions;
+
+  /// Gets the negotiated protocol version after connection.
+  String? getProtocolVersion() => _negotiatedProtocolVersion;
 
   @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
