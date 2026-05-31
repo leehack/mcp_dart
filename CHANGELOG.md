@@ -54,6 +54,8 @@
   client while keeping absent `resultType` compatible with stable result parsing.
 - Added `X-Accel-Buffering: no` to Streamable HTTP SSE responses and marked
   JSON-RPC error bodies with `Content-Type: application/json`.
+- Tightened `x-mcp-header` and `Mcp-Param-*` suffix validation to RFC 9110
+  HTTP field-name token syntax.
 
 ## 2.2.0
 

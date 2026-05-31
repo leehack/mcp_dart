@@ -203,6 +203,15 @@ void main() {
         callback: (args, extra) async => const CallToolResult(content: []),
       );
       server.registerTool(
+        'separator-header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'value': JsonString(mcpHeader: 'Bad/Header'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
         'number-header-tool',
         inputSchema: const ToolInputSchema(
           properties: {

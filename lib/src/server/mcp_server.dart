@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
+import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/tool_name_validation.dart';
@@ -1177,9 +1178,7 @@ class McpServer {
   }
 
   bool _isValidMcpHeaderNameSuffix(String value) {
-    return value.codeUnits.every(
-      (unit) => unit >= 0x21 && unit <= 0x7E && unit != 0x3A,
-    );
+    return isValidMcpHeaderNameSuffix(value);
   }
 
   bool _isToolParameterHeaderPrimitive(JsonSchema schema) {

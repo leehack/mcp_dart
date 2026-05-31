@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 
 import '../shared/transport.dart';
@@ -573,10 +574,7 @@ class StreamableHTTPServerTransport
       }
 
       final headerSuffix = name.substring(prefix.length);
-      if (headerSuffix.isEmpty ||
-          !headerSuffix.codeUnits.every(
-            (unit) => unit >= 0x21 && unit <= 0x7E && unit != 0x3A,
-          )) {
+      if (!isValidMcpHeaderNameSuffix(headerSuffix)) {
         headers[lowerName] = _McpParamHeader.invalidName(
           name: name,
           suffix: headerSuffix,

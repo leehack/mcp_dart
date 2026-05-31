@@ -186,6 +186,14 @@ void main() {
               },
             ),
           ),
+          Tool(
+            name: 'separator_header',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'region': JsonSchema.string(mcpHeader: 'Bad/Header'),
+              },
+            ),
+          ),
           Tool.fromJson({
             'name': 'non_string_header',
             'inputSchema': {
@@ -228,7 +236,7 @@ void main() {
       });
       expect(
         warnings.where((message) => message.contains('Rejecting tool')),
-        hasLength(5),
+        hasLength(6),
       );
     });
 
