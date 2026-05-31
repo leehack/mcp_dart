@@ -26,7 +26,7 @@
   mirrored tool headers limited to string, JavaScript-safe integer, and boolean
   parameters.
 - Removed `Mcp-Session-Id` from 2026 stateless Streamable HTTP requests by
-  stripping it from client sends and rejecting it on stateless server POSTs.
+  stripping it from client sends and ignoring it on stateless server POSTs.
 - Enforced 2026 stateless Streamable HTTP POST-only behavior by skipping
   legacy client GET/DELETE session paths and returning `Allow: POST` for
   stateless non-POST server requests.

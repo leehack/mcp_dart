@@ -1932,7 +1932,7 @@ void main() {
       expect(body['error']['message'], contains('Mcp-Name header is required'));
     });
 
-    test('2026 stateless HTTP rejects session header', () async {
+    test('2026 stateless HTTP ignores session header', () async {
       final transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
           sessionIdGenerator: () => "unused-session-id",
@@ -1942,6 +1942,19 @@ void main() {
       addTearDown(transport.close);
       await transport.start();
       transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcListToolsRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const ListToolsResult(tools: []).toJson(),
+              ),
+            ),
+          );
+        }
+      };
 
       final client = HttpClient();
       addTearDown(() => client.close(force: true));
@@ -1958,12 +1971,12 @@ void main() {
 
       final response = await request.close();
 
-      expect(response.statusCode, HttpStatus.badRequest);
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers.value('mcp-session-id'), isNull);
       final body =
           jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
       expect(body['id'], 6);
-      expect(body['error']['code'], ErrorCode.headerMismatch.value);
-      expect(body['error']['message'], contains('Mcp-Session-Id header'));
+      expect(body['result']['tools'], isEmpty);
     });
 
     test('2026 stateless HTTP accepts matching standard and parameter headers',
