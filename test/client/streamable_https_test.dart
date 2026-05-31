@@ -1188,6 +1188,58 @@ void main() {
       });
     });
 
+    test('send adds task id as 2026 stateless task name header', () async {
+      final capturedHeaders = <String, String?>{};
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        capturedHeaders['protocolVersion'] =
+            request.headers.value('mcp-protocol-version');
+        capturedHeaders['method'] = request.headers.value('mcp-method');
+        capturedHeaders['name'] = request.headers.value('mcp-name');
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 1,
+                result: {'resultType': resultTypeComplete},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = draftProtocolVersion2026_07_28;
+      await transport.start();
+
+      final completer = Completer<JsonRpcMessage>();
+      transport.onmessage = completer.complete;
+
+      await transport.send(
+        JsonRpcUpdateTaskRequest(
+          id: 1,
+          updateParams: const UpdateTaskRequest(
+            taskId: 'task-1',
+            inputResponses: {},
+          ),
+          meta: _statelessMeta(),
+        ),
+      );
+      await completer.future.timeout(const Duration(seconds: 5));
+
+      expect(
+        capturedHeaders['protocolVersion'],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(capturedHeaders['method'], Method.tasksUpdate);
+      expect(capturedHeaders['name'], 'task-1');
+    });
+
     test('send mirrors mapped tool parameters into 2026 stateless headers',
         () async {
       final capturedHeaders = <String, String?>{};

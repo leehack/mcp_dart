@@ -414,6 +414,10 @@ class StreamableHTTPServerTransport
       Method.toolsCall => params['name'],
       Method.resourcesRead => params['uri'],
       Method.promptsGet => params['name'],
+      Method.tasksCancel ||
+      Method.tasksGet ||
+      Method.tasksUpdate =>
+        params['taskId'],
       _ => null,
     };
     return value is String ? value : null;

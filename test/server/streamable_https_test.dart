@@ -1875,6 +1875,62 @@ void main() {
       expect(body['error']['message'], contains('Mcp-Name header value'));
     });
 
+    test('2026 stateless HTTP requires task id name header for task requests',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcUpdateTaskRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const TaskExtensionAcknowledgementResult().toJson(),
+              ),
+            ),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Method', Method.tasksUpdate);
+      request.write(
+        jsonEncode(
+          JsonRpcUpdateTaskRequest(
+            id: 4,
+            updateParams: const UpdateTaskRequest(
+              taskId: 'task-1',
+              inputResponses: {},
+            ),
+            meta: _statelessMeta(),
+          ),
+        ),
+      );
+
+      final response = await request.close();
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 4);
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
+      expect(body['error']['message'], contains('Mcp-Name header is required'));
+    });
+
     test('2026 stateless HTTP accepts matching standard and parameter headers',
         () async {
       final transport = StreamableHTTPServerTransport(
