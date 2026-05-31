@@ -456,13 +456,13 @@ class CallToolResult implements BaseResultData {
 
 /// Notification from server indicating the list of available tools has changed.
 class JsonRpcToolListChangedNotification extends JsonRpcNotification {
-  const JsonRpcToolListChangedNotification()
+  const JsonRpcToolListChangedNotification({super.meta})
       : super(method: Method.notificationsToolsListChanged);
 
   factory JsonRpcToolListChangedNotification.fromJson(
     Map<String, dynamic> json,
   ) =>
-      const JsonRpcToolListChangedNotification();
+      JsonRpcToolListChangedNotification(meta: extractRequestMeta(json));
 }
 
 void _validateObjectRootSchema(

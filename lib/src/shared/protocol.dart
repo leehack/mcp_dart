@@ -78,6 +78,12 @@ class RequestOptions {
   /// Maximum total time to wait for a response.
   final Duration? maxTotalTimeout;
 
+  /// Whether this request should use protocol-level timeout handling.
+  ///
+  /// Long-lived requests such as `subscriptions/listen` can disable this and
+  /// rely on explicit cancellation or transport closure instead.
+  final bool timeoutEnabled;
+
   /// Augments the request with task creation parameters.
   final TaskCreation? task;
 
@@ -91,6 +97,7 @@ class RequestOptions {
     this.timeout,
     this.resetTimeoutOnProgress = false,
     this.maxTotalTimeout,
+    this.timeoutEnabled = true,
     this.task,
     this.relatedTask,
   });
@@ -276,10 +283,7 @@ void _recordOrValidateSubscriptionNotification(
     );
   }
 
-  if (!_subscriptionFilterAllowsNotification(
-    state.acknowledgedNotifications,
-    notification,
-  )) {
+  if (!state.acknowledgedNotifications.allowsNotification(notification)) {
     throw McpError(
       ErrorCode.invalidRequest.value,
       '${notification.method} was not requested or acknowledged for this '
@@ -299,29 +303,6 @@ SubscriptionFilter _acknowledgedSubscriptionFilter(
   }
 
   return SubscriptionsAcknowledgedNotification.fromJson(params).notifications;
-}
-
-bool _subscriptionFilterAllowsNotification(
-  SubscriptionFilter filter,
-  JsonRpcNotification notification,
-) {
-  switch (notification.method) {
-    case Method.notificationsToolsListChanged:
-      return filter.toolsListChanged == true;
-    case Method.notificationsPromptsListChanged:
-      return filter.promptsListChanged == true;
-    case Method.notificationsResourcesListChanged:
-      return filter.resourcesListChanged == true;
-    case Method.notificationsResourcesUpdated:
-      final uri = notification.params?['uri'];
-      return uri is String &&
-          (filter.resourceSubscriptions?.contains(uri) ?? false);
-    case Method.notificationsTasks:
-      final taskId = notification.params?['taskId'];
-      return taskId is String && (filter.taskIds?.contains(taskId) ?? false);
-    default:
-      return false;
-  }
 }
 
 /// Internal class holding timeout state for a request.
@@ -1036,6 +1017,10 @@ abstract class Protocol {
   @protected
   void onIncomingRequestAccepted(JsonRpcRequest request) {}
 
+  /// Subclass hook called after an incoming notification has passed validation.
+  @protected
+  void onIncomingNotificationAccepted(JsonRpcNotification notification) {}
+
   /// Subclass hook called after an incoming request handler has completed and
   /// its response has been sent or enqueued.
   @protected
@@ -1069,6 +1054,8 @@ abstract class Protocol {
       _onerror(validationError);
       return;
     }
+
+    onIncomingNotificationAccepted(notification);
 
     if (notification is JsonRpcTaskStatusNotification) {
       _onTaskStatusNotification(notification);
@@ -1278,6 +1265,7 @@ abstract class Protocol {
           timeout: options.timeout,
           resetTimeoutOnProgress: options.resetTimeoutOnProgress,
           maxTotalTimeout: options.maxTotalTimeout,
+          timeoutEnabled: options.timeoutEnabled,
           task: options.task,
           relatedTask: options.relatedTask ??
               (relatedTaskId != null
@@ -1558,11 +1546,35 @@ abstract class Protocol {
     );
   }
 
+  /// Reserves an outgoing integer request ID for APIs that need to correlate
+  /// side-channel data before the response arrives.
+  @protected
+  int reserveRequestId() => _requestMessageId++;
+
+  /// Sends a request using a previously reserved outgoing integer request ID.
+  @protected
+  Future<T> requestWithReservedId<T extends BaseResultData>(
+    int requestId,
+    JsonRpcRequest requestData,
+    T Function(Map<String, dynamic> resultJson) resultFactory, [
+    RequestOptions? options,
+    RequestId? relatedRequestId,
+  ]) {
+    return _requestWithRequestId(
+      requestData,
+      resultFactory,
+      options,
+      relatedRequestId,
+      requestId,
+    );
+  }
+
   Future<T> _requestWithRequestId<T extends BaseResultData>(
     JsonRpcRequest requestData,
     T Function(Map<String, dynamic> resultJson) resultFactory, [
     RequestOptions? options,
     RequestId? relatedRequestId,
+    int? reservedRequestId,
   ]) {
     if (_transport == null) {
       return Future.error(StateError("Not connected to a transport."));
@@ -1585,7 +1597,7 @@ abstract class Protocol {
       return Future.error(e);
     }
 
-    final messageId = _requestMessageId++;
+    final messageId = reservedRequestId ?? _requestMessageId++;
     final completer = Completer<JsonRpcResponse>();
     Error? capturedError;
     Object? progressToken;
@@ -1746,26 +1758,28 @@ abstract class Protocol {
       taskRequestState?.abortSubscription = abortSubscription;
     }
 
-    final timeoutDuration = options?.timeout ?? defaultRequestTimeout;
-    final maxTotalTimeoutDuration = options?.maxTotalTimeout;
-    void timeoutHandler() {
-      cancel(
-        McpError(
-          ErrorCode.requestTimeout.value,
-          "Request $messageId timed out after $timeoutDuration",
-          {'timeout': timeoutDuration.inMilliseconds},
-        ),
-        fromTimeout: true,
+    if (options?.timeoutEnabled ?? true) {
+      final timeoutDuration = options?.timeout ?? defaultRequestTimeout;
+      final maxTotalTimeoutDuration = options?.maxTotalTimeout;
+      void timeoutHandler() {
+        cancel(
+          McpError(
+            ErrorCode.requestTimeout.value,
+            "Request $messageId timed out after $timeoutDuration",
+            {'timeout': timeoutDuration.inMilliseconds},
+          ),
+          fromTimeout: true,
+        );
+      }
+
+      _setupTimeout(
+        messageId,
+        timeoutDuration,
+        maxTotalTimeoutDuration,
+        options?.resetTimeoutOnProgress ?? false,
+        timeoutHandler,
       );
     }
-
-    _setupTimeout(
-      messageId,
-      timeoutDuration,
-      maxTotalTimeoutDuration,
-      options?.resetTimeoutOnProgress ?? false,
-      timeoutHandler,
-    );
 
     // Queue request if related to a task
     if (options?.relatedTask != null) {

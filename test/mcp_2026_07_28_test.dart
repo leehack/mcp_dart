@@ -1852,6 +1852,434 @@ void main() {
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
     });
 
+    test('client listenSubscriptions requires a connected transport', () {
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+      );
+
+      expect(
+        () => client.listenSubscriptions(
+          const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(toolsListChanged: true),
+          ),
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('client listenSubscriptions demultiplexes by subscription id',
+        () async {
+      final transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+          resources: ServerCapabilitiesResources(),
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+
+      final toolsSubscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      final resourcesSubscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(
+            resourceSubscriptions: ['file:///project/config.json'],
+          ),
+        ),
+      );
+      await _pump();
+
+      final listenRequests = transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .where((message) => message.method == Method.subscriptionsListen)
+          .toList();
+      expect(listenRequests, hasLength(2));
+      expect(listenRequests[0].id, toolsSubscription.id);
+      expect(listenRequests[1].id, resourcesSubscription.id);
+      expect(
+        listenRequests[0].meta?[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(listenRequests[0].params?['notifications'], {
+        'toolsListChanged': true,
+      });
+
+      transport.onmessage?.call(
+        JsonRpcSubscriptionsAcknowledgedNotification(
+          acknowledgedParams: const SubscriptionsAcknowledgedNotification(
+            notifications: SubscriptionFilter(
+              resourceSubscriptions: ['file:///project/config.json'],
+            ),
+          ),
+          meta: {McpMetaKey.subscriptionId: resourcesSubscription.id},
+        ),
+      );
+      transport.onmessage?.call(
+        JsonRpcSubscriptionsAcknowledgedNotification(
+          acknowledgedParams: const SubscriptionsAcknowledgedNotification(
+            notifications: SubscriptionFilter(toolsListChanged: true),
+          ),
+          meta: {McpMetaKey.subscriptionId: toolsSubscription.id},
+        ),
+      );
+
+      final toolsAcknowledged = await toolsSubscription.acknowledged;
+      final resourcesAcknowledged = await resourcesSubscription.acknowledged;
+      expect(toolsAcknowledged.notifications.toolsListChanged, isTrue);
+      expect(
+        resourcesAcknowledged.notifications.resourceSubscriptions,
+        ['file:///project/config.json'],
+      );
+
+      final toolNotification = toolsSubscription.notifications.first;
+      final resourceNotification = resourcesSubscription.notifications.first;
+      transport.onmessage?.call(
+        JsonRpcToolListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: toolsSubscription.id},
+        ),
+      );
+      transport.onmessage?.call(
+        JsonRpcResourceUpdatedNotification(
+          updatedParams: const ResourceUpdatedNotification(
+            uri: 'file:///project/config.json',
+          ),
+          meta: {McpMetaKey.subscriptionId: resourcesSubscription.id},
+        ),
+      );
+
+      expect(
+        (await toolNotification).method,
+        Method.notificationsToolsListChanged,
+      );
+      expect(
+        (await resourceNotification).method,
+        Method.notificationsResourcesUpdated,
+      );
+
+      toolsSubscription.cancel('done');
+      resourcesSubscription.cancel('done');
+      await expectLater(toolsSubscription.done, completes);
+      await expectLater(resourcesSubscription.done, completes);
+      await _pump();
+
+      final cancellations =
+          transport.sentMessages.whereType<JsonRpcCancelledNotification>();
+      expect(
+        cancellations
+            .map((notification) => notification.cancelParams.requestId),
+        containsAll([toolsSubscription.id, resourcesSubscription.id]),
+      );
+    });
+
+    test('client subscription rejects notifications before acknowledgment',
+        () async {
+      final transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+
+      final subscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      subscription.notifications.listen(null, onError: (_) {});
+      await _pump();
+
+      final acknowledgedExpectation = expectLater(
+        subscription.acknowledged,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains(Method.notificationsSubscriptionsAcknowledged),
+          ),
+        ),
+      );
+      final doneExpectation = expectLater(
+        subscription.done,
+        throwsA(isA<McpError>()),
+      );
+
+      transport.onmessage?.call(
+        JsonRpcToolListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: subscription.id},
+        ),
+      );
+
+      await acknowledgedExpectation;
+      await doneExpectation;
+      await _pump();
+
+      final cancellation = transport.sentMessages
+          .whereType<JsonRpcCancelledNotification>()
+          .single;
+      expect(cancellation.cancelParams.requestId, subscription.id);
+    });
+
+    test('client subscription fails when the connection closes', () async {
+      final transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+
+      final subscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      subscription.notifications.listen(null, onError: (_) {});
+      await _pump();
+
+      final acknowledgedExpectation = expectLater(
+        subscription.acknowledged,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      final doneExpectation = expectLater(
+        subscription.done,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            'Connection closed',
+          ),
+        ),
+      );
+
+      await transport.close();
+
+      await acknowledgedExpectation;
+      await doneExpectation;
+    });
+
+    test('client subscription rejects acknowledgments outside requested filter',
+        () async {
+      final transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+          prompts: ServerCapabilitiesPrompts(listChanged: true),
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+
+      final subscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      subscription.notifications.listen(null, onError: (_) {});
+      await _pump();
+
+      final acknowledgedExpectation = expectLater(
+        subscription.acknowledged,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('not requested'),
+          ),
+        ),
+      );
+      final doneExpectation = expectLater(
+        subscription.done,
+        throwsA(isA<McpError>()),
+      );
+
+      transport.onmessage?.call(
+        JsonRpcNotification(
+          method: Method.notificationsSubscriptionsAcknowledged,
+          params: const {
+            'notifications': {'promptsListChanged': true},
+          },
+          meta: {McpMetaKey.subscriptionId: subscription.id},
+        ),
+      );
+
+      await acknowledgedExpectation;
+      await doneExpectation;
+      await _pump();
+
+      final cancellation = transport.sentMessages
+          .whereType<JsonRpcCancelledNotification>()
+          .single;
+      expect(cancellation.cancelParams.requestId, subscription.id);
+    });
+
+    test('client subscription rejects unacknowledged notification types',
+        () async {
+      final transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+          prompts: ServerCapabilitiesPrompts(listChanged: true),
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+
+      final subscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      subscription.notifications.listen(null, onError: (_) {});
+      await _pump();
+
+      transport.onmessage?.call(
+        JsonRpcSubscriptionsAcknowledgedNotification(
+          acknowledgedParams: const SubscriptionsAcknowledgedNotification(
+            notifications: SubscriptionFilter(toolsListChanged: true),
+          ),
+          meta: {McpMetaKey.subscriptionId: subscription.id},
+        ),
+      );
+      await subscription.acknowledged;
+
+      final doneExpectation = expectLater(
+        subscription.done,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains(Method.notificationsPromptsListChanged),
+          ),
+        ),
+      );
+
+      transport.onmessage?.call(
+        JsonRpcPromptListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: subscription.id},
+        ),
+      );
+
+      await doneExpectation;
+      await _pump();
+
+      final cancellation = transport.sentMessages
+          .whereType<JsonRpcCancelledNotification>()
+          .single;
+      expect(cancellation.cancelParams.requestId, subscription.id);
+    });
+
+    test('client subscription cancel before ack completes done', () async {
+      final transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+
+      final subscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      await _pump();
+
+      final acknowledgedExpectation = expectLater(
+        subscription.acknowledged,
+        throwsA(
+          isA<AbortError>().having(
+            (error) => error.reason,
+            'reason',
+            'user cancelled',
+          ),
+        ),
+      );
+
+      subscription.cancel('user cancelled');
+
+      await acknowledgedExpectation;
+      await expectLater(subscription.done, completes);
+      await _pump();
+
+      final cancellation = transport.sentMessages
+          .whereType<JsonRpcCancelledNotification>()
+          .single;
+      expect(cancellation.cancelParams.requestId, subscription.id);
+    });
+
+    test('client subscription rejects completion before acknowledgment',
+        () async {
+      final transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+
+      final subscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      subscription.notifications.listen(null, onError: (_) {});
+      await _pump();
+
+      final acknowledgedExpectation = expectLater(
+        subscription.acknowledged,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('completed before'),
+          ),
+        ),
+      );
+      final doneExpectation = expectLater(
+        subscription.done,
+        throwsA(isA<McpError>()),
+      );
+
+      transport.onmessage?.call(
+        JsonRpcResponse(
+          id: subscription.id,
+          result: const EmptyResult().toJson(),
+        ),
+      );
+
+      await acknowledgedExpectation;
+      await doneExpectation;
+    });
+
     test('client rejects unrecognized stateless resultType values', () async {
       final transport = DiscoveringClientTransport(
         toolsListResult: const {

@@ -66,6 +66,9 @@
 - Retried `server/discover` with an advertised compatible stateless protocol
   version after `UnsupportedProtocolVersionError` instead of falling back to
   legacy initialization.
+- Added client-side `subscriptions/listen` handles that correlate stream
+  notifications by `io.modelcontextprotocol/subscriptionId`, validate the
+  acknowledgment, and cancel long-lived streams with `notifications/cancelled`.
 
 ## 2.2.0
 

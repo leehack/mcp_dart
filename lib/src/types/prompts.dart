@@ -343,13 +343,13 @@ class GetPromptResult implements BaseResultData {
 
 /// Notification from server indicating the list of available prompts has changed.
 class JsonRpcPromptListChangedNotification extends JsonRpcNotification {
-  const JsonRpcPromptListChangedNotification()
+  const JsonRpcPromptListChangedNotification({super.meta})
       : super(method: Method.notificationsPromptsListChanged);
 
   factory JsonRpcPromptListChangedNotification.fromJson(
     Map<String, dynamic> json,
   ) =>
-      const JsonRpcPromptListChangedNotification();
+      JsonRpcPromptListChangedNotification(meta: extractRequestMeta(json));
 }
 
 /// Deprecated alias for [ListPromptsRequest].

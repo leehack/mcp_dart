@@ -553,13 +553,13 @@ class ReadResourceResult implements CacheableResultData {
 
 /// Notification from server indicating the list of available resources has changed.
 class JsonRpcResourceListChangedNotification extends JsonRpcNotification {
-  const JsonRpcResourceListChangedNotification()
+  const JsonRpcResourceListChangedNotification({super.meta})
       : super(method: Method.notificationsResourcesListChanged);
 
   factory JsonRpcResourceListChangedNotification.fromJson(
     Map<String, dynamic> json,
   ) =>
-      const JsonRpcResourceListChangedNotification();
+      JsonRpcResourceListChangedNotification(meta: extractRequestMeta(json));
 }
 
 /// Parameters for the `resources/subscribe` request.

@@ -76,6 +76,50 @@ class SubscriptionFilter {
     );
   }
 
+  /// Whether this filter is a subset of [requested].
+  bool isSubsetOf(SubscriptionFilter requested) {
+    if (toolsListChanged == true && requested.toolsListChanged != true) {
+      return false;
+    }
+    if (promptsListChanged == true && requested.promptsListChanged != true) {
+      return false;
+    }
+    if (resourcesListChanged == true &&
+        requested.resourcesListChanged != true) {
+      return false;
+    }
+    if (!_stringListSubsetOf(
+      resourceSubscriptions,
+      requested.resourceSubscriptions,
+    )) {
+      return false;
+    }
+    if (!_stringListSubsetOf(taskIds, requested.taskIds)) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Whether this acknowledged filter allows [notification].
+  bool allowsNotification(JsonRpcNotification notification) {
+    switch (notification.method) {
+      case Method.notificationsToolsListChanged:
+        return toolsListChanged == true;
+      case Method.notificationsPromptsListChanged:
+        return promptsListChanged == true;
+      case Method.notificationsResourcesListChanged:
+        return resourcesListChanged == true;
+      case Method.notificationsResourcesUpdated:
+        final uri = notification.params?['uri'];
+        return uri is String && (resourceSubscriptions?.contains(uri) ?? false);
+      case Method.notificationsTasks:
+        final taskId = notification.params?['taskId'];
+        return taskId is String && (taskIds?.contains(taskId) ?? false);
+      default:
+        return false;
+    }
+  }
+
   Map<String, dynamic> toJson() => {
         if (toolsListChanged != null) 'toolsListChanged': toolsListChanged,
         if (promptsListChanged != null)
@@ -231,6 +275,17 @@ List<String>? _readOptionalStringList(Object? value, String field) {
     throw FormatException('$field must contain only strings');
   }
   return value.cast<String>();
+}
+
+bool _stringListSubsetOf(List<String>? subset, List<String>? superset) {
+  if (subset == null || subset.isEmpty) {
+    return true;
+  }
+  final allowed = superset?.toSet();
+  if (allowed == null) {
+    return false;
+  }
+  return subset.every(allowed.contains);
 }
 
 Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {

@@ -76,6 +76,73 @@ void main() {
       expect(acknowledged.toJson(), isEmpty);
     });
 
+    test('checks acknowledged subsets and allowed notifications', () {
+      const requested = SubscriptionFilter(
+        toolsListChanged: true,
+        resourceSubscriptions: [
+          'file:///project/config.json',
+          'file:///project/other.json',
+        ],
+      );
+      const acknowledged = SubscriptionFilter(
+        toolsListChanged: true,
+        resourceSubscriptions: ['file:///project/config.json'],
+      );
+
+      expect(acknowledged.isSubsetOf(requested), isTrue);
+      expect(
+        const SubscriptionFilter(promptsListChanged: true).isSubsetOf(
+          requested,
+        ),
+        isFalse,
+      );
+      expect(
+        const SubscriptionFilter(resourcesListChanged: true).isSubsetOf(
+          requested,
+        ),
+        isFalse,
+      );
+      expect(
+        const SubscriptionFilter(
+          resourceSubscriptions: ['file:///project/missing.json'],
+        ).isSubsetOf(requested),
+        isFalse,
+      );
+
+      expect(
+        acknowledged.allowsNotification(
+          const JsonRpcToolListChangedNotification(),
+        ),
+        isTrue,
+      );
+      expect(
+        acknowledged.allowsNotification(
+          JsonRpcResourceUpdatedNotification(
+            updatedParams: const ResourceUpdatedNotification(
+              uri: 'file:///project/config.json',
+            ),
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        acknowledged.allowsNotification(
+          JsonRpcResourceUpdatedNotification(
+            updatedParams: const ResourceUpdatedNotification(
+              uri: 'file:///project/missing.json',
+            ),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        acknowledged.allowsNotification(
+          const JsonRpcPromptListChangedNotification(),
+        ),
+        isFalse,
+      );
+    });
+
     test('rejects malformed filters', () {
       expect(
         () => SubscriptionFilter.fromJson(
@@ -151,6 +218,29 @@ void main() {
   });
 
   group('JsonRpcSubscriptionsAcknowledgedNotification', () {
+    test('preserves subscription metadata on list changed notifications', () {
+      for (final notification in [
+        const JsonRpcToolListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: 'sub-1'},
+        ),
+        const JsonRpcPromptListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: 'sub-1'},
+        ),
+        const JsonRpcResourceListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: 'sub-1'},
+        ),
+        // ignore: deprecated_member_use_from_same_package, deprecated_member_use
+        const JsonRpcCompletionListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: 'sub-1'},
+        ),
+      ]) {
+        final parsed = JsonRpcMessage.fromJson(notification.toJson())
+            as JsonRpcNotification;
+
+        expect(parsed.meta?[McpMetaKey.subscriptionId], 'sub-1');
+      }
+    });
+
     test('serializes and parses subscription acknowledgments', () {
       final notification = JsonRpcSubscriptionsAcknowledgedNotification(
         acknowledgedParams: const SubscriptionsAcknowledgedNotification(
