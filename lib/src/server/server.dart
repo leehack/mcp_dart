@@ -339,6 +339,27 @@ class Server extends Protocol {
     return null;
   }
 
+  McpError? _validateServerTasksExtensionSupport(JsonRpcRequest request) {
+    if (!_isStatelessRequest(request)) {
+      return null;
+    }
+
+    switch (request.method) {
+      case Method.tasksGet:
+      case Method.tasksCancel:
+      case Method.tasksUpdate:
+        if (_capabilities.supportsTasksExtension) {
+          return null;
+        }
+        return McpError(
+          ErrorCode.methodNotFound.value,
+          '${request.method} requires server support for $mcpTasksExtensionId.',
+        );
+    }
+
+    return null;
+  }
+
   McpError? _validateTasksExtensionCapabilities(JsonRpcRequest request) {
     final requiresTasksExtension =
         (request is JsonRpcSubscriptionsListenRequest &&
@@ -380,6 +401,11 @@ class Server extends Protocol {
       return removedMethodError;
     }
 
+    final serverExtensionError = _validateServerTasksExtensionSupport(request);
+    if (serverExtensionError != null) {
+      return serverExtensionError;
+    }
+
     final extensionCapabilityError =
         _validateTasksExtensionCapabilities(request);
     if (extensionCapabilityError != null) {
@@ -402,6 +428,33 @@ class Server extends Protocol {
     }
 
     return false;
+  }
+
+  bool _allowsTaskExtensionResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    if (!_isStatelessRequest(request)) {
+      return true;
+    }
+
+    return switch (request.method) {
+      Method.tasksGet => result is GetTaskExtensionResult,
+      Method.tasksCancel ||
+      Method.tasksUpdate =>
+        result is TaskExtensionAcknowledgementResult || result is EmptyResult,
+      _ => true,
+    };
+  }
+
+  String _expectedTaskExtensionResult(String method) {
+    return switch (method) {
+      Method.tasksGet => 'GetTaskExtensionResult',
+      Method.tasksCancel ||
+      Method.tasksUpdate =>
+        'TaskExtensionAcknowledgementResult or EmptyResult',
+      _ => 'valid MCP Tasks extension result',
+    };
   }
 
   bool _isLegacyTaskAugmentedRequest(JsonRpcCallToolRequest request) {
@@ -650,6 +703,24 @@ class Server extends Protocol {
               "Invalid tools/call result: Expected CallToolResult",
             );
           }
+        }
+        return result;
+      }
+
+      super.setRequestHandler(method, wrappedHandler, requestFactory);
+    } else if (method == Method.tasksGet ||
+        method == Method.tasksCancel ||
+        method == Method.tasksUpdate) {
+      Future<BaseResultData> wrappedHandler(
+        ReqT request,
+        RequestHandlerExtra extra,
+      ) async {
+        final result = await handler(request, extra);
+        if (!_allowsTaskExtensionResult(result, request)) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Invalid ${request.method} result for MCP Tasks extension: Expected ${_expectedTaskExtensionResult(request.method)}",
+          );
         }
         return result;
       }

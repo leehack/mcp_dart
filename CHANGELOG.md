@@ -22,6 +22,9 @@
 - Synced registered tool `x-mcp-header` metadata into Streamable HTTP server
   transports so 2026 stateless `tools/call` requests reject missing or
   mismatched `Mcp-Param-*` argument headers.
+- Gated 2026 stateless task extension methods on advertised server extension
+  support and rejected legacy task result shapes on extension `tasks/get`,
+  `tasks/update`, and `tasks/cancel` handlers.
 - Added request-scoped stateless logging gating via
   `io.modelcontextprotocol/logLevel` metadata so 2026 log notifications are
   emitted only when the current request opts in.
