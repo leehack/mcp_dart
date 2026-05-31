@@ -127,13 +127,17 @@ class StreamableHttpClientTransportOptions {
 /// It will connect to a server using HTTP POST for sending messages and HTTP GET with Server-Sent Events
 /// for receiving messages.
 class StreamableHttpClientTransport
-    implements Transport, ProtocolVersionAwareTransport {
+    implements
+        Transport,
+        ProtocolVersionAwareTransport,
+        ToolParameterHeaderAwareTransport {
   StreamController<bool>? _abortController;
   final Uri _url;
   final Map<String, dynamic>? _requestInit;
   final OAuthClientProvider? _authProvider;
   String? _sessionId;
   String? _protocolVersion;
+  ToolParameterHeaderMappings _toolParameterHeaderMappings = const {};
   int _sessionGeneration = 0;
   bool _staleSessionDetected = false;
   final StreamableHttpReconnectionOptions _reconnectionOptions;
@@ -551,7 +555,63 @@ class StreamableHttpClientTransport
       headers['Mcp-Name'] = name;
     }
 
+    if (method == Method.toolsCall && name != null) {
+      headers.addAll(_toolParameterHeaders(name, params));
+    }
+
     return headers;
+  }
+
+  Map<String, String> _toolParameterHeaders(
+    String toolName,
+    Map<String, dynamic>? params,
+  ) {
+    final mappings = _toolParameterHeaderMappings[toolName];
+    final arguments = params?['arguments'];
+    if (mappings == null || arguments is! Map) {
+      return const {};
+    }
+
+    final argumentMap = arguments.cast<String, dynamic>();
+    final headers = <String, String>{};
+    for (final entry in mappings.entries) {
+      if (!argumentMap.containsKey(entry.key)) {
+        continue;
+      }
+
+      final value = _toolParameterHeaderString(argumentMap[entry.key]);
+      if (value == null) {
+        continue;
+      }
+
+      headers['Mcp-Param-${entry.value}'] =
+          _encodeToolParameterHeaderValue(value);
+    }
+    return headers;
+  }
+
+  String? _toolParameterHeaderString(Object? value) {
+    return switch (value) {
+      String() => value,
+      num() => value.toString(),
+      bool() => value.toString(),
+      _ => null,
+    };
+  }
+
+  String _encodeToolParameterHeaderValue(String value) {
+    if (_isPlainToolParameterHeaderValue(value)) {
+      return value;
+    }
+
+    return '=?base64?${base64Encode(utf8.encode(value))}?=';
+  }
+
+  bool _isPlainToolParameterHeaderValue(String value) {
+    return value.trim() == value &&
+        value.codeUnits.every(
+          (unit) => unit == 0x09 || (unit >= 0x20 && unit <= 0x7E),
+        );
   }
 
   String? _methodFrom(JsonRpcMessage message) {
@@ -1206,6 +1266,16 @@ class StreamableHttpClientTransport
   @override
   set protocolVersion(String? value) {
     _protocolVersion = value;
+  }
+
+  @override
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  ) {
+    _toolParameterHeaderMappings = {
+      for (final entry in mappings.entries)
+        entry.key: Map.unmodifiable(Map<String, String>.from(entry.value)),
+    };
   }
 
   /// Terminates the current session by sending a DELETE request to the server.

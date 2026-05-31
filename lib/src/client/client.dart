@@ -96,6 +96,7 @@ class McpClient extends Protocol {
 
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
   final Set<String> _cachedRequiredTaskTools = {};
+  final ToolParameterHeaderMappings _cachedToolParameterHeaders = {};
 
   /// Callback for handling elicitation requests from the server.
   ///
@@ -789,16 +790,40 @@ class McpClient extends Protocol {
       options,
     );
 
-    _cacheToolMetadata(result.tools);
+    final tools = _cacheToolMetadata(result.tools);
 
-    return result;
+    if (identical(tools, result.tools)) {
+      return result;
+    }
+
+    return ListToolsResult(
+      tools: tools,
+      nextCursor: result.nextCursor,
+      meta: result.meta,
+    );
   }
 
-  void _cacheToolMetadata(List<Tool> tools) {
+  List<Tool> _cacheToolMetadata(List<Tool> tools) {
     _cachedToolOutputSchemas.clear();
     _cachedRequiredTaskTools.clear();
+    _cachedToolParameterHeaders.clear();
+
+    var filtered = false;
+    final validTools = <Tool>[];
 
     for (final tool in tools) {
+      final headerValidation = _validateToolParameterHeaders(tool);
+      if (headerValidation.rejectionReason != null) {
+        filtered = true;
+        _logger.warn(
+          'Rejecting tool "${tool.name}" from tools/list: '
+          '${headerValidation.rejectionReason}',
+        );
+        continue;
+      }
+
+      validTools.add(tool);
+
       if (tool.outputSchema != null) {
         _cachedToolOutputSchemas[tool.name] = tool.outputSchema!;
       }
@@ -806,7 +831,92 @@ class McpClient extends Protocol {
       if (tool.execution?.taskSupport == 'required') {
         _cachedRequiredTaskTools.add(tool.name);
       }
+
+      if (headerValidation.mappings.isNotEmpty) {
+        _cachedToolParameterHeaders[tool.name] = headerValidation.mappings;
+      }
     }
+
+    final activeTransport = transport;
+    final headerAwareTransport =
+        activeTransport is ToolParameterHeaderAwareTransport
+            ? activeTransport as ToolParameterHeaderAwareTransport
+            : null;
+    if (headerAwareTransport != null) {
+      headerAwareTransport.setToolParameterHeaderMappings(
+        _cachedToolParameterHeaders,
+      );
+    }
+
+    return filtered ? validTools : tools;
+  }
+
+  _ToolParameterHeaderValidation _validateToolParameterHeaders(Tool tool) {
+    final inputSchema = tool.inputSchema;
+    final properties =
+        inputSchema is JsonObject ? inputSchema.properties : null;
+    if (properties == null || properties.isEmpty) {
+      return const _ToolParameterHeaderValidation.valid({});
+    }
+
+    final mappings = <String, String>{};
+    final seenHeaders = <String>{};
+    for (final entry in properties.entries) {
+      final propertyJson = entry.value.toJson();
+      if (!propertyJson.containsKey('x-mcp-header')) {
+        continue;
+      }
+
+      final rawHeader = propertyJson['x-mcp-header'];
+      if (rawHeader is! String) {
+        return _ToolParameterHeaderValidation.invalid(
+          'parameter "${entry.key}" has a non-string x-mcp-header value',
+        );
+      }
+
+      if (rawHeader.isEmpty) {
+        return _ToolParameterHeaderValidation.invalid(
+          'parameter "${entry.key}" has an empty x-mcp-header value',
+        );
+      }
+
+      if (!_isValidMcpHeaderNameSuffix(rawHeader)) {
+        return _ToolParameterHeaderValidation.invalid(
+          'parameter "${entry.key}" has invalid x-mcp-header value '
+          '"$rawHeader"',
+        );
+      }
+
+      final normalizedHeader = rawHeader.toLowerCase();
+      if (!seenHeaders.add(normalizedHeader)) {
+        return _ToolParameterHeaderValidation.invalid(
+          'x-mcp-header value "$rawHeader" is not unique',
+        );
+      }
+
+      if (!_isToolParameterHeaderPrimitive(entry.value)) {
+        return _ToolParameterHeaderValidation.invalid(
+          'parameter "${entry.key}" uses x-mcp-header on a non-primitive type',
+        );
+      }
+
+      mappings[entry.key] = rawHeader;
+    }
+
+    return _ToolParameterHeaderValidation.valid(mappings);
+  }
+
+  bool _isValidMcpHeaderNameSuffix(String value) {
+    return value.codeUnits.every(
+      (unit) => unit >= 0x21 && unit <= 0x7E && unit != 0x3A,
+    );
+  }
+
+  bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
+    return schema is JsonString ||
+        schema is JsonNumber ||
+        schema is JsonInteger ||
+        schema is JsonBoolean;
   }
 
   /// Sends a `notifications/roots/list_changed` notification to the server.
@@ -819,3 +929,14 @@ class McpClient extends Protocol {
 /// Deprecated alias for [McpClient].
 @Deprecated('Use McpClient instead')
 typedef Client = McpClient;
+
+class _ToolParameterHeaderValidation {
+  final Map<String, String> mappings;
+  final String? rejectionReason;
+
+  const _ToolParameterHeaderValidation.valid(this.mappings)
+      : rejectionReason = null;
+
+  const _ToolParameterHeaderValidation.invalid(this.rejectionReason)
+      : mappings = const {};
+}

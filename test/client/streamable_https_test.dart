@@ -1188,6 +1188,85 @@ void main() {
       });
     });
 
+    test('send mirrors mapped tool parameters into 2026 stateless headers',
+        () async {
+      final capturedHeaders = <String, String?>{};
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        capturedHeaders['region'] = request.headers.value('mcp-param-region');
+        capturedHeaders['greeting'] =
+            request.headers.value('mcp-param-greeting');
+        capturedHeaders['limit'] = request.headers.value('mcp-param-limit');
+        capturedHeaders['dryRun'] = request.headers.value('mcp-param-dry-run');
+        capturedHeaders['text'] = request.headers.value('mcp-param-text');
+        capturedHeaders['payload'] = request.headers.value('mcp-param-payload');
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 1,
+                result: {'content': []},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )
+        ..protocolVersion = draftProtocolVersion2026_07_28
+        ..setToolParameterHeaderMappings(
+          {
+            'execute_sql': {
+              'region': 'Region',
+              'greeting': 'Greeting',
+              'limit': 'Limit',
+              'dryRun': 'Dry-Run',
+              'text': 'Text',
+              'payload': 'Payload',
+            },
+          },
+        );
+      await transport.start();
+
+      final completer = Completer<JsonRpcMessage>();
+      transport.onmessage = completer.complete;
+
+      await transport.send(
+        JsonRpcCallToolRequest(
+          id: 1,
+          params: const {
+            'name': 'execute_sql',
+            'arguments': {
+              'region': 'us-west1',
+              'greeting': 'Hello, 世界',
+              'limit': 42,
+              'dryRun': false,
+              'text': ' padded ',
+              'payload': {'nested': true},
+            },
+          },
+          meta: _statelessMeta(),
+        ),
+      );
+      await completer.future.timeout(const Duration(seconds: 5));
+
+      expect(capturedHeaders['region'], 'us-west1');
+      expect(
+        capturedHeaders['greeting'],
+        '=?base64?${base64Encode(utf8.encode('Hello, 世界'))}?=',
+      );
+      expect(capturedHeaders['limit'], '42');
+      expect(capturedHeaders['dryRun'], 'false');
+      expect(capturedHeaders['text'], '=?base64?IHBhZGRlZCA=?=');
+      expect(capturedHeaders['payload'], isNull);
+    });
+
     test('send with initialized notification triggers SSE establishment',
         () async {
       transport = StreamableHttpClientTransport(serverUrl);
