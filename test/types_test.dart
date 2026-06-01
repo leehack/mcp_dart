@@ -1987,6 +1987,67 @@ void main() {
       expect(result.elicitationId, equals('elicitation-1'));
       expect(result.toJson(), equals({'action': 'accept'}));
     });
+
+    test('elicitation parsers reject malformed wire fields', () {
+      for (final parse in <Object Function()>[
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.elicitationCreate,
+              'params': 'bad',
+            }),
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.elicitationCreate,
+              'params': null,
+            }),
+        () => ElicitRequest.fromJson({
+              'message': 'Bad schema',
+              'requestedSchema': 'bad',
+            }),
+        () => ElicitRequest.fromJson({
+              'message': 'Bad properties',
+              'requestedSchema': {
+                'type': 'object',
+                'properties': <Object?, Object?>{
+                  1: {'type': 'string'},
+                },
+              },
+            }),
+        () => ElicitResult.fromJson({
+              'action': 'accept',
+              'url': 1,
+            }),
+        () => ElicitResult.fromJson({
+              'action': 'accept',
+              'content': <Object?, Object?>{1: 'bad'},
+            }),
+        () => ElicitationCompleteNotification.fromJson({
+              'elicitationId': 1,
+            }),
+        () => JsonRpcElicitationCompleteNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsElicitationComplete,
+              'params': 'bad',
+            }),
+        () => JsonRpcElicitationCompleteNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsElicitationComplete,
+              'params': null,
+            }),
+        () => URLElicitationRequiredErrorData.fromJson({
+              'elicitations': [1],
+            }),
+        () => URLElicitationRequiredErrorData.fromJson({
+              'elicitations': [
+                <Object?, Object?>{1: 'bad'},
+              ],
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
   });
 
   group('ClientElicitation Tests', () {

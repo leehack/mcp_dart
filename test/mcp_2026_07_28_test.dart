@@ -431,6 +431,53 @@ void main() {
       );
     });
 
+    test('rejects malformed elicitation wire shapes', () {
+      for (final parse in <Object Function()>[
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.elicitationCreate,
+              'params': 'bad',
+            }),
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.elicitationCreate,
+              'params': null,
+            }),
+        () => ElicitRequest.fromJson({
+              'message': 'Bad properties',
+              'requestedSchema': {
+                'type': 'object',
+                'properties': <Object?, Object?>{
+                  1: {'type': 'string'},
+                },
+              },
+            }),
+        () => ElicitResult.fromJson({
+              'action': 'accept',
+              'url': 1,
+            }),
+        () => ElicitResult.fromJson({
+              'action': 'accept',
+              'content': <Object?, Object?>{1: 'bad'},
+            }),
+        () => ElicitationCompleteNotification.fromJson({
+              'elicitationId': 1,
+            }),
+        () => JsonRpcElicitationCompleteNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsElicitationComplete,
+              'params': 'bad',
+            }),
+        () => URLElicitationRequiredErrorData.fromJson({
+              'elicitations': [1],
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
     test('rejects non-finite JSON numbers', () {
       expect(
         () => ProgressNotification.fromJson({

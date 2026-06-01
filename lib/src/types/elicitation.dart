@@ -117,7 +117,10 @@ class ElicitRequest {
       throw const FormatException('Elicitation message is required.');
     }
 
-    final requestedSchemaJson = json['requestedSchema'];
+    final requestedSchemaJson = readOptionalJsonObject(
+      json['requestedSchema'],
+      'ElicitRequest.requestedSchema',
+    );
     final url = json['url'];
     final elicitationId = json['elicitationId'];
     final task = readOptionalJsonObject(json['task'], 'ElicitRequest.task');
@@ -143,7 +146,7 @@ class ElicitRequest {
       );
     }
 
-    if (requestedSchemaJson is! Map<String, dynamic>) {
+    if (requestedSchemaJson == null) {
       throw const FormatException('Form elicitation requires requestedSchema.');
     }
     _validateFormRequestedSchemaJson(
@@ -236,10 +239,8 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
         );
 
   factory JsonRpcElicitRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException("Missing params for elicit request");
-    }
+    final paramsMap =
+        _readRequiredParamsObject(json, 'JsonRpcElicitRequest.params');
     final meta = extractRequestMeta(json);
     final protocolVersion = _protocolVersionFromMeta(meta);
     return JsonRpcElicitRequest(
@@ -311,8 +312,11 @@ class ElicitResult implements BaseResultData {
     return ElicitResult(
       action: action,
       content: content,
-      url: json['url'] as String?,
-      elicitationId: json['elicitationId'] as String?,
+      url: readOptionalString(json['url'], 'ElicitResult.url'),
+      elicitationId: readOptionalString(
+        json['elicitationId'],
+        'ElicitResult.elicitationId',
+      ),
       meta: readOptionalJsonObject(json['_meta'], 'ElicitResult._meta'),
     );
   }
@@ -368,7 +372,10 @@ class ElicitationCompleteNotification {
 
   factory ElicitationCompleteNotification.fromJson(Map<String, dynamic> json) {
     return ElicitationCompleteNotification(
-      elicitationId: json['elicitationId'] as String,
+      elicitationId: readRequiredString(
+        json['elicitationId'],
+        'ElicitationCompleteNotification.elicitationId',
+      ),
     );
   }
 
@@ -394,12 +401,10 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
   factory JsonRpcElicitationCompleteNotification.fromJson(
     Map<String, dynamic> json,
   ) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException(
-        "Missing params for elicitation complete notification",
-      );
-    }
+    final paramsMap = _readRequiredParamsObject(
+      json,
+      'JsonRpcElicitationCompleteNotification.params',
+    );
     final meta = readOptionalJsonObject(
       paramsMap['_meta'],
       'JsonRpcElicitationCompleteNotification._meta',
@@ -429,8 +434,15 @@ class URLElicitationRequiredErrorData {
         'URLElicitationRequiredErrorData.elicitations is required',
       );
     }
-    final elicitations = elicitationsList
-        .map((e) => ElicitRequest.fromJson(e as Map<String, dynamic>))
+    final elicitations = elicitationsList.indexed
+        .map(
+          (entry) => ElicitRequest.fromJson(
+            readJsonObject(
+              entry.$2,
+              'URLElicitationRequiredErrorData.elicitations[${entry.$1}]',
+            ),
+          ),
+        )
         .toList();
     _validateUrlElicitations(elicitations, formatException: true);
     return URLElicitationRequiredErrorData(elicitations: elicitations);
@@ -481,20 +493,26 @@ void _validateFormRequestedSchemaJson(
       'Form elicitation requestedSchema must have type object.',
     );
   }
-  final properties = json['properties'];
-  if (properties is! Map) {
+  final properties = readOptionalJsonObject(
+    json['properties'],
+    'ElicitRequest.requestedSchema.properties',
+  );
+  if (properties == null) {
     throw const FormatException(
       'Form elicitation requestedSchema.properties is required.',
     );
   }
   for (final entry in properties.entries) {
-    if (entry.key is! String || entry.value is! Map) {
+    if (entry.value is! Map) {
       throw const FormatException(
         'Form elicitation requestedSchema properties must be schema objects.',
       );
     }
     _validatePrimitiveSchema(
-      (entry.value as Map).cast<String, dynamic>(),
+      readJsonObject(
+        entry.value,
+        'ElicitRequest.requestedSchema.properties.${entry.key}',
+      ),
       'ElicitRequest.requestedSchema.properties.${entry.key}',
       protocolVersion: protocolVersion,
     );
@@ -676,7 +694,7 @@ void _validateMultiSelectEnumSchema(
   if (items is! Map) {
     throw FormatException('$context.items is required for array schemas.');
   }
-  final itemMap = items.cast<String, dynamic>();
+  final itemMap = readJsonObject(items, '$context.items');
   if (itemMap.containsKey('enum')) {
     _ensureAllowedKeys(itemMap, const {'type', 'enum'}, '$context.items');
     if (itemMap['type'] != 'string') {
@@ -768,11 +786,18 @@ Map<String, dynamic>? _parseElicitResultContent(Object? content) {
   if (content == null) {
     return null;
   }
-  if (content is! Map) {
-    throw const FormatException('ElicitResult.content must be an object.');
-  }
-  final result = content.cast<String, dynamic>();
+  final result = readJsonObject(content, 'ElicitResult.content');
   return _normalizeElicitResultContent(result, formatException: true);
+}
+
+Map<String, dynamic> _readRequiredParamsObject(
+  Map<String, dynamic> json,
+  String field,
+) {
+  if (!json.containsKey('params')) {
+    throw FormatException('$field is required');
+  }
+  return readJsonObject(json['params'], field);
 }
 
 Map<String, dynamic>? _normalizeElicitResultContent(
