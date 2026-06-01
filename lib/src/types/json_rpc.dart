@@ -328,12 +328,12 @@ Map<String, dynamic>? _parseRequestMeta(Object? value) {
   return validateRequestMeta(readJsonObject(value, '_meta'));
 }
 
-/// Extracts request metadata from either top-level or params-nested `_meta`.
+/// Extracts request metadata, preferring spec-defined params-nested `_meta`.
 Map<String, dynamic>? extractRequestMeta(Map<String, dynamic> json) {
   final topLevelMeta = _parseRequestMeta(json['_meta']);
   final params = json['params'];
   final paramsMeta = params is Map ? _parseRequestMeta(params['_meta']) : null;
-  return topLevelMeta ?? paramsMeta;
+  return paramsMeta ?? topLevelMeta;
 }
 
 /// Base class for all JSON-RPC messages (requests, notifications, responses, errors).
@@ -435,14 +435,7 @@ sealed class JsonRpcMessage {
           _ => JsonRpcNotification(
               method: method,
               params: params,
-              meta: readOptionalJsonObject(
-                    json['_meta'],
-                    'JsonRpcNotification._meta',
-                  ) ??
-                  readOptionalJsonObject(
-                    params?['_meta'],
-                    'JsonRpcNotification._meta',
-                  ),
+              meta: extractRequestMeta(json),
             ),
         };
       }

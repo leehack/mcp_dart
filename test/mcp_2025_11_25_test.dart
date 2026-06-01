@@ -1226,6 +1226,26 @@ void main() {
         );
       });
 
+      test('request parsing prefers params metadata over top-level metadata',
+          () {
+        final parsed = JsonRpcMessage.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'id': 'tools',
+            'method': Method.toolsList,
+            '_meta': {'progressToken': 'top-level'},
+            'params': {
+              '_meta': {'progressToken': 'params-nested'},
+            },
+          },
+        );
+
+        expect(parsed, isA<JsonRpcListToolsRequest>());
+        final request = parsed as JsonRpcListToolsRequest;
+        expect(request.meta, {'progressToken': 'params-nested'});
+        expect(request.progressToken, 'params-nested');
+      });
+
       test('server capabilities omit non-stable fields while parsing legacy',
           () {
         final capabilities = const ServerCapabilities(

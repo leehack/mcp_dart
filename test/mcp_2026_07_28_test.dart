@@ -322,6 +322,31 @@ void main() {
       }
     });
 
+    test('request parsing does not let top-level metadata override params', () {
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 'tools',
+        'method': Method.toolsList,
+        '_meta': {
+          McpMetaKey.protocolVersion: latestProtocolVersion,
+        },
+        'params': {
+          '_meta': _clientMeta(),
+        },
+      });
+
+      expect(parsed, isA<JsonRpcListToolsRequest>());
+      final request = parsed as JsonRpcListToolsRequest;
+      expect(
+        request.meta?[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(request.meta?[McpMetaKey.clientInfo], {
+        'name': 'client',
+        'version': '1.0.0',
+      });
+    });
+
     test('preserves integer request ids and progress tokens', () {
       final message = JsonRpcMessage.fromJson(
         const {
