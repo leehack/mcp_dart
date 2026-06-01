@@ -587,6 +587,101 @@ void main() {
       );
     });
 
+    test('Implementation parses stable wire fields', () {
+      final implementation = Implementation.fromJson({
+        'name': 'test-client',
+        'title': 'Test Client',
+        'version': '1.0.0',
+        'description': 'A test MCP client',
+        'icons': [
+          {
+            'src': 'https://example.com/icon.png',
+            'theme': 'light',
+          },
+        ],
+        'websiteUrl': 'https://example.com',
+      });
+
+      expect(implementation.name, equals('test-client'));
+      expect(implementation.title, equals('Test Client'));
+      expect(implementation.version, equals('1.0.0'));
+      expect(implementation.description, equals('A test MCP client'));
+      expect(implementation.icons!.single.theme, equals(IconTheme.light));
+      expect(implementation.websiteUrl, equals('https://example.com'));
+      expect(implementation.toJson(), {
+        'name': 'test-client',
+        'title': 'Test Client',
+        'version': '1.0.0',
+        'description': 'A test MCP client',
+        'icons': [
+          {
+            'src': 'https://example.com/icon.png',
+            'theme': 'light',
+          },
+        ],
+        'websiteUrl': 'https://example.com',
+      });
+    });
+
+    test('Implementation rejects malformed stable wire fields', () {
+      void expectInvalid(Map<String, dynamic> json) {
+        expect(
+          () => Implementation.fromJson(json),
+          throwsA(isA<FormatException>()),
+        );
+      }
+
+      expectInvalid({});
+      expectInvalid({'name': 'test-client'});
+      expectInvalid({'name': 1, 'version': '1.0.0'});
+      expectInvalid({'name': 'test-client', 'version': 1});
+      expectInvalid({'name': 'test-client', 'version': '1.0.0', 'title': null});
+      expectInvalid({'name': 'test-client', 'version': '1.0.0', 'title': 1});
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'description': null,
+      });
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'description': 1,
+      });
+      expectInvalid({'name': 'test-client', 'version': '1.0.0', 'icons': null});
+      expectInvalid({'name': 'test-client', 'version': '1.0.0', 'icons': {}});
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'icons': [null],
+      });
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'websiteUrl': null,
+      });
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'websiteUrl': 1,
+      });
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'websiteUrl': 'example.com',
+      });
+    });
+
+    test('Implementation validates website URL during serialization', () {
+      expect(
+        () => const Implementation(
+          name: 'test-client',
+          version: '1.0.0',
+          websiteUrl: 'example.com',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('ImageContent supports annotations and meta', () {
       final content = const ImageContent(
         data: 'base64data',
