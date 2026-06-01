@@ -119,6 +119,13 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-null-params-member',
+            description:
+                'Rejects JSON-RPC request and notification envelopes whose params member is null.',
+            check: _rejectsNullJsonRpcParamsMember,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.preserves-string-response-id',
             description:
                 'Parses and serializes successful responses with string JSON-RPC IDs.',
@@ -781,6 +788,24 @@ Future<void> _rejectsMalformedJsonRpcErrorObject() async {
       },
     }),
   );
+}
+
+Future<void> _rejectsNullJsonRpcParamsMember() async {
+  for (final message in const [
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'method': Method.ping,
+      'params': null,
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'method': Method.notificationsInitialized,
+      'params': null,
+    },
+  ]) {
+    _expectThrowsFormatException(() => JsonRpcMessage.fromJson(message));
+  }
 }
 
 Future<void> _preservesStringResponseId() async {

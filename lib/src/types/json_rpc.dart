@@ -237,6 +237,16 @@ RequestId? _parseErrorResponseId(Map<String, dynamic> json) {
   return parseRequestId(json['id']);
 }
 
+Map<String, dynamic>? _parseOptionalParamsObject(
+  Map<String, dynamic> json,
+  String fieldName,
+) {
+  if (!json.containsKey('params')) {
+    return null;
+  }
+  return readJsonObject(json['params'], fieldName);
+}
+
 Object _requestIdToJson(RequestId id, String fieldName) {
   return parseRequestId(id, fieldName: fieldName);
 }
@@ -344,6 +354,10 @@ sealed class JsonRpcMessage {
     if (json.containsKey('method')) {
       final method = _parseMethod(json['method']);
       final hasId = json.containsKey('id');
+      final params = _parseOptionalParamsObject(
+        json,
+        hasId ? 'JsonRpcRequest.params' : 'JsonRpcNotification.params',
+      );
 
       if (hasId) {
         return switch (method) {
@@ -378,10 +392,7 @@ sealed class JsonRpcMessage {
           _ => JsonRpcRequest(
               id: parseRequestId(json['id']),
               method: method,
-              params: readOptionalJsonObject(
-                json['params'],
-                'JsonRpcRequest.params',
-              ),
+              params: params,
               meta: extractRequestMeta(json),
             ),
         };
@@ -421,19 +432,13 @@ sealed class JsonRpcMessage {
             JsonRpcElicitationCompleteNotification.fromJson(json),
           _ => JsonRpcNotification(
               method: method,
-              params: readOptionalJsonObject(
-                json['params'],
-                'JsonRpcNotification.params',
-              ),
+              params: params,
               meta: readOptionalJsonObject(
                     json['_meta'],
                     'JsonRpcNotification._meta',
                   ) ??
                   readOptionalJsonObject(
-                    readOptionalJsonObject(
-                      json['params'],
-                      'JsonRpcNotification.params',
-                    )?['_meta'],
+                    params?['_meta'],
                     'JsonRpcNotification._meta',
                   ),
             ),

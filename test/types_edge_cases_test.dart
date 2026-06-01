@@ -452,7 +452,7 @@ void main() {
     });
 
     test('rejects malformed generic request params wire values', () {
-      for (final params in [false, 1, 'not-params', <Object>[]]) {
+      for (final params in [null, false, 1, 'not-params', <Object>[]]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',
@@ -460,6 +460,30 @@ void main() {
             'method': 'unknown/request',
             'params': params,
           }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('params')),
+          ),
+        );
+      }
+    });
+
+    test('rejects explicit null params on typed request and notification', () {
+      for (final json in [
+        {
+          'jsonrpc': '2.0',
+          'id': 'request-1',
+          'method': Method.ping,
+          'params': null,
+        },
+        {
+          'jsonrpc': '2.0',
+          'method': Method.notificationsInitialized,
+          'params': null,
+        },
+      ]) {
+        expect(
+          () => JsonRpcMessage.fromJson(json),
           throwsA(
             isA<FormatException>()
                 .having((e) => e.message, 'message', contains('params')),
