@@ -1092,6 +1092,76 @@ abstract class Protocol {
   ) =>
       result.toJson();
 
+  /// Handles an MRTR input request embedded in an `InputRequiredResult`.
+  ///
+  /// Embedded input requests reuse the locally registered request handlers, but
+  /// are not received as transport-level JSON-RPC requests.
+  @protected
+  Future<BaseResultData> handleEmbeddedInputRequest(
+    String inputRequestKey,
+    InputRequest inputRequest, {
+    AbortSignal? signal,
+  }) async {
+    final request = JsonRpcRequest(
+      id: inputRequestKey,
+      method: inputRequest.method,
+      params: inputRequest.params,
+    );
+    final registeredHandler = _requestHandlers[inputRequest.method];
+    final fallbackHandler = fallbackRequestHandler;
+    if (registeredHandler == null && fallbackHandler == null) {
+      throw McpError(
+        ErrorCode.methodNotFound.value,
+        'No handler registered for MRTR input request ${inputRequest.method}',
+      );
+    }
+
+    final abortController = signal == null ? BasicAbortController() : null;
+    final effectiveSignal = signal ?? abortController!.signal;
+    effectiveSignal.throwIfAborted();
+
+    final extra = RequestHandlerExtra(
+      signal: effectiveSignal,
+      sessionId: _transport?.sessionId,
+      requestId: request.id,
+      meta: request.meta,
+      sendNotification: (notification, {relatedTask}) {
+        return _notificationWithRequestId(
+          notification,
+          relatedTask: relatedTask,
+          relatedRequestId: request.id,
+        );
+      },
+      sendRequest: <T extends BaseResultData>(
+        JsonRpcRequest req,
+        T Function(Map<String, dynamic>) resultFactory,
+        RequestOptions options,
+      ) {
+        return _requestWithRequestId<T>(
+          req,
+          resultFactory,
+          options,
+          request.id,
+        );
+      },
+    );
+
+    try {
+      if (registeredHandler != null) {
+        final result = await registeredHandler(request, extra);
+        effectiveSignal.throwIfAborted();
+        return result;
+      }
+
+      final result = await fallbackHandler!(request);
+      effectiveSignal.throwIfAborted();
+      return result;
+    } catch (error) {
+      onIncomingRequestFailed(request, error);
+      rethrow;
+    }
+  }
+
   /// Subclass hook called after protocol-owned state has been cleared for a
   /// closed transport.
   @protected

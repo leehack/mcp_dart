@@ -53,6 +53,7 @@ class DiscoveringClientTransport extends Transport
       'ttlMs': 0,
       'cacheScope': CacheScope.private,
     },
+    this.onRequest,
   });
 
   final List<String> discoverVersions;
@@ -60,6 +61,7 @@ class DiscoveringClientTransport extends Transport
   final Object? unsupportedDiscoverData;
   final ServerCapabilities capabilities;
   final Map<String, dynamic> toolsListResult;
+  final void Function(JsonRpcRequest request)? onRequest;
   final List<JsonRpcMessage> sentMessages = [];
 
   @override
@@ -120,6 +122,11 @@ class DiscoveringClientTransport extends Transport
           result: toolsListResult,
         ),
       );
+      return;
+    }
+
+    if (message is JsonRpcRequest) {
+      onRequest?.call(message);
     }
   }
 
@@ -3775,6 +3782,164 @@ void main() {
       expect(response.error.code, ErrorCode.invalidRequest.value);
       expect(response.error.message, contains('input_required'));
       expect(response.error.message, contains('inputRequests'));
+    });
+
+    test('client retries tools/call after fulfilling input_required requests',
+        () async {
+      late DiscoveringClientTransport transport;
+      final callRequests = <JsonRpcRequest>[];
+      transport = DiscoveringClientTransport(
+        onRequest: (request) {
+          if (request.method != Method.toolsCall) {
+            return;
+          }
+
+          callRequests.add(request);
+          if (callRequests.length == 1) {
+            transport.onmessage?.call(
+              JsonRpcResponse(
+                id: request.id,
+                result: InputRequiredResult(
+                  requestState: 'state-1',
+                  inputRequests: {
+                    'profile': InputRequest.elicit(
+                      ElicitRequest.form(
+                        message: 'Enter profile',
+                        requestedSchema: JsonSchema.object(
+                          properties: {'name': JsonSchema.string()},
+                          required: ['name'],
+                        ),
+                      ),
+                    ),
+                    'roots': InputRequest.listRoots(),
+                  },
+                ).toJson(),
+              ),
+            );
+            return;
+          }
+
+          expect(request.params?['requestState'], 'state-1');
+          final inputResponses =
+              request.params?['inputResponses'] as Map<String, dynamic>;
+          expect(inputResponses['profile'], {
+            'action': 'accept',
+            'content': {'name': 'Ada'},
+          });
+          expect(inputResponses['roots'], {
+            'roots': [
+              {'uri': 'file:///repo'},
+            ],
+          });
+          transport.onmessage?.call(
+            JsonRpcResponse(
+              id: request.id,
+              result: {
+                'resultType': resultTypeComplete,
+                ...const CallToolResult(
+                  content: [TextContent(text: 'ok')],
+                ).toJson(),
+              },
+            ),
+          );
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          capabilities: ClientCapabilities(
+            elicitation: ClientElicitation.formOnly(),
+            roots: ClientCapabilitiesRoots(),
+          ),
+        ),
+      );
+      client.onElicitRequest = (params) async {
+        expect(params.message, 'Enter profile');
+        return const ElicitResult(
+          action: 'accept',
+          content: {'name': 'Ada'},
+        );
+      };
+      client.setRequestHandler<JsonRpcListRootsRequest>(
+        Method.rootsList,
+        (request, extra) async => ListRootsResult(
+          roots: [Root(uri: 'file:///repo')],
+        ),
+        (id, params, meta) => JsonRpcListRootsRequest(id: id, meta: meta),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'lookup'),
+      );
+
+      expect((result.content.single as TextContent).text, 'ok');
+      expect(callRequests, hasLength(2));
+      expect(callRequests[1].id, isNot(callRequests[0].id));
+    });
+
+    test('client retries requestState-only input_required without responses',
+        () async {
+      late DiscoveringClientTransport transport;
+      final readRequests = <JsonRpcRequest>[];
+      transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          resources: ServerCapabilitiesResources(),
+        ),
+        onRequest: (request) {
+          if (request.method != Method.resourcesRead) {
+            return;
+          }
+
+          readRequests.add(request);
+          if (readRequests.length == 1) {
+            transport.onmessage?.call(
+              JsonRpcResponse(
+                id: request.id,
+                result: const InputRequiredResult(
+                  requestState: 'read-state',
+                ).toJson(),
+              ),
+            );
+            return;
+          }
+
+          expect(request.params?['requestState'], 'read-state');
+          expect(request.params, isNot(contains('inputResponses')));
+          transport.onmessage?.call(
+            JsonRpcResponse(
+              id: request.id,
+              result: {
+                'resultType': resultTypeComplete,
+                ...const ReadResourceResult(
+                  contents: [
+                    TextResourceContents(
+                      uri: 'file:///doc.txt',
+                      text: 'hello',
+                    ),
+                  ],
+                  ttlMs: 0,
+                  cacheScope: CacheScope.private,
+                ).toJson(),
+              },
+            ),
+          );
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.readResource(
+        const ReadResourceRequest(uri: 'file:///doc.txt'),
+      );
+
+      expect((result.contents.single as TextResourceContents).text, 'hello');
+      expect(readRequests, hasLength(2));
+      expect(readRequests[1].id, isNot(readRequests[0].id));
     });
 
     test('client listenSubscriptions requires a connected transport', () {

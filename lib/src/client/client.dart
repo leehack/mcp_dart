@@ -122,6 +122,8 @@ const Set<String> _statelessRemovedNotificationMethods = {
   Method.notificationsTasksStatus,
 };
 
+const int _maxInputRequiredRetries = 16;
+
 /// An MCP client implementation built on top of a pluggable [Transport].
 ///
 /// Handles the initialization handshake with the server upon connection
@@ -580,6 +582,85 @@ class McpClient extends Protocol {
     }
   }
 
+  BaseResultData _parseExpectedOrInputRequired<T extends BaseResultData>(
+    Map<String, dynamic> json,
+    T Function(Map<String, dynamic>) resultFactory,
+  ) {
+    if (json['resultType'] == resultTypeInputRequired) {
+      return InputRequiredResult.fromJson(json);
+    }
+    return resultFactory(json);
+  }
+
+  Future<InputResponses?> _resolveInputRequests(
+    InputRequests? inputRequests,
+    AbortSignal? signal,
+  ) async {
+    if (inputRequests == null) {
+      return null;
+    }
+
+    final inputResponses = <String, InputResponse>{};
+    for (final entry in inputRequests.entries) {
+      signal?.throwIfAborted();
+      final result = await handleEmbeddedInputRequest(
+        entry.key,
+        entry.value,
+        signal: signal,
+      );
+      inputResponses[entry.key] = InputResponse.fromResult(result);
+    }
+    return inputResponses;
+  }
+
+  Future<T> _requestResolvingInputRequired<T extends BaseResultData>(
+    String method,
+    JsonRpcRequest Function(
+      InputResponses? inputResponses,
+      String? requestState,
+      bool isRetry,
+    ) buildRequest,
+    T Function(Map<String, dynamic>) resultFactory, [
+    RequestOptions? options,
+  ]) async {
+    InputResponses? inputResponses;
+    String? requestState;
+
+    for (var attempt = 0; attempt <= _maxInputRequiredRetries; attempt++) {
+      final result = await request<BaseResultData>(
+        buildRequest(inputResponses, requestState, attempt > 0),
+        (json) => _parseExpectedOrInputRequired<T>(json, resultFactory),
+        options,
+      );
+
+      if (result is T) {
+        return result;
+      }
+
+      if (result is! InputRequiredResult) {
+        throw McpError(
+          ErrorCode.internalError.value,
+          'Unexpected result type ${result.runtimeType} for $method.',
+        );
+      }
+
+      if (attempt == _maxInputRequiredRetries) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          'Exceeded $_maxInputRequiredRetries input_required retries for $method.',
+        );
+      }
+
+      inputResponses = await _resolveInputRequests(
+        result.inputRequests,
+        options?.signal,
+      );
+      requestState = result.requestState;
+    }
+
+    throw StateError('Unreachable input_required retry state for $method.');
+  }
+
   @override
   Future<void> notification(
     JsonRpcNotification notificationData, {
@@ -912,10 +993,18 @@ class McpClient extends Protocol {
     GetPromptRequest params, [
     RequestOptions? options,
   ]) {
-    final req = JsonRpcGetPromptRequest(id: -1, getParams: params);
-    return request<GetPromptResult>(
-      req,
-      (json) => GetPromptResult.fromJson(json),
+    return _requestResolvingInputRequired<GetPromptResult>(
+      Method.promptsGet,
+      (inputResponses, requestState, isRetry) => JsonRpcGetPromptRequest(
+        id: -1,
+        getParams: GetPromptRequest(
+          name: params.name,
+          arguments: params.arguments,
+          inputResponses: isRetry ? inputResponses : params.inputResponses,
+          requestState: isRetry ? requestState : params.requestState,
+        ),
+      ),
+      GetPromptResult.fromJson,
       options,
     );
   }
@@ -964,10 +1053,17 @@ class McpClient extends Protocol {
     ReadResourceRequest params, [
     RequestOptions? options,
   ]) {
-    final req = JsonRpcReadResourceRequest(id: -1, readParams: params);
-    return request<ReadResourceResult>(
-      req,
-      (json) => ReadResourceResult.fromJson(json),
+    return _requestResolvingInputRequired<ReadResourceResult>(
+      Method.resourcesRead,
+      (inputResponses, requestState, isRetry) => JsonRpcReadResourceRequest(
+        id: -1,
+        readParams: ReadResourceRequest(
+          uri: params.uri,
+          inputResponses: isRetry ? inputResponses : params.inputResponses,
+          requestState: isRetry ? requestState : params.requestState,
+        ),
+      ),
+      ReadResourceResult.fromJson,
       options,
     );
   }
@@ -1043,10 +1139,18 @@ class McpClient extends Protocol {
       );
     }
 
-    final req = JsonRpcCallToolRequest(id: -1, params: params.toJson());
-    final result = await request<CallToolResult>(
-      req,
-      (json) => CallToolResult.fromJson(json),
+    final result = await _requestResolvingInputRequired<CallToolResult>(
+      Method.toolsCall,
+      (inputResponses, requestState, isRetry) => JsonRpcCallToolRequest(
+        id: -1,
+        params: CallToolRequest(
+          name: params.name,
+          arguments: params.arguments,
+          inputResponses: isRetry ? inputResponses : params.inputResponses,
+          requestState: isRetry ? requestState : params.requestState,
+        ).toJson(),
+      ),
+      CallToolResult.fromJson,
       options,
     );
 
