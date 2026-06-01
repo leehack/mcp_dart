@@ -92,3 +92,15 @@ abstract class ProtocolVersionAwareTransport {
   /// Updates the negotiated MCP protocol version.
   set protocolVersion(String? value);
 }
+
+/// Maps tool names to argument names and their `Mcp-Param-*` header suffixes.
+typedef ToolParameterHeaderMappings = Map<String, Map<String, String>>;
+
+/// Optional capability for transports that can mirror tool arguments into
+/// stateless HTTP headers.
+abstract class ToolParameterHeaderAwareTransport {
+  /// Updates the currently advertised tool parameter header mappings.
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  );
+}

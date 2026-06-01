@@ -8,10 +8,21 @@ import 'logging.dart';
 import 'sampling.dart';
 import 'completion.dart';
 import 'roots.dart';
+import 'subscriptions.dart';
 import 'tasks.dart';
+import 'validation.dart';
 
-/// The latest version of the Model Context Protocol supported.
-const latestProtocolVersion = "2025-11-25";
+/// The draft/RC MCP protocol version being prepared for the next major release.
+const draftProtocolVersion2026_07_28 = "2026-07-28";
+
+/// The latest stable version of the Model Context Protocol supported.
+const stableProtocolVersion2025_11_25 = "2025-11-25";
+
+/// The latest stable version of the Model Context Protocol supported.
+const latestProtocolVersion = stableProtocolVersion2025_11_25;
+
+/// The latest draft/RC protocol version implemented behind opt-in paths.
+const latestDraftProtocolVersion = draftProtocolVersion2026_07_28;
 
 /// List of supported Model Context Protocol versions.
 const supportedProtocolVersions = [
@@ -22,11 +33,70 @@ const supportedProtocolVersions = [
   "2024-10-07",
 ];
 
+/// Protocol versions supported by the 2026 RC development branch.
+const supportedProtocolVersionsWithDraft = [
+  latestDraftProtocolVersion,
+  ...supportedProtocolVersions,
+];
+
+/// Protocol versions that use per-request metadata instead of initialization.
+const statelessProtocolVersions = [
+  draftProtocolVersion2026_07_28,
+];
+
+/// Returns true when [version] uses the 2026 stateless request model.
+bool isStatelessProtocolVersion(String version) =>
+    statelessProtocolVersions.contains(version);
+
+/// Selects the first locally preferred version supported by a peer.
+String? negotiateProtocolVersion(
+  Iterable<String> peerSupportedVersions, {
+  Iterable<String> localSupportedVersions = supportedProtocolVersionsWithDraft,
+}) {
+  final peerVersions = peerSupportedVersions.toSet();
+  for (final version in localSupportedVersions) {
+    if (peerVersions.contains(version)) {
+      return version;
+    }
+  }
+  return null;
+}
+
+/// MCP-reserved `_meta` keys used by the 2026 stateless request model.
+class McpMetaKey {
+  static const protocolVersion = 'io.modelcontextprotocol/protocolVersion';
+  static const clientInfo = 'io.modelcontextprotocol/clientInfo';
+  static const clientCapabilities =
+      'io.modelcontextprotocol/clientCapabilities';
+  static const logLevel = 'io.modelcontextprotocol/logLevel';
+  static const subscriptionId = 'io.modelcontextprotocol/subscriptionId';
+
+  const McpMetaKey._();
+}
+
+/// Builds request metadata required by the 2026 stateless request model.
+Map<String, dynamic> buildProtocolRequestMeta({
+  required String protocolVersion,
+  required Implementation clientInfo,
+  required ClientCapabilities clientCapabilities,
+  Map<String, dynamic>? meta,
+  Object? logLevel,
+}) {
+  return <String, dynamic>{
+    ...?meta,
+    McpMetaKey.protocolVersion: protocolVersion,
+    McpMetaKey.clientInfo: clientInfo.toJson(),
+    McpMetaKey.clientCapabilities: clientCapabilities.toJson(),
+    if (logLevel != null) McpMetaKey.logLevel: logLevel,
+  };
+}
+
 /// JSON-RPC protocol version string.
 const jsonRpcVersion = "2.0";
 
 /// Standard MCP JSON-RPC methods.
 class Method {
+  static const serverDiscover = "server/discover";
   static const initialize = "initialize";
   static const ping = "ping";
   static const resourcesList = "resources/list";
@@ -34,6 +104,7 @@ class Method {
   static const resourcesTemplatesList = "resources/templates/list";
   static const resourcesSubscribe = "resources/subscribe";
   static const resourcesUnsubscribe = "resources/unsubscribe";
+  static const subscriptionsListen = "subscriptions/listen";
   static const promptsList = "prompts/list";
   static const promptsGet = "prompts/get";
   static const elicitationCreate = "elicitation/create";
@@ -47,6 +118,7 @@ class Method {
   static const tasksCancel = "tasks/cancel";
   static const tasksGet = "tasks/get";
   static const tasksResult = "tasks/result";
+  static const tasksUpdate = "tasks/update";
 
   static const notificationsInitialized = "notifications/initialized";
   static const notificationsCancelled = "notifications/cancelled";
@@ -55,6 +127,8 @@ class Method {
       "notifications/resources/list_changed";
   static const notificationsResourcesUpdated =
       "notifications/resources/updated";
+  static const notificationsSubscriptionsAcknowledged =
+      "notifications/subscriptions/acknowledged";
   static const notificationsPromptsListChanged =
       "notifications/prompts/list_changed";
   static const notificationsToolsListChanged =
@@ -71,6 +145,7 @@ class Method {
   static const notificationsRootsListChanged =
       "notifications/roots/list_changed";
   static const notificationsTasksStatus = "notifications/tasks/status";
+  static const notificationsTasks = "notifications/tasks";
   static const notificationsElicitationComplete =
       "notifications/elicitation/complete";
 
@@ -185,6 +260,7 @@ sealed class JsonRpcMessage {
 
       if (hasId) {
         return switch (method) {
+          Method.serverDiscover => JsonRpcServerDiscoverRequest.fromJson(json),
           Method.initialize => JsonRpcInitializeRequest.fromJson(json),
           Method.ping => JsonRpcPingRequest.fromJson(json),
           Method.resourcesList => JsonRpcListResourcesRequest.fromJson(json),
@@ -194,6 +270,8 @@ sealed class JsonRpcMessage {
           Method.resourcesSubscribe => JsonRpcSubscribeRequest.fromJson(json),
           Method.resourcesUnsubscribe =>
             JsonRpcUnsubscribeRequest.fromJson(json),
+          Method.subscriptionsListen =>
+            JsonRpcSubscriptionsListenRequest.fromJson(json),
           Method.promptsList => JsonRpcListPromptsRequest.fromJson(json),
           Method.promptsGet => JsonRpcGetPromptRequest.fromJson(json),
           Method.elicitationCreate => JsonRpcElicitRequest.fromJson(json),
@@ -209,6 +287,7 @@ sealed class JsonRpcMessage {
           Method.tasksCancel => JsonRpcCancelTaskRequest.fromJson(json),
           Method.tasksGet => JsonRpcGetTaskRequest.fromJson(json),
           Method.tasksResult => JsonRpcTaskResultRequest.fromJson(json),
+          Method.tasksUpdate => JsonRpcUpdateTaskRequest.fromJson(json),
           _ => JsonRpcRequest(
               id: parseRequestId(json['id']),
               method: method,
@@ -231,6 +310,8 @@ sealed class JsonRpcMessage {
             JsonRpcResourceListChangedNotification.fromJson(json),
           Method.notificationsResourcesUpdated =>
             JsonRpcResourceUpdatedNotification.fromJson(json),
+          Method.notificationsSubscriptionsAcknowledged =>
+            JsonRpcSubscriptionsAcknowledgedNotification.fromJson(json),
           Method.notificationsPromptsListChanged =>
             JsonRpcPromptListChangedNotification.fromJson(json),
           Method.notificationsToolsListChanged =>
@@ -245,6 +326,7 @@ sealed class JsonRpcMessage {
             JsonRpcRootsListChangedNotification.fromJson(json),
           Method.notificationsTasksStatus =>
             JsonRpcTaskStatusNotification.fromJson(json),
+          Method.notificationsTasks => JsonRpcTaskNotification.fromJson(json),
           Method.notificationsElicitationComplete =>
             JsonRpcElicitationCompleteNotification.fromJson(json),
           _ => JsonRpcNotification(
@@ -369,6 +451,18 @@ enum ErrorCode {
   connectionClosed(-32000),
   requestTimeout(-32001),
 
+  /// HTTP request metadata headers do not match the JSON-RPC body.
+  ///
+  /// This is the MCP 2026-07-28 meaning of the shared -32001 server-error
+  /// code. [requestTimeout] is retained for older SDK behavior.
+  headerMismatch(-32001),
+
+  /// Required per-request client capabilities were not declared.
+  missingRequiredClientCapability(-32003),
+
+  /// The requested protocol version is unsupported by the receiver.
+  unsupportedProtocolVersion(-32004),
+
   /// URL mode elicitation is required before the request can be processed.
   /// The error data contains elicitations that must be completed.
   urlElicitationRequired(-32042),
@@ -444,6 +538,263 @@ abstract class BaseResultData {
   /// Implementations must include `_meta` when [meta] is non-null so typed
   /// results preserve the MCP `Result._meta` field during direct serialization.
   Map<String, dynamic> toJson();
+}
+
+/// Result type for completed MCP requests.
+const resultTypeComplete = 'complete';
+
+/// Result type for MCP multi round-trip requests needing more input.
+const resultTypeInputRequired = 'input_required';
+
+/// Result type for MCP task extension task creation results.
+const resultTypeTask = 'task';
+
+/// Map of server-assigned input request keys to requested inputs.
+typedef InputRequests = Map<String, InputRequest>;
+
+/// Map of server-assigned input request keys to client responses.
+typedef InputResponses = Map<String, InputResponse>;
+
+/// A server-to-client request embedded in an MRTR `InputRequiredResult`.
+class InputRequest {
+  /// Request method. Must be one of the MRTR-supported server request methods.
+  final String method;
+
+  /// Request params, when present.
+  final Map<String, dynamic>? params;
+
+  const InputRequest._({required this.method, this.params});
+
+  /// Creates an embedded `elicitation/create` input request.
+  factory InputRequest.elicit(ElicitRequest params) {
+    return InputRequest._(
+      method: Method.elicitationCreate,
+      params: params.toJson(),
+    );
+  }
+
+  /// Creates an embedded `sampling/createMessage` input request.
+  factory InputRequest.createMessage(CreateMessageRequest params) {
+    return InputRequest._(
+      method: Method.samplingCreateMessage,
+      params: params.toJson(),
+    );
+  }
+
+  /// Creates an embedded `roots/list` input request.
+  factory InputRequest.listRoots({Map<String, dynamic>? params}) {
+    return InputRequest._(
+      method: Method.rootsList,
+      params: params,
+    );
+  }
+
+  factory InputRequest.fromJson(Map<String, dynamic> json) {
+    final method = json['method'];
+    if (method is! String) {
+      throw const FormatException('InputRequest.method is required');
+    }
+
+    switch (method) {
+      case Method.elicitationCreate:
+        final params = _readRequiredJsonObject(
+          json['params'],
+          'InputRequest.params',
+        );
+        ElicitRequest.fromJson(params);
+        return InputRequest._(method: method, params: params);
+      case Method.samplingCreateMessage:
+        final params = _readRequiredJsonObject(
+          json['params'],
+          'InputRequest.params',
+        );
+        CreateMessageRequest.fromJson(params);
+        return InputRequest._(method: method, params: params);
+      case Method.rootsList:
+        return InputRequest._(
+          method: method,
+          params: _readOptionalJsonObject(
+            json['params'],
+            'InputRequest.params',
+          ),
+        );
+      default:
+        throw const FormatException(
+          'InputRequest.method must be one of '
+          '${Method.elicitationCreate}, ${Method.samplingCreateMessage}, '
+          'or ${Method.rootsList}',
+        );
+    }
+  }
+
+  /// Parses an input request map.
+  static InputRequests? mapFromJson(Object? value, String field) {
+    if (value == null) {
+      return null;
+    }
+    final json = _readRequiredJsonObject(value, field);
+    return json.map(
+      (key, value) => MapEntry(
+        key,
+        InputRequest.fromJson(_readRequiredJsonObject(value, '$field.$key')),
+      ),
+    );
+  }
+
+  /// Converts an input request map to JSON.
+  static Map<String, dynamic> mapToJson(InputRequests requests) {
+    return requests.map(
+      (key, value) => MapEntry(key, value.toJson()),
+    );
+  }
+
+  /// The typed params for an embedded `elicitation/create` request.
+  ElicitRequest get elicitParams {
+    if (method != Method.elicitationCreate || params == null) {
+      throw StateError('InputRequest is not an elicitation/create request');
+    }
+    return ElicitRequest.fromJson(params!);
+  }
+
+  /// The typed params for an embedded `sampling/createMessage` request.
+  CreateMessageRequest get createMessageParams {
+    if (method != Method.samplingCreateMessage || params == null) {
+      throw StateError('InputRequest is not a sampling/createMessage request');
+    }
+    return CreateMessageRequest.fromJson(params!);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'method': method,
+        if (params != null) 'params': params,
+      };
+}
+
+/// A client response to an MRTR [InputRequest].
+class InputResponse {
+  /// Raw result object for the embedded request.
+  final Map<String, dynamic> value;
+
+  const InputResponse.raw(this.value);
+
+  /// Creates an input response from a typed MCP result.
+  factory InputResponse.fromResult(BaseResultData result) {
+    return InputResponse.raw(result.toJson());
+  }
+
+  factory InputResponse.fromJson(Map<String, dynamic> json) {
+    return InputResponse.raw(Map<String, dynamic>.from(json));
+  }
+
+  /// Parses an input response map.
+  static InputResponses? mapFromJson(Object? value, String field) {
+    if (value == null) {
+      return null;
+    }
+    final json = _readRequiredJsonObject(value, field);
+    return json.map(
+      (key, value) => MapEntry(
+        key,
+        InputResponse.fromJson(_readRequiredJsonObject(value, '$field.$key')),
+      ),
+    );
+  }
+
+  /// Converts an input response map to JSON.
+  static Map<String, dynamic> mapToJson(InputResponses responses) {
+    return responses.map(
+      (key, value) => MapEntry(key, value.toJson()),
+    );
+  }
+
+  Map<String, dynamic> toJson() => Map<String, dynamic>.from(value);
+}
+
+/// Result returned when a request needs extra client input before retry.
+class InputRequiredResult implements BaseResultData {
+  /// Server-to-client requests the client must fulfill before retry.
+  final InputRequests? inputRequests;
+
+  /// Opaque server state to echo exactly on retry.
+  final String? requestState;
+
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const InputRequiredResult({
+    this.inputRequests,
+    this.requestState,
+    this.meta,
+  }) : assert(
+          inputRequests != null || requestState != null,
+          'InputRequiredResult requires inputRequests or requestState',
+        );
+
+  factory InputRequiredResult.fromJson(Map<String, dynamic> json) {
+    if (json['resultType'] != resultTypeInputRequired) {
+      throw const FormatException(
+        'InputRequiredResult.resultType must be input_required',
+      );
+    }
+
+    final inputRequests = InputRequest.mapFromJson(
+      json['inputRequests'],
+      'InputRequiredResult.inputRequests',
+    );
+    final requestState = readOptionalString(
+      json['requestState'],
+      'InputRequiredResult.requestState',
+    );
+    if (inputRequests == null && requestState == null) {
+      throw const FormatException(
+        'InputRequiredResult requires inputRequests or requestState',
+      );
+    }
+
+    return InputRequiredResult(
+      inputRequests: inputRequests,
+      requestState: requestState,
+      meta: _readOptionalJsonObject(json['_meta'], 'InputRequiredResult._meta'),
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    if (inputRequests == null && requestState == null) {
+      throw StateError(
+        'InputRequiredResult requires inputRequests or requestState',
+      );
+    }
+
+    return {
+      'resultType': resultTypeInputRequired,
+      if (inputRequests != null)
+        'inputRequests': InputRequest.mapToJson(inputRequests!),
+      if (requestState != null) 'requestState': requestState,
+      if (meta != null) '_meta': meta,
+    };
+  }
+}
+
+Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    if (value.keys.any((key) => key is! String)) {
+      throw FormatException('$field must be an object with string keys');
+    }
+    return value.cast<String, dynamic>();
+  }
+  throw FormatException('$field must be an object');
+}
+
+Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return _readRequiredJsonObject(value, field);
 }
 
 /// Custom error class for MCP specific errors.

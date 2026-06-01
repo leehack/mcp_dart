@@ -2,6 +2,47 @@ import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('Tool parameter header annotations', () {
+    test('primitive schemas preserve x-mcp-header round-trip', () {
+      final schema = JsonSchema.object(
+        properties: {
+          'region': JsonSchema.string(mcpHeader: 'Region'),
+          'limit': JsonSchema.number(mcpHeader: 'Limit'),
+          'count': JsonSchema.integer(mcpHeader: 'Count'),
+          'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
+        },
+      );
+
+      final json = schema.toJson();
+      final properties = json['properties'] as Map<String, dynamic>;
+      expect(properties['region']['x-mcp-header'], 'Region');
+      expect(properties['limit']['x-mcp-header'], 'Limit');
+      expect(properties['count']['x-mcp-header'], 'Count');
+      expect(properties['dryRun']['x-mcp-header'], 'Dry-Run');
+
+      final parsed = JsonSchema.fromJson(json) as JsonObject;
+      final parsedProperties = parsed.properties!;
+      expect((parsedProperties['region'] as JsonString).mcpHeader, 'Region');
+      expect((parsedProperties['limit'] as JsonNumber).mcpHeader, 'Limit');
+      expect((parsedProperties['count'] as JsonInteger).mcpHeader, 'Count');
+      expect(
+        (parsedProperties['dryRun'] as JsonBoolean).mcpHeader,
+        'Dry-Run',
+      );
+      expect(parsed.toJson(), json);
+    });
+
+    test('non-primitive x-mcp-header annotations remain visible', () {
+      final schema = JsonSchema.fromJson({
+        'type': 'object',
+        'x-mcp-header': 'Payload',
+      });
+
+      expect(schema, isA<JsonAny>());
+      expect(schema.toJson()['x-mcp-header'], 'Payload');
+    });
+  });
+
   group('Tool Schema Required Fields Tests', () {
     test('ToolInputSchema preserves required fields during serialization', () {
       final schema = JsonObject(

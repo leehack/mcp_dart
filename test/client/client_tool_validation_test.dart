@@ -3,15 +3,19 @@ import 'dart:async';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
-class MockTransport extends Transport {
+class MockTransport extends Transport
+    implements ToolParameterHeaderAwareTransport {
   final List<JsonRpcMessage> sentMessages = [];
   ServerCapabilities serverCapabilities;
+  List<Tool> advertisedTools;
+  ToolParameterHeaderMappings toolParameterHeaderMappings = const {};
 
   MockTransport({
     this.serverCapabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
-  });
+    List<Tool>? advertisedTools,
+  }) : advertisedTools = advertisedTools ?? _defaultAdvertisedTools();
 
   @override
   String? get sessionId => null;
@@ -41,35 +45,7 @@ class MockTransport extends Transport {
       _respond(
         JsonRpcResponse(
           id: message.id,
-          result: ListToolsResult(
-            tools: [
-              Tool(
-                name: 'validated_tool',
-                inputSchema: JsonSchema.object(properties: {}),
-                outputSchema: ToolOutputSchema(
-                  properties: {
-                    'result': JsonSchema.string(),
-                  },
-                  required: ['result'],
-                ),
-              ),
-              Tool(
-                name: 'broken_tool', // Tool that returns invalid data
-                inputSchema: const ToolInputSchema(),
-                outputSchema: ToolOutputSchema(
-                  properties: {
-                    'result': JsonSchema.string(),
-                  },
-                  required: ['result'],
-                ),
-              ),
-              const Tool(
-                name: 'task_required_tool',
-                inputSchema: ToolInputSchema(),
-                execution: ToolExecution(taskSupport: 'required'),
-              ),
-            ],
-          ).toJson(),
+          result: ListToolsResult(tools: advertisedTools).toJson(),
         ),
       );
     } else if (message is JsonRpcRequest &&
@@ -104,6 +80,46 @@ class MockTransport extends Transport {
 
   @override
   Future<void> start() async {}
+
+  @override
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  ) {
+    toolParameterHeaderMappings = {
+      for (final entry in mappings.entries)
+        entry.key: Map.unmodifiable(Map<String, String>.from(entry.value)),
+    };
+  }
+
+  static List<Tool> _defaultAdvertisedTools() {
+    return [
+      Tool(
+        name: 'validated_tool',
+        inputSchema: JsonSchema.object(properties: {}),
+        outputSchema: ToolOutputSchema(
+          properties: {
+            'result': JsonSchema.string(),
+          },
+          required: ['result'],
+        ),
+      ),
+      Tool(
+        name: 'broken_tool', // Tool that returns invalid data
+        inputSchema: const ToolInputSchema(),
+        outputSchema: ToolOutputSchema(
+          properties: {
+            'result': JsonSchema.string(),
+          },
+          required: ['result'],
+        ),
+      ),
+      const Tool(
+        name: 'task_required_tool',
+        inputSchema: ToolInputSchema(),
+        execution: ToolExecution(taskSupport: 'required'),
+      ),
+    ];
+  }
 }
 
 void main() {
@@ -115,6 +131,90 @@ void main() {
       transport = MockTransport();
       client = Client(
         const Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+    });
+
+    test('listTools filters invalid x-mcp-header definitions', () async {
+      final warnings = <String>[];
+      setMcpLogHandler((loggerName, level, message) {
+        if (level == LogLevel.warn) {
+          warnings.add(message);
+        }
+      });
+      addTearDown(resetMcpLogHandler);
+
+      transport = MockTransport(
+        advertisedTools: [
+          Tool(
+            name: 'valid_headers',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'region': JsonSchema.string(mcpHeader: 'Region'),
+                'limit': JsonSchema.number(mcpHeader: 'Limit'),
+                'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
+                'count': JsonSchema.integer(mcpHeader: 'Count'),
+              },
+            ),
+          ),
+          Tool(
+            name: 'duplicate_headers',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'primary': JsonSchema.string(mcpHeader: 'Region'),
+                'secondary': JsonSchema.string(mcpHeader: 'region'),
+              },
+            ),
+          ),
+          Tool(
+            name: 'empty_header',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'region': JsonSchema.string(mcpHeader: ''),
+              },
+            ),
+          ),
+          Tool.fromJson({
+            'name': 'non_string_header',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'region': {
+                  'type': 'string',
+                  'x-mcp-header': 1,
+                },
+              },
+            },
+          }),
+          Tool.fromJson({
+            'name': 'object_header',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'payload': {
+                  'type': 'object',
+                  'x-mcp-header': 'Payload',
+                },
+              },
+            },
+          }),
+        ],
+      );
+
+      await client.connect(transport);
+      final result = await client.listTools();
+
+      expect(result.tools.map((tool) => tool.name), ['valid_headers']);
+      expect(transport.toolParameterHeaderMappings, {
+        'valid_headers': {
+          'region': 'Region',
+          'limit': 'Limit',
+          'dryRun': 'Dry-Run',
+          'count': 'Count',
+        },
+      });
+      expect(
+        warnings.where((message) => message.contains('Rejecting tool')),
+        hasLength(4),
       );
     });
 

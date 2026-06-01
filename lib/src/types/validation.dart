@@ -33,3 +33,13 @@ int? readOptionalInteger(Object? value, String field) {
   }
   throw FormatException('$field must be an integer');
 }
+
+String? readOptionalString(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is String) {
+    return value;
+  }
+  throw FormatException('$field must be a string');
+}

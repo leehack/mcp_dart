@@ -148,6 +148,12 @@ List<Map<String, dynamic>> _decodeSseJsonMessages(String body) {
   return messages;
 }
 
+Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
+      protocolVersion: draftProtocolVersion2026_07_28,
+      clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
+      clientCapabilities: const ClientCapabilities(),
+    );
+
 class _SseEvent {
   final String? id;
   final String? event;
@@ -1785,6 +1791,307 @@ void main() {
       await transport.close();
     });
 
+    test('2026 stateless HTTP validates required protocol header', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final response = await HttpClient()
+          .postUrl(
+        Uri.parse('$serverUrlBase/mcp'),
+      )
+          .then((request) async {
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          )
+          ..set('Mcp-Method', Method.toolsList);
+        request.write(
+          jsonEncode(JsonRpcListToolsRequest(id: 1, meta: _statelessMeta())),
+        );
+        return request.close();
+      });
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 1);
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
+      expect(
+        body['error']['message'],
+        contains('MCP-Protocol-Version header is required'),
+      );
+    });
+
+    test('2026 stateless HTTP rejects mismatched method and name headers',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Method', Method.toolsCall)
+        ..set('Mcp-Name', 'wrong-tool');
+      request.write(
+        jsonEncode(
+          JsonRpcCallToolRequest(
+            id: 2,
+            params: const {
+              'name': 'echo',
+              'arguments': {'message': 'hello'},
+            },
+            meta: _statelessMeta(),
+          ),
+        ),
+      );
+
+      final response = await request.close();
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 2);
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
+      expect(body['error']['message'], contains('Mcp-Name header value'));
+    });
+
+    test('2026 stateless HTTP requires task id name header for task requests',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcUpdateTaskRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const TaskExtensionAcknowledgementResult().toJson(),
+              ),
+            ),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Method', Method.tasksUpdate);
+      request.write(
+        jsonEncode(
+          JsonRpcUpdateTaskRequest(
+            id: 4,
+            updateParams: const UpdateTaskRequest(
+              taskId: 'task-1',
+              inputResponses: {},
+            ),
+            meta: _statelessMeta(),
+          ),
+        ),
+      );
+
+      final response = await request.close();
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 4);
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
+      expect(body['error']['message'], contains('Mcp-Name header is required'));
+    });
+
+    test('2026 stateless HTTP accepts matching standard and parameter headers',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcCallToolRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const CallToolResult(content: []).toJson(),
+              ),
+            ),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Method', Method.toolsCall)
+        ..set('Mcp-Name', 'execute')
+        ..set('Mcp-Param-region', 'us-east1');
+      request.write(
+        jsonEncode(
+          JsonRpcCallToolRequest(
+            id: 3,
+            params: const {
+              'name': 'execute',
+              'arguments': {'region': 'us-east1'},
+            },
+            meta: _statelessMeta(),
+          ),
+        ),
+      );
+
+      final response = await request.close();
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers.value('mcp-session-id'), isNull);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 3);
+      expect(body['result']['content'], isEmpty);
+    });
+
+    test('2026 stateless HTTP rejects malformed routing headers', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+          rejectBatchJsonRpcPayloads: false,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      Future<Map<String, dynamic>> postJson(
+        Object body, {
+        Map<String, String> headers = const {},
+      }) async {
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        headers.forEach(request.headers.set);
+        request.write(jsonEncode(body));
+
+        final response = await request.close();
+        expect(response.statusCode, HttpStatus.badRequest);
+        return jsonDecode(await utf8.decodeStream(response))
+            as Map<String, dynamic>;
+      }
+
+      var body = await postJson(
+        const JsonRpcListToolsRequest(id: 4).toJson(),
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+      expect(
+        body['error']['message'],
+        contains('no matching request _meta protocol version'),
+      );
+
+      body = await postJson(
+        JsonRpcListToolsRequest(id: 5, meta: _statelessMeta()).toJson(),
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+        },
+      );
+      expect(body['error']['message'], contains('Mcp-Method header'));
+
+      body = await postJson(
+        JsonRpcCallToolRequest(
+          id: 6,
+          params: const {
+            'name': 'execute',
+            'arguments': {'count': 2, 'enabled': true},
+          },
+          meta: _statelessMeta(),
+        ).toJson(),
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'execute',
+          'Mcp-Param-count': '2',
+          'Mcp-Param-enabled': 'false',
+        },
+      );
+      expect(body['id'], 6);
+      expect(body['error']['message'], contains('mcp-param-enabled'));
+
+      body = await postJson(
+        JsonRpcCallToolRequest(
+          id: 7,
+          params: const {
+            'name': 'execute',
+            'arguments': {},
+          },
+          meta: _statelessMeta(),
+        ).toJson(),
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+        },
+      );
+      expect(body['id'], 7);
+      expect(body['error']['message'], contains('Mcp-Name header'));
+
+      body = await postJson(
+        [
+          JsonRpcListToolsRequest(id: 8, meta: _statelessMeta()).toJson(),
+          JsonRpcListToolsRequest(id: 9, meta: _statelessMeta()).toJson(),
+        ],
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+        },
+      );
+      expect(body['error']['message'], contains('must contain one'));
+    });
+
     test('stateless mode allows initialization with session header', () async {
       final transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
@@ -1843,6 +2150,37 @@ void main() {
           _decodeSseJsonMessages(await utf8.decodeStream(response));
       expect(messages.single['id'], 1);
       expect(transport.sessionId, isNull);
+    });
+
+    test('2026 stateless GET requests return method not allowed', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.getUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers.set(
+        'MCP-Protocol-Version',
+        draftProtocolVersion2026_07_28,
+      );
+
+      final response = await request.close();
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.methodNotAllowed);
+      expect(response.headers.value(HttpHeaders.allowHeader), 'POST');
+      expect(body['error']['code'], ErrorCode.connectionClosed.value);
+      expect(
+        body['error']['message'],
+        'Method not allowed for stateless MCP requests.',
+      );
     });
 
     test('close cleans up all resources', () async {

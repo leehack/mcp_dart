@@ -1,5 +1,6 @@
 import '../types.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Describes an argument accepted by a prompt template.
 class PromptArgument {
@@ -186,7 +187,18 @@ class GetPromptRequest {
   /// Arguments to use for templating the prompt.
   final Map<String, String>? arguments;
 
-  const GetPromptRequest({required this.name, this.arguments});
+  /// Client responses to MRTR input requests when retrying this prompt request.
+  final InputResponses? inputResponses;
+
+  /// Opaque MRTR state returned by the server and echoed on retry.
+  final String? requestState;
+
+  const GetPromptRequest({
+    required this.name,
+    this.arguments,
+    this.inputResponses,
+    this.requestState,
+  });
 
   factory GetPromptRequest.fromJson(Map<String, dynamic> json) =>
       GetPromptRequest(
@@ -194,11 +206,22 @@ class GetPromptRequest {
         arguments: (json['arguments'] as Map<String, dynamic>?)?.map(
           (k, v) => MapEntry(k, v as String),
         ),
+        inputResponses: InputResponse.mapFromJson(
+          json['inputResponses'],
+          'GetPromptRequest.inputResponses',
+        ),
+        requestState: readOptionalString(
+          json['requestState'],
+          'GetPromptRequest.requestState',
+        ),
       );
 
   Map<String, dynamic> toJson() => {
         'name': name,
         if (arguments != null) 'arguments': arguments,
+        if (inputResponses != null)
+          'inputResponses': InputResponse.mapToJson(inputResponses!),
+        if (requestState != null) 'requestState': requestState,
       };
 }
 

@@ -366,6 +366,71 @@ class JsonRpcTaskResultRequest extends JsonRpcRequest {
   }
 }
 
+/// Parameters for the MCP Tasks extension `tasks/update` request.
+class UpdateTaskRequest {
+  /// The ID of the task to update.
+  final String taskId;
+
+  /// Responses to outstanding task input requests.
+  final InputResponses inputResponses;
+
+  const UpdateTaskRequest({
+    required this.taskId,
+    required this.inputResponses,
+  });
+
+  factory UpdateTaskRequest.fromJson(Map<String, dynamic> json) {
+    final inputResponses = InputResponse.mapFromJson(
+      json['inputResponses'],
+      'UpdateTaskRequest.inputResponses',
+    );
+    if (inputResponses == null) {
+      throw const FormatException(
+        'UpdateTaskRequest.inputResponses is required',
+      );
+    }
+
+    return UpdateTaskRequest(
+      taskId: _readRequiredTaskString(
+        json,
+        'taskId',
+        owner: 'UpdateTaskRequest',
+      ),
+      inputResponses: inputResponses,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'taskId': taskId,
+        'inputResponses': InputResponse.mapToJson(inputResponses),
+      };
+}
+
+/// Request sent by a client to provide input for a task.
+class JsonRpcUpdateTaskRequest extends JsonRpcRequest {
+  /// The update parameters.
+  final UpdateTaskRequest updateParams;
+
+  JsonRpcUpdateTaskRequest({
+    required super.id,
+    required this.updateParams,
+    super.meta,
+  }) : super(method: Method.tasksUpdate, params: updateParams.toJson());
+
+  factory JsonRpcUpdateTaskRequest.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw const FormatException("Missing params for update task request");
+    }
+    final meta = extractRequestMeta(json);
+    return JsonRpcUpdateTaskRequest(
+      id: parseRequestId(json['id']),
+      updateParams: UpdateTaskRequest.fromJson(paramsMap),
+      meta: meta,
+    );
+  }
+}
+
 /// Parameters for task creation when augmenting requests.
 class TaskCreation {
   /// Requested duration in milliseconds to retain task from creation.
@@ -431,6 +496,219 @@ class TaskResultMessage extends TaskStreamMessage {
 class TaskErrorMessage extends TaskStreamMessage {
   final Object error;
   const TaskErrorMessage(this.error) : super('error');
+}
+
+/// Task state shape used by the MCP Tasks extension.
+class TaskExtensionTask {
+  /// Unique identifier for the task.
+  final String taskId;
+
+  /// Current state of the task execution.
+  final TaskStatus status;
+
+  /// Optional human-readable message describing the current state.
+  final String? statusMessage;
+
+  /// ISO 8601 timestamp when the task was created.
+  final String createdAt;
+
+  /// ISO 8601 timestamp when the task was last updated.
+  final String lastUpdatedAt;
+
+  /// Time in milliseconds from creation before task may be deleted.
+  final int? ttlMs;
+
+  /// Suggested time in milliseconds between status checks.
+  final int? pollIntervalMs;
+
+  /// Outstanding input requests when [status] is `input_required`.
+  final InputRequests? inputRequests;
+
+  /// Final result when [status] is `completed`.
+  final Map<String, dynamic>? result;
+
+  /// JSON-RPC error when [status] is `failed`.
+  final JsonRpcErrorData? error;
+
+  const TaskExtensionTask({
+    required this.taskId,
+    required this.status,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+    required this.ttlMs,
+    this.statusMessage,
+    this.pollIntervalMs,
+    this.inputRequests,
+    this.result,
+    this.error,
+  });
+
+  factory TaskExtensionTask.fromJson(Map<String, dynamic> json) {
+    return TaskExtensionTask(
+      taskId: _readRequiredTaskString(
+        json,
+        'taskId',
+        owner: 'TaskExtensionTask',
+      ),
+      status: TaskStatusName.fromString(
+        _readRequiredTaskString(json, 'status', owner: 'TaskExtensionTask'),
+      ),
+      statusMessage: _readOptionalTaskString(
+        json,
+        'statusMessage',
+        owner: 'TaskExtensionTask',
+      ),
+      createdAt: _readRequiredTaskString(
+        json,
+        'createdAt',
+        owner: 'TaskExtensionTask',
+      ),
+      lastUpdatedAt: _readRequiredTaskString(
+        json,
+        'lastUpdatedAt',
+        owner: 'TaskExtensionTask',
+      ),
+      ttlMs: _readTaskInt(
+        json,
+        'ttlMs',
+        requiredField: true,
+        owner: 'TaskExtensionTask',
+      ),
+      pollIntervalMs: _readTaskInt(
+        json,
+        'pollIntervalMs',
+        owner: 'TaskExtensionTask',
+      ),
+      inputRequests: InputRequest.mapFromJson(
+        json['inputRequests'],
+        'TaskExtensionTask.inputRequests',
+      ),
+      result: _readOptionalJsonObject(
+        json['result'],
+        'TaskExtensionTask.result',
+      ),
+      error: json['error'] == null
+          ? null
+          : JsonRpcErrorData.fromJson(
+              _readRequiredJsonObject(
+                json['error'],
+                'TaskExtensionTask.error',
+              ),
+            ),
+    );
+  }
+
+  Map<String, dynamic> toJson({String? resultType}) => {
+        if (resultType != null) 'resultType': resultType,
+        'taskId': taskId,
+        'status': status.name,
+        if (statusMessage != null) 'statusMessage': statusMessage,
+        'createdAt': createdAt,
+        'lastUpdatedAt': lastUpdatedAt,
+        'ttlMs': ttlMs,
+        if (pollIntervalMs != null) 'pollIntervalMs': pollIntervalMs,
+        if (inputRequests != null)
+          'inputRequests': InputRequest.mapToJson(inputRequests!),
+        if (result != null) 'result': result,
+        if (error != null) 'error': error!.toJson(),
+      };
+}
+
+/// `resultType: "task"` response from the MCP Tasks extension.
+class CreateTaskExtensionResult implements BaseResultData {
+  /// The created task state.
+  final TaskExtensionTask task;
+
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const CreateTaskExtensionResult({required this.task, this.meta});
+
+  factory CreateTaskExtensionResult.fromJson(Map<String, dynamic> json) {
+    if (json['resultType'] != resultTypeTask) {
+      throw const FormatException(
+        'CreateTaskExtensionResult.resultType must be task',
+      );
+    }
+    return CreateTaskExtensionResult(
+      task: TaskExtensionTask.fromJson(json),
+      meta: _readOptionalJsonObject(
+        json['_meta'],
+        'CreateTaskExtensionResult._meta',
+      ),
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        ...task.toJson(resultType: resultTypeTask),
+        if (meta != null) '_meta': meta,
+      };
+}
+
+/// `tasks/get` result from the MCP Tasks extension.
+class GetTaskExtensionResult implements BaseResultData {
+  /// The current task state.
+  final TaskExtensionTask task;
+
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const GetTaskExtensionResult({required this.task, this.meta});
+
+  factory GetTaskExtensionResult.fromJson(Map<String, dynamic> json) {
+    if (json['resultType'] != resultTypeComplete) {
+      throw const FormatException(
+        'GetTaskExtensionResult.resultType must be complete',
+      );
+    }
+    return GetTaskExtensionResult(
+      task: TaskExtensionTask.fromJson(json),
+      meta: _readOptionalJsonObject(
+        json['_meta'],
+        'GetTaskExtensionResult._meta',
+      ),
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        ...task.toJson(resultType: resultTypeComplete),
+        if (meta != null) '_meta': meta,
+      };
+}
+
+/// Empty `tasks/update` or `tasks/cancel` acknowledgement result.
+class TaskExtensionAcknowledgementResult implements BaseResultData {
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const TaskExtensionAcknowledgementResult({this.meta});
+
+  factory TaskExtensionAcknowledgementResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    if (json['resultType'] != resultTypeComplete) {
+      throw const FormatException(
+        'TaskExtensionAcknowledgementResult.resultType must be complete',
+      );
+    }
+    return TaskExtensionAcknowledgementResult(
+      meta: _readOptionalJsonObject(
+        json['_meta'],
+        'TaskExtensionAcknowledgementResult._meta',
+      ),
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'resultType': resultTypeComplete,
+        if (meta != null) '_meta': meta,
+      };
 }
 
 /// Parameters for the `notifications/tasks/status` notification.
@@ -566,6 +844,49 @@ class JsonRpcTaskStatusNotification extends JsonRpcNotification {
       meta: meta,
     );
   }
+}
+
+/// `notifications/tasks` notification from the MCP Tasks extension.
+class JsonRpcTaskNotification extends JsonRpcNotification {
+  /// The task state carried by the notification.
+  final TaskExtensionTask task;
+
+  JsonRpcTaskNotification({required this.task, super.meta})
+      : super(method: Method.notificationsTasks, params: task.toJson());
+
+  factory JsonRpcTaskNotification.fromJson(Map<String, dynamic> json) {
+    final paramsMap = json['params'] as Map<String, dynamic>?;
+    if (paramsMap == null) {
+      throw const FormatException("Missing params for task notification");
+    }
+    return JsonRpcTaskNotification(
+      task: TaskExtensionTask.fromJson(paramsMap),
+      meta: _readOptionalJsonObject(
+        paramsMap['_meta'],
+        'JsonRpcTaskNotification._meta',
+      ),
+    );
+  }
+}
+
+Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    if (value.keys.any((key) => key is! String)) {
+      throw FormatException('$field must be an object with string keys');
+    }
+    return value.cast<String, dynamic>();
+  }
+  throw FormatException('$field must be an object');
+}
+
+Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return _readRequiredJsonObject(value, field);
 }
 
 /// Deprecated alias for [ListTasksRequest].

@@ -320,9 +320,17 @@ class CallToolRequest {
   /// The arguments to pass to the tool.
   final Map<String, dynamic> arguments;
 
+  /// Client responses to MRTR input requests when retrying this tool call.
+  final InputResponses? inputResponses;
+
+  /// Opaque MRTR state returned by the server and echoed on retry.
+  final String? requestState;
+
   const CallToolRequest({
     required this.name,
     this.arguments = const {},
+    this.inputResponses,
+    this.requestState,
   });
 
   factory CallToolRequest.fromJson(Map<String, dynamic> json) {
@@ -332,12 +340,23 @@ class CallToolRequest {
       arguments: arguments == null
           ? const {}
           : (arguments as Map).cast<String, dynamic>(),
+      inputResponses: InputResponse.mapFromJson(
+        json['inputResponses'],
+        'CallToolRequest.inputResponses',
+      ),
+      requestState: readOptionalString(
+        json['requestState'],
+        'CallToolRequest.requestState',
+      ),
     );
   }
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'arguments': arguments,
+        if (inputResponses != null)
+          'inputResponses': InputResponse.mapToJson(inputResponses!),
+        if (requestState != null) 'requestState': requestState,
       };
 }
 
