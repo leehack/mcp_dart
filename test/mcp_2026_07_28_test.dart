@@ -2355,6 +2355,136 @@ void main() {
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
     });
 
+    test('stateless client rejects removed request methods before send',
+        () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final removedRequests = <({String method, Future<void> Function() call})>[
+        (
+          method: Method.ping,
+          call: () async {
+            await client.ping();
+          },
+        ),
+        (
+          method: Method.loggingSetLevel,
+          call: () async {
+            await client.setLoggingLevel(LoggingLevel.debug);
+          },
+        ),
+        (
+          method: Method.resourcesSubscribe,
+          call: () async {
+            await client.subscribeResource(
+              const SubscribeRequest(uri: 'file:///tmp/example.txt'),
+            );
+          },
+        ),
+        (
+          method: Method.resourcesUnsubscribe,
+          call: () async {
+            await client.unsubscribeResource(
+              const UnsubscribeRequest(uri: 'file:///tmp/example.txt'),
+            );
+          },
+        ),
+        (
+          method: Method.tasksList,
+          call: () async {
+            await client.request<ListTasksResult>(
+              JsonRpcListTasksRequest(id: -1),
+              ListTasksResult.fromJson,
+            );
+          },
+        ),
+        (
+          method: Method.tasksResult,
+          call: () async {
+            await client.request<CallToolResult>(
+              JsonRpcTaskResultRequest(
+                id: -1,
+                resultParams: const TaskResultRequest(taskId: 'task-1'),
+              ),
+              CallToolResult.fromJson,
+            );
+          },
+        ),
+      ];
+
+      for (final scenario in removedRequests) {
+        await expectLater(
+          scenario.call(),
+          throwsA(
+            isA<McpError>()
+                .having(
+                  (error) => error.code,
+                  'code',
+                  ErrorCode.methodNotFound.value,
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains(scenario.method),
+                ),
+          ),
+        );
+      }
+
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test('stateless client rejects removed notifications before send',
+        () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final removedNotifications =
+          <({String method, Future<void> Function() call})>[
+        (
+          method: Method.notificationsInitialized,
+          call: () => client.notification(
+                const JsonRpcInitializedNotification(),
+              ),
+        ),
+        (
+          method: Method.notificationsRootsListChanged,
+          call: client.sendRootsListChanged,
+        ),
+      ];
+
+      for (final scenario in removedNotifications) {
+        await expectLater(
+          scenario.call(),
+          throwsA(
+            isA<McpError>()
+                .having(
+                  (error) => error.code,
+                  'code',
+                  ErrorCode.methodNotFound.value,
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains(scenario.method),
+                ),
+          ),
+        );
+      }
+
+      expect(transport.sentMessages, isEmpty);
+    });
+
     test('client listenSubscriptions requires a connected transport', () {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),

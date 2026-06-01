@@ -4,6 +4,7 @@ import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 
@@ -107,6 +108,21 @@ dynamic _deepCopy(dynamic value) {
     return value;
   }
 }
+
+const Set<String> _statelessRemovedRequestMethods = {
+  Method.initialize,
+  Method.ping,
+  Method.loggingSetLevel,
+  Method.resourcesSubscribe,
+  Method.resourcesUnsubscribe,
+  Method.tasksList,
+  Method.tasksResult,
+};
+
+const Set<String> _statelessRemovedNotificationMethods = {
+  Method.notificationsInitialized,
+  Method.notificationsRootsListChanged,
+};
 
 /// An MCP client implementation built on top of a pluggable [Transport].
 ///
@@ -481,6 +497,8 @@ class McpClient extends Protocol {
     RequestOptions? options,
     int? relatedRequestId,
   ]) async {
+    _assertStatelessRequestAllowed(requestData.method);
+
     final outboundRequest =
         _usesStatelessProtocol && requestData.method != Method.serverDiscover
             ? JsonRpcRequest(
@@ -535,6 +553,44 @@ class McpClient extends Protocol {
         relatedRequestId,
       );
     }
+  }
+
+  @override
+  Future<void> notification(
+    JsonRpcNotification notificationData, {
+    RelatedTaskMetadata? relatedTask,
+    int? relatedRequestId,
+  }) async {
+    _assertStatelessNotificationAllowed(notificationData.method);
+    await super.notification(
+      notificationData,
+      relatedTask: relatedTask,
+      relatedRequestId: relatedRequestId,
+    );
+  }
+
+  void _assertStatelessRequestAllowed(String method) {
+    if (!_usesStatelessProtocol ||
+        !_statelessRemovedRequestMethods.contains(method)) {
+      return;
+    }
+
+    throw McpError(
+      ErrorCode.methodNotFound.value,
+      'MCP $_negotiatedProtocolVersion does not define $method.',
+    );
+  }
+
+  void _assertStatelessNotificationAllowed(String method) {
+    if (!_usesStatelessProtocol ||
+        !_statelessRemovedNotificationMethods.contains(method)) {
+      return;
+    }
+
+    throw McpError(
+      ErrorCode.methodNotFound.value,
+      'MCP $_negotiatedProtocolVersion does not define $method.',
+    );
   }
 
   /// Gets the server's reported capabilities after successful initialization.
