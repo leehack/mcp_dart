@@ -579,7 +579,9 @@ abstract class Protocol {
         return task;
       },
       (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.tasksGet,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -602,7 +604,9 @@ abstract class Protocol {
         }
       },
       (id, params, meta) => JsonRpcListTasksRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.tasksList,
         if (params != null) 'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -656,7 +660,9 @@ abstract class Protocol {
         }
       },
       (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.tasksCancel,
         'params': params,
         if (meta != null) '_meta': meta,
       }),

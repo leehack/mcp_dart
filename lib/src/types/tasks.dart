@@ -2,6 +2,22 @@ import '../types.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 /// The current state of a task execution.
 enum TaskStatus {
   working,
@@ -213,6 +229,7 @@ class JsonRpcListTasksRequest extends JsonRpcRequest {
         super(method: Method.tasksList, params: params?.toJson());
 
   factory JsonRpcListTasksRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.tasksList, 'JsonRpcListTasksRequest');
     final paramsMap =
         _readOptionalParamsObject(json, 'JsonRpcListTasksRequest.params');
     final meta = extractRequestMeta(json);
@@ -293,6 +310,7 @@ class JsonRpcCancelTaskRequest extends JsonRpcRequest {
   }) : super(method: Method.tasksCancel, params: cancelParams.toJson());
 
   factory JsonRpcCancelTaskRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.tasksCancel, 'JsonRpcCancelTaskRequest');
     final paramsMap =
         _readRequiredParamsObject(json, 'JsonRpcCancelTaskRequest.params');
     final meta = extractRequestMeta(json);
@@ -330,6 +348,7 @@ class JsonRpcGetTaskRequest extends JsonRpcRequest {
   }) : super(method: Method.tasksGet, params: getParams.toJson());
 
   factory JsonRpcGetTaskRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.tasksGet, 'JsonRpcGetTaskRequest');
     final paramsMap =
         _readRequiredParamsObject(json, 'JsonRpcGetTaskRequest.params');
     final meta = extractRequestMeta(json);
@@ -368,6 +387,7 @@ class JsonRpcTaskResultRequest extends JsonRpcRequest {
   }) : super(method: Method.tasksResult, params: resultParams.toJson());
 
   factory JsonRpcTaskResultRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.tasksResult, 'JsonRpcTaskResultRequest');
     final paramsMap =
         _readRequiredParamsObject(json, 'JsonRpcTaskResultRequest.params');
     final meta = extractRequestMeta(json);
@@ -431,6 +451,7 @@ class JsonRpcUpdateTaskRequest extends JsonRpcRequest {
   }) : super(method: Method.tasksUpdate, params: updateParams.toJson());
 
   factory JsonRpcUpdateTaskRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.tasksUpdate, 'JsonRpcUpdateTaskRequest');
     final paramsMap =
         _readRequiredParamsObject(json, 'JsonRpcUpdateTaskRequest.params');
     final meta = extractRequestMeta(json);
@@ -854,6 +875,11 @@ class JsonRpcTaskStatusNotification extends JsonRpcNotification {
         );
 
   factory JsonRpcTaskStatusNotification.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsTasksStatus,
+      'JsonRpcTaskStatusNotification',
+    );
     final paramsMap = _readRequiredParamsObject(
       json,
       'JsonRpcTaskStatusNotification.params',
@@ -878,6 +904,11 @@ class JsonRpcTaskNotification extends JsonRpcNotification {
       : super(method: Method.notificationsTasks, params: task.toJson());
 
   factory JsonRpcTaskNotification.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsTasks,
+      'JsonRpcTaskNotification',
+    );
     final paramsMap =
         _readRequiredParamsObject(json, 'JsonRpcTaskNotification.params');
     return JsonRpcTaskNotification(

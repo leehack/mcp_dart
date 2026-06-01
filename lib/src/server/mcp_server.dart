@@ -1385,7 +1385,9 @@ class McpServer {
         return await Future.value(_listTasksCallback!(extra));
       },
       (id, params, meta) => JsonRpcListTasksRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.tasksList,
         if (params != null) 'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -1418,7 +1420,9 @@ class McpServer {
         return task;
       },
       (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.tasksCancel,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -1432,7 +1436,9 @@ class McpServer {
           return await Future.value(_getTaskCallback!(taskId, extra));
         },
         (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksGet,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1450,7 +1456,9 @@ class McpServer {
           return _withRelatedTaskMeta(result, taskId);
         },
         (id, params, meta) => JsonRpcTaskResultRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksResult,
           'params': params,
           if (meta != null) '_meta': meta,
         }),

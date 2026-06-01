@@ -196,6 +196,18 @@ void main() {
     });
 
     test('rejects malformed task extension payloads', () {
+      final updateParams = {
+        'taskId': 'task-1',
+        'inputResponses': <String, dynamic>{},
+      };
+      final taskParams = {
+        'taskId': 'task-1',
+        'status': 'working',
+        'createdAt': '2026-07-28T00:00:00Z',
+        'lastUpdatedAt': '2026-07-28T00:00:01Z',
+        'ttlMs': null,
+      };
+
       expect(
         () => CreateTaskExtensionResult.fromJson(
           const {
@@ -240,6 +252,24 @@ void main() {
         throwsFormatException,
       );
       expect(
+        () => JsonRpcUpdateTaskRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.tasksUpdate,
+          'params': updateParams,
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcUpdateTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.tasksGet,
+          'params': updateParams,
+        }),
+        throwsFormatException,
+      );
+      expect(
         () => JsonRpcTaskNotification.fromJson(
           const {
             'jsonrpc': jsonRpcVersion,
@@ -257,6 +287,22 @@ void main() {
             'params': null,
           },
         ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcTaskNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': Method.notificationsTasks,
+          'params': taskParams,
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcTaskNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsTasksStatus,
+          'params': taskParams,
+        }),
         throwsFormatException,
       );
     });

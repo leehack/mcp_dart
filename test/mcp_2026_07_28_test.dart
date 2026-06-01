@@ -1660,6 +1660,26 @@ void main() {
     });
 
     test('rejects malformed task wire shapes', () {
+      final taskParams = {'taskId': 'task-1'};
+      final updateTaskParams = {
+        'taskId': 'task-1',
+        'inputResponses': <String, dynamic>{},
+      };
+      final taskStatusParams = {
+        'taskId': 'task-1',
+        'status': 'working',
+        'ttl': null,
+        'createdAt': '2026-07-28T00:00:00Z',
+        'lastUpdatedAt': '2026-07-28T00:00:01Z',
+      };
+      final taskExtensionParams = {
+        'taskId': 'task-1',
+        'status': 'working',
+        'createdAt': '2026-07-28T00:00:00Z',
+        'lastUpdatedAt': '2026-07-28T00:00:01Z',
+        'ttlMs': null,
+      };
+
       for (final parse in <Object Function()>[
         () => ListTasksRequest.fromJson({'cursor': 1}),
         () => JsonRpcListTasksRequest.fromJson({
@@ -1667,6 +1687,16 @@ void main() {
               'id': 1,
               'method': Method.tasksList,
               'params': null,
+            }),
+        () => JsonRpcListTasksRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksList,
+            }),
+        () => JsonRpcListTasksRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
             }),
         () => ListTasksResult.fromJson({
               'tasks': [1],
@@ -1678,12 +1708,36 @@ void main() {
               'method': Method.tasksCancel,
               'params': 'bad',
             }),
+        () => JsonRpcCancelTaskRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksCancel,
+              'params': taskParams,
+            }),
+        () => JsonRpcCancelTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': taskParams,
+            }),
         () => GetTaskRequest.fromJson({'taskId': 1}),
         () => JsonRpcGetTaskRequest.fromJson({
               'jsonrpc': jsonRpcVersion,
               'id': 1,
               'method': Method.tasksGet,
               'params': 'bad',
+            }),
+        () => JsonRpcGetTaskRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': taskParams,
+            }),
+        () => JsonRpcGetTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksCancel,
+              'params': taskParams,
             }),
         () => TaskResultRequest.fromJson({'taskId': 1}),
         () => JsonRpcTaskResultRequest.fromJson({
@@ -1692,6 +1746,18 @@ void main() {
               'method': Method.tasksResult,
               'params': null,
             }),
+        () => JsonRpcTaskResultRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksResult,
+              'params': taskParams,
+            }),
+        () => JsonRpcTaskResultRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': taskParams,
+            }),
         () => CreateTaskResult.fromJson({'task': 'bad'}),
         () => JsonRpcUpdateTaskRequest.fromJson({
               'jsonrpc': jsonRpcVersion,
@@ -1699,15 +1765,47 @@ void main() {
               'method': Method.tasksUpdate,
               'params': 'bad',
             }),
+        () => JsonRpcUpdateTaskRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksUpdate,
+              'params': updateTaskParams,
+            }),
+        () => JsonRpcUpdateTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': updateTaskParams,
+            }),
         () => JsonRpcTaskStatusNotification.fromJson({
               'jsonrpc': jsonRpcVersion,
               'method': Method.notificationsTasksStatus,
               'params': 'bad',
             }),
+        () => JsonRpcTaskStatusNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsTasksStatus,
+              'params': taskStatusParams,
+            }),
+        () => JsonRpcTaskStatusNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsTasks,
+              'params': taskStatusParams,
+            }),
         () => JsonRpcTaskNotification.fromJson({
               'jsonrpc': jsonRpcVersion,
               'method': Method.notificationsTasks,
               'params': null,
+            }),
+        () => JsonRpcTaskNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsTasks,
+              'params': taskExtensionParams,
+            }),
+        () => JsonRpcTaskNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsTasksStatus,
+              'params': taskExtensionParams,
             }),
       ]) {
         expect(parse, throwsFormatException);
@@ -2166,7 +2264,9 @@ void main() {
           ),
         ),
         (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksGet,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2175,7 +2275,9 @@ void main() {
         Method.tasksCancel,
         (request, extra) async => const TaskExtensionAcknowledgementResult(),
         (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksCancel,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2184,7 +2286,9 @@ void main() {
         Method.tasksUpdate,
         (request, extra) async => const EmptyResult(),
         (id, params, meta) => JsonRpcUpdateTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksUpdate,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2292,7 +2396,9 @@ void main() {
           lastUpdatedAt: '2026-07-28T00:01:00Z',
         ),
         (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksGet,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2895,7 +3001,9 @@ void main() {
           Method.tasksUpdate,
           (request, extra) async => const TaskExtensionAcknowledgementResult(),
           (id, params, meta) => JsonRpcUpdateTaskRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.tasksUpdate,
             'params': params,
             if (meta != null) '_meta': meta,
           }),
