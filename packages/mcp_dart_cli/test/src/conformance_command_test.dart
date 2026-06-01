@@ -21,7 +21,9 @@ void main() {
           'jsonrpc.rejects-invalid-version',
           'jsonrpc.rejects-malformed-message',
           'jsonrpc.preserves-string-response-id',
+          'jsonrpc.preserves-numeric-response-id',
           'jsonrpc.preserves-string-progress-token',
+          'jsonrpc.preserves-numeric-progress-token',
           'protocol-version.advertises-latest-2025-11-25',
         ]),
       );

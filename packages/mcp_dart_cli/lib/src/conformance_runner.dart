@@ -105,10 +105,24 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
+            name: 'jsonrpc.preserves-numeric-response-id',
+            description:
+                'Parses and serializes successful responses with numeric JSON-RPC IDs.',
+            check: _preservesNumericResponseId,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.preserves-string-progress-token',
             description:
                 'Parses and serializes progress notifications with string progress tokens.',
             check: _preservesStringProgressToken,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
+            name: 'jsonrpc.preserves-numeric-progress-token',
+            description:
+                'Parses and serializes progress notifications with numeric progress tokens.',
+            check: _preservesNumericProgressToken,
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
@@ -151,7 +165,7 @@ class ConformanceRunner {
             suite: _specSuite,
             name: 'progress.rejects-malformed-progress-token',
             description:
-                'Rejects progress notifications whose progressToken is not a string or integer.',
+                'Rejects progress notifications whose progressToken is not a string or finite number.',
             check: _rejectsMalformedProgressToken,
           ),
         ];
@@ -283,8 +297,11 @@ class _GeneratedJsonRpcFixture {
 
 _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
   final numericId = random.nextInt(1000000);
+  final numericIdValue =
+      random.nextBool() ? numericId : numericId + random.nextDouble();
   final stringId = 'req-${random.nextInt(1000000)}';
-  final progressToken = random.nextBool() ? numericId : 'progress-$numericId';
+  final progressToken =
+      random.nextBool() ? numericIdValue : 'progress-$numericId';
 
   return switch (random.nextInt(6)) {
     0 => _GeneratedJsonRpcFixture(
@@ -311,20 +328,20 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
       ),
     2 => _GeneratedJsonRpcFixture(
         name: 'fuzz.jsonrpc.request-id.$index',
-        description: 'Generated requests preserve string-or-integer IDs.',
+        description: 'Generated requests preserve string-or-number IDs.',
         message: <String, dynamic>{
           'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? numericId : stringId,
+          'id': random.nextBool() ? numericIdValue : stringId,
           'method': Method.ping,
         },
         expectation: _expectRequestIdRoundTrip,
       ),
     3 => _GeneratedJsonRpcFixture(
         name: 'fuzz.jsonrpc.response-id.$index',
-        description: 'Generated responses preserve string-or-integer IDs.',
+        description: 'Generated responses preserve string-or-number IDs.',
         message: <String, dynamic>{
           'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? numericId : stringId,
+          'id': random.nextBool() ? numericIdValue : stringId,
           'result': <String, dynamic>{},
         },
         expectation: _expectResponseIdRoundTrip,
@@ -332,7 +349,7 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
     4 => _GeneratedJsonRpcFixture(
         name: 'fuzz.jsonrpc.progress-token.$index',
         description:
-            'Generated progress notifications preserve string-or-integer progress tokens.',
+            'Generated progress notifications preserve string-or-number progress tokens.',
         message: <String, dynamic>{
           'jsonrpc': jsonRpcVersion,
           'method': Method.notificationsProgress,
@@ -346,11 +363,10 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
       ),
     _ => _GeneratedJsonRpcFixture(
         name: 'fuzz.jsonrpc.error-id.$index',
-        description:
-            'Generated error responses preserve string-or-integer IDs.',
+        description: 'Generated error responses preserve string-or-number IDs.',
         message: <String, dynamic>{
           'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? numericId : stringId,
+          'id': random.nextBool() ? numericIdValue : stringId,
           'error': <String, dynamic>{
             'code': ErrorCode.invalidRequest.value,
             'message': 'generated invalid request',
@@ -662,6 +678,24 @@ Future<void> _preservesStringResponseId() async {
   }
 }
 
+Future<void> _preservesNumericResponseId() async {
+  final message = JsonRpcMessage.fromJson(const <String, dynamic>{
+    'jsonrpc': jsonRpcVersion,
+    'id': 1.5,
+    'result': <String, dynamic>{},
+  });
+
+  if (message is! JsonRpcResponse) {
+    throw StateError('Expected JsonRpcResponse, got ${message.runtimeType}.');
+  }
+  if (message.id != 1.5) {
+    throw StateError('Expected numeric response ID to be preserved.');
+  }
+  if (message.toJson()['id'] != 1.5) {
+    throw StateError('Expected serialized response ID to stay numeric.');
+  }
+}
+
 JsonRpcResponse _expectSingleErrorFreeResponse(
   List<JsonRpcMessage> messages, {
   required RequestId id,
@@ -728,6 +762,30 @@ Future<void> _preservesStringProgressToken() async {
   }
   if (message.toJson()['params']['progressToken'] != 'progress-1') {
     throw StateError('Expected serialized progress token to stay a string.');
+  }
+}
+
+Future<void> _preservesNumericProgressToken() async {
+  final message = JsonRpcMessage.fromJson(const <String, dynamic>{
+    'jsonrpc': jsonRpcVersion,
+    'method': Method.notificationsProgress,
+    'params': <String, dynamic>{
+      'progressToken': 1.5,
+      'progress': 1,
+      'total': 2,
+    },
+  });
+
+  if (message is! JsonRpcProgressNotification) {
+    throw StateError(
+      'Expected JsonRpcProgressNotification, got ${message.runtimeType}.',
+    );
+  }
+  if (message.progressParams.progressToken != 1.5) {
+    throw StateError('Expected numeric progress token to be preserved.');
+  }
+  if (message.toJson()['params']['progressToken'] != 1.5) {
+    throw StateError('Expected serialized progress token to stay numeric.');
   }
 }
 

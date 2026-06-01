@@ -127,7 +127,7 @@ The CLI supports `sampling/createMessage` requests from the server (often used b
 
 ### Conformance
 
-Run built-in fixture checks, MCP 2025-11-25 spec-critical checks, and deterministic fuzz checks for MCP protocol edge cases. The fixture suite covers JSON-RPC malformed-message handling, string request IDs, string progress tokens, and advertised protocol-version support. The spec suite covers raw-wire lifecycle, capability, elicitation, task-metadata, and progress-token negative cases.
+Run built-in fixture checks, MCP 2025-11-25 spec-critical checks, and deterministic fuzz checks for MCP protocol edge cases. The fixture suite covers JSON-RPC malformed-message handling, string and numeric request IDs, string and numeric progress tokens, and advertised protocol-version support. The spec suite covers raw-wire lifecycle, capability, elicitation, task-metadata, and progress-token negative cases.
 
 ```bash
 # Run all built-in fixture cases

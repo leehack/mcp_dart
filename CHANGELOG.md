@@ -121,6 +121,9 @@
   tool parameter headers, including requested `Mcp-Param-*` headers.
 - Serialized MRTR `ElicitResult` and `ListRootsResult` input responses with the
   MCP 2026 embedded client-result shapes that omit common Result `_meta`.
+- Accepted finite numeric JSON-RPC request IDs and progress tokens, matching
+  the stable and MCP 2026 `string | number` schema while continuing to reject
+  non-finite numbers.
 
 ## 2.2.0
 

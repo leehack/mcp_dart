@@ -91,7 +91,14 @@ void main() {
     });
 
     test('rejects malformed requestId wire values', () {
-      for (final requestId in [null, true, <String, dynamic>{}, <Object>[]]) {
+      for (final requestId in [
+        null,
+        true,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcCancelledNotification.fromJson({
             'jsonrpc': '2.0',
@@ -106,10 +113,20 @@ void main() {
           ),
         );
       }
+
+      expect(
+        () => const CancelledNotificationParams(
+          requestId: double.nan,
+        ).toJson(),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('requestId')),
+        ),
+      );
     });
 
-    test('preserves string and integer requestId wire values', () {
-      for (final requestId in <Object>[123, 'request-123']) {
+    test('preserves string and finite number requestId wire values', () {
+      for (final requestId in <Object>[123, 123.5, 'request-123']) {
         final notification = JsonRpcCancelledNotification.fromJson({
           'jsonrpc': '2.0',
           'method': 'notifications/cancelled',
@@ -237,6 +254,8 @@ void main() {
       for (final progressToken in [
         null,
         false,
+        double.nan,
+        double.infinity,
         <String, dynamic>{},
         <Object>[],
       ]) {
@@ -258,10 +277,21 @@ void main() {
           ),
         );
       }
+
+      expect(
+        () => const ProgressNotification(
+          progressToken: double.nan,
+          progress: 1,
+        ).toJson(),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('progressToken')),
+        ),
+      );
     });
 
-    test('preserves string and integer progressToken wire values', () {
-      for (final progressToken in <Object>[123, 'progress-123']) {
+    test('preserves string and finite number progressToken wire values', () {
+      for (final progressToken in <Object>[123, 123.5, 'progress-123']) {
         final notification = JsonRpcProgressNotification.fromJson({
           'jsonrpc': '2.0',
           'method': 'notifications/progress',
@@ -311,7 +341,14 @@ void main() {
     });
 
     test('rejects malformed request id wire values', () {
-      for (final id in [null, false, 1.5, <String, dynamic>{}, <Object>[]]) {
+      for (final id in [
+        null,
+        false,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',
@@ -324,10 +361,24 @@ void main() {
           ),
         );
       }
+
+      expect(
+        () => const JsonRpcRequest(
+          id: double.nan,
+          method: 'unknown/request',
+        ).toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('JsonRpcRequest.id'),
+          ),
+        ),
+      );
     });
 
-    test('preserves string and integer request ids', () {
-      for (final id in <Object>[123, 'request-123']) {
+    test('preserves string and finite number request ids', () {
+      for (final id in <Object>[123, 123.5, 'request-123']) {
         final message = JsonRpcMessage.fromJson({
           'jsonrpc': '2.0',
           'id': id,
@@ -341,7 +392,14 @@ void main() {
     });
 
     test('rejects malformed request progressToken wire values', () {
-      for (final token in [null, false, 1.5, <String, dynamic>{}, <Object>[]]) {
+      for (final token in [
+        null,
+        false,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',
@@ -394,8 +452,9 @@ void main() {
       );
     });
 
-    test('preserves string and integer request progressToken wire values', () {
-      for (final token in <Object>[123, 'progress-123']) {
+    test('preserves string and finite number request progressToken wire values',
+        () {
+      for (final token in <Object>[123, 123.5, 'progress-123']) {
         final message = JsonRpcMessage.fromJson({
           'jsonrpc': '2.0',
           'id': 'request-1',
@@ -452,7 +511,13 @@ void main() {
     });
 
     test('rejects malformed response id wire values', () {
-      for (final id in [false, 1.5, <String, dynamic>{}, <Object>[]]) {
+      for (final id in [
+        false,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',
@@ -480,7 +545,13 @@ void main() {
     });
 
     test('rejects malformed error id wire values', () {
-      for (final id in [false, 1.5, <String, dynamic>{}, <Object>[]]) {
+      for (final id in [
+        false,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',

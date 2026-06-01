@@ -31,7 +31,7 @@ class CancelledNotification {
       );
 
   Map<String, dynamic> toJson() => {
-        'requestId': requestId,
+        'requestId': parseRequestId(requestId, fieldName: 'requestId'),
         if (reason != null) 'reason': reason,
       };
 }
@@ -148,7 +148,7 @@ class ProgressNotification implements Progress {
 
   @override
   Map<String, dynamic> toJson() => {
-        'progressToken': progressToken,
+        'progressToken': parseProgressToken(progressToken),
         ...Progress(
           progress: progress,
           total: total,

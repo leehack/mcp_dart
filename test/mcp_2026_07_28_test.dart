@@ -322,6 +322,26 @@ void main() {
       }
     });
 
+    test('preserves finite numeric request ids and progress tokens', () {
+      final message = JsonRpcMessage.fromJson(
+        const {
+          'jsonrpc': jsonRpcVersion,
+          'id': 1.5,
+          'method': Method.toolsList,
+          'params': {
+            '_meta': {'progressToken': 2.5},
+          },
+        },
+      );
+
+      expect(message, isA<JsonRpcListToolsRequest>());
+      final request = message as JsonRpcListToolsRequest;
+      expect(request.id, 1.5);
+      expect(request.progressToken, 2.5);
+      expect(request.toJson()['id'], 1.5);
+      expect(request.toJson()['params']['_meta']['progressToken'], 2.5);
+    });
+
     test('rejects URL elicitation relative URI values', () {
       expect(
         () => ElicitRequestParams.fromJson({
