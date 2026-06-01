@@ -44,6 +44,7 @@ void main() {
         result.caseNames,
         containsAll(<String>[
           'lifecycle.rejects-pre-initialize-request',
+          'server-discover.requires-request-meta',
           'capabilities.rejects-unnegotiated-sampling-tools',
           'elicitation.rejects-invalid-form-url-union',
           'tasks.strips-unnegotiated-related-task-metadata',

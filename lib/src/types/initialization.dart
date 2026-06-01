@@ -600,10 +600,43 @@ class JsonRpcServerDiscoverRequest extends JsonRpcRequest {
   }) : super(method: Method.serverDiscover);
 
   factory JsonRpcServerDiscoverRequest.fromJson(Map<String, dynamic> json) {
+    final params = readJsonObject(
+      json['params'],
+      'JsonRpcServerDiscoverRequest.params',
+    );
+    final meta = validateRequestMeta(
+      readJsonObject(
+        params['_meta'],
+        'JsonRpcServerDiscoverRequest.params._meta',
+      ),
+      validateKeys: true,
+    )!;
+
     return JsonRpcServerDiscoverRequest(
       id: parseRequestId(json['id']),
-      meta: extractRequestMeta(json),
+      meta: meta,
     );
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    final meta = this.meta;
+    if (meta == null) {
+      throw const FormatException(
+        'JsonRpcServerDiscoverRequest.params._meta is required',
+      );
+    }
+    return {
+      'jsonrpc': jsonrpc,
+      'id': parseRequestId(id, fieldName: 'JsonRpcServerDiscoverRequest.id'),
+      'method': method,
+      'params': <String, dynamic>{
+        '_meta': readJsonObject(
+          validateRequestMeta(meta, validateKeys: true),
+          'JsonRpcServerDiscoverRequest.params._meta',
+        ),
+      },
+    };
   }
 }
 

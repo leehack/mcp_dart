@@ -184,6 +184,13 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _specSuite,
+            name: 'server-discover.requires-request-meta',
+            description:
+                'Rejects server/discover requests that omit params._meta request metadata.',
+            check: _serverDiscoverRequiresRequestMeta,
+          ),
+          _ConformanceCase(
+            suite: _specSuite,
             name: 'capabilities.rejects-unnegotiated-sampling-tools',
             description:
                 'Rejects sampling/createMessage tool-use when sampling.tools was not negotiated.',
@@ -551,6 +558,58 @@ Future<void> _rejectsPreInitializeRequest() async {
     messageContains: 'before initialize',
   );
   await server.close();
+}
+
+Future<void> _serverDiscoverRequiresRequestMeta() async {
+  for (final message in const [
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 'discover-1',
+      'method': Method.serverDiscover,
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 'discover-1',
+      'method': Method.serverDiscover,
+      '_meta': <String, dynamic>{
+        McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+      },
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 'discover-1',
+      'method': Method.serverDiscover,
+      'params': <String, dynamic>{},
+    },
+  ]) {
+    _expectThrowsFormatException(() => JsonRpcMessage.fromJson(message));
+  }
+
+  _expectThrowsFormatException(
+    () => JsonRpcServerDiscoverRequest(id: 'discover-1').toJson(),
+  );
+
+  final parsed = JsonRpcMessage.fromJson(<String, dynamic>{
+    'jsonrpc': jsonRpcVersion,
+    'id': 'discover-1',
+    'method': Method.serverDiscover,
+    'params': <String, dynamic>{
+      '_meta': buildProtocolRequestMeta(
+        protocolVersion: draftProtocolVersion2026_07_28,
+        clientInfo: const Implementation(name: 'client', version: '1.0.0'),
+        clientCapabilities: const ClientCapabilities(),
+      ),
+    },
+  });
+  if (parsed is! JsonRpcServerDiscoverRequest) {
+    throw StateError(
+      'Expected JsonRpcServerDiscoverRequest, got ${parsed.runtimeType}.',
+    );
+  }
+  if (parsed.meta?[McpMetaKey.protocolVersion] !=
+      draftProtocolVersion2026_07_28) {
+    throw StateError('Expected server/discover metadata to be preserved.');
+  }
 }
 
 Future<void> _rejectsUnnegotiatedSamplingTools() async {

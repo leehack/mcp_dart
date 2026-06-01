@@ -542,6 +542,63 @@ void main() {
       );
     });
 
+    test('requires server/discover request metadata in params', () {
+      expect(
+        () => JsonRpcServerDiscoverRequest(id: 'discover-1').toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('params._meta'),
+          ),
+        ),
+      );
+
+      for (final message in [
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-1',
+          'method': Method.serverDiscover,
+        },
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-1',
+          'method': Method.serverDiscover,
+          '_meta': _clientMeta(),
+        },
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-1',
+          'method': Method.serverDiscover,
+          'params': <String, dynamic>{},
+        },
+      ]) {
+        expect(
+          () => JsonRpcMessage.fromJson(message),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              anyOf(contains('params'), contains('params._meta')),
+            ),
+          ),
+        );
+      }
+
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 'discover-1',
+        'method': Method.serverDiscover,
+        'params': {'_meta': _clientMeta()},
+      });
+      expect(parsed, isA<JsonRpcServerDiscoverRequest>());
+      expect(
+        (parsed as JsonRpcServerDiscoverRequest)
+            .meta?[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
+      );
+    });
+
     test('serializes cacheable result hints without changing legacy defaults',
         () {
       final toolsJson = const ListToolsResult(
