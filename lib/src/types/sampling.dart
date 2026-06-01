@@ -664,7 +664,10 @@ class CreateMessageRequest {
         json['temperature'],
         'CreateMessageRequest.temperature',
       ),
-      maxTokens: json['maxTokens'] as int,
+      maxTokens: readInteger(
+        json['maxTokens'],
+        'CreateMessageRequest.maxTokens',
+      ),
       stopSequences: (json['stopSequences'] as List<dynamic>?)?.cast<String>(),
       metadata: _asJsonObjectOrNull(
         json['metadata'],

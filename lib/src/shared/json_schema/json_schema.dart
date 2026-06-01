@@ -1,5 +1,18 @@
 const _jsonSchemaAnnotationKeys = {'title', 'description', 'default'};
 
+int? _readOptionalInteger(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is int) {
+    return value;
+  }
+  if (value is double && value.isFinite && value == value.truncateToDouble()) {
+    return value.toInt();
+  }
+  throw FormatException('$field must be an integer');
+}
+
 /// A builder for creating JSON Schemas in a type-safe way.
 sealed class JsonSchema {
   final String? title;
@@ -496,8 +509,14 @@ class JsonString extends JsonSchema {
   factory JsonString.fromJson(Map<String, dynamic> json) {
     final rawMcpHeader = json['x-mcp-header'];
     return JsonString._(
-      minLength: json['minLength'] as int?,
-      maxLength: json['maxLength'] as int?,
+      minLength: _readOptionalInteger(
+        json['minLength'],
+        'JsonString.minLength',
+      ),
+      maxLength: _readOptionalInteger(
+        json['maxLength'],
+        'JsonString.maxLength',
+      ),
       pattern: json['pattern'] as String?,
       format: json['format'] as String?,
       enumValues: (json['enum'] as List?)?.cast<String>() ??
@@ -832,8 +851,14 @@ class JsonArray extends JsonSchema {
       items: json['items'] != null
           ? JsonSchema.fromJson(json['items'] as Map<String, dynamic>)
           : null,
-      minItems: json['minItems'] as int?,
-      maxItems: json['maxItems'] as int?,
+      minItems: _readOptionalInteger(
+        json['minItems'],
+        'JsonArray.minItems',
+      ),
+      maxItems: _readOptionalInteger(
+        json['maxItems'],
+        'JsonArray.maxItems',
+      ),
       uniqueItems: json['uniqueItems'] as bool?,
       title: json['title'] as String?,
       description: json['description'] as String?,

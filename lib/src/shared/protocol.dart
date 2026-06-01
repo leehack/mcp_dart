@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/types.dart';
+import 'package:mcp_dart/src/types/validation.dart';
 import 'package:meta/meta.dart';
 
 import 'transport.dart';
@@ -1275,8 +1276,10 @@ abstract class Protocol {
               this,
             )
           : null,
-      taskRequestedTtl:
-          (request.params?['task'] as Map<String, dynamic>?)?['ttl'] as int?,
+      taskRequestedTtl: readOptionalInteger(
+        (request.params?['task'] as Map<String, dynamic>?)?['ttl'],
+        'RequestOptions.task.ttl',
+      ),
       sendNotification: (notification, {relatedTask}) {
         var outgoingNotification = notification;
         if (subscriptionState != null) {

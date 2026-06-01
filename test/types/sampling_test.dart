@@ -494,6 +494,37 @@ void main() {
       expect(params.includeContext, equals(IncludeContext.allServers));
     });
 
+    test('accepts whole-number JSON maxTokens values', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+
+      final params = CreateMessageRequestParams.fromJson({
+        'messages': messages,
+        'maxTokens': 100.0,
+      });
+
+      expect(params.maxTokens, 100);
+      expect(params.toJson()['maxTokens'], 100);
+
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('rejects non-finite temperature values', () {
       final messages = [
         {

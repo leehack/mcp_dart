@@ -22,6 +22,32 @@ void main() {
       expect(s.enumValues, ['a', 'b']);
     });
 
+    test('accepts whole-number numeric string schema bounds', () {
+      final schema = JsonSchema.fromJson({
+        'type': 'string',
+        'minLength': 5.0,
+        'maxLength': 10.0,
+      });
+
+      expect(schema, isA<JsonString>());
+      final stringSchema = schema as JsonString;
+      expect(stringSchema.minLength, 5);
+      expect(stringSchema.maxLength, 10);
+      expect(stringSchema.toJson(), {
+        'minLength': 5,
+        'maxLength': 10,
+        'type': 'string',
+      });
+
+      expect(
+        () => JsonSchema.fromJson({
+          'type': 'string',
+          'minLength': 1.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('preserves mixed typed enum schemas conjunctively', () {
       final json = {
         'type': 'string',
@@ -192,6 +218,32 @@ void main() {
       expect(s.minItems, 1);
       expect(s.maxItems, 5);
       expect(s.uniqueItems, true);
+    });
+
+    test('accepts whole-number numeric array schema bounds', () {
+      final schema = JsonSchema.fromJson({
+        'type': 'array',
+        'minItems': 1.0,
+        'maxItems': 5.0,
+      });
+
+      expect(schema, isA<JsonArray>());
+      final arraySchema = schema as JsonArray;
+      expect(arraySchema.minItems, 1);
+      expect(arraySchema.maxItems, 5);
+      expect(arraySchema.toJson(), {
+        'minItems': 1,
+        'maxItems': 5,
+        'type': 'array',
+      });
+
+      expect(
+        () => JsonSchema.fromJson({
+          'type': 'array',
+          'minItems': 1.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('parses object schema', () {

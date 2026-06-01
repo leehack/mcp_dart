@@ -63,6 +63,14 @@ int? readOptionalInteger(Object? value, String field) {
   throw FormatException('$field must be an integer');
 }
 
+int readInteger(Object? value, String field) {
+  final integer = readOptionalInteger(value, field);
+  if (integer == null) {
+    throw FormatException('$field is required');
+  }
+  return integer;
+}
+
 String? readOptionalString(Object? value, String field) {
   if (value == null) {
     return null;

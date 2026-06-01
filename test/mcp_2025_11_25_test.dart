@@ -743,6 +743,17 @@ void main() {
         expect(deserialized.ttl, 3600);
       });
 
+      test('TaskCreationParams accepts whole-number JSON ttl values', () {
+        final deserialized = TaskCreationParams.fromJson({'ttl': 3600.0});
+        expect(deserialized.ttl, 3600);
+        expect(deserialized.toJson()['ttl'], 3600);
+
+        expect(
+          () => TaskCreationParams.fromJson({'ttl': 3600.5}),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
       test('TaskCreationParams without ttl', () {
         final params = const TaskCreationParams();
         expect(params.ttl, isNull);
@@ -1041,6 +1052,22 @@ void main() {
         final json = task.toJson();
         expect(json, containsPair('ttl', null));
         expect(json, isNot(contains('pollInterval')));
+      });
+
+      test('Task accepts whole-number JSON ttl and poll interval values', () {
+        final task = Task.fromJson({
+          'taskId': 'numeric-task',
+          'status': 'working',
+          'ttl': 3600.0,
+          'pollInterval': 500.0,
+          'createdAt': '2025-01-15T10:00:00Z',
+          'lastUpdatedAt': '2025-01-15T10:01:00Z',
+        });
+
+        expect(task.ttl, 3600);
+        expect(task.pollInterval, 500);
+        expect(task.toJson(), containsPair('ttl', 3600));
+        expect(task.toJson(), containsPair('pollInterval', 500));
       });
 
       test('Task rejects missing MCP-required fields', () {
@@ -1430,6 +1457,19 @@ void main() {
         expect(
           () => CompletionResultData.fromJson({
             'values': List.generate(101, (index) => '$index'),
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        final completion = CompletionResultData.fromJson({
+          'values': ['a'],
+          'total': 10.0,
+        });
+        expect(completion.total, 10);
+        expect(completion.toJson()['total'], 10);
+        expect(
+          () => CompletionResultData.fromJson({
+            'values': ['a'],
+            'total': 10.5,
           }),
           throwsA(isA<FormatException>()),
         );

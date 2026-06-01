@@ -178,6 +178,9 @@ int? _readTaskInt(
   if (value == null || value is int) {
     return value as int?;
   }
+  if (value is double && value.isFinite && value == value.truncateToDouble()) {
+    return value.toInt();
+  }
 
   throw FormatException('$owner.$field must be an integer or null');
 }
@@ -442,7 +445,7 @@ class TaskCreation {
   const TaskCreation({this.ttl});
 
   factory TaskCreation.fromJson(Map<String, dynamic> json) =>
-      TaskCreation(ttl: json['ttl'] as int?);
+      TaskCreation(ttl: readOptionalInteger(json['ttl'], 'TaskCreation.ttl'));
 
   Map<String, dynamic> toJson() => {
         if (ttl != null) 'ttl': ttl,

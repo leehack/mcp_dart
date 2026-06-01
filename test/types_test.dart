@@ -784,6 +784,28 @@ void main() {
       expect((content as ResourceLink).uri, equals('file:///docs/spec.md'));
     });
 
+    test('ResourceLink accepts whole-number JSON size values', () {
+      final link = ResourceLink.fromJson({
+        'type': 'resource_link',
+        'uri': 'file:///docs/spec.md',
+        'name': 'spec',
+        'size': 123.0,
+      });
+
+      expect(link.size, 123);
+      expect(link.toJson()['size'], 123);
+
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/spec.md',
+          'name': 'spec',
+          'size': 123.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('EmbeddedResource supports annotations and meta', () {
       final content = const EmbeddedResource(
         resource: TextResourceContents(

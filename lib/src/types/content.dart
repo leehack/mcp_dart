@@ -574,7 +574,7 @@ class ResourceLink extends Content {
       title: json['title'] as String?,
       description: json['description'] as String?,
       mimeType: json['mimeType'] as String?,
-      size: json['size'] as int?,
+      size: readOptionalInteger(json['size'], 'ResourceLink.size'),
       icons: (json['icons'] as List<dynamic>?)
           ?.map((icon) => McpIcon.fromJson(_asJsonObject(icon)))
           .toList(),

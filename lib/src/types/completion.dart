@@ -204,7 +204,7 @@ class CompletionResultData {
     }
     return CompletionResultData(
       values: values.cast<String>(),
-      total: json['total'] as int?,
+      total: readOptionalInteger(json['total'], 'CompletionResultData.total'),
       hasMore: json['hasMore'] as bool?,
     );
   }

@@ -66,6 +66,9 @@
 - Retried `server/discover` with an advertised compatible stateless protocol
   version after `UnsupportedProtocolVersionError` instead of falling back to
   legacy initialization.
+- Accepted whole-number JSON numeric values for integer wire fields such as
+  resource link sizes, completion totals, sampling `maxTokens`, task TTLs, and
+  JSON Schema length/item bounds while continuing to reject fractional values.
 - Added client-side `subscriptions/listen` handles that correlate stream
   notifications by `io.modelcontextprotocol/subscriptionId`, validate the
   acknowledgment, and cancel long-lived streams with `notifications/cancelled`.
