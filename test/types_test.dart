@@ -822,6 +822,74 @@ void main() {
       expect(deserialized.roots?.listChanged, equals(true));
     });
 
+    test('capabilities preserve unknown top-level capability entries', () {
+      final clientCapabilities = ClientCapabilities.fromJson(
+        const {
+          'roots': {},
+          'com.example/clientFeature': {
+            'enabled': true,
+            'modes': ['fast', 'safe'],
+          },
+        },
+      );
+      expect(clientCapabilities.roots, isNotNull);
+      expect(clientCapabilities.additionalCapabilities, {
+        'com.example/clientFeature': {
+          'enabled': true,
+          'modes': ['fast', 'safe'],
+        },
+      });
+      expect(clientCapabilities.toJson()['com.example/clientFeature'], {
+        'enabled': true,
+        'modes': ['fast', 'safe'],
+      });
+
+      final serverCapabilities = ServerCapabilities.fromJson(
+        const {
+          'tools': {},
+          'com.example/serverFeature': {
+            'limits': {'requests': 10},
+          },
+        },
+      );
+      expect(serverCapabilities.tools, isNotNull);
+      expect(serverCapabilities.additionalCapabilities, {
+        'com.example/serverFeature': {
+          'limits': {'requests': 10},
+        },
+      });
+      expect(serverCapabilities.toJson()['com.example/serverFeature'], {
+        'limits': {'requests': 10},
+      });
+    });
+
+    test('additional capability values must be JSON values', () {
+      expect(
+        () => ClientCapabilities.fromJson(
+          {'com.example/clientFeature': Object()},
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ServerCapabilities.fromJson(
+          {'com.example/serverFeature': Object()},
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ClientCapabilities(
+          additionalCapabilities: {'roots': {}},
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ServerCapabilities(
+          additionalCapabilities: {'tools': {}},
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('experimental capability values must be objects', () {
       expect(
         () => ClientCapabilities.fromJson(

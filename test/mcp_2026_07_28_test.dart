@@ -3315,6 +3315,18 @@ void main() {
         ),
         isNull,
       );
+      expect(
+        validateToolRequest(
+          _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              additionalCapabilities: {
+                'com.example/clientFeature': {'enabled': true},
+              },
+            ),
+          ),
+        ),
+        isNull,
+      );
     });
 
     test('server rejects core RPCs removed from stateless MCP', () async {

@@ -150,6 +150,50 @@ Map<String, Map<String, dynamic>>? _serializeExtensionMap(
   );
 }
 
+Map<String, dynamic>? _readAdditionalCapabilities(
+  Map<String, dynamic> json,
+  Set<String> knownKeys,
+  String field,
+) {
+  final additional = <String, dynamic>{};
+  for (final entry in json.entries) {
+    if (knownKeys.contains(entry.key)) {
+      continue;
+    }
+    additional[entry.key] = readJsonValue(
+      entry.value,
+      '$field.${entry.key}',
+    );
+  }
+  return additional.isEmpty ? null : additional;
+}
+
+Map<String, dynamic>? _serializeAdditionalCapabilities(
+  Map<String, dynamic>? value,
+  Set<String> knownKeys,
+  String field,
+) {
+  if (value == null) {
+    return null;
+  }
+
+  final additional = <String, dynamic>{};
+  for (final entry in value.entries) {
+    if (knownKeys.contains(entry.key)) {
+      throw ArgumentError.value(
+        entry.key,
+        '$field.${entry.key}',
+        'must not duplicate a known capability key',
+      );
+    }
+    additional[entry.key] = readJsonValue(
+      entry.value,
+      '$field.${entry.key}',
+    );
+  }
+  return additional;
+}
+
 bool? _capabilityDeclared(Object? value, String field) {
   if (value == null) {
     return null;
@@ -180,6 +224,27 @@ Map<String, Map<String, dynamic>> withMcpTasksExtension([
     mcpTasksExtensionId: <String, dynamic>{},
   };
 }
+
+const _clientCapabilityKeys = {
+  'experimental',
+  'sampling',
+  'roots',
+  'elicitation',
+  'tasks',
+  'extensions',
+};
+
+const _serverCapabilityKeys = {
+  'experimental',
+  'logging',
+  'prompts',
+  'resources',
+  'tools',
+  'completions',
+  'tasks',
+  'elicitation',
+  'extensions',
+};
 
 /// Describes an MCP implementation (client or server).
 class Implementation {
@@ -586,6 +651,9 @@ class ClientCapabilities {
   /// values are extension-specific settings.
   final Map<String, Map<String, dynamic>>? extensions;
 
+  /// Additional client capabilities not yet modeled by this SDK.
+  final Map<String, dynamic>? additionalCapabilities;
+
   const ClientCapabilities({
     this.experimental,
     this.sampling,
@@ -593,6 +661,7 @@ class ClientCapabilities {
     this.elicitation,
     this.tasks,
     this.extensions,
+    this.additionalCapabilities,
   });
 
   factory ClientCapabilities.fromJson(Map<String, dynamic> json) {
@@ -627,6 +696,11 @@ class ClientCapabilities {
       tasks:
           tasksMap == null ? null : ClientCapabilitiesTasks.fromJson(tasksMap),
       extensions: extensionsMap,
+      additionalCapabilities: _readAdditionalCapabilities(
+        json,
+        _clientCapabilityKeys,
+        'ClientCapabilities',
+      ),
     );
   }
 
@@ -645,6 +719,11 @@ class ClientCapabilities {
             extensions,
             'ClientCapabilities.extensions',
           ),
+        ...?_serializeAdditionalCapabilities(
+          additionalCapabilities,
+          _clientCapabilityKeys,
+          'ClientCapabilities.additionalCapabilities',
+        ),
       };
 
   /// Whether the MCP Tasks extension is declared.
@@ -1104,6 +1183,9 @@ class ServerCapabilities {
   /// values are extension-specific settings.
   final Map<String, Map<String, dynamic>>? extensions;
 
+  /// Additional server capabilities not yet modeled by this SDK.
+  final Map<String, dynamic>? additionalCapabilities;
+
   const ServerCapabilities({
     this.experimental,
     this.logging,
@@ -1114,6 +1196,7 @@ class ServerCapabilities {
     this.tasks,
     this.elicitation,
     this.extensions,
+    this.additionalCapabilities,
   });
 
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
@@ -1158,6 +1241,11 @@ class ServerCapabilities {
           ? null
           : ServerCapabilitiesElicitation.fromJson(elicitationMap),
       extensions: extensionsMap,
+      additionalCapabilities: _readAdditionalCapabilities(
+        json,
+        _serverCapabilityKeys,
+        'ServerCapabilities',
+      ),
     );
   }
 
@@ -1179,6 +1267,11 @@ class ServerCapabilities {
             extensions,
             'ServerCapabilities.extensions',
           ),
+        ...?_serializeAdditionalCapabilities(
+          additionalCapabilities,
+          _serverCapabilityKeys,
+          'ServerCapabilities.additionalCapabilities',
+        ),
       };
 
   /// Whether the MCP Tasks extension is declared.
