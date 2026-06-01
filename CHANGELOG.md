@@ -80,6 +80,8 @@
   stateless requests use `-32602` with the missing `uri` in error data.
 - Enforced MCP 2026 `_meta` key-name grammar on stateless request metadata and
   the 2026 request metadata builder while preserving legacy metadata parsing.
+- Rejected negative cacheable-result `ttlMs` values during parsing instead of
+  clamping malformed wire values to zero.
 
 ## 2.2.0
 

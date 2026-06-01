@@ -413,8 +413,8 @@ void main() {
 
       expect(const ListToolsResult(tools: []).toJson(), {'tools': []});
       expect(
-        ListToolsResult.fromJson(const {'tools': [], 'ttlMs': -1}).ttlMs,
-        0,
+        () => ListToolsResult.fromJson(const {'tools': [], 'ttlMs': -1}),
+        throwsFormatException,
       );
       expect(
         () => ListToolsResult.fromJson(

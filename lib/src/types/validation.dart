@@ -49,7 +49,10 @@ int? readOptionalTtlMs(Object? value, String field) {
   if (ttlMs == null) {
     return null;
   }
-  return ttlMs < 0 ? 0 : ttlMs;
+  if (ttlMs < 0) {
+    throw FormatException('$field must be greater than or equal to 0');
+  }
+  return ttlMs;
 }
 
 void validateTtlMs(int? value, String field) {
