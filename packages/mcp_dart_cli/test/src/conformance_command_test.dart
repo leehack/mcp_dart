@@ -42,6 +42,7 @@ void main() {
           'elicitation.rejects-invalid-form-url-union',
           'tasks.strips-unnegotiated-related-task-metadata',
           'progress.rejects-malformed-progress-token',
+          'progress.dispatches-numeric-progress-token',
         ]),
       );
       expect(

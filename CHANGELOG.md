@@ -124,6 +124,8 @@
 - Accepted finite numeric JSON-RPC request IDs and progress tokens, matching
   the stable and MCP 2026 `string | number` schema while continuing to reject
   non-finite numbers.
+- Allowed protocol progress handlers and `RequestHandlerExtra.sendProgress` to
+  dispatch finite numeric progress tokens end-to-end.
 
 ## 2.2.0
 

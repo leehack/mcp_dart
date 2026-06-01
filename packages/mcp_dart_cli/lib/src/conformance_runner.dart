@@ -168,6 +168,13 @@ class ConformanceRunner {
                 'Rejects progress notifications whose progressToken is not a string or finite number.',
             check: _rejectsMalformedProgressToken,
           ),
+          _ConformanceCase(
+            suite: _specSuite,
+            name: 'progress.dispatches-numeric-progress-token',
+            description:
+                'Dispatches progress notifications for finite numeric progress tokens.',
+            check: _dispatchesNumericProgressToken,
+          ),
         ];
 
   /// Runs one named conformance suite.
@@ -639,6 +646,64 @@ Future<void> _rejectsMalformedProgressToken() async {
       },
     }),
   );
+}
+
+Future<void> _dispatchesNumericProgressToken() async {
+  final transport = _ConformanceTransport();
+  final server = McpServer(
+    const Implementation(name: 'server', version: '1.0.0'),
+    options: const McpServerOptions(
+      capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
+    ),
+  );
+  server.registerTool(
+    'progress_probe',
+    callback: (args, extra) async {
+      await extra.sendProgress(1, total: 2, message: 'halfway');
+      return const CallToolResult(
+        content: <Content>[TextContent(text: 'ok')],
+      );
+    },
+  );
+
+  await _initializeMcpServer(server, transport);
+  transport.emit(
+    const JsonRpcCallToolRequest(
+      id: 104,
+      params: <String, dynamic>{
+        'name': 'progress_probe',
+        'arguments': <String, dynamic>{},
+        '_meta': <String, dynamic>{
+          'progressToken': 1.5,
+        },
+      },
+    ),
+  );
+  await _settle();
+
+  final progressMessages = transport.sentMessages
+      .whereType<JsonRpcNotification>()
+      .where((message) => message.method == Method.notificationsProgress)
+      .toList();
+  if (progressMessages.length != 1) {
+    throw StateError(
+      'Expected one progress notification, got ${progressMessages.length}.',
+    );
+  }
+  final progress = ProgressNotification.fromJson(
+    progressMessages.single.params ?? const <String, dynamic>{},
+  );
+  if (progress.progressToken != 1.5) {
+    throw StateError('Expected numeric progress token to be preserved.');
+  }
+  if (progress.progress != 1 || progress.total != 2) {
+    throw StateError('Expected progress values to be preserved.');
+  }
+
+  final responses =
+      transport.sentMessages.whereType<JsonRpcResponse>().toList();
+  _expectSingleErrorFreeResponse(responses, id: 104);
+  await server.close();
 }
 
 Future<void> _rejectsInvalidJsonRpcVersion() async {

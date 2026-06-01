@@ -617,6 +617,59 @@ void main() {
       expect(result.value, 'response-data');
     });
 
+    test('dispatches finite numeric progress tokens from request metadata',
+        () async {
+      await protocol.connect(transport);
+
+      final progressUpdates = <Progress>[];
+      final requestFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 1.5},
+            ),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(
+              onprogress: progressUpdates.add,
+              timeout: const Duration(seconds: 1),
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(transport.sentMessages, hasLength(1));
+      final sentRequest = transport.sentMessages.single as JsonRpcRequest;
+      expect(sentRequest.meta?['progressToken'], 1.5);
+
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 1.5,
+            progress: 50,
+            total: 100,
+            message: 'halfway',
+          ),
+        ),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(progressUpdates, hasLength(1));
+      expect(progressUpdates.single.progress, 50);
+      expect(progressUpdates.single.total, 100);
+      expect(progressUpdates.single.message, 'halfway');
+
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: sentRequest.id,
+          result: {'value': 'response-data'},
+        ),
+      );
+
+      final result = await requestFuture;
+      expect(result.value, 'response-data');
+    });
+
     test('task options serialize as task-augmented request params', () async {
       await protocol.connect(transport);
 
@@ -1136,6 +1189,27 @@ void main() {
             id: 0,
             method: 'test/method',
             meta: {'progressToken': false},
+          ),
+          (json) => TestResult(value: json['value'] as String),
+          RequestOptions(onprogress: (_) {}),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test(
+        'rejects non-finite request progress tokens when progress handler is set',
+        () async {
+      await protocol.connect(transport);
+
+      await expectLater(
+        protocol.request<TestResult>(
+          const JsonRpcRequest(
+            id: 0,
+            method: 'test/method',
+            meta: {'progressToken': double.nan},
           ),
           (json) => TestResult(value: json['value'] as String),
           RequestOptions(onprogress: (_) {}),
