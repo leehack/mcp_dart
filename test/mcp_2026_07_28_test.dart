@@ -2485,6 +2485,29 @@ void main() {
       expect(transport.sentMessages, isEmpty);
     });
 
+    test('stateless client rejects server-initiated requests on transport',
+        () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          capabilities: ClientCapabilities(roots: ClientCapabilitiesRoots()),
+          useServerDiscover: true,
+        ),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      transport.onmessage?.call(const JsonRpcListRootsRequest(id: 'roots-1'));
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.id, 'roots-1');
+      expect(response.error.code, ErrorCode.invalidRequest.value);
+      expect(response.error.message, contains('input_required'));
+      expect(response.error.message, contains('inputRequests'));
+    });
+
     test('client listenSubscriptions requires a connected transport', () {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),

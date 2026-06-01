@@ -617,6 +617,14 @@ class McpClient extends Protocol {
 
   @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
+    if (_usesStatelessProtocol) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Server-initiated JSON-RPC requests are not supported in stateless '
+        'MCP; return input_required with inputRequests instead.',
+      );
+    }
+
     if (_sentInitialized || request.method == Method.ping) {
       return null;
     }
