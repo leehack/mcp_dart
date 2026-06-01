@@ -93,6 +93,19 @@ CallToolResult _toolResultForProtocol(
   );
 }
 
+McpError _resourceNotFoundErrorForProtocol(
+  String uri,
+  String? protocolVersion,
+) {
+  return McpError(
+    _isDraft2026Request(protocolVersion)
+        ? ErrorCode.invalidParams.value
+        : ErrorCode.resourceNotFound.value,
+    'Resource not found',
+    {'uri': uri},
+  );
+}
+
 /// Definition for a completable argument.
 class CompletableDef {
   /// The callback to invoke to get completion suggestions.
@@ -1809,9 +1822,10 @@ class McpServer {
             return await Future.value(entry.readCallback(uri, vars, extra));
           }
         }
-        throw McpError(
-          ErrorCode.invalidParams.value,
-          "Resource not found: $uriString",
+        final protocolVersion = extra.meta?[McpMetaKey.protocolVersion];
+        throw _resourceNotFoundErrorForProtocol(
+          uriString,
+          protocolVersion is String ? protocolVersion : null,
         );
       },
       (id, params, meta) => JsonRpcReadResourceRequest.fromJson({

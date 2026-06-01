@@ -457,6 +457,9 @@ enum ErrorCode {
   /// code. [requestTimeout] is retained for older SDK behavior.
   headerMismatch(-32001),
 
+  /// Resource not found in stable MCP 2025-11-25.
+  resourceNotFound(-32002),
+
   /// Required per-request client capabilities were not declared.
   missingRequiredClientCapability(-32003),
 
