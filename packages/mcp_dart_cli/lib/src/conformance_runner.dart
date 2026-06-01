@@ -6,6 +6,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 const String _fixtureSuite = 'fixture';
 const String _specSuite = 'spec';
 const String _allSuites = 'all';
+const String _serverDiscoverMethod = 'server/discover';
 
 const List<String> conformanceSuiteNames = <String>[
   _fixtureSuite,
@@ -565,12 +566,12 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
     <String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': 'discover-1',
-      'method': Method.serverDiscover,
+      'method': _serverDiscoverMethod,
     },
     <String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': 'discover-1',
-      'method': Method.serverDiscover,
+      'method': _serverDiscoverMethod,
       '_meta': <String, dynamic>{
         McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
       },
@@ -578,7 +579,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
     <String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': 'discover-1',
-      'method': Method.serverDiscover,
+      'method': _serverDiscoverMethod,
       'params': <String, dynamic>{},
     },
   ]) {
@@ -592,7 +593,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
   final parsed = JsonRpcMessage.fromJson(<String, dynamic>{
     'jsonrpc': jsonRpcVersion,
     'id': 'discover-1',
-    'method': Method.serverDiscover,
+    'method': _serverDiscoverMethod,
     'params': <String, dynamic>{
       '_meta': buildProtocolRequestMeta(
         protocolVersion: draftProtocolVersion2026_07_28,
