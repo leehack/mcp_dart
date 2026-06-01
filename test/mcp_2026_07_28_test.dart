@@ -1455,6 +1455,48 @@ void main() {
       }
     });
 
+    test('rejects malformed subscription wire shapes', () {
+      for (final parse in <Object Function()>[
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': 'bad',
+            }),
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': null,
+            }),
+        () => SubscriptionsListenRequest.fromJson({
+              'notifications': 'bad',
+            }),
+        () => SubscriptionsListenRequest.fromJson({
+              'notifications': <Object?, Object?>{
+                1: true,
+              },
+            }),
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsSubscriptionsAcknowledged,
+              'params': 'bad',
+            }),
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsSubscriptionsAcknowledged,
+              'params': null,
+            }),
+        () => SubscriptionsAcknowledgedNotification.fromJson({
+              'notifications': <Object?, Object?>{
+                1: true,
+              },
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
     test('server acknowledges subscriptions/listen with subscription id',
         () async {
       final server = Server(

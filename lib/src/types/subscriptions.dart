@@ -141,17 +141,13 @@ class SubscriptionsListenRequest {
   const SubscriptionsListenRequest({required this.notifications});
 
   factory SubscriptionsListenRequest.fromJson(Map<String, dynamic> json) {
-    final notifications = json['notifications'];
-    if (notifications is! Map) {
-      throw const FormatException(
-        'SubscriptionsListenRequest.notifications is required',
-      );
-    }
+    final notifications = _readRequiredJsonObject(
+      json['notifications'],
+      'SubscriptionsListenRequest.notifications',
+    );
 
     return SubscriptionsListenRequest(
-      notifications: SubscriptionFilter.fromJson(
-        notifications.cast<String, dynamic>(),
-      ),
+      notifications: SubscriptionFilter.fromJson(notifications),
     );
   }
 
@@ -177,12 +173,10 @@ class JsonRpcSubscriptionsListenRequest extends JsonRpcRequest {
   factory JsonRpcSubscriptionsListenRequest.fromJson(
     Map<String, dynamic> json,
   ) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException(
-        'Missing params for subscriptions/listen request',
-      );
-    }
+    final paramsMap = _readRequiredParamsObject(
+      json,
+      'JsonRpcSubscriptionsListenRequest.params',
+    );
 
     return JsonRpcSubscriptionsListenRequest(
       id: parseRequestId(json['id']),
@@ -202,17 +196,13 @@ class SubscriptionsAcknowledgedNotification {
   factory SubscriptionsAcknowledgedNotification.fromJson(
     Map<String, dynamic> json,
   ) {
-    final notifications = json['notifications'];
-    if (notifications is! Map) {
-      throw const FormatException(
-        'SubscriptionsAcknowledgedNotification.notifications is required',
-      );
-    }
+    final notifications = _readRequiredJsonObject(
+      json['notifications'],
+      'SubscriptionsAcknowledgedNotification.notifications',
+    );
 
     return SubscriptionsAcknowledgedNotification(
-      notifications: SubscriptionFilter.fromJson(
-        notifications.cast<String, dynamic>(),
-      ),
+      notifications: SubscriptionFilter.fromJson(notifications),
     );
   }
 
@@ -237,12 +227,10 @@ class JsonRpcSubscriptionsAcknowledgedNotification extends JsonRpcNotification {
   factory JsonRpcSubscriptionsAcknowledgedNotification.fromJson(
     Map<String, dynamic> json,
   ) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException(
-        'Missing params for subscriptions acknowledged notification',
-      );
-    }
+    final paramsMap = _readRequiredParamsObject(
+      json,
+      'JsonRpcSubscriptionsAcknowledgedNotification.params',
+    );
 
     return JsonRpcSubscriptionsAcknowledgedNotification(
       acknowledgedParams:
@@ -253,6 +241,20 @@ class JsonRpcSubscriptionsAcknowledgedNotification extends JsonRpcNotification {
       ),
     );
   }
+}
+
+Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
+  return readJsonObject(value, field);
+}
+
+Map<String, dynamic> _readRequiredParamsObject(
+  Map<String, dynamic> json,
+  String field,
+) {
+  if (!json.containsKey('params')) {
+    throw FormatException('$field is required');
+  }
+  return _readRequiredJsonObject(json['params'], field);
 }
 
 bool? _readOptionalBool(Object? value, String field) {
