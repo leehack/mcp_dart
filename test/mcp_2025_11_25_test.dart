@@ -326,14 +326,17 @@ void main() {
         action: 'accept',
         content: {
           'text': 'answer',
+          'confidence': 0.75,
           'selection': ['a', 'b'], // List<String>
         },
       );
+      expect(result.content?['confidence'], 0.75);
       expect(result.content?['selection'], isA<List>());
       expect((result.content?['selection'] as List).first, 'a');
 
       final json = result.toJson();
       final deserialized = ElicitResult.fromJson(json);
+      expect(deserialized.content?['confidence'], 0.75);
       expect((deserialized.content?['selection'] as List).last, 'b');
     });
 

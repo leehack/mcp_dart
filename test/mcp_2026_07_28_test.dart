@@ -390,6 +390,20 @@ void main() {
         }),
         throwsA(isA<FormatException>()),
       );
+      expect(
+        () => ElicitResult.fromJson({
+          'action': 'accept',
+          'content': {'score': double.infinity},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'accept',
+          content: {'score': double.nan},
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('rejects non-JSON sampling object values', () {
