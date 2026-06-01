@@ -217,6 +217,48 @@ void main() {
         ),
         throwsFormatException,
       );
+      expect(
+        () => JsonRpcUpdateTaskRequest.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'id': 1,
+            'method': Method.tasksUpdate,
+            'params': 'bad',
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcUpdateTaskRequest.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'id': 1,
+            'method': Method.tasksUpdate,
+            'params': null,
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcTaskNotification.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsTasks,
+            'params': 'bad',
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcTaskNotification.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsTasks,
+            'params': null,
+          },
+        ),
+        throwsFormatException,
+      );
     });
   });
 }

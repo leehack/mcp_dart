@@ -1386,7 +1386,7 @@ class McpServer {
       },
       (id, params, meta) => JsonRpcListTasksRequest.fromJson({
         'id': id,
-        'params': params,
+        if (params != null) 'params': params,
         if (meta != null) '_meta': meta,
       }),
     );

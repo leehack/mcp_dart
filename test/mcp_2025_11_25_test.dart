@@ -871,6 +871,65 @@ void main() {
         expect(deserialized.task.ttl, 7200);
       });
 
+      test('task request and result wire fields reject malformed values', () {
+        for (final parse in <Object Function()>[
+          () => ListTasksRequest.fromJson({'cursor': 1}),
+          () => JsonRpcListTasksRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksList,
+                'params': 'bad',
+              }),
+          () => JsonRpcListTasksRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksList,
+                'params': null,
+              }),
+          () => ListTasksResult.fromJson({
+                'tasks': [1],
+              }),
+          () => ListTasksResult.fromJson({
+                'tasks': <Map<String, dynamic>>[],
+                'nextCursor': 1,
+              }),
+          () => CancelTaskRequest.fromJson({'taskId': 1}),
+          () => JsonRpcCancelTaskRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksCancel,
+                'params': 'bad',
+              }),
+          () => GetTaskRequest.fromJson({'taskId': 1}),
+          () => JsonRpcGetTaskRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksGet,
+                'params': 'bad',
+              }),
+          () => TaskResultRequest.fromJson({'taskId': 1}),
+          () => JsonRpcTaskResultRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksResult,
+                'params': null,
+              }),
+          () => CreateTaskResult.fromJson({'task': 'bad'}),
+          () => JsonRpcTaskStatusNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsTasksStatus,
+                'params': 'bad',
+              }),
+          () => JsonRpcTaskStatusNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsTasksStatus,
+                'params': null,
+              }),
+        ]) {
+          expect(parse, throwsA(isA<FormatException>()));
+        }
+      });
+
       test('TaskStatusNotificationParams serialization', () {
         final params = const TaskStatusNotificationParams(
           taskId: 'task-notify-123',
