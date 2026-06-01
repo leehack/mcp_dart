@@ -1555,6 +1555,42 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        expect(
+          () => SetLevelRequestParams.fromJson({'level': 'verbose'}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => LoggingMessageNotificationParams.fromJson({
+            'level': 'verbose',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'includeContext': 'nearbyServers',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'toolChoice': {'mode': 'sometimes'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
 
       test('bare task containers strip task metadata', () {

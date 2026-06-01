@@ -592,6 +592,47 @@ void main() {
       expect(params.includeContext, equals(IncludeContext.allServers));
     });
 
+    test('validates enum wire fields', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'includeContext': 'nearbyServers',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'includeContext': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'toolChoice': {'mode': 'sometimes'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'toolChoice': {'mode': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('accepts whole-number JSON maxTokens values', () {
       final messages = [
         {

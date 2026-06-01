@@ -596,11 +596,13 @@ class ToolChoice {
       return const ToolChoice();
     }
 
-    if (rawMode is! String) {
-      throw FormatException('Expected toolChoice mode string, got $rawMode');
-    }
-
-    return ToolChoice(mode: ToolChoiceMode.values.byName(rawMode));
+    return ToolChoice(
+      mode: readRequiredEnumValue(
+        rawMode,
+        ToolChoiceMode.values,
+        'ToolChoice.mode',
+      ),
+    );
   }
 
   Map<String, dynamic> toJson() => {
@@ -667,9 +669,14 @@ class CreateMessageRequest {
   });
 
   factory CreateMessageRequest.fromJson(Map<String, dynamic> json) {
-    final ctxStr = json['includeContext'] as String?;
-    final task = _asJsonObjectOrNull(json['task']);
-    final toolChoice = _asJsonObjectOrNull(json['toolChoice']);
+    final task = _asJsonObjectOrNull(json['task'], 'CreateMessageRequest.task');
+    final toolChoice = _asJsonObjectOrNull(
+      json['toolChoice'],
+      'CreateMessageRequest.toolChoice',
+    );
+    if (toolChoice != null) {
+      ToolChoice.fromJson(toolChoice);
+    }
     final messages = json['messages'];
     if (messages is! List) {
       throw const FormatException('CreateMessageRequest.messages is required');
@@ -680,8 +687,11 @@ class CreateMessageRequest {
           .toList(),
       task: task == null ? null : TaskCreation.fromJson(task),
       systemPrompt: json['systemPrompt'] as String?,
-      includeContext:
-          ctxStr == null ? null : IncludeContext.values.byName(ctxStr),
+      includeContext: readOptionalEnumValue(
+        json['includeContext'],
+        IncludeContext.values,
+        'CreateMessageRequest.includeContext',
+      ),
       temperature: readOptionalFiniteDouble(
         json['temperature'],
         'CreateMessageRequest.temperature',

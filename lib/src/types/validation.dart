@@ -85,6 +85,32 @@ void validateBase64String(String value, String field) {
   }
 }
 
+T readRequiredEnumValue<T extends Enum>(
+  Object? value,
+  Iterable<T> values,
+  String field,
+) {
+  final name = readRequiredString(value, field);
+  for (final enumValue in values) {
+    if (enumValue.name == name) {
+      return enumValue;
+    }
+  }
+  final allowed = values.map((value) => '"${value.name}"').join(', ');
+  throw FormatException('$field must be one of: $allowed');
+}
+
+T? readOptionalEnumValue<T extends Enum>(
+  Object? value,
+  Iterable<T> values,
+  String field,
+) {
+  if (value == null) {
+    return null;
+  }
+  return readRequiredEnumValue(value, values, field);
+}
+
 bool isRoleString(String value) {
   return value == 'user' || value == 'assistant';
 }
