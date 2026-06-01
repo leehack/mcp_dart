@@ -295,7 +295,9 @@ class PromptMessage {
 
   factory PromptMessage.fromJson(Map<String, dynamic> json) {
     return PromptMessage(
-      role: PromptMessageRole.values.byName(json['role'] as String),
+      role: PromptMessageRole.values.byName(
+        readRequiredRoleString(json['role'], 'PromptMessage.role'),
+      ),
       content: Content.fromJson(json['content'] as Map<String, dynamic>),
     );
   }

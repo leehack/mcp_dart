@@ -1533,6 +1533,28 @@ void main() {
           () => ModelPreferences.fromJson({'costPriority': -1}),
           throwsA(isA<FormatException>()),
         );
+        expect(
+          () => SamplingMessage.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageResult.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+            'model': 'model',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptMessage.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
 
       test('bare task containers strip task metadata', () {

@@ -109,6 +109,8 @@
   content to match stable and MCP 2026 `format: byte` schemas.
 - Rejected malformed shared annotation fields, including non-role audiences,
   out-of-range priorities, and non-string `lastModified` values.
+- Rejected malformed `Role` values in prompt and sampling messages instead of
+  allowing raw enum lookup failures.
 - Rejected non-finite numeric values for progress, annotation priority, model
   priority, and sampling temperature fields so SDK-built payloads remain valid
   JSON numbers.

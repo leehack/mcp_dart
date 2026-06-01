@@ -560,7 +560,9 @@ class SamplingMessage {
 
   factory SamplingMessage.fromJson(Map<String, dynamic> json) {
     return SamplingMessage(
-      role: SamplingMessageRole.values.byName(json['role'] as String),
+      role: SamplingMessageRole.values.byName(
+        readRequiredRoleString(json['role'], 'SamplingMessage.role'),
+      ),
       content: _parseSamplingMessageContent(json['content']),
       meta: _asJsonObjectOrNull(json['_meta'], 'SamplingMessage._meta'),
     );
@@ -818,7 +820,9 @@ class CreateMessageResult implements BaseResultData {
     return CreateMessageResult(
       model: json['model'] as String,
       stopReason: reason,
-      role: SamplingMessageRole.values.byName(json['role'] as String),
+      role: SamplingMessageRole.values.byName(
+        readRequiredRoleString(json['role'], 'CreateMessageResult.role'),
+      ),
       content: _parseSamplingMessageContent(json['content']),
       meta: meta,
     );

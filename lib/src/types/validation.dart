@@ -85,6 +85,18 @@ void validateBase64String(String value, String field) {
   }
 }
 
+bool isRoleString(String value) {
+  return value == 'user' || value == 'assistant';
+}
+
+String readRequiredRoleString(Object? value, String field) {
+  final result = readRequiredString(value, field);
+  if (!isRoleString(result)) {
+    throw FormatException('$field must be "user" or "assistant"');
+  }
+  return result;
+}
+
 List<String>? readOptionalAnnotationAudience(Object? value, String field) {
   if (value == null) {
     return null;
@@ -93,11 +105,7 @@ List<String>? readOptionalAnnotationAudience(Object? value, String field) {
     throw FormatException('$field must be a list of roles');
   }
   return [
-    for (final item in value)
-      if (item is String && (item == 'user' || item == 'assistant'))
-        item
-      else
-        throw FormatException('$field items must be "user" or "assistant"'),
+    for (final item in value) readRequiredRoleString(item, '$field items'),
   ];
 }
 
@@ -106,7 +114,7 @@ void validateAnnotationAudience(List<String>? value, String field) {
     return;
   }
   for (final item in value) {
-    if (item != 'user' && item != 'assistant') {
+    if (!isRoleString(item)) {
       throw ArgumentError.value(
         item,
         field,

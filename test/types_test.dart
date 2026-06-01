@@ -1104,6 +1104,23 @@ void main() {
       expect(deserialized.description, equals('Argument 1'));
       expect(deserialized.required, equals(true));
     });
+
+    test('PromptMessage validates role wire values', () {
+      expect(
+        () => PromptMessage.fromJson({
+          'role': 'system',
+          'content': {'type': 'text', 'text': 'Hello'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => PromptMessage.fromJson({
+          'role': 1,
+          'content': {'type': 'text', 'text': 'Hello'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
   group('CreateMessageResult Tests', () {
     test('CreateMessageResult serialization and deserialization', () {

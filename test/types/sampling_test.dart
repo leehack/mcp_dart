@@ -455,6 +455,23 @@ void main() {
       expect(msg.content, isA<SamplingTextContent>());
     });
 
+    test('validates role wire values', () {
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'system',
+          'content': {'type': 'text', 'text': 'Question'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 1,
+          'content': {'type': 'text', 'text': 'Question'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('supports array content with normalized contentBlocks', () {
       final msg = const SamplingMessage(
         role: SamplingMessageRole.assistant,
@@ -730,6 +747,25 @@ void main() {
       };
       final result = CreateMessageResult.fromJson(json);
       expect(result.stopReason, equals('customReason'));
+    });
+
+    test('validates role wire values', () {
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'system',
+          'content': {'type': 'text', 'text': 'Msg'},
+          'model': 'model-x',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 1,
+          'content': {'type': 'text', 'text': 'Msg'},
+          'model': 'model-x',
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('rejects non-JSON metadata objects', () {
