@@ -580,7 +580,7 @@ class TaskExtensionTask {
   });
 
   factory TaskExtensionTask.fromJson(Map<String, dynamic> json) {
-    return TaskExtensionTask(
+    final task = TaskExtensionTask(
       taskId: _readRequiredTaskString(
         json,
         'taskId',
@@ -632,23 +632,57 @@ class TaskExtensionTask {
               ),
             ),
     );
+    task._validateStatusPayload();
+    return task;
   }
 
-  Map<String, dynamic> toJson({String? resultType}) => {
-        if (resultType != null) 'resultType': resultType,
-        'taskId': taskId,
-        'status': status.name,
-        if (statusMessage != null) 'statusMessage': statusMessage,
-        'createdAt': createdAt,
-        'lastUpdatedAt': lastUpdatedAt,
-        'ttlMs': ttlMs,
-        if (pollIntervalMs != null) 'pollIntervalMs': pollIntervalMs,
-        if (inputRequests != null)
-          'inputRequests': InputRequest.mapToJson(inputRequests!),
-        if (result != null)
-          'result': readJsonObject(result, 'TaskExtensionTask.result'),
-        if (error != null) 'error': error!.toJson(),
-      };
+  void _validateStatusPayload() {
+    switch (status) {
+      case TaskStatus.inputRequired:
+        if (inputRequests == null) {
+          throw const FormatException(
+            'TaskExtensionTask.inputRequests is required when status is input_required',
+          );
+        }
+        break;
+      case TaskStatus.completed:
+        if (result == null) {
+          throw const FormatException(
+            'TaskExtensionTask.result is required when status is completed',
+          );
+        }
+        break;
+      case TaskStatus.failed:
+        if (error == null) {
+          throw const FormatException(
+            'TaskExtensionTask.error is required when status is failed',
+          );
+        }
+        break;
+      case TaskStatus.working:
+      case TaskStatus.cancelled:
+        break;
+    }
+  }
+
+  Map<String, dynamic> toJson({String? resultType}) {
+    _validateStatusPayload();
+    return {
+      if (resultType != null) 'resultType': resultType,
+      'taskId': taskId,
+      'status': status.name,
+      if (statusMessage != null) 'statusMessage': statusMessage,
+      'createdAt': createdAt,
+      'lastUpdatedAt': lastUpdatedAt,
+      'ttlMs': ttlMs,
+      if (pollIntervalMs != null) 'pollIntervalMs': pollIntervalMs,
+      if (inputRequests != null)
+        'inputRequests': InputRequest.mapToJson(inputRequests!),
+      if (result != null)
+        'result': readJsonObject(result, 'TaskExtensionTask.result'),
+      if (error != null) 'error': error!.toJson(),
+    };
+  }
 }
 
 /// `resultType: "task"` response from the MCP Tasks extension.
