@@ -1186,6 +1186,63 @@ void main() {
       expect(capturedHeaders['session'], isNull);
     });
 
+    test('send accepts generic map nested metadata for stateless headers',
+        () async {
+      final capturedHeaders = <String, String?>{};
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        capturedHeaders['protocolVersion'] =
+            request.headers.value('mcp-protocol-version');
+        capturedHeaders['method'] = request.headers.value('mcp-method');
+        capturedHeaders['name'] = request.headers.value('mcp-name');
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: body['id'],
+                result: const {'content': []},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      );
+      await transport.start();
+
+      final completer = Completer<JsonRpcMessage>();
+      transport.onmessage = completer.complete;
+
+      await transport.send(
+        const JsonRpcRequest(
+          id: 1,
+          method: Method.toolsCall,
+          params: {
+            'name': 'echo',
+            'arguments': {'message': 'hello'},
+            '_meta': <Object, Object>{
+              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+            },
+          },
+        ),
+      );
+      await completer.future.timeout(const Duration(seconds: 5));
+
+      expect(
+        capturedHeaders['protocolVersion'],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(capturedHeaders['method'], Method.toolsCall);
+      expect(capturedHeaders['name'], 'echo');
+    });
+
     test('send maps 2026 stateless headers for standard request types',
         () async {
       final capturedHeaders = <Map<String, String?>>[];
