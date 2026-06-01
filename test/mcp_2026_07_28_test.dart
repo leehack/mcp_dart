@@ -1280,6 +1280,46 @@ void main() {
       );
     });
 
+    test('rejects malformed tool wire shapes', () {
+      for (final parse in <Object Function()>[
+        () => ToolAnnotations.fromJson({'openWorldHint': 'false'}),
+        () => ToolExecution.fromJson({'taskSupport': 1}),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'execution': 'bad',
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'icons': [1],
+            }),
+        () => ListToolsRequest.fromJson({'cursor': 1}),
+        () => ListToolsResult.fromJson({
+              'tools': [1],
+            }),
+        () => CallToolRequest.fromJson({'name': 1}),
+        () => CallToolResult.fromJson({
+              'content': <Map<String, dynamic>>[],
+              'isError': 'true',
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+              'params': 'bad',
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': 'bad',
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
     test('server acknowledges subscriptions/listen with subscription id',
         () async {
       final server = Server(

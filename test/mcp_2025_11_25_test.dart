@@ -621,6 +621,52 @@ void main() {
       );
     });
 
+    test('Tool wire fields reject malformed values', () {
+      for (final parse in <Object Function()>[
+        () => ToolAnnotations.fromJson({'title': 1}),
+        () => ToolAnnotations.fromJson({'readOnlyHint': 'true'}),
+        () => ToolExecution.fromJson({'taskSupport': 1}),
+        () => Tool.fromJson({
+              'name': 1,
+              'inputSchema': {'type': 'object'},
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'annotations': 'bad',
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'icons': [1],
+            }),
+        () => ListToolsRequest.fromJson({'cursor': 1}),
+        () => ListToolsResult.fromJson({
+              'tools': <Map<String, dynamic>>[],
+              'nextCursor': 1,
+            }),
+        () => CallToolRequest.fromJson({'name': 1}),
+        () => CallToolResult.fromJson({
+              'content': <Map<String, dynamic>>[],
+              'isError': 'true',
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+              'params': 'bad',
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': 'bad',
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+
     test('Result metadata fields reject non-JSON Dart maps', () {
       expect(
         () => Root.fromJson({

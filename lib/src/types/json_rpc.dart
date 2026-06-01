@@ -1060,7 +1060,10 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
   factory JsonRpcListToolsRequest.fromJson(Map<String, dynamic> json) {
     return JsonRpcListToolsRequest(
       id: parseRequestId(json['id']),
-      params: json['params'] as Map<String, dynamic>?,
+      params: readOptionalJsonObject(
+        json['params'],
+        'JsonRpcListToolsRequest.params',
+      ),
       meta: extractRequestMeta(json),
     );
   }
@@ -1085,7 +1088,11 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
   factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
     return JsonRpcCallToolRequest(
       id: parseRequestId(json['id']),
-      params: json['params'] as Map<String, dynamic>? ?? {},
+      params: readOptionalJsonObject(
+            json['params'],
+            'JsonRpcCallToolRequest.params',
+          ) ??
+          {},
       meta: extractRequestMeta(json),
     );
   }

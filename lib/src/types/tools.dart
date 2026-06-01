@@ -77,13 +77,32 @@ class ToolAnnotations {
 
   factory ToolAnnotations.fromJson(Map<String, dynamic> json) {
     return ToolAnnotations(
-      title: json['title'] as String?,
-      readOnlyHint: json['readOnlyHint'] as bool? ?? false,
-      destructiveHint: json['destructiveHint'] as bool? ?? true,
-      idempotentHint: json['idempotentHint'] as bool? ?? false,
-      openWorldHint: json['openWorldHint'] as bool? ?? true,
+      title: readOptionalString(json['title'], 'ToolAnnotations.title'),
+      readOnlyHint: readOptionalBool(
+            json['readOnlyHint'],
+            'ToolAnnotations.readOnlyHint',
+          ) ??
+          false,
+      destructiveHint: readOptionalBool(
+            json['destructiveHint'],
+            'ToolAnnotations.destructiveHint',
+          ) ??
+          true,
+      idempotentHint: readOptionalBool(
+            json['idempotentHint'],
+            'ToolAnnotations.idempotentHint',
+          ) ??
+          false,
+      openWorldHint: readOptionalBool(
+            json['openWorldHint'],
+            'ToolAnnotations.openWorldHint',
+          ) ??
+          true,
       priority: readUnitDouble(json['priority'], 'ToolAnnotations.priority'),
-      audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
+      audience: readOptionalAnnotationAudience(
+        json['audience'],
+        'ToolAnnotations.audience',
+      ),
     );
   }
 
@@ -117,7 +136,9 @@ class ToolExecution {
   const ToolExecution({this.taskSupport = 'forbidden'});
 
   factory ToolExecution.fromJson(Map<String, dynamic> json) {
-    final taskSupport = json['taskSupport'] as String? ?? 'forbidden';
+    final taskSupport =
+        readOptionalString(json['taskSupport'], 'ToolExecution.taskSupport') ??
+            'forbidden';
     if (!allowedTaskSupportValues.contains(taskSupport)) {
       throw FormatException(
         "Invalid tool execution taskSupport '$taskSupport'. Expected one of: ${allowedTaskSupportValues.join(', ')}",
@@ -202,26 +223,30 @@ class Tool {
         outputSchemaJson == null ? null : JsonSchema.fromJson(outputSchemaJson);
 
     return Tool(
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
+      name: readRequiredString(json['name'], 'Tool.name'),
+      title: readOptionalString(json['title'], 'Tool.title'),
+      description: readOptionalString(json['description'], 'Tool.description'),
       inputSchema: inputSchema,
       outputSchema: outputSchema,
       annotations: json['annotations'] != null
           ? ToolAnnotations.fromJson(
-              json['annotations'] as Map<String, dynamic>,
+              readJsonObject(json['annotations'], 'Tool.annotations'),
             )
           : null,
       meta: readOptionalJsonObject(json['_meta'], 'Tool._meta'),
       execution: json['execution'] != null
-          ? ToolExecution.fromJson(json['execution'] as Map<String, dynamic>)
+          ? ToolExecution.fromJson(
+              readJsonObject(json['execution'], 'Tool.execution'),
+            )
           : null,
       icon: json['icon'] != null
-          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          ? ImageContent.fromJson(readJsonObject(json['icon'], 'Tool.icon'))
           : null,
-      icons: (json['icons'] as List<dynamic>?)
-          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      icons: _readOptionalObjectList(
+        json['icons'],
+        'Tool.icons',
+        McpIcon.fromJson,
+      ),
     );
   }
 
@@ -251,7 +276,7 @@ class ListToolsRequest {
 
   factory ListToolsRequest.fromJson(Map<String, dynamic> json) {
     return ListToolsRequest(
-      cursor: json['cursor'] as String?,
+      cursor: readOptionalString(json['cursor'], 'ListToolsRequest.cursor'),
     );
   }
 
@@ -297,9 +322,14 @@ class ListToolsResult implements CacheableResultData {
       throw const FormatException('ListToolsResult.tools is required');
     }
     return ListToolsResult(
-      tools:
-          tools.map((e) => Tool.fromJson(e as Map<String, dynamic>)).toList(),
-      nextCursor: json['nextCursor'] as String?,
+      tools: [
+        for (var i = 0; i < tools.length; i++)
+          Tool.fromJson(
+            readJsonObject(tools[i], 'ListToolsResult.tools[$i]'),
+          ),
+      ],
+      nextCursor:
+          readOptionalString(json['nextCursor'], 'ListToolsResult.nextCursor'),
       ttlMs: readOptionalTtlMs(json['ttlMs'], 'ListToolsResult.ttlMs'),
       cacheScope: readOptionalCacheScope(
         json['cacheScope'],
@@ -350,7 +380,7 @@ class CallToolRequest {
   factory CallToolRequest.fromJson(Map<String, dynamic> json) {
     final arguments = json['arguments'];
     return CallToolRequest(
-      name: json['name'] as String,
+      name: readRequiredString(json['name'], 'CallToolRequest.name'),
       arguments: arguments == null
           ? const {}
           : _readJsonObject(arguments, 'CallToolRequest.arguments'),
@@ -437,10 +467,14 @@ class CallToolResult implements BaseResultData {
     }
 
     return CallToolResult(
-      content: content
-          .map((e) => Content.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      isError: json['isError'] as bool? ?? false,
+      content: [
+        for (var i = 0; i < content.length; i++)
+          Content.fromJson(
+            readJsonObject(content[i], 'CallToolResult.content[$i]'),
+          ),
+      ],
+      isError:
+          readOptionalBool(json['isError'], 'CallToolResult.isError') ?? false,
       structuredContent: json.containsKey('structuredContent')
           ? readJsonValue(
               json['structuredContent'],
@@ -509,6 +543,23 @@ Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
     return null;
   }
   return _readJsonObject(value, field);
+}
+
+List<T>? _readOptionalObjectList<T>(
+  Object? value,
+  String field,
+  T Function(Map<String, dynamic> json) fromJson,
+) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! List) {
+    throw FormatException('$field must be a list of JSON objects');
+  }
+  return [
+    for (var i = 0; i < value.length; i++)
+      fromJson(_readJsonObject(value[i], '$field[$i]')),
+  ];
 }
 
 Map<String, dynamic> _readJsonObject(Object? value, String field) {

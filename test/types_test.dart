@@ -381,10 +381,34 @@ void main() {
     });
   });
 
+  group('ToolAnnotations Tests', () {
+    test('rejects malformed wire fields', () {
+      for (final parse in <Object Function()>[
+        () => ToolAnnotations.fromJson({'title': 1}),
+        () => ToolAnnotations.fromJson({'readOnlyHint': 'true'}),
+        () => ToolAnnotations.fromJson({'destructiveHint': 'true'}),
+        () => ToolAnnotations.fromJson({'idempotentHint': 'false'}),
+        () => ToolAnnotations.fromJson({'openWorldHint': 'false'}),
+        () => ToolAnnotations.fromJson({
+              'audience': ['user', 1],
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+  });
+
   group('ToolExecution Tests', () {
     test('rejects invalid taskSupport while parsing wire JSON', () {
       expect(
         () => ToolExecution.fromJson({'taskSupport': 'sometimes'}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-string taskSupport while parsing wire JSON', () {
+      expect(
+        () => ToolExecution.fromJson({'taskSupport': 1}),
         throwsA(isA<FormatException>()),
       );
     });
@@ -394,6 +418,84 @@ void main() {
         () => const ToolExecution(taskSupport: 'sometimes').toJson(),
         throwsA(isA<ArgumentError>()),
       );
+    });
+  });
+
+  group('Tool wire parsing Tests', () {
+    test('rejects malformed tool definition fields', () {
+      for (final parse in <Object Function()>[
+        () => Tool.fromJson({
+              'name': 1,
+              'inputSchema': {'type': 'object'},
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'title': 1,
+              'inputSchema': {'type': 'object'},
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'description': 1,
+              'inputSchema': {'type': 'object'},
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'annotations': 'bad',
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'execution': 'bad',
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'icon': 'bad',
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'icons': [1],
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+
+    test('rejects malformed list and call fields', () {
+      for (final parse in <Object Function()>[
+        () => ListToolsRequest.fromJson({'cursor': 1}),
+        () => ListToolsResult.fromJson({
+              'tools': [1],
+            }),
+        () => ListToolsResult.fromJson({
+              'tools': <Map<String, dynamic>>[],
+              'nextCursor': 1,
+            }),
+        () => CallToolRequest.fromJson({'name': 1}),
+        () => CallToolResult.fromJson({
+              'content': [1],
+            }),
+        () => CallToolResult.fromJson({
+              'content': <Map<String, dynamic>>[],
+              'isError': 'true',
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+              'params': 'bad',
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': 'bad',
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
     });
   });
 
