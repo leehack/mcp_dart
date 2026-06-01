@@ -1,3 +1,4 @@
+import 'package:mcp_dart/src/types/json_rpc.dart';
 import 'package:mcp_dart/src/types/logging.dart';
 import 'package:test/test.dart';
 
@@ -120,6 +121,27 @@ void main() {
       };
       expect(
         () => JsonRpcSetLevelRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcSetLevelRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': 'logging/setLevel',
+          'params': {'level': 'info'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcSetLevelRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': 'notifications/message',
+          'params': {'level': 'info'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });
@@ -315,6 +337,25 @@ void main() {
       };
       expect(
         () => JsonRpcLoggingMessageNotification.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcLoggingMessageNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/message',
+          'params': {'level': 'info', 'data': 'message'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcLoggingMessageNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'logging/setLevel',
+          'params': {'level': 'info', 'data': 'message'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });

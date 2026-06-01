@@ -162,6 +162,25 @@ void main() {
       );
     });
 
+    test('rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcCancelledNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/cancelled',
+          'params': {'requestId': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcCancelledNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'notifications/progress',
+          'params': {'requestId': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('handles optional reason field correctly', () {
       // With reason
       final withReason = const CancelledNotificationParams(
@@ -302,6 +321,36 @@ void main() {
     });
   });
 
+  group('JsonRpcPingRequest Edge Cases', () {
+    test('rejects wrong wrapper constants and malformed params', () {
+      expect(
+        () => JsonRpcPingRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.ping,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcPingRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.toolsList,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcPingRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.ping,
+          'params': null,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+  });
+
   group('JsonRpcProgressNotification Edge Cases', () {
     test('throws FormatException when params is missing', () {
       final json = {
@@ -319,6 +368,25 @@ void main() {
             contains('Missing params'),
           ),
         ),
+      );
+    });
+
+    test('rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcProgressNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/progress',
+          'params': {'progressToken': 'token', 'progress': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcProgressNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'notifications/cancelled',
+          'params': {'progressToken': 'token', 'progress': 1},
+        }),
+        throwsA(isA<FormatException>()),
       );
     });
 

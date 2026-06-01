@@ -1,6 +1,22 @@
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 /// Severity levels for log messages (syslog levels).
 enum LoggingLevel {
   debug,
@@ -44,6 +60,11 @@ class JsonRpcSetLevelRequest extends JsonRpcRequest {
   }) : super(method: Method.loggingSetLevel, params: setParams.toJson());
 
   factory JsonRpcSetLevelRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.loggingSetLevel,
+      'JsonRpcSetLevelRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcSetLevelRequest.params',
@@ -111,6 +132,11 @@ class JsonRpcLoggingMessageNotification extends JsonRpcNotification {
   factory JsonRpcLoggingMessageNotification.fromJson(
     Map<String, dynamic> json,
   ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsMessage,
+      'JsonRpcLoggingMessageNotification',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcLoggingMessageNotification.params',

@@ -130,7 +130,9 @@ class Server extends Protocol {
           return const EmptyResult();
         },
         (id, params, meta) => JsonRpcSetLevelRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.loggingSetLevel,
           'params': params,
           if (meta != null) '_meta': meta,
         }),

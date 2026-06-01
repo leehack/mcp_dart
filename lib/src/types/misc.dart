@@ -1,6 +1,29 @@
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
+void _readOptionalParamsObject(Map<String, dynamic> json, String field) {
+  if (!json.containsKey('params')) {
+    return;
+  }
+  readJsonObject(json['params'], field);
+}
+
 /// A response that indicates success but carries no specific data.
 class EmptyResult implements BaseResultData {
   @override
@@ -54,6 +77,11 @@ class JsonRpcCancelledNotification extends JsonRpcNotification {
         );
 
   factory JsonRpcCancelledNotification.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsCancelled,
+      'JsonRpcCancelledNotification',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcCancelledNotification.params',
@@ -78,6 +106,8 @@ class JsonRpcPingRequest extends JsonRpcRequest {
       : super(method: Method.ping);
 
   factory JsonRpcPingRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.ping, 'JsonRpcPingRequest');
+    _readOptionalParamsObject(json, 'JsonRpcPingRequest.params');
     return JsonRpcPingRequest(
       id: parseRequestId(json['id']),
       meta: extractRequestMeta(json),
@@ -180,6 +210,11 @@ class JsonRpcProgressNotification extends JsonRpcNotification {
 
   /// Creates from JSON.
   factory JsonRpcProgressNotification.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsProgress,
+      'JsonRpcProgressNotification',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcProgressNotification.params',

@@ -1828,6 +1828,55 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => JsonRpcPingRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'ping',
+            'method': Method.ping,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcPingRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'ping',
+            'method': Method.toolsList,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcSetLevelRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'log-level',
+            'method': Method.toolsCall,
+            'params': {'level': 'info'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcLoggingMessageNotification.fromJson({
+            'jsonrpc': '1.0',
+            'method': Method.notificationsMessage,
+            'params': {'level': 'info', 'data': 'message'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcCancelledNotification.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsProgress,
+            'params': {'requestId': 'request-1'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcProgressNotification.fromJson({
+            'jsonrpc': '1.0',
+            'method': Method.notificationsProgress,
+            'params': {'progressToken': 'progress-1', 'progress': 1},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => PromptArgument.fromJson({'name': 1}),
           throwsA(isA<FormatException>()),
         );

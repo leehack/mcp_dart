@@ -461,6 +461,8 @@ abstract class Protocol {
         controller?.abort(params.reason);
       },
       (params, meta) => JsonRpcCancelledNotification.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsCancelled,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -470,6 +472,8 @@ abstract class Protocol {
       "notifications/progress",
       (notification) async => _onprogress(notification),
       (params, meta) => JsonRpcProgressNotification.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsProgress,
         'params': params,
         if (meta != null) '_meta': meta,
       }),

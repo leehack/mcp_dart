@@ -1172,6 +1172,26 @@ void main() {
               'level': 'info',
               'data': Object(),
             }),
+        () => JsonRpcLoggingMessageNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsMessage,
+              'params': {'level': 'info', 'data': 'message'},
+            }),
+        () => JsonRpcLoggingMessageNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsProgress,
+              'params': {'level': 'info', 'data': 'message'},
+            }),
+        () => JsonRpcCancelledNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsProgress,
+              'params': {'requestId': 'request-1'},
+            }),
+        () => JsonRpcProgressNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsProgress,
+              'params': {'progressToken': 'progress-1', 'progress': 1},
+            }),
         () => ProgressNotification.fromJson({
               'progressToken': 'progress-1',
               'progress': 1,
