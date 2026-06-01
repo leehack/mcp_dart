@@ -119,6 +119,8 @@
   `params._meta` metadata for direct JSON-RPC transport sends.
 - Allowed Streamable MCP server CORS preflights for 2026 stateless routing and
   tool parameter headers, including requested `Mcp-Param-*` headers.
+- Serialized MRTR `ElicitResult` and `ListRootsResult` input responses with the
+  MCP 2026 embedded client-result shapes that omit common Result `_meta`.
 
 ## 2.2.0
 

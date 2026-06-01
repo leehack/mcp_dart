@@ -770,17 +770,13 @@ class InputResponse {
 
   /// Creates an input response from a typed MCP result.
   factory InputResponse.fromResult(BaseResultData result) {
-    return InputResponse.raw(result.toJson());
+    return InputResponse.raw(_inputResponseJsonForResult(result));
   }
 
   factory InputResponse.fromJson(Map<String, dynamic> json) {
-    if (!_isValidInputResponse(json)) {
-      throw const FormatException(
-        'InputResponse must be a CreateMessageResult, ListRootsResult, '
-        'or ElicitResult',
-      );
-    }
-    return InputResponse.raw(Map<String, dynamic>.from(json));
+    final value = Map<String, dynamic>.from(json);
+    _validateInputResponse(value);
+    return InputResponse.raw(value);
   }
 
   /// Parses an input response map.
@@ -804,13 +800,49 @@ class InputResponse {
     );
   }
 
-  Map<String, dynamic> toJson() => readJsonObject(value, 'InputResponse');
+  Map<String, dynamic> toJson() {
+    final json = readJsonObject(value, 'InputResponse');
+    _validateInputResponse(json);
+    return json;
+  }
 }
 
-bool _isValidInputResponse(Map<String, dynamic> json) {
-  return _canParseInputResponse(CreateMessageResult.fromJson, json) ||
-      _canParseInputResponse(ListRootsResult.fromJson, json) ||
-      _canParseInputResponse(ElicitResult.fromJson, json);
+Map<String, dynamic> _inputResponseJsonForResult(BaseResultData result) {
+  final json = Map<String, dynamic>.from(result.toJson());
+  if (result is ElicitResult || result is ListRootsResult) {
+    json.remove('_meta');
+  }
+  _validateInputResponse(json);
+  return json;
+}
+
+void _validateInputResponse(Map<String, dynamic> json) {
+  if (_canParseInputResponse(CreateMessageResult.fromJson, json)) {
+    return;
+  }
+
+  if (_canParseInputResponse(ListRootsResult.fromJson, json)) {
+    _rejectInputResponseMeta(json, 'ListRootsResult');
+    return;
+  }
+
+  if (_canParseInputResponse(ElicitResult.fromJson, json)) {
+    _rejectInputResponseMeta(json, 'ElicitResult');
+    return;
+  }
+
+  throw const FormatException(
+    'InputResponse must be a CreateMessageResult, ListRootsResult, '
+    'or ElicitResult',
+  );
+}
+
+void _rejectInputResponseMeta(Map<String, dynamic> json, String resultName) {
+  if (json.containsKey('_meta')) {
+    throw FormatException(
+      'InputResponse $resultName must not include _meta in MCP 2026',
+    );
+  }
 }
 
 bool _canParseInputResponse(

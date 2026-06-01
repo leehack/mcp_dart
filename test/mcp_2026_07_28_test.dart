@@ -657,10 +657,22 @@ void main() {
           const ElicitResult(
             action: 'accept',
             content: {'name': 'octocat'},
+            meta: {'stable': true},
           ),
         ),
         'roots': InputResponse.fromResult(
-          ListRootsResult(roots: [Root(uri: 'file:///repo')]),
+          ListRootsResult(
+            roots: [Root(uri: 'file:///repo')],
+            meta: const {'stable': true},
+          ),
+        ),
+        'capital_of_france': InputResponse.fromResult(
+          const CreateMessageResult(
+            model: 'model',
+            role: SamplingMessageRole.assistant,
+            content: SamplingTextContent(text: 'Paris'),
+            meta: {'preserved': true},
+          ),
         ),
       };
 
@@ -672,6 +684,14 @@ void main() {
       );
       final toolJson = toolRequest.toJson();
       expect(toolJson['inputResponses']['github_login']['action'], 'accept');
+      expect(
+        toolJson['inputResponses']['github_login'],
+        isNot(contains('_meta')),
+      );
+      expect(toolJson['inputResponses']['roots'], isNot(contains('_meta')));
+      expect(toolJson['inputResponses']['capital_of_france']['_meta'], {
+        'preserved': true,
+      });
       expect(toolJson['requestState'], 'opaque-state');
 
       final parsedToolRequest = CallToolRequest.fromJson(toolJson);
@@ -799,6 +819,27 @@ void main() {
             },
           },
         ),
+        throwsFormatException,
+      );
+      expect(
+        () => ReadResourceRequest.fromJson(
+          const {
+            'uri': 'file:///repo/README.md',
+            'inputResponses': {
+              'roots': {
+                'roots': [],
+                '_meta': {'trace': 'not-in-draft-client-result'},
+              },
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => const InputResponse.raw({
+          'action': 'accept',
+          '_meta': {'trace': 'not-in-draft-client-result'},
+        }).toJson(),
         throwsFormatException,
       );
     });
