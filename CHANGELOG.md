@@ -111,6 +111,8 @@
   notification methods removed from that protocol revision.
 - Rejected server-initiated JSON-RPC requests received by stateless MCP 2026
   clients on generic transports.
+- Rejected stateless MCP 2026 responses that omit `resultType` or required
+  cacheable-result fields.
 
 ## 2.2.0
 

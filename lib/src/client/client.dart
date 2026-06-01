@@ -479,6 +479,9 @@ class McpClient extends Protocol {
           _logger.debug(
             "server/discover not available; falling back to initialize.",
           );
+          if (transport is ProtocolVersionAwareTransport) {
+            (transport as ProtocolVersionAwareTransport).protocolVersion = null;
+          }
         }
       }
 

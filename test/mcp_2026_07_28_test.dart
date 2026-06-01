@@ -47,7 +47,12 @@ class DiscoveringClientTransport extends Transport
     this.capabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
-    this.toolsListResult = const {'tools': []},
+    this.toolsListResult = const {
+      'resultType': resultTypeComplete,
+      'tools': [],
+      'ttlMs': 0,
+      'cacheScope': CacheScope.private,
+    },
   });
 
   final List<String> discoverVersions;
@@ -2928,12 +2933,45 @@ void main() {
       transport.onmessage?.call(
         JsonRpcResponse(
           id: subscription.id,
-          result: const EmptyResult().toJson(),
+          result: const {'resultType': resultTypeComplete},
         ),
       );
 
       await acknowledgedExpectation;
       await doneExpectation;
+    });
+
+    test('client rejects missing stateless resultType values', () async {
+      final transport = DiscoveringClientTransport(
+        toolsListResult: const {
+          'tools': [],
+          'ttlMs': 0,
+          'cacheScope': CacheScope.private,
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+
+      await client.connect(transport);
+
+      await expectLater(
+        client.listTools(),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains('must include resultType'),
+              ),
+        ),
+      );
     });
 
     test('client rejects unrecognized stateless resultType values', () async {
@@ -3004,6 +3042,77 @@ void main() {
         ),
       );
     });
+
+    for (final scenario in [
+      (
+        name: 'missing ttlMs',
+        result: const {
+          'resultType': resultTypeComplete,
+          'tools': [],
+          'cacheScope': CacheScope.private,
+        },
+        message: 'ttlMs',
+      ),
+      (
+        name: 'missing cacheScope',
+        result: const {
+          'resultType': resultTypeComplete,
+          'tools': [],
+          'ttlMs': 0,
+        },
+        message: 'cacheScope',
+      ),
+      (
+        name: 'negative ttlMs',
+        result: const {
+          'resultType': resultTypeComplete,
+          'tools': [],
+          'ttlMs': -1,
+          'cacheScope': CacheScope.private,
+        },
+        message: 'ttlMs',
+      ),
+      (
+        name: 'invalid cacheScope',
+        result: const {
+          'resultType': resultTypeComplete,
+          'tools': [],
+          'ttlMs': 0,
+          'cacheScope': 'shared',
+        },
+        message: 'cacheScope',
+      ),
+    ]) {
+      test('client rejects stateless cacheable result ${scenario.name}',
+          () async {
+        final transport = DiscoveringClientTransport(
+          toolsListResult: scenario.result,
+        );
+        final client = McpClient(
+          const Implementation(name: 'client', version: '1.0.0'),
+          options: const McpClientOptions(useServerDiscover: true),
+        );
+
+        await client.connect(transport);
+
+        await expectLater(
+          client.listTools(),
+          throwsA(
+            isA<McpError>()
+                .having(
+                  (error) => error.code,
+                  'code',
+                  ErrorCode.internalError.value,
+                )
+                .having(
+                  (error) => error.data.toString(),
+                  'data',
+                  contains(scenario.message),
+                ),
+          ),
+        );
+      });
+    }
 
     test('client accepts advertised task extension resultType values',
         () async {

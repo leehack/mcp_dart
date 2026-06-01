@@ -11,6 +11,14 @@ final _logger = Logger("mcp_dart.shared.protocol");
 
 bool _isProgressToken(Object? token) => token is int || token is String;
 
+const Set<String> _statelessCacheableResultMethods = {
+  Method.toolsList,
+  Method.promptsList,
+  Method.resourcesList,
+  Method.resourcesTemplatesList,
+  Method.resourcesRead,
+};
+
 final _lastProgressByExtra = Expando<double>();
 final _subscriptionStateByExtra = Expando<_SubscriptionStreamState>();
 
@@ -508,13 +516,41 @@ abstract class Protocol {
 
     final resultType = resultJson['resultType'];
     if (resultType == null) {
-      return;
+      throw const FormatException(
+        'MCP stateless responses must include resultType',
+      );
     }
     if (resultType is! String) {
       throw const FormatException('MCP resultType must be a string');
     }
     if (!isRecognizedResultType(resultType)) {
       throw FormatException('Unrecognized MCP resultType "$resultType"');
+    }
+
+    if (resultType == resultTypeComplete &&
+        _statelessCacheableResultMethods.contains(request.method)) {
+      _validateStatelessCacheableResult(request, resultJson);
+    }
+  }
+
+  void _validateStatelessCacheableResult(
+    JsonRpcRequest request,
+    Map<String, dynamic> resultJson,
+  ) {
+    final ttlMs = resultJson['ttlMs'];
+    if (ttlMs is! int || ttlMs < 0) {
+      throw FormatException(
+        'MCP stateless ${request.method} responses must include '
+        'a non-negative integer ttlMs',
+      );
+    }
+
+    final cacheScope = resultJson['cacheScope'];
+    if (cacheScope != CacheScope.private && cacheScope != CacheScope.public) {
+      throw FormatException(
+        'MCP stateless ${request.method} responses must include '
+        'cacheScope "private" or "public"',
+      );
     }
   }
 
