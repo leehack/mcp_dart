@@ -119,6 +119,13 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-null-error-response-id',
+            description:
+                'Rejects JSON-RPC error responses whose id member is explicitly null.',
+            check: _rejectsNullJsonRpcErrorResponseId,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.rejects-null-params-member',
             description:
                 'Rejects JSON-RPC request and notification envelopes whose params member is null.',
@@ -784,6 +791,19 @@ Future<void> _rejectsMalformedJsonRpcErrorObject() async {
       'id': 1,
       'error': <String, dynamic>{
         'code': 'not-a-number',
+        'message': 'Invalid request',
+      },
+    }),
+  );
+}
+
+Future<void> _rejectsNullJsonRpcErrorResponseId() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(const <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': null,
+      'error': <String, dynamic>{
+        'code': -32600,
         'message': 'Invalid request',
       },
     }),

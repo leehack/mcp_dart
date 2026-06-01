@@ -115,6 +115,8 @@
   not a string, and validated generic request `params` as JSON objects.
 - Rejected malformed JSON-RPC `error` objects with missing or invalid `code` or
   `message` fields instead of surfacing Dart cast errors.
+- Rejected JSON-RPC error responses that include an explicit `id: null` member
+  while continuing to allow omitted IDs for malformed-request error cases.
 - Rejected JSON-RPC request and notification envelopes that include an explicit
   `params: null` member, since `params` must be an object when present.
 - Prevented stateless MCP 2026 clients from sending core request and

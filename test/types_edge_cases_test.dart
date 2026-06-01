@@ -700,10 +700,9 @@ void main() {
       );
     });
 
-    test('handles error with null id', () {
+    test('handles error with omitted id', () {
       final json = {
         'jsonrpc': '2.0',
-        'id': null,
         'error': {'code': -32600, 'message': 'Error'},
       };
 
@@ -714,6 +713,7 @@ void main() {
 
     test('rejects malformed error id wire values', () {
       for (final id in [
+        null,
         false,
         double.nan,
         double.infinity,

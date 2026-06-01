@@ -231,7 +231,7 @@ RequestId _parseResultResponseId(Object? value) {
 }
 
 RequestId? _parseErrorResponseId(Map<String, dynamic> json) {
-  if (!json.containsKey('id') || json['id'] == null) {
+  if (!json.containsKey('id')) {
     return null;
   }
   return parseRequestId(json['id']);

@@ -23,6 +23,7 @@ void main() {
           'jsonrpc.rejects-non-string-method',
           'jsonrpc.rejects-result-error-response',
           'jsonrpc.rejects-malformed-error-object',
+          'jsonrpc.rejects-null-error-response-id',
           'jsonrpc.rejects-null-params-member',
           'jsonrpc.preserves-string-response-id',
           'jsonrpc.preserves-numeric-response-id',

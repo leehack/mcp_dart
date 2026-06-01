@@ -408,6 +408,17 @@ void main() {
           field: 'id',
           message: {
             'jsonrpc': '2.0',
+            'id': null,
+            'error': {
+              'code': -32600,
+              'message': 'Invalid request',
+            },
+          },
+        ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
             'id': <Object>[],
             'error': {
               'code': -32600,
