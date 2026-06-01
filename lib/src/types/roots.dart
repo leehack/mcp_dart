@@ -19,6 +19,22 @@ void _validateRootUri(String uri) {
   }
 }
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 /// Represents a root directory or file the server can operate on.
 class Root {
   /// URI identifying the root (must start with `file://`).
@@ -62,6 +78,7 @@ class JsonRpcListRootsRequest extends JsonRpcRequest {
       : super(method: Method.rootsList);
 
   factory JsonRpcListRootsRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.rootsList, 'JsonRpcListRootsRequest');
     _readOptionalParamsObject(json, 'JsonRpcListRootsRequest.params');
     return JsonRpcListRootsRequest(
       id: parseRequestId(json['id']),
@@ -114,6 +131,11 @@ class JsonRpcRootsListChangedNotification extends JsonRpcNotification {
   factory JsonRpcRootsListChangedNotification.fromJson(
     Map<String, dynamic> json,
   ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsRootsListChanged,
+      'JsonRpcRootsListChangedNotification',
+    );
     _readOptionalParamsObject(
       json,
       'JsonRpcRootsListChangedNotification.params',

@@ -127,6 +127,8 @@
   errors.
 - Rejected malformed tool JSON-RPC wrapper constants with protocol parse
   errors.
+- Rejected malformed root JSON-RPC wrapper constants with protocol parse
+  errors.
 - Rejected missing and mismatched completion reference type discriminators with
   protocol parse errors.
 - Rejected malformed completion JSON-RPC wrapper constants with protocol parse

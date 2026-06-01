@@ -1589,6 +1589,16 @@ void main() {
               'method': Method.rootsList,
               'params': null,
             }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.rootsList,
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+            }),
         () => JsonRpcRootsListChangedNotification.fromJson({
               'jsonrpc': jsonRpcVersion,
               'method': Method.notificationsRootsListChanged,
@@ -1598,6 +1608,14 @@ void main() {
               'jsonrpc': jsonRpcVersion,
               'method': Method.notificationsRootsListChanged,
               'params': null,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsRootsListChanged,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsToolsListChanged,
             }),
       ]) {
         expect(parse, throwsFormatException);

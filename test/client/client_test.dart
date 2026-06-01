@@ -1093,7 +1093,9 @@ void _addCriticalPathTests() {
           'roots/list',
           (request, extra) async => const ListRootsResult(roots: []),
           (id, params, meta) => JsonRpcListRootsRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.rootsList,
             if (params != null) 'params': params,
             if (meta != null) '_meta': meta,
           }),
