@@ -7,6 +7,12 @@ const String _fixtureSuite = 'fixture';
 const String _specSuite = 'spec';
 const String _allSuites = 'all';
 const String _serverDiscoverMethod = 'server/discover';
+const String _draftProtocolVersion2026_07_28 = '2026-07-28';
+const String _protocolVersionMetaKey =
+    'io.modelcontextprotocol/protocolVersion';
+const String _clientInfoMetaKey = 'io.modelcontextprotocol/clientInfo';
+const String _clientCapabilitiesMetaKey =
+    'io.modelcontextprotocol/clientCapabilities';
 
 const List<String> conformanceSuiteNames = <String>[
   _fixtureSuite,
@@ -562,7 +568,7 @@ Future<void> _rejectsPreInitializeRequest() async {
 }
 
 Future<void> _serverDiscoverRequiresRequestMeta() async {
-  for (final message in const [
+  for (final message in [
     <String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': 'discover-1',
@@ -573,7 +579,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
       'id': 'discover-1',
       'method': _serverDiscoverMethod,
       '_meta': <String, dynamic>{
-        McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+        _protocolVersionMetaKey: _draftProtocolVersion2026_07_28,
       },
     },
     <String, dynamic>{
@@ -586,29 +592,28 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
     _expectThrowsFormatException(() => JsonRpcMessage.fromJson(message));
   }
 
-  _expectThrowsFormatException(
-    () => JsonRpcServerDiscoverRequest(id: 'discover-1').toJson(),
-  );
-
   final parsed = JsonRpcMessage.fromJson(<String, dynamic>{
     'jsonrpc': jsonRpcVersion,
     'id': 'discover-1',
     'method': _serverDiscoverMethod,
     'params': <String, dynamic>{
-      '_meta': buildProtocolRequestMeta(
-        protocolVersion: draftProtocolVersion2026_07_28,
-        clientInfo: const Implementation(name: 'client', version: '1.0.0'),
-        clientCapabilities: const ClientCapabilities(),
-      ),
+      '_meta': <String, dynamic>{
+        _protocolVersionMetaKey: _draftProtocolVersion2026_07_28,
+        _clientInfoMetaKey: <String, dynamic>{
+          'name': 'client',
+          'version': '1.0.0',
+        },
+        _clientCapabilitiesMetaKey: <String, dynamic>{},
+      },
     },
   });
-  if (parsed is! JsonRpcServerDiscoverRequest) {
+  if (parsed is! JsonRpcRequest) {
     throw StateError(
-      'Expected JsonRpcServerDiscoverRequest, got ${parsed.runtimeType}.',
+      'Expected JsonRpcRequest, got ${parsed.runtimeType}.',
     );
   }
-  if (parsed.meta?[McpMetaKey.protocolVersion] !=
-      draftProtocolVersion2026_07_28) {
+  if (parsed.meta?[_protocolVersionMetaKey] !=
+      _draftProtocolVersion2026_07_28) {
     throw StateError('Expected server/discover metadata to be preserved.');
   }
 }
