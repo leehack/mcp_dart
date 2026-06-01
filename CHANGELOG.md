@@ -117,6 +117,8 @@
   MCP 2026 stateless Streamable HTTP requests.
 - Derived MCP 2026 stateless Streamable HTTP headers from nested
   `params._meta` metadata for direct JSON-RPC transport sends.
+- Allowed Streamable MCP server CORS preflights for 2026 stateless routing and
+  tool parameter headers, including requested `Mcp-Param-*` headers.
 
 ## 2.2.0
 

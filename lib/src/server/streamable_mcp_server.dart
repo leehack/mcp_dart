@@ -7,8 +7,22 @@ import 'package:mcp_dart/src/server/dns_rebinding_protection.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
+import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
+
+const List<String> _defaultCorsAllowedHeaders = [
+  'Origin',
+  'X-Requested-With',
+  'Content-Type',
+  'Accept',
+  'mcp-session-id',
+  'Last-Event-ID',
+  'Authorization',
+  'MCP-Protocol-Version',
+  'Mcp-Method',
+  'Mcp-Name',
+];
 
 String _quoteHeaderValue(String value) {
   const backslash = '\\';
@@ -344,7 +358,7 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
-    _setCorsHeaders(request.response);
+    _setCorsHeaders(request, request.response);
 
     if (enableDnsRebindingProtection &&
         !isRequestAllowedByDnsRebindingProtection(
@@ -899,13 +913,46 @@ class StreamableMcpServer {
     await response.close();
   }
 
-  void _setCorsHeaders(HttpResponse response) {
+  String _corsAllowedHeaders(HttpRequest request) {
+    final allowedHeaders = <String>[];
+    final seenHeaders = <String>{};
+
+    void addAllowedHeader(String headerName) {
+      final normalized = headerName.toLowerCase();
+      if (seenHeaders.add(normalized)) {
+        allowedHeaders.add(headerName);
+      }
+    }
+
+    for (final headerName in _defaultCorsAllowedHeaders) {
+      addAllowedHeader(headerName);
+    }
+
+    final requestedHeaders =
+        request.headers.value('access-control-request-headers');
+    if (requestedHeaders == null) {
+      return allowedHeaders.join(', ');
+    }
+
+    for (final rawHeaderName in requestedHeaders.split(',')) {
+      final headerName = rawHeaderName.trim();
+      if (headerName.isEmpty ||
+          !headerName.codeUnits.every(isHttpFieldNameTokenChar)) {
+        continue;
+      }
+      addAllowedHeader(headerName);
+    }
+
+    return allowedHeaders.join(', ');
+  }
+
+  void _setCorsHeaders(HttpRequest request, HttpResponse response) {
     response.headers.set('Access-Control-Allow-Origin', '*');
     response.headers
         .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     response.headers.set(
       'Access-Control-Allow-Headers',
-      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization, MCP-Protocol-Version',
+      _corsAllowedHeaders(request),
     );
     response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Max-Age', defaultCorsMaxAgeSeconds);

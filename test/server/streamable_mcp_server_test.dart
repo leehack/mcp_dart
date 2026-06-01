@@ -227,6 +227,28 @@ void main() {
       }
     });
 
+    test('CORS preflight allows stateless routing and parameter headers',
+        () async {
+      final client = http.Client();
+      try {
+        final req = http.Request('OPTIONS', Uri.parse(baseUrl))
+          ..headers['Access-Control-Request-Method'] = 'POST'
+          ..headers['Access-Control-Request-Headers'] =
+              'Mcp-Method, Mcp-Name, Mcp-Param-Region';
+        final streamedRes = await client.send(req);
+        final res = await http.Response.fromStream(streamedRes);
+        final allowedHeaders =
+            res.headers['access-control-allow-headers']!.toLowerCase();
+
+        expect(res.statusCode, HttpStatus.ok);
+        expect(allowedHeaders, contains('mcp-method'));
+        expect(allowedHeaders, contains('mcp-name'));
+        expect(allowedHeaders, contains('mcp-param-region'));
+      } finally {
+        client.close();
+      }
+    });
+
     test('initialize session flow', () async {
       final initRequest = JsonRpcRequest(
         id: 1,
