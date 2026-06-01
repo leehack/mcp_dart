@@ -94,6 +94,9 @@
 - Restricted numeric `ElicitResult.content` values to integers, matching the
   stable and MCP 2026 `string | integer | boolean | string[]` schemas while
   still accepting whole-number JSON numeric values.
+- Made form elicitation number-schema keyword validation protocol-aware:
+  stable 2025 keeps integer-only `minimum`, `maximum`, and `default` values,
+  while MCP 2026 accepts fractional number keywords.
 - Rejected form elicitation schemas that provide legacy `enumNames` without the
   required string `enum`.
 - Rejected `ElicitResult.content` when the result action is `decline` or

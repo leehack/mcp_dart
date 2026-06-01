@@ -94,7 +94,10 @@ class ElicitRequest {
   })  : mode = ElicitationMode.url,
         requestedSchema = null;
 
-  factory ElicitRequest.fromJson(Map<String, dynamic> json) {
+  factory ElicitRequest.fromJson(
+    Map<String, dynamic> json, {
+    String? protocolVersion,
+  }) {
     final modeValue = json['mode'];
     if (modeValue != null && modeValue is! String) {
       throw const FormatException('Elicitation mode must be a string.');
@@ -143,7 +146,10 @@ class ElicitRequest {
     if (requestedSchemaJson is! Map<String, dynamic>) {
       throw const FormatException('Form elicitation requires requestedSchema.');
     }
-    _validateFormRequestedSchemaJson(requestedSchemaJson);
+    _validateFormRequestedSchemaJson(
+      requestedSchemaJson,
+      protocolVersion: protocolVersion,
+    );
     if (url != null) {
       throw const FormatException('Form elicitation must not include url.');
     }
@@ -161,7 +167,7 @@ class ElicitRequest {
     );
   }
 
-  void _validateShape() {
+  void _validateShape({String? protocolVersion}) {
     if (isUrlMode) {
       if (requestedSchema != null) {
         throw ArgumentError(
@@ -181,7 +187,10 @@ class ElicitRequest {
     if (requestedSchema == null) {
       throw ArgumentError('Form elicitation requires requestedSchema.');
     }
-    _validateFormRequestedSchema(requestedSchema!);
+    _validateFormRequestedSchema(
+      requestedSchema!,
+      protocolVersion: protocolVersion,
+    );
     if (url != null) {
       throw ArgumentError('Form elicitation must not include url.');
     }
@@ -190,8 +199,8 @@ class ElicitRequest {
     }
   }
 
-  Map<String, dynamic> toJson() {
-    _validateShape();
+  Map<String, dynamic> toJson({String? protocolVersion}) {
+    _validateShape(protocolVersion: protocolVersion);
     return {
       if (mode != null) 'mode': mode!.name,
       'message': message,
@@ -218,7 +227,13 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
     required super.id,
     required this.elicitParams,
     super.meta,
-  }) : super(method: Method.elicitationCreate, params: elicitParams.toJson());
+    String? protocolVersion,
+  }) : super(
+          method: Method.elicitationCreate,
+          params: elicitParams.toJson(
+            protocolVersion: protocolVersion ?? _protocolVersionFromMeta(meta),
+          ),
+        );
 
   factory JsonRpcElicitRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
@@ -226,10 +241,15 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
       throw const FormatException("Missing params for elicit request");
     }
     final meta = extractRequestMeta(json);
+    final protocolVersion = _protocolVersionFromMeta(meta);
     return JsonRpcElicitRequest(
       id: parseRequestId(json['id']),
-      elicitParams: ElicitRequest.fromJson(paramsMap),
+      elicitParams: ElicitRequest.fromJson(
+        paramsMap,
+        protocolVersion: protocolVersion,
+      ),
       meta: meta,
+      protocolVersion: protocolVersion,
     );
   }
 }
@@ -432,11 +452,20 @@ typedef ElicitRequestParams = ElicitRequest;
 @Deprecated('Use ElicitationCompleteNotification instead')
 typedef ElicitationCompleteParams = ElicitationCompleteNotification;
 
-void _validateFormRequestedSchema(ElicitationInputSchema schema) {
-  _validateFormRequestedSchemaJson(schema.toJson());
+void _validateFormRequestedSchema(
+  ElicitationInputSchema schema, {
+  String? protocolVersion,
+}) {
+  _validateFormRequestedSchemaJson(
+    schema.toJson(),
+    protocolVersion: protocolVersion,
+  );
 }
 
-void _validateFormRequestedSchemaJson(Map<String, dynamic> json) {
+void _validateFormRequestedSchemaJson(
+  Map<String, dynamic> json, {
+  String? protocolVersion,
+}) {
   _ensureAllowedKeys(
     json,
     const {r'$schema', 'type', 'properties', 'required'},
@@ -467,6 +496,7 @@ void _validateFormRequestedSchemaJson(Map<String, dynamic> json) {
     _validatePrimitiveSchema(
       (entry.value as Map).cast<String, dynamic>(),
       'ElicitRequest.requestedSchema.properties.${entry.key}',
+      protocolVersion: protocolVersion,
     );
   }
   final required = json['required'];
@@ -478,7 +508,11 @@ void _validateFormRequestedSchemaJson(Map<String, dynamic> json) {
   }
 }
 
-void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
+void _validatePrimitiveSchema(
+  Map<String, dynamic> json,
+  String context, {
+  String? protocolVersion,
+}) {
   final type = json['type'];
   switch (type) {
     case 'string':
@@ -499,7 +533,11 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
         context,
       );
       _validatePrimitiveBaseKeywords(json, context);
-      _validateNumberSchemaKeywords(json, context, type as String);
+      _validateNumberSchemaKeywords(
+        json,
+        context,
+        protocolVersion: protocolVersion,
+      );
       return;
     case 'boolean':
       _ensureAllowedKeys(
@@ -532,21 +570,20 @@ void _validatePrimitiveBaseKeywords(
 
 void _validateNumberSchemaKeywords(
   Map<String, dynamic> json,
-  String context,
-  String type,
-) {
-  if (type == 'integer') {
-    _validateOptionalIntegerKeyword(json, 'default', context);
+  String context, {
+  String? protocolVersion,
+}) {
+  if (!_usesDraftNumberSchemaKeywords(protocolVersion)) {
+    for (final key in const ['default', 'minimum', 'maximum']) {
+      _validateOptionalIntegerKeyword(json, key, context);
+    }
+    return;
   }
 
-  for (final key in const ['minimum', 'maximum']) {
+  for (final key in const ['default', 'minimum', 'maximum']) {
     if (json[key] != null) {
       readFiniteNumber(json[key], '$context.$key');
     }
-  }
-
-  if (type == 'number' && json['default'] != null) {
-    readFiniteNumber(json['default'], '$context.default');
   }
 }
 
@@ -716,6 +753,15 @@ void _ensureAllowedKeys(
       '$context contains unsupported fields: ${unsupported.join(', ')}',
     );
   }
+}
+
+String? _protocolVersionFromMeta(Map<String, dynamic>? meta) {
+  final protocolVersion = meta?[McpMetaKey.protocolVersion];
+  return protocolVersion is String ? protocolVersion : null;
+}
+
+bool _usesDraftNumberSchemaKeywords(String? protocolVersion) {
+  return protocolVersion != null && isStatelessProtocolVersion(protocolVersion);
 }
 
 Map<String, dynamic>? _parseElicitResultContent(Object? content) {

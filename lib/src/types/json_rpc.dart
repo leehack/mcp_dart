@@ -711,7 +711,9 @@ class InputRequest {
 
   /// Creates an embedded `elicitation/create` input request.
   factory InputRequest.elicit(ElicitRequest params) {
-    final inputParams = params.toJson()..remove('task');
+    final inputParams = params.toJson(
+      protocolVersion: latestDraftProtocolVersion,
+    )..remove('task');
     return InputRequest._(
       method: Method.elicitationCreate,
       params: inputParams,
@@ -753,7 +755,10 @@ class InputRequest {
             'legacy task metadata',
           );
         }
-        ElicitRequest.fromJson(params);
+        ElicitRequest.fromJson(
+          params,
+          protocolVersion: latestDraftProtocolVersion,
+        );
         return InputRequest._(method: method, params: params);
       case Method.samplingCreateMessage:
         final params = _readRequiredJsonObject(
@@ -811,7 +816,10 @@ class InputRequest {
     if (method != Method.elicitationCreate || params == null) {
       throw StateError('InputRequest is not an elicitation/create request');
     }
-    return ElicitRequest.fromJson(params!);
+    return ElicitRequest.fromJson(
+      params!,
+      protocolVersion: latestDraftProtocolVersion,
+    );
   }
 
   /// The typed params for an embedded `sampling/createMessage` request.

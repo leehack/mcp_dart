@@ -1395,6 +1395,21 @@ void main() {
         expect(request.toJson()['requestedSchema']['type'], 'object');
 
         expect(
+          () => ElicitRequest.form(
+            message: 'Fractional bounds',
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'ratio': JsonSchema.number(
+                  minimum: 0.1,
+                  maximum: 0.9,
+                  defaultValue: 0.5,
+                ),
+              },
+            ),
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => const ElicitRequest.form(
             message: 'Nested',
             requestedSchema: JsonObject(

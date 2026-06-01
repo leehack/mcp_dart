@@ -890,6 +890,138 @@ void main() {
       expect(request.toJson()['requestedSchema'], isA<Map<String, dynamic>>());
     });
 
+    test('Form elicitation defaults to stable number schema keywords', () {
+      Map<String, dynamic> requestWithProperty(
+        String name,
+        Map<String, dynamic> property,
+      ) =>
+          {
+            'message': 'Configure deployment',
+            'requestedSchema': {
+              'type': 'object',
+              'properties': {name: property},
+            },
+          };
+
+      for (final property in <String, Map<String, dynamic>>{
+        'fractionalNumberDefault': {
+          'type': 'number',
+          'default': 0.5,
+        },
+        'fractionalNumberMinimum': {
+          'type': 'number',
+          'minimum': 0.1,
+        },
+        'fractionalNumberMaximum': {
+          'type': 'number',
+          'maximum': 0.9,
+        },
+        'fractionalIntegerDefault': {
+          'type': 'integer',
+          'default': 1.5,
+        },
+        'fractionalIntegerMinimum': {
+          'type': 'integer',
+          'minimum': 1.5,
+        },
+        'fractionalIntegerMaximum': {
+          'type': 'integer',
+          'maximum': 10.5,
+        },
+      }.entries) {
+        expect(
+          () => ElicitRequestParams.fromJson(
+            requestWithProperty(property.key, property.value),
+          ),
+          throwsA(isA<FormatException>()),
+        );
+      }
+
+      expect(
+        () => ElicitRequestParams.form(
+          message: 'Configure deployment',
+          requestedSchema: JsonSchema.object(
+            properties: {
+              'ratio': JsonSchema.number(
+                minimum: 0.1,
+                maximum: 0.9,
+                defaultValue: 0.5,
+              ),
+            },
+          ),
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Draft form elicitation accepts fractional number schema keywords',
+        () {
+      final params = {
+        'mode': 'form',
+        'message': 'Configure deployment',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': {
+            'ratio': {
+              'type': 'number',
+              'minimum': 0.1,
+              'maximum': 0.9,
+              'default': 0.5,
+            },
+            'count': {
+              'type': 'integer',
+              'minimum': 0.5,
+              'maximum': 10.5,
+              'default': 1.5,
+            },
+          },
+        },
+      };
+
+      final request = ElicitRequestParams.fromJson(
+        params,
+        protocolVersion: draftProtocolVersion2026_07_28,
+      );
+      final draftJson = request.toJson(
+        protocolVersion: draftProtocolVersion2026_07_28,
+      );
+      final schema = draftJson['requestedSchema'] as Map<String, dynamic>;
+      final properties = schema['properties'] as Map<String, dynamic>;
+
+      expect(
+        (properties['ratio'] as Map<String, dynamic>)['default'],
+        0.5,
+      );
+      expect(
+        (properties['count'] as Map<String, dynamic>)['default'],
+        1.5,
+      );
+      expect(
+        (properties['count'] as Map<String, dynamic>)['maximum'],
+        10.5,
+      );
+      expect(
+        () => request.toJson(),
+        throwsA(isA<FormatException>()),
+      );
+
+      final rpc = JsonRpcElicitRequest.fromJson({
+        'id': 1,
+        'params': {
+          ...params,
+          '_meta': {
+            McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+          },
+        },
+      });
+      final rpcSchema = rpc.params!['requestedSchema'] as Map<String, dynamic>;
+      final rpcProperties = rpcSchema['properties'] as Map<String, dynamic>;
+      expect(
+        (rpcProperties['ratio'] as Map<String, dynamic>)['minimum'],
+        0.1,
+      );
+    });
+
     test('Form elicitation rejects non-spec schema shapes', () {
       Map<String, dynamic> requestWithProperty(
         String name,

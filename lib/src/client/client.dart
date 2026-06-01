@@ -214,11 +214,18 @@ class McpClient extends Protocol {
           }
           return result;
         },
-        (id, params, meta) => JsonRpcElicitRequest(
-          id: id,
-          elicitParams: ElicitRequest.fromJson(params ?? {}),
-          meta: meta,
-        ),
+        (id, params, meta) {
+          final protocolVersion = _protocolVersionForIncomingRequest(meta);
+          return JsonRpcElicitRequest(
+            id: id,
+            elicitParams: ElicitRequest.fromJson(
+              params ?? {},
+              protocolVersion: protocolVersion,
+            ),
+            meta: meta,
+            protocolVersion: protocolVersion,
+          );
+        },
       );
     }
 
@@ -622,6 +629,14 @@ class McpClient extends Protocol {
 
   /// Gets the negotiated protocol version after connection.
   String? getProtocolVersion() => _negotiatedProtocolVersion;
+
+  String? _protocolVersionForIncomingRequest(Map<String, dynamic>? meta) {
+    final protocolVersion = meta?[McpMetaKey.protocolVersion];
+    if (protocolVersion is String) {
+      return protocolVersion;
+    }
+    return _negotiatedProtocolVersion ?? _preferredProtocolVersion;
+  }
 
   @override
   bool isRecognizedResultType(String resultType) {

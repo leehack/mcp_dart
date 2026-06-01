@@ -393,6 +393,44 @@ void main() {
       );
     });
 
+    test('allows fractional elicitation number schema keywords', () {
+      final request = ElicitRequestParams.form(
+        message: 'Configure ratio',
+        requestedSchema: JsonSchema.object(
+          properties: {
+            'ratio': JsonSchema.number(
+              minimum: 0.1,
+              maximum: 0.9,
+              defaultValue: 0.5,
+            ),
+            'count': JsonSchema.integer(
+              minimum: 0.5,
+              maximum: 10.5,
+              defaultValue: 1.5,
+            ),
+          },
+        ),
+      );
+
+      final json = request.toJson(
+        protocolVersion: draftProtocolVersion2026_07_28,
+      );
+      final schema = json['requestedSchema'] as Map<String, dynamic>;
+      final properties = schema['properties'] as Map<String, dynamic>;
+      expect((properties['ratio'] as Map<String, dynamic>)['minimum'], 0.1);
+      expect((properties['count'] as Map<String, dynamic>)['default'], 1.5);
+      expect((properties['count'] as Map<String, dynamic>)['maximum'], 10.5);
+
+      final inputRequest = InputRequest.elicit(request);
+      final inputSchema =
+          inputRequest.params!['requestedSchema'] as Map<String, dynamic>;
+      final inputProperties = inputSchema['properties'] as Map<String, dynamic>;
+      expect(
+        (inputProperties['ratio'] as Map<String, dynamic>)['default'],
+        0.5,
+      );
+    });
+
     test('rejects non-finite JSON numbers', () {
       expect(
         () => ProgressNotification.fromJson({
