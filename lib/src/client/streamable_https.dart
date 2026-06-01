@@ -715,11 +715,24 @@ class StreamableHttpClientTransport
   }
 
   Map<String, dynamic>? _metaFrom(JsonRpcMessage message) {
+    final Map<String, dynamic>? directMeta;
     if (message is JsonRpcRequest) {
-      return message.meta;
+      directMeta = message.meta;
+    } else if (message is JsonRpcNotification) {
+      directMeta = message.meta;
+    } else {
+      return null;
     }
-    if (message is JsonRpcNotification) {
-      return message.meta;
+    if (directMeta != null) {
+      return directMeta;
+    }
+
+    final paramsMeta = _paramsFrom(message)?['_meta'];
+    if (paramsMeta is Map<String, dynamic>) {
+      return paramsMeta;
+    }
+    if (paramsMeta is Map) {
+      return paramsMeta.cast<String, dynamic>();
     }
     return null;
   }

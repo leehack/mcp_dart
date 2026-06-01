@@ -115,6 +115,8 @@
   cacheable-result fields.
 - Stripped caller-supplied `Mcp-Session-Id` headers case-insensitively from
   MCP 2026 stateless Streamable HTTP requests.
+- Derived MCP 2026 stateless Streamable HTTP headers from nested
+  `params._meta` metadata for direct JSON-RPC transport sends.
 
 ## 2.2.0
 
