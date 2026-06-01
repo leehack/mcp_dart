@@ -150,9 +150,22 @@ void main() {
             inputSchema: JsonSchema.object(
               properties: {
                 'region': JsonSchema.string(mcpHeader: 'Region'),
-                'limit': JsonSchema.number(mcpHeader: 'Limit'),
+                'limit': JsonSchema.integer(mcpHeader: 'Limit'),
                 'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
                 'count': JsonSchema.integer(mcpHeader: 'Count'),
+                'auth': JsonSchema.object(
+                  properties: {
+                    'tenant': JsonSchema.string(mcpHeader: 'Tenant'),
+                  },
+                ),
+              },
+            ),
+          ),
+          Tool(
+            name: 'number_header',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'ratio': JsonSchema.number(mcpHeader: 'Ratio'),
               },
             ),
           ),
@@ -170,6 +183,14 @@ void main() {
             inputSchema: JsonSchema.object(
               properties: {
                 'region': JsonSchema.string(mcpHeader: ''),
+              },
+            ),
+          ),
+          Tool(
+            name: 'separator_header',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'region': JsonSchema.string(mcpHeader: 'Bad/Header'),
               },
             ),
           ),
@@ -210,11 +231,12 @@ void main() {
           'limit': 'Limit',
           'dryRun': 'Dry-Run',
           'count': 'Count',
+          '/auth/tenant': 'Tenant',
         },
       });
       expect(
         warnings.where((message) => message.contains('Rejecting tool')),
-        hasLength(4),
+        hasLength(6),
       );
     });
 

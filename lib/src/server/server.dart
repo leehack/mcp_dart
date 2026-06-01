@@ -64,6 +64,19 @@ class Server extends Protocol {
     LoggingLevel.emergency: 7,
   };
 
+  static const Set<String> _statelessRemovedRequestMethods = {
+    Method.initialize,
+    Method.ping,
+    Method.loggingSetLevel,
+    Method.resourcesSubscribe,
+    Method.resourcesUnsubscribe,
+  };
+
+  static const Set<String> _statelessRemovedNotificationMethods = {
+    Method.notificationsInitialized,
+    Method.notificationsRootsListChanged,
+  };
+
   /// Callback to be notified when the server is fully initialized.
   void Function()? oninitialized;
 
@@ -181,6 +194,14 @@ class Server extends Protocol {
       );
     }
 
+    final logLevel = meta?[McpMetaKey.logLevel];
+    if (logLevel != null && _parseLoggingLevel(logLevel) == null) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Invalid stateless request metadata: ${McpMetaKey.logLevel}',
+      );
+    }
+
     return null;
   }
 
@@ -225,6 +246,82 @@ class Server extends Protocol {
         isStatelessProtocolVersion(requestedProtocolVersion);
   }
 
+  bool _isStatelessNotification(JsonRpcNotification notification) {
+    final requestedProtocolVersion =
+        notification.meta?[McpMetaKey.protocolVersion];
+    return requestedProtocolVersion is String &&
+        isStatelessProtocolVersion(requestedProtocolVersion);
+  }
+
+  LoggingLevel? _parseLoggingLevel(Object? value) {
+    if (value is LoggingLevel) {
+      return value;
+    }
+    if (value is String) {
+      for (final level in LoggingLevel.values) {
+        if (level.name == value) {
+          return level;
+        }
+      }
+    }
+    return null;
+  }
+
+  bool _allowsStatelessLogging(
+    LoggingLevel messageLevel,
+    Map<String, dynamic>? requestMeta,
+  ) {
+    if (!_isStatelessMeta(requestMeta)) {
+      return true;
+    }
+
+    final requestedLevel = _parseLoggingLevel(
+      requestMeta?[McpMetaKey.logLevel],
+    );
+    if (requestedLevel == null) {
+      return false;
+    }
+
+    return _logLevelSeverity[messageLevel]! >=
+        _logLevelSeverity[requestedLevel]!;
+  }
+
+  bool _isStatelessMeta(Map<String, dynamic>? requestMeta) {
+    final requestedProtocolVersion = requestMeta?[McpMetaKey.protocolVersion];
+    return requestedProtocolVersion is String &&
+        isStatelessProtocolVersion(requestedProtocolVersion);
+  }
+
+  McpError? _validateStatelessRemovedRequestMethod(JsonRpcRequest request) {
+    if (!_isStatelessRequest(request)) {
+      return null;
+    }
+    if (!_statelessRemovedRequestMethods.contains(request.method)) {
+      return null;
+    }
+
+    return McpError(
+      ErrorCode.methodNotFound.value,
+      '${request.method} is not part of MCP stateless protocol versions.',
+    );
+  }
+
+  McpError? _validateStatelessRemovedNotificationMethod(
+    JsonRpcNotification notification,
+  ) {
+    if (!_isStatelessNotification(notification)) {
+      return null;
+    }
+    if (!_statelessRemovedNotificationMethods.contains(notification.method)) {
+      return null;
+    }
+
+    return McpError(
+      ErrorCode.methodNotFound.value,
+      '${notification.method} is not part of MCP stateless protocol versions.',
+    );
+  }
+
   McpError? _validateDraftTaskMethods(JsonRpcRequest request) {
     if (!_isStatelessRequest(request)) {
       return null;
@@ -236,6 +333,27 @@ class Server extends Protocol {
         return McpError(
           ErrorCode.methodNotFound.value,
           '${request.method} is not part of the MCP Tasks extension.',
+        );
+    }
+
+    return null;
+  }
+
+  McpError? _validateServerTasksExtensionSupport(JsonRpcRequest request) {
+    if (!_isStatelessRequest(request)) {
+      return null;
+    }
+
+    switch (request.method) {
+      case Method.tasksGet:
+      case Method.tasksCancel:
+      case Method.tasksUpdate:
+        if (_capabilities.supportsTasksExtension) {
+          return null;
+        }
+        return McpError(
+          ErrorCode.methodNotFound.value,
+          '${request.method} requires server support for $mcpTasksExtensionId.',
         );
     }
 
@@ -283,6 +401,11 @@ class Server extends Protocol {
       return removedMethodError;
     }
 
+    final serverExtensionError = _validateServerTasksExtensionSupport(request);
+    if (serverExtensionError != null) {
+      return serverExtensionError;
+    }
+
     final extensionCapabilityError =
         _validateTasksExtensionCapabilities(request);
     if (extensionCapabilityError != null) {
@@ -305,6 +428,33 @@ class Server extends Protocol {
     }
 
     return false;
+  }
+
+  bool _allowsTaskExtensionResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    if (!_isStatelessRequest(request)) {
+      return true;
+    }
+
+    return switch (request.method) {
+      Method.tasksGet => result is GetTaskExtensionResult,
+      Method.tasksCancel ||
+      Method.tasksUpdate =>
+        result is TaskExtensionAcknowledgementResult || result is EmptyResult,
+      _ => true,
+    };
+  }
+
+  String _expectedTaskExtensionResult(String method) {
+    return switch (method) {
+      Method.tasksGet => 'GetTaskExtensionResult',
+      Method.tasksCancel ||
+      Method.tasksUpdate =>
+        'TaskExtensionAcknowledgementResult or EmptyResult',
+      _ => 'valid MCP Tasks extension result',
+    };
   }
 
   bool _isLegacyTaskAugmentedRequest(JsonRpcCallToolRequest request) {
@@ -335,6 +485,12 @@ class Server extends Protocol {
       final metadataError = _validateStatelessRequestMetadata(request);
       if (metadataError != null) {
         return metadataError;
+      }
+      final removedMethodError = _validateStatelessRemovedRequestMethod(
+        request,
+      );
+      if (removedMethodError != null) {
+        return removedMethodError;
       }
       return _validateRequestTaskSemantics(request);
     }
@@ -372,6 +528,12 @@ class Server extends Protocol {
 
   @override
   McpError? validateIncomingNotification(JsonRpcNotification notification) {
+    final removedMethodError =
+        _validateStatelessRemovedNotificationMethod(notification);
+    if (removedMethodError != null) {
+      return removedMethodError;
+    }
+
     switch (notification.method) {
       case Method.notificationsCancelled:
       case Method.notificationsProgress:
@@ -434,6 +596,45 @@ class Server extends Protocol {
       _clientVersion = null;
       _lifecycleState = _ServerLifecycleState.uninitialized;
     }
+  }
+
+  bool _requiresCacheableResult(String method) {
+    return switch (method) {
+      Method.toolsList ||
+      Method.promptsList ||
+      Method.resourcesList ||
+      Method.resourcesTemplatesList ||
+      Method.resourcesRead =>
+        true,
+      _ => false,
+    };
+  }
+
+  @override
+  Map<String, dynamic> serializeIncomingResult(
+    JsonRpcRequest request,
+    BaseResultData result,
+  ) {
+    final json = super.serializeIncomingResult(request, result);
+    if (!_isStatelessRequest(request)) {
+      return json;
+    }
+
+    json.putIfAbsent('resultType', () => resultTypeComplete);
+    if (_requiresCacheableResult(request.method)) {
+      json.putIfAbsent(
+        'ttlMs',
+        () => result is CacheableResultData ? result.ttlMs ?? 0 : 0,
+      );
+      json.putIfAbsent(
+        'cacheScope',
+        () => result is CacheableResultData
+            ? result.cacheScope ?? CacheScope.private
+            : CacheScope.private,
+      );
+    }
+
+    return json;
   }
 
   @override
@@ -502,6 +703,24 @@ class Server extends Protocol {
               "Invalid tools/call result: Expected CallToolResult",
             );
           }
+        }
+        return result;
+      }
+
+      super.setRequestHandler(method, wrappedHandler, requestFactory);
+    } else if (method == Method.tasksGet ||
+        method == Method.tasksCancel ||
+        method == Method.tasksUpdate) {
+      Future<BaseResultData> wrappedHandler(
+        ReqT request,
+        RequestHandlerExtra extra,
+      ) async {
+        final result = await handler(request, extra);
+        if (!_allowsTaskExtensionResult(result, request)) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            "Invalid ${request.method} result for MCP Tasks extension: Expected ${_expectedTaskExtensionResult(request.method)}",
+          );
         }
         return result;
       }
@@ -988,12 +1207,20 @@ class Server extends Protocol {
   }
 
   /// Sends a `notifications/message` (logging) notification to the client.
+  ///
+  /// For stateless MCP requests, pass [requestMeta] from
+  /// [RequestHandlerExtra.meta] so log notifications honor the request-scoped
+  /// `io.modelcontextprotocol/logLevel` opt-in.
   Future<void> sendLoggingMessage(
     LoggingMessageNotification params, {
     String? sessionId,
+    Map<String, dynamic>? requestMeta,
   }) async {
     if (_capabilities.logging != null) {
-      if (!_isMessageIgnored(params.level, sessionId)) {
+      final statelessLogContext = _isStatelessMeta(requestMeta);
+      if (_allowsStatelessLogging(params.level, requestMeta) &&
+          (statelessLogContext ||
+              !_isMessageIgnored(params.level, sessionId))) {
         final notif = JsonRpcLoggingMessageNotification(logParams: params);
         return notification(notif);
       }

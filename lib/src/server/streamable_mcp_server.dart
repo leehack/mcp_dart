@@ -419,6 +419,8 @@ class StreamableMcpServer {
     try {
       if (request.method == 'POST') {
         await _handlePostRequest(request);
+      } else if (_isStatelessProtocolVersionRequest(request)) {
+        await _createStatelessTransport().handleRequest(request);
       } else if (request.method == 'GET') {
         await _handleGetRequest(request);
       } else if (request.method == 'DELETE') {

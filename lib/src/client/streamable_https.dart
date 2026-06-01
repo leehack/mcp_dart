@@ -16,6 +16,9 @@ const _defaultStreamableHttpReconnectionOptions =
   maxRetries: 2,
 );
 
+const int _maxSafeHeaderInteger = 9007199254740991;
+const int _minSafeHeaderInteger = -9007199254740991;
+
 /// Error thrown for Streamable HTTP issues
 class StreamableHttpError extends Error {
   /// HTTP status code if applicable
@@ -48,11 +51,15 @@ class StartSseOptions {
   /// Default is true.
   final bool shouldReconnect;
 
+  /// Whether JSON-RPC requests received on this stream should be rejected.
+  final bool rejectServerRequests;
+
   const StartSseOptions({
     this.resumptionToken,
     this.onResumptionToken,
     this.replayMessageId,
     this.shouldReconnect = true,
+    this.rejectServerRequests = false,
   });
 }
 
@@ -575,11 +582,12 @@ class StreamableHttpClientTransport
     final argumentMap = arguments.cast<String, dynamic>();
     final headers = <String, String>{};
     for (final entry in mappings.entries) {
-      if (!argumentMap.containsKey(entry.key)) {
+      final argument = _toolParameterHeaderArgument(argumentMap, entry.key);
+      if (!argument.exists) {
         continue;
       }
 
-      final value = _toolParameterHeaderString(argumentMap[entry.key]);
+      final value = _toolParameterHeaderString(argument.value);
       if (value == null) {
         continue;
       }
@@ -590,13 +598,67 @@ class StreamableHttpClientTransport
     return headers;
   }
 
+  ({bool exists, Object? value}) _toolParameterHeaderArgument(
+    Map<String, dynamic> arguments,
+    String selector,
+  ) {
+    if (!selector.startsWith('/')) {
+      return (
+        exists: arguments.containsKey(selector),
+        value: arguments[selector],
+      );
+    }
+
+    Object? current = arguments;
+    for (final segment in _jsonPointerSegments(selector)) {
+      if (current is! Map || !current.containsKey(segment)) {
+        return (exists: false, value: null);
+      }
+      current = current[segment];
+    }
+    return (exists: true, value: current);
+  }
+
+  Iterable<String> _jsonPointerSegments(String selector) {
+    if (selector == '/') {
+      return const [''];
+    }
+    return selector
+        .substring(1)
+        .split('/')
+        .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
+  }
+
   String? _toolParameterHeaderString(Object? value) {
+    final integer = _safeHeaderInteger(value);
+    if (integer != null) {
+      return integer.toString();
+    }
+
     return switch (value) {
       String() => value,
-      num() => value.toString(),
       bool() => value.toString(),
       _ => null,
     };
+  }
+
+  int? _safeHeaderInteger(Object? value) {
+    if (value is int) {
+      if (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger) {
+        return null;
+      }
+      return value;
+    }
+
+    if (value is double &&
+        value.isFinite &&
+        value.truncateToDouble() == value &&
+        value >= _minSafeHeaderInteger &&
+        value <= _maxSafeHeaderInteger) {
+      return value.toInt();
+    }
+
+    return null;
   }
 
   String _encodeToolParameterHeaderValue(String value) {
@@ -608,10 +670,15 @@ class StreamableHttpClientTransport
   }
 
   bool _isPlainToolParameterHeaderValue(String value) {
-    return value.trim() == value &&
+    return !_isBase64ToolParameterHeaderSentinel(value) &&
+        value.trim() == value &&
         value.codeUnits.every(
           (unit) => unit == 0x09 || (unit >= 0x20 && unit <= 0x7E),
         );
+  }
+
+  bool _isBase64ToolParameterHeaderSentinel(String value) {
+    return value.startsWith('=?base64?') && value.endsWith('?=');
   }
 
   String? _methodFrom(JsonRpcMessage message) {
@@ -683,6 +750,11 @@ class StreamableHttpClientTransport
   }
 
   Future<void> _startOrAuthSse(StartSseOptions options) async {
+    if (_protocolVersion != null &&
+        isStatelessProtocolVersion(_protocolVersion!)) {
+      return;
+    }
+
     final resumptionToken = options.resumptionToken;
     try {
       // Try to open an initial SSE stream with GET to listen for server messages
@@ -874,9 +946,15 @@ class StreamableHttpClientTransport
             result: message.result,
             meta: message.meta,
           );
-          onmessage?.call(newMessage);
+          _dispatchReceivedMessage(
+            newMessage,
+            rejectServerRequests: options.rejectServerRequests,
+          );
         } else {
-          onmessage?.call(message);
+          _dispatchReceivedMessage(
+            message,
+            rejectServerRequests: options.rejectServerRequests,
+          );
         }
       } catch (error) {
         if (error is Error) {
@@ -999,6 +1077,25 @@ class StreamableHttpClientTransport
     });
   }
 
+  void _dispatchReceivedMessage(
+    JsonRpcMessage message, {
+    required bool rejectServerRequests,
+  }) {
+    if (rejectServerRequests && message is JsonRpcRequest) {
+      onerror?.call(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'Server-initiated JSON-RPC requests are not supported on 2026 '
+          'stateless MCP response streams; return input_required with '
+          'inputRequests instead.',
+        ),
+      );
+      return;
+    }
+
+    onmessage?.call(message);
+  }
+
   @override
   Future<void> start() async {
     if (_abortController != null) {
@@ -1117,6 +1214,12 @@ class StreamableHttpClientTransport
 
       final headers = await _commonHeaders();
       headers.addAll(_headersForMessage(message));
+      final protocolVersion = _protocolVersion ?? _protocolVersionFrom(message);
+      final isStatelessRequest = protocolVersion != null &&
+          isStatelessProtocolVersion(protocolVersion);
+      if (isStatelessRequest) {
+        headers.remove('mcp-session-id');
+      }
       final requestSessionId = headers['mcp-session-id'];
       headers['content-type'] = 'application/json';
       headers['accept'] = 'application/json, text/event-stream';
@@ -1174,7 +1277,7 @@ class StreamableHttpClientTransport
 
       // Handle session ID received from successful stateful responses.
       final sessionId = response.headers['mcp-session-id'];
-      if (sessionId != null) {
+      if (sessionId != null && !isStatelessRequest) {
         _sessionId = sessionId;
         _staleSessionDetected = false;
       }
@@ -1226,6 +1329,7 @@ class StreamableHttpClientTransport
             StartSseOptions(
               onResumptionToken: onResumptionToken,
               shouldReconnect: false, // Do not reconnect for POST responses
+              rejectServerRequests: isStatelessRequest,
             ),
           );
         } else if (contentType?.contains('application/json') ?? false) {
@@ -1236,11 +1340,17 @@ class StreamableHttpClientTransport
           if (data is List) {
             for (final item in data) {
               final msg = JsonRpcMessage.fromJson(item);
-              onmessage?.call(msg);
+              _dispatchReceivedMessage(
+                msg,
+                rejectServerRequests: isStatelessRequest,
+              );
             }
           } else {
             final msg = JsonRpcMessage.fromJson(data);
-            onmessage?.call(msg);
+            _dispatchReceivedMessage(
+              msg,
+              rejectServerRequests: isStatelessRequest,
+            );
           }
         } else {
           throw StreamableHttpError(
@@ -1292,6 +1402,13 @@ class StreamableHttpClientTransport
   /// The server MAY respond with HTTP 405 Method Not Allowed, indicating that
   /// the server does not allow clients to terminate sessions.
   Future<void> terminateSession() async {
+    if (_protocolVersion != null &&
+        isStatelessProtocolVersion(_protocolVersion!)) {
+      _sessionId = null;
+      _staleSessionDetected = false;
+      return;
+    }
+
     if (_sessionId == null) {
       return; // No session to terminate
     }

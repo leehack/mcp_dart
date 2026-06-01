@@ -12,6 +12,12 @@ final _logger = Logger("mcp_dart.shared.protocol");
 bool _isProgressToken(Object? token) => token is int || token is String;
 
 final _lastProgressByExtra = Expando<double>();
+final _subscriptionStateByExtra = Expando<_SubscriptionStreamState>();
+
+class _SubscriptionStreamState {
+  bool acknowledgmentSent = false;
+  SubscriptionFilter acknowledgedNotifications = const SubscriptionFilter();
+}
 
 /// Callback for progress notifications.
 typedef ProgressCallback = void Function(Progress progress);
@@ -72,6 +78,12 @@ class RequestOptions {
   /// Maximum total time to wait for a response.
   final Duration? maxTotalTimeout;
 
+  /// Whether this request should use protocol-level timeout handling.
+  ///
+  /// Long-lived requests such as `subscriptions/listen` can disable this and
+  /// rely on explicit cancellation or transport closure instead.
+  final bool timeoutEnabled;
+
   /// Augments the request with task creation parameters.
   final TaskCreation? task;
 
@@ -85,6 +97,7 @@ class RequestOptions {
     this.timeout,
     this.resetTimeoutOnProgress = false,
     this.maxTotalTimeout,
+    this.timeoutEnabled = true,
     this.task,
     this.relatedTask,
   });
@@ -152,6 +165,16 @@ class RequestHandlerExtra {
     this.closeStandaloneSSEStream,
   });
 
+  _SubscriptionStreamState get _activeSubscriptionState =>
+      (_subscriptionStateByExtra[this] ??= _SubscriptionStreamState());
+
+  void _validateSubscriptionNotification(JsonRpcNotification notification) {
+    _recordOrValidateSubscriptionNotification(
+      _activeSubscriptionState,
+      notification,
+    );
+  }
+
   /// Sends a progress notification for the current request.
   ///
   /// This method automatically retrieves the `progressToken` from the request metadata.
@@ -215,19 +238,71 @@ class RequestHandlerExtra {
   Future<void> sendSubscriptionNotification(
     JsonRpcNotification notification,
   ) {
-    final meta = <String, dynamic>{
-      ...?notification.meta,
-      McpMetaKey.subscriptionId: requestId,
-    };
+    final subscriptionNotification =
+        _withSubscriptionId(notification, requestId);
 
-    return sendNotification(
-      JsonRpcNotification(
-        method: notification.method,
-        params: notification.params,
-        meta: meta,
-      ),
+    _validateSubscriptionNotification(subscriptionNotification);
+
+    return sendNotification(subscriptionNotification);
+  }
+}
+
+JsonRpcNotification _withSubscriptionId(
+  JsonRpcNotification notification,
+  RequestId requestId,
+) {
+  final meta = <String, dynamic>{
+    ...?notification.meta,
+    McpMetaKey.subscriptionId: requestId,
+  };
+  return JsonRpcNotification(
+    method: notification.method,
+    params: notification.params,
+    meta: meta,
+  );
+}
+
+void _recordOrValidateSubscriptionNotification(
+  _SubscriptionStreamState state,
+  JsonRpcNotification notification,
+) {
+  if (notification.method == Method.notificationsSubscriptionsAcknowledged) {
+    state
+      ..acknowledgmentSent = true
+      ..acknowledgedNotifications =
+          _acknowledgedSubscriptionFilter(notification);
+    return;
+  }
+
+  if (!state.acknowledgmentSent) {
+    throw McpError(
+      ErrorCode.invalidRequest.value,
+      'subscriptions/listen streams must send '
+      '${Method.notificationsSubscriptionsAcknowledged} before '
+      '${notification.method}.',
     );
   }
+
+  if (!state.acknowledgedNotifications.allowsNotification(notification)) {
+    throw McpError(
+      ErrorCode.invalidRequest.value,
+      '${notification.method} was not requested or acknowledged for this '
+      'subscriptions/listen stream.',
+    );
+  }
+}
+
+SubscriptionFilter _acknowledgedSubscriptionFilter(
+  JsonRpcNotification notification,
+) {
+  final params = notification.params;
+  if (params == null) {
+    throw const FormatException(
+      'subscriptions acknowledged notification params are required',
+    );
+  }
+
+  return SubscriptionsAcknowledgedNotification.fromJson(params).notifications;
 }
 
 /// Internal class holding timeout state for a request.
@@ -399,6 +474,50 @@ abstract class Protocol {
     }
   }
 
+  /// Returns whether [resultType] is recognized for result parsing.
+  @protected
+  bool isRecognizedResultType(String resultType) {
+    return resultType == resultTypeComplete ||
+        resultType == resultTypeInputRequired;
+  }
+
+  bool _usesStatelessResultTypes(JsonRpcRequest request) {
+    final requestProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
+    if (requestProtocolVersion is String &&
+        isStatelessProtocolVersion(requestProtocolVersion)) {
+      return true;
+    }
+
+    final Object? activeTransport = _transport;
+    if (activeTransport is! ProtocolVersionAwareTransport) {
+      return false;
+    }
+
+    final transportProtocolVersion = activeTransport.protocolVersion;
+    return transportProtocolVersion != null &&
+        isStatelessProtocolVersion(transportProtocolVersion);
+  }
+
+  void _validateResponseResultType(
+    JsonRpcRequest request,
+    Map<String, dynamic> resultJson,
+  ) {
+    if (!_usesStatelessResultTypes(request)) {
+      return;
+    }
+
+    final resultType = resultJson['resultType'];
+    if (resultType == null) {
+      return;
+    }
+    if (resultType is! String) {
+      throw const FormatException('MCP resultType must be a string');
+    }
+    if (!isRecognizedResultType(resultType)) {
+      throw FormatException('Unrecognized MCP resultType "$resultType"');
+    }
+  }
+
   void _registerTaskHandlers() {
     setRequestHandler<JsonRpcGetTaskRequest>(
       Method.tasksGet,
@@ -506,6 +625,15 @@ abstract class Protocol {
       throw StateError("Protocol already connected to a transport.");
     }
     _transport = transport;
+    if (transport is IncomingRequestValidationAwareTransport) {
+      final validationAwareTransport =
+          transport as IncomingRequestValidationAwareTransport;
+      validationAwareTransport.setIncomingRequestValidator(
+        validateIncomingRequest,
+      );
+      validationAwareTransport
+          .setRequestMethodSupported(_supportsRequestMethod);
+    }
     _transport!.onclose = _onclose;
     _transport!.onerror = _onerror;
     _transport!.onmessage = (message) {
@@ -541,6 +669,9 @@ abstract class Protocol {
       rethrow;
     }
   }
+
+  bool _supportsRequestMethod(String method) =>
+      _requestHandlers.containsKey(method) || fallbackRequestHandler != null;
 
   /// Gets the currently attached transport, or null if not connected.
   Transport? get transport => _transport;
@@ -886,6 +1017,10 @@ abstract class Protocol {
   @protected
   void onIncomingRequestAccepted(JsonRpcRequest request) {}
 
+  /// Subclass hook called after an incoming notification has passed validation.
+  @protected
+  void onIncomingNotificationAccepted(JsonRpcNotification notification) {}
+
   /// Subclass hook called after an incoming request handler has completed and
   /// its response has been sent or enqueued.
   @protected
@@ -899,6 +1034,14 @@ abstract class Protocol {
   @protected
   void onIncomingRequestFailed(JsonRpcRequest request, Object error) {}
 
+  /// Converts a handler result into the JSON object sent on the wire.
+  @protected
+  Map<String, dynamic> serializeIncomingResult(
+    JsonRpcRequest request,
+    BaseResultData result,
+  ) =>
+      result.toJson();
+
   /// Subclass hook called after protocol-owned state has been cleared for a
   /// closed transport.
   @protected
@@ -911,6 +1054,8 @@ abstract class Protocol {
       _onerror(validationError);
       return;
     }
+
+    onIncomingNotificationAccepted(notification);
 
     if (notification is JsonRpcTaskStatusNotification) {
       _onTaskStatusNotification(notification);
@@ -1073,6 +1218,9 @@ abstract class Protocol {
 
     final abortController = BasicAbortController();
     _requestHandlerAbortControllers[request.id] = abortController;
+    final subscriptionState = request is JsonRpcSubscriptionsListenRequest
+        ? _SubscriptionStreamState()
+        : null;
 
     final extra = RequestHandlerExtra(
       signal: abortController.signal,
@@ -1090,12 +1238,22 @@ abstract class Protocol {
           : null,
       taskRequestedTtl:
           (request.params?['task'] as Map<String, dynamic>?)?['ttl'] as int?,
-      sendNotification: (notification, {relatedTask}) =>
-          _notificationWithRequestId(
-        notification,
-        relatedTask: relatedTask,
-        relatedRequestId: request.id,
-      ),
+      sendNotification: (notification, {relatedTask}) {
+        var outgoingNotification = notification;
+        if (subscriptionState != null) {
+          outgoingNotification = _withSubscriptionId(notification, request.id);
+          _recordOrValidateSubscriptionNotification(
+            subscriptionState,
+            outgoingNotification,
+          );
+        }
+
+        return _notificationWithRequestId(
+          outgoingNotification,
+          relatedTask: relatedTask,
+          relatedRequestId: request.id,
+        );
+      },
       sendRequest: <T extends BaseResultData>(
         JsonRpcRequest req,
         T Function(Map<String, dynamic>) resultFactory,
@@ -1107,6 +1265,7 @@ abstract class Protocol {
           timeout: options.timeout,
           resetTimeoutOnProgress: options.resetTimeoutOnProgress,
           maxTotalTimeout: options.maxTotalTimeout,
+          timeoutEnabled: options.timeoutEnabled,
           task: options.task,
           relatedTask: options.relatedTask ??
               (relatedTaskId != null
@@ -1121,6 +1280,9 @@ abstract class Protocol {
         );
       },
     );
+    if (subscriptionState != null) {
+      _subscriptionStateByExtra[extra] = subscriptionState;
+    }
 
     // If task creation is requested, check capability
     if (extra.taskRequestedTtl != null ||
@@ -1159,7 +1321,7 @@ abstract class Protocol {
 
         final response = JsonRpcResponse(
           id: request.id,
-          result: result.toJson(),
+          result: serializeIncomingResult(request, result),
           meta: _mergeRelatedTaskMeta(result.meta, relatedTaskJson),
         );
 
@@ -1384,11 +1546,35 @@ abstract class Protocol {
     );
   }
 
+  /// Reserves an outgoing integer request ID for APIs that need to correlate
+  /// side-channel data before the response arrives.
+  @protected
+  int reserveRequestId() => _requestMessageId++;
+
+  /// Sends a request using a previously reserved outgoing integer request ID.
+  @protected
+  Future<T> requestWithReservedId<T extends BaseResultData>(
+    int requestId,
+    JsonRpcRequest requestData,
+    T Function(Map<String, dynamic> resultJson) resultFactory, [
+    RequestOptions? options,
+    RequestId? relatedRequestId,
+  ]) {
+    return _requestWithRequestId(
+      requestData,
+      resultFactory,
+      options,
+      relatedRequestId,
+      requestId,
+    );
+  }
+
   Future<T> _requestWithRequestId<T extends BaseResultData>(
     JsonRpcRequest requestData,
     T Function(Map<String, dynamic> resultJson) resultFactory, [
     RequestOptions? options,
     RequestId? relatedRequestId,
+    int? reservedRequestId,
   ]) {
     if (_transport == null) {
       return Future.error(StateError("Not connected to a transport."));
@@ -1411,7 +1597,7 @@ abstract class Protocol {
       return Future.error(e);
     }
 
-    final messageId = _requestMessageId++;
+    final messageId = reservedRequestId ?? _requestMessageId++;
     final completer = Completer<JsonRpcResponse>();
     Error? capturedError;
     Object? progressToken;
@@ -1572,26 +1758,28 @@ abstract class Protocol {
       taskRequestState?.abortSubscription = abortSubscription;
     }
 
-    final timeoutDuration = options?.timeout ?? defaultRequestTimeout;
-    final maxTotalTimeoutDuration = options?.maxTotalTimeout;
-    void timeoutHandler() {
-      cancel(
-        McpError(
-          ErrorCode.requestTimeout.value,
-          "Request $messageId timed out after $timeoutDuration",
-          {'timeout': timeoutDuration.inMilliseconds},
-        ),
-        fromTimeout: true,
+    if (options?.timeoutEnabled ?? true) {
+      final timeoutDuration = options?.timeout ?? defaultRequestTimeout;
+      final maxTotalTimeoutDuration = options?.maxTotalTimeout;
+      void timeoutHandler() {
+        cancel(
+          McpError(
+            ErrorCode.requestTimeout.value,
+            "Request $messageId timed out after $timeoutDuration",
+            {'timeout': timeoutDuration.inMilliseconds},
+          ),
+          fromTimeout: true,
+        );
+      }
+
+      _setupTimeout(
+        messageId,
+        timeoutDuration,
+        maxTotalTimeoutDuration,
+        options?.resetTimeoutOnProgress ?? false,
+        timeoutHandler,
       );
     }
-
-    _setupTimeout(
-      messageId,
-      timeoutDuration,
-      maxTotalTimeoutDuration,
-      options?.resetTimeoutOnProgress ?? false,
-      timeoutHandler,
-    );
 
     // Queue request if related to a task
     if (options?.relatedTask != null) {
@@ -1654,8 +1842,10 @@ abstract class Protocol {
       Object? taskCancellationError;
       late final T result;
       try {
+        final resultJson = response.toJson()['result'] as Map<String, dynamic>;
+        _validateResponseResultType(jsonrpcRequest, resultJson);
         result = resultFactory(
-          response.toJson()['result'] as Map<String, dynamic>,
+          resultJson,
         );
         final state = taskRequestState;
         if (state != null) {

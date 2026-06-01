@@ -983,11 +983,11 @@ class DiscoverResult implements BaseResultData {
 
 /// Notification sent from the client to the server after initialization is finished.
 class JsonRpcInitializedNotification extends JsonRpcNotification {
-  const JsonRpcInitializedNotification()
+  const JsonRpcInitializedNotification({super.meta})
       : super(method: Method.notificationsInitialized);
 
   factory JsonRpcInitializedNotification.fromJson(Map<String, dynamic> json) =>
-      const JsonRpcInitializedNotification();
+      JsonRpcInitializedNotification(meta: extractRequestMeta(json));
 }
 
 /// Deprecated alias for [InitializeRequest].
