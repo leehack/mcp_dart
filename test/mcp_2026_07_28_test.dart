@@ -367,6 +367,48 @@ void main() {
       );
     });
 
+    test('rejects non-JSON sampling object values', () {
+      expect(
+        () => SamplingToolUseContent.fromJson({
+          'type': 'tool_use',
+          'id': 'call-1',
+          'name': 'lookup',
+          'input': {'query': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Hello'},
+          'model': 'model-x',
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequest.fromJson({
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 16,
+          'metadata': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('serializes server/discover request and result', () {
       final request = JsonRpcServerDiscoverRequest(
         id: 'discover-1',

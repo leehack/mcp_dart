@@ -4,23 +4,23 @@ import 'tasks.dart';
 import 'tools.dart';
 import 'validation.dart';
 
-Map<String, dynamic>? _asJsonObjectOrNull(dynamic value) {
+Map<String, dynamic>? _asJsonObjectOrNull(
+  dynamic value, [
+  String field = 'object',
+]) {
   if (value == null) {
     return null;
   }
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('Expected object, got ${value.runtimeType}');
+  return readJsonObject(value, field);
 }
 
-Map<String, dynamic> _asJsonObject(dynamic value) {
-  final map = _asJsonObjectOrNull(value);
+Map<String, dynamic> _asJsonObject(
+  dynamic value, [
+  String field = 'object',
+]) {
+  final map = _asJsonObjectOrNull(value, field);
   if (map == null) {
-    throw const FormatException('Expected object, got null');
+    throw FormatException('$field must be a JSON object');
   }
   return map;
 }
@@ -286,26 +286,45 @@ sealed class SamplingContent {
         ...switch (this) {
           final SamplingTextContent c => {
               'text': c.text,
-              if (c.annotations != null) 'annotations': c.annotations,
-              if (c.meta != null) '_meta': c.meta,
+              if (c.annotations != null)
+                'annotations': readJsonObject(
+                  c.annotations,
+                  'SamplingTextContent.annotations',
+                ),
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'SamplingTextContent._meta'),
             },
           final SamplingImageContent c => {
               'data': c.data,
               'mimeType': c.mimeType,
-              if (c.annotations != null) 'annotations': c.annotations,
-              if (c.meta != null) '_meta': c.meta,
+              if (c.annotations != null)
+                'annotations': readJsonObject(
+                  c.annotations,
+                  'SamplingImageContent.annotations',
+                ),
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'SamplingImageContent._meta'),
             },
           final SamplingAudioContent c => {
               'data': c.data,
               'mimeType': c.mimeType,
-              if (c.annotations != null) 'annotations': c.annotations,
-              if (c.meta != null) '_meta': c.meta,
+              if (c.annotations != null)
+                'annotations': readJsonObject(
+                  c.annotations,
+                  'SamplingAudioContent.annotations',
+                ),
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'SamplingAudioContent._meta'),
             },
           final SamplingToolUseContent c => {
               'id': c.id,
               'name': c.name,
-              'input': c.input,
-              if (c.meta != null) '_meta': c.meta,
+              'input': readJsonObject(
+                c.input,
+                'SamplingToolUseContent.input',
+              ),
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'SamplingToolUseContent._meta'),
             },
           final SamplingToolResultContent c => {
               'toolUseId': c.toolUseId,
@@ -316,7 +335,11 @@ sealed class SamplingContent {
                   'SamplingToolResultContent.structuredContent',
                 ),
               if (c.isError != null) 'isError': c.isError,
-              if (c.meta != null) '_meta': c.meta,
+              if (c.meta != null)
+                '_meta': readJsonObject(
+                  c.meta,
+                  'SamplingToolResultContent._meta',
+                ),
             },
         },
       };
@@ -342,8 +365,11 @@ class SamplingTextContent extends SamplingContent {
   factory SamplingTextContent.fromJson(Map<String, dynamic> json) =>
       SamplingTextContent(
         text: json['text'] as String,
-        annotations: _asJsonObjectOrNull(json['annotations']),
-        meta: _asJsonObjectOrNull(json['_meta']),
+        annotations: _asJsonObjectOrNull(
+          json['annotations'],
+          'SamplingTextContent.annotations',
+        ),
+        meta: _asJsonObjectOrNull(json['_meta'], 'SamplingTextContent._meta'),
       );
 }
 
@@ -372,8 +398,11 @@ class SamplingImageContent extends SamplingContent {
       SamplingImageContent(
         data: json['data'] as String,
         mimeType: json['mimeType'] as String,
-        annotations: _asJsonObjectOrNull(json['annotations']),
-        meta: _asJsonObjectOrNull(json['_meta']),
+        annotations: _asJsonObjectOrNull(
+          json['annotations'],
+          'SamplingImageContent.annotations',
+        ),
+        meta: _asJsonObjectOrNull(json['_meta'], 'SamplingImageContent._meta'),
       );
 }
 
@@ -402,8 +431,11 @@ class SamplingAudioContent extends SamplingContent {
       SamplingAudioContent(
         data: json['data'] as String,
         mimeType: json['mimeType'] as String,
-        annotations: _asJsonObjectOrNull(json['annotations']),
-        meta: _asJsonObjectOrNull(json['_meta']),
+        annotations: _asJsonObjectOrNull(
+          json['annotations'],
+          'SamplingAudioContent.annotations',
+        ),
+        meta: _asJsonObjectOrNull(json['_meta'], 'SamplingAudioContent._meta'),
       );
 }
 
@@ -425,8 +457,9 @@ class SamplingToolUseContent extends SamplingContent {
       SamplingToolUseContent(
         id: json['id'] as String,
         name: json['name'] as String,
-        input: _asJsonObject(json['input']),
-        meta: _asJsonObjectOrNull(json['_meta']),
+        input: _asJsonObject(json['input'], 'SamplingToolUseContent.input'),
+        meta:
+            _asJsonObjectOrNull(json['_meta'], 'SamplingToolUseContent._meta'),
       );
 }
 
@@ -469,7 +502,8 @@ class SamplingToolResultContent extends SamplingContent {
           : null,
       hasStructuredContent: json.containsKey('structuredContent'),
       isError: json['isError'] as bool?,
-      meta: _asJsonObjectOrNull(json['_meta']),
+      meta:
+          _asJsonObjectOrNull(json['_meta'], 'SamplingToolResultContent._meta'),
     );
   }
 }
@@ -508,7 +542,7 @@ class SamplingMessage {
     return SamplingMessage(
       role: SamplingMessageRole.values.byName(json['role'] as String),
       content: _parseSamplingMessageContent(json['content']),
-      meta: _asJsonObjectOrNull(json['_meta']),
+      meta: _asJsonObjectOrNull(json['_meta'], 'SamplingMessage._meta'),
     );
   }
 
@@ -516,7 +550,8 @@ class SamplingMessage {
   Map<String, dynamic> toJson() => {
         'role': role.name,
         'content': _samplingMessageContentToJson(content),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'SamplingMessage._meta'),
       };
 }
 
@@ -631,7 +666,10 @@ class CreateMessageRequest {
       ),
       maxTokens: json['maxTokens'] as int,
       stopSequences: (json['stopSequences'] as List<dynamic>?)?.cast<String>(),
-      metadata: _asJsonObjectOrNull(json['metadata']),
+      metadata: _asJsonObjectOrNull(
+        json['metadata'],
+        'CreateMessageRequest.metadata',
+      ),
       modelPreferences: json['modelPreferences'] == null
           ? null
           : ModelPreferences.fromJson(
@@ -658,7 +696,11 @@ class CreateMessageRequest {
       if (temperature != null) 'temperature': temperature,
       'maxTokens': maxTokens,
       if (stopSequences != null) 'stopSequences': stopSequences,
-      if (metadata != null) 'metadata': metadata,
+      if (metadata != null)
+        'metadata': readJsonObject(
+          metadata,
+          'CreateMessageRequest.metadata',
+        ),
       if (modelPreferences != null)
         'modelPreferences': modelPreferences!.toJson(),
       if (tools != null) 'tools': tools!.map((t) => t.toJson()).toList(),
@@ -738,7 +780,8 @@ class CreateMessageResult implements BaseResultData {
   }
 
   factory CreateMessageResult.fromJson(Map<String, dynamic> json) {
-    final meta = _asJsonObjectOrNull(json['_meta']);
+    final meta =
+        _asJsonObjectOrNull(json['_meta'], 'CreateMessageResult._meta');
     dynamic reason = json['stopReason'];
     if (reason is String) {
       try {
@@ -774,7 +817,8 @@ class CreateMessageResult implements BaseResultData {
         'stopReason': reason is StopReason ? reason.name : reason,
       'role': role.name,
       'content': _samplingMessageContentToJson(content),
-      if (meta != null) '_meta': meta,
+      if (meta != null)
+        '_meta': readJsonObject(meta, 'CreateMessageResult._meta'),
     };
   }
 }

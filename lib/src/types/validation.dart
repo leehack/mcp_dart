@@ -148,3 +148,17 @@ Object? readJsonValue(Object? value, String field) {
   }
   throw FormatException('$field must be a JSON value');
 }
+
+Map<String, dynamic> readJsonObject(Object? value, String field) {
+  if (value is! Map) {
+    throw FormatException('$field must be a JSON object');
+  }
+  return (readJsonValue(value, field) as Map).cast<String, dynamic>();
+}
+
+Map<String, dynamic>? readOptionalJsonObject(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return readJsonObject(value, field);
+}

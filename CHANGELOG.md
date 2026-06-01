@@ -99,6 +99,8 @@
 - Rejected non-finite numeric values for progress, annotation priority, model
   priority, and sampling temperature fields so SDK-built payloads remain valid
   JSON numbers.
+- Rejected non-JSON values in sampling JSON object fields, including
+  `tool_use.input`, sampling metadata, annotations, and `_meta` maps.
 
 ## 2.2.0
 

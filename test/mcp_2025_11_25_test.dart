@@ -518,6 +518,48 @@ void main() {
       expect((json['content'] as List).single['type'], 'tool_use');
     });
 
+    test('Sampling JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => SamplingToolUseContent.fromJson({
+          'type': 'tool_use',
+          'id': 'call-1',
+          'name': 'calculator',
+          'input': {'expr': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Hello'},
+          'model': 'model-x',
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 100,
+          'metadata': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     group('Tasks API Types', () {
       test('GetTaskRequestParams serialization', () {
         final params = const GetTaskRequestParams(taskId: 'task-123');
