@@ -20,6 +20,7 @@ void main() {
         containsAll(<String>[
           'jsonrpc.rejects-invalid-version',
           'jsonrpc.rejects-malformed-message',
+          'jsonrpc.rejects-result-error-response',
           'jsonrpc.preserves-string-response-id',
           'jsonrpc.preserves-numeric-response-id',
           'jsonrpc.preserves-string-progress-token',

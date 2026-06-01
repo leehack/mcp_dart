@@ -98,6 +98,13 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-result-error-response',
+            description:
+                'Rejects JSON-RPC responses that include both result and error members.',
+            check: _rejectsResultErrorJsonRpcResponse,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.preserves-string-response-id',
             description:
                 'Parses and serializes successful responses with string JSON-RPC IDs.',
@@ -721,6 +728,20 @@ Future<void> _rejectsMalformedJsonRpcMessage() async {
     () => JsonRpcMessage.fromJson(const <String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': 1,
+    }),
+  );
+}
+
+Future<void> _rejectsResultErrorJsonRpcResponse() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(<String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'result': <String, dynamic>{},
+      'error': <String, dynamic>{
+        'code': ErrorCode.internalError.value,
+        'message': 'Internal error',
+      },
     }),
   );
 }

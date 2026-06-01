@@ -559,6 +559,22 @@ void main() {
       }
     });
 
+    test('rejects response envelopes with both result and error', () {
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': '2.0',
+          'id': 1,
+          'result': {'data': 'test'},
+          'error': {'code': -32603, 'message': 'Internal error'},
+        }),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('result'))
+              .having((e) => e.message, 'message', contains('error')),
+        ),
+      );
+    });
+
     test('handles error with null id', () {
       final json = {
         'jsonrpc': '2.0',

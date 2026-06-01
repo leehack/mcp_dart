@@ -109,6 +109,8 @@
   metadata fields.
 - Rejected non-JSON JSON-RPC error `data` values at parse and serialize
   boundaries.
+- Rejected JSON-RPC response envelopes that include both `result` and `error`
+  instead of silently treating them as successful responses.
 - Prevented stateless MCP 2026 clients from sending core request and
   notification methods removed from that protocol revision.
 - Rejected server-initiated JSON-RPC requests received by stateless MCP 2026

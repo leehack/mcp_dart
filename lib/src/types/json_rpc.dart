@@ -313,6 +313,9 @@ sealed class JsonRpcMessage {
       throw FormatException('Invalid JSON-RPC version: ${json['jsonrpc']}');
     }
 
+    final hasResult = json.containsKey('result');
+    final hasError = json.containsKey('error');
+
     if (json.containsKey('method')) {
       final method = json['method'] as String;
       final hasId = json.containsKey('id');
@@ -408,7 +411,11 @@ sealed class JsonRpcMessage {
             ),
         };
       }
-    } else if (json.containsKey('result')) {
+    } else if (hasResult && hasError) {
+      throw const FormatException(
+        'Invalid JSON-RPC response: result and error are mutually exclusive',
+      );
+    } else if (hasResult) {
       final id = _parseResultResponseId(json['id']);
       final resultData =
           readJsonObject(json['result'], 'JsonRpcResponse.result');
@@ -419,7 +426,7 @@ sealed class JsonRpcMessage {
       final actualResult = Map<String, dynamic>.from(resultData)
         ..remove('_meta');
       return JsonRpcResponse(id: id, result: actualResult, meta: meta);
-    } else if (json.containsKey('error')) {
+    } else if (hasError) {
       return JsonRpcError.fromJson(json);
     } else {
       throw FormatException('Invalid JSON-RPC message format: $json');
