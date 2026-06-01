@@ -126,6 +126,8 @@
   non-finite numbers.
 - Allowed protocol progress handlers and `RequestHandlerExtra.sendProgress` to
   dispatch finite numeric progress tokens end-to-end.
+- Widened protocol `relatedRequestId` API parameters to preserve string and
+  finite numeric JSON-RPC request IDs through request and notification routing.
 
 ## 2.2.0
 

@@ -1574,7 +1574,7 @@ abstract class Protocol {
     JsonRpcRequest requestData,
     T Function(Map<String, dynamic> resultJson) resultFactory, [
     RequestOptions? options,
-    int? relatedRequestId,
+    RequestId? relatedRequestId,
   ]) {
     return _requestWithRequestId(
       requestData,
@@ -1961,7 +1961,7 @@ abstract class Protocol {
   Future<void> notification(
     JsonRpcNotification notificationData, {
     RelatedTaskMetadata? relatedTask,
-    int? relatedRequestId,
+    RequestId? relatedRequestId,
   }) {
     return _notificationWithRequestId(
       notificationData,

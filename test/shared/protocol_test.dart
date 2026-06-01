@@ -477,6 +477,47 @@ void main() {
       expect(response.result['value'], 'nested-ok');
     });
 
+    test('public request preserves string relatedRequestId', () async {
+      await protocol.connect(transport);
+
+      final requestFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(id: 0, method: 'test/method'),
+            (json) => TestResult(value: json['value'] as String),
+            const RequestOptions(timeout: Duration(seconds: 1)),
+            'parent-req-1',
+          )
+          .timeout(const Duration(seconds: 5));
+
+      await waitForSentMessages(transport, 1);
+
+      expect(transport.sentMessages[0], isA<JsonRpcRequest>());
+      expect(transport.relatedRequestIds[0], 'parent-req-1');
+
+      final request = transport.sentMessages[0] as JsonRpcRequest;
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: request.id,
+          result: {'value': 'ok'},
+        ),
+      );
+
+      expect((await requestFuture).value, 'ok');
+    });
+
+    test('public notification preserves finite numeric relatedRequestId',
+        () async {
+      await protocol.connect(transport);
+
+      await protocol.notification(
+        const JsonRpcNotification(method: 'test/notification'),
+        relatedRequestId: 1.5,
+      );
+
+      expect(transport.sentMessages.single, isA<JsonRpcNotification>());
+      expect(transport.relatedRequestIds.single, 1.5);
+    });
+
     test('routes nested cancellation notifications for string request IDs',
         () async {
       await protocol.connect(transport);

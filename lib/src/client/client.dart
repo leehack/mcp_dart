@@ -498,7 +498,7 @@ class McpClient extends Protocol {
     JsonRpcRequest requestData,
     T Function(Map<String, dynamic> resultJson) resultFactory, [
     RequestOptions? options,
-    int? relatedRequestId,
+    RequestId? relatedRequestId,
   ]) async {
     _assertStatelessRequestAllowed(requestData.method);
 
@@ -562,7 +562,7 @@ class McpClient extends Protocol {
   Future<void> notification(
     JsonRpcNotification notificationData, {
     RelatedTaskMetadata? relatedTask,
-    int? relatedRequestId,
+    RequestId? relatedRequestId,
   }) async {
     _assertStatelessNotificationAllowed(notificationData.method);
     await super.notification(
