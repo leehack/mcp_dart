@@ -1459,6 +1459,12 @@ void main() {
       expect(
         () => ResourceContents.fromJson({
           'uri': 'file://example.txt',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file://example.txt',
           'text': 'Sample text content',
           '_meta': {'bad': Object()},
         }),
@@ -1487,6 +1493,12 @@ void main() {
           extra: {'bad': Object()},
         ).toJson(),
         throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const UnknownResourceContents(
+          uri: 'file://example.txt',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
       );
     });
   });

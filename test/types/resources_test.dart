@@ -790,33 +790,35 @@ void main() {
       expect(roundTripped['customField']['enabled'], isTrue);
     });
 
-    test('unknown resource content preserves passthrough fields', () {
-      final result = ReadResourceResult.fromJson({
-        'contents': [
-          {
-            'uri': 'ui://weather/raw',
-            'mimeType': 'application/vnd.custom+json',
-            '_meta': {
-              'ui': {
-                'prefersBorder': true,
+    test('resource contents require text or blob', () {
+      expect(
+        () => ReadResourceResult.fromJson({
+          'contents': [
+            {
+              'uri': 'ui://weather/raw',
+              'mimeType': 'application/vnd.custom+json',
+              '_meta': {
+                'ui': {
+                  'prefersBorder': true,
+                },
+              },
+              'payload': {
+                'kind': 'custom',
               },
             },
-            'payload': {
-              'kind': 'custom',
-            },
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const UnknownResourceContents(
+          uri: 'ui://weather/raw',
+          extra: {
+            'payload': {'kind': 'custom'},
           },
-        ],
-      });
-
-      final content = result.contents.single;
-      expect(content, isA<UnknownResourceContents>());
-      expect(content.meta!['ui']['prefersBorder'], isTrue);
-      expect(content.extra!['payload']['kind'], equals('custom'));
-
-      final json = result.toJson();
-      final roundTripped = (json['contents'] as List).single;
-      expect(roundTripped['payload']['kind'], equals('custom'));
-      expect(roundTripped['_meta']['ui']['prefersBorder'], isTrue);
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('fromJson rejects malformed content items', () {

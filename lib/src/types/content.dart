@@ -249,11 +249,8 @@ sealed class ResourceContents {
         extra: passthrough,
       );
     }
-    return UnknownResourceContents(
-      uri: uri,
-      mimeType: mimeType,
-      meta: meta,
-      extra: passthrough,
+    throw const FormatException(
+      'ResourceContents must include text or blob',
     );
   }
 
@@ -266,7 +263,11 @@ sealed class ResourceContents {
           final BlobResourceContents c => {
               'blob': _base64ForJson(c.blob, 'BlobResourceContents.blob'),
             },
-          UnknownResourceContents _ => {},
+          UnknownResourceContents _ => throw ArgumentError.value(
+              this,
+              'ResourceContents',
+              'must include text or blob',
+            ),
         },
         if (meta != null)
           '_meta': readJsonObject(meta, 'ResourceContents._meta'),
@@ -303,6 +304,11 @@ class BlobResourceContents extends ResourceContents {
 }
 
 /// Represents unknown or passthrough resource content types.
+///
+/// Stable MCP and MCP 2026 wire results require either text or blob content.
+/// This class is retained for source compatibility, but serialization rejects
+/// it because no current protocol result shape references bare
+/// `ResourceContents`.
 class UnknownResourceContents extends ResourceContents {
   const UnknownResourceContents({
     required super.uri,

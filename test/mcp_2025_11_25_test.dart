@@ -1956,6 +1956,12 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => ResourceContents.fromJson({
+            'uri': 'file:///docs/readme.md',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => ResourceLink.fromJson({
             'type': 'resource_link',
             'uri': 'file:///docs/readme.md',

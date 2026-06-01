@@ -134,6 +134,8 @@
   wire fields with protocol parse errors.
 - Rejected missing, unknown, and mismatched content block type discriminators
   with protocol parse errors.
+- Rejected resource content items that omit both `text` and `blob`, matching
+  the spec-defined `TextResourceContents | BlobResourceContents` union.
 - Rejected non-finite numeric values for progress, annotation priority, model
   priority, and sampling temperature fields so SDK-built payloads remain valid
   JSON numbers.
