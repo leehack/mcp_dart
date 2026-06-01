@@ -277,6 +277,17 @@ List<String>? readOptionalStringList(Object? value, String field) {
   ];
 }
 
+Map<String, String>? readOptionalStringMap(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  final map = readJsonObject(value, field);
+  return {
+    for (final entry in map.entries)
+      entry.key: readRequiredString(entry.value, '$field.${entry.key}'),
+  };
+}
+
 int? readOptionalTtlMs(Object? value, String field) {
   final ttlMs = readOptionalInteger(value, field);
   if (ttlMs == null) {

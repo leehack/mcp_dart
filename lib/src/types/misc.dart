@@ -17,21 +17,27 @@ class EmptyResult implements BaseResultData {
 /// Parameters for the `notifications/cancelled` notification.
 class CancelledNotification {
   /// The ID of the request to cancel.
-  final RequestId requestId;
+  final RequestId? requestId;
 
   /// An optional string describing the reason for the cancellation.
   final String? reason;
 
-  const CancelledNotification({required this.requestId, this.reason});
+  const CancelledNotification({this.requestId, this.reason});
 
   factory CancelledNotification.fromJson(Map<String, dynamic> json) =>
       CancelledNotification(
-        requestId: parseRequestId(json['requestId'], fieldName: 'requestId'),
-        reason: json['reason'] as String?,
+        requestId: json.containsKey('requestId')
+            ? parseRequestId(json['requestId'], fieldName: 'requestId')
+            : null,
+        reason: readOptionalString(
+          json['reason'],
+          'CancelledNotification.reason',
+        ),
       );
 
   Map<String, dynamic> toJson() => {
-        'requestId': parseRequestId(requestId, fieldName: 'requestId'),
+        if (requestId != null)
+          'requestId': parseRequestId(requestId, fieldName: 'requestId'),
         if (reason != null) 'reason': reason,
       };
 }
@@ -48,7 +54,10 @@ class JsonRpcCancelledNotification extends JsonRpcNotification {
         );
 
   factory JsonRpcCancelledNotification.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcCancelledNotification.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for cancelled notification");
     }
@@ -97,7 +106,7 @@ class Progress {
     return Progress(
       progress: readFiniteNumber(json['progress'], 'Progress.progress'),
       total: readOptionalFiniteNumber(json['total'], 'Progress.total'),
-      message: json['message'] as String?,
+      message: readOptionalString(json['message'], 'Progress.message'),
     );
   }
 
@@ -171,7 +180,10 @@ class JsonRpcProgressNotification extends JsonRpcNotification {
 
   /// Creates from JSON.
   factory JsonRpcProgressNotification.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcProgressNotification.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for progress notification");
     }

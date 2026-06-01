@@ -177,6 +177,20 @@ void main() {
       expect(json.containsKey('reason'), isFalse);
     });
 
+    test('allows omitted requestId per notification wire schema', () {
+      final parsed = JsonRpcCancelledNotification.fromJson({
+        'jsonrpc': '2.0',
+        'method': 'notifications/cancelled',
+        'params': {'reason': 'Task cancellation uses tasks/cancel'},
+      });
+
+      expect(parsed.cancelParams.requestId, isNull);
+      expect(parsed.cancelParams.reason, 'Task cancellation uses tasks/cancel');
+      expect(parsed.toJson()['params'], {
+        'reason': 'Task cancellation uses tasks/cancel',
+      });
+    });
+
     test('rejects malformed requestId wire values', () {
       for (final requestId in [
         null,

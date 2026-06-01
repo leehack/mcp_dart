@@ -111,6 +111,19 @@ void main() {
       );
     });
 
+    test('fromJson rejects non-object params', () {
+      final json = {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'logging/setLevel',
+        'params': 'bad',
+      };
+      expect(
+        () => JsonRpcSetLevelRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('toJson serializes correctly', () {
       final request = JsonRpcSetLevelRequest(
         id: 5,
@@ -215,6 +228,30 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
+
+    test('rejects malformed logger and non-JSON data values', () {
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({
+          'level': 'info',
+          'logger': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({
+          'level': 'info',
+          'data': Object(),
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const LoggingMessageNotificationParams(
+          level: LoggingLevel.info,
+          data: Object(),
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcLoggingMessageNotification', () {
@@ -263,6 +300,18 @@ void main() {
       final json = {
         'jsonrpc': '2.0',
         'method': 'notifications/message',
+      };
+      expect(
+        () => JsonRpcLoggingMessageNotification.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects non-object params', () {
+      final json = {
+        'jsonrpc': '2.0',
+        'method': 'notifications/message',
+        'params': 'bad',
       };
       expect(
         () => JsonRpcLoggingMessageNotification.fromJson(json),

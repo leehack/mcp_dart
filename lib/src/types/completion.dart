@@ -11,7 +11,7 @@ sealed class Reference {
   });
 
   factory Reference.fromJson(Map<String, dynamic> json) {
-    final type = json['type'] as String?;
+    final type = readRequiredString(json['type'], 'Reference.type');
     return switch (type) {
       'ref/resource' => ResourceReference.fromJson(json),
       'ref/prompt' => PromptReference.fromJson(json),
@@ -66,8 +66,8 @@ class PromptReference extends Reference {
 
   factory PromptReference.fromJson(Map<String, dynamic> json) {
     return PromptReference(
-      name: json['name'] as String,
-      title: json['title'] as String?,
+      name: readRequiredString(json['name'], 'PromptReference.name'),
+      title: readOptionalString(json['title'], 'PromptReference.title'),
     );
   }
 }
@@ -87,8 +87,8 @@ class ArgumentCompletionInfo {
 
   factory ArgumentCompletionInfo.fromJson(Map<String, dynamic> json) {
     return ArgumentCompletionInfo(
-      name: json['name'] as String,
-      value: json['value'] as String,
+      name: readRequiredString(json['name'], 'ArgumentCompletionInfo.name'),
+      value: readRequiredString(json['value'], 'ArgumentCompletionInfo.value'),
     );
   }
 
@@ -107,8 +107,9 @@ class CompletionContext {
 
   factory CompletionContext.fromJson(Map<String, dynamic> json) {
     return CompletionContext(
-      arguments: (json['arguments'] as Map<String, dynamic>?)?.map(
-        (key, value) => MapEntry(key, value as String),
+      arguments: readOptionalStringMap(
+        json['arguments'],
+        'CompletionContext.arguments',
       ),
     );
   }
@@ -137,14 +138,16 @@ class CompleteRequest {
 
   factory CompleteRequest.fromJson(Map<String, dynamic> json) =>
       CompleteRequest(
-        ref: Reference.fromJson(json['ref'] as Map<String, dynamic>),
+        ref: Reference.fromJson(
+          readJsonObject(json['ref'], 'CompleteRequest.ref'),
+        ),
         argument: ArgumentCompletionInfo.fromJson(
-          json['argument'] as Map<String, dynamic>,
+          readJsonObject(json['argument'], 'CompleteRequest.argument'),
         ),
         context: json['context'] == null
             ? null
             : CompletionContext.fromJson(
-                json['context'] as Map<String, dynamic>,
+                readJsonObject(json['context'], 'CompleteRequest.context'),
               ),
       );
 
@@ -170,7 +173,10 @@ class JsonRpcCompleteRequest extends JsonRpcRequest {
         );
 
   factory JsonRpcCompleteRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcCompleteRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for complete request");
     }
@@ -211,9 +217,15 @@ class CompletionResultData {
       );
     }
     return CompletionResultData(
-      values: values.cast<String>(),
+      values: [
+        for (final value in values)
+          readRequiredString(value, 'CompletionResultData.values items'),
+      ],
       total: readOptionalInteger(json['total'], 'CompletionResultData.total'),
-      hasMore: json['hasMore'] as bool?,
+      hasMore: readOptionalBool(
+        json['hasMore'],
+        'CompletionResultData.hasMore',
+      ),
     );
   }
 
@@ -248,7 +260,7 @@ class CompleteResult implements BaseResultData {
     final meta = readOptionalJsonObject(json['_meta'], 'CompleteResult._meta');
     return CompleteResult(
       completion: CompletionResultData.fromJson(
-        json['completion'] as Map<String, dynamic>,
+        readJsonObject(json['completion'], 'CompleteResult.completion'),
       ),
       meta: meta,
     );

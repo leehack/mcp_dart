@@ -2,6 +2,23 @@ import '../types.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
+List<T>? _readOptionalObjectList<T>(
+  Object? value,
+  String field,
+  T Function(Map<String, dynamic> json) fromJson,
+) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! List) {
+    throw FormatException('$field must be a list of objects');
+  }
+  return [
+    for (var i = 0; i < value.length; i++)
+      fromJson(readJsonObject(value[i], '$field[$i]')),
+  ];
+}
+
 /// Describes an argument accepted by a prompt template.
 class PromptArgument {
   /// The name of the argument.
@@ -25,10 +42,13 @@ class PromptArgument {
 
   factory PromptArgument.fromJson(Map<String, dynamic> json) {
     return PromptArgument(
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      required: json['required'] as bool?,
+      name: readRequiredString(json['name'], 'PromptArgument.name'),
+      title: readOptionalString(json['title'], 'PromptArgument.title'),
+      description: readOptionalString(
+        json['description'],
+        'PromptArgument.description',
+      ),
+      required: readOptionalBool(json['required'], 'PromptArgument.required'),
     );
   }
 
@@ -78,18 +98,23 @@ class Prompt {
 
   factory Prompt.fromJson(Map<String, dynamic> json) {
     return Prompt(
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      arguments: (json['arguments'] as List<dynamic>?)
-          ?.map((a) => PromptArgument.fromJson(a as Map<String, dynamic>))
-          .toList(),
+      name: readRequiredString(json['name'], 'Prompt.name'),
+      title: readOptionalString(json['title'], 'Prompt.title'),
+      description:
+          readOptionalString(json['description'], 'Prompt.description'),
+      arguments: _readOptionalObjectList(
+        json['arguments'],
+        'Prompt.arguments',
+        PromptArgument.fromJson,
+      ),
       icon: json['icon'] != null
-          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          ? ImageContent.fromJson(readJsonObject(json['icon'], 'Prompt.icon'))
           : null,
-      icons: (json['icons'] as List<dynamic>?)
-          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      icons: _readOptionalObjectList(
+        json['icons'],
+        'Prompt.icons',
+        McpIcon.fromJson,
+      ),
       meta: readOptionalJsonObject(json['_meta'], 'Prompt._meta'),
     );
   }
@@ -114,7 +139,9 @@ class ListPromptsRequest {
   const ListPromptsRequest({this.cursor});
 
   factory ListPromptsRequest.fromJson(Map<String, dynamic> json) =>
-      ListPromptsRequest(cursor: json['cursor'] as String?);
+      ListPromptsRequest(
+        cursor: readOptionalString(json['cursor'], 'ListPromptsRequest.cursor'),
+      );
 
   Map<String, dynamic> toJson() => {if (cursor != null) 'cursor': cursor};
 }
@@ -132,7 +159,10 @@ class JsonRpcListPromptsRequest extends JsonRpcRequest {
         super(method: Method.promptsList, params: params?.toJson());
 
   factory JsonRpcListPromptsRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcListPromptsRequest.params',
+    );
     final meta = extractRequestMeta(json);
     return JsonRpcListPromptsRequest(
       id: parseRequestId(json['id']),
@@ -179,9 +209,16 @@ class ListPromptsResult implements CacheableResultData {
     }
     return ListPromptsResult(
       prompts: prompts
-          .map((p) => Prompt.fromJson(p as Map<String, dynamic>))
+          .map(
+            (p) => Prompt.fromJson(
+              readJsonObject(p, 'ListPromptsResult.prompts items'),
+            ),
+          )
           .toList(),
-      nextCursor: json['nextCursor'] as String?,
+      nextCursor: readOptionalString(
+        json['nextCursor'],
+        'ListPromptsResult.nextCursor',
+      ),
       ttlMs: readOptionalTtlMs(json['ttlMs'], 'ListPromptsResult.ttlMs'),
       cacheScope: readOptionalCacheScope(
         json['cacheScope'],
@@ -229,9 +266,10 @@ class GetPromptRequest {
 
   factory GetPromptRequest.fromJson(Map<String, dynamic> json) =>
       GetPromptRequest(
-        name: json['name'] as String,
-        arguments: (json['arguments'] as Map<String, dynamic>?)?.map(
-          (k, v) => MapEntry(k, v as String),
+        name: readRequiredString(json['name'], 'GetPromptRequest.name'),
+        arguments: readOptionalStringMap(
+          json['arguments'],
+          'GetPromptRequest.arguments',
         ),
         inputResponses: InputResponse.mapFromJson(
           json['inputResponses'],
@@ -264,7 +302,10 @@ class JsonRpcGetPromptRequest extends JsonRpcRequest {
   }) : super(method: Method.promptsGet, params: getParams.toJson());
 
   factory JsonRpcGetPromptRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcGetPromptRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for get prompt request");
     }
@@ -298,7 +339,9 @@ class PromptMessage {
       role: PromptMessageRole.values.byName(
         readRequiredRoleString(json['role'], 'PromptMessage.role'),
       ),
-      content: Content.fromJson(json['content'] as Map<String, dynamic>),
+      content: Content.fromJson(
+        readJsonObject(json['content'], 'PromptMessage.content'),
+      ),
     );
   }
 
@@ -329,9 +372,16 @@ class GetPromptResult implements BaseResultData {
       throw const FormatException('GetPromptResult.messages is required');
     }
     return GetPromptResult(
-      description: json['description'] as String?,
+      description: readOptionalString(
+        json['description'],
+        'GetPromptResult.description',
+      ),
       messages: messages
-          .map((m) => PromptMessage.fromJson(m as Map<String, dynamic>))
+          .map(
+            (m) => PromptMessage.fromJson(
+              readJsonObject(m, 'GetPromptResult.messages items'),
+            ),
+          )
           .toList(),
       meta: meta,
     );

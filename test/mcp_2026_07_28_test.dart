@@ -927,6 +927,40 @@ void main() {
       );
     });
 
+    test(
+        'prompt completion and notification fields reject malformed wire shapes',
+        () {
+      for (final parse in <Object Function()>[
+        () => Prompt.fromJson({
+              'name': 'prompt',
+              'arguments': [1],
+            }),
+        () => GetPromptRequest.fromJson({
+              'name': 'prompt',
+              'arguments': {'arg': 1},
+            }),
+        () => CompleteRequest.fromJson({
+              'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+              'argument': {'name': 'arg', 'value': 1},
+            }),
+        () => CompletionResultData.fromJson({
+              'values': ['a'],
+              'hasMore': 'true',
+            }),
+        () => LoggingMessageNotification.fromJson({
+              'level': 'info',
+              'data': Object(),
+            }),
+        () => ProgressNotification.fromJson({
+              'progressToken': 'progress-1',
+              'progress': 1,
+              'message': 1,
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
     test('serializes MRTR input required results', () {
       final result = InputRequiredResult(
         inputRequests: {

@@ -1307,6 +1307,69 @@ void main() {
       expect(deserialized.required, equals(true));
     });
 
+    test('Prompt parsers reject malformed wire fields', () {
+      for (final parse in <Object Function()>[
+        () => PromptArgument.fromJson({'name': 1}),
+        () => PromptArgument.fromJson({
+              'name': 'arg',
+              'required': 'true',
+            }),
+        () => Prompt.fromJson({'name': 1}),
+        () => Prompt.fromJson({
+              'name': 'prompt',
+              'arguments': 'bad',
+            }),
+        () => Prompt.fromJson({
+              'name': 'prompt',
+              'arguments': [1],
+            }),
+        () => Prompt.fromJson({
+              'name': 'prompt',
+              'icon': 'bad',
+            }),
+        () => Prompt.fromJson({
+              'name': 'prompt',
+              'icons': [1],
+            }),
+        () => ListPromptsRequest.fromJson({'cursor': 1}),
+        () => ListPromptsResult.fromJson({
+              'prompts': [1],
+            }),
+        () => ListPromptsResult.fromJson({
+              'prompts': [],
+              'nextCursor': 1,
+            }),
+        () => GetPromptRequest.fromJson({'name': 1}),
+        () => GetPromptRequest.fromJson({
+              'name': 'prompt',
+              'arguments': 'bad',
+            }),
+        () => GetPromptRequest.fromJson({
+              'name': 'prompt',
+              'arguments': {'arg': 1},
+            }),
+        () => JsonRpcGetPromptRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsGet,
+              'params': 'bad',
+            }),
+        () => PromptMessage.fromJson({
+              'role': 'user',
+              'content': 'bad',
+            }),
+        () => GetPromptResult.fromJson({
+              'description': 1,
+              'messages': [],
+            }),
+        () => GetPromptResult.fromJson({
+              'messages': [1],
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+
     test('PromptMessage validates role wire values', () {
       expect(
         () => PromptMessage.fromJson({
@@ -1324,6 +1387,53 @@ void main() {
       );
     });
   });
+
+  group('Completion Tests', () {
+    test('Completion parsers reject malformed wire fields', () {
+      final validRef = {'type': 'ref/prompt', 'name': 'prompt'};
+      final validArgument = {'name': 'arg', 'value': 'prefix'};
+
+      for (final parse in <Object Function()>[
+        () => Reference.fromJson({'type': 1}),
+        () => PromptReference.fromJson({'name': 1}),
+        () => ArgumentCompletionInfo.fromJson({'name': 1, 'value': 'v'}),
+        () => ArgumentCompletionInfo.fromJson({'name': 'arg', 'value': 1}),
+        () => CompletionContext.fromJson({
+              'arguments': {'arg': 1},
+            }),
+        () => CompleteRequest.fromJson({
+              'ref': 'bad',
+              'argument': validArgument,
+            }),
+        () => CompleteRequest.fromJson({
+              'ref': validRef,
+              'argument': 'bad',
+            }),
+        () => CompleteRequest.fromJson({
+              'ref': validRef,
+              'argument': validArgument,
+              'context': 'bad',
+            }),
+        () => JsonRpcCompleteRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.completionComplete,
+              'params': 'bad',
+            }),
+        () => CompletionResultData.fromJson({
+              'values': ['one', 1],
+            }),
+        () => CompletionResultData.fromJson({
+              'values': ['one'],
+              'hasMore': 'true',
+            }),
+        () => CompleteResult.fromJson({'completion': 'bad'}),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+  });
+
   group('CreateMessageResult Tests', () {
     test('CreateMessageResult serialization and deserialization', () {
       final result = const CreateMessageResult(

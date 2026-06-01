@@ -1606,6 +1606,53 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => LoggingMessageNotificationParams.fromJson({
+            'level': 'info',
+            'data': Object(),
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptArgument.fromJson({'name': 1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Prompt.fromJson({
+            'name': 'prompt',
+            'arguments': [1],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => GetPromptRequest.fromJson({
+            'name': 'prompt',
+            'arguments': {'arg': 1},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CompleteRequest.fromJson({
+            'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+            'argument': {'name': 'arg', 'value': 1},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CompletionResultData.fromJson({
+            'values': ['a'],
+            'hasMore': 'true',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ProgressNotification.fromJson({
+            'progressToken': 'progress-1',
+            'progress': 1,
+            'message': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => CreateMessageRequestParams.fromJson({
             'messages': [
               {
