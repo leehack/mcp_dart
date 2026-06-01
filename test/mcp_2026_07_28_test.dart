@@ -130,9 +130,11 @@ class DiscoveringClientTransport extends Transport
 class LegacyFallbackTransport extends Transport
     implements ProtocolVersionAwareTransport {
   LegacyFallbackTransport({
+    this.discoveryError,
     this.toolsListResult = const {'tools': []},
   });
 
+  final McpError? discoveryError;
   final Map<String, dynamic> toolsListResult;
   final List<JsonRpcMessage> sentMessages = [];
 
@@ -152,6 +154,10 @@ class LegacyFallbackTransport extends Transport
     sentMessages.add(message);
 
     if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      final error = discoveryError;
+      if (error != null) {
+        throw error;
+      }
       onmessage?.call(
         JsonRpcError(
           id: message.id,
@@ -2497,12 +2503,11 @@ void main() {
       expect(transport.sentMessages.single, isA<JsonRpcResponse>());
     });
 
-    test('client can opt in to server/discover and sends stateless metadata',
+    test('client defaults to server/discover and sends stateless metadata',
         () async {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
       );
 
       await client.connect(transport);
@@ -2527,6 +2532,62 @@ void main() {
         'version': '1.0.0',
       });
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
+    });
+
+    test('client can opt out of discovery for legacy initialization', () async {
+      final transport = LegacyFallbackTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: false),
+      );
+
+      await client.connect(transport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        isNot(contains(Method.serverDiscover)),
+      );
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        contains(Method.initialize),
+      );
+    });
+
+    test('client falls back when legacy HTTP rejects discovery before init',
+        () async {
+      final errors = [
+        McpError(
+          0,
+          'Error POSTing to endpoint (HTTP 400): '
+          '{"jsonrpc":"2.0","error":{"code":-32000,'
+          '"message":"Bad Request: Server not initialized"},"id":null}',
+        ),
+        McpError(0, 'Error POSTing to endpoint (HTTP 400): '),
+      ];
+
+      for (final error in errors) {
+        final transport = LegacyFallbackTransport(discoveryError: error);
+        final client = McpClient(
+          const Implementation(name: 'client', version: '1.0.0'),
+        );
+
+        await client.connect(transport);
+
+        expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+        expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+        expect(
+          transport.sentMessages
+              .whereType<JsonRpcRequest>()
+              .map((message) => message.method),
+          [Method.serverDiscover, Method.initialize],
+        );
+      }
     });
 
     test('stateless client rejects removed request methods before send',
@@ -3470,7 +3531,6 @@ void main() {
       final transport = LegacyFallbackTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
       );
 
       await client.connect(transport);
