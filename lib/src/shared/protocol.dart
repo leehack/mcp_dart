@@ -1311,7 +1311,8 @@ abstract class Protocol {
       return;
     }
 
-    final handler = _requestHandlers[request.method] ?? fallbackRequestHandler;
+    final registeredHandler = _requestHandlers[request.method];
+    final fallbackHandler = fallbackRequestHandler;
 
     if (_hasTaskAugmentation(request) &&
         !_canHandleTaskAugmentation(request.method)) {
@@ -1325,7 +1326,7 @@ abstract class Protocol {
         meta?[legacyRelatedTaskMetadataKey]) as Map<String, dynamic>?;
     final relatedTaskId = relatedTaskJson?['taskId'] as String?;
 
-    if (handler == null) {
+    if (registeredHandler == null && fallbackHandler == null) {
       _sendErrorResponse(
         request.id,
         ErrorCode.methodNotFound.value,
@@ -1435,7 +1436,15 @@ abstract class Protocol {
       );
     }
 
-    Future.microtask(() => handler(request, extra)).then(
+    Future<BaseResultData> invokeHandler() {
+      final handler = registeredHandler;
+      if (handler != null) {
+        return handler(request, extra);
+      }
+      return fallbackHandler!(request);
+    }
+
+    Future.microtask(invokeHandler).then(
       (result) async {
         if (abortController.signal.aborted) {
           return;
