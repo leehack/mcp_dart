@@ -122,6 +122,7 @@ const Set<String> _statelessRemovedRequestMethods = {
 const Set<String> _statelessRemovedNotificationMethods = {
   Method.notificationsInitialized,
   Method.notificationsRootsListChanged,
+  Method.notificationsTasksStatus,
 };
 
 /// An MCP client implementation built on top of a pluggable [Transport].

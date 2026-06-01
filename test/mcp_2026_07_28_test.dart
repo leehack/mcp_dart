@@ -1541,6 +1541,18 @@ void main() {
             resultParams: const TaskResultRequest(taskId: 'task-1'),
             meta: taskExtensionMeta,
           ),
+        )
+        ..receive(
+          JsonRpcTaskStatusNotification(
+            statusParams: const TaskStatusNotification(
+              taskId: 'task-1',
+              status: TaskStatus.working,
+              ttl: null,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ),
+            meta: taskExtensionMeta,
+          ),
         );
       await _pump();
 
@@ -2622,6 +2634,20 @@ void main() {
         (
           method: Method.notificationsRootsListChanged,
           call: client.sendRootsListChanged,
+        ),
+        (
+          method: Method.notificationsTasksStatus,
+          call: () => client.notification(
+                JsonRpcTaskStatusNotification(
+                  statusParams: const TaskStatusNotification(
+                    taskId: 'task-1',
+                    status: TaskStatus.working,
+                    ttl: null,
+                    createdAt: '2026-07-28T00:00:00Z',
+                    lastUpdatedAt: '2026-07-28T00:00:00Z',
+                  ),
+                ),
+              ),
         ),
       ];
 

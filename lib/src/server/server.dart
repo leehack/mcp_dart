@@ -76,6 +76,7 @@ class Server extends Protocol {
   static const Set<String> _statelessRemovedNotificationMethods = {
     Method.notificationsInitialized,
     Method.notificationsRootsListChanged,
+    Method.notificationsTasksStatus,
   };
 
   static const Set<String> _inputRequiredResultMethods = {
