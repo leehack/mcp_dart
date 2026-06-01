@@ -238,19 +238,23 @@ void main() {
         message: 'test',
         url: 'https://example.com/ui',
         elicitationId: 'ui-123',
+        task: TaskCreationParams(ttl: 7200),
       );
 
       expect(params.url, 'https://example.com/ui');
       expect(params.elicitationId, 'ui-123');
+      expect(params.task?.ttl, 7200);
 
       final json = params.toJson();
       expect(json['mode'], 'url');
       expect(json['url'], 'https://example.com/ui');
       expect(json['elicitationId'], 'ui-123');
+      expect(json['task'], {'ttl': 7200});
 
       final deserialized = ElicitRequestParams.fromJson(json);
       expect(deserialized.url, 'https://example.com/ui');
       expect(deserialized.elicitationId, 'ui-123');
+      expect(deserialized.task?.ttl, 7200);
     });
 
     test('Elicitation URL must be absolute URI', () {

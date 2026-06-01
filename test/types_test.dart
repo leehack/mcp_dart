@@ -1069,16 +1069,19 @@ void main() {
           properties: {'name': JsonSchema.string(minLength: 1)},
           required: const ['name'],
         ),
+        task: const TaskCreationParams(ttl: 3600),
       );
 
       final json = params.toJson();
       expect(json['message'], equals("Enter your name"));
       expect(json['requestedSchema']['type'], equals('object'));
       expect(json['requestedSchema']['properties']['name']['type'], 'string');
+      expect(json['task'], {'ttl': 3600});
 
       final restored = ElicitRequestParams.fromJson(json);
       expect(restored.message, equals("Enter your name"));
       expect(restored.requestedSchema!.toJson()['type'], equals('object'));
+      expect(restored.task?.ttl, 3600);
     });
 
     test('JsonRpcElicitRequest serialization and deserialization', () {

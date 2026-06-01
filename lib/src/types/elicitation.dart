@@ -1,5 +1,6 @@
 import '../shared/json_schema/json_schema.dart';
 import 'json_rpc.dart';
+import 'tasks.dart';
 import 'validation.dart';
 
 /// Legacy alias for [JsonSchema] used in elicitation requests.
@@ -40,12 +41,16 @@ class ElicitRequest {
   /// Required for URL mode to correlate with completion notifications.
   final String? elicitationId;
 
+  /// Task metadata for task-augmented execution.
+  final TaskCreation? task;
+
   const ElicitRequest({
     this.mode,
     required this.message,
     this.requestedSchema,
     this.url,
     this.elicitationId,
+    this.task,
   })  : assert(
           mode != ElicitationMode.url || requestedSchema == null,
           'URL elicitation must not include requestedSchema.',
@@ -75,6 +80,7 @@ class ElicitRequest {
   const ElicitRequest.form({
     required this.message,
     required ElicitationInputSchema this.requestedSchema,
+    this.task,
   })  : mode = ElicitationMode.form,
         url = null,
         elicitationId = null;
@@ -84,6 +90,7 @@ class ElicitRequest {
     required this.message,
     required String this.url,
     required String this.elicitationId,
+    this.task,
   })  : mode = ElicitationMode.url,
         requestedSchema = null;
 
@@ -110,6 +117,7 @@ class ElicitRequest {
     final requestedSchemaJson = json['requestedSchema'];
     final url = json['url'];
     final elicitationId = json['elicitationId'];
+    final task = readOptionalJsonObject(json['task'], 'ElicitRequest.task');
 
     if (mode == ElicitationMode.url) {
       if (url is! String) {
@@ -128,6 +136,7 @@ class ElicitRequest {
         message: message,
         url: url,
         elicitationId: elicitationId,
+        task: task == null ? null : TaskCreation.fromJson(task),
       );
     }
 
@@ -148,6 +157,7 @@ class ElicitRequest {
       mode: mode,
       message: message,
       requestedSchema: JsonSchema.fromJson(requestedSchemaJson),
+      task: task == null ? null : TaskCreation.fromJson(task),
     );
   }
 
@@ -188,6 +198,7 @@ class ElicitRequest {
       if (requestedSchema != null) 'requestedSchema': requestedSchema!.toJson(),
       if (url != null) 'url': url,
       if (elicitationId != null) 'elicitationId': elicitationId,
+      if (task != null) 'task': task!.toJson(),
     };
   }
 

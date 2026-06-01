@@ -725,6 +725,7 @@ void main() {
                 properties: {'name': JsonSchema.string()},
                 required: ['name'],
               ),
+              task: const TaskCreation(ttl: 1000),
             ),
           ),
           'capital_of_france': InputRequest.createMessage(
@@ -756,6 +757,10 @@ void main() {
         Method.elicitationCreate,
       );
       expect(
+        json['inputRequests']['github_login']['params'],
+        isNot(contains('task')),
+      );
+      expect(
         json['inputRequests']['capital_of_france']['method'],
         Method.samplingCreateMessage,
       );
@@ -770,6 +775,10 @@ void main() {
       expect(
         parsed.inputRequests!['github_login']!.elicitParams.message,
         'Please provide your GitHub username',
+      );
+      expect(
+        parsed.inputRequests!['github_login']!.elicitParams.task,
+        isNull,
       );
       expect(
         parsed
@@ -907,6 +916,30 @@ void main() {
             'resultType': resultTypeInputRequired,
             'inputRequests': {
               'unsupported': {'method': Method.toolsCall},
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'inputRequests': {
+              'legacy_task_elicit': {
+                'method': Method.elicitationCreate,
+                'params': {
+                  'mode': 'form',
+                  'message': 'Need username',
+                  'requestedSchema': {
+                    'type': 'object',
+                    'properties': {
+                      'name': {'type': 'string'},
+                    },
+                  },
+                  'task': {'ttl': 1000},
+                },
+              },
             },
           },
         ),

@@ -711,9 +711,10 @@ class InputRequest {
 
   /// Creates an embedded `elicitation/create` input request.
   factory InputRequest.elicit(ElicitRequest params) {
+    final inputParams = params.toJson()..remove('task');
     return InputRequest._(
       method: Method.elicitationCreate,
-      params: params.toJson(),
+      params: inputParams,
     );
   }
 
@@ -746,6 +747,12 @@ class InputRequest {
           json['params'],
           'InputRequest.params',
         );
+        if (params.containsKey('task')) {
+          throw const FormatException(
+            'InputRequest elicitation/create params must not include '
+            'legacy task metadata',
+          );
+        }
         ElicitRequest.fromJson(params);
         return InputRequest._(method: method, params: params);
       case Method.samplingCreateMessage:
