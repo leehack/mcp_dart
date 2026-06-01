@@ -109,8 +109,10 @@ void main() {
       expect(transport.sentMessages.length, greaterThan(0));
       expect(transport.sentMessages.first is JsonRpcRequest, isTrue);
       expect(
-        (transport.sentMessages.first as JsonRpcRequest).method,
-        equals('initialize'),
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        containsAllInOrder([Method.serverDiscover, Method.initialize]),
       );
 
       // Verify that an initialized notification was sent
@@ -585,8 +587,20 @@ class MockTransport extends Transport {
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
 
-    // If it's an initialize request, respond with the mock response
-    if (message is JsonRpcRequest &&
+    // Simulate a legacy peer by rejecting discovery, then respond to initialize.
+    if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      if (onmessage != null) {
+        onmessage!(
+          JsonRpcError(
+            id: message.id,
+            error: const JsonRpcErrorData(
+              code: -32601,
+              message: 'Method not found',
+            ),
+          ),
+        );
+      }
+    } else if (message is JsonRpcRequest &&
         message.method == 'initialize' &&
         mockInitializeResponse != null) {
       if (onmessage != null) {

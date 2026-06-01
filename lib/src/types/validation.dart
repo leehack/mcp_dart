@@ -1,3 +1,173 @@
+import 'dart:convert';
+
+import '../shared/uri_template.dart';
+
+final _base64Pattern = RegExp(
+  r'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$',
+);
+
+String readRequiredString(Object? value, String field) {
+  if (value is String) {
+    return value;
+  }
+  throw FormatException('$field must be a string');
+}
+
+bool isAbsoluteUriString(String value) {
+  return Uri.tryParse(value)?.hasScheme ?? false;
+}
+
+String readRequiredAbsoluteUriString(Object? value, String field) {
+  final result = readRequiredString(value, field);
+  if (!isAbsoluteUriString(result)) {
+    throw FormatException('$field must be an absolute URI');
+  }
+  return result;
+}
+
+void validateAbsoluteUriString(String value, String field) {
+  if (!isAbsoluteUriString(value)) {
+    throw ArgumentError.value(value, field, 'must be an absolute URI');
+  }
+}
+
+String readRequiredUriTemplateString(Object? value, String field) {
+  final result = readRequiredString(value, field);
+  try {
+    UriTemplateExpander(result);
+  } on ArgumentError catch (error) {
+    throw FormatException(
+      '$field must be a URI template: ${error.message}',
+    );
+  }
+  return result;
+}
+
+void validateUriTemplateString(String value, String field) {
+  try {
+    UriTemplateExpander(value);
+  } on ArgumentError catch (error) {
+    throw ArgumentError.value(
+        value,
+        field,
+        'must be a URI template: '
+        '${error.message}');
+  }
+}
+
+bool isBase64String(String value) {
+  if (!_base64Pattern.hasMatch(value)) {
+    return false;
+  }
+  try {
+    base64.decode(value);
+    return true;
+  } on FormatException {
+    return false;
+  }
+}
+
+String readRequiredBase64String(Object? value, String field) {
+  final result = readRequiredString(value, field);
+  if (!isBase64String(result)) {
+    throw FormatException('$field must be a base64-encoded string');
+  }
+  return result;
+}
+
+void validateBase64String(String value, String field) {
+  if (!isBase64String(value)) {
+    throw ArgumentError.value(
+      value,
+      field,
+      'must be a base64-encoded string',
+    );
+  }
+}
+
+T readRequiredEnumValue<T extends Enum>(
+  Object? value,
+  Iterable<T> values,
+  String field,
+) {
+  final name = readRequiredString(value, field);
+  for (final enumValue in values) {
+    if (enumValue.name == name) {
+      return enumValue;
+    }
+  }
+  final allowed = values.map((value) => '"${value.name}"').join(', ');
+  throw FormatException('$field must be one of: $allowed');
+}
+
+T? readOptionalEnumValue<T extends Enum>(
+  Object? value,
+  Iterable<T> values,
+  String field,
+) {
+  if (value == null) {
+    return null;
+  }
+  return readRequiredEnumValue(value, values, field);
+}
+
+bool isRoleString(String value) {
+  return value == 'user' || value == 'assistant';
+}
+
+String readRequiredRoleString(Object? value, String field) {
+  final result = readRequiredString(value, field);
+  if (!isRoleString(result)) {
+    throw FormatException('$field must be "user" or "assistant"');
+  }
+  return result;
+}
+
+List<String>? readOptionalAnnotationAudience(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! List) {
+    throw FormatException('$field must be a list of roles');
+  }
+  return [
+    for (final item in value) readRequiredRoleString(item, '$field items'),
+  ];
+}
+
+void validateAnnotationAudience(List<String>? value, String field) {
+  if (value == null) {
+    return;
+  }
+  for (final item in value) {
+    if (!isRoleString(item)) {
+      throw ArgumentError.value(
+        item,
+        field,
+        'items must be "user" or "assistant"',
+      );
+    }
+  }
+}
+
+void validateAnnotationsObject(Map<String, dynamic>? value, String field) {
+  if (value == null) {
+    return;
+  }
+  readOptionalAnnotationAudience(value['audience'], '$field.audience');
+  readUnitDouble(value['priority'], '$field.priority');
+  readOptionalString(value['lastModified'], '$field.lastModified');
+}
+
+Map<String, dynamic>? readOptionalAnnotationsObject(
+  Object? value,
+  String field,
+) {
+  final result = readOptionalJsonObject(value, field);
+  validateAnnotationsObject(result, field);
+  return result;
+}
+
 double? readUnitDouble(Object? value, String field) {
   final number = readOptionalFiniteNumber(value, field);
   final result = number?.toDouble();
@@ -61,6 +231,14 @@ int? readOptionalInteger(Object? value, String field) {
     return value.toInt();
   }
   throw FormatException('$field must be an integer');
+}
+
+int readInteger(Object? value, String field) {
+  final integer = readOptionalInteger(value, field);
+  if (integer == null) {
+    throw FormatException('$field is required');
+  }
+  return integer;
 }
 
 String? readOptionalString(Object? value, String field) {

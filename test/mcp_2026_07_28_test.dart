@@ -130,9 +130,11 @@ class DiscoveringClientTransport extends Transport
 class LegacyFallbackTransport extends Transport
     implements ProtocolVersionAwareTransport {
   LegacyFallbackTransport({
+    this.discoveryError,
     this.toolsListResult = const {'tools': []},
   });
 
+  final McpError? discoveryError;
   final Map<String, dynamic> toolsListResult;
   final List<JsonRpcMessage> sentMessages = [];
 
@@ -152,6 +154,10 @@ class LegacyFallbackTransport extends Transport
     sentMessages.add(message);
 
     if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      final error = discoveryError;
+      if (error != null) {
+        throw error;
+      }
       onmessage?.call(
         JsonRpcError(
           id: message.id,
@@ -387,6 +393,44 @@ void main() {
       );
     });
 
+    test('allows fractional elicitation number schema keywords', () {
+      final request = ElicitRequestParams.form(
+        message: 'Configure ratio',
+        requestedSchema: JsonSchema.object(
+          properties: {
+            'ratio': JsonSchema.number(
+              minimum: 0.1,
+              maximum: 0.9,
+              defaultValue: 0.5,
+            ),
+            'count': JsonSchema.integer(
+              minimum: 0.5,
+              maximum: 10.5,
+              defaultValue: 1.5,
+            ),
+          },
+        ),
+      );
+
+      final json = request.toJson(
+        protocolVersion: draftProtocolVersion2026_07_28,
+      );
+      final schema = json['requestedSchema'] as Map<String, dynamic>;
+      final properties = schema['properties'] as Map<String, dynamic>;
+      expect((properties['ratio'] as Map<String, dynamic>)['minimum'], 0.1);
+      expect((properties['count'] as Map<String, dynamic>)['default'], 1.5);
+      expect((properties['count'] as Map<String, dynamic>)['maximum'], 10.5);
+
+      final inputRequest = InputRequest.elicit(request);
+      final inputSchema =
+          inputRequest.params!['requestedSchema'] as Map<String, dynamic>;
+      final inputProperties = inputSchema['properties'] as Map<String, dynamic>;
+      expect(
+        (inputProperties['ratio'] as Map<String, dynamic>)['default'],
+        0.5,
+      );
+    });
+
     test('rejects non-finite JSON numbers', () {
       expect(
         () => ProgressNotification.fromJson({
@@ -423,9 +467,23 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        () => ElicitResult.fromJson({
+          'action': 'accept',
+          'content': {'score': 1.5},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
         () => const ElicitResult(
           action: 'accept',
           content: {'score': double.nan},
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'accept',
+          content: {'score': 1.5},
         ).toJson(),
         throwsA(isA<ArgumentError>()),
       );
@@ -564,6 +622,43 @@ void main() {
       expect(
         DiscoverResult.fromJson(resultJson).instructions,
         'Use the tools.',
+      );
+    });
+
+    test('requires complete resultType on server/discover results', () {
+      final validResult = const DiscoverResult(
+        supportedVersions: [draftProtocolVersion2026_07_28],
+        capabilities: ServerCapabilities(),
+        serverInfo: Implementation(name: 'server', version: '1.0.0'),
+      ).toJson();
+
+      for (final json in [
+        {
+          ...validResult,
+        }..remove('resultType'),
+        {
+          ...validResult,
+          'resultType': resultTypeInputRequired,
+        },
+        {
+          ...validResult,
+          'resultType': 1,
+        },
+      ]) {
+        expect(
+          () => DiscoverResult.fromJson(json),
+          throwsFormatException,
+        );
+      }
+
+      expect(
+        () => const DiscoverResult(
+          resultType: resultTypeInputRequired,
+          supportedVersions: [draftProtocolVersion2026_07_28],
+          capabilities: ServerCapabilities(),
+          serverInfo: Implementation(name: 'server', version: '1.0.0'),
+        ).toJson(),
+        throwsArgumentError,
       );
     });
 
@@ -719,6 +814,7 @@ void main() {
                 properties: {'name': JsonSchema.string()},
                 required: ['name'],
               ),
+              task: const TaskCreation(ttl: 1000),
             ),
           ),
           'capital_of_france': InputRequest.createMessage(
@@ -731,6 +827,7 @@ void main() {
                   ),
                 ),
               ],
+              task: TaskCreation(ttl: 1000),
               maxTokens: 100,
             ),
           ),
@@ -749,8 +846,16 @@ void main() {
         Method.elicitationCreate,
       );
       expect(
+        json['inputRequests']['github_login']['params'],
+        isNot(contains('task')),
+      );
+      expect(
         json['inputRequests']['capital_of_france']['method'],
         Method.samplingCreateMessage,
+      );
+      expect(
+        json['inputRequests']['capital_of_france']['params'],
+        isNot(contains('task')),
       );
       expect(json['inputRequests']['roots'], {'method': Method.rootsList});
 
@@ -761,9 +866,17 @@ void main() {
         'Please provide your GitHub username',
       );
       expect(
+        parsed.inputRequests!['github_login']!.elicitParams.task,
+        isNull,
+      );
+      expect(
         parsed
             .inputRequests!['capital_of_france']!.createMessageParams.maxTokens,
         100,
+      );
+      expect(
+        parsed.inputRequests!['capital_of_france']!.createMessageParams.task,
+        isNull,
       );
     });
 
@@ -892,6 +1005,56 @@ void main() {
             'resultType': resultTypeInputRequired,
             'inputRequests': {
               'unsupported': {'method': Method.toolsCall},
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'inputRequests': {
+              'legacy_task_elicit': {
+                'method': Method.elicitationCreate,
+                'params': {
+                  'mode': 'form',
+                  'message': 'Need username',
+                  'requestedSchema': {
+                    'type': 'object',
+                    'properties': {
+                      'name': {'type': 'string'},
+                    },
+                  },
+                  'task': {'ttl': 1000},
+                },
+              },
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'inputRequests': {
+              'legacy_task_sampling': {
+                'method': Method.samplingCreateMessage,
+                'params': {
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': {
+                        'type': 'text',
+                        'text': 'Continue?',
+                      },
+                    },
+                  ],
+                  'maxTokens': 1,
+                  'task': {'ttl': 1000},
+                },
+              },
             },
           },
         ),
@@ -1539,6 +1702,18 @@ void main() {
           JsonRpcTaskResultRequest(
             id: 'task-result',
             resultParams: const TaskResultRequest(taskId: 'task-1'),
+            meta: taskExtensionMeta,
+          ),
+        )
+        ..receive(
+          JsonRpcTaskStatusNotification(
+            statusParams: const TaskStatusNotification(
+              taskId: 'task-1',
+              status: TaskStatus.working,
+              ttl: null,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ),
             meta: taskExtensionMeta,
           ),
         );
@@ -2485,12 +2660,11 @@ void main() {
       expect(transport.sentMessages.single, isA<JsonRpcResponse>());
     });
 
-    test('client can opt in to server/discover and sends stateless metadata',
+    test('client defaults to server/discover and sends stateless metadata',
         () async {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
       );
 
       await client.connect(transport);
@@ -2515,6 +2689,62 @@ void main() {
         'version': '1.0.0',
       });
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
+    });
+
+    test('client can opt out of discovery for legacy initialization', () async {
+      final transport = LegacyFallbackTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: false),
+      );
+
+      await client.connect(transport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        isNot(contains(Method.serverDiscover)),
+      );
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        contains(Method.initialize),
+      );
+    });
+
+    test('client falls back when legacy HTTP rejects discovery before init',
+        () async {
+      final errors = [
+        McpError(
+          0,
+          'Error POSTing to endpoint (HTTP 400): '
+          '{"jsonrpc":"2.0","error":{"code":-32000,'
+          '"message":"Bad Request: Server not initialized"},"id":null}',
+        ),
+        McpError(0, 'Error POSTing to endpoint (HTTP 400): '),
+      ];
+
+      for (final error in errors) {
+        final transport = LegacyFallbackTransport(discoveryError: error);
+        final client = McpClient(
+          const Implementation(name: 'client', version: '1.0.0'),
+        );
+
+        await client.connect(transport);
+
+        expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+        expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+        expect(
+          transport.sentMessages
+              .whereType<JsonRpcRequest>()
+              .map((message) => message.method),
+          [Method.serverDiscover, Method.initialize],
+        );
+      }
     });
 
     test('stateless client rejects removed request methods before send',
@@ -2622,6 +2852,20 @@ void main() {
         (
           method: Method.notificationsRootsListChanged,
           call: client.sendRootsListChanged,
+        ),
+        (
+          method: Method.notificationsTasksStatus,
+          call: () => client.notification(
+                JsonRpcTaskStatusNotification(
+                  statusParams: const TaskStatusNotification(
+                    taskId: 'task-1',
+                    status: TaskStatus.working,
+                    ttl: null,
+                    createdAt: '2026-07-28T00:00:00Z',
+                    lastUpdatedAt: '2026-07-28T00:00:00Z',
+                  ),
+                ),
+              ),
         ),
       ];
 
@@ -3444,7 +3688,6 @@ void main() {
       final transport = LegacyFallbackTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
       );
 
       await client.connect(transport);

@@ -525,6 +525,25 @@ Future<void> _initializeClient(
   final connectFuture = client.connect(transport);
   await _settle();
 
+  final discoverRequests = transport.sentMessages
+      .whereType<JsonRpcRequest>()
+      .where((request) => request.method == _serverDiscoverMethod)
+      .toList();
+  for (final discoverRequest in discoverRequests) {
+    transport.emit(
+      JsonRpcError(
+        id: discoverRequest.id,
+        error: JsonRpcErrorData(
+          code: ErrorCode.methodNotFound.value,
+          message: 'Method not found',
+        ),
+      ),
+    );
+  }
+  if (discoverRequests.isNotEmpty) {
+    await _settle();
+  }
+
   final initializeRequests = transport.sentMessages
       .whereType<JsonRpcRequest>()
       .where((request) => request.method == Method.initialize)

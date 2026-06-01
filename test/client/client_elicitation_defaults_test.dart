@@ -17,7 +17,18 @@ class MockTransport extends Transport {
   @override
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
-    if (message is JsonRpcRequest && message.method == Method.initialize) {
+    if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      _respond(
+        JsonRpcError(
+          id: message.id,
+          error: const JsonRpcErrorData(
+            code: -32601,
+            message: 'Method not found',
+          ),
+        ),
+      );
+    } else if (message is JsonRpcRequest &&
+        message.method == Method.initialize) {
       _respond(
         JsonRpcResponse(
           id: message.id,

@@ -1,5 +1,6 @@
 import '../shared/json_schema/json_schema.dart';
 import 'json_rpc.dart';
+import 'tasks.dart';
 import 'validation.dart';
 
 /// Legacy alias for [JsonSchema] used in elicitation requests.
@@ -40,12 +41,16 @@ class ElicitRequest {
   /// Required for URL mode to correlate with completion notifications.
   final String? elicitationId;
 
+  /// Task metadata for task-augmented execution.
+  final TaskCreation? task;
+
   const ElicitRequest({
     this.mode,
     required this.message,
     this.requestedSchema,
     this.url,
     this.elicitationId,
+    this.task,
   })  : assert(
           mode != ElicitationMode.url || requestedSchema == null,
           'URL elicitation must not include requestedSchema.',
@@ -75,6 +80,7 @@ class ElicitRequest {
   const ElicitRequest.form({
     required this.message,
     required ElicitationInputSchema this.requestedSchema,
+    this.task,
   })  : mode = ElicitationMode.form,
         url = null,
         elicitationId = null;
@@ -84,10 +90,14 @@ class ElicitRequest {
     required this.message,
     required String this.url,
     required String this.elicitationId,
+    this.task,
   })  : mode = ElicitationMode.url,
         requestedSchema = null;
 
-  factory ElicitRequest.fromJson(Map<String, dynamic> json) {
+  factory ElicitRequest.fromJson(
+    Map<String, dynamic> json, {
+    String? protocolVersion,
+  }) {
     final modeValue = json['mode'];
     if (modeValue != null && modeValue is! String) {
       throw const FormatException('Elicitation mode must be a string.');
@@ -110,6 +120,7 @@ class ElicitRequest {
     final requestedSchemaJson = json['requestedSchema'];
     final url = json['url'];
     final elicitationId = json['elicitationId'];
+    final task = readOptionalJsonObject(json['task'], 'ElicitRequest.task');
 
     if (mode == ElicitationMode.url) {
       if (url is! String) {
@@ -128,13 +139,17 @@ class ElicitRequest {
         message: message,
         url: url,
         elicitationId: elicitationId,
+        task: task == null ? null : TaskCreation.fromJson(task),
       );
     }
 
     if (requestedSchemaJson is! Map<String, dynamic>) {
       throw const FormatException('Form elicitation requires requestedSchema.');
     }
-    _validateFormRequestedSchemaJson(requestedSchemaJson);
+    _validateFormRequestedSchemaJson(
+      requestedSchemaJson,
+      protocolVersion: protocolVersion,
+    );
     if (url != null) {
       throw const FormatException('Form elicitation must not include url.');
     }
@@ -148,10 +163,11 @@ class ElicitRequest {
       mode: mode,
       message: message,
       requestedSchema: JsonSchema.fromJson(requestedSchemaJson),
+      task: task == null ? null : TaskCreation.fromJson(task),
     );
   }
 
-  void _validateShape() {
+  void _validateShape({String? protocolVersion}) {
     if (isUrlMode) {
       if (requestedSchema != null) {
         throw ArgumentError(
@@ -171,7 +187,10 @@ class ElicitRequest {
     if (requestedSchema == null) {
       throw ArgumentError('Form elicitation requires requestedSchema.');
     }
-    _validateFormRequestedSchema(requestedSchema!);
+    _validateFormRequestedSchema(
+      requestedSchema!,
+      protocolVersion: protocolVersion,
+    );
     if (url != null) {
       throw ArgumentError('Form elicitation must not include url.');
     }
@@ -180,14 +199,15 @@ class ElicitRequest {
     }
   }
 
-  Map<String, dynamic> toJson() {
-    _validateShape();
+  Map<String, dynamic> toJson({String? protocolVersion}) {
+    _validateShape(protocolVersion: protocolVersion);
     return {
       if (mode != null) 'mode': mode!.name,
       'message': message,
       if (requestedSchema != null) 'requestedSchema': requestedSchema!.toJson(),
       if (url != null) 'url': url,
       if (elicitationId != null) 'elicitationId': elicitationId,
+      if (task != null) 'task': task!.toJson(),
     };
   }
 
@@ -207,7 +227,13 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
     required super.id,
     required this.elicitParams,
     super.meta,
-  }) : super(method: Method.elicitationCreate, params: elicitParams.toJson());
+    String? protocolVersion,
+  }) : super(
+          method: Method.elicitationCreate,
+          params: elicitParams.toJson(
+            protocolVersion: protocolVersion ?? _protocolVersionFromMeta(meta),
+          ),
+        );
 
   factory JsonRpcElicitRequest.fromJson(Map<String, dynamic> json) {
     final paramsMap = json['params'] as Map<String, dynamic>?;
@@ -215,10 +241,15 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
       throw const FormatException("Missing params for elicit request");
     }
     final meta = extractRequestMeta(json);
+    final protocolVersion = _protocolVersionFromMeta(meta);
     return JsonRpcElicitRequest(
       id: parseRequestId(json['id']),
-      elicitParams: ElicitRequest.fromJson(paramsMap),
+      elicitParams: ElicitRequest.fromJson(
+        paramsMap,
+        protocolVersion: protocolVersion,
+      ),
       meta: meta,
+      protocolVersion: protocolVersion,
     );
   }
 }
@@ -290,10 +321,10 @@ class ElicitResult implements BaseResultData {
   Map<String, dynamic> toJson() {
     final resultAction = action;
     _validateElicitResultContentForAction(resultAction, content);
-    _validateElicitResultContent(content);
+    final normalizedContent = _normalizeElicitResultContent(content);
     return {
       'action': resultAction,
-      if (content != null) 'content': content,
+      if (normalizedContent != null) 'content': normalizedContent,
       if (meta != null) '_meta': readJsonObject(meta, 'ElicitResult._meta'),
     };
   }
@@ -421,14 +452,28 @@ typedef ElicitRequestParams = ElicitRequest;
 @Deprecated('Use ElicitationCompleteNotification instead')
 typedef ElicitationCompleteParams = ElicitationCompleteNotification;
 
-void _validateFormRequestedSchema(ElicitationInputSchema schema) {
-  _validateFormRequestedSchemaJson(schema.toJson());
+void _validateFormRequestedSchema(
+  ElicitationInputSchema schema, {
+  String? protocolVersion,
+}) {
+  _validateFormRequestedSchemaJson(
+    schema.toJson(),
+    protocolVersion: protocolVersion,
+  );
 }
 
-void _validateFormRequestedSchemaJson(Map<String, dynamic> json) {
+void _validateFormRequestedSchemaJson(
+  Map<String, dynamic> json, {
+  String? protocolVersion,
+}) {
   _ensureAllowedKeys(
     json,
     const {r'$schema', 'type', 'properties', 'required'},
+    'ElicitRequest.requestedSchema',
+  );
+  _validateOptionalStringKeyword(
+    json,
+    r'$schema',
     'ElicitRequest.requestedSchema',
   );
   if (json['type'] != 'object') {
@@ -451,6 +496,7 @@ void _validateFormRequestedSchemaJson(Map<String, dynamic> json) {
     _validatePrimitiveSchema(
       (entry.value as Map).cast<String, dynamic>(),
       'ElicitRequest.requestedSchema.properties.${entry.key}',
+      protocolVersion: protocolVersion,
     );
   }
   final required = json['required'];
@@ -462,7 +508,11 @@ void _validateFormRequestedSchemaJson(Map<String, dynamic> json) {
   }
 }
 
-void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
+void _validatePrimitiveSchema(
+  Map<String, dynamic> json,
+  String context, {
+  String? protocolVersion,
+}) {
   final type = json['type'];
   switch (type) {
     case 'string':
@@ -482,6 +532,12 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
         },
         context,
       );
+      _validatePrimitiveBaseKeywords(json, context);
+      _validateNumberSchemaKeywords(
+        json,
+        context,
+        protocolVersion: protocolVersion,
+      );
       return;
     case 'boolean':
       _ensureAllowedKeys(
@@ -489,6 +545,10 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
         const {'type', 'title', 'description', 'default'},
         context,
       );
+      _validatePrimitiveBaseKeywords(json, context);
+      if (json['default'] != null && json['default'] is! bool) {
+        throw FormatException('$context.default must be a boolean.');
+      }
       return;
     case 'array':
       _validateMultiSelectEnumSchema(json, context);
@@ -497,6 +557,33 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
       throw FormatException(
         '$context must be a primitive elicitation schema.',
       );
+  }
+}
+
+void _validatePrimitiveBaseKeywords(
+  Map<String, dynamic> json,
+  String context,
+) {
+  _validateOptionalStringKeyword(json, 'title', context);
+  _validateOptionalStringKeyword(json, 'description', context);
+}
+
+void _validateNumberSchemaKeywords(
+  Map<String, dynamic> json,
+  String context, {
+  String? protocolVersion,
+}) {
+  if (!_usesDraftNumberSchemaKeywords(protocolVersion)) {
+    for (final key in const ['default', 'minimum', 'maximum']) {
+      _validateOptionalIntegerKeyword(json, key, context);
+    }
+    return;
+  }
+
+  for (final key in const ['default', 'minimum', 'maximum']) {
+    if (json[key] != null) {
+      readFiniteNumber(json[key], '$context.$key');
+    }
   }
 }
 
@@ -510,6 +597,8 @@ void _validateStringOrSingleEnumSchema(
       const {'type', 'title', 'description', 'oneOf', 'default'},
       context,
     );
+    _validatePrimitiveBaseKeywords(json, context);
+    _validateOptionalStringKeyword(json, 'default', context);
     final oneOf = json['oneOf'];
     if (oneOf is! List ||
         oneOf.any(
@@ -538,6 +627,10 @@ void _validateStringOrSingleEnumSchema(
     },
     context,
   );
+  _validatePrimitiveBaseKeywords(json, context);
+  _validateOptionalStringKeyword(json, 'default', context);
+  _validateOptionalIntegerKeyword(json, 'minLength', context);
+  _validateOptionalIntegerKeyword(json, 'maxLength', context);
   final enumValues = json['enum'];
   if (enumValues != null &&
       (enumValues is! List || enumValues.any((value) => value is! String))) {
@@ -575,16 +668,21 @@ void _validateMultiSelectEnumSchema(
     },
     context,
   );
+  _validatePrimitiveBaseKeywords(json, context);
+  _validateOptionalIntegerKeyword(json, 'minItems', context);
+  _validateOptionalIntegerKeyword(json, 'maxItems', context);
+  _validateOptionalStringListKeyword(json, 'default', context);
   final items = json['items'];
   if (items is! Map) {
     throw FormatException('$context.items is required for array schemas.');
   }
   final itemMap = items.cast<String, dynamic>();
-  if (itemMap['type'] == 'string' && itemMap['enum'] is List) {
-    final enumValues = itemMap['enum'] as List;
-    if (enumValues.any((value) => value is! String)) {
-      throw FormatException('$context.items.enum must be a string array.');
+  if (itemMap.containsKey('enum')) {
+    _ensureAllowedKeys(itemMap, const {'type', 'enum'}, '$context.items');
+    if (itemMap['type'] != 'string') {
+      throw FormatException('$context.items.type must be string.');
     }
+    _validateRequiredStringListKeyword(itemMap, 'enum', '$context.items');
     return;
   }
   final anyOf = itemMap['anyOf'];
@@ -600,6 +698,50 @@ void _validateMultiSelectEnumSchema(
   throw FormatException('$context.items must define a string enum.');
 }
 
+void _validateOptionalStringKeyword(
+  Map<String, dynamic> json,
+  String key,
+  String context,
+) {
+  final value = json[key];
+  if (value != null && value is! String) {
+    throw FormatException('$context.$key must be a string.');
+  }
+}
+
+void _validateOptionalIntegerKeyword(
+  Map<String, dynamic> json,
+  String key,
+  String context,
+) {
+  if (json[key] == null) {
+    return;
+  }
+  readOptionalInteger(json[key], '$context.$key');
+}
+
+void _validateOptionalStringListKeyword(
+  Map<String, dynamic> json,
+  String key,
+  String context,
+) {
+  if (json[key] == null) {
+    return;
+  }
+  _validateRequiredStringListKeyword(json, key, context);
+}
+
+void _validateRequiredStringListKeyword(
+  Map<String, dynamic> json,
+  String key,
+  String context,
+) {
+  final value = json[key];
+  if (value is! List || value.any((item) => item is! String)) {
+    throw FormatException('$context.$key must be a string array.');
+  }
+}
+
 void _ensureAllowedKeys(
   Map<String, dynamic> json,
   Set<String> allowed,
@@ -613,6 +755,15 @@ void _ensureAllowedKeys(
   }
 }
 
+String? _protocolVersionFromMeta(Map<String, dynamic>? meta) {
+  final protocolVersion = meta?[McpMetaKey.protocolVersion];
+  return protocolVersion is String ? protocolVersion : null;
+}
+
+bool _usesDraftNumberSchemaKeywords(String? protocolVersion) {
+  return protocolVersion != null && isStatelessProtocolVersion(protocolVersion);
+}
+
 Map<String, dynamic>? _parseElicitResultContent(Object? content) {
   if (content == null) {
     return null;
@@ -621,39 +772,49 @@ Map<String, dynamic>? _parseElicitResultContent(Object? content) {
     throw const FormatException('ElicitResult.content must be an object.');
   }
   final result = content.cast<String, dynamic>();
-  _validateElicitResultContent(result, formatException: true);
-  return result;
+  return _normalizeElicitResultContent(result, formatException: true);
 }
 
-void _validateElicitResultContent(
+Map<String, dynamic>? _normalizeElicitResultContent(
   Map<String, dynamic>? content, {
   bool formatException = false,
 }) {
   if (content == null) {
-    return;
+    return null;
   }
+  final normalized = <String, dynamic>{};
   for (final entry in content.entries) {
     final value = entry.value;
     if (value is String || value is bool) {
+      normalized[entry.key] = value;
       continue;
     }
-    if (value is num && value.isFinite) {
+    if (value is int) {
+      normalized[entry.key] = value;
+      continue;
+    }
+    if (value is double &&
+        value.isFinite &&
+        value == value.truncateToDouble()) {
+      normalized[entry.key] = value.toInt();
       continue;
     }
     if (value is List && value.every((item) => item is String)) {
+      normalized[entry.key] = List<String>.from(value);
       continue;
     }
     if (formatException) {
       throw FormatException(
-        'ElicitResult.content.${entry.key} must be string, finite number, boolean, or string[]',
+        'ElicitResult.content.${entry.key} must be string, integer, boolean, or string[]',
       );
     }
     throw ArgumentError.value(
       value,
       'content.${entry.key}',
-      'ElicitResult content values must be string, finite number, boolean, or string[]',
+      'ElicitResult content values must be string, integer, boolean, or string[]',
     );
   }
+  return normalized;
 }
 
 void _validateElicitResultContentForAction(

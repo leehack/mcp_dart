@@ -1,5 +1,18 @@
 const _jsonSchemaAnnotationKeys = {'title', 'description', 'default'};
 
+int? _readOptionalInteger(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is int) {
+    return value;
+  }
+  if (value is double && value.isFinite && value == value.truncateToDouble()) {
+    return value.toInt();
+  }
+  throw FormatException('$field must be an integer');
+}
+
 /// A builder for creating JSON Schemas in a type-safe way.
 sealed class JsonSchema {
   final String? title;
@@ -8,7 +21,7 @@ sealed class JsonSchema {
   /// The default value for this schema.
   ///
   /// The type of this value depends on the schema type (e.g., [String] for [JsonString],
-  /// [int] for [JsonInteger], etc.).
+  /// [num] for [JsonNumber] and [JsonInteger], etc.).
   dynamic get defaultValue;
 
   const JsonSchema({this.title, this.description});
@@ -255,14 +268,14 @@ sealed class JsonSchema {
 
   /// Creates an integer schema.
   static JsonInteger integer({
-    int? minimum,
-    int? maximum,
-    int? exclusiveMinimum,
-    int? exclusiveMaximum,
-    int? multipleOf,
+    num? minimum,
+    num? maximum,
+    num? exclusiveMinimum,
+    num? exclusiveMaximum,
+    num? multipleOf,
     String? title,
     String? description,
-    int? defaultValue,
+    num? defaultValue,
     String? mcpHeader,
   }) {
     return JsonInteger(
@@ -496,8 +509,14 @@ class JsonString extends JsonSchema {
   factory JsonString.fromJson(Map<String, dynamic> json) {
     final rawMcpHeader = json['x-mcp-header'];
     return JsonString._(
-      minLength: json['minLength'] as int?,
-      maxLength: json['maxLength'] as int?,
+      minLength: _readOptionalInteger(
+        json['minLength'],
+        'JsonString.minLength',
+      ),
+      maxLength: _readOptionalInteger(
+        json['maxLength'],
+        'JsonString.maxLength',
+      ),
       pattern: json['pattern'] as String?,
       format: json['format'] as String?,
       enumValues: (json['enum'] as List?)?.cast<String>() ??
@@ -619,11 +638,11 @@ class JsonInteger extends JsonSchema {
   final bool _hasDefault;
   final bool _hasMcpHeader;
   final Object? _rawMcpHeader;
-  final int? minimum;
-  final int? maximum;
-  final int? exclusiveMinimum;
-  final int? exclusiveMaximum;
-  final int? multipleOf;
+  final num? minimum;
+  final num? maximum;
+  final num? exclusiveMinimum;
+  final num? exclusiveMaximum;
+  final num? multipleOf;
 
   /// MCP `x-mcp-header` extension for mirroring this parameter into HTTP.
   final String? mcpHeader;
@@ -660,19 +679,19 @@ class JsonInteger extends JsonSchema {
         _rawMcpHeader = rawMcpHeader;
 
   @override
-  final int? defaultValue;
+  final num? defaultValue;
 
   factory JsonInteger.fromJson(Map<String, dynamic> json) {
     final rawMcpHeader = json['x-mcp-header'];
     return JsonInteger._(
-      minimum: json['minimum'] as int?,
-      maximum: json['maximum'] as int?,
-      exclusiveMinimum: json['exclusiveMinimum'] as int?,
-      exclusiveMaximum: json['exclusiveMaximum'] as int?,
-      multipleOf: json['multipleOf'] as int?,
+      minimum: json['minimum'] as num?,
+      maximum: json['maximum'] as num?,
+      exclusiveMinimum: json['exclusiveMinimum'] as num?,
+      exclusiveMaximum: json['exclusiveMaximum'] as num?,
+      multipleOf: json['multipleOf'] as num?,
       title: json['title'] as String?,
       description: json['description'] as String?,
-      defaultValue: json['default'] as int?,
+      defaultValue: json['default'] as num?,
       mcpHeader: rawMcpHeader is String ? rawMcpHeader : null,
       rawMcpHeader: rawMcpHeader,
       hasDefault: json.containsKey('default'),
@@ -832,8 +851,14 @@ class JsonArray extends JsonSchema {
       items: json['items'] != null
           ? JsonSchema.fromJson(json['items'] as Map<String, dynamic>)
           : null,
-      minItems: json['minItems'] as int?,
-      maxItems: json['maxItems'] as int?,
+      minItems: _readOptionalInteger(
+        json['minItems'],
+        'JsonArray.minItems',
+      ),
+      maxItems: _readOptionalInteger(
+        json['maxItems'],
+        'JsonArray.maxItems',
+      ),
       uniqueItems: json['uniqueItems'] as bool?,
       title: json['title'] as String?,
       description: json['description'] as String?,

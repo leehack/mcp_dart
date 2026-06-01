@@ -25,6 +25,20 @@ Map<String, dynamic> _asJsonObject(
   return map;
 }
 
+String _base64ForJson(String value, String field) {
+  validateBase64String(value, field);
+  return value;
+}
+
+Map<String, dynamic> _annotationsForJson(
+  Map<String, dynamic> value,
+  String field,
+) {
+  final result = readJsonObject(value, field);
+  validateAnnotationsObject(result, field);
+  return result;
+}
+
 Object _parseSamplingMessageContent(dynamic value) {
   if (value is List) {
     return value
@@ -287,30 +301,30 @@ sealed class SamplingContent {
           final SamplingTextContent c => {
               'text': c.text,
               if (c.annotations != null)
-                'annotations': readJsonObject(
-                  c.annotations,
+                'annotations': _annotationsForJson(
+                  c.annotations!,
                   'SamplingTextContent.annotations',
                 ),
               if (c.meta != null)
                 '_meta': readJsonObject(c.meta, 'SamplingTextContent._meta'),
             },
           final SamplingImageContent c => {
-              'data': c.data,
+              'data': _base64ForJson(c.data, 'SamplingImageContent.data'),
               'mimeType': c.mimeType,
               if (c.annotations != null)
-                'annotations': readJsonObject(
-                  c.annotations,
+                'annotations': _annotationsForJson(
+                  c.annotations!,
                   'SamplingImageContent.annotations',
                 ),
               if (c.meta != null)
                 '_meta': readJsonObject(c.meta, 'SamplingImageContent._meta'),
             },
           final SamplingAudioContent c => {
-              'data': c.data,
+              'data': _base64ForJson(c.data, 'SamplingAudioContent.data'),
               'mimeType': c.mimeType,
               if (c.annotations != null)
-                'annotations': readJsonObject(
-                  c.annotations,
+                'annotations': _annotationsForJson(
+                  c.annotations!,
                   'SamplingAudioContent.annotations',
                 ),
               if (c.meta != null)
@@ -365,7 +379,7 @@ class SamplingTextContent extends SamplingContent {
   factory SamplingTextContent.fromJson(Map<String, dynamic> json) =>
       SamplingTextContent(
         text: json['text'] as String,
-        annotations: _asJsonObjectOrNull(
+        annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingTextContent.annotations',
         ),
@@ -396,9 +410,12 @@ class SamplingImageContent extends SamplingContent {
 
   factory SamplingImageContent.fromJson(Map<String, dynamic> json) =>
       SamplingImageContent(
-        data: json['data'] as String,
+        data: readRequiredBase64String(
+          json['data'],
+          'SamplingImageContent.data',
+        ),
         mimeType: json['mimeType'] as String,
-        annotations: _asJsonObjectOrNull(
+        annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingImageContent.annotations',
         ),
@@ -429,9 +446,12 @@ class SamplingAudioContent extends SamplingContent {
 
   factory SamplingAudioContent.fromJson(Map<String, dynamic> json) =>
       SamplingAudioContent(
-        data: json['data'] as String,
+        data: readRequiredBase64String(
+          json['data'],
+          'SamplingAudioContent.data',
+        ),
         mimeType: json['mimeType'] as String,
-        annotations: _asJsonObjectOrNull(
+        annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingAudioContent.annotations',
         ),
@@ -540,7 +560,9 @@ class SamplingMessage {
 
   factory SamplingMessage.fromJson(Map<String, dynamic> json) {
     return SamplingMessage(
-      role: SamplingMessageRole.values.byName(json['role'] as String),
+      role: SamplingMessageRole.values.byName(
+        readRequiredRoleString(json['role'], 'SamplingMessage.role'),
+      ),
       content: _parseSamplingMessageContent(json['content']),
       meta: _asJsonObjectOrNull(json['_meta'], 'SamplingMessage._meta'),
     );
@@ -574,11 +596,13 @@ class ToolChoice {
       return const ToolChoice();
     }
 
-    if (rawMode is! String) {
-      throw FormatException('Expected toolChoice mode string, got $rawMode');
-    }
-
-    return ToolChoice(mode: ToolChoiceMode.values.byName(rawMode));
+    return ToolChoice(
+      mode: readRequiredEnumValue(
+        rawMode,
+        ToolChoiceMode.values,
+        'ToolChoice.mode',
+      ),
+    );
   }
 
   Map<String, dynamic> toJson() => {
@@ -645,9 +669,14 @@ class CreateMessageRequest {
   });
 
   factory CreateMessageRequest.fromJson(Map<String, dynamic> json) {
-    final ctxStr = json['includeContext'] as String?;
-    final task = _asJsonObjectOrNull(json['task']);
-    final toolChoice = _asJsonObjectOrNull(json['toolChoice']);
+    final task = _asJsonObjectOrNull(json['task'], 'CreateMessageRequest.task');
+    final toolChoice = _asJsonObjectOrNull(
+      json['toolChoice'],
+      'CreateMessageRequest.toolChoice',
+    );
+    if (toolChoice != null) {
+      ToolChoice.fromJson(toolChoice);
+    }
     final messages = json['messages'];
     if (messages is! List) {
       throw const FormatException('CreateMessageRequest.messages is required');
@@ -658,13 +687,19 @@ class CreateMessageRequest {
           .toList(),
       task: task == null ? null : TaskCreation.fromJson(task),
       systemPrompt: json['systemPrompt'] as String?,
-      includeContext:
-          ctxStr == null ? null : IncludeContext.values.byName(ctxStr),
+      includeContext: readOptionalEnumValue(
+        json['includeContext'],
+        IncludeContext.values,
+        'CreateMessageRequest.includeContext',
+      ),
       temperature: readOptionalFiniteDouble(
         json['temperature'],
         'CreateMessageRequest.temperature',
       ),
-      maxTokens: json['maxTokens'] as int,
+      maxTokens: readInteger(
+        json['maxTokens'],
+        'CreateMessageRequest.maxTokens',
+      ),
       stopSequences: (json['stopSequences'] as List<dynamic>?)?.cast<String>(),
       metadata: _asJsonObjectOrNull(
         json['metadata'],
@@ -795,7 +830,9 @@ class CreateMessageResult implements BaseResultData {
     return CreateMessageResult(
       model: json['model'] as String,
       stopReason: reason,
-      role: SamplingMessageRole.values.byName(json['role'] as String),
+      role: SamplingMessageRole.values.byName(
+        readRequiredRoleString(json['role'], 'CreateMessageResult.role'),
+      ),
       content: _parseSamplingMessageContent(json['content']),
       meta: meta,
     );

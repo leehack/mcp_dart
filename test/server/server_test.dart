@@ -507,7 +507,7 @@ void main() {
 
       // Send resource updated notification
       final resourceParams = const ResourceUpdatedNotification(
-        uri: 'test-resource',
+        uri: 'file:///test-resource',
       );
       await resourceServer.sendResourceUpdated(resourceParams);
 
@@ -542,7 +542,7 @@ void main() {
       );
 
       final resourceParams = const ResourceUpdatedNotification(
-        uri: 'test-resource',
+        uri: 'file:///test-resource',
       );
       expect(
         () => plainServer.sendResourceUpdated(resourceParams),

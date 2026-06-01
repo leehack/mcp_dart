@@ -56,7 +56,8 @@ void main() {
     });
 
     test('Icon Field Support', () {
-      final icon = const ImageContent(data: 'base64', mimeType: 'image/png');
+      const iconData = 'YmFzZTY0';
+      final icon = const ImageContent(data: iconData, mimeType: 'image/png');
       final icons = [
         const McpIcon(
           src: 'https://example.com/icon.png',
@@ -71,12 +72,12 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(tool.icon?.data, 'base64');
+      expect(tool.icon?.data, iconData);
       expect(tool.toJson().containsKey('icon'), isFalse);
       expect((tool.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Tool.fromJson({...tool.toJson(), 'icon': icon.toJson()}).icon?.data,
-        'base64',
+        iconData,
       );
 
       final resource = Resource(
@@ -85,14 +86,14 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(resource.icon?.data, 'base64');
+      expect(resource.icon?.data, iconData);
       expect(resource.toJson().containsKey('icon'), isFalse);
       expect((resource.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Resource.fromJson(
           {...resource.toJson(), 'icon': icon.toJson()},
         ).icon?.data,
-        'base64',
+        iconData,
       );
 
       final prompt = Prompt(
@@ -100,12 +101,12 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(prompt.icon?.data, 'base64');
+      expect(prompt.icon?.data, iconData);
       expect(prompt.toJson().containsKey('icon'), isFalse);
       expect((prompt.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Prompt.fromJson({...prompt.toJson(), 'icon': icon.toJson()}).icon?.data,
-        'base64',
+        iconData,
       );
 
       final template = ResourceTemplate(
@@ -114,14 +115,14 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(template.icon?.data, 'base64');
+      expect(template.icon?.data, iconData);
       expect(template.toJson().containsKey('icon'), isFalse);
       expect((template.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         ResourceTemplate.fromJson(
           {...template.toJson(), 'icon': icon.toJson()},
         ).icon?.data,
-        'base64',
+        iconData,
       );
     });
 
@@ -238,19 +239,23 @@ void main() {
         message: 'test',
         url: 'https://example.com/ui',
         elicitationId: 'ui-123',
+        task: TaskCreationParams(ttl: 7200),
       );
 
       expect(params.url, 'https://example.com/ui');
       expect(params.elicitationId, 'ui-123');
+      expect(params.task?.ttl, 7200);
 
       final json = params.toJson();
       expect(json['mode'], 'url');
       expect(json['url'], 'https://example.com/ui');
       expect(json['elicitationId'], 'ui-123');
+      expect(json['task'], {'ttl': 7200});
 
       final deserialized = ElicitRequestParams.fromJson(json);
       expect(deserialized.url, 'https://example.com/ui');
       expect(deserialized.elicitationId, 'ui-123');
+      expect(deserialized.task?.ttl, 7200);
     });
 
     test('Elicitation URL must be absolute URI', () {
@@ -326,24 +331,24 @@ void main() {
         action: 'accept',
         content: {
           'text': 'answer',
-          'confidence': 0.75,
+          'confidence': 75,
           'selection': ['a', 'b'], // List<String>
         },
       );
-      expect(result.content?['confidence'], 0.75);
+      expect(result.content?['confidence'], 75);
       expect(result.content?['selection'], isA<List>());
       expect((result.content?['selection'] as List).first, 'a');
 
       final json = result.toJson();
       final deserialized = ElicitResult.fromJson(json);
-      expect(deserialized.content?['confidence'], 0.75);
+      expect(deserialized.content?['confidence'], 75);
       expect((deserialized.content?['selection'] as List).last, 'b');
     });
 
     test('McpServer Metadata Logic', () {
       final server =
           McpServer(const Implementation(name: 'test', version: '1.0'));
-      final icon = const ImageContent(data: 'data', mimeType: 'image/png');
+      final icon = const ImageContent(data: 'ZGF0YQ==', mimeType: 'image/png');
       // We can rely on the fact that we updated the code to pass it through.
 
       // Let's rely on the previous unit tests for `Tool` serialization, and here just ensure `McpServer` methods don't crash.
@@ -739,6 +744,17 @@ void main() {
         expect(deserialized.ttl, 3600);
       });
 
+      test('TaskCreationParams accepts whole-number JSON ttl values', () {
+        final deserialized = TaskCreationParams.fromJson({'ttl': 3600.0});
+        expect(deserialized.ttl, 3600);
+        expect(deserialized.toJson()['ttl'], 3600);
+
+        expect(
+          () => TaskCreationParams.fromJson({'ttl': 3600.5}),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
       test('TaskCreationParams without ttl', () {
         final params = const TaskCreationParams();
         expect(params.ttl, isNull);
@@ -1037,6 +1053,22 @@ void main() {
         final json = task.toJson();
         expect(json, containsPair('ttl', null));
         expect(json, isNot(contains('pollInterval')));
+      });
+
+      test('Task accepts whole-number JSON ttl and poll interval values', () {
+        final task = Task.fromJson({
+          'taskId': 'numeric-task',
+          'status': 'working',
+          'ttl': 3600.0,
+          'pollInterval': 500.0,
+          'createdAt': '2025-01-15T10:00:00Z',
+          'lastUpdatedAt': '2025-01-15T10:01:00Z',
+        });
+
+        expect(task.ttl, 3600);
+        expect(task.pollInterval, 500);
+        expect(task.toJson(), containsPair('ttl', 3600));
+        expect(task.toJson(), containsPair('pollInterval', 500));
       });
 
       test('Task rejects missing MCP-required fields', () {
@@ -1364,6 +1396,21 @@ void main() {
         expect(request.toJson()['requestedSchema']['type'], 'object');
 
         expect(
+          () => ElicitRequest.form(
+            message: 'Fractional bounds',
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'ratio': JsonSchema.number(
+                  minimum: 0.1,
+                  maximum: 0.9,
+                  defaultValue: 0.5,
+                ),
+              },
+            ),
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => const ElicitRequest.form(
             message: 'Nested',
             requestedSchema: JsonObject(
@@ -1386,6 +1433,24 @@ void main() {
             action: 'accept',
             content: {
               'bad': ['ok', 1],
+            },
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          () => ElicitResult.fromJson({
+            'action': 'accept',
+            'content': {
+              'fractional': 1.5,
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const ElicitResult(
+            action: 'accept',
+            content: {
+              'fractional': 1.5,
             },
           ).toJson(),
           throwsA(isA<ArgumentError>()),
@@ -1418,6 +1483,16 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => Annotations.fromJson({
+            'audience': ['model'],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Annotations.fromJson({'lastModified': 1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => CompletionResultData(
             values: List.generate(101, (index) => '$index'),
           ).toJson(),
@@ -1429,9 +1504,26 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        final completion = CompletionResultData.fromJson({
+          'values': ['a'],
+          'total': 10.0,
+        });
+        expect(completion.total, 10);
+        expect(completion.toJson()['total'], 10);
+        expect(
+          () => CompletionResultData.fromJson({
+            'values': ['a'],
+            'total': 10.5,
+          }),
+          throwsA(isA<FormatException>()),
+        );
         expect(
           () => Root(uri: 'https://example.com'),
           throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          () => Root.fromJson({'uri': 'relative/path'}),
+          throwsA(isA<FormatException>()),
         );
         expect(
           () => ModelPreferences(costPriority: 2).toJson(),
@@ -1439,6 +1531,64 @@ void main() {
         );
         expect(
           () => ModelPreferences.fromJson({'costPriority': -1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingMessage.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageResult.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+            'model': 'model',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptMessage.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SetLevelRequestParams.fromJson({'level': 'verbose'}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => LoggingMessageNotificationParams.fromJson({
+            'level': 'verbose',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'includeContext': 'nearbyServers',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'toolChoice': {'mode': 'sometimes'},
+          }),
           throwsA(isA<FormatException>()),
         );
       });

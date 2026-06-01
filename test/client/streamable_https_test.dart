@@ -331,8 +331,11 @@ void main() {
 
       expect(initializeCount, 1);
       expect(initializedNotificationCount, 1);
-      expect(capturedSessionHeaders, isNotEmpty);
-      expect(capturedSessionHeaders, everyElement(preconfiguredSessionId));
+      expect(capturedSessionHeaders, [
+        null,
+        preconfiguredSessionId,
+        preconfiguredSessionId,
+      ]);
       expect(client.getServerCapabilities()?.logging, isNotNull);
       expect(client.getServerVersion()?.name, 'PreconfiguredSessionServer');
       expect(

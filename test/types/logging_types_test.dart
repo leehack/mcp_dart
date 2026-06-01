@@ -48,6 +48,17 @@ void main() {
         expect(params.level, equals(level));
       }
     });
+
+    test('rejects malformed logging levels', () {
+      expect(
+        () => SetLevelRequestParams.fromJson({'level': 'verbose'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SetLevelRequestParams.fromJson({'level': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcSetLevelRequest', () {
@@ -186,6 +197,23 @@ void main() {
       expect(restored.level, equals(original.level));
       expect(restored.logger, equals(original.logger));
       expect(restored.data, equals(original.data));
+    });
+
+    test('rejects malformed logging levels', () {
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({
+          'level': 'verbose',
+          'data': 'message',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({
+          'level': 1,
+          'data': 'message',
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 

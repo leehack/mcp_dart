@@ -15,24 +15,21 @@ class McpClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
-  /// Preferred protocol version for opt-in `server/discover` negotiation.
-  ///
-  /// The current default keeps existing clients on the stable initialization
-  /// flow unless [useServerDiscover] is enabled.
+  /// Preferred protocol version for `server/discover` negotiation.
   final String protocolVersion;
 
   /// Whether [McpClient.connect] should probe with `server/discover` first.
   final bool useServerDiscover;
 
-  /// Whether a `server/discover` method-not-found response should fall back to
-  /// the legacy `initialize` handshake.
+  /// Whether a failed `server/discover` probe should fall back to the legacy
+  /// `initialize` handshake when the peer looks like a pre-discovery server.
   final bool allowLegacyInitializationFallback;
 
   const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
     this.protocolVersion = latestDraftProtocolVersion,
-    this.useServerDiscover = false,
+    this.useServerDiscover = true,
     this.allowLegacyInitializationFallback = true,
   });
 }
@@ -122,6 +119,7 @@ const Set<String> _statelessRemovedRequestMethods = {
 const Set<String> _statelessRemovedNotificationMethods = {
   Method.notificationsInitialized,
   Method.notificationsRootsListChanged,
+  Method.notificationsTasksStatus,
 };
 
 /// An MCP client implementation built on top of a pluggable [Transport].
@@ -172,7 +170,7 @@ class McpClient extends Protocol {
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         _preferredProtocolVersion =
             options?.protocolVersion ?? latestDraftProtocolVersion,
-        _useServerDiscover = options?.useServerDiscover ?? false,
+        _useServerDiscover = options?.useServerDiscover ?? true,
         _allowLegacyInitializationFallback =
             options?.allowLegacyInitializationFallback ?? true,
         super(options) {
@@ -216,11 +214,18 @@ class McpClient extends Protocol {
           }
           return result;
         },
-        (id, params, meta) => JsonRpcElicitRequest(
-          id: id,
-          elicitParams: ElicitRequest.fromJson(params ?? {}),
-          meta: meta,
-        ),
+        (id, params, meta) {
+          final protocolVersion = _protocolVersionForIncomingRequest(meta);
+          return JsonRpcElicitRequest(
+            id: id,
+            elicitParams: ElicitRequest.fromJson(
+              params ?? {},
+              protocolVersion: protocolVersion,
+            ),
+            meta: meta,
+            protocolVersion: protocolVersion,
+          );
+        },
       );
     }
 
@@ -470,10 +475,7 @@ class McpClient extends Protocol {
           await discoverServer();
           return;
         } catch (error) {
-          final canFallback = _allowLegacyInitializationFallback &&
-              error is McpError &&
-              error.code == ErrorCode.methodNotFound.value;
-          if (!canFallback) {
+          if (!_isLegacyDiscoveryFallbackError(error)) {
             rethrow;
           }
           _logger.debug(
@@ -491,6 +493,26 @@ class McpClient extends Protocol {
       await close();
       rethrow;
     }
+  }
+
+  bool _isLegacyDiscoveryFallbackError(Object error) {
+    if (!_allowLegacyInitializationFallback || error is! McpError) {
+      return false;
+    }
+    if (error.code == ErrorCode.methodNotFound.value) {
+      return true;
+    }
+
+    final message = error.message;
+    if (error.code == 0 &&
+        message.contains('Error POSTing to endpoint (HTTP 400)')) {
+      return true;
+    }
+
+    return (error.code == 0 ||
+            error.code == ErrorCode.connectionClosed.value ||
+            error.code == ErrorCode.invalidRequest.value) &&
+        message.contains('Server not initialized');
   }
 
   @override
@@ -607,6 +629,14 @@ class McpClient extends Protocol {
 
   /// Gets the negotiated protocol version after connection.
   String? getProtocolVersion() => _negotiatedProtocolVersion;
+
+  String? _protocolVersionForIncomingRequest(Map<String, dynamic>? meta) {
+    final protocolVersion = meta?[McpMetaKey.protocolVersion];
+    if (protocolVersion is String) {
+      return protocolVersion;
+    }
+    return _negotiatedProtocolVersion ?? _preferredProtocolVersion;
+  }
 
   @override
   bool isRecognizedResultType(String resultType) {

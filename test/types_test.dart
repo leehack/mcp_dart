@@ -482,35 +482,236 @@ void main() {
     });
 
     test('ImageContent serialization and deserialization', () {
+      const imageData = 'YmFzZTY0ZGF0YQ==';
       final content =
-          const ImageContent(data: 'base64data', mimeType: 'image/png');
+          const ImageContent(data: imageData, mimeType: 'image/png');
       final json = content.toJson();
       expect(json['type'], equals('image'));
-      expect(json['data'], equals('base64data'));
+      expect(json['data'], equals(imageData));
       expect(json['mimeType'], equals('image/png'));
 
       final deserialized = ImageContent.fromJson(json);
-      expect(deserialized.data, equals('base64data'));
+      expect(deserialized.data, equals(imageData));
       expect(deserialized.mimeType, equals('image/png'));
     });
 
-    test('ImageContent supports optional theme', () {
+    test('ImageContent parses legacy theme without serializing it', () {
       final content = const ImageContent(
-        data: 'base64data',
+        data: 'YmFzZTY0ZGF0YQ==',
         mimeType: 'image/png',
         theme: 'dark',
       );
 
       final json = content.toJson();
-      expect(json['theme'], equals('dark'));
+      expect(json, isNot(contains('theme')));
 
-      final deserialized = ImageContent.fromJson(json);
+      final deserialized = ImageContent.fromJson({
+        ...json,
+        'theme': 'dark',
+      });
       expect(deserialized.theme, equals('dark'));
+    });
+
+    test('ImageContent validates base64 byte data', () {
+      expect(
+        () => ImageContent.fromJson({
+          'type': 'image',
+          'data': 'not base64!',
+          'mimeType': 'image/png',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ImageContent.fromJson({
+          'type': 'image',
+          'data': 'a-b_',
+          'mimeType': 'image/png',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ImageContent(
+          data: 'not base64!',
+          mimeType: 'image/png',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('McpIcon parses stable wire fields', () {
+      final icon = McpIcon.fromJson({
+        'src': 'https://example.com/icon.png',
+        'mimeType': 'image/png',
+        'sizes': ['48x48', 'any'],
+        'theme': 'dark',
+      });
+
+      expect(icon.src, equals('https://example.com/icon.png'));
+      expect(icon.mimeType, equals('image/png'));
+      expect(icon.sizes, equals(['48x48', 'any']));
+      expect(icon.theme, equals(IconTheme.dark));
+      expect(icon.toJson(), {
+        'src': 'https://example.com/icon.png',
+        'mimeType': 'image/png',
+        'sizes': ['48x48', 'any'],
+        'theme': 'dark',
+      });
+
+      final dataIcon = McpIcon.fromJson({
+        'src': 'data:image/png;base64,aWNvbg==',
+      });
+      expect(dataIcon.src, equals('data:image/png;base64,aWNvbg=='));
+    });
+
+    test('McpIcon rejects malformed stable wire fields', () {
+      void expectInvalid(
+        Map<String, dynamic> json,
+      ) {
+        expect(() => McpIcon.fromJson(json), throwsA(isA<FormatException>()));
+      }
+
+      expectInvalid({});
+      expectInvalid({'src': 1});
+      expectInvalid({'src': 'icon.png'});
+      expectInvalid({'src': '://not-a-uri'});
+      expectInvalid({'src': 'https://example.com/icon.png', 'mimeType': null});
+      expectInvalid({'src': 'https://example.com/icon.png', 'mimeType': 1});
+      expectInvalid({'src': 'https://example.com/icon.png', 'sizes': null});
+      expectInvalid({'src': 'https://example.com/icon.png', 'sizes': '48x48'});
+      expectInvalid({
+        'src': 'https://example.com/icon.png',
+        'sizes': ['48x48', 1],
+      });
+      expectInvalid({'src': 'https://example.com/icon.png', 'theme': null});
+      expectInvalid({'src': 'https://example.com/icon.png', 'theme': 1});
+      expectInvalid({'src': 'https://example.com/icon.png', 'theme': 'sepia'});
+    });
+
+    test('McpIcon validates src URI during serialization', () {
+      expect(
+        () => const McpIcon(src: 'icon.png').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        const McpIcon(src: 'data:image/png;base64,aWNvbg==').toJson()['src'],
+        equals('data:image/png;base64,aWNvbg=='),
+      );
+    });
+
+    test('Implementation icon parsing rejects invalid themes', () {
+      expect(
+        () => Implementation.fromJson({
+          'name': 'test-client',
+          'version': '1.0.0',
+          'icons': [
+            {
+              'src': 'https://example.com/icon.png',
+              'theme': 'sepia',
+            },
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Implementation parses stable wire fields', () {
+      final implementation = Implementation.fromJson({
+        'name': 'test-client',
+        'title': 'Test Client',
+        'version': '1.0.0',
+        'description': 'A test MCP client',
+        'icons': [
+          {
+            'src': 'https://example.com/icon.png',
+            'theme': 'light',
+          },
+        ],
+        'websiteUrl': 'https://example.com',
+      });
+
+      expect(implementation.name, equals('test-client'));
+      expect(implementation.title, equals('Test Client'));
+      expect(implementation.version, equals('1.0.0'));
+      expect(implementation.description, equals('A test MCP client'));
+      expect(implementation.icons!.single.theme, equals(IconTheme.light));
+      expect(implementation.websiteUrl, equals('https://example.com'));
+      expect(implementation.toJson(), {
+        'name': 'test-client',
+        'title': 'Test Client',
+        'version': '1.0.0',
+        'description': 'A test MCP client',
+        'icons': [
+          {
+            'src': 'https://example.com/icon.png',
+            'theme': 'light',
+          },
+        ],
+        'websiteUrl': 'https://example.com',
+      });
+    });
+
+    test('Implementation rejects malformed stable wire fields', () {
+      void expectInvalid(Map<String, dynamic> json) {
+        expect(
+          () => Implementation.fromJson(json),
+          throwsA(isA<FormatException>()),
+        );
+      }
+
+      expectInvalid({});
+      expectInvalid({'name': 'test-client'});
+      expectInvalid({'name': 1, 'version': '1.0.0'});
+      expectInvalid({'name': 'test-client', 'version': 1});
+      expectInvalid({'name': 'test-client', 'version': '1.0.0', 'title': null});
+      expectInvalid({'name': 'test-client', 'version': '1.0.0', 'title': 1});
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'description': null,
+      });
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'description': 1,
+      });
+      expectInvalid({'name': 'test-client', 'version': '1.0.0', 'icons': null});
+      expectInvalid({'name': 'test-client', 'version': '1.0.0', 'icons': {}});
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'icons': [null],
+      });
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'websiteUrl': null,
+      });
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'websiteUrl': 1,
+      });
+      expectInvalid({
+        'name': 'test-client',
+        'version': '1.0.0',
+        'websiteUrl': 'example.com',
+      });
+    });
+
+    test('Implementation validates website URL during serialization', () {
+      expect(
+        () => const Implementation(
+          name: 'test-client',
+          version: '1.0.0',
+          websiteUrl: 'example.com',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('ImageContent supports annotations and meta', () {
       final content = const ImageContent(
-        data: 'base64data',
+        data: 'YmFzZTY0ZGF0YQ==',
         mimeType: 'image/png',
         annotations: Annotations(
           audience: [AnnotationAudience.user],
@@ -530,21 +731,22 @@ void main() {
     });
 
     test('AudioContent serialization and deserialization', () {
+      const audioData = 'YmFzZTY0ZGF0YQ==';
       final content =
-          const AudioContent(data: 'base64data', mimeType: 'audio/wav');
+          const AudioContent(data: audioData, mimeType: 'audio/wav');
       final json = content.toJson();
       expect(json['type'], equals('audio'));
-      expect(json['data'], equals('base64data'));
+      expect(json['data'], equals(audioData));
       expect(json['mimeType'], equals('audio/wav'));
 
       final deserialized = AudioContent.fromJson(json);
-      expect(deserialized.data, equals('base64data'));
+      expect(deserialized.data, equals(audioData));
       expect(deserialized.mimeType, equals('audio/wav'));
     });
 
     test('AudioContent supports annotations and meta', () {
       final content = const AudioContent(
-        data: 'base64data',
+        data: 'YmFzZTY0ZGF0YQ==',
         mimeType: 'audio/wav',
         annotations: Annotations(priority: 0.3),
         meta: {
@@ -559,6 +761,24 @@ void main() {
       final deserialized = AudioContent.fromJson(json);
       expect(deserialized.annotations?.priority, equals(0.3));
       expect(deserialized.meta?['traceId'], equals('audio-1'));
+    });
+
+    test('AudioContent validates base64 byte data', () {
+      expect(
+        () => AudioContent.fromJson({
+          'type': 'audio',
+          'data': 'not base64!',
+          'mimeType': 'audio/wav',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const AudioContent(
+          data: 'not base64!',
+          mimeType: 'audio/wav',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('UnknownContent serialization and deserialization', () {
@@ -579,6 +799,7 @@ void main() {
         annotations: {
           'audience': ['assistant'],
           'priority': 0.5,
+          'vendor': {'hint': true},
         },
       );
 
@@ -592,9 +813,44 @@ void main() {
       expect(deserialized.name, equals('readme'));
       expect(deserialized.mimeType, equals('text/markdown'));
       expect(deserialized.annotations?['priority'], equals(0.5));
+      expect(deserialized.annotations?['vendor'], equals({'hint': true}));
       expect(
         deserialized.parsedAnnotations?.audience,
         equals([AnnotationAudience.assistant]),
+      );
+    });
+
+    test('ResourceLink validates shared annotation fields', () {
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'annotations': {
+            'audience': ['model'],
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'file:///docs/readme.md',
+          name: 'readme',
+          annotations: {
+            'priority': 2,
+          },
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'file:///docs/readme.md',
+          name: 'readme',
+          annotations: {
+            'lastModified': 1,
+          },
+        ).toJson(),
+        throwsA(isA<FormatException>()),
       );
     });
 
@@ -608,6 +864,28 @@ void main() {
       final content = Content.fromJson(json);
       expect(content, isA<ResourceLink>());
       expect((content as ResourceLink).uri, equals('file:///docs/spec.md'));
+    });
+
+    test('ResourceLink accepts whole-number JSON size values', () {
+      final link = ResourceLink.fromJson({
+        'type': 'resource_link',
+        'uri': 'file:///docs/spec.md',
+        'name': 'spec',
+        'size': 123.0,
+      });
+
+      expect(link.size, 123);
+      expect(link.toJson()['size'], 123);
+
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/spec.md',
+          'name': 'spec',
+          'size': 123.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('EmbeddedResource supports annotations and meta', () {
@@ -714,21 +992,39 @@ void main() {
     });
 
     test('BlobResourceContents serialization and deserialization', () {
+      const blobData = 'YmFzZTY0ZGF0YQ==';
       final contents = const BlobResourceContents(
         uri: 'file://example.bin',
-        blob: 'base64data',
+        blob: blobData,
         mimeType: 'application/octet-stream',
       );
 
       final json = contents.toJson();
       expect(json['uri'], equals('file://example.bin'));
-      expect(json['blob'], equals('base64data'));
+      expect(json['blob'], equals(blobData));
       expect(json['mimeType'], equals('application/octet-stream'));
 
       final deserialized =
           ResourceContents.fromJson(json) as BlobResourceContents;
       expect(deserialized.uri, equals('file://example.bin'));
-      expect(deserialized.blob, equals('base64data'));
+      expect(deserialized.blob, equals(blobData));
+    });
+
+    test('BlobResourceContents validates base64 byte data', () {
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file://example.bin',
+          'blob': 'not base64!',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const BlobResourceContents(
+          uri: 'file://example.bin',
+          blob: 'not base64!',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('ResourceContents rejects non-JSON metadata and passthrough maps', () {
@@ -807,6 +1103,23 @@ void main() {
       expect(deserialized.name, equals('arg1'));
       expect(deserialized.description, equals('Argument 1'));
       expect(deserialized.required, equals(true));
+    });
+
+    test('PromptMessage validates role wire values', () {
+      expect(
+        () => PromptMessage.fromJson({
+          'role': 'system',
+          'content': {'type': 'text', 'text': 'Hello'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => PromptMessage.fromJson({
+          'role': 1,
+          'content': {'type': 'text', 'text': 'Hello'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
   group('CreateMessageResult Tests', () {
@@ -1066,16 +1379,19 @@ void main() {
           properties: {'name': JsonSchema.string(minLength: 1)},
           required: const ['name'],
         ),
+        task: const TaskCreationParams(ttl: 3600),
       );
 
       final json = params.toJson();
       expect(json['message'], equals("Enter your name"));
       expect(json['requestedSchema']['type'], equals('object'));
       expect(json['requestedSchema']['properties']['name']['type'], 'string');
+      expect(json['task'], {'ttl': 3600});
 
       final restored = ElicitRequestParams.fromJson(json);
       expect(restored.message, equals("Enter your name"));
       expect(restored.requestedSchema!.toJson()['type'], equals('object'));
+      expect(restored.task?.ttl, 3600);
     });
 
     test('JsonRpcElicitRequest serialization and deserialization', () {

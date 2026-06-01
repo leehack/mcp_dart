@@ -22,7 +22,11 @@ class SetLevelRequest {
 
   factory SetLevelRequest.fromJson(Map<String, dynamic> json) =>
       SetLevelRequest(
-        level: LoggingLevel.values.byName(json['level'] as String),
+        level: readRequiredEnumValue(
+          json['level'],
+          LoggingLevel.values,
+          'SetLevelRequest.level',
+        ),
       );
 
   Map<String, dynamic> toJson() => {'level': level.name};
@@ -74,7 +78,11 @@ class LoggingMessageNotification {
     Map<String, dynamic> json,
   ) =>
       LoggingMessageNotification(
-        level: LoggingLevel.values.byName(json['level'] as String),
+        level: readRequiredEnumValue(
+          json['level'],
+          LoggingLevel.values,
+          'LoggingMessageNotification.level',
+        ),
         logger: json['logger'] as String?,
         data: json['data'],
       );

@@ -66,6 +66,9 @@
 - Retried `server/discover` with an advertised compatible stateless protocol
   version after `UnsupportedProtocolVersionError` instead of falling back to
   legacy initialization.
+- Accepted whole-number JSON numeric values for integer wire fields such as
+  resource link sizes, completion totals, sampling `maxTokens`, task TTLs, and
+  JSON Schema length/item bounds while continuing to reject fractional values.
 - Added client-side `subscriptions/listen` handles that correlate stream
   notifications by `io.modelcontextprotocol/subscriptionId`, validate the
   acknowledgment, and cancel long-lived streams with `notifications/cancelled`.
@@ -88,14 +91,28 @@
   clamping malformed wire values to zero.
 - Validated MRTR `inputResponses` as `CreateMessageResult`, `ListRootsResult`,
   or `ElicitResult` instead of accepting arbitrary result objects.
-- Allowed finite numeric `ElicitResult.content` values to match the stable and
-  MCP 2026 `string | number | boolean | string[]` schema.
+- Restricted numeric `ElicitResult.content` values to integers, matching the
+  stable and MCP 2026 `string | integer | boolean | string[]` schemas while
+  still accepting whole-number JSON numeric values.
+- Made form elicitation number-schema keyword validation protocol-aware:
+  stable 2025 keeps integer-only `minimum`, `maximum`, and `default` values,
+  while MCP 2026 accepts fractional number keywords.
 - Rejected form elicitation schemas that provide legacy `enumNames` without the
   required string `enum`.
 - Rejected `ElicitResult.content` when the result action is `decline` or
   `cancel`.
 - Rejected URL elicitation values that are not absolute URIs to match the stable
   and MCP 2026 `format: uri` schemas.
+- Rejected non-absolute resource URIs and malformed resource URI templates to
+  match stable and MCP 2026 `format: uri` and `format: uri-template` schemas.
+- Rejected malformed base64 payloads for image, audio, and blob resource
+  content to match stable and MCP 2026 `format: byte` schemas.
+- Rejected malformed shared annotation fields, including non-role audiences,
+  out-of-range priorities, and non-string `lastModified` values.
+- Rejected malformed `Role` values in prompt and sampling messages instead of
+  allowing raw enum lookup failures.
+- Rejected malformed logging level, sampling `includeContext`, and sampling
+  `toolChoice.mode` enum values with protocol parse errors.
 - Rejected non-finite numeric values for progress, annotation priority, model
   priority, and sampling temperature fields so SDK-built payloads remain valid
   JSON numbers.
@@ -140,6 +157,9 @@
   dispatch finite numeric progress tokens end-to-end.
 - Widened protocol `relatedRequestId` API parameters to preserve string and
   finite numeric JSON-RPC request IDs through request and notification routing.
+- Accepted numeric `minimum`, `maximum`, `exclusiveMinimum`,
+  `exclusiveMaximum`, `multipleOf`, and `default` values on JSON Schema
+  `integer` schemas, matching the stable and MCP 2026 schema definitions.
 
 ## 2.2.0
 

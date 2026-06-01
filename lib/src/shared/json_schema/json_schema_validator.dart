@@ -188,7 +188,7 @@ extension JsonSchemaValidation on JsonSchema {
     }
 
     if (schema.multipleOf != null) {
-      if ((data % schema.multipleOf!).abs() > 0) {
+      if ((data % schema.multipleOf!).abs() > 1e-10) {
         throw JsonSchemaValidationException(
           'Value must be multiple of ${schema.multipleOf}',
           path,

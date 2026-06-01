@@ -18,6 +18,69 @@ Map<String, dynamic>? _asJsonObject(dynamic value) {
   throw FormatException('Expected object capability, got ${value.runtimeType}');
 }
 
+String _readRequiredString(Object? value, String field) {
+  if (value is String) {
+    return value;
+  }
+  throw FormatException('$field must be a string');
+}
+
+String? _readOptionalPresentString(
+  Map<String, dynamic> json,
+  String key,
+  String field,
+) {
+  if (!json.containsKey(key)) {
+    return null;
+  }
+  return _readRequiredString(json[key], field);
+}
+
+bool _isAbsoluteUri(String value) {
+  return Uri.tryParse(value)?.hasScheme ?? false;
+}
+
+String? _readOptionalPresentUriString(
+  Map<String, dynamic> json,
+  String key,
+  String field,
+) {
+  final value = _readOptionalPresentString(json, key, field);
+  if (value == null) {
+    return null;
+  }
+  if (!_isAbsoluteUri(value)) {
+    throw FormatException('$field must be an absolute URI');
+  }
+  return value;
+}
+
+void _validateAbsoluteUriString(String value, String field) {
+  if (!_isAbsoluteUri(value)) {
+    throw ArgumentError.value(value, field, 'must be an absolute URI');
+  }
+}
+
+List<McpIcon>? _readOptionalIconList(
+  Map<String, dynamic> json,
+  String key,
+  String field,
+) {
+  if (!json.containsKey(key)) {
+    return null;
+  }
+
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('$field must be a list of objects');
+  }
+
+  return [
+    for (var i = 0; i < value.length; i++)
+      McpIcon.fromJson(readJsonObject(value[i], '$field[$i]')),
+  ];
+}
+
 Map<String, dynamic>? _asStrictJsonObject(Object? value, String field) {
   if (value == null) {
     return null;
@@ -150,25 +213,42 @@ class Implementation {
 
   factory Implementation.fromJson(Map<String, dynamic> json) {
     return Implementation(
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      version: json['version'] as String,
-      description: json['description'] as String?,
-      icons: (json['icons'] as List<dynamic>?)
-          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      websiteUrl: json['websiteUrl'] as String?,
+      name: _readRequiredString(json['name'], 'Implementation.name'),
+      title: _readOptionalPresentString(
+        json,
+        'title',
+        'Implementation.title',
+      ),
+      version: _readRequiredString(json['version'], 'Implementation.version'),
+      description: _readOptionalPresentString(
+        json,
+        'description',
+        'Implementation.description',
+      ),
+      icons: _readOptionalIconList(json, 'icons', 'Implementation.icons'),
+      websiteUrl: _readOptionalPresentUriString(
+        json,
+        'websiteUrl',
+        'Implementation.websiteUrl',
+      ),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        if (title != null) 'title': title,
-        'version': version,
-        if (description != null) 'description': description,
-        if (icons != null) 'icons': icons?.map((e) => e.toJson()).toList(),
-        if (websiteUrl != null) 'websiteUrl': websiteUrl,
-      };
+  Map<String, dynamic> toJson() {
+    final websiteUrl = this.websiteUrl;
+    if (websiteUrl != null) {
+      _validateAbsoluteUriString(websiteUrl, 'Implementation.websiteUrl');
+    }
+
+    return {
+      'name': name,
+      if (title != null) 'title': title,
+      'version': version,
+      if (description != null) 'description': description,
+      if (icons != null) 'icons': icons?.map((e) => e.toJson()).toList(),
+      if (websiteUrl != null) 'websiteUrl': websiteUrl,
+    };
+  }
 }
 
 /// Describes capabilities related to root resources (e.g., workspace folders).
@@ -1083,6 +1163,16 @@ class DiscoverResult implements BaseResultData {
   });
 
   factory DiscoverResult.fromJson(Map<String, dynamic> json) {
+    final resultType = readOptionalString(
+      json['resultType'],
+      'DiscoverResult.resultType',
+    );
+    if (resultType != resultTypeComplete) {
+      throw const FormatException(
+        'DiscoverResult.resultType must be complete',
+      );
+    }
+
     final supportedVersions = json['supportedVersions'];
     if (supportedVersions is! List) {
       throw const FormatException(
@@ -1091,7 +1181,6 @@ class DiscoverResult implements BaseResultData {
     }
 
     return DiscoverResult(
-      resultType: json['resultType'] as String? ?? 'complete',
       supportedVersions: supportedVersions.cast<String>(),
       capabilities: ServerCapabilities.fromJson(
         json['capabilities'] as Map<String, dynamic>,
@@ -1105,14 +1194,24 @@ class DiscoverResult implements BaseResultData {
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'resultType': resultType,
-        'supportedVersions': supportedVersions,
-        'capabilities': capabilities.toJson(),
-        'serverInfo': serverInfo.toJson(),
-        if (instructions != null) 'instructions': instructions,
-        if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
-      };
+  Map<String, dynamic> toJson() {
+    if (resultType != resultTypeComplete) {
+      throw ArgumentError.value(
+        resultType,
+        'DiscoverResult.resultType',
+        'must be complete',
+      );
+    }
+
+    return {
+      'resultType': resultType,
+      'supportedVersions': supportedVersions,
+      'capabilities': capabilities.toJson(),
+      'serverInfo': serverInfo.toJson(),
+      if (instructions != null) 'instructions': instructions,
+      if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
+    };
+  }
 }
 
 /// Notification sent from the client to the server after initialization is finished.

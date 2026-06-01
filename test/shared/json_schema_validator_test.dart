@@ -160,7 +160,7 @@ void main() {
       });
 
       test('validates exclusiveMinimum', () {
-        final schema = JsonSchema.integer(exclusiveMinimum: 5);
+        final schema = JsonSchema.integer(exclusiveMinimum: 5.5);
         schema.validate(6);
         expect(
           () => schema.validate(5),
@@ -169,19 +169,21 @@ void main() {
       });
 
       test('validates exclusiveMaximum', () {
-        final schema = JsonSchema.integer(exclusiveMaximum: 10);
+        final schema = JsonSchema.integer(exclusiveMaximum: 10.5);
         schema.validate(9);
+        schema.validate(10);
         expect(
-          () => schema.validate(10),
+          () => schema.validate(11),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
 
       test('validates multipleOf', () {
-        final schema = JsonSchema.integer(multipleOf: 3);
-        schema.validate(9);
+        final schema = JsonSchema.integer(multipleOf: 1.5);
+        schema.validate(3);
+        schema.validate(6);
         expect(
-          () => schema.validate(10),
+          () => schema.validate(4),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });

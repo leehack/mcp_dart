@@ -751,6 +751,43 @@ void main() {
       expect((await requestFuture).task.taskId, 'shape-task');
     });
 
+    test('handler extra accepts whole-number JSON task ttl values', () async {
+      await protocol.connect(transport);
+
+      final observedTtl = Completer<int?>();
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/task-ttl',
+        (request, extra) async {
+          observedTtl.complete(extra.taskRequestedTtl);
+          return TestResult(value: 'ok');
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/task-ttl',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      transport.receiveMessage(
+        const JsonRpcRequest(
+          id: 99,
+          method: 'test/task-ttl',
+          params: {
+            'task': {'ttl': 1234.0},
+          },
+        ),
+      );
+
+      await waitForSentMessages(transport, 1);
+      expect(
+        await observedTtl.future.timeout(const Duration(seconds: 5)),
+        1234,
+      );
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result, {'value': 'ok'});
+    });
+
     test('progress notifications reset timeout for custom tokens', () async {
       await protocol.connect(transport);
 

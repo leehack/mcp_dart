@@ -711,17 +711,21 @@ class InputRequest {
 
   /// Creates an embedded `elicitation/create` input request.
   factory InputRequest.elicit(ElicitRequest params) {
+    final inputParams = params.toJson(
+      protocolVersion: latestDraftProtocolVersion,
+    )..remove('task');
     return InputRequest._(
       method: Method.elicitationCreate,
-      params: params.toJson(),
+      params: inputParams,
     );
   }
 
   /// Creates an embedded `sampling/createMessage` input request.
   factory InputRequest.createMessage(CreateMessageRequest params) {
+    final inputParams = params.toJson()..remove('task');
     return InputRequest._(
       method: Method.samplingCreateMessage,
-      params: params.toJson(),
+      params: inputParams,
     );
   }
 
@@ -745,13 +749,28 @@ class InputRequest {
           json['params'],
           'InputRequest.params',
         );
-        ElicitRequest.fromJson(params);
+        if (params.containsKey('task')) {
+          throw const FormatException(
+            'InputRequest elicitation/create params must not include '
+            'legacy task metadata',
+          );
+        }
+        ElicitRequest.fromJson(
+          params,
+          protocolVersion: latestDraftProtocolVersion,
+        );
         return InputRequest._(method: method, params: params);
       case Method.samplingCreateMessage:
         final params = _readRequiredJsonObject(
           json['params'],
           'InputRequest.params',
         );
+        if (params.containsKey('task')) {
+          throw const FormatException(
+            'InputRequest sampling/createMessage params must not include '
+            'legacy task metadata',
+          );
+        }
         CreateMessageRequest.fromJson(params);
         return InputRequest._(method: method, params: params);
       case Method.rootsList:
@@ -797,7 +816,10 @@ class InputRequest {
     if (method != Method.elicitationCreate || params == null) {
       throw StateError('InputRequest is not an elicitation/create request');
     }
-    return ElicitRequest.fromJson(params!);
+    return ElicitRequest.fromJson(
+      params!,
+      protocolVersion: latestDraftProtocolVersion,
+    );
   }
 
   /// The typed params for an embedded `sampling/createMessage` request.

@@ -50,6 +50,31 @@ void main() {
       expect(json.containsKey('priority'), isFalse);
       expect(json.containsKey('lastModified'), isFalse);
     });
+
+    test('validates shared annotation fields', () {
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'audience': ['model'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'audience': 'user',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'lastModified': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceAnnotations(audience: ['model']).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
   });
 
   group('Resource', () {
@@ -76,7 +101,7 @@ void main() {
         'mimeType': 'text/plain',
         'icon': {
           'type': 'image',
-          'data': 'base64data',
+          'data': 'YmFzZTY0ZGF0YQ==',
           'mimeType': 'image/png',
         },
         'annotations': {
@@ -98,7 +123,7 @@ void main() {
       expect(resource.description, equals('A test file resource'));
       expect(resource.mimeType, equals('text/plain'));
       expect(resource.icon, isNotNull);
-      expect(resource.icon!.data, equals('base64data'));
+      expect(resource.icon!.data, equals('YmFzZTY0ZGF0YQ=='));
       expect(resource.icons, isNotNull);
       expect(
         resource.icons!.single.src,
@@ -225,7 +250,7 @@ void main() {
         'mimeType': 'application/json',
         'icon': {
           'type': 'image',
-          'data': 'icondata',
+          'data': 'aWNvbmRhdGE=',
           'mimeType': 'image/svg+xml',
         },
         'annotations': {
@@ -827,6 +852,108 @@ void main() {
       final notification = JsonRpcResourceUpdatedNotification.fromJson(json);
       expect(notification.meta, isNotNull);
       expect(notification.meta!['key'], equals('value'));
+    });
+  });
+
+  group('Resource URI format validation', () {
+    test('rejects non-absolute resource URIs from wire JSON', () {
+      expect(
+        () => Resource.fromJson({'uri': 'relative/path', 'name': 'Relative'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'relative/path',
+          'name': 'Relative',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ReadResourceRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SubscribeRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => UnsubscribeRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceUpdatedNotification.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-absolute resource URIs during serialization', () {
+      expect(
+        () => const Resource(uri: 'relative/path', name: 'Relative').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const TextResourceContents(
+          uri: 'relative/path',
+          text: 'Relative',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'relative/path',
+          name: 'Relative',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ReadResourceRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const SubscribeRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const UnsubscribeRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ResourceUpdatedNotification(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('rejects malformed resource URI templates', () {
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path',
+          'name': 'Bad Template',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceTemplate(
+          uriTemplate: 'file:///{path',
+          name: 'Bad Template',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => ResourceReference.fromJson({
+          'type': 'ref/resource',
+          'uri': 'file:///{path',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceReference(uri: 'file:///{path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
   });
 }
