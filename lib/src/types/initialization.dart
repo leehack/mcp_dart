@@ -1083,6 +1083,16 @@ class DiscoverResult implements BaseResultData {
   });
 
   factory DiscoverResult.fromJson(Map<String, dynamic> json) {
+    final resultType = readOptionalString(
+      json['resultType'],
+      'DiscoverResult.resultType',
+    );
+    if (resultType != resultTypeComplete) {
+      throw const FormatException(
+        'DiscoverResult.resultType must be complete',
+      );
+    }
+
     final supportedVersions = json['supportedVersions'];
     if (supportedVersions is! List) {
       throw const FormatException(
@@ -1091,7 +1101,6 @@ class DiscoverResult implements BaseResultData {
     }
 
     return DiscoverResult(
-      resultType: json['resultType'] as String? ?? 'complete',
       supportedVersions: supportedVersions.cast<String>(),
       capabilities: ServerCapabilities.fromJson(
         json['capabilities'] as Map<String, dynamic>,
@@ -1105,14 +1114,24 @@ class DiscoverResult implements BaseResultData {
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'resultType': resultType,
-        'supportedVersions': supportedVersions,
-        'capabilities': capabilities.toJson(),
-        'serverInfo': serverInfo.toJson(),
-        if (instructions != null) 'instructions': instructions,
-        if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
-      };
+  Map<String, dynamic> toJson() {
+    if (resultType != resultTypeComplete) {
+      throw ArgumentError.value(
+        resultType,
+        'DiscoverResult.resultType',
+        'must be complete',
+      );
+    }
+
+    return {
+      'resultType': resultType,
+      'supportedVersions': supportedVersions,
+      'capabilities': capabilities.toJson(),
+      'serverInfo': serverInfo.toJson(),
+      if (instructions != null) 'instructions': instructions,
+      if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
+    };
+  }
 }
 
 /// Notification sent from the client to the server after initialization is finished.

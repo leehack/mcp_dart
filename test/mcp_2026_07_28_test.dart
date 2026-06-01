@@ -573,6 +573,43 @@ void main() {
       );
     });
 
+    test('requires complete resultType on server/discover results', () {
+      final validResult = const DiscoverResult(
+        supportedVersions: [draftProtocolVersion2026_07_28],
+        capabilities: ServerCapabilities(),
+        serverInfo: Implementation(name: 'server', version: '1.0.0'),
+      ).toJson();
+
+      for (final json in [
+        {
+          ...validResult,
+        }..remove('resultType'),
+        {
+          ...validResult,
+          'resultType': resultTypeInputRequired,
+        },
+        {
+          ...validResult,
+          'resultType': 1,
+        },
+      ]) {
+        expect(
+          () => DiscoverResult.fromJson(json),
+          throwsFormatException,
+        );
+      }
+
+      expect(
+        () => const DiscoverResult(
+          resultType: resultTypeInputRequired,
+          supportedVersions: [draftProtocolVersion2026_07_28],
+          capabilities: ServerCapabilities(),
+          serverInfo: Implementation(name: 'server', version: '1.0.0'),
+        ).toJson(),
+        throwsArgumentError,
+      );
+    });
+
     test('requires server/discover request metadata in params', () {
       expect(
         () => JsonRpcServerDiscoverRequest(id: 'discover-1').toJson(),
