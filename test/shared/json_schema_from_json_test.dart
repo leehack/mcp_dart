@@ -146,20 +146,23 @@ void main() {
     test('parses integer schema', () {
       final json = {
         'type': 'integer',
-        'minimum': 1,
-        'maximum': 10,
-        'exclusiveMinimum': 0,
-        'exclusiveMaximum': 11,
-        'multipleOf': 2,
+        'minimum': 1.5,
+        'maximum': 10.5,
+        'exclusiveMinimum': 0.5,
+        'exclusiveMaximum': 11.5,
+        'multipleOf': 0.5,
+        'default': 2.0,
       };
       final schema = JsonSchema.fromJson(json);
       expect(schema, isA<JsonInteger>());
       final s = schema as JsonInteger;
-      expect(s.minimum, 1);
-      expect(s.maximum, 10);
-      expect(s.exclusiveMinimum, 0);
-      expect(s.exclusiveMaximum, 11);
-      expect(s.multipleOf, 2);
+      expect(s.minimum, 1.5);
+      expect(s.maximum, 10.5);
+      expect(s.exclusiveMinimum, 0.5);
+      expect(s.exclusiveMaximum, 11.5);
+      expect(s.multipleOf, 0.5);
+      expect(s.defaultValue, 2.0);
+      expect(s.toJson(), json);
     });
 
     test('parses boolean schema', () {

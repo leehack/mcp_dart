@@ -140,6 +140,9 @@
   dispatch finite numeric progress tokens end-to-end.
 - Widened protocol `relatedRequestId` API parameters to preserve string and
   finite numeric JSON-RPC request IDs through request and notification routing.
+- Accepted numeric `minimum`, `maximum`, `exclusiveMinimum`,
+  `exclusiveMaximum`, `multipleOf`, and `default` values on JSON Schema
+  `integer` schemas, matching the stable and MCP 2026 schema definitions.
 
 ## 2.2.0
 
