@@ -1465,6 +1465,46 @@ void main() {
         );
       });
 
+      test('initialization and capability wire fields reject bad shapes', () {
+        final initializeRequest = {
+          'protocolVersion': latestProtocolVersion,
+          'capabilities': <String, dynamic>{},
+          'clientInfo': {'name': 'client', 'version': '1.0.0'},
+        };
+        final initializeResult = {
+          'protocolVersion': latestProtocolVersion,
+          'capabilities': <String, dynamic>{},
+          'serverInfo': {'name': 'server', 'version': '1.0.0'},
+        };
+
+        for (final parse in <Object Function()>[
+          () => InitializeRequest.fromJson({
+                ...initializeRequest,
+                'protocolVersion': 1,
+              }),
+          () => InitializeRequest.fromJson({
+                ...initializeRequest,
+                'capabilities': 'bad',
+              }),
+          () => InitializeRequest.fromJson({
+                ...initializeRequest,
+                'clientInfo': 'bad',
+              }),
+          () => InitializeResult.fromJson({
+                ...initializeResult,
+                'capabilities': 'bad',
+              }),
+          () => InitializeResult.fromJson({
+                ...initializeResult,
+                'instructions': 1,
+              }),
+          () => ClientCapabilitiesRoots.fromJson({'listChanged': 'true'}),
+          () => ServerCapabilitiesResources.fromJson({'subscribe': 'true'}),
+        ]) {
+          expect(parse, throwsA(isA<FormatException>()));
+        }
+      });
+
       test('runtime value constraints are enforced without asserts', () {
         expect(
           () => Annotations(priority: 2).toJson(),

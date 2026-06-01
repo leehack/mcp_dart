@@ -117,6 +117,8 @@
   protocol parse errors.
 - Rejected malformed content and resource string/list wire fields with protocol
   parse errors.
+- Rejected malformed initialization and capability wire fields with protocol
+  parse errors.
 - Rejected non-finite numeric values for progress, annotation priority, model
   priority, and sampling temperature fields so SDK-built payloads remain valid
   JSON numbers.

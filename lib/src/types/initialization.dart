@@ -2,27 +2,14 @@ import 'content.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
-Map<String, dynamic>? _asJsonObject(dynamic value) {
+Map<String, dynamic>? _asJsonObject(Object? value, String field) {
   if (value == null) {
     return null;
-  }
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    return value.cast<String, dynamic>();
   }
   if (value is bool) {
     return value ? <String, dynamic>{} : null;
   }
-  throw FormatException('Expected object capability, got ${value.runtimeType}');
-}
-
-String _readRequiredString(Object? value, String field) {
-  if (value is String) {
-    return value;
-  }
-  throw FormatException('$field must be a string');
+  return readJsonObject(value, field);
 }
 
 String? _readOptionalPresentString(
@@ -33,7 +20,7 @@ String? _readOptionalPresentString(
   if (!json.containsKey(key)) {
     return null;
   }
-  return _readRequiredString(json[key], field);
+  return readRequiredString(json[key], field);
 }
 
 bool _isAbsoluteUri(String value) {
@@ -85,16 +72,7 @@ Map<String, dynamic>? _asStrictJsonObject(Object? value, String field) {
   if (value == null) {
     return null;
   }
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    if (value.keys.any((key) => key is! String)) {
-      throw FormatException('$field must be an object with string keys');
-    }
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('$field must be an object');
+  return readJsonObject(value, field);
 }
 
 Map<String, dynamic>? _asJsonObjectMap(Object? value, String field) {
@@ -149,17 +127,15 @@ Map<String, Map<String, dynamic>>? _serializeExtensionMap(
   );
 }
 
-bool? _capabilityDeclared(dynamic value) {
+bool? _capabilityDeclared(Object? value, String field) {
   if (value == null) {
     return null;
   }
   if (value is bool) {
     return value;
   }
-  if (value is Map) {
-    return true;
-  }
-  throw FormatException('Expected capability marker, got ${value.runtimeType}');
+  readJsonObject(value, field);
+  return true;
 }
 
 Map<String, dynamic>? _serializeCapabilityObject(bool? declared) {
@@ -213,13 +189,13 @@ class Implementation {
 
   factory Implementation.fromJson(Map<String, dynamic> json) {
     return Implementation(
-      name: _readRequiredString(json['name'], 'Implementation.name'),
+      name: readRequiredString(json['name'], 'Implementation.name'),
       title: _readOptionalPresentString(
         json,
         'title',
         'Implementation.title',
       ),
-      version: _readRequiredString(json['version'], 'Implementation.version'),
+      version: readRequiredString(json['version'], 'Implementation.version'),
       description: _readOptionalPresentString(
         json,
         'description',
@@ -262,7 +238,10 @@ class ClientCapabilitiesRoots {
 
   factory ClientCapabilitiesRoots.fromJson(Map<String, dynamic> json) {
     return ClientCapabilitiesRoots(
-      listChanged: json['listChanged'] as bool?,
+      listChanged: readOptionalBool(
+        json['listChanged'],
+        'ClientCapabilitiesRoots.listChanged',
+      ),
     );
   }
 
@@ -281,7 +260,10 @@ class ClientElicitationForm {
 
   factory ClientElicitationForm.fromJson(Map<String, dynamic> json) {
     return ClientElicitationForm(
-      applyDefaults: json['applyDefaults'] as bool?,
+      applyDefaults: readOptionalBool(
+        json['applyDefaults'],
+        'ClientElicitationForm.applyDefaults',
+      ),
     );
   }
 
@@ -343,8 +325,8 @@ class ClientElicitation {
       return const ClientElicitation.formOnly();
     }
 
-    final formMap = (json['form'] as Map?)?.cast<String, dynamic>();
-    final urlMap = (json['url'] as Map?)?.cast<String, dynamic>();
+    final formMap = _asJsonObject(json['form'], 'ClientElicitation.form');
+    final urlMap = _asJsonObject(json['url'], 'ClientElicitation.url');
 
     return ClientElicitation(
       form: formMap == null ? null : ClientElicitationForm.fromJson(formMap),
@@ -373,8 +355,16 @@ class ClientCapabilitiesSampling {
 
   factory ClientCapabilitiesSampling.fromJson(Map<String, dynamic> json) {
     return ClientCapabilitiesSampling(
-      context: _capabilityDeclared(json['context']) ?? false,
-      tools: _capabilityDeclared(json['tools']) ?? false,
+      context: _capabilityDeclared(
+            json['context'],
+            'ClientCapabilitiesSampling.context',
+          ) ??
+          false,
+      tools: _capabilityDeclared(
+            json['tools'],
+            'ClientCapabilitiesSampling.tools',
+          ) ??
+          false,
     );
   }
 
@@ -405,7 +395,10 @@ class ClientCapabilitiesTasksElicitation {
   factory ClientCapabilitiesTasksElicitation.fromJson(
     Map<String, dynamic> json,
   ) {
-    final createMap = _asJsonObject(json['create']);
+    final createMap = _asJsonObject(
+      json['create'],
+      'ClientCapabilitiesTasksElicitation.create',
+    );
     return ClientCapabilitiesTasksElicitation(
       create: createMap != null
           ? ClientCapabilitiesTasksElicitationCreate.fromJson(createMap)
@@ -437,7 +430,10 @@ class ClientCapabilitiesTasksSampling {
   const ClientCapabilitiesTasksSampling({this.createMessage});
 
   factory ClientCapabilitiesTasksSampling.fromJson(Map<String, dynamic> json) {
-    final createMessageMap = _asJsonObject(json['createMessage']);
+    final createMessageMap = _asJsonObject(
+      json['createMessage'],
+      'ClientCapabilitiesTasksSampling.createMessage',
+    );
     return ClientCapabilitiesTasksSampling(
       createMessage: createMessageMap != null
           ? ClientCapabilitiesTasksSamplingCreateMessage.fromJson(
@@ -467,8 +463,14 @@ class ClientCapabilitiesTasksRequests {
   });
 
   factory ClientCapabilitiesTasksRequests.fromJson(Map<String, dynamic> json) {
-    final elicitationMap = _asJsonObject(json['elicitation']);
-    final samplingMap = _asJsonObject(json['sampling']);
+    final elicitationMap = _asJsonObject(
+      json['elicitation'],
+      'ClientCapabilitiesTasksRequests.elicitation',
+    );
+    final samplingMap = _asJsonObject(
+      json['sampling'],
+      'ClientCapabilitiesTasksRequests.sampling',
+    );
 
     return ClientCapabilitiesTasksRequests(
       elicitation: elicitationMap != null
@@ -504,10 +506,19 @@ class ClientCapabilitiesTasks {
   });
 
   factory ClientCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
-    final requestsMap = _asJsonObject(json['requests']);
+    final requestsMap = _asJsonObject(
+      json['requests'],
+      'ClientCapabilitiesTasks.requests',
+    );
     return ClientCapabilitiesTasks(
-      cancel: _capabilityDeclared(json['cancel']),
-      list: _capabilityDeclared(json['list']),
+      cancel: _capabilityDeclared(
+        json['cancel'],
+        'ClientCapabilitiesTasks.cancel',
+      ),
+      list: _capabilityDeclared(
+        json['list'],
+        'ClientCapabilitiesTasks.list',
+      ),
       requests: requestsMap == null
           ? null
           : ClientCapabilitiesTasksRequests.fromJson(requestsMap),
@@ -562,10 +573,16 @@ class ClientCapabilities {
   });
 
   factory ClientCapabilities.fromJson(Map<String, dynamic> json) {
-    final rootsMap = _asJsonObject(json['roots']);
-    final elicitationMap = _asJsonObject(json['elicitation']);
-    final tasksMap = _asJsonObject(json['tasks']);
-    final samplingMap = _asJsonObject(json['sampling']);
+    final rootsMap = _asJsonObject(json['roots'], 'ClientCapabilities.roots');
+    final elicitationMap = _asJsonObject(
+      json['elicitation'],
+      'ClientCapabilities.elicitation',
+    );
+    final tasksMap = _asJsonObject(json['tasks'], 'ClientCapabilities.tasks');
+    final samplingMap = _asJsonObject(
+      json['sampling'],
+      'ClientCapabilities.sampling',
+    );
     final extensionsMap = _asExtensionMap(
       json['extensions'],
       'ClientCapabilities.extensions',
@@ -631,12 +648,18 @@ class InitializeRequest {
 
   factory InitializeRequest.fromJson(Map<String, dynamic> json) =>
       InitializeRequest(
-        protocolVersion: json['protocolVersion'] as String,
+        protocolVersion: readRequiredString(
+          json['protocolVersion'],
+          'InitializeRequest.protocolVersion',
+        ),
         capabilities: ClientCapabilities.fromJson(
-          json['capabilities'] as Map<String, dynamic>,
+          readJsonObject(
+            json['capabilities'],
+            'InitializeRequest.capabilities',
+          ),
         ),
         clientInfo: Implementation.fromJson(
-          json['clientInfo'] as Map<String, dynamic>,
+          readJsonObject(json['clientInfo'], 'InitializeRequest.clientInfo'),
         ),
       );
 
@@ -659,7 +682,10 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
   }) : super(method: Method.initialize, params: initParams.toJson());
 
   factory JsonRpcInitializeRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcInitializeRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for initialize request");
     }
@@ -771,8 +797,14 @@ class ServerCapabilitiesElicitation {
         url = const ServerElicitationUrl();
 
   factory ServerCapabilitiesElicitation.fromJson(Map<String, dynamic> json) {
-    final formMap = _asJsonObject(json['form']);
-    final urlMap = _asJsonObject(json['url']);
+    final formMap = _asJsonObject(
+      json['form'],
+      'ServerCapabilitiesElicitation.form',
+    );
+    final urlMap = _asJsonObject(
+      json['url'],
+      'ServerCapabilitiesElicitation.url',
+    );
 
     return ServerCapabilitiesElicitation(
       form: formMap == null ? null : ServerElicitationForm.fromJson(formMap),
@@ -797,7 +829,10 @@ class ServerCapabilitiesPrompts {
 
   factory ServerCapabilitiesPrompts.fromJson(Map<String, dynamic> json) {
     return ServerCapabilitiesPrompts(
-      listChanged: json['listChanged'] as bool?,
+      listChanged: readOptionalBool(
+        json['listChanged'],
+        'ServerCapabilitiesPrompts.listChanged',
+      ),
     );
   }
 
@@ -821,8 +856,14 @@ class ServerCapabilitiesResources {
 
   factory ServerCapabilitiesResources.fromJson(Map<String, dynamic> json) {
     return ServerCapabilitiesResources(
-      subscribe: json['subscribe'] as bool?,
-      listChanged: json['listChanged'] as bool?,
+      subscribe: readOptionalBool(
+        json['subscribe'],
+        'ServerCapabilitiesResources.subscribe',
+      ),
+      listChanged: readOptionalBool(
+        json['listChanged'],
+        'ServerCapabilitiesResources.listChanged',
+      ),
     );
   }
 
@@ -843,7 +884,10 @@ class ServerCapabilitiesTools {
 
   factory ServerCapabilitiesTools.fromJson(Map<String, dynamic> json) {
     return ServerCapabilitiesTools(
-      listChanged: json['listChanged'] as bool?,
+      listChanged: readOptionalBool(
+        json['listChanged'],
+        'ServerCapabilitiesTools.listChanged',
+      ),
     );
   }
 
@@ -869,7 +913,10 @@ class ServerCapabilitiesCompletions {
 
   factory ServerCapabilitiesCompletions.fromJson(Map<String, dynamic> json) {
     return ServerCapabilitiesCompletions(
-      listChanged: json['listChanged'] as bool?,
+      listChanged: readOptionalBool(
+        json['listChanged'],
+        'ServerCapabilitiesCompletions.listChanged',
+      ),
     );
   }
 
@@ -893,7 +940,10 @@ class ServerCapabilitiesTasksTools {
   const ServerCapabilitiesTasksTools({this.call});
 
   factory ServerCapabilitiesTasksTools.fromJson(Map<String, dynamic> json) {
-    final callMap = _asJsonObject(json['call']);
+    final callMap = _asJsonObject(
+      json['call'],
+      'ServerCapabilitiesTasksTools.call',
+    );
     return ServerCapabilitiesTasksTools(
       call: callMap == null
           ? null
@@ -912,7 +962,10 @@ class ServerCapabilitiesTasksRequests {
   const ServerCapabilitiesTasksRequests({this.tools});
 
   factory ServerCapabilitiesTasksRequests.fromJson(Map<String, dynamic> json) {
-    final toolsMap = _asJsonObject(json['tools']);
+    final toolsMap = _asJsonObject(
+      json['tools'],
+      'ServerCapabilitiesTasksRequests.tools',
+    );
     return ServerCapabilitiesTasksRequests(
       tools: toolsMap == null
           ? null
@@ -949,14 +1002,26 @@ class ServerCapabilitiesTasks {
   });
 
   factory ServerCapabilitiesTasks.fromJson(Map<String, dynamic> json) {
-    final requestsMap = _asJsonObject(json['requests']);
+    final requestsMap = _asJsonObject(
+      json['requests'],
+      'ServerCapabilitiesTasks.requests',
+    );
     return ServerCapabilitiesTasks(
-      list: _capabilityDeclared(json['list']),
-      cancel: _capabilityDeclared(json['cancel']),
+      list: _capabilityDeclared(
+        json['list'],
+        'ServerCapabilitiesTasks.list',
+      ),
+      cancel: _capabilityDeclared(
+        json['cancel'],
+        'ServerCapabilitiesTasks.cancel',
+      ),
       requests: requestsMap == null
           ? null
           : ServerCapabilitiesTasksRequests.fromJson(requestsMap),
-      listChanged: json['listChanged'] as bool?,
+      listChanged: readOptionalBool(
+        json['listChanged'],
+        'ServerCapabilitiesTasks.listChanged',
+      ),
     );
   }
 
@@ -1023,12 +1088,21 @@ class ServerCapabilities {
   });
 
   factory ServerCapabilities.fromJson(Map<String, dynamic> json) {
-    final pMap = _asJsonObject(json['prompts']);
-    final rMap = _asJsonObject(json['resources']);
-    final cMap = _asJsonObject(json['completions']);
-    final tMap = _asJsonObject(json['tools']);
-    final tasksMap = _asJsonObject(json['tasks']);
-    final elicitationMap = _asJsonObject(json['elicitation']);
+    final pMap = _asJsonObject(json['prompts'], 'ServerCapabilities.prompts');
+    final rMap = _asJsonObject(
+      json['resources'],
+      'ServerCapabilities.resources',
+    );
+    final cMap = _asJsonObject(
+      json['completions'],
+      'ServerCapabilities.completions',
+    );
+    final tMap = _asJsonObject(json['tools'], 'ServerCapabilities.tools');
+    final tasksMap = _asJsonObject(json['tasks'], 'ServerCapabilities.tasks');
+    final elicitationMap = _asJsonObject(
+      json['elicitation'],
+      'ServerCapabilities.elicitation',
+    );
     final extensionsMap = _asExtensionMap(
       json['extensions'],
       'ServerCapabilities.extensions',
@@ -1039,7 +1113,10 @@ class ServerCapabilities {
         json['experimental'],
         'ServerCapabilities.experimental',
       ),
-      logging: json['logging'] as Map<String, dynamic>?,
+      logging: readOptionalJsonObject(
+        json['logging'],
+        'ServerCapabilities.logging',
+      ),
       prompts: pMap == null ? null : ServerCapabilitiesPrompts.fromJson(pMap),
       resources:
           rMap == null ? null : ServerCapabilitiesResources.fromJson(rMap),
@@ -1061,7 +1138,8 @@ class ServerCapabilities {
             experimental,
             'ServerCapabilities.experimental',
           ),
-        if (logging != null) 'logging': logging,
+        if (logging != null)
+          'logging': readJsonObject(logging, 'ServerCapabilities.logging'),
         if (prompts != null) 'prompts': prompts!.toJson(),
         if (resources != null) 'resources': resources!.toJson(),
         if (tools != null) 'tools': tools!.toJson(),
@@ -1109,14 +1187,23 @@ class InitializeResult implements BaseResultData {
     final meta =
         readOptionalJsonObject(json['_meta'], 'InitializeResult._meta');
     return InitializeResult(
-      protocolVersion: json['protocolVersion'] as String,
+      protocolVersion: readRequiredString(
+        json['protocolVersion'],
+        'InitializeResult.protocolVersion',
+      ),
       capabilities: ServerCapabilities.fromJson(
-        json['capabilities'] as Map<String, dynamic>,
+        readJsonObject(
+          json['capabilities'],
+          'InitializeResult.capabilities',
+        ),
       ),
       serverInfo: Implementation.fromJson(
-        json['serverInfo'] as Map<String, dynamic>,
+        readJsonObject(json['serverInfo'], 'InitializeResult.serverInfo'),
       ),
-      instructions: json['instructions'] as String?,
+      instructions: readOptionalString(
+        json['instructions'],
+        'InitializeResult.instructions',
+      ),
       meta: meta,
     );
   }
@@ -1181,14 +1268,20 @@ class DiscoverResult implements BaseResultData {
     }
 
     return DiscoverResult(
-      supportedVersions: supportedVersions.cast<String>(),
+      supportedVersions: [
+        for (final version in supportedVersions)
+          readRequiredString(version, 'DiscoverResult.supportedVersions items'),
+      ],
       capabilities: ServerCapabilities.fromJson(
-        json['capabilities'] as Map<String, dynamic>,
+        readJsonObject(json['capabilities'], 'DiscoverResult.capabilities'),
       ),
       serverInfo: Implementation.fromJson(
-        json['serverInfo'] as Map<String, dynamic>,
+        readJsonObject(json['serverInfo'], 'DiscoverResult.serverInfo'),
       ),
-      instructions: json['instructions'] as String?,
+      instructions: readOptionalString(
+        json['instructions'],
+        'DiscoverResult.instructions',
+      ),
       meta: readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta'),
     );
   }

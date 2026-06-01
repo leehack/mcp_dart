@@ -711,6 +711,43 @@ void main() {
       );
     });
 
+    test('server/discover and capability fields reject malformed wire shapes',
+        () {
+      final result = {
+        'resultType': resultTypeComplete,
+        'supportedVersions': [draftProtocolVersion2026_07_28],
+        'capabilities': <String, dynamic>{},
+        'serverInfo': {'name': 'server', 'version': '1.0.0'},
+      };
+
+      for (final parse in <Object Function()>[
+        () => DiscoverResult.fromJson({
+              ...result,
+              'supportedVersions': [draftProtocolVersion2026_07_28, 1],
+            }),
+        () => DiscoverResult.fromJson({
+              ...result,
+              'capabilities': 'bad',
+            }),
+        () => DiscoverResult.fromJson({
+              ...result,
+              'serverInfo': 'bad',
+            }),
+        () => DiscoverResult.fromJson({
+              ...result,
+              'instructions': 1,
+            }),
+        () => ClientCapabilitiesSampling.fromJson({
+              'tools': {'bad': Object()},
+            }),
+        () => ServerCapabilities.fromJson({
+              'logging': {'bad': Object()},
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
     test('requires complete resultType on server/discover results', () {
       final validResult = const DiscoverResult(
         supportedVersions: [draftProtocolVersion2026_07_28],

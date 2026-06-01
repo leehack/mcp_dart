@@ -31,6 +31,37 @@ void main() {
       );
     });
 
+    test('initialize request rejects malformed wire fields', () {
+      final params = {
+        'protocolVersion': latestProtocolVersion,
+        'capabilities': <String, dynamic>{},
+        'clientInfo': {'name': 'test-client', 'version': '1.0.0'},
+      };
+
+      for (final parse in <Object Function()>[
+        () => InitializeRequest.fromJson({
+              ...params,
+              'protocolVersion': 1,
+            }),
+        () => InitializeRequest.fromJson({
+              ...params,
+              'capabilities': 'bad',
+            }),
+        () => InitializeRequest.fromJson({
+              ...params,
+              'clientInfo': 'bad',
+            }),
+        () => JsonRpcInitializeRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.initialize,
+              'params': 'bad',
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+
     test('JsonRpcResponse serialization', () {
       final response = const JsonRpcResponse(
         id: 1,
@@ -297,6 +328,57 @@ void main() {
         expect(parse, throwsA(isA<FormatException>()));
       }
     });
+
+    test('initialize and discover results reject malformed wire fields', () {
+      final initializeResult = {
+        'protocolVersion': latestProtocolVersion,
+        'capabilities': <String, dynamic>{},
+        'serverInfo': {'name': 'server', 'version': '1.0.0'},
+      };
+      final discoverResult = {
+        'resultType': resultTypeComplete,
+        'supportedVersions': [draftProtocolVersion2026_07_28],
+        'capabilities': <String, dynamic>{},
+        'serverInfo': {'name': 'server', 'version': '1.0.0'},
+      };
+
+      for (final parse in <Object Function()>[
+        () => InitializeResult.fromJson({
+              ...initializeResult,
+              'protocolVersion': 1,
+            }),
+        () => InitializeResult.fromJson({
+              ...initializeResult,
+              'capabilities': 'bad',
+            }),
+        () => InitializeResult.fromJson({
+              ...initializeResult,
+              'serverInfo': 'bad',
+            }),
+        () => InitializeResult.fromJson({
+              ...initializeResult,
+              'instructions': 1,
+            }),
+        () => DiscoverResult.fromJson({
+              ...discoverResult,
+              'supportedVersions': [draftProtocolVersion2026_07_28, 1],
+            }),
+        () => DiscoverResult.fromJson({
+              ...discoverResult,
+              'capabilities': 'bad',
+            }),
+        () => DiscoverResult.fromJson({
+              ...discoverResult,
+              'serverInfo': 'bad',
+            }),
+        () => DiscoverResult.fromJson({
+              ...discoverResult,
+              'instructions': 1,
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
   });
 
   group('ToolExecution Tests', () {
@@ -446,6 +528,43 @@ void main() {
         ),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('capability parsers reject malformed wire fields', () {
+      for (final parse in <Object Function()>[
+        () => ClientCapabilitiesRoots.fromJson({'listChanged': 'true'}),
+        () => ClientElicitationForm.fromJson({'applyDefaults': 'true'}),
+        () => ClientElicitation.fromJson({'form': 'bad'}),
+        () => ClientCapabilitiesSampling.fromJson({
+              'tools': {'bad': Object()},
+            }),
+        () => ClientCapabilities.fromJson({
+              'experimental': {
+                'feature': {'bad': Object()},
+              },
+            }),
+        () => ClientCapabilities.fromJson({
+              'extensions': {
+                'io.example/feature': {'bad': Object()},
+              },
+            }),
+        () => ServerCapabilities.fromJson({
+              'logging': {'bad': Object()},
+            }),
+        () => const ServerCapabilities(
+              logging: {'bad': Object()},
+            ).toJson(),
+        () => ServerCapabilitiesPrompts.fromJson({'listChanged': 'true'}),
+        () => ServerCapabilitiesResources.fromJson({'subscribe': 'true'}),
+        () => ServerCapabilitiesTools.fromJson({'listChanged': 'true'}),
+        () => ServerCapabilitiesCompletions.fromJson({'listChanged': 'true'}),
+        () => ServerCapabilitiesTasks.fromJson({'listChanged': 'true'}),
+        () => ServerCapabilitiesTasks.fromJson({
+              'list': {'bad': Object()},
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
     });
   });
 
