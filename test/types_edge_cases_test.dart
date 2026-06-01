@@ -212,6 +212,27 @@ void main() {
       expect(json.containsKey('total'), isFalse);
     });
 
+    test('rejects non-finite progress numbers', () {
+      for (final value in [double.nan, double.infinity]) {
+        expect(
+          () => Progress.fromJson({'progress': value}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Progress(progress: value).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          () => Progress.fromJson({'progress': 1, 'total': value}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Progress(progress: 1, total: value).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      }
+    });
+
     test('rejects malformed progressToken wire values', () {
       for (final progressToken in [
         null,

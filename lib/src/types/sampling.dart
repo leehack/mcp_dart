@@ -625,7 +625,10 @@ class CreateMessageRequest {
       systemPrompt: json['systemPrompt'] as String?,
       includeContext:
           ctxStr == null ? null : IncludeContext.values.byName(ctxStr),
-      temperature: (json['temperature'] as num?)?.toDouble(),
+      temperature: readOptionalFiniteDouble(
+        json['temperature'],
+        'CreateMessageRequest.temperature',
+      ),
       maxTokens: json['maxTokens'] as int,
       stopSequences: (json['stopSequences'] as List<dynamic>?)?.cast<String>(),
       metadata: _asJsonObjectOrNull(json['metadata']),
@@ -642,20 +645,26 @@ class CreateMessageRequest {
   }
 
   /// Converts to JSON.
-  Map<String, dynamic> toJson() => {
-        'messages': messages.map((m) => m.toJson()).toList(),
-        if (task != null) 'task': task!.toJson(),
-        if (systemPrompt != null) 'systemPrompt': systemPrompt,
-        if (includeContext != null) 'includeContext': includeContext!.name,
-        if (temperature != null) 'temperature': temperature,
-        'maxTokens': maxTokens,
-        if (stopSequences != null) 'stopSequences': stopSequences,
-        if (metadata != null) 'metadata': metadata,
-        if (modelPreferences != null)
-          'modelPreferences': modelPreferences!.toJson(),
-        if (tools != null) 'tools': tools!.map((t) => t.toJson()).toList(),
-        if (toolChoiceConfig != null) 'toolChoice': toolChoiceConfig!.toJson(),
-      };
+  Map<String, dynamic> toJson() {
+    validateOptionalFiniteNumber(
+      temperature,
+      'CreateMessageRequest.temperature',
+    );
+    return {
+      'messages': messages.map((m) => m.toJson()).toList(),
+      if (task != null) 'task': task!.toJson(),
+      if (systemPrompt != null) 'systemPrompt': systemPrompt,
+      if (includeContext != null) 'includeContext': includeContext!.name,
+      if (temperature != null) 'temperature': temperature,
+      'maxTokens': maxTokens,
+      if (stopSequences != null) 'stopSequences': stopSequences,
+      if (metadata != null) 'metadata': metadata,
+      if (modelPreferences != null)
+        'modelPreferences': modelPreferences!.toJson(),
+      if (tools != null) 'tools': tools!.map((t) => t.toJson()).toList(),
+      if (toolChoiceConfig != null) 'toolChoice': toolChoiceConfig!.toJson(),
+    };
+  }
 }
 
 /// Request sent from server to client to sample an LLM.

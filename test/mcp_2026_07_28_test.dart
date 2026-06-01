@@ -337,6 +337,36 @@ void main() {
       );
     });
 
+    test('rejects non-finite JSON numbers', () {
+      expect(
+        () => ProgressNotification.fromJson({
+          'progressToken': 'progress-1',
+          'progress': double.nan,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ProgressNotification(
+          progressToken: 'progress-1',
+          progress: double.infinity,
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => CreateMessageRequest.fromJson({
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 16,
+          'temperature': double.nan,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('serializes server/discover request and result', () {
       final request = JsonRpcServerDiscoverRequest(
         id: 'discover-1',

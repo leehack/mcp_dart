@@ -1264,6 +1264,14 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => Annotations(priority: double.nan).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+        expect(
+          () => Annotations.fromJson({'priority': double.infinity}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => CompletionResultData(
             values: List.generate(101, (index) => '$index'),
           ).toJson(),

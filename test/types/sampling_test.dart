@@ -76,6 +76,19 @@ void main() {
       expect(prefs.hints, isNull);
       expect(prefs.costPriority, isNull);
     });
+
+    test('rejects non-finite priorities', () {
+      for (final value in [double.nan, double.infinity]) {
+        expect(
+          () => ModelPreferences.fromJson({'costPriority': value}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ModelPreferences(costPriority: value).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+      }
+    });
   });
 
   group('SamplingContent', () {
@@ -440,6 +453,38 @@ void main() {
       expect(params.messages, hasLength(1));
       expect(params.maxTokens, equals(200));
       expect(params.includeContext, equals(IncludeContext.allServers));
+    });
+
+    test('rejects non-finite temperature values', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      for (final value in [double.nan, double.infinity]) {
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': messages,
+            'maxTokens': 100,
+            'temperature': value,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams(
+            messages: const [
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: SamplingTextContent(text: 'Hello'),
+              ),
+            ],
+            maxTokens: 100,
+            temperature: value,
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      }
     });
   });
 

@@ -1,4 +1,5 @@
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// A response that indicates success but carries no specific data.
 class EmptyResult implements BaseResultData {
@@ -91,17 +92,21 @@ class Progress {
 
   factory Progress.fromJson(Map<String, dynamic> json) {
     return Progress(
-      progress: json['progress'] as num,
-      total: json['total'] as num?,
+      progress: readFiniteNumber(json['progress'], 'Progress.progress'),
+      total: readOptionalFiniteNumber(json['total'], 'Progress.total'),
       message: json['message'] as String?,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'progress': progress,
-        if (total != null) 'total': total,
-        if (message != null) 'message': message,
-      };
+  Map<String, dynamic> toJson() {
+    validateFiniteNumber(progress, 'Progress.progress');
+    validateOptionalFiniteNumber(total, 'Progress.total');
+    return {
+      'progress': progress,
+      if (total != null) 'total': total,
+      if (message != null) 'message': message,
+    };
+  }
 }
 
 /// Parameters for the `notifications/progress` notification.
