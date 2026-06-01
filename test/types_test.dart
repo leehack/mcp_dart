@@ -494,7 +494,7 @@ void main() {
       expect(deserialized.mimeType, equals('image/png'));
     });
 
-    test('ImageContent supports optional theme', () {
+    test('ImageContent parses legacy theme without serializing it', () {
       final content = const ImageContent(
         data: 'base64data',
         mimeType: 'image/png',
@@ -502,9 +502,12 @@ void main() {
       );
 
       final json = content.toJson();
-      expect(json['theme'], equals('dark'));
+      expect(json, isNot(contains('theme')));
 
-      final deserialized = ImageContent.fromJson(json);
+      final deserialized = ImageContent.fromJson({
+        ...json,
+        'theme': 'dark',
+      });
       expect(deserialized.theme, equals('dark'));
     });
 

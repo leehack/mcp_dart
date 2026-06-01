@@ -267,7 +267,6 @@ sealed class Content {
           final ImageContent c => {
               'data': c.data,
               'mimeType': c.mimeType,
-              if (c.theme != null) 'theme': c.theme,
               if (c.annotations != null) 'annotations': c.annotations!.toJson(),
               if (c.meta != null)
                 '_meta': readJsonObject(c.meta, 'ImageContent._meta'),
@@ -346,6 +345,10 @@ class ImageContent extends Content {
   final String mimeType;
 
   /// Optional theme hint for legacy icon usage (`light` | `dark`).
+  ///
+  /// This field is parsed for backwards compatibility with older icon-shaped
+  /// payloads. MCP ImageContent content blocks do not serialize `theme`; use
+  /// [McpIcon.theme] for advertised icons.
   final String? theme;
 
   /// Optional annotations for the content block.
