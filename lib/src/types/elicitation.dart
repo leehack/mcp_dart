@@ -267,9 +267,16 @@ class ElicitResult implements BaseResultData {
       throw FormatException('Invalid elicitation action: $action');
     }
 
+    final content = _parseElicitResultContent(json['content']);
+    _validateElicitResultContentForAction(
+      action,
+      content,
+      formatException: true,
+    );
+
     return ElicitResult(
       action: action,
-      content: _parseElicitResultContent(json['content']),
+      content: content,
       url: json['url'] as String?,
       elicitationId: json['elicitationId'] as String?,
       meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
@@ -278,9 +285,11 @@ class ElicitResult implements BaseResultData {
 
   @override
   Map<String, dynamic> toJson() {
+    final resultAction = action;
+    _validateElicitResultContentForAction(resultAction, content);
     _validateElicitResultContent(content);
     return {
-      'action': action,
+      'action': resultAction,
       if (content != null) 'content': content,
       if (meta != null) '_meta': meta,
     };
@@ -636,6 +645,26 @@ void _validateElicitResultContent(
       'ElicitResult content values must be string, integer, boolean, or string[]',
     );
   }
+}
+
+void _validateElicitResultContentForAction(
+  String action,
+  Map<String, dynamic>? content, {
+  bool formatException = false,
+}) {
+  if (content == null || action == 'accept') {
+    return;
+  }
+  if (formatException) {
+    throw const FormatException(
+      'ElicitResult.content is only allowed when action is accept.',
+    );
+  }
+  throw ArgumentError.value(
+    content,
+    'content',
+    'ElicitResult.content is only allowed when action is accept.',
+  );
 }
 
 void _validateUrlElicitations(

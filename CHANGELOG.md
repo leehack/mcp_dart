@@ -88,6 +88,8 @@
   stable and MCP 2026 schemas.
 - Rejected form elicitation schemas that provide legacy `enumNames` without the
   required string `enum`.
+- Rejected `ElicitResult.content` when the result action is `decline` or
+  `cancel`.
 
 ## 2.2.0
 

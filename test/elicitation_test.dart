@@ -1052,6 +1052,15 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        () => ElicitResult.fromJson({
+          'action': 'decline',
+          'content': {
+            'name': 'Alice',
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
         () => const ElicitResult(
           action: 'accept',
           content: {
@@ -1065,6 +1074,15 @@ void main() {
           action: 'accept',
           content: {
             'ratio': 0.5,
+          },
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'cancel',
+          content: {
+            'name': 'Alice',
           },
         ).toJson(),
         throwsA(isA<ArgumentError>()),
