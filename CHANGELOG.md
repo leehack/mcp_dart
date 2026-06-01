@@ -132,6 +132,8 @@
   protocol parse errors.
 - Rejected malformed sampling tool-list, tool-choice, and tool-result content
   wire fields with protocol parse errors.
+- Rejected missing, unknown, and mismatched content block type discriminators
+  with protocol parse errors.
 - Rejected non-finite numeric values for progress, annotation priority, model
   priority, and sampling temperature fields so SDK-built payloads remain valid
   JSON numbers.

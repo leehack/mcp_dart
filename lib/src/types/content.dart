@@ -25,6 +25,17 @@ String _readRequiredString(Object? value, String field) {
   return readRequiredString(value, field);
 }
 
+void _expectType(
+  Map<String, dynamic> json,
+  String expected,
+  String field,
+) {
+  final value = _readRequiredString(json['type'], field);
+  if (value != expected) {
+    throw FormatException('$field must be "$expected"');
+  }
+}
+
 bool _isAbsoluteUri(String value) {
   return Uri.tryParse(value)?.hasScheme ?? false;
 }
@@ -374,14 +385,16 @@ sealed class Content {
   });
 
   factory Content.fromJson(Map<String, dynamic> json) {
-    final type = readOptionalString(json['type'], 'Content.type');
+    final type = readRequiredString(json['type'], 'Content.type');
     return switch (type) {
       'text' => TextContent.fromJson(json),
       'image' => ImageContent.fromJson(json),
       'audio' => AudioContent.fromJson(json),
       'resource_link' => ResourceLink.fromJson(json),
       'resource' => EmbeddedResource.fromJson(json),
-      _ => UnknownContent(type: type ?? 'unknown'),
+      _ => throw const FormatException(
+          'Content.type must be a known content type',
+        ),
     };
   }
 
@@ -454,6 +467,7 @@ class TextContent extends Content {
   }) : super(type: 'text');
 
   factory TextContent.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'text', 'TextContent.type');
     return TextContent(
       text: readRequiredString(json['text'], 'TextContent.text'),
       annotations: json['annotations'] == null
@@ -496,6 +510,7 @@ class ImageContent extends Content {
   }) : super(type: 'image');
 
   factory ImageContent.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'image', 'ImageContent.type');
     return ImageContent(
       data: readRequiredBase64String(json['data'], 'ImageContent.data'),
       mimeType: readRequiredString(json['mimeType'], 'ImageContent.mimeType'),
@@ -531,6 +546,7 @@ class AudioContent extends Content {
   }) : super(type: 'audio');
 
   factory AudioContent.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'audio', 'AudioContent.type');
     return AudioContent(
       data: readRequiredBase64String(json['data'], 'AudioContent.data'),
       mimeType: readRequiredString(json['mimeType'], 'AudioContent.mimeType'),
@@ -562,6 +578,7 @@ class EmbeddedResource extends Content {
   }) : super(type: 'resource');
 
   factory EmbeddedResource.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'resource', 'EmbeddedResource.type');
     return EmbeddedResource(
       resource: ResourceContents.fromJson(
         _asJsonObject(json['resource'], 'EmbeddedResource.resource'),
@@ -625,6 +642,7 @@ class ResourceLink extends Content {
   }) : super(type: 'resource_link');
 
   factory ResourceLink.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'resource_link', 'ResourceLink.type');
     return ResourceLink(
       uri: readRequiredAbsoluteUriString(json['uri'], 'ResourceLink.uri'),
       name: readRequiredString(json['name'], 'ResourceLink.name'),

@@ -1922,6 +1922,26 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => Content.fromJson({
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Content.fromJson({
+            'type': 'unknown',
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => TextContent.fromJson({
+            'type': 'image',
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => TextContent.fromJson({
             'type': 'text',
             'text': 1,
@@ -1940,6 +1960,14 @@ void main() {
             'type': 'resource_link',
             'uri': 'file:///docs/readme.md',
             'name': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceLink.fromJson({
+            'type': 'resource',
+            'uri': 'file:///docs/readme.md',
+            'name': 'readme',
           }),
           throwsA(isA<FormatException>()),
         );
