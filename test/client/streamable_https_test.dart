@@ -1265,7 +1265,7 @@ void main() {
       });
     });
 
-    test('send adds task id as 2026 stateless task name header', () async {
+    test('send adds 2026 stateless task name header', () async {
       final capturedHeaders = <String, String?>{};
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => server.close(force: true));
@@ -1495,7 +1495,7 @@ void main() {
         '=?base64?${base64Encode(utf8.encode('Hello, 世界'))}?=',
       );
       expect(capturedHeaders['limit'], '42');
-      expect(capturedHeaders['rounded'], '42');
+      expect(capturedHeaders['rounded'], isNull);
       expect(capturedHeaders['unsafe'], isNull);
       expect(capturedHeaders['ratio'], isNull);
       expect(capturedHeaders['dryRun'], 'false');

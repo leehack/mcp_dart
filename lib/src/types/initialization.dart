@@ -32,15 +32,7 @@ void _expectJsonRpcMethod(
   String expected,
   String context,
 ) {
-  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
-  if (version != jsonRpcVersion) {
-    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
-  }
-
-  final method = readRequiredString(json['method'], '$context.method');
-  if (method != expected) {
-    throw FormatException('$context.method must be "$expected"');
-  }
+  expectJsonRpcMethod(json, expected, context);
 }
 
 void _readOptionalParamsObject(Map<String, dynamic> json, String field) {
@@ -333,8 +325,8 @@ class ClientCapabilitiesRoots {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        if (listChanged != null) 'listChanged': listChanged,
+  Map<String, dynamic> toJson({bool omitListChanged = false}) => {
+        if (!omitListChanged && listChanged != null) 'listChanged': listChanged,
       };
 }
 
@@ -645,7 +637,7 @@ class ClientCapabilities {
   /// Present if the client supports tasks (`tasks/list`, `tasks/requests`, etc).
   final ClientCapabilitiesTasks? tasks;
 
-  /// Optional MCP extension capabilities (SEP-1724).
+  /// Optional MCP extension capabilities.
   ///
   /// Keys are extension identifiers (e.g. `"io.modelcontextprotocol/ui"`),
   /// values are extension-specific settings.
@@ -704,16 +696,23 @@ class ClientCapabilities {
     );
   }
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({
+    bool omitLegacyTasks = false,
+    bool omitLegacyRootsListChanged = false,
+  }) =>
+      {
         if (experimental != null)
           'experimental': _serializeJsonObjectMap(
             experimental,
             'ClientCapabilities.experimental',
           ),
         if (sampling != null) 'sampling': sampling!.toJson(),
-        if (roots != null) 'roots': roots!.toJson(),
+        if (roots != null)
+          'roots': roots!.toJson(
+            omitListChanged: omitLegacyRootsListChanged,
+          ),
         if (elicitation != null) 'elicitation': elicitation!.toJson(),
-        if (tasks != null) 'tasks': tasks!.toJson(),
+        if (!omitLegacyTasks && tasks != null) 'tasks': tasks!.toJson(),
         if (extensions != null)
           'extensions': _serializeExtensionMap(
             extensions,
@@ -951,7 +950,10 @@ class ServerCapabilitiesPrompts {
 
 /// Describes capabilities related to resources.
 class ServerCapabilitiesResources {
-  /// Whether the server supports `resources/subscribe` and `resources/unsubscribe`.
+  /// Whether the server supports resource update subscriptions.
+  ///
+  /// MCP 2025 uses `resources/subscribe` and `resources/unsubscribe`; MCP 2026
+  /// uses `subscriptions/listen` with `resourceSubscriptions`.
   final bool? subscribe;
 
   /// Whether the server supports `notifications/resources/list_changed`.
@@ -1177,7 +1179,7 @@ class ServerCapabilities {
   )
   final ServerCapabilitiesElicitation? elicitation;
 
-  /// Optional MCP extension capabilities (SEP-1724).
+  /// Optional MCP extension capabilities.
   ///
   /// Keys are extension identifiers (e.g. `"io.modelcontextprotocol/ui"`),
   /// values are extension-specific settings.
@@ -1249,7 +1251,7 @@ class ServerCapabilities {
     );
   }
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({bool omitLegacyTasks = false}) => {
         if (experimental != null)
           'experimental': _serializeJsonObjectMap(
             experimental,
@@ -1261,7 +1263,7 @@ class ServerCapabilities {
         if (resources != null) 'resources': resources!.toJson(),
         if (tools != null) 'tools': tools!.toJson(),
         if (completions != null) 'completions': completions!.toJson(),
-        if (tasks != null) 'tasks': tasks!.toJson(),
+        if (!omitLegacyTasks && tasks != null) 'tasks': tasks!.toJson(),
         if (extensions != null)
           'extensions': _serializeExtensionMap(
             extensions,
@@ -1421,7 +1423,7 @@ class DiscoverResult implements BaseResultData {
     return {
       'resultType': resultType,
       'supportedVersions': supportedVersions,
-      'capabilities': capabilities.toJson(),
+      'capabilities': capabilities.toJson(omitLegacyTasks: true),
       'serverInfo': serverInfo.toJson(),
       if (instructions != null) 'instructions': instructions,
       if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),

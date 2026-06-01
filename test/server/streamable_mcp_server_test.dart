@@ -362,6 +362,172 @@ void main() {
       expect(messages.single['result']['tools'][0]['name'], 'echo');
     });
 
+    test('handles 2026 stateless request with unknown session ID', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcListToolsRequest(id: 2, meta: statelessMeta()).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+          'mcp-session-id': 'unknown-legacy-session',
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['mcp-session-id'], isNull);
+      final messages = _decodeSseJsonMessages(response.body);
+      expect(messages.single['id'], 2);
+      expect(messages.single['result']['tools'][0]['name'], 'echo');
+    });
+
+    test('handles stateless task lookup across independent requests', () async {
+      const taskId = 'task-http-1';
+      final tasks = <String, TaskExtensionTask>{};
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              capabilities: ServerCapabilities(
+                tools: ServerCapabilitiesTools(),
+                extensions: {mcpTasksExtensionId: <String, dynamic>{}},
+              ),
+            ),
+          );
+          mcpServer.server.setRequestHandler<JsonRpcCallToolRequest>(
+            Method.toolsCall,
+            (request, extra) async {
+              final task = TaskExtensionTask(
+                taskId: taskId,
+                status: TaskStatus.working,
+                createdAt: DateTime.utc(2026, 7, 28).toIso8601String(),
+                lastUpdatedAt: DateTime.utc(2026, 7, 28).toIso8601String(),
+                ttlMs: 60000,
+              );
+              tasks[task.taskId] = task;
+              return CreateTaskExtensionResult(task: task);
+            },
+            (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': id,
+              'method': Method.toolsCall,
+              'params': params,
+              if (meta != null) '_meta': meta,
+            }),
+          );
+          mcpServer.server.setRequestHandler<JsonRpcGetTaskRequest>(
+            Method.tasksGet,
+            (request, extra) async {
+              final task = tasks[request.getParams.taskId];
+              if (task == null) {
+                throw McpError(
+                  ErrorCode.invalidParams.value,
+                  'Task not found',
+                );
+              }
+              return GetTaskExtensionResult(task: task);
+            },
+            (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': id,
+              'method': Method.tasksGet,
+              'params': params,
+              if (meta != null) '_meta': meta,
+            }),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final meta = buildProtocolRequestMeta(
+        protocolVersion: draftProtocolVersion2026_07_28,
+        clientInfo: const Implementation(name: 'Client', version: '1.0'),
+        clientCapabilities: const ClientCapabilities(
+          extensions: {mcpTasksExtensionId: <String, dynamic>{}},
+        ),
+      );
+      final createResponse = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcCallToolRequest(
+            id: 'call-task',
+            params: const CallToolRequest(name: 'long').toJson(),
+            meta: meta,
+          ).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'long',
+        },
+      );
+
+      expect(createResponse.statusCode, HttpStatus.ok);
+      expect(createResponse.headers['mcp-session-id'], isNull);
+      final createMessages = _decodeSseJsonMessages(createResponse.body);
+      expect(createMessages.single['result']['resultType'], resultTypeTask);
+      expect(createMessages.single['result']['taskId'], taskId);
+
+      final lookupResponse = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcGetTaskRequest(
+            id: 'get-task',
+            getParams: const GetTaskRequest(taskId: taskId),
+            meta: meta,
+          ).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.tasksGet,
+          'Mcp-Name': taskId,
+          'mcp-session-id': 'unknown-legacy-session',
+        },
+      );
+
+      expect(lookupResponse.statusCode, HttpStatus.ok);
+      expect(lookupResponse.headers['mcp-session-id'], isNull);
+      final lookupMessages = _decodeSseJsonMessages(lookupResponse.body);
+      expect(lookupMessages.single['id'], 'get-task');
+      expect(lookupMessages.single['result']['resultType'], resultTypeComplete);
+      expect(lookupMessages.single['result']['taskId'], taskId);
+      expect(
+        lookupMessages.single['result']['status'],
+        TaskStatus.working.name,
+      );
+      expect(lookupMessages.single['result']['ttlMs'], 60000);
+    });
+
     test('detects stateless requests from nested metadata before top-level',
         () async {
       await server.stop();
@@ -1372,6 +1538,21 @@ void main() {
 
     test('server port is exposed correctly', () async {
       expect(server.port, equals(port));
+      expect(server.boundPort, equals(port));
+    });
+
+    test('bound port exposes OS-assigned port', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'PortServer', version: '1.0')),
+        host: host,
+        port: 0,
+      );
+      await server.start();
+
+      expect(server.port, equals(0));
+      expect(server.boundPort, isNot(0));
     });
   });
 }

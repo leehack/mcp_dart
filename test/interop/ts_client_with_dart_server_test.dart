@@ -361,15 +361,14 @@ void main() {
     test(
       'official TS Streamable HTTP client lists tools immediately after lifecycle',
       () async {
-        final port = await _findAvailablePort();
-        final baseUrl = 'http://127.0.0.1:$port/mcp';
         final streamableServer = StreamableMcpServer(
           serverFactory: (_) => createServer(),
           host: '127.0.0.1',
-          port: port,
+          port: 0,
         );
 
         await streamableServer.start();
+        final baseUrl = 'http://127.0.0.1:${streamableServer.boundPort}/mcp';
         try {
           final result = await Process.run(
             'node',
@@ -644,15 +643,14 @@ void main() {
     test(
       'Dart Streamable HTTP server rejects operations before initialized',
       () async {
-        final port = await _findAvailablePort();
-        final baseUrl = 'http://127.0.0.1:$port/mcp';
         final streamableServer = StreamableMcpServer(
           serverFactory: (_) => createServer(),
           host: '127.0.0.1',
-          port: port,
+          port: 0,
         );
 
         await streamableServer.start();
+        final baseUrl = 'http://127.0.0.1:${streamableServer.boundPort}/mcp';
         try {
           final initRes = await http.post(
             Uri.parse(baseUrl),
@@ -739,8 +737,6 @@ void main() {
     test(
       'official TS client resumes Dart server SSE replay by Last-Event-ID',
       () async {
-        final port = await _findAvailablePort();
-        final baseUrl = 'http://127.0.0.1:$port/mcp';
         final servers = <String, McpServer>{};
 
         final streamableServer = StreamableMcpServer(
@@ -752,7 +748,7 @@ void main() {
             return mcpServer;
           },
           host: '127.0.0.1',
-          port: port,
+          port: 0,
           eventStore: InMemoryEventStore(),
         );
 
@@ -769,6 +765,7 @@ void main() {
         }
 
         await streamableServer.start();
+        final baseUrl = 'http://127.0.0.1:${streamableServer.boundPort}/mcp';
         try {
           final initRes = await http.post(
             Uri.parse(baseUrl),

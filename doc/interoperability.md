@@ -43,7 +43,8 @@ dart test --tags interop
 If the compiled fixtures are missing, local test runs skip the interop groups; CI should fail when required fixtures are unavailable.
 
 The CLI spec conformance gate covers raw-wire negative cases that do not need a
-cross-SDK fixture:
+cross-SDK fixture, including stable MCP 2025-11-25 checks and MCP 2026-07-28 RC
+stateless/discovery/task-extension checks:
 
 ```bash
 cd packages/mcp_dart_cli

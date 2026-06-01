@@ -609,6 +609,24 @@ void main() {
   });
 
   group('ToolExecution Tests', () {
+    test('Tool serialization preserves execution by default', () {
+      final json = const Tool(
+        name: 'task-tool',
+        inputSchema: JsonObject(),
+        execution: ToolExecution(taskSupport: 'optional'),
+      ).toJson();
+
+      expect(json['execution'], {'taskSupport': 'optional'});
+      expect(
+        const Tool(
+          name: 'task-tool',
+          inputSchema: JsonObject(),
+          execution: ToolExecution(taskSupport: 'optional'),
+        ).toJson(omitExecution: true),
+        isNot(contains('execution')),
+      );
+    });
+
     test('rejects invalid taskSupport while parsing wire JSON', () {
       expect(
         () => ToolExecution.fromJson({'taskSupport': 'sometimes'}),
@@ -2171,23 +2189,11 @@ void main() {
       expect(restored.defaultValue, equals('medium'));
     });
 
-    // Removed test for invalid type because JsonSchema might handle unknown types differently or throw different error.
-    // But testing for 'type': 'unknown' should usually fail or be generic.
-    // JsonSchema.fromJson throws format exception for valid types mismatch, but unknown?
-    // Let's testing unknown type throwing exception.
     test('JsonSchema factory throws on invalid type', () {
-      // Assuming implementation throws for completely unknown type if strictly typed?
-      // Currently JsonSchema.fromJson handles known types. Fallback?
-      // Let's assume it might throw or return generic.
-      // Based on previous code, I'll keep expectation if it throws.
-      final json = {'type': 'unknown'};
-      try {
-        JsonSchema.fromJson(json);
-        // If it doesn't throw, we might need to adjust test expectation or implementation.
-        // For now, removing this specific assertion if behavior is undefined.
-      } catch (e) {
-        expect(e, isA<Exception>());
-      }
+      expect(
+        () => JsonSchema.fromJson({'type': 'unknown'}),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 

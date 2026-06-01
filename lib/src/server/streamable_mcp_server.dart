@@ -258,6 +258,12 @@ class StreamableMcpServer {
   /// Port to bind the HTTP server to.
   final int port;
 
+  /// Port currently bound by the HTTP server.
+  ///
+  /// This differs from [port] when the server was configured with `port: 0`
+  /// and the operating system selected an available port during [start].
+  int get boundPort => _httpServer?.port ?? port;
+
   /// Path to listen for MCP requests on.
   final String path;
 
@@ -334,7 +340,7 @@ class StreamableMcpServer {
 
     _httpServer = await HttpServer.bind(host, port);
     _logger.info(
-      'MCP Streamable HTTP Server listening on http://$host:$port$path',
+      'MCP Streamable HTTP Server listening on http://$host:$boundPort$path',
     );
 
     final httpServer = _httpServer;

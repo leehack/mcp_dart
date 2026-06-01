@@ -2739,6 +2739,57 @@ void main() {
       }
     });
 
+    test('does not send cancellation notification for initialize request',
+        () async {
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      final requestFuture = protocol
+          .request<InitializeResult>(
+            JsonRpcInitializeRequest(
+              id: 0,
+              initParams: const InitializeRequest(
+                protocolVersion: latestProtocolVersion,
+                capabilities: ClientCapabilities(),
+                clientInfo: Implementation(
+                  name: 'test-client',
+                  version: '1.0.0',
+                ),
+              ),
+            ),
+            InitializeResult.fromJson,
+            RequestOptions(
+              signal: controller.signal,
+              timeoutEnabled: false,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(transport.sentMessages, hasLength(1));
+      expect(
+        (transport.sentMessages.single as JsonRpcRequest).method,
+        Method.initialize,
+      );
+
+      controller.abort('User cancelled initialize');
+
+      await expectLater(
+        requestFuture,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('User cancelled initialize'),
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        transport.sentMessages.whereType<JsonRpcCancelledNotification>(),
+        isEmpty,
+      );
+      expect(transport.sentMessages, hasLength(1));
+    });
+
     test('enforces strict capabilities when enabled', () {
       // We avoid using a transport connection in this test and just verify the capability check directly
       final strictProtocol = TestProtocol(

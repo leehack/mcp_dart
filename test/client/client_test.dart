@@ -187,11 +187,23 @@ void main() {
       // Should throw for unsupported capabilities
       expect(
         () => limitedClient.assertCapabilityForMethod("logging/setLevel"),
-        throwsA(isA<McpError>()),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
       expect(
         () => limitedClient.assertCapabilityForMethod("prompts/list"),
-        throwsA(isA<McpError>()),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
       expect(
         () => limitedClient.assertCapabilityForMethod(
@@ -933,6 +945,7 @@ void _addCriticalPathTests() {
         () => client.assertCapabilityForMethod('resources/read'),
         throwsA(
           isA<McpError>()
+              .having((e) => e.code, 'code', ErrorCode.methodNotFound.value)
               .having((e) => e.message, 'message', contains('resources')),
         ),
       );
@@ -1190,7 +1203,7 @@ void _addCriticalPathTests() {
       expect(transport.sentMessages.single, isA<JsonRpcError>());
       final error = transport.sentMessages.single as JsonRpcError;
       expect(error.id, 'sample-1');
-      expect(error.error.code, ErrorCode.invalidRequest.value);
+      expect(error.error.code, ErrorCode.methodNotFound.value);
       expect(error.error.message, contains('sampling.tools'));
     });
 
@@ -1244,7 +1257,7 @@ void _addCriticalPathTests() {
       expect(transport.sentMessages.single, isA<JsonRpcError>());
       final error = transport.sentMessages.single as JsonRpcError;
       expect(error.id, 7);
-      expect(error.error.code, ErrorCode.invalidRequest.value);
+      expect(error.error.code, ErrorCode.methodNotFound.value);
       expect(error.error.message, contains('sampling.tools'));
     });
 

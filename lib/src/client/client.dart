@@ -266,7 +266,7 @@ class McpClient extends Protocol {
                   request.createParams.toolChoice != null) &&
               _capabilities.sampling?.tools != true) {
             throw McpError(
-              ErrorCode.invalidRequest.value,
+              ErrorCode.methodNotFound.value,
               "Client does not support 'sampling.tools' capability required by sampling/createMessage request.",
             );
           }
@@ -508,6 +508,10 @@ class McpClient extends Protocol {
       return false;
     }
     if (error.code == ErrorCode.methodNotFound.value) {
+      return true;
+    }
+    if (error.code == ErrorCode.invalidParams.value &&
+        error.message.contains('Invalid request parameters')) {
       return true;
     }
 
@@ -981,6 +985,15 @@ class McpClient extends Protocol {
   @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
     if (_usesStatelessProtocol) {
+      final missingPeerCapability =
+          _missingPeerCapabilityForIncomingRequest(request.method);
+      if (missingPeerCapability != null) {
+        return McpError(
+          ErrorCode.methodNotFound.value,
+          "Client does not support capability '$missingPeerCapability' "
+          "required for method '${request.method}'",
+        );
+      }
       return McpError(
         ErrorCode.invalidRequest.value,
         'Server-initiated JSON-RPC requests are not supported in stateless '
@@ -996,6 +1009,17 @@ class McpClient extends Protocol {
       ErrorCode.invalidRequest.value,
       "Received ${request.method} before notifications/initialized was sent.",
     );
+  }
+
+  String? _missingPeerCapabilityForIncomingRequest(String method) {
+    return switch (method) {
+      Method.rootsList => _capabilities.roots == null ? 'roots' : null,
+      Method.samplingCreateMessage =>
+        _capabilities.sampling == null ? 'sampling' : null,
+      Method.elicitationCreate =>
+        _capabilities.elicitation == null ? 'elicitation' : null,
+      _ => null,
+    };
   }
 
   @override
@@ -1111,7 +1135,7 @@ class McpClient extends Protocol {
 
     if (!supported) {
       throw McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.methodNotFound.value,
         "Server does not support capability '$requiredCapability' required for method '$method'",
       );
     }
@@ -1178,7 +1202,7 @@ class McpClient extends Protocol {
 
     if (missingCapability != null) {
       throw McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.methodNotFound.value,
         "Server does not support capability '$missingCapability' required for task-based '$method'",
       );
     }

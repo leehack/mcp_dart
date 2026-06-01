@@ -20,15 +20,7 @@ void _expectJsonRpcMethod(
   String expected,
   String context,
 ) {
-  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
-  if (version != jsonRpcVersion) {
-    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
-  }
-
-  final method = readRequiredString(json['method'], '$context.method');
-  if (method != expected) {
-    throw FormatException('$context.method must be "$expected"');
-  }
+  expectJsonRpcMethod(json, expected, context);
 }
 
 /// Additional properties describing a Tool to clients.
@@ -266,7 +258,7 @@ class Tool {
     );
   }
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson({bool omitExecution = false}) {
     _validateObjectRootSchema(inputSchema, 'Tool.inputSchema');
 
     return {
@@ -277,7 +269,7 @@ class Tool {
       if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
       if (annotations != null) 'annotations': annotations!.toJson(),
       if (meta != null) '_meta': readJsonObject(meta, 'Tool._meta'),
-      if (execution != null) 'execution': execution!.toJson(),
+      if (!omitExecution && execution != null) 'execution': execution!.toJson(),
       if (icons != null) 'icons': icons!.map((icon) => icon.toJson()).toList(),
     };
   }

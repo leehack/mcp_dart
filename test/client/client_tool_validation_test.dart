@@ -260,7 +260,9 @@ void main() {
       await client.connect(transport);
       final result = await client.listTools();
 
-      expect(result.tools.map((tool) => tool.name), ['valid_headers']);
+      expect(result.tools.map((tool) => tool.name), [
+        'valid_headers',
+      ]);
       expect(transport.toolParameterHeaderMappings, {
         'valid_headers': {
           'region': 'Region',
@@ -365,11 +367,17 @@ void main() {
       expect(
         () => client.assertTaskCapability(Method.toolsCall),
         throwsA(
-          isA<McpError>().having(
-            (e) => e.message,
-            'message',
-            contains('tasks.requests.tools.call'),
-          ),
+          isA<McpError>()
+              .having(
+                (e) => e.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('tasks.requests.tools.call'),
+              ),
         ),
       );
     });
@@ -386,11 +394,17 @@ void main() {
       expect(
         () => client.assertTaskCapability(Method.completionComplete),
         throwsA(
-          isA<McpError>().having(
-            (e) => e.message,
-            'message',
-            contains('tasks.requests.completion/complete'),
-          ),
+          isA<McpError>()
+              .having(
+                (e) => e.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('tasks.requests.completion/complete'),
+              ),
         ),
       );
     });

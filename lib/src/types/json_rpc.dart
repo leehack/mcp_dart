@@ -87,7 +87,10 @@ Map<String, dynamic> buildProtocolRequestMeta({
     ...?meta,
     McpMetaKey.protocolVersion: protocolVersion,
     McpMetaKey.clientInfo: clientInfo.toJson(),
-    McpMetaKey.clientCapabilities: clientCapabilities.toJson(),
+    McpMetaKey.clientCapabilities: clientCapabilities.toJson(
+      omitLegacyTasks: isStatelessProtocolVersion(protocolVersion),
+      omitLegacyRootsListChanged: isStatelessProtocolVersion(protocolVersion),
+    ),
     if (logLevel != null) McpMetaKey.logLevel: logLevel,
   };
 }
@@ -336,20 +339,42 @@ Map<String, dynamic>? extractRequestMeta(Map<String, dynamic> json) {
   return paramsMeta ?? topLevelMeta;
 }
 
-void _expectJsonRpcMethod(
-  Map<String, dynamic> json,
-  String expected,
-  String context,
-) {
+void _expectJsonRpcVersion(Map<String, dynamic> json, String context) {
   final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
   if (version != jsonRpcVersion) {
     throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
   }
+}
+
+/// Validates the JSON-RPC wrapper fields for a typed request or notification.
+///
+/// This is hidden from the public `mcp_dart` export surface but shared by the
+/// typed protocol modules so direct parser calls enforce the same envelope
+/// constraints as [JsonRpcMessage.fromJson].
+void expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  _expectJsonRpcVersion(json, context);
 
   final method = readRequiredString(json['method'], '$context.method');
   if (method != expected) {
     throw FormatException('$context.method must be "$expected"');
   }
+  if (json.containsKey('result') || json.containsKey('error')) {
+    throw const FormatException(
+      'Invalid JSON-RPC message: method cannot be combined with result or error',
+    );
+  }
+}
+
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  expectJsonRpcMethod(json, expected, context);
 }
 
 /// Base class for all JSON-RPC messages (requests, notifications, responses, errors).
@@ -366,10 +391,22 @@ sealed class JsonRpcMessage {
       throw FormatException('Invalid JSON-RPC version: ${json['jsonrpc']}');
     }
 
+    final hasMethod = json.containsKey('method');
     final hasResult = json.containsKey('result');
     final hasError = json.containsKey('error');
 
-    if (json.containsKey('method')) {
+    if (hasResult && hasError) {
+      throw const FormatException(
+        'Invalid JSON-RPC response: result and error are mutually exclusive',
+      );
+    }
+    if (hasMethod && (hasResult || hasError)) {
+      throw const FormatException(
+        'Invalid JSON-RPC message: method cannot be combined with result or error',
+      );
+    }
+
+    if (hasMethod) {
       final method = _parseMethod(json['method']);
       final hasId = json.containsKey('id');
       final params = _parseOptionalParamsObject(
@@ -455,10 +492,6 @@ sealed class JsonRpcMessage {
             ),
         };
       }
-    } else if (hasResult && hasError) {
-      throw const FormatException(
-        'Invalid JSON-RPC response: result and error are mutually exclusive',
-      );
     } else if (hasResult) {
       final id = _parseResultResponseId(json['id']);
       final resultData =
@@ -656,12 +689,26 @@ class JsonRpcError extends JsonRpcMessage {
 
   const JsonRpcError({required this.id, required this.error});
 
-  factory JsonRpcError.fromJson(Map<String, dynamic> json) => JsonRpcError(
-        id: _parseErrorResponseId(json),
-        error: JsonRpcErrorData.fromJson(
-          readJsonObject(json['error'], 'JsonRpcError.error'),
-        ),
+  factory JsonRpcError.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcVersion(json, 'JsonRpcError');
+    if (json.containsKey('method')) {
+      throw const FormatException(
+        'Invalid JSON-RPC error response: method cannot be combined with error',
       );
+    }
+    if (json.containsKey('result')) {
+      throw const FormatException(
+        'Invalid JSON-RPC error response: result and error are mutually exclusive',
+      );
+    }
+
+    return JsonRpcError(
+      id: _parseErrorResponseId(json),
+      error: JsonRpcErrorData.fromJson(
+        readJsonObject(json['error'], 'JsonRpcError.error'),
+      ),
+    );
+  }
 
   @override
   Map<String, dynamic> toJson() => {
@@ -738,7 +785,7 @@ class InputRequest {
 
   /// Creates an embedded `sampling/createMessage` input request.
   factory InputRequest.createMessage(CreateMessageRequest params) {
-    final inputParams = params.toJson()..remove('task');
+    final inputParams = params.toJson(omitToolExecution: true)..remove('task');
     return InputRequest._(
       method: Method.samplingCreateMessage,
       params: inputParams,
@@ -1104,13 +1151,18 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
 
   factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
     _expectJsonRpcMethod(json, Method.toolsCall, 'JsonRpcCallToolRequest');
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcCallToolRequest.params',
+    );
+    if (paramsMap == null) {
+      throw const FormatException(
+        'JsonRpcCallToolRequest.params is required',
+      );
+    }
     return JsonRpcCallToolRequest(
       id: parseRequestId(json['id']),
-      params: readOptionalJsonObject(
-            json['params'],
-            'JsonRpcCallToolRequest.params',
-          ) ??
-          {},
+      params: paramsMap,
       meta: extractRequestMeta(json),
     );
   }

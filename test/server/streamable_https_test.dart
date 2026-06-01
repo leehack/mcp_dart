@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -621,6 +622,114 @@ void main() {
         expect(messages[0]['params'], containsPair('marker', 'routed'));
         expect(messages[1]['id'], 'client-req-string');
         expect(messages[1]['result'], containsPair('ok', true));
+      },
+      timeout: const Timeout(Duration(seconds: 5)),
+    );
+
+    test(
+      'routes handler client requests on originating POST SSE stream',
+      () async {
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => null,
+          ),
+        );
+        addTearDown(transport.close);
+
+        final server = Server(
+          const Implementation(name: 'TestServer', version: '1.0.0'),
+        );
+        addTearDown(server.close);
+        server.setRequestHandler<JsonRpcRequest>(
+          'test/nested-request',
+          (request, extra) async {
+            await extra.sendRequest<EmptyResult>(
+              const JsonRpcRequest(
+                id: 0,
+                method: 'test/client-question',
+                params: {'prompt': 'confirm'},
+              ),
+              EmptyResult.fromJson,
+              const RequestOptions(timeout: Duration(seconds: 2)),
+            );
+            return const EmptyResult();
+          },
+          (id, params, meta) => JsonRpcRequest(
+            id: id,
+            method: 'test/nested-request',
+            params: params,
+            meta: meta,
+          ),
+        );
+        await server.connect(transport);
+        transports['/mcp'] = transport;
+
+        Future<HttpClientResponse> postJsonRpc(JsonRpcMessage message) async {
+          final client = HttpClient();
+          addTearDown(() => client.close(force: true));
+
+          final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            );
+          request.write(jsonEncode(message.toJson()));
+          return request.close();
+        }
+
+        final initResponse = await postJsonRpc(
+          JsonRpcInitializeRequest(
+            id: 1,
+            initParams: const InitializeRequestParams(
+              protocolVersion: latestProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+            ),
+          ),
+        );
+        expect(initResponse.statusCode, HttpStatus.ok);
+        expect(
+          _decodeSseJsonMessages(await utf8.decodeStream(initResponse)).single,
+          containsPair('id', 1),
+        );
+
+        final initializedResponse = await postJsonRpc(
+          const JsonRpcInitializedNotification(),
+        );
+        expect(initializedResponse.statusCode, HttpStatus.accepted);
+        await initializedResponse.drain<void>();
+
+        final response = await postJsonRpc(
+          const JsonRpcRequest(
+            id: 'originating-request',
+            method: 'test/nested-request',
+          ),
+        );
+        expect(response.statusCode, HttpStatus.ok);
+        expect(response.headers.contentType?.mimeType, 'text/event-stream');
+        final lines = StreamIterator(
+          response.transform(utf8.decoder).transform(const LineSplitter()),
+        );
+        addTearDown(lines.cancel);
+
+        final nestedRequest = await _readSseJsonEvent(lines);
+        expect(nestedRequest.json['method'], 'test/client-question');
+        expect(nestedRequest.json['params'], {'prompt': 'confirm'});
+
+        final nestedResponse = await postJsonRpc(
+          JsonRpcResponse(
+            id: nestedRequest.json['id'],
+            result: const EmptyResult().toJson(),
+          ),
+        );
+        expect(nestedResponse.statusCode, HttpStatus.accepted);
+        await nestedResponse.drain<void>();
+
+        final finalResponse = await _readSseJsonEvent(lines);
+        expect(finalResponse.json['id'], 'originating-request');
+        expect(finalResponse.json['result'], const EmptyResult().toJson());
       },
       timeout: const Timeout(Duration(seconds: 5)),
     );
@@ -2159,7 +2268,7 @@ void main() {
       expect(body['error']['message'], contains('Mcp-Name header value'));
     });
 
-    test('2026 stateless HTTP requires task id name header for task requests',
+    test('2026 stateless HTTP accepts task requests with matching name header',
         () async {
       final transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
@@ -2191,6 +2300,49 @@ void main() {
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
         ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Method', Method.tasksUpdate)
+        ..set('Mcp-Name', 'task-1');
+      request.write(
+        jsonEncode(
+          JsonRpcUpdateTaskRequest(
+            id: 4,
+            updateParams: const UpdateTaskRequest(
+              taskId: 'task-1',
+              inputResponses: {},
+            ),
+            meta: _statelessMeta(),
+          ),
+        ),
+      );
+
+      final response = await request.close();
+
+      expect(response.statusCode, HttpStatus.ok);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 4);
+      expect(body['result'], {'resultType': resultTypeComplete});
+    });
+
+    test('2026 stateless HTTP rejects task requests without name header',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.tasksUpdate);
       request.write(
         jsonEncode(
@@ -2212,7 +2364,50 @@ void main() {
           jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
       expect(body['id'], 4);
       expect(body['error']['code'], ErrorCode.headerMismatch.value);
-      expect(body['error']['message'], contains('Mcp-Name header is required'));
+      expect(body['error']['message'], contains('Mcp-Name header'));
+    });
+
+    test('2026 stateless HTTP accepts response posts without body metadata',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => "unused-session-id",
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final receivedMessage = Completer<JsonRpcMessage>();
+      transport.onmessage = receivedMessage.complete;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28);
+      request.write(
+        jsonEncode(
+          const JsonRpcResponse(
+            id: 'input-response',
+            result: {'ok': true},
+          ).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+
+      expect(response.statusCode, HttpStatus.accepted);
+      expect(await utf8.decodeStream(response), isEmpty);
+      final message =
+          await receivedMessage.future.timeout(const Duration(seconds: 5));
+      expect(message, isA<JsonRpcResponse>());
+      final jsonRpcResponse = message as JsonRpcResponse;
+      expect(jsonRpcResponse.id, 'input-response');
+      expect(jsonRpcResponse.result, {'ok': true});
     });
 
     test('2026 stateless HTTP ignores session header', () async {
@@ -2262,6 +2457,94 @@ void main() {
       expect(body['result']['tools'], isEmpty);
     });
 
+    test('2026 stateless HTTP omits existing transport session header',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'stateful-session-id',
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      transport.onmessage = (message) {
+        if (message is JsonRpcInitializeRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const InitializeResult(
+                  protocolVersion: latestProtocolVersion,
+                  capabilities: ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'StatefulServer',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ),
+            ),
+          );
+        } else if (message is JsonRpcListToolsRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const ListToolsResult(tools: []).toJson(),
+              ),
+            ),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final initRequest = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      initRequest.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream');
+      initRequest.write(
+        jsonEncode(
+          JsonRpcInitializeRequest(
+            id: 1,
+            initParams: const InitializeRequest(
+              protocolVersion: latestProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'client', version: '1.0.0'),
+            ),
+          ),
+        ),
+      );
+
+      final initResponse = await initRequest.close();
+      expect(initResponse.statusCode, HttpStatus.ok);
+      final sessionId = initResponse.headers.value('mcp-session-id');
+      expect(sessionId, 'stateful-session-id');
+      await utf8.decodeStream(initResponse);
+
+      final statelessRequest =
+          await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      statelessRequest.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Method', Method.toolsList)
+        ..set('Mcp-Session-Id', sessionId!);
+      statelessRequest.write(
+        jsonEncode(JsonRpcListToolsRequest(id: 6, meta: _statelessMeta())),
+      );
+
+      final statelessResponse = await statelessRequest.close();
+
+      expect(statelessResponse.statusCode, HttpStatus.ok);
+      expect(statelessResponse.headers.value('mcp-session-id'), isNull);
+      final body = jsonDecode(await utf8.decodeStream(statelessResponse))
+          as Map<String, dynamic>;
+      expect(body['id'], 6);
+      expect(body['result']['tools'], isEmpty);
+    });
+
     test('2026 stateless HTTP accepts matching standard and parameter headers',
         () async {
       final transport = StreamableHTTPServerTransport(
@@ -2297,6 +2580,7 @@ void main() {
         ..set('Mcp-Method', Method.toolsCall)
         ..set('Mcp-Name', 'execute')
         ..set('Mcp-Param-region', 'us-east1')
+        ..set('Mcp-Param-ratio', '1.5')
         ..set('Mcp-Param-dryRun', 'false');
       request.write(
         jsonEncode(
@@ -2306,6 +2590,7 @@ void main() {
               'name': 'execute',
               'arguments': {
                 'region': 'us-east1',
+                'ratio': 1.5,
                 'dryRun': false,
               },
             },
@@ -2490,9 +2775,8 @@ void main() {
       transport.setToolParameterHeaderMappings(
         const {
           'execute': {
+            'count': 'Count',
             'dryRun': 'Dry-Run',
-            'rounded': 'Rounded',
-            'ratio': 'Ratio',
             'region': 'Region',
             'sentinel': 'Sentinel',
             '/location/zone': 'Zone',
@@ -2603,33 +2887,50 @@ void main() {
       (statusCode, body) = await postToolCall(
         id: 34,
         arguments: const {
+          'count': 42,
           'dryRun': false,
-          'ratio': 1.5,
           'region': 'us-east1',
         },
         headers: const {
+          'Mcp-Param-Count': '42',
           'Mcp-Param-Dry-Run': 'false',
-          'Mcp-Param-Ratio': '1.5',
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.ok);
+      expect(body['id'], 34);
+      expect(body['result']['content'], isEmpty);
+
+      (statusCode, body) = await postToolCall(
+        id: 38,
+        arguments: const {
+          'count': 42,
+          'dryRun': false,
+          'region': 'us-east1',
+        },
+        headers: const {
+          'Mcp-Param-Count': '43',
+          'Mcp-Param-Dry-Run': 'false',
           'Mcp-Param-Region': 'us-east1',
         },
       );
       expect(statusCode, HttpStatus.badRequest);
-      expect(body['id'], 34);
+      expect(body['id'], 38);
       expect(
         body['error']['message'],
-        contains('no matching primitive body argument'),
+        contains("body argument 'count'"),
       );
 
       (statusCode, body) = await postToolCall(
         id: 35,
         arguments: const {
+          'count': 42,
           'dryRun': false,
-          'rounded': 42.0,
           'region': 'us-east1',
         },
         headers: const {
+          'Mcp-Param-Count': '42.0',
           'Mcp-Param-Dry-Run': 'false',
-          'Mcp-Param-Rounded': '42.0',
           'Mcp-Param-Region': 'us-east1',
         },
       );
@@ -3050,6 +3351,28 @@ void main() {
       expect(patchBody['error']['code'], ErrorCode.connectionClosed.value);
       expect(
         patchBody['error']['message'],
+        'Method not allowed for stateless MCP requests.',
+      );
+
+      final deleteRequest = await client.deleteUrl(
+        Uri.parse('$serverUrlBase/mcp'),
+      );
+      deleteRequest.headers
+        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('Mcp-Session-Id', 'ignored-stateless-session');
+
+      final deleteResponse = await deleteRequest.close();
+      final deleteBody = jsonDecode(
+        await utf8.decodeStream(deleteResponse),
+      ) as Map<String, dynamic>;
+
+      expect(deleteResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(deleteResponse.headers.contentType?.mimeType, 'application/json');
+      expect(deleteResponse.headers.value(HttpHeaders.allowHeader), 'POST');
+      expect(deleteResponse.headers.value('mcp-session-id'), isNull);
+      expect(deleteBody['error']['code'], ErrorCode.connectionClosed.value);
+      expect(
+        deleteBody['error']['message'],
         'Method not allowed for stateless MCP requests.',
       );
     });

@@ -8,15 +8,7 @@ void _expectJsonRpcMethod(
   String expected,
   String context,
 ) {
-  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
-  if (version != jsonRpcVersion) {
-    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
-  }
-
-  final method = readRequiredString(json['method'], '$context.method');
-  if (method != expected) {
-    throw FormatException('$context.method must be "$expected"');
-  }
+  expectJsonRpcMethod(json, expected, context);
 }
 
 /// Legacy alias for [JsonSchema] used in elicitation requests.
@@ -577,11 +569,7 @@ void _validatePrimitiveSchema(
         context,
       );
       _validatePrimitiveBaseKeywords(json, context);
-      _validateNumberSchemaKeywords(
-        json,
-        context,
-        protocolVersion: protocolVersion,
-      );
+      _validateNumberSchemaKeywords(json, context);
       return;
     case 'boolean':
       _ensureAllowedKeys(
@@ -614,20 +602,10 @@ void _validatePrimitiveBaseKeywords(
 
 void _validateNumberSchemaKeywords(
   Map<String, dynamic> json,
-  String context, {
-  String? protocolVersion,
-}) {
-  if (!_usesDraftNumberSchemaKeywords(protocolVersion)) {
-    for (final key in const ['default', 'minimum', 'maximum']) {
-      _validateOptionalIntegerKeyword(json, key, context);
-    }
-    return;
-  }
-
+  String context,
+) {
   for (final key in const ['default', 'minimum', 'maximum']) {
-    if (json[key] != null) {
-      readFiniteNumber(json[key], '$context.$key');
-    }
+    readOptionalFiniteNumber(json[key], '$context.$key');
   }
 }
 
@@ -802,10 +780,6 @@ void _ensureAllowedKeys(
 String? _protocolVersionFromMeta(Map<String, dynamic>? meta) {
   final protocolVersion = meta?[McpMetaKey.protocolVersion];
   return protocolVersion is String ? protocolVersion : null;
-}
-
-bool _usesDraftNumberSchemaKeywords(String? protocolVersion) {
-  return protocolVersion != null && isStatelessProtocolVersion(protocolVersion);
 }
 
 Map<String, dynamic>? _parseElicitResultContent(Object? content) {

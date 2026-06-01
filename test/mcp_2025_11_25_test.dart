@@ -1673,16 +1673,30 @@ void main() {
         );
         expect(request.toJson()['requestedSchema']['type'], 'object');
 
+        final fractionalBounds = ElicitRequest.form(
+          message: 'Fractional bounds',
+          requestedSchema: JsonSchema.object(
+            properties: {
+              'ratio': JsonSchema.number(
+                minimum: 0.1,
+                maximum: 0.9,
+                defaultValue: 0.5,
+              ),
+            },
+          ),
+        ).toJson();
+        final ratioSchema =
+            fractionalBounds['requestedSchema']['properties']['ratio'];
+        expect(ratioSchema['minimum'], 0.1);
+        expect(ratioSchema['maximum'], 0.9);
+        expect(ratioSchema['default'], 0.5);
+
         expect(
           () => ElicitRequest.form(
-            message: 'Fractional bounds',
+            message: 'Non-finite bound',
             requestedSchema: JsonSchema.object(
               properties: {
-                'ratio': JsonSchema.number(
-                  minimum: 0.1,
-                  maximum: 0.9,
-                  defaultValue: 0.5,
-                ),
+                'ratio': JsonSchema.number(maximum: double.infinity),
               },
             ),
           ).toJson(),
@@ -2471,6 +2485,35 @@ void main() {
             'content': {'type': 'text', 'text': 'legacy'},
           }),
           throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('strict incoming tools/call requests require params', () {
+        final json = {
+          'jsonrpc': '2.0',
+          'id': 'call-1',
+          'method': Method.toolsCall,
+        };
+
+        expect(
+          () => JsonRpcCallToolRequest.fromJson(json),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('params'),
+            ),
+          ),
+        );
+        expect(
+          () => JsonRpcMessage.fromJson(json),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('params'),
+            ),
+          ),
         );
       });
     });

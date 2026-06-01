@@ -6,14 +6,7 @@ void _expectJsonRpcMethod(
   String expected,
   String context,
 ) {
-  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
-  if (version != jsonRpcVersion) {
-    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
-  }
-  final method = readRequiredString(json['method'], '$context.method');
-  if (method != expected) {
-    throw FormatException('$context.method must be "$expected"');
-  }
+  expectJsonRpcMethod(json, expected, context);
 }
 
 void _expectType(
@@ -319,8 +312,16 @@ class JsonRpcCompletionListChangedNotification extends JsonRpcNotification {
 
   factory JsonRpcCompletionListChangedNotification.fromJson(
     Map<String, dynamic> json,
-  ) =>
-      JsonRpcCompletionListChangedNotification(meta: extractRequestMeta(json));
+  ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsExperimentalCompletionsListChanged,
+      'JsonRpcCompletionListChangedNotification',
+    );
+    return JsonRpcCompletionListChangedNotification(
+      meta: extractRequestMeta(json),
+    );
+  }
 }
 
 /// Deprecated alias for [CompleteRequest].

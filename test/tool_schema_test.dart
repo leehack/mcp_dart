@@ -3,7 +3,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('Tool parameter header annotations', () {
-    test('primitive schemas preserve x-mcp-header round-trip', () {
+    test('schema objects preserve x-mcp-header round-trip', () {
       final schema = JsonSchema.object(
         properties: {
           'region': JsonSchema.string(mcpHeader: 'Region'),

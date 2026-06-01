@@ -669,7 +669,7 @@ void main() {
         }
       });
 
-      test('rejects malformed raw type arrays', () {
+      test('rejects malformed raw type arrays at parse time', () {
         final schemas = [
           {
             'type': ['string', 1],
@@ -688,11 +688,9 @@ void main() {
         ];
 
         for (final json in schemas) {
-          final schema = JsonSchema.fromJson(json);
-          expect(schema.toJson(), json);
           expect(
-            () => schema.validate('value'),
-            throwsA(isA<JsonSchemaValidationException>()),
+            () => JsonSchema.fromJson(json),
+            throwsA(isA<FormatException>()),
           );
         }
       });

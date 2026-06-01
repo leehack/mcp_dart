@@ -30,15 +30,7 @@ void _expectJsonRpcMethod(
   String expected,
   String context,
 ) {
-  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
-  if (version != jsonRpcVersion) {
-    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
-  }
-
-  final method = readRequiredString(json['method'], '$context.method');
-  if (method != expected) {
-    throw FormatException('$context.method must be "$expected"');
-  }
+  expectJsonRpcMethod(json, expected, context);
 }
 
 String _base64ForJson(String value, String field) {
@@ -795,7 +787,7 @@ class CreateMessageRequest {
   }
 
   /// Converts to JSON.
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson({bool omitToolExecution = false}) {
     validateOptionalFiniteNumber(
       temperature,
       'CreateMessageRequest.temperature',
@@ -815,7 +807,10 @@ class CreateMessageRequest {
         ),
       if (modelPreferences != null)
         'modelPreferences': modelPreferences!.toJson(),
-      if (tools != null) 'tools': tools!.map((t) => t.toJson()).toList(),
+      if (tools != null)
+        'tools': tools!
+            .map((t) => t.toJson(omitExecution: omitToolExecution))
+            .toList(),
       if (toolChoiceConfig != null) 'toolChoice': toolChoiceConfig!.toJson(),
     };
   }

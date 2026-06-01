@@ -10,8 +10,6 @@ import '../shared/transport.dart';
 import '../types.dart';
 import 'dns_rebinding_protection.dart';
 
-const int _maxSafeHeaderInteger = 9007199254740991;
-const int _minSafeHeaderInteger = -9007199254740991;
 const String _xAccelBufferingHeader = 'X-Accel-Buffering';
 
 /// ID for SSE streams
@@ -497,9 +495,9 @@ class StreamableHTTPServerTransport
       Method.toolsCall => params['name'],
       Method.resourcesRead => params['uri'],
       Method.promptsGet => params['name'],
-      Method.tasksCancel ||
       Method.tasksGet ||
-      Method.tasksUpdate =>
+      Method.tasksUpdate ||
+      Method.tasksCancel =>
         params['taskId'],
       _ => null,
     };
@@ -520,9 +518,14 @@ class StreamableHTTPServerTransport
   }
 
   String? _primitiveHeaderString(Object? value) {
-    final integer = _safeHeaderInteger(value);
-    if (integer != null) {
-      return integer.toString();
+    if (value is num) {
+      if (!value.isFinite) {
+        return null;
+      }
+      if (value is double && value.truncateToDouble() == value) {
+        return value.toInt().toString();
+      }
+      return value.toString();
     }
 
     return switch (value) {
@@ -533,30 +536,15 @@ class StreamableHTTPServerTransport
     };
   }
 
-  int? _safeHeaderInteger(Object? value) {
-    if (value is int) {
-      if (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger) {
-        return null;
-      }
-      return value;
-    }
-
-    if (value is double &&
-        value.isFinite &&
-        value.truncateToDouble() == value &&
-        value >= _minSafeHeaderInteger &&
-        value <= _maxSafeHeaderInteger) {
-      return value.toInt();
-    }
-
-    return null;
-  }
-
   bool _headerValueMatchesPrimitive(Object? bodyValue, String headerValue) {
-    final integer = _safeHeaderInteger(bodyValue);
-    if (integer != null) {
-      final headerInteger = _safeHeaderInteger(num.tryParse(headerValue));
-      return headerInteger != null && headerInteger == integer;
+    if (bodyValue is num) {
+      if (!bodyValue.isFinite) {
+        return false;
+      }
+      final headerNumber = num.tryParse(headerValue);
+      return headerNumber != null &&
+          headerNumber.isFinite &&
+          headerNumber == bodyValue;
     }
 
     final value = _primitiveHeaderString(bodyValue);
@@ -803,6 +791,10 @@ class StreamableHTTPServerTransport
         'MCP-Protocol-Version header value is malformed',
       );
       return false;
+    }
+
+    if (message is JsonRpcResponse || message is JsonRpcError) {
+      return true;
     }
 
     final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
@@ -1392,6 +1384,8 @@ class StreamableHTTPServerTransport
         }
       }
 
+      final usesStatelessHttpValidation =
+          _usesStatelessHttpValidation(req, messages);
       if (!await _validateStatelessHttpHeaders(req, messages, messageJsons)) {
         return;
       }
@@ -1400,6 +1394,8 @@ class StreamableHTTPServerTransport
       // https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle/
       final isInitializationRequest = messages.any(_isInitializeRequest);
       final isStatelessRequest = messages.any(_isStatelessJsonRpcRequest);
+      final isStatelessMessage =
+          usesStatelessHttpValidation || isStatelessRequest;
       if (isInitializationRequest) {
         final requestSessionId = req.headers.value('mcp-session-id');
 
@@ -1475,7 +1471,7 @@ class StreamableHTTPServerTransport
       // clients using the Streamable HTTP transport MUST include it
       // in the Mcp-Session-Id header on all of their subsequent HTTP requests.
       if (!isInitializationRequest &&
-          !isStatelessRequest &&
+          !isStatelessMessage &&
           !await _validateSession(req, req.response)) {
         return;
       }
@@ -1506,7 +1502,7 @@ class StreamableHTTPServerTransport
           final headers = _sseResponseHeaders();
 
           // After initialization, always include the session ID if we have one
-          if (sessionId != null) {
+          if (sessionId != null && !isStatelessRequest) {
             headers["mcp-session-id"] = sessionId!;
           }
 
@@ -1860,7 +1856,10 @@ class StreamableHTTPServerTransport
             HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
           };
 
-          if (sessionId != null) {
+          final isStatelessResponse = relatedIds.any(
+            (id) => _statelessRequestIds.contains(id),
+          );
+          if (sessionId != null && !isStatelessResponse) {
             headers['mcp-session-id'] = sessionId!;
           }
 

@@ -643,9 +643,11 @@ class StreamableHttpClientTransport
   }
 
   String? _toolParameterHeaderString(Object? value) {
-    final integer = _safeHeaderInteger(value);
-    if (integer != null) {
-      return integer.toString();
+    if (value is int) {
+      if (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger) {
+        return null;
+      }
+      return value.toString();
     }
 
     return switch (value) {
@@ -653,25 +655,6 @@ class StreamableHttpClientTransport
       bool() => value.toString(),
       _ => null,
     };
-  }
-
-  int? _safeHeaderInteger(Object? value) {
-    if (value is int) {
-      if (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger) {
-        return null;
-      }
-      return value;
-    }
-
-    if (value is double &&
-        value.isFinite &&
-        value.truncateToDouble() == value &&
-        value >= _minSafeHeaderInteger &&
-        value <= _maxSafeHeaderInteger) {
-      return value.toInt();
-    }
-
-    return null;
   }
 
   String _encodeToolParameterHeaderValue(String value) {
@@ -754,9 +737,9 @@ class StreamableHttpClientTransport
       Method.toolsCall => params['name'],
       Method.resourcesRead => params['uri'],
       Method.promptsGet => params['name'],
-      Method.tasksCancel ||
       Method.tasksGet ||
-      Method.tasksUpdate =>
+      Method.tasksUpdate ||
+      Method.tasksCancel =>
         params['taskId'],
       _ => null,
     };
@@ -1295,6 +1278,13 @@ class StreamableHttpClientTransport
           }
           return;
         }
+        if (_dispatchHttpJsonRpcErrorBody(
+          text,
+          message,
+          rejectServerRequests: isStatelessRequest,
+        )) {
+          return;
+        }
         throw McpError(
           0,
           "Error POSTing to endpoint (HTTP ${response.statusCode}): $text",
@@ -1394,6 +1384,43 @@ class StreamableHttpClientTransport
         }
       }
       rethrow;
+    }
+  }
+
+  bool _dispatchHttpJsonRpcErrorBody(
+    String body,
+    JsonRpcMessage requestMessage, {
+    required bool rejectServerRequests,
+  }) {
+    if (requestMessage is! JsonRpcRequest || body.trim().isEmpty) {
+      return false;
+    }
+
+    try {
+      final decoded = jsonDecode(body);
+      final responseCandidates = decoded is List ? decoded : [decoded];
+      var dispatched = false;
+
+      for (final candidate in responseCandidates) {
+        if (candidate is! Map) {
+          continue;
+        }
+        final parsed = JsonRpcMessage.fromJson(
+          candidate.cast<String, dynamic>(),
+        );
+        if (parsed is! JsonRpcError || parsed.id != requestMessage.id) {
+          continue;
+        }
+        _dispatchReceivedMessage(
+          parsed,
+          rejectServerRequests: rejectServerRequests,
+        );
+        dispatched = true;
+      }
+
+      return dispatched;
+    } catch (_) {
+      return false;
     }
   }
 

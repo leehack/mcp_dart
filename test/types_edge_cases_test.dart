@@ -140,6 +140,30 @@ void main() {
         );
       }
     });
+
+    test('JsonRpcError validates JSON-RPC envelope fields directly', () {
+      for (final json in [
+        {
+          'jsonrpc': '1.0',
+          'error': {'code': -32600, 'message': 'Bad version'},
+        },
+        {
+          'jsonrpc': '2.0',
+          'method': 'unexpected/request',
+          'error': {'code': -32600, 'message': 'Bad kind'},
+        },
+        {
+          'jsonrpc': '2.0',
+          'result': {'ok': true},
+          'error': {'code': -32603, 'message': 'Internal error'},
+        },
+      ]) {
+        expect(
+          () => JsonRpcError.fromJson(json),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
   });
 
   group('JsonRpcCancelledNotification Edge Cases', () {
@@ -196,18 +220,29 @@ void main() {
       expect(json.containsKey('reason'), isFalse);
     });
 
-    test('allows omitted requestId per notification wire schema', () {
-      final parsed = JsonRpcCancelledNotification.fromJson({
-        'jsonrpc': '2.0',
-        'method': 'notifications/cancelled',
-        'params': {'reason': 'Task cancellation uses tasks/cancel'},
-      });
+    test('rejects omitted requestId per cancellation semantics', () {
+      expect(
+        () => JsonRpcCancelledNotification.fromJson({
+          'jsonrpc': '2.0',
+          'method': 'notifications/cancelled',
+          'params': {'reason': 'Task cancellation uses tasks/cancel'},
+        }),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('requestId')),
+        ),
+      );
 
-      expect(parsed.cancelParams.requestId, isNull);
-      expect(parsed.cancelParams.reason, 'Task cancellation uses tasks/cancel');
-      expect(parsed.toJson()['params'], {
-        'reason': 'Task cancellation uses tasks/cancel',
-      });
+      expect(
+        () => const CancelledNotificationParams(
+          requestId: null,
+          reason: 'missing request id',
+        ).toJson(),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('requestId')),
+        ),
+      );
     });
 
     test('rejects malformed requestId wire values', () {
@@ -889,6 +924,72 @@ void main() {
               .having((e) => e.message, 'message', contains('error')),
         ),
       );
+    });
+
+    test('rejects message envelopes mixing method with response fields', () {
+      for (final json in [
+        {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'unknown/request',
+          'result': {'ok': true},
+        },
+        {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'unknown/request',
+          'error': {'code': -32600, 'message': 'Invalid request'},
+        },
+      ]) {
+        expect(
+          () => JsonRpcMessage.fromJson(json),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('method'))
+                .having((e) => e.message, 'message', contains('result'))
+                .having((e) => e.message, 'message', contains('error')),
+          ),
+        );
+      }
+    });
+
+    test('typed parsers reject response fields directly', () {
+      for (final parse in [
+        () => JsonRpcPingRequest.fromJson({
+              'jsonrpc': '2.0',
+              'id': 1,
+              'method': Method.ping,
+              'result': {'ok': true},
+            }),
+        () => JsonRpcPingRequest.fromJson({
+              'jsonrpc': '2.0',
+              'id': 1,
+              'method': Method.ping,
+              'error': {'code': -32600, 'message': 'Invalid request'},
+            }),
+        () => JsonRpcProgressNotification.fromJson({
+              'jsonrpc': '2.0',
+              'method': Method.notificationsProgress,
+              'params': {'progressToken': 'p1', 'progress': 1},
+              'result': {'ok': true},
+            }),
+        () => JsonRpcProgressNotification.fromJson({
+              'jsonrpc': '2.0',
+              'method': Method.notificationsProgress,
+              'params': {'progressToken': 'p1', 'progress': 1},
+              'error': {'code': -32600, 'message': 'Invalid request'},
+            }),
+      ]) {
+        expect(
+          parse,
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('method'))
+                .having((e) => e.message, 'message', contains('result'))
+                .having((e) => e.message, 'message', contains('error')),
+          ),
+        );
+      }
     });
 
     test('handles error with omitted id', () {

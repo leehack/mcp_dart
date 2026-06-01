@@ -72,7 +72,11 @@ Future<void> main(List<String> args) async {
         break;
       default:
         if (id != null) {
-          await _writeResponse(id, const <String, dynamic>{});
+          await _writeErrorResponse(
+            id,
+            -32601,
+            'Method not found',
+          );
         }
     }
   }
@@ -83,6 +87,22 @@ Future<void> _writeResponse(Object? id, Map<String, dynamic> result) async {
     'jsonrpc': '2.0',
     'id': id,
     'result': result,
+  }));
+  await stdout.flush();
+}
+
+Future<void> _writeErrorResponse(
+  Object? id,
+  int code,
+  String message,
+) async {
+  stdout.writeln(jsonEncode(<String, dynamic>{
+    'jsonrpc': '2.0',
+    'id': id,
+    'error': <String, dynamic>{
+      'code': code,
+      'message': message,
+    },
   }));
   await stdout.flush();
 }

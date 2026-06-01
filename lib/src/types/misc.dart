@@ -6,15 +6,7 @@ void _expectJsonRpcMethod(
   String expected,
   String context,
 ) {
-  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
-  if (version != jsonRpcVersion) {
-    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
-  }
-
-  final method = readRequiredString(json['method'], '$context.method');
-  if (method != expected) {
-    throw FormatException('$context.method must be "$expected"');
-  }
+  expectJsonRpcMethod(json, expected, context);
 }
 
 void _readOptionalParamsObject(Map<String, dynamic> json, String field) {
@@ -44,18 +36,16 @@ class EmptyResult implements BaseResultData {
 /// Parameters for the `notifications/cancelled` notification.
 class CancelledNotification {
   /// The ID of the request to cancel.
-  final RequestId? requestId;
+  final RequestId requestId;
 
   /// An optional string describing the reason for the cancellation.
   final String? reason;
 
-  const CancelledNotification({this.requestId, this.reason});
+  const CancelledNotification({required this.requestId, this.reason});
 
   factory CancelledNotification.fromJson(Map<String, dynamic> json) =>
       CancelledNotification(
-        requestId: json.containsKey('requestId')
-            ? parseRequestId(json['requestId'], fieldName: 'requestId')
-            : null,
+        requestId: parseRequestId(json['requestId'], fieldName: 'requestId'),
         reason: readOptionalString(
           json['reason'],
           'CancelledNotification.reason',
@@ -63,8 +53,7 @@ class CancelledNotification {
       );
 
   Map<String, dynamic> toJson() => {
-        if (requestId != null)
-          'requestId': parseRequestId(requestId, fieldName: 'requestId'),
+        'requestId': parseRequestId(requestId, fieldName: 'requestId'),
         if (reason != null) 'reason': reason,
       };
 }

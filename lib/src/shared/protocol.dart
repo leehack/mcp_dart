@@ -128,6 +128,34 @@ class RequestHandlerExtra {
   /// Metadata from the original request.
   final Map<String, dynamic>? meta;
 
+  /// MCP protocol version from the request metadata, when present.
+  String? get protocolVersion {
+    final value = meta?[McpMetaKey.protocolVersion];
+    return value is String ? value : null;
+  }
+
+  /// Client implementation from the request metadata, when present.
+  Implementation? get clientInfo {
+    final value = meta?[McpMetaKey.clientInfo];
+    if (value == null) {
+      return null;
+    }
+    return Implementation.fromJson(
+      readJsonObject(value, 'RequestHandlerExtra.clientInfo'),
+    );
+  }
+
+  /// Client capabilities from the request metadata, when present.
+  ClientCapabilities? get clientCapabilities {
+    final value = meta?[McpMetaKey.clientCapabilities];
+    if (value == null) {
+      return null;
+    }
+    return ClientCapabilities.fromJson(
+      readJsonObject(value, 'RequestHandlerExtra.clientCapabilities'),
+    );
+  }
+
   /// Information about a validated access token.
   final AuthInfo? authInfo;
 
@@ -589,6 +617,14 @@ abstract class Protocol {
             'Failed to retrieve task: Task not found',
           );
         }
+        if (_usesStatelessResultTypes(request)) {
+          return GetTaskExtensionResult(
+            task: await _taskExtensionTaskFromStore(
+              task,
+              extra.sessionId,
+            ),
+          );
+        }
         return task;
       },
       (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
@@ -662,6 +698,9 @@ abstract class Protocol {
               'Task not found after cancellation: $taskId',
             );
           }
+          if (_usesStatelessResultTypes(request)) {
+            return const TaskExtensionAcknowledgementResult();
+          }
           return cancelledTask;
         } catch (error) {
           if (error is McpError) rethrow;
@@ -682,6 +721,50 @@ abstract class Protocol {
     );
   }
 
+  Future<TaskExtensionTask> _taskExtensionTaskFromStore(
+    Task task,
+    String? sessionId,
+  ) async {
+    Map<String, dynamic>? result;
+    JsonRpcErrorData? error;
+    InputRequests? inputRequests;
+
+    switch (task.status) {
+      case TaskStatus.completed:
+        result = (await _taskStore!.getTaskResult(
+          task.taskId,
+          sessionId,
+        ))
+            .toJson();
+        break;
+      case TaskStatus.failed:
+        error = JsonRpcErrorData(
+          code: ErrorCode.internalError.value,
+          message: task.statusMessage ?? 'Task failed',
+        );
+        break;
+      case TaskStatus.inputRequired:
+        inputRequests = const {};
+        break;
+      case TaskStatus.working:
+      case TaskStatus.cancelled:
+        break;
+    }
+
+    return TaskExtensionTask(
+      taskId: task.taskId,
+      status: task.status,
+      statusMessage: task.statusMessage,
+      createdAt: task.createdAt,
+      lastUpdatedAt: task.lastUpdatedAt,
+      ttlMs: task.ttl,
+      pollIntervalMs: task.pollInterval,
+      inputRequests: inputRequests,
+      result: result,
+      error: error,
+    );
+  }
+
   /// Attaches to the given transport, starts it, and starts listening for messages.
   Future<void> connect(Transport transport) async {
     if (_transport != null) {
@@ -695,7 +778,7 @@ abstract class Protocol {
         validateIncomingRequest,
       );
       validationAwareTransport
-          .setRequestMethodSupported(_supportsRequestMethod);
+          .setRequestMethodSupported(canHandleRequestMethod);
     }
     _transport!.onclose = _onclose;
     _transport!.onerror = _onerror;
@@ -733,8 +816,30 @@ abstract class Protocol {
     }
   }
 
-  bool _supportsRequestMethod(String method) =>
+  @protected
+  bool canHandleRequestMethod(String method) =>
       _requestHandlers.containsKey(method) || fallbackRequestHandler != null;
+
+  @protected
+  Future<BaseResultData> invokeRequestHandlerForValidation(
+    JsonRpcRequest request,
+    RequestHandlerExtra extra,
+  ) {
+    final registeredHandler = _requestHandlers[request.method];
+    if (registeredHandler != null) {
+      return registeredHandler(request, extra);
+    }
+
+    final fallbackHandler = fallbackRequestHandler;
+    if (fallbackHandler != null) {
+      return fallbackHandler(request);
+    }
+
+    throw McpError(
+      ErrorCode.methodNotFound.value,
+      'Method not found: ${request.method}',
+    );
+  }
 
   /// Gets the currently attached transport, or null if not connected.
   Transport? get transport => _transport;
@@ -949,6 +1054,23 @@ abstract class Protocol {
       token++;
     }
     return token;
+  }
+
+  bool _usesStatelessRequestShape(JsonRpcRequest request) {
+    final requestProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
+    if (requestProtocolVersion is String) {
+      return isStatelessProtocolVersion(requestProtocolVersion);
+    }
+
+    final activeTransport = _transport;
+    if (activeTransport is! ProtocolVersionAwareTransport) {
+      return false;
+    }
+    final versionAwareTransport =
+        activeTransport as ProtocolVersionAwareTransport;
+    final transportProtocolVersion = versionAwareTransport.protocolVersion;
+    return transportProtocolVersion != null &&
+        isStatelessProtocolVersion(transportProtocolVersion);
   }
 
   Map<String, dynamic>? _mergeRelatedTaskMeta(
@@ -1355,10 +1477,13 @@ abstract class Protocol {
     final subscriptionState = request is JsonRpcSubscriptionsListenRequest
         ? _SubscriptionStreamState()
         : null;
+    final usesStatelessResultTypes = _usesStatelessResultTypes(request);
+    final requestSessionId =
+        usesStatelessResultTypes ? null : _transport?.sessionId;
 
     final extra = RequestHandlerExtra(
       signal: abortController.signal,
-      sessionId: _transport?.sessionId,
+      sessionId: requestSessionId,
       requestId: request.id,
       meta: request.meta,
       taskId: relatedTaskId,
@@ -1366,14 +1491,16 @@ abstract class Protocol {
           ? _RequestTaskStoreImpl(
               _taskStore!,
               request,
-              _transport?.sessionId,
+              requestSessionId,
               this,
             )
           : null,
-      taskRequestedTtl: readOptionalInteger(
-        (request.params?['task'] as Map<String, dynamic>?)?['ttl'],
-        'RequestOptions.task.ttl',
-      ),
+      taskRequestedTtl: usesStatelessResultTypes
+          ? null
+          : readOptionalInteger(
+              (request.params?['task'] as Map<String, dynamic>?)?['ttl'],
+              'RequestOptions.task.ttl',
+            ),
       sendNotification: (notification, {relatedTask}) {
         var outgoingNotification = notification;
         if (subscriptionState != null) {
@@ -1421,8 +1548,9 @@ abstract class Protocol {
     }
 
     // If task creation is requested, check capability
-    if (extra.taskRequestedTtl != null ||
-        request.params?.containsKey('task') == true) {
+    if (!usesStatelessResultTypes &&
+        (extra.taskRequestedTtl != null ||
+            request.params?.containsKey('task') == true)) {
       try {
         assertTaskHandlerCapability(request.method);
       } catch (e) {
@@ -1445,7 +1573,7 @@ abstract class Protocol {
         relatedTaskId,
         TaskStatus.inputRequired,
         null,
-        _transport?.sessionId,
+        requestSessionId,
       );
     }
 
@@ -1749,6 +1877,17 @@ abstract class Protocol {
 
     Map<String, dynamic>? finalMeta = requestData.meta;
     Map<String, dynamic>? finalParams = requestData.params;
+    final usesStatelessRequestShape = _usesStatelessRequestShape(requestData);
+
+    if (usesStatelessRequestShape && options?.task != null) {
+      return Future.error(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'RequestOptions.task is not supported for stateless MCP requests; '
+          'use the $mcpTasksExtensionId extension flow instead.',
+        ),
+      );
+    }
 
     if (options?.onprogress != null) {
       final currentMeta = Map<String, dynamic>.from(finalMeta ?? {});
@@ -1853,6 +1992,12 @@ abstract class Protocol {
       _responseErrorHandlers.remove(messageId);
       _cleanupProgressHandler(messageId);
       _cleanupTimeout(messageId);
+
+      // MCP 2025-11-25 forbids clients from cancelling `initialize`.
+      if (jsonrpcRequest.method == Method.initialize) {
+        completer.completeError(errorReason);
+        return;
+      }
 
       final cancelReason = reason?.toString() ?? 'Request cancelled';
       final notification = JsonRpcCancelledNotification(

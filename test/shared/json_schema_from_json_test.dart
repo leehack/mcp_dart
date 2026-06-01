@@ -80,6 +80,42 @@ void main() {
       expect(s.toJson(), json);
     });
 
+    test('rejects invalid explicit type values', () {
+      expect(
+        () => JsonSchema.fromJson({'type': 'unknown'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonSchema.fromJson({
+          'type': ['string', 'unknown'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonSchema.fromJson({
+          'type': ['string', 'string'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonSchema.fromJson({'type': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('keeps schemas without explicit type as any schemas', () {
+      final schema = JsonSchema.fromJson({
+        'title': 'Any JSON value',
+        'description': 'No type restriction.',
+      });
+
+      expect(schema, isA<JsonAny>());
+      expect(schema.toJson(), {
+        'title': 'Any JSON value',
+        'description': 'No type restriction.',
+      });
+    });
+
     test('parses const schema', () {
       final json = {'const': 'DELETE'};
       final schema = JsonSchema.fromJson(json);

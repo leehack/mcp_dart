@@ -25,6 +25,10 @@ class McpServerOptions extends ProtocolOptions {
 
   const McpServerOptions({
     super.enforceStrictCapabilities,
+    super.taskStore,
+    super.taskMessageQueue,
+    super.defaultTaskPollInterval,
+    super.maxTaskQueueSize,
     this.capabilities,
     this.instructions,
   });
@@ -256,9 +260,11 @@ class Server extends Protocol {
     return McpError(
       ErrorCode.missingRequiredClientCapability.value,
       'Missing required client capability',
-      {
+      const {
         'requiredCapabilities': {
-          'extensions': {mcpTasksExtensionId: <String, dynamic>{}},
+          'extensions': {
+            mcpTasksExtensionId: <String, dynamic>{},
+          },
         },
       },
     );
@@ -402,12 +408,8 @@ class Server extends Protocol {
 
   McpError? _validateTasksExtensionCapabilities(JsonRpcRequest request) {
     final requiresTasksExtension =
-        (request is JsonRpcSubscriptionsListenRequest &&
-                request.listenParams.notifications.taskIds != null) ||
-            (_isStatelessRequest(request) &&
-                (request.method == Method.tasksGet ||
-                    request.method == Method.tasksCancel ||
-                    request.method == Method.tasksUpdate));
+        request is JsonRpcSubscriptionsListenRequest &&
+            request.listenParams.notifications.taskIds != null;
 
     if (!requiresTasksExtension) {
       return null;
@@ -529,19 +531,110 @@ class Server extends Protocol {
     return null;
   }
 
-  bool _allowsToolCallResult(BaseResultData result, JsonRpcRequest request) {
+  Future<bool> _allowsToolCallResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+    RequestHandlerExtra extra,
+  ) async {
     if (result is CallToolResult) {
+      _validateCallToolResult(result, request);
       return true;
     }
     if (_allowsInputRequiredResult(result, request)) {
       return true;
     }
     if (result is CreateTaskExtensionResult && _isStatelessRequest(request)) {
-      _assertTasksExtensionClientCapability(request);
+      await _validateTaskCreationResult(result, request, extra);
       return true;
     }
 
     return false;
+  }
+
+  void _validateCallToolResult(
+    CallToolResult result,
+    JsonRpcRequest request,
+  ) {
+    if (!_isStatelessRequest(request)) {
+      return;
+    }
+
+    final resultType = result.extra?['resultType'];
+    if (resultType == null || resultType == resultTypeComplete) {
+      return;
+    }
+
+    throw McpError(
+      ErrorCode.invalidParams.value,
+      'Invalid ${request.method} result: CallToolResult cannot set MCP '
+      'resultType "$resultType"; use InputRequiredResult or '
+      'CreateTaskExtensionResult.',
+    );
+  }
+
+  Future<void> _validateTaskCreationResult(
+    CreateTaskExtensionResult result,
+    JsonRpcRequest request,
+    RequestHandlerExtra extra,
+  ) async {
+    if (!_capabilities.supportsTasksExtension) {
+      throw McpError(
+        ErrorCode.invalidParams.value,
+        'Invalid ${request.method} result: CreateTaskExtensionResult requires '
+        'server support for $mcpTasksExtensionId.',
+      );
+    }
+
+    _assertTasksExtensionClientCapability(request);
+
+    if (!canHandleRequestMethod(Method.tasksGet)) {
+      throw McpError(
+        ErrorCode.invalidParams.value,
+        'Invalid ${request.method} result: CreateTaskExtensionResult requires '
+        'a tasks/get handler so ${result.task.taskId} can be resolved.',
+      );
+    }
+
+    final resolvedResult = await _resolveCreatedTask(result, request, extra);
+    if (resolvedResult is! GetTaskExtensionResult) {
+      throw McpError(
+        ErrorCode.invalidParams.value,
+        'Invalid ${request.method} result: tasks/get for '
+        '${result.task.taskId} must return GetTaskExtensionResult.',
+      );
+    }
+    if (resolvedResult.task.taskId != result.task.taskId) {
+      throw McpError(
+        ErrorCode.invalidParams.value,
+        'Invalid ${request.method} result: tasks/get resolved '
+        '${resolvedResult.task.taskId} instead of ${result.task.taskId}.',
+      );
+    }
+  }
+
+  Future<BaseResultData> _resolveCreatedTask(
+    CreateTaskExtensionResult result,
+    JsonRpcRequest request,
+    RequestHandlerExtra extra,
+  ) async {
+    try {
+      return await invokeRequestHandlerForValidation(
+        JsonRpcGetTaskRequest(
+          id: request.id,
+          getParams: GetTaskRequest(taskId: result.task.taskId),
+          meta: request.meta,
+        ),
+        extra,
+      );
+    } catch (error) {
+      throw McpError(
+        ErrorCode.invalidParams.value,
+        'Invalid ${request.method} result: CreateTaskExtensionResult taskId '
+        '${result.task.taskId} must be resolvable by tasks/get before '
+        'returning.',
+        error.toString(),
+      );
+    }
   }
 
   bool _allowsPromptGetResult(BaseResultData result, JsonRpcRequest request) {
@@ -773,6 +866,20 @@ class Server extends Protocol {
     };
   }
 
+  void _omitStatelessLegacyToolExecution(
+    Map<String, dynamic> resultJson,
+  ) {
+    final tools = resultJson['tools'];
+    if (tools is! List) {
+      return;
+    }
+    for (final tool in tools) {
+      if (tool is Map<String, dynamic>) {
+        tool.remove('execution');
+      }
+    }
+  }
+
   @override
   Map<String, dynamic> serializeIncomingResult(
     JsonRpcRequest request,
@@ -781,6 +888,10 @@ class Server extends Protocol {
     final json = super.serializeIncomingResult(request, result);
     if (!_isStatelessRequest(request)) {
       return json;
+    }
+
+    if (request.method == Method.toolsList) {
+      _omitStatelessLegacyToolExecution(json);
     }
 
     json.putIfAbsent('resultType', () => resultTypeComplete);
@@ -860,7 +971,7 @@ class Server extends Protocol {
             );
           }
         } else {
-          if (!_allowsToolCallResult(result, request)) {
+          if (!await _allowsToolCallResult(result, request, extra)) {
             throw McpError(
               ErrorCode.invalidParams.value,
               "Invalid tools/call result: Expected CallToolResult",
@@ -985,7 +1096,7 @@ class Server extends Protocol {
       case Method.samplingCreateMessage:
         if (!(_clientCapabilities?.sampling != null)) {
           throw McpError(
-            ErrorCode.invalidRequest.value,
+            ErrorCode.methodNotFound.value,
             "Client does not support sampling (required for server to send $method)",
           );
         }
@@ -994,7 +1105,7 @@ class Server extends Protocol {
       case Method.rootsList:
         if (!(_clientCapabilities?.roots != null)) {
           throw McpError(
-            ErrorCode.invalidRequest.value,
+            ErrorCode.methodNotFound.value,
             "Client does not support listing roots (required for server to send $method)",
           );
         }
@@ -1003,7 +1114,7 @@ class Server extends Protocol {
       case Method.elicitationCreate:
         if (!(_clientCapabilities?.elicitation != null)) {
           throw McpError(
-            ErrorCode.invalidRequest.value,
+            ErrorCode.methodNotFound.value,
             "Client does not support elicitation (required for server to send $method)",
           );
         }
@@ -1168,9 +1279,10 @@ class Server extends Protocol {
 
       case Method.tasksList:
       case Method.tasksResult:
-        if (!(_capabilities.tasks != null)) {
+        if (!(_capabilities.tasks != null ||
+            _capabilities.supportsTasksExtension)) {
           throw StateError(
-            "Server setup error: Cannot handle '$method' without 'tasks' capability",
+            "Server setup error: Cannot handle '$method' without 'tasks' capability or '$mcpTasksExtensionId' extension",
           );
         }
         break;
@@ -1217,7 +1329,7 @@ class Server extends Protocol {
 
     if (missingCapability != null) {
       throw McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.methodNotFound.value,
         "Client does not support capability '$missingCapability' required for task-based '$method'",
       );
     }
@@ -1257,10 +1369,18 @@ class Server extends Protocol {
     if (params.tools != null || params.toolChoice != null) {
       if (!(_clientCapabilities?.sampling?.tools ?? false)) {
         throw McpError(
-          ErrorCode.invalidRequest.value,
+          ErrorCode.methodNotFound.value,
           "Client does not support sampling tools capability.",
         );
       }
+    }
+    if (params.includeContext != null &&
+        params.includeContext != IncludeContext.none &&
+        !(_clientCapabilities?.sampling?.context ?? false)) {
+      throw McpError(
+        ErrorCode.methodNotFound.value,
+        "Client does not support sampling context capability.",
+      );
     }
 
     // Message structure validation - always validate tool_use/tool_result pairs.

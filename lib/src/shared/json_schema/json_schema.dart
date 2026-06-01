@@ -32,12 +32,33 @@ sealed class JsonSchema {
   }
 
   static JsonSchema _fromJson(Map<String, dynamic> json) {
-    if (_hasMcpHeaderOnNonPrimitiveSchema(json)) {
-      return JsonAny.fromJson(json);
-    }
-
     if (JsonEnum._canParse(json)) {
       return JsonEnum.fromJson(json);
+    }
+
+    final type = json['type'];
+    if (json.containsKey('type')) {
+      if (type is List) {
+        if (!_isValidJsonTypeArray(type)) {
+          throw const FormatException(
+            'JsonSchema.type must be a non-empty array of unique JSON Schema type strings',
+          );
+        }
+      } else if (type is String) {
+        if (!_knownJsonTypes.contains(type)) {
+          throw FormatException(
+            "JsonSchema.type '$type' is not a supported JSON Schema type",
+          );
+        }
+      } else {
+        throw const FormatException(
+          'JsonSchema.type must be a string or array of strings',
+        );
+      }
+    }
+
+    if (_hasMcpHeaderOnNonPrimitiveSchema(json)) {
+      return JsonAny.fromJson(json);
     }
 
     final conjunctiveSchema = _splitConjunctiveSchema(json);
@@ -61,11 +82,7 @@ sealed class JsonSchema {
       return JsonNot.fromJson(json);
     }
 
-    final type = json['type'];
     if (type is List) {
-      if (!_isValidJsonTypeArray(type)) {
-        return JsonAny.fromJson(json);
-      }
       return JsonUnion.fromJson(json);
     }
     if (type is String) {
@@ -561,7 +578,11 @@ class JsonNumber extends JsonSchema {
   final num? exclusiveMaximum;
   final num? multipleOf;
 
-  /// MCP `x-mcp-header` extension for mirroring this parameter into HTTP.
+  /// MCP `x-mcp-header` extension metadata.
+  ///
+  /// This is preserved for schema round-tripping. MCP 2026 stateless
+  /// Streamable HTTP header mirroring only accepts string, integer, and boolean
+  /// schemas, so number schemas carrying this metadata are not mirrored.
   final String? mcpHeader;
 
   const JsonNumber({
