@@ -707,14 +707,6 @@ class StreamableMcpServer {
   }
 
   String? _bodyProtocolVersion(Map<String, dynamic> body) {
-    final topLevelMeta = body['_meta'];
-    if (topLevelMeta is Map) {
-      final version = topLevelMeta[McpMetaKey.protocolVersion];
-      if (version is String) {
-        return version;
-      }
-    }
-
     final params = body['params'];
     if (params is Map) {
       final meta = params['_meta'];
@@ -723,6 +715,14 @@ class StreamableMcpServer {
         if (version is String) {
           return version;
         }
+      }
+    }
+
+    final topLevelMeta = body['_meta'];
+    if (topLevelMeta is Map) {
+      final version = topLevelMeta[McpMetaKey.protocolVersion];
+      if (version is String) {
+        return version;
       }
     }
 

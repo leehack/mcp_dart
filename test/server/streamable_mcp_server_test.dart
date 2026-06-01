@@ -362,6 +362,51 @@ void main() {
       expect(messages.single['result']['tools'][0]['name'], 'echo');
     });
 
+    test('detects stateless requests from nested metadata before top-level',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final request = JsonRpcListToolsRequest(
+        id: 11,
+        meta: statelessMeta(),
+      ).toJson()
+        ..['_meta'] = const {
+          McpMetaKey.protocolVersion: latestProtocolVersion,
+        };
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(request),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['mcp-session-id'], isNull);
+      final messages = _decodeSseJsonMessages(response.body);
+      expect(messages.single['result']['tools'][0]['name'], 'echo');
+    });
+
     test('detects 2026 stateless requests from body metadata', () async {
       final response = await http.post(
         Uri.parse(baseUrl),
