@@ -53,6 +53,33 @@ void main() {
       final restored = JsonRpcErrorData.fromJson(json);
       expect(restored.data['nested']['level'], equals(2));
     });
+
+    test('JsonRpcErrorData rejects non-JSON data values', () {
+      expect(
+        () => const JsonRpcErrorData(
+          code: -32600,
+          message: 'Bad data',
+          data: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const JsonRpcErrorData(
+          code: -32600,
+          message: 'Bad number',
+          data: {'score': double.infinity},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcErrorData.fromJson({
+          'code': -32600,
+          'message': 'Bad data',
+          'data': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcCancelledNotification Edge Cases', () {

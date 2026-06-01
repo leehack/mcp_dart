@@ -583,13 +583,15 @@ class JsonRpcErrorData {
       JsonRpcErrorData(
         code: json['code'] as int,
         message: json['message'] as String,
-        data: json['data'],
+        data: json.containsKey('data')
+            ? readJsonValue(json['data'], 'JsonRpcErrorData.data')
+            : null,
       );
 
   Map<String, dynamic> toJson() => {
         'code': code,
         'message': message,
-        if (data != null) 'data': data,
+        if (data != null) 'data': readJsonValue(data, 'JsonRpcErrorData.data'),
       };
 }
 

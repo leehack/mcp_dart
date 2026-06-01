@@ -107,6 +107,8 @@
   and tool object fields.
 - Rejected non-JSON values in JSON-RPC envelope and remaining typed result
   metadata fields.
+- Rejected non-JSON JSON-RPC error `data` values at parse and serialize
+  boundaries.
 - Prevented stateless MCP 2026 clients from sending core request and
   notification methods removed from that protocol revision.
 - Rejected server-initiated JSON-RPC requests received by stateless MCP 2026
