@@ -45,14 +45,14 @@ abstract class Transport {
 }
 
 /// Optional capability for transports that can preserve JSON-RPC request IDs
-/// with their full MCP shape (string or finite number) for request/stream
+/// with their full MCP shape (string or integer) for request/stream
 /// correlation.
 ///
 /// Existing custom transports can keep implementing [Transport.send] with
 /// `int? relatedRequestId`. Transports that need to route messages by string
 /// request IDs should also implement this interface.
 abstract class RequestIdAwareTransport {
-  /// Sends a JSON-RPC message while preserving a string-or-number request ID.
+  /// Sends a JSON-RPC message while preserving a string-or-integer request ID.
   Future<void> sendWithRequestId(
     JsonRpcMessage message, {
     RequestId? relatedRequestId,

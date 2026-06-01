@@ -10,7 +10,9 @@ import 'transport.dart';
 final _logger = Logger("mcp_dart.shared.protocol");
 
 bool _isProgressToken(Object? token) =>
-    token is String || (token is num && token.isFinite);
+    token is String ||
+    token is int ||
+    (token is double && token.isFinite && token == token.truncateToDouble());
 
 const Set<String> _statelessCacheableResultMethods = {
   Method.toolsList,
@@ -204,7 +206,7 @@ class RequestHandlerExtra {
     if (!_isProgressToken(progressToken)) {
       _logger.warn(
         "Invalid progressToken type: ${progressToken.runtimeType}. "
-        "Expected string or finite number.",
+        "Expected string or integer.",
       );
       return;
     }
@@ -1428,7 +1430,7 @@ abstract class Protocol {
       _onerror(
         ArgumentError(
           "Received invalid progressToken: $progressToken. "
-          "Expected string or finite number.",
+          "Expected string or integer.",
         ),
       );
       return;
@@ -1650,7 +1652,7 @@ abstract class Protocol {
         if (!_isProgressToken(requestedProgressToken)) {
           return Future.error(
             ArgumentError(
-              'progressToken must be a string or finite number when '
+              'progressToken must be a string or integer when '
               'onprogress is set.',
             ),
           );

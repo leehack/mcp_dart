@@ -505,17 +505,16 @@ void main() {
       expect((await requestFuture).value, 'ok');
     });
 
-    test('public notification preserves finite numeric relatedRequestId',
-        () async {
+    test('public notification preserves integer relatedRequestId', () async {
       await protocol.connect(transport);
 
       await protocol.notification(
         const JsonRpcNotification(method: 'test/notification'),
-        relatedRequestId: 1.5,
+        relatedRequestId: 15,
       );
 
       expect(transport.sentMessages.single, isA<JsonRpcNotification>());
-      expect(transport.relatedRequestIds.single, 1.5);
+      expect(transport.relatedRequestIds.single, 15);
     });
 
     test('routes nested cancellation notifications for string request IDs',
@@ -658,8 +657,7 @@ void main() {
       expect(result.value, 'response-data');
     });
 
-    test('dispatches finite numeric progress tokens from request metadata',
-        () async {
+    test('dispatches integer progress tokens from request metadata', () async {
       await protocol.connect(transport);
 
       final progressUpdates = <Progress>[];
@@ -668,7 +666,7 @@ void main() {
             const JsonRpcRequest(
               id: 0,
               method: 'test/method',
-              meta: {'progressToken': 1.5},
+              meta: {'progressToken': 15},
             ),
             (json) => TestResult(value: json['value'] as String),
             RequestOptions(
@@ -680,12 +678,12 @@ void main() {
 
       expect(transport.sentMessages, hasLength(1));
       final sentRequest = transport.sentMessages.single as JsonRpcRequest;
-      expect(sentRequest.meta?['progressToken'], 1.5);
+      expect(sentRequest.meta?['progressToken'], 15);
 
       transport.receiveMessage(
         JsonRpcProgressNotification(
           progressParams: const ProgressNotification(
-            progressToken: 1.5,
+            progressToken: 15,
             progress: 50,
             total: 100,
             message: 'halfway',
@@ -1251,6 +1249,27 @@ void main() {
             id: 0,
             method: 'test/method',
             meta: {'progressToken': double.nan},
+          ),
+          (json) => TestResult(value: json['value'] as String),
+          RequestOptions(onprogress: (_) {}),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test(
+        'rejects fractional request progress tokens when progress handler is set',
+        () async {
+      await protocol.connect(transport);
+
+      await expectLater(
+        protocol.request<TestResult>(
+          const JsonRpcRequest(
+            id: 0,
+            method: 'test/method',
+            meta: {'progressToken': 1.5},
           ),
           (json) => TestResult(value: json['value'] as String),
           RequestOptions(onprogress: (_) {}),

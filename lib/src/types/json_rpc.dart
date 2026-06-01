@@ -158,7 +158,7 @@ typedef ProgressToken = dynamic;
 
 /// Parses a wire progress token.
 ///
-/// MCP progress tokens are JSON strings or finite numbers. Reject malformed wire
+/// MCP progress tokens are JSON strings or integers. Reject malformed wire
 /// shapes at decode boundaries instead of allowing dynamic values to leak into
 /// higher-level protocol code.
 ProgressToken parseProgressToken(
@@ -168,11 +168,12 @@ ProgressToken parseProgressToken(
   if (value is String) {
     return value;
   }
-  if (value is num && value.isFinite) {
-    return value;
+  final integer = readOptionalInteger(value, fieldName);
+  if (integer != null) {
+    return integer;
   }
   throw FormatException(
-    'Invalid $fieldName: expected string or finite number, '
+    'Invalid $fieldName: expected string or integer, '
     'got ${value.runtimeType}',
   );
 }
@@ -185,18 +186,19 @@ typedef RequestId = dynamic;
 
 /// Parses a JSON-RPC request identifier.
 ///
-/// JSON-RPC/MCP request IDs are JSON strings or finite numbers for SDK request
+/// JSON-RPC/MCP request IDs are JSON strings or integers for SDK request
 /// boundaries. Notifications omit the `id` member entirely, and responses may
 /// omit the `id` member for JSON-RPC error cases.
 RequestId parseRequestId(Object? value, {String fieldName = 'id'}) {
   if (value is String) {
     return value;
   }
-  if (value is num && value.isFinite) {
-    return value;
+  final integer = readOptionalInteger(value, fieldName);
+  if (integer != null) {
+    return integer;
   }
   throw FormatException(
-    'Invalid $fieldName: expected string or finite number, '
+    'Invalid $fieldName: expected string or integer, '
     'got ${value.runtimeType}',
   );
 }
@@ -293,8 +295,8 @@ void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
 
 /// Validates request metadata that can affect protocol behavior.
 ///
-/// `_meta.progressToken` is an MCP wire token and must be a string or finite
-/// number when present. [validateKeys] opts in to the MCP 2026 `_meta`
+/// `_meta.progressToken` is an MCP wire token and must be a string or integer
+/// when present. [validateKeys] opts in to the MCP 2026 `_meta`
 /// key-name grammar without changing stable/legacy request parsing.
 Map<String, dynamic>? validateRequestMeta(
   Map<String, dynamic>? meta, {
@@ -508,7 +510,10 @@ class JsonRpcRequest extends JsonRpcMessage {
             if (params != null)
               ...readJsonObject(params, 'JsonRpcRequest.params'),
             if (meta != null)
-              '_meta': readJsonObject(meta, 'JsonRpcRequest._meta'),
+              '_meta': readJsonObject(
+                validateRequestMeta(meta),
+                'JsonRpcRequest._meta',
+              ),
           },
       };
 }

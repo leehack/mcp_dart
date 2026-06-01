@@ -347,8 +347,29 @@ void main() {
           field: 'id',
           message: {
             'jsonrpc': '2.0',
+            'id': 1.5,
+            'method': 'ping',
+          },
+        ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
             'id': null,
             'method': 'ping',
+          },
+        ),
+        (
+          field: 'progressToken',
+          message: {
+            'jsonrpc': '2.0',
+            'id': 'with-bad-meta',
+            'method': 'ping',
+            'params': {
+              '_meta': {
+                'progressToken': 1.5,
+              },
+            },
           },
         ),
         (
@@ -372,6 +393,17 @@ void main() {
             'method': 'ping',
             'params': {
               '_meta': false,
+            },
+          },
+        ),
+        (
+          field: 'progressToken',
+          message: {
+            'jsonrpc': '2.0',
+            'method': 'notifications/progress',
+            'params': {
+              'progressToken': 1.5,
+              'progress': 0,
             },
           },
         ),

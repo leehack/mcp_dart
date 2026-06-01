@@ -26,9 +26,10 @@ void main() {
           'jsonrpc.rejects-null-error-response-id',
           'jsonrpc.rejects-null-params-member',
           'jsonrpc.preserves-string-response-id',
-          'jsonrpc.preserves-numeric-response-id',
+          'jsonrpc.preserves-integer-response-id',
           'jsonrpc.preserves-string-progress-token',
-          'jsonrpc.preserves-numeric-progress-token',
+          'jsonrpc.preserves-integer-progress-token',
+          'jsonrpc.rejects-fractional-ids-and-progress-tokens',
           'protocol-version.advertises-latest-2025-11-25',
         ]),
       );
@@ -47,7 +48,7 @@ void main() {
           'elicitation.rejects-invalid-form-url-union',
           'tasks.strips-unnegotiated-related-task-metadata',
           'progress.rejects-malformed-progress-token',
-          'progress.dispatches-numeric-progress-token',
+          'progress.dispatches-integer-progress-token',
         ]),
       );
       expect(

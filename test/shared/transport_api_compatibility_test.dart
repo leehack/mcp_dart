@@ -59,7 +59,8 @@ void main() {
       expect(transport.lastRelatedRequestId, isNull);
     });
 
-    test('request-id-aware transports preserve non-integer relatedRequestId',
+    test(
+        'request-id-aware transports preserve string and integer relatedRequestId',
         () async {
       final transport = FullRequestIdAwareTransport();
 
@@ -74,10 +75,10 @@ void main() {
 
       await transport.sendPreservingRequestId(
         const JsonRpcNotification(method: 'test/notification'),
-        relatedRequestId: 1.5,
+        relatedRequestId: 15,
       );
 
-      expect(transport.lastRequestIdAwareRelatedRequestId, 1.5);
+      expect(transport.lastRequestIdAwareRelatedRequestId, 15);
     });
   });
 }
