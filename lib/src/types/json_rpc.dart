@@ -758,6 +758,12 @@ class InputResponse {
   }
 
   factory InputResponse.fromJson(Map<String, dynamic> json) {
+    if (!_isValidInputResponse(json)) {
+      throw const FormatException(
+        'InputResponse must be a CreateMessageResult, ListRootsResult, '
+        'or ElicitResult',
+      );
+    }
     return InputResponse.raw(Map<String, dynamic>.from(json));
   }
 
@@ -783,6 +789,28 @@ class InputResponse {
   }
 
   Map<String, dynamic> toJson() => Map<String, dynamic>.from(value);
+}
+
+bool _isValidInputResponse(Map<String, dynamic> json) {
+  return _canParseInputResponse(CreateMessageResult.fromJson, json) ||
+      _canParseInputResponse(ListRootsResult.fromJson, json) ||
+      _canParseInputResponse(ElicitResult.fromJson, json);
+}
+
+bool _canParseInputResponse(
+  BaseResultData Function(Map<String, dynamic> json) parser,
+  Map<String, dynamic> json,
+) {
+  try {
+    parser(json);
+    return true;
+  } on FormatException {
+    return false;
+  } on ArgumentError {
+    return false;
+  } on TypeError {
+    return false;
+  }
 }
 
 /// Result returned when a request needs extra client input before retry.

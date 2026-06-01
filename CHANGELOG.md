@@ -82,6 +82,8 @@
   the 2026 request metadata builder while preserving legacy metadata parsing.
 - Rejected negative cacheable-result `ttlMs` values during parsing instead of
   clamping malformed wire values to zero.
+- Validated MRTR `inputResponses` as `CreateMessageResult`, `ListRootsResult`,
+  or `ElicitResult` instead of accepting arbitrary result objects.
 
 ## 2.2.0
 

@@ -603,6 +603,17 @@ void main() {
         ),
         throwsFormatException,
       );
+      expect(
+        () => ReadResourceRequest.fromJson(
+          const {
+            'uri': 'file:///repo/README.md',
+            'inputResponses': {
+              'unknown': {'unexpected': true},
+            },
+          },
+        ),
+        throwsFormatException,
+      );
     });
 
     test('server acknowledges subscriptions/listen with subscription id',
