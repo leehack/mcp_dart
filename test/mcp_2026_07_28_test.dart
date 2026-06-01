@@ -4472,6 +4472,41 @@ void main() {
       );
     });
 
+    test('client rejects input_required on non-MRTR requests', () async {
+      final transport = DiscoveringClientTransport(
+        toolsListResult: const {
+          'resultType': resultTypeInputRequired,
+          'requestState': 'list-state',
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+
+      await client.connect(transport);
+
+      await expectLater(
+        client.listTools(),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains(
+                  'MCP resultType "$resultTypeInputRequired" is not valid for '
+                  '${Method.toolsList}',
+                ),
+              ),
+        ),
+      );
+    });
+
     for (final scenario in [
       (
         name: 'missing ttlMs',
@@ -4543,7 +4578,7 @@ void main() {
       });
     }
 
-    test('client accepts advertised task extension resultType values',
+    test('client rejects task resultType on non-task-eligible requests',
         () async {
       final transport = DiscoveringClientTransport(
         capabilities: ServerCapabilities(
@@ -4562,8 +4597,25 @@ void main() {
 
       await client.connect(transport);
 
-      final result = await client.listTools();
-      expect(result.tools, isEmpty);
+      await expectLater(
+        client.listTools(),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains(
+                  'MCP resultType "$resultTypeTask" is not valid for '
+                  '${Method.toolsList}',
+                ),
+              ),
+        ),
+      );
     });
 
     test('client preserves cache hints when filtering invalid tools', () async {

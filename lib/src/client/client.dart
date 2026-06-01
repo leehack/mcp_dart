@@ -122,6 +122,12 @@ const Set<String> _statelessRemovedNotificationMethods = {
   Method.notificationsTasksStatus,
 };
 
+const Set<String> _statelessInputRequiredResultMethods = {
+  Method.toolsCall,
+  Method.promptsGet,
+  Method.resourcesRead,
+};
+
 const int _maxInputRequiredRetries = 16;
 
 /// An MCP client implementation built on top of a pluggable [Transport].
@@ -727,6 +733,21 @@ class McpClient extends Protocol {
 
     return resultType == resultTypeTask &&
         (_serverCapabilities?.supportsTasksExtension ?? false);
+  }
+
+  @override
+  bool isResultTypeAllowedForRequest(
+    JsonRpcRequest request,
+    String resultType,
+  ) {
+    if (resultType == resultTypeInputRequired) {
+      return _statelessInputRequiredResultMethods.contains(request.method);
+    }
+    if (resultType == resultTypeTask) {
+      return request.method == Method.toolsCall &&
+          (_serverCapabilities?.supportsTasksExtension ?? false);
+    }
+    return super.isResultTypeAllowedForRequest(request, resultType);
   }
 
   @override

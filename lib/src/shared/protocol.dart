@@ -497,6 +497,14 @@ abstract class Protocol {
         resultType == resultTypeInputRequired;
   }
 
+  /// Returns whether [resultType] is valid for [request].
+  @protected
+  bool isResultTypeAllowedForRequest(
+    JsonRpcRequest request,
+    String resultType,
+  ) =>
+      isRecognizedResultType(resultType);
+
   bool _usesStatelessResultTypes(JsonRpcRequest request) {
     final requestProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
     if (requestProtocolVersion is String &&
@@ -533,6 +541,11 @@ abstract class Protocol {
     }
     if (!isRecognizedResultType(resultType)) {
       throw FormatException('Unrecognized MCP resultType "$resultType"');
+    }
+    if (!isResultTypeAllowedForRequest(request, resultType)) {
+      throw FormatException(
+        'MCP resultType "$resultType" is not valid for ${request.method}',
+      );
     }
 
     if (resultType == resultTypeComplete &&
