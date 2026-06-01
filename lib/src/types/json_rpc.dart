@@ -378,17 +378,32 @@ sealed class JsonRpcMessage {
             JsonRpcElicitationCompleteNotification.fromJson(json),
           _ => JsonRpcNotification(
               method: method,
-              params: json['params'] as Map<String, dynamic>?,
-              meta: json['_meta'] as Map<String, dynamic>? ??
-                  (json['params'] as Map<String, dynamic>?)?['_meta']
-                      as Map<String, dynamic>?,
+              params: readOptionalJsonObject(
+                json['params'],
+                'JsonRpcNotification.params',
+              ),
+              meta: readOptionalJsonObject(
+                    json['_meta'],
+                    'JsonRpcNotification._meta',
+                  ) ??
+                  readOptionalJsonObject(
+                    readOptionalJsonObject(
+                      json['params'],
+                      'JsonRpcNotification.params',
+                    )?['_meta'],
+                    'JsonRpcNotification._meta',
+                  ),
             ),
         };
       }
     } else if (json.containsKey('result')) {
       final id = _parseResultResponseId(json['id']);
-      final resultData = json['result'] as Map<String, dynamic>;
-      final meta = resultData['_meta'] as Map<String, dynamic>?;
+      final resultData =
+          readJsonObject(json['result'], 'JsonRpcResponse.result');
+      final meta = readOptionalJsonObject(
+        resultData['_meta'],
+        'JsonRpcResponse._meta',
+      );
       final actualResult = Map<String, dynamic>.from(resultData)
         ..remove('_meta');
       return JsonRpcResponse(id: id, result: actualResult, meta: meta);
@@ -438,8 +453,10 @@ class JsonRpcRequest extends JsonRpcMessage {
         'method': method,
         if (params != null || meta != null)
           'params': <String, dynamic>{
-            ...?params,
-            if (meta != null) '_meta': meta,
+            if (params != null)
+              ...readJsonObject(params, 'JsonRpcRequest.params'),
+            if (meta != null)
+              '_meta': readJsonObject(meta, 'JsonRpcRequest._meta'),
           },
       };
 }
@@ -464,8 +481,10 @@ class JsonRpcNotification extends JsonRpcMessage {
         'method': method,
         if (params != null || meta != null)
           'params': <String, dynamic>{
-            ...?params,
-            if (meta != null) '_meta': meta,
+            if (params != null)
+              ...readJsonObject(params, 'JsonRpcNotification.params'),
+            if (meta != null)
+              '_meta': readJsonObject(meta, 'JsonRpcNotification._meta'),
           },
       };
 }
@@ -488,7 +507,11 @@ class JsonRpcResponse extends JsonRpcMessage {
   Map<String, dynamic> toJson() => {
         'jsonrpc': jsonrpc,
         'id': id,
-        'result': <String, dynamic>{...result, if (meta != null) '_meta': meta},
+        'result': <String, dynamic>{
+          ...readJsonObject(result, 'JsonRpcResponse.result'),
+          if (meta != null)
+            '_meta': readJsonObject(meta, 'JsonRpcResponse._meta'),
+        },
       };
 }
 // --- JSON-RPC Error ---

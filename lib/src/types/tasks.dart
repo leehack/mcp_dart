@@ -99,7 +99,7 @@ class Task implements BaseResultData {
     final createdAt = _readRequiredTaskString(json, 'createdAt');
     final lastUpdatedAt = _readRequiredTaskString(json, 'lastUpdatedAt');
 
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(json['_meta'], 'Task._meta');
     return Task(
       taskId: _readRequiredTaskString(json, 'taskId'),
       status: TaskStatusName.fromString(
@@ -123,7 +123,8 @@ class Task implements BaseResultData {
         if (pollInterval != null) 'pollInterval': pollInterval,
         'createdAt': createdAt,
         'lastUpdatedAt': lastUpdatedAt,
-        if (includeMeta && meta != null) '_meta': meta,
+        if (includeMeta && meta != null)
+          '_meta': readJsonObject(meta, 'Task._meta'),
       };
 
   /// Serializes this task where MCP expects the bare `Task` schema.
@@ -232,7 +233,7 @@ class ListTasksResult implements BaseResultData {
   const ListTasksResult({required this.tasks, this.nextCursor, this.meta});
 
   factory ListTasksResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(json['_meta'], 'ListTasksResult._meta');
     final tasks = json['tasks'];
     if (tasks is! List) {
       throw const FormatException('ListTasksResult.tasks is required');
@@ -249,7 +250,8 @@ class ListTasksResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'tasks': tasks.map((t) => t.toBareJson()).toList(),
         if (nextCursor != null) 'nextCursor': nextCursor,
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'ListTasksResult._meta'),
       };
 }
 
@@ -459,7 +461,8 @@ class CreateTaskResult implements BaseResultData {
   const CreateTaskResult({required this.task, this.meta});
 
   factory CreateTaskResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta =
+        readOptionalJsonObject(json['_meta'], 'CreateTaskResult._meta');
     return CreateTaskResult(
       task: Task.fromJson(json['task'] as Map<String, dynamic>),
       meta: meta,
@@ -469,7 +472,8 @@ class CreateTaskResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'task': task.toBareJson(),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'CreateTaskResult._meta'),
       };
 }
 

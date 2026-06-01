@@ -10,7 +10,7 @@ class EmptyResult implements BaseResultData {
 
   @override
   Map<String, dynamic> toJson() => {
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'EmptyResult._meta'),
       };
 }
 
@@ -52,7 +52,10 @@ class JsonRpcCancelledNotification extends JsonRpcNotification {
     if (paramsMap == null) {
       throw const FormatException("Missing params for cancelled notification");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcCancelledNotification._meta',
+    );
     return JsonRpcCancelledNotification(
       cancelParams: CancelledNotification.fromJson(paramsMap),
       meta: meta,
@@ -172,7 +175,10 @@ class JsonRpcProgressNotification extends JsonRpcNotification {
     if (paramsMap == null) {
       throw const FormatException("Missing params for progress notification");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcProgressNotification._meta',
+    );
     return JsonRpcProgressNotification(
       progressParams: ProgressNotification.fromJson(paramsMap),
       meta: meta,

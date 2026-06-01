@@ -305,7 +305,7 @@ class ListToolsResult implements CacheableResultData {
         json['cacheScope'],
         'ListToolsResult.cacheScope',
       ),
-      meta: json['_meta'] as Map<String, dynamic>?,
+      meta: readOptionalJsonObject(json['_meta'], 'ListToolsResult._meta'),
     );
   }
 
@@ -318,7 +318,7 @@ class ListToolsResult implements CacheableResultData {
       if (nextCursor != null) 'nextCursor': nextCursor,
       if (ttlMs != null) 'ttlMs': ttlMs,
       if (cacheScope != null) 'cacheScope': cacheScope,
-      if (meta != null) '_meta': meta,
+      if (meta != null) '_meta': readJsonObject(meta, 'ListToolsResult._meta'),
     };
   }
 }

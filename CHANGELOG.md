@@ -105,6 +105,8 @@
   `resource_link.annotations`.
 - Reused shared JSON-object validation for MRTR, task extension, subscription,
   and tool object fields.
+- Rejected non-JSON values in JSON-RPC envelope and remaining typed result
+  metadata fields.
 
 ## 2.2.0
 

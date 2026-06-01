@@ -613,6 +613,34 @@ void main() {
       );
     });
 
+    test('Result metadata fields reject non-JSON Dart maps', () {
+      expect(
+        () => Root.fromJson({
+          'uri': 'file:///repo',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ListResourcesResult.fromJson({
+          'resources': [],
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'result': {
+            'ok': true,
+            '_meta': {'bad': Object()},
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     group('Tasks API Types', () {
       test('GetTaskRequestParams serialization', () {
         final params = const GetTaskRequestParams(taskId: 'task-123');

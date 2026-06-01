@@ -437,6 +437,39 @@ void main() {
       );
     });
 
+    test('rejects non-JSON result metadata values', () {
+      expect(
+        () => DiscoverResult.fromJson({
+          'resultType': 'complete',
+          'supportedVersions': [draftProtocolVersion2026_07_28],
+          'capabilities': <String, dynamic>{},
+          'serverInfo': {'name': 'server', 'version': '1.0.0'},
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const DiscoverResult(
+          supportedVersions: [draftProtocolVersion2026_07_28],
+          capabilities: ServerCapabilities(),
+          serverInfo: Implementation(name: 'server', version: '1.0.0'),
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'result': {
+            'resultType': 'complete',
+            '_meta': {'bad': Object()},
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('serializes server/discover request and result', () {
       final request = JsonRpcServerDiscoverRequest(
         id: 'discover-1',

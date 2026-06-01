@@ -1,5 +1,6 @@
 import '../shared/json_schema/json_schema.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Legacy alias for [JsonSchema] used in elicitation requests.
 typedef ElicitationInputSchema = JsonSchema;
@@ -281,7 +282,7 @@ class ElicitResult implements BaseResultData {
       content: content,
       url: json['url'] as String?,
       elicitationId: json['elicitationId'] as String?,
-      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
+      meta: readOptionalJsonObject(json['_meta'], 'ElicitResult._meta'),
     );
   }
 
@@ -293,7 +294,7 @@ class ElicitResult implements BaseResultData {
     return {
       'action': resultAction,
       if (content != null) 'content': content,
-      if (meta != null) '_meta': meta,
+      if (meta != null) '_meta': readJsonObject(meta, 'ElicitResult._meta'),
     };
   }
 
@@ -368,7 +369,10 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
         "Missing params for elicitation complete notification",
       );
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcElicitationCompleteNotification._meta',
+    );
     return JsonRpcElicitationCompleteNotification(
       completeParams: ElicitationCompleteNotification.fromJson(paramsMap),
       meta: meta,

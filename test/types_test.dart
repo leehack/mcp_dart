@@ -45,6 +45,41 @@ void main() {
       expect(json['result']['_meta']['metaKey'], equals('metaValue'));
     });
 
+    test('JSON-RPC envelope metadata rejects non-JSON Dart maps', () {
+      final invalidMeta = {'bad': Object()};
+
+      expect(
+        () => JsonRpcRequest(
+          id: 1,
+          method: 'custom/request',
+          meta: invalidMeta,
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcNotification(
+          method: 'custom/notification',
+          meta: invalidMeta,
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'custom/notification',
+          'params': {'_meta': invalidMeta},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const JsonRpcResponse(
+          id: 1,
+          result: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('JsonRpcError serialization and deserialization', () {
       final error = JsonRpcError(
         id: 1,
@@ -131,6 +166,135 @@ void main() {
         ),
       ]) {
         expectMeta(result);
+      }
+    });
+
+    test('typed metadata rejects non-JSON Dart maps', () {
+      final invalidMeta = {'bad': Object()};
+      final task = Task(
+        taskId: 'task-1',
+        status: TaskStatus.completed,
+        ttl: null,
+        createdAt: '2026-05-25T00:00:00.000Z',
+        lastUpdatedAt: '2026-05-25T00:00:01.000Z',
+        meta: invalidMeta,
+      );
+
+      for (final serialize in <Map<String, dynamic> Function()>[
+        () => Root(uri: 'file:///repo', meta: invalidMeta).toJson(),
+        () => Resource(
+              uri: 'file:///repo/readme.md',
+              name: 'readme',
+              meta: invalidMeta,
+            ).toJson(),
+        () => ResourceTemplate(
+              uriTemplate: 'file:///repo/{name}',
+              name: 'repo-file',
+              meta: invalidMeta,
+            ).toJson(),
+        () => Prompt(name: 'summary', meta: invalidMeta).toJson(),
+        () => EmptyResult(meta: invalidMeta).toJson(),
+        () => InitializeResult(
+              protocolVersion: latestProtocolVersion,
+              capabilities: const ServerCapabilities(),
+              serverInfo: const Implementation(name: 'server', version: '1.0'),
+              meta: invalidMeta,
+            ).toJson(),
+        () => DiscoverResult(
+              supportedVersions: const [draftProtocolVersion2026_07_28],
+              capabilities: const ServerCapabilities(),
+              serverInfo: const Implementation(name: 'server', version: '1.0'),
+              meta: invalidMeta,
+            ).toJson(),
+        () => ListRootsResult(roots: const [], meta: invalidMeta).toJson(),
+        () => ListResourcesResult(resources: const [], meta: invalidMeta)
+            .toJson(),
+        () => ListResourceTemplatesResult(
+              resourceTemplates: const [],
+              meta: invalidMeta,
+            ).toJson(),
+        () =>
+            ReadResourceResult(contents: const [], meta: invalidMeta).toJson(),
+        () => ListPromptsResult(prompts: const [], meta: invalidMeta).toJson(),
+        () => GetPromptResult(messages: const [], meta: invalidMeta).toJson(),
+        () => CompleteResult(
+              completion: CompletionResultData(values: const []),
+              meta: invalidMeta,
+            ).toJson(),
+        () => ElicitResult(action: 'accept', meta: invalidMeta).toJson(),
+        () => ListToolsResult(tools: const [], meta: invalidMeta).toJson(),
+        () => task.toJson(),
+        () => ListTasksResult(tasks: const [], meta: invalidMeta).toJson(),
+        () => CreateTaskResult(task: task, meta: invalidMeta).toJson(),
+        () => JsonRpcResponse(
+              id: 1,
+              result: const {'ok': true},
+              meta: invalidMeta,
+            ).toJson(),
+      ]) {
+        expect(serialize, throwsA(isA<FormatException>()));
+      }
+
+      for (final parse in <Object Function()>[
+        () => Root.fromJson({'uri': 'file:///repo', '_meta': invalidMeta}),
+        () => Resource.fromJson({
+              'uri': 'file:///repo/readme.md',
+              'name': 'readme',
+              '_meta': invalidMeta,
+            }),
+        () => ResourceTemplate.fromJson({
+              'uriTemplate': 'file:///repo/{name}',
+              'name': 'repo-file',
+              '_meta': invalidMeta,
+            }),
+        () => Prompt.fromJson({'name': 'summary', '_meta': invalidMeta}),
+        () => ListRootsResult.fromJson({'roots': [], '_meta': invalidMeta}),
+        () => ListResourcesResult.fromJson({
+              'resources': [],
+              '_meta': invalidMeta,
+            }),
+        () => ListResourceTemplatesResult.fromJson({
+              'resourceTemplates': [],
+              '_meta': invalidMeta,
+            }),
+        () => ReadResourceResult.fromJson({
+              'contents': [],
+              '_meta': invalidMeta,
+            }),
+        () => ListPromptsResult.fromJson({'prompts': [], '_meta': invalidMeta}),
+        () => GetPromptResult.fromJson({'messages': [], '_meta': invalidMeta}),
+        () => CompleteResult.fromJson({
+              'completion': {'values': []},
+              '_meta': invalidMeta,
+            }),
+        () => ElicitResult.fromJson({'action': 'accept', '_meta': invalidMeta}),
+        () => ListToolsResult.fromJson({'tools': [], '_meta': invalidMeta}),
+        () => Task.fromJson({
+              'taskId': 'task-1',
+              'status': 'completed',
+              'ttl': null,
+              'createdAt': '2026-05-25T00:00:00.000Z',
+              'lastUpdatedAt': '2026-05-25T00:00:01.000Z',
+              '_meta': invalidMeta,
+            }),
+        () => ListTasksResult.fromJson({'tasks': [], '_meta': invalidMeta}),
+        () => CreateTaskResult.fromJson({
+              'task': const {
+                'taskId': 'task-1',
+                'status': 'completed',
+                'ttl': null,
+                'createdAt': '2026-05-25T00:00:00.000Z',
+                'lastUpdatedAt': '2026-05-25T00:00:01.000Z',
+              },
+              '_meta': invalidMeta,
+            }),
+        () => JsonRpcMessage.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'result': {'ok': true, '_meta': invalidMeta},
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
       }
     });
   });

@@ -1,5 +1,6 @@
 import 'content.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 Map<String, dynamic>? _asJsonObject(dynamic value) {
   if (value == null) {
@@ -992,7 +993,8 @@ class InitializeResult implements BaseResultData {
   });
 
   factory InitializeResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta =
+        readOptionalJsonObject(json['_meta'], 'InitializeResult._meta');
     return InitializeResult(
       protocolVersion: json['protocolVersion'] as String,
       capabilities: ServerCapabilities.fromJson(
@@ -1012,7 +1014,8 @@ class InitializeResult implements BaseResultData {
         'capabilities': capabilities.toJson(),
         'serverInfo': serverInfo.toJson(),
         if (instructions != null) 'instructions': instructions,
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'InitializeResult._meta'),
       };
 }
 
@@ -1064,7 +1067,7 @@ class DiscoverResult implements BaseResultData {
         json['serverInfo'] as Map<String, dynamic>,
       ),
       instructions: json['instructions'] as String?,
-      meta: json['_meta'] as Map<String, dynamic>?,
+      meta: readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta'),
     );
   }
 
@@ -1075,7 +1078,7 @@ class DiscoverResult implements BaseResultData {
         'capabilities': capabilities.toJson(),
         'serverInfo': serverInfo.toJson(),
         if (instructions != null) 'instructions': instructions,
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
       };
 }
 

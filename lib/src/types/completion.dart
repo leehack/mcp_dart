@@ -1,4 +1,5 @@
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Sealed class representing a reference for autocompletion targets.
 sealed class Reference {
@@ -236,7 +237,7 @@ class CompleteResult implements BaseResultData {
   const CompleteResult({required this.completion, this.meta});
 
   factory CompleteResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(json['_meta'], 'CompleteResult._meta');
     return CompleteResult(
       completion: CompletionResultData.fromJson(
         json['completion'] as Map<String, dynamic>,
@@ -248,7 +249,7 @@ class CompleteResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'completion': completion.toJson(),
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'CompleteResult._meta'),
       };
 }
 
