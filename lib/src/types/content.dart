@@ -28,6 +28,24 @@ String _readRequiredString(Object? value, String field) {
   throw FormatException('$field must be a string');
 }
 
+bool _isAbsoluteUri(String value) {
+  return Uri.tryParse(value)?.hasScheme ?? false;
+}
+
+String _readRequiredAbsoluteUriString(Object? value, String field) {
+  final result = _readRequiredString(value, field);
+  if (!_isAbsoluteUri(result)) {
+    throw FormatException('$field must be an absolute URI');
+  }
+  return result;
+}
+
+void _validateAbsoluteUriString(String value, String field) {
+  if (!_isAbsoluteUri(value)) {
+    throw ArgumentError.value(value, field, 'must be an absolute URI');
+  }
+}
+
 String? _readOptionalPresentString(
   Map<String, dynamic> json,
   String key,
@@ -266,7 +284,7 @@ class McpIcon {
     };
 
     return McpIcon(
-      src: _readRequiredString(json['src'], 'McpIcon.src'),
+      src: _readRequiredAbsoluteUriString(json['src'], 'McpIcon.src'),
       mimeType: _readOptionalPresentString(
         json,
         'mimeType',
@@ -277,12 +295,16 @@ class McpIcon {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'src': src,
-        if (mimeType != null) 'mimeType': mimeType,
-        if (sizes != null) 'sizes': sizes,
-        if (theme != null) 'theme': theme!.name,
-      };
+  Map<String, dynamic> toJson() {
+    _validateAbsoluteUriString(src, 'McpIcon.src');
+
+    return {
+      'src': src,
+      if (mimeType != null) 'mimeType': mimeType,
+      if (sizes != null) 'sizes': sizes,
+      if (theme != null) 'theme': theme!.name,
+    };
+  }
 }
 
 /// Base class for content parts within prompts or tool results.

@@ -529,6 +529,11 @@ void main() {
         'sizes': ['48x48', 'any'],
         'theme': 'dark',
       });
+
+      final dataIcon = McpIcon.fromJson({
+        'src': 'data:image/png;base64,aWNvbg==',
+      });
+      expect(dataIcon.src, equals('data:image/png;base64,aWNvbg=='));
     });
 
     test('McpIcon rejects malformed stable wire fields', () {
@@ -540,6 +545,8 @@ void main() {
 
       expectInvalid({});
       expectInvalid({'src': 1});
+      expectInvalid({'src': 'icon.png'});
+      expectInvalid({'src': '://not-a-uri'});
       expectInvalid({'src': 'https://example.com/icon.png', 'mimeType': null});
       expectInvalid({'src': 'https://example.com/icon.png', 'mimeType': 1});
       expectInvalid({'src': 'https://example.com/icon.png', 'sizes': null});
@@ -551,6 +558,17 @@ void main() {
       expectInvalid({'src': 'https://example.com/icon.png', 'theme': null});
       expectInvalid({'src': 'https://example.com/icon.png', 'theme': 1});
       expectInvalid({'src': 'https://example.com/icon.png', 'theme': 'sepia'});
+    });
+
+    test('McpIcon validates src URI during serialization', () {
+      expect(
+        () => const McpIcon(src: 'icon.png').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        const McpIcon(src: 'data:image/png;base64,aWNvbg==').toJson()['src'],
+        equals('data:image/png;base64,aWNvbg=='),
+      );
     });
 
     test('Implementation icon parsing rejects invalid themes', () {
