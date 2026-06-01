@@ -4,6 +4,7 @@ import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
+import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 
 final _logger = Logger("mcp_dart.server");
 
@@ -156,6 +157,16 @@ class Server extends Protocol {
 
   McpError? _validateStatelessRequestMetadata(JsonRpcRequest request) {
     final meta = request.meta;
+    try {
+      json_rpc.validateRequestMeta(meta, validateKeys: true);
+    } on FormatException catch (error) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Invalid stateless request metadata.',
+        error.message,
+      );
+    }
+
     final requestedVersion = meta?[McpMetaKey.protocolVersion];
     if (requestedVersion is! String || requestedVersion.isEmpty) {
       return McpError(

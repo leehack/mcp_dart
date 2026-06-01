@@ -234,12 +234,14 @@ class CompletedTaskHandler extends CancelTaskResultHandler {
 Map<String, dynamic> _clientMeta({
   String? protocolVersion,
   ClientCapabilities clientCapabilities = const ClientCapabilities(),
+  Map<String, dynamic>? meta,
   Object? logLevel,
 }) {
   return buildProtocolRequestMeta(
     protocolVersion: protocolVersion ?? draftProtocolVersion2026_07_28,
     clientInfo: const Implementation(name: 'client', version: '1.0.0'),
     clientCapabilities: clientCapabilities,
+    meta: meta,
     logLevel: logLevel,
   );
 }
@@ -265,11 +267,15 @@ void main() {
         protocolVersion: draftProtocolVersion2026_07_28,
         clientInfo: const Implementation(name: 'client', version: '1.0.0'),
         clientCapabilities: const ClientCapabilities(),
-        meta: const {'caller': 'value'},
+        meta: const {
+          'caller': 'value',
+          'com.example.trace/id': 'trace-1',
+        },
         logLevel: 'debug',
       );
 
       expect(meta['caller'], 'value');
+      expect(meta['com.example.trace/id'], 'trace-1');
       expect(
         meta[McpMetaKey.protocolVersion],
         draftProtocolVersion2026_07_28,
@@ -280,6 +286,35 @@ void main() {
       });
       expect(meta[McpMetaKey.clientCapabilities], <String, dynamic>{});
       expect(meta[McpMetaKey.logLevel], 'debug');
+    });
+
+    test('rejects invalid 2026 request metadata keys during construction', () {
+      for (final key in [
+        '/name',
+        '1bad/name',
+        'bad prefix/value',
+        'com.example./name',
+        'com.example/name_',
+      ]) {
+        expect(
+          () => buildProtocolRequestMeta(
+            protocolVersion: draftProtocolVersion2026_07_28,
+            clientInfo: const Implementation(
+              name: 'client',
+              version: '1.0.0',
+            ),
+            clientCapabilities: const ClientCapabilities(),
+            meta: {key: 'value'},
+          ),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains(key),
+            ),
+          ),
+        );
+      }
     });
 
     test('serializes server/discover request and result', () {
@@ -1712,6 +1747,29 @@ void main() {
           'message',
           contains(McpMetaKey.logLevel),
         ),
+      );
+      expect(
+        validateToolRequest({
+          ..._clientMeta(),
+          'bad prefix/value': 'value',
+        }),
+        isA<McpError>()
+            .having(
+              (error) => error.code,
+              'code',
+              ErrorCode.invalidRequest.value,
+            )
+            .having(
+              (error) => error.data,
+              'data',
+              contains('bad prefix/value'),
+            ),
+      );
+      expect(
+        validateToolRequest(
+          _clientMeta(meta: const {'com.example.trace/id': 'trace-1'}),
+        ),
+        isNull,
       );
     });
 

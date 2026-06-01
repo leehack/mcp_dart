@@ -82,6 +82,7 @@ Map<String, dynamic> buildProtocolRequestMeta({
   Map<String, dynamic>? meta,
   Object? logLevel,
 }) {
+  validateRequestMeta(meta, validateKeys: true);
   return <String, dynamic>{
     ...?meta,
     McpMetaKey.protocolVersion: protocolVersion,
@@ -203,12 +204,66 @@ RequestId? _parseErrorResponseId(Map<String, dynamic> json) {
   return parseRequestId(json['id']);
 }
 
+final _metaPrefixLabelPattern = RegExp(
+  r'^[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$',
+);
+final _metaNamePattern = RegExp(
+  r'^(?:[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?)?$',
+);
+
+/// Validates an MCP 2026 `_meta` key name.
+///
+/// MCP 2026 constrains metadata keys to an optional dot-separated prefix
+/// followed by `/`, plus a name segment. Earlier protocol versions did not
+/// define this grammar, so callers choose when to enforce it.
+void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
+  final slashIndex = key.indexOf('/');
+  final prefix = slashIndex == -1 ? null : key.substring(0, slashIndex);
+  final name = slashIndex == -1 ? key : key.substring(slashIndex + 1);
+
+  if (prefix != null) {
+    if (prefix.isEmpty) {
+      throw FormatException(
+        'Invalid $fieldName key "$key": prefix must not be empty',
+      );
+    }
+    final labels = prefix.split('.');
+    for (final label in labels) {
+      if (!_metaPrefixLabelPattern.hasMatch(label)) {
+        throw FormatException(
+          'Invalid $fieldName key "$key": invalid prefix label "$label"',
+        );
+      }
+    }
+  }
+
+  if (!_metaNamePattern.hasMatch(name)) {
+    throw FormatException(
+      'Invalid $fieldName key "$key": invalid name segment "$name"',
+    );
+  }
+}
+
 /// Validates request metadata that can affect protocol behavior.
 ///
 /// `_meta.progressToken` is an MCP wire token and must be a string or integer
-/// when present. Other `_meta` fields are preserved without interpretation.
-Map<String, dynamic>? validateRequestMeta(Map<String, dynamic>? meta) {
-  if (meta != null && meta.containsKey('progressToken')) {
+/// when present. [validateKeys] opts in to the MCP 2026 `_meta` key-name
+/// grammar without changing stable/legacy request parsing.
+Map<String, dynamic>? validateRequestMeta(
+  Map<String, dynamic>? meta, {
+  bool validateKeys = false,
+}) {
+  if (meta == null) {
+    return null;
+  }
+
+  if (validateKeys) {
+    for (final key in meta.keys) {
+      validateMetaKeyName(key);
+    }
+  }
+
+  if (meta.containsKey('progressToken')) {
     parseProgressToken(
       meta['progressToken'],
       fieldName: '_meta.progressToken',
