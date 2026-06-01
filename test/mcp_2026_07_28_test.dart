@@ -3879,6 +3879,265 @@ void main() {
       expect(callRequests[1].id, isNot(callRequests[0].id));
     });
 
+    test('client resolves task resultType tools/call responses', () async {
+      late DiscoveringClientTransport transport;
+      final requests = <JsonRpcRequest>[];
+      transport = DiscoveringClientTransport(
+        capabilities: ServerCapabilities(
+          tools: const ServerCapabilitiesTools(),
+          extensions: withMcpTasksExtension(null),
+        ),
+        onRequest: (request) {
+          requests.add(request);
+          switch (request.method) {
+            case Method.toolsCall:
+              expect(request.params?['name'], 'delayed');
+              final clientCapabilities = request
+                  .meta?[McpMetaKey.clientCapabilities] as Map<String, dynamic>;
+              expect(
+                clientCapabilities['extensions'][mcpTasksExtensionId],
+                <String, dynamic>{},
+              );
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const CreateTaskExtensionResult(
+                    task: TaskExtensionTask(
+                      taskId: 'task-1',
+                      status: TaskStatus.working,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:01Z',
+                      ttlMs: null,
+                      pollIntervalMs: 1,
+                    ),
+                  ).toJson(),
+                ),
+              );
+              break;
+
+            case Method.tasksGet:
+              expect(request.params?['taskId'], 'task-1');
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const GetTaskExtensionResult(
+                    task: TaskExtensionTask(
+                      taskId: 'task-1',
+                      status: TaskStatus.completed,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:02Z',
+                      ttlMs: null,
+                      result: {
+                        'content': [
+                          {'type': 'text', 'text': 'task done'},
+                        ],
+                        'isError': false,
+                      },
+                    ),
+                  ).toJson(),
+                ),
+              );
+              break;
+          }
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: McpClientOptions(
+          capabilities: ClientCapabilities(
+            extensions: withMcpTasksExtension(null),
+          ),
+        ),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'delayed'),
+      );
+
+      expect((result.content.single as TextContent).text, 'task done');
+      expect(requests.map((request) => request.method), [
+        Method.toolsCall,
+        Method.tasksGet,
+      ]);
+    });
+
+    test('client updates task input requests once while polling', () async {
+      late DiscoveringClientTransport transport;
+      var getCount = 0;
+      var updateCount = 0;
+      transport = DiscoveringClientTransport(
+        capabilities: ServerCapabilities(
+          tools: const ServerCapabilitiesTools(),
+          extensions: withMcpTasksExtension(null),
+        ),
+        onRequest: (request) {
+          switch (request.method) {
+            case Method.toolsCall:
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const CreateTaskExtensionResult(
+                    task: TaskExtensionTask(
+                      taskId: 'task-2',
+                      status: TaskStatus.working,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:01Z',
+                      ttlMs: null,
+                      pollIntervalMs: 1,
+                    ),
+                  ).toJson(),
+                ),
+              );
+              break;
+
+            case Method.tasksGet:
+              getCount += 1;
+              final task = getCount < 3
+                  ? TaskExtensionTask(
+                      taskId: 'task-2',
+                      status: TaskStatus.inputRequired,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:02Z',
+                      ttlMs: null,
+                      pollIntervalMs: 1,
+                      inputRequests: {
+                        'approval': InputRequest.elicit(
+                          ElicitRequest.form(
+                            message: 'Approve?',
+                            requestedSchema: JsonSchema.object(
+                              properties: {
+                                'approved': JsonSchema.boolean(),
+                              },
+                              required: ['approved'],
+                            ),
+                          ),
+                        ),
+                      },
+                    )
+                  : const TaskExtensionTask(
+                      taskId: 'task-2',
+                      status: TaskStatus.completed,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:03Z',
+                      ttlMs: null,
+                      result: {
+                        'content': [
+                          {'type': 'text', 'text': 'approved'},
+                        ],
+                      },
+                    );
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: GetTaskExtensionResult(task: task).toJson(),
+                ),
+              );
+              break;
+
+            case Method.tasksUpdate:
+              updateCount += 1;
+              expect(request.params?['taskId'], 'task-2');
+              expect(
+                request.params?['inputResponses']['approval'],
+                {
+                  'action': 'accept',
+                  'content': {'approved': true},
+                },
+              );
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const TaskExtensionAcknowledgementResult().toJson(),
+                ),
+              );
+              break;
+          }
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: McpClientOptions(
+          capabilities: ClientCapabilities(
+            elicitation: const ClientElicitation.formOnly(),
+            extensions: withMcpTasksExtension(null),
+          ),
+        ),
+      );
+      client.onElicitRequest = (params) async {
+        expect(params.message, 'Approve?');
+        return const ElicitResult(
+          action: 'accept',
+          content: {'approved': true},
+        );
+      };
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'approval-tool'),
+      );
+
+      expect((result.content.single as TextContent).text, 'approved');
+      expect(getCount, 3);
+      expect(updateCount, 1);
+    });
+
+    test('client rejects task resultType when request lacks task extension',
+        () async {
+      late DiscoveringClientTransport transport;
+      transport = DiscoveringClientTransport(
+        capabilities: ServerCapabilities(
+          tools: const ServerCapabilitiesTools(),
+          extensions: withMcpTasksExtension(null),
+        ),
+        onRequest: (request) {
+          if (request.method != Method.toolsCall) {
+            return;
+          }
+          transport.onmessage?.call(
+            JsonRpcResponse(
+              id: request.id,
+              result: const CreateTaskExtensionResult(
+                task: TaskExtensionTask(
+                  taskId: 'task-3',
+                  status: TaskStatus.working,
+                  createdAt: '2026-07-28T00:00:00Z',
+                  lastUpdatedAt: '2026-07-28T00:00:01Z',
+                  ttlMs: null,
+                ),
+              ).toJson(),
+            ),
+          );
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+      );
+      await client.connect(transport);
+
+      await expectLater(
+        client.callTool(const CallToolRequest(name: 'delayed')),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains(
+                  'MCP resultType "$resultTypeTask" is not valid for '
+                  '${Method.toolsCall}',
+                ),
+              ),
+        ),
+      );
+    });
+
     test('client retries requestState-only input_required without responses',
         () async {
       late DiscoveringClientTransport transport;

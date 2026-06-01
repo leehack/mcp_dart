@@ -598,6 +598,24 @@ class McpClient extends Protocol {
     return resultFactory(json);
   }
 
+  BaseResultData _parseToolCallResult(Map<String, dynamic> json) {
+    switch (json['resultType']) {
+      case resultTypeInputRequired:
+        return InputRequiredResult.fromJson(json);
+      case resultTypeTask:
+        if (!_usesStatelessProtocol ||
+            !_capabilities.supportsTasksExtension ||
+            !(_serverCapabilities?.supportsTasksExtension ?? false)) {
+          throw const FormatException(
+            'MCP resultType "task" is not valid for tools/call',
+          );
+        }
+        return CreateTaskExtensionResult.fromJson(json);
+      default:
+        return CallToolResult.fromJson(json);
+    }
+  }
+
   Future<InputResponses?> _resolveInputRequests(
     InputRequests? inputRequests,
     AbortSignal? signal,
@@ -615,6 +633,35 @@ class McpClient extends Protocol {
         signal: signal,
       );
       inputResponses[entry.key] = InputResponse.fromResult(result);
+    }
+    return inputResponses;
+  }
+
+  Future<InputResponses?> _resolveNewInputRequests(
+    InputRequests? inputRequests,
+    Set<String> answeredKeys,
+    AbortSignal? signal,
+  ) async {
+    if (inputRequests == null) {
+      return null;
+    }
+
+    final pendingRequests = <String, InputRequest>{};
+    for (final entry in inputRequests.entries) {
+      if (!answeredKeys.contains(entry.key)) {
+        pendingRequests[entry.key] = entry.value;
+      }
+    }
+    if (pendingRequests.isEmpty) {
+      return null;
+    }
+
+    final inputResponses = await _resolveInputRequests(
+      pendingRequests,
+      signal,
+    );
+    if (inputResponses != null) {
+      answeredKeys.addAll(inputResponses.keys);
     }
     return inputResponses;
   }
@@ -665,6 +712,186 @@ class McpClient extends Protocol {
     }
 
     throw StateError('Unreachable input_required retry state for $method.');
+  }
+
+  Future<BaseResultData> _requestResolvingToolCall(
+    CallToolRequest params,
+    RequestOptions? options,
+  ) async {
+    InputResponses? inputResponses;
+    String? requestState;
+
+    for (var attempt = 0; attempt <= _maxInputRequiredRetries; attempt++) {
+      final result = await request<BaseResultData>(
+        JsonRpcCallToolRequest(
+          id: -1,
+          params: CallToolRequest(
+            name: params.name,
+            arguments: params.arguments,
+            inputResponses:
+                attempt > 0 ? inputResponses : params.inputResponses,
+            requestState: attempt > 0 ? requestState : params.requestState,
+          ).toJson(),
+        ),
+        _parseToolCallResult,
+        options,
+      );
+
+      if (result is CallToolResult || result is CreateTaskExtensionResult) {
+        return result;
+      }
+
+      if (result is! InputRequiredResult) {
+        throw McpError(
+          ErrorCode.internalError.value,
+          'Unexpected result type ${result.runtimeType} for ${Method.toolsCall}.',
+        );
+      }
+
+      if (attempt == _maxInputRequiredRetries) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          'Exceeded $_maxInputRequiredRetries input_required retries for ${Method.toolsCall}.',
+        );
+      }
+
+      inputResponses = await _resolveInputRequests(
+        result.inputRequests,
+        options?.signal,
+      );
+      requestState = result.requestState;
+    }
+
+    throw StateError(
+      'Unreachable input_required retry state for ${Method.toolsCall}.',
+    );
+  }
+
+  Future<CallToolResult> _resolveTaskExtensionToolResult(
+    TaskExtensionTask initialTask,
+    RequestOptions? options,
+  ) async {
+    var currentTask = initialTask;
+    final answeredInputKeys = <String>{};
+
+    while (true) {
+      options?.signal?.throwIfAborted();
+
+      switch (currentTask.status) {
+        case TaskStatus.completed:
+          final result = currentTask.result;
+          if (result == null) {
+            throw McpError(
+              ErrorCode.internalError.value,
+              'Completed task ${currentTask.taskId} is missing a result.',
+            );
+          }
+          return CallToolResult.fromJson(result);
+
+        case TaskStatus.failed:
+          final error = currentTask.error;
+          if (error != null) {
+            throw McpError(error.code, error.message, error.data);
+          }
+          throw McpError(
+            ErrorCode.internalError.value,
+            'Task ${currentTask.taskId} failed without error details.',
+          );
+
+        case TaskStatus.cancelled:
+          throw McpError(
+            ErrorCode.invalidRequest.value,
+            'Task ${currentTask.taskId} was cancelled.',
+          );
+
+        case TaskStatus.inputRequired:
+          final inputResponses = await _resolveNewInputRequests(
+            currentTask.inputRequests,
+            answeredInputKeys,
+            options?.signal,
+          );
+          if (inputResponses != null && inputResponses.isNotEmpty) {
+            await request<TaskExtensionAcknowledgementResult>(
+              JsonRpcUpdateTaskRequest(
+                id: -1,
+                updateParams: UpdateTaskRequest(
+                  taskId: currentTask.taskId,
+                  inputResponses: inputResponses,
+                ),
+              ),
+              TaskExtensionAcknowledgementResult.fromJson,
+              _taskFollowUpOptions(options),
+            );
+          }
+          break;
+
+        case TaskStatus.working:
+          break;
+      }
+
+      await _waitForTaskExtensionPoll(currentTask, options?.signal);
+      currentTask = await _getTaskExtension(currentTask.taskId, options);
+    }
+  }
+
+  Future<TaskExtensionTask> _getTaskExtension(
+    String taskId,
+    RequestOptions? options,
+  ) async {
+    final result = await request<GetTaskExtensionResult>(
+      JsonRpcGetTaskRequest(
+        id: -1,
+        getParams: GetTaskRequest(taskId: taskId),
+      ),
+      GetTaskExtensionResult.fromJson,
+      _taskFollowUpOptions(options),
+    );
+    return result.task;
+  }
+
+  RequestOptions? _taskFollowUpOptions(RequestOptions? options) {
+    if (options == null) {
+      return null;
+    }
+    return RequestOptions(
+      signal: options.signal,
+      timeout: options.timeout,
+      resetTimeoutOnProgress: options.resetTimeoutOnProgress,
+      maxTotalTimeout: options.maxTotalTimeout,
+      timeoutEnabled: options.timeoutEnabled,
+    );
+  }
+
+  Future<void> _waitForTaskExtensionPoll(
+    TaskExtensionTask task,
+    AbortSignal? signal,
+  ) async {
+    signal?.throwIfAborted();
+
+    final interval = task.pollIntervalMs ?? 1000;
+    final completer = Completer<void>();
+    final timer = Timer(Duration(milliseconds: interval), () {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    StreamSubscription? abortSubscription;
+    if (signal != null) {
+      abortSubscription = signal.onAbort.listen((_) {
+        timer.cancel();
+        if (!completer.isCompleted) {
+          completer.completeError(AbortError(signal.reason));
+        }
+      });
+    }
+
+    try {
+      await completer.future;
+    } finally {
+      timer.cancel();
+      await abortSubscription?.cancel();
+    }
   }
 
   @override
@@ -745,6 +972,7 @@ class McpClient extends Protocol {
     }
     if (resultType == resultTypeTask) {
       return request.method == Method.toolsCall &&
+          _capabilities.supportsTasksExtension &&
           (_serverCapabilities?.supportsTasksExtension ?? false);
     }
     return super.isResultTypeAllowedForRequest(request, resultType);
@@ -1160,20 +1388,13 @@ class McpClient extends Protocol {
       );
     }
 
-    final result = await _requestResolvingInputRequired<CallToolResult>(
-      Method.toolsCall,
-      (inputResponses, requestState, isRetry) => JsonRpcCallToolRequest(
-        id: -1,
-        params: CallToolRequest(
-          name: params.name,
-          arguments: params.arguments,
-          inputResponses: isRetry ? inputResponses : params.inputResponses,
-          requestState: isRetry ? requestState : params.requestState,
-        ).toJson(),
-      ),
-      CallToolResult.fromJson,
-      options,
-    );
+    final taskOrToolResult = await _requestResolvingToolCall(params, options);
+    final result = taskOrToolResult is CreateTaskExtensionResult
+        ? await _resolveTaskExtensionToolResult(
+            taskOrToolResult.task,
+            options,
+          )
+        : taskOrToolResult as CallToolResult;
 
     final outputSchema = _cachedToolOutputSchemas[params.name];
     if (outputSchema != null && !result.isError) {
