@@ -667,6 +667,39 @@ void main() {
       }
     });
 
+    test('Root wire fields reject malformed values', () {
+      for (final parse in <Object Function()>[
+        () => Root.fromJson({'uri': 'file:///repo', 'name': 1}),
+        () => ListRootsResult.fromJson({
+              'roots': [1],
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.rootsList,
+              'params': 'bad',
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.rootsList,
+              'params': null,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsRootsListChanged,
+              'params': 'bad',
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsRootsListChanged,
+              'params': null,
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+
     test('Result metadata fields reject non-JSON Dart maps', () {
       expect(
         () => Root.fromJson({

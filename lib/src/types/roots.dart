@@ -41,7 +41,7 @@ class Root {
   factory Root.fromJson(Map<String, dynamic> json) {
     return Root(
       uri: _readRootUri(json['uri']),
-      name: json['name'] as String?,
+      name: readOptionalString(json['name'], 'Root.name'),
       meta: readOptionalJsonObject(json['_meta'], 'Root._meta'),
     );
   }
@@ -62,6 +62,7 @@ class JsonRpcListRootsRequest extends JsonRpcRequest {
       : super(method: Method.rootsList);
 
   factory JsonRpcListRootsRequest.fromJson(Map<String, dynamic> json) {
+    _readOptionalParamsObject(json, 'JsonRpcListRootsRequest.params');
     return JsonRpcListRootsRequest(
       id: parseRequestId(json['id']),
       meta: extractRequestMeta(json),
@@ -87,8 +88,12 @@ class ListRootsResult implements BaseResultData {
       throw const FormatException('ListRootsResult.roots is required');
     }
     return ListRootsResult(
-      roots:
-          roots.map((r) => Root.fromJson(r as Map<String, dynamic>)).toList(),
+      roots: [
+        for (var i = 0; i < roots.length; i++)
+          Root.fromJson(
+            readJsonObject(roots[i], 'ListRootsResult.roots[$i]'),
+          ),
+      ],
       meta: meta,
     );
   }
@@ -108,6 +113,18 @@ class JsonRpcRootsListChangedNotification extends JsonRpcNotification {
 
   factory JsonRpcRootsListChangedNotification.fromJson(
     Map<String, dynamic> json,
-  ) =>
-      JsonRpcRootsListChangedNotification(meta: extractRequestMeta(json));
+  ) {
+    _readOptionalParamsObject(
+      json,
+      'JsonRpcRootsListChangedNotification.params',
+    );
+    return JsonRpcRootsListChangedNotification(meta: extractRequestMeta(json));
+  }
+}
+
+void _readOptionalParamsObject(Map<String, dynamic> json, String field) {
+  if (!json.containsKey('params')) {
+    return;
+  }
+  readJsonObject(json['params'], field);
 }
