@@ -21,6 +21,46 @@ Map<String, dynamic> _asJsonObject(
   return map;
 }
 
+String _readRequiredString(Object? value, String field) {
+  if (value is String) {
+    return value;
+  }
+  throw FormatException('$field must be a string');
+}
+
+String? _readOptionalPresentString(
+  Map<String, dynamic> json,
+  String key,
+  String field,
+) {
+  if (!json.containsKey(key)) {
+    return null;
+  }
+  return _readRequiredString(json[key], field);
+}
+
+List<String>? _readOptionalPresentStringList(
+  Map<String, dynamic> json,
+  String key,
+  String field,
+) {
+  if (!json.containsKey(key)) {
+    return null;
+  }
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('$field must be a list of strings');
+  }
+
+  return [
+    for (final item in value)
+      if (item is String)
+        item
+      else
+        throw FormatException('$field items must be strings'),
+  ];
+}
+
 /// Allowed audience values for content/resource annotations.
 enum AnnotationAudience { user, assistant }
 
@@ -211,17 +251,28 @@ class McpIcon {
   });
 
   factory McpIcon.fromJson(Map<String, dynamic> json) {
-    final themeString = json['theme'] as String?;
+    final themeString = _readOptionalPresentString(
+      json,
+      'theme',
+      'McpIcon.theme',
+    );
     final iconTheme = switch (themeString) {
       'light' => IconTheme.light,
       'dark' => IconTheme.dark,
-      _ => null,
+      null => null,
+      _ => throw const FormatException(
+          'McpIcon.theme must be either "light" or "dark"',
+        ),
     };
 
     return McpIcon(
-      src: json['src'] as String,
-      mimeType: json['mimeType'] as String?,
-      sizes: (json['sizes'] as List<dynamic>?)?.cast<String>(),
+      src: _readRequiredString(json['src'], 'McpIcon.src'),
+      mimeType: _readOptionalPresentString(
+        json,
+        'mimeType',
+        'McpIcon.mimeType',
+      ),
+      sizes: _readOptionalPresentStringList(json, 'sizes', 'McpIcon.sizes'),
       theme: iconTheme,
     );
   }

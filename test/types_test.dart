@@ -511,6 +511,64 @@ void main() {
       expect(deserialized.theme, equals('dark'));
     });
 
+    test('McpIcon parses stable wire fields', () {
+      final icon = McpIcon.fromJson({
+        'src': 'https://example.com/icon.png',
+        'mimeType': 'image/png',
+        'sizes': ['48x48', 'any'],
+        'theme': 'dark',
+      });
+
+      expect(icon.src, equals('https://example.com/icon.png'));
+      expect(icon.mimeType, equals('image/png'));
+      expect(icon.sizes, equals(['48x48', 'any']));
+      expect(icon.theme, equals(IconTheme.dark));
+      expect(icon.toJson(), {
+        'src': 'https://example.com/icon.png',
+        'mimeType': 'image/png',
+        'sizes': ['48x48', 'any'],
+        'theme': 'dark',
+      });
+    });
+
+    test('McpIcon rejects malformed stable wire fields', () {
+      void expectInvalid(
+        Map<String, dynamic> json,
+      ) {
+        expect(() => McpIcon.fromJson(json), throwsA(isA<FormatException>()));
+      }
+
+      expectInvalid({});
+      expectInvalid({'src': 1});
+      expectInvalid({'src': 'https://example.com/icon.png', 'mimeType': null});
+      expectInvalid({'src': 'https://example.com/icon.png', 'mimeType': 1});
+      expectInvalid({'src': 'https://example.com/icon.png', 'sizes': null});
+      expectInvalid({'src': 'https://example.com/icon.png', 'sizes': '48x48'});
+      expectInvalid({
+        'src': 'https://example.com/icon.png',
+        'sizes': ['48x48', 1],
+      });
+      expectInvalid({'src': 'https://example.com/icon.png', 'theme': null});
+      expectInvalid({'src': 'https://example.com/icon.png', 'theme': 1});
+      expectInvalid({'src': 'https://example.com/icon.png', 'theme': 'sepia'});
+    });
+
+    test('Implementation icon parsing rejects invalid themes', () {
+      expect(
+        () => Implementation.fromJson({
+          'name': 'test-client',
+          'version': '1.0.0',
+          'icons': [
+            {
+              'src': 'https://example.com/icon.png',
+              'theme': 'sepia',
+            },
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('ImageContent supports annotations and meta', () {
       final content = const ImageContent(
         data: 'base64data',
