@@ -2730,6 +2730,18 @@ void main() {
         contains('no matching request _meta protocol version'),
       );
 
+      final topLevelMetaOnly = const JsonRpcListToolsRequest(id: 20).toJson()
+        ..['_meta'] = _statelessMeta();
+      body = await postJson(
+        topLevelMetaOnly,
+        headers: {
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+      expect(body['id'], 20);
+      expect(body['error']['message'], contains('params._meta'));
+
       body = await postJson(
         JsonRpcListToolsRequest(id: 5, meta: _statelessMeta()).toJson(),
         headers: {

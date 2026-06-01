@@ -439,6 +439,18 @@ class StreamableHTTPServerTransport
     return null;
   }
 
+  String? _nestedMetadataProtocolVersion(Map<String, dynamic> messageJson) {
+    final params = messageJson['params'];
+    if (params is Map) {
+      final meta = params['_meta'];
+      if (meta is Map) {
+        final version = meta[McpMetaKey.protocolVersion];
+        return version is String ? version : null;
+      }
+    }
+    return null;
+  }
+
   bool _usesStatelessHttpValidation(
     HttpRequest req,
     List<JsonRpcMessage> messages,
@@ -756,6 +768,7 @@ class StreamableHTTPServerTransport
   Future<bool> _validateStatelessHttpHeaders(
     HttpRequest req,
     List<JsonRpcMessage> messages,
+    List<Map<String, dynamic>> messageJsons,
   ) async {
     if (!_usesStatelessHttpValidation(req, messages)) {
       return true;
@@ -773,6 +786,7 @@ class StreamableHTTPServerTransport
     }
 
     final message = messages.single;
+    final messageJson = messageJsons.single;
     final protocolHeader = req.headers.value('mcp-protocol-version')?.trim();
     if (protocolHeader == null || protocolHeader.isEmpty) {
       await _writeHeaderMismatchResponse(
@@ -791,12 +805,12 @@ class StreamableHTTPServerTransport
       return false;
     }
 
-    final metadataVersion = _metadataProtocolVersion(message);
+    final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
     if (metadataVersion == null) {
       await _writeHeaderMismatchResponse(
         req.response,
         message,
-        'MCP-Protocol-Version header has no matching request _meta protocol version',
+        'MCP-Protocol-Version header has no matching request _meta protocol version in params._meta',
       );
       return false;
     }
@@ -1336,6 +1350,7 @@ class StreamableHTTPServerTransport
       }
 
       final List<JsonRpcMessage> messages = [];
+      final List<Map<String, dynamic>> messageJsons = [];
       if (rawMessages.isEmpty) {
         await _writeJsonRpcErrorResponse(
           req.response,
@@ -1362,6 +1377,7 @@ class StreamableHTTPServerTransport
           final messageJson = rawItem is Map<String, dynamic>
               ? rawItem
               : rawItem.cast<String, dynamic>();
+          messageJsons.add(messageJson);
           messages.add(JsonRpcMessage.fromJson(messageJson));
         } catch (e) {
           await _writeJsonRpcErrorResponse(
@@ -1376,7 +1392,7 @@ class StreamableHTTPServerTransport
         }
       }
 
-      if (!await _validateStatelessHttpHeaders(req, messages)) {
+      if (!await _validateStatelessHttpHeaders(req, messages, messageJsons)) {
         return;
       }
 
