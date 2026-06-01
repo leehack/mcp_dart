@@ -76,7 +76,7 @@ void main() {
         'mimeType': 'text/plain',
         'icon': {
           'type': 'image',
-          'data': 'base64data',
+          'data': 'YmFzZTY0ZGF0YQ==',
           'mimeType': 'image/png',
         },
         'annotations': {
@@ -98,7 +98,7 @@ void main() {
       expect(resource.description, equals('A test file resource'));
       expect(resource.mimeType, equals('text/plain'));
       expect(resource.icon, isNotNull);
-      expect(resource.icon!.data, equals('base64data'));
+      expect(resource.icon!.data, equals('YmFzZTY0ZGF0YQ=='));
       expect(resource.icons, isNotNull);
       expect(
         resource.icons!.single.src,
@@ -225,7 +225,7 @@ void main() {
         'mimeType': 'application/json',
         'icon': {
           'type': 'image',
-          'data': 'icondata',
+          'data': 'aWNvbmRhdGE=',
           'mimeType': 'image/svg+xml',
         },
         'annotations': {

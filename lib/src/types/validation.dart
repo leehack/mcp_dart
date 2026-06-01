@@ -1,4 +1,10 @@
+import 'dart:convert';
+
 import '../shared/uri_template.dart';
+
+final _base64Pattern = RegExp(
+  r'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$',
+);
 
 String readRequiredString(Object? value, String field) {
   if (value is String) {
@@ -46,6 +52,36 @@ void validateUriTemplateString(String value, String field) {
         field,
         'must be a URI template: '
         '${error.message}');
+  }
+}
+
+bool isBase64String(String value) {
+  if (!_base64Pattern.hasMatch(value)) {
+    return false;
+  }
+  try {
+    base64.decode(value);
+    return true;
+  } on FormatException {
+    return false;
+  }
+}
+
+String readRequiredBase64String(Object? value, String field) {
+  final result = readRequiredString(value, field);
+  if (!isBase64String(result)) {
+    throw FormatException('$field must be a base64-encoded string');
+  }
+  return result;
+}
+
+void validateBase64String(String value, String field) {
+  if (!isBase64String(value)) {
+    throw ArgumentError.value(
+      value,
+      field,
+      'must be a base64-encoded string',
+    );
   }
 }
 

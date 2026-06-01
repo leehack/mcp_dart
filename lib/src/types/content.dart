@@ -51,6 +51,11 @@ String _absoluteUriForJson(String value, String field) {
   return value;
 }
 
+String _base64ForJson(String value, String field) {
+  validateBase64String(value, field);
+  return value;
+}
+
 String? _readOptionalPresentString(
   Map<String, dynamic> json,
   String key,
@@ -186,7 +191,10 @@ sealed class ResourceContents {
       return BlobResourceContents(
         uri: uri,
         mimeType: mimeType,
-        blob: json['blob'] as String,
+        blob: readRequiredBase64String(
+          json['blob'],
+          'BlobResourceContents.blob',
+        ),
         meta: meta,
         extra: passthrough,
       );
@@ -205,7 +213,9 @@ sealed class ResourceContents {
         if (mimeType != null) 'mimeType': mimeType,
         ...switch (this) {
           final TextResourceContents c => {'text': c.text},
-          final BlobResourceContents c => {'blob': c.blob},
+          final BlobResourceContents c => {
+              'blob': _base64ForJson(c.blob, 'BlobResourceContents.blob'),
+            },
           UnknownResourceContents _ => {},
         },
         if (meta != null)
@@ -346,14 +356,14 @@ sealed class Content {
                 '_meta': readJsonObject(c.meta, 'TextContent._meta'),
             },
           final ImageContent c => {
-              'data': c.data,
+              'data': _base64ForJson(c.data, 'ImageContent.data'),
               'mimeType': c.mimeType,
               if (c.annotations != null) 'annotations': c.annotations!.toJson(),
               if (c.meta != null)
                 '_meta': readJsonObject(c.meta, 'ImageContent._meta'),
             },
           final AudioContent c => {
-              'data': c.data,
+              'data': _base64ForJson(c.data, 'AudioContent.data'),
               'mimeType': c.mimeType,
               if (c.annotations != null) 'annotations': c.annotations!.toJson(),
               if (c.meta != null)
@@ -448,7 +458,7 @@ class ImageContent extends Content {
 
   factory ImageContent.fromJson(Map<String, dynamic> json) {
     return ImageContent(
-      data: json['data'] as String,
+      data: readRequiredBase64String(json['data'], 'ImageContent.data'),
       mimeType: json['mimeType'] as String,
       theme: json['theme'] as String?,
       annotations: json['annotations'] == null
@@ -483,7 +493,7 @@ class AudioContent extends Content {
 
   factory AudioContent.fromJson(Map<String, dynamic> json) {
     return AudioContent(
-      data: json['data'] as String,
+      data: readRequiredBase64String(json['data'], 'AudioContent.data'),
       mimeType: json['mimeType'] as String,
       annotations: json['annotations'] == null
           ? null

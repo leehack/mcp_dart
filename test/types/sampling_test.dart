@@ -116,67 +116,109 @@ void main() {
 
     group('SamplingImageContent', () {
       test('constructs correctly', () {
+        const imageData = 'YmFzZTY0ZGF0YQ==';
         const content =
-            SamplingImageContent(data: 'base64data', mimeType: 'image/png');
-        expect(content.data, equals('base64data'));
+            SamplingImageContent(data: imageData, mimeType: 'image/png');
+        expect(content.data, equals(imageData));
         expect(content.mimeType, equals('image/png'));
       });
 
       test('toJson serializes correctly', () {
+        const imageData = 'aW1nZGF0YQ==';
         const content =
-            SamplingImageContent(data: 'imgdata', mimeType: 'image/jpeg');
+            SamplingImageContent(data: imageData, mimeType: 'image/jpeg');
         final json = content.toJson();
         expect(json['type'], equals('image'));
-        expect(json['data'], equals('imgdata'));
+        expect(json['data'], equals(imageData));
         expect(json['mimeType'], equals('image/jpeg'));
       });
 
       test('fromJson parses correctly', () {
+        const imageData = 'ZW5jb2RlZA==';
         final json = {
           'type': 'image',
-          'data': 'encoded',
+          'data': imageData,
           'mimeType': 'image/gif',
         };
         final content = SamplingContent.fromJson(json);
         expect(content, isA<SamplingImageContent>());
         final img = content as SamplingImageContent;
-        expect(img.data, equals('encoded'));
+        expect(img.data, equals(imageData));
         expect(img.mimeType, equals('image/gif'));
+      });
+
+      test('validates base64 byte data', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'image',
+            'data': 'not base64!',
+            'mimeType': 'image/png',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingImageContent(
+            data: 'not base64!',
+            mimeType: 'image/png',
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
       });
     });
 
     group('SamplingAudioContent', () {
       test('constructs correctly', () {
+        const audioData = 'YmFzZTY0YXVkaW8=';
         const content = SamplingAudioContent(
-          data: 'base64audio',
+          data: audioData,
           mimeType: 'audio/wav',
         );
-        expect(content.data, equals('base64audio'));
+        expect(content.data, equals(audioData));
         expect(content.mimeType, equals('audio/wav'));
       });
 
       test('toJson serializes correctly', () {
+        const audioData = 'YXVkaW8tZGF0YQ==';
         const content = SamplingAudioContent(
-          data: 'audio-data',
+          data: audioData,
           mimeType: 'audio/mpeg',
         );
         final json = content.toJson();
         expect(json['type'], equals('audio'));
-        expect(json['data'], equals('audio-data'));
+        expect(json['data'], equals(audioData));
         expect(json['mimeType'], equals('audio/mpeg'));
       });
 
       test('fromJson parses correctly', () {
+        const audioData = 'ZW5jb2RlZC1hdWRpbw==';
         final json = {
           'type': 'audio',
-          'data': 'encoded-audio',
+          'data': audioData,
           'mimeType': 'audio/ogg',
         };
         final content = SamplingContent.fromJson(json);
         expect(content, isA<SamplingAudioContent>());
         final audio = content as SamplingAudioContent;
-        expect(audio.data, equals('encoded-audio'));
+        expect(audio.data, equals(audioData));
         expect(audio.mimeType, equals('audio/ogg'));
+      });
+
+      test('validates base64 byte data', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'audio',
+            'data': 'not base64!',
+            'mimeType': 'audio/wav',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingAudioContent(
+            data: 'not base64!',
+            mimeType: 'audio/wav',
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
       });
     });
 

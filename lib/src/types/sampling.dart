@@ -25,6 +25,11 @@ Map<String, dynamic> _asJsonObject(
   return map;
 }
 
+String _base64ForJson(String value, String field) {
+  validateBase64String(value, field);
+  return value;
+}
+
 Object _parseSamplingMessageContent(dynamic value) {
   if (value is List) {
     return value
@@ -295,7 +300,7 @@ sealed class SamplingContent {
                 '_meta': readJsonObject(c.meta, 'SamplingTextContent._meta'),
             },
           final SamplingImageContent c => {
-              'data': c.data,
+              'data': _base64ForJson(c.data, 'SamplingImageContent.data'),
               'mimeType': c.mimeType,
               if (c.annotations != null)
                 'annotations': readJsonObject(
@@ -306,7 +311,7 @@ sealed class SamplingContent {
                 '_meta': readJsonObject(c.meta, 'SamplingImageContent._meta'),
             },
           final SamplingAudioContent c => {
-              'data': c.data,
+              'data': _base64ForJson(c.data, 'SamplingAudioContent.data'),
               'mimeType': c.mimeType,
               if (c.annotations != null)
                 'annotations': readJsonObject(
@@ -396,7 +401,10 @@ class SamplingImageContent extends SamplingContent {
 
   factory SamplingImageContent.fromJson(Map<String, dynamic> json) =>
       SamplingImageContent(
-        data: json['data'] as String,
+        data: readRequiredBase64String(
+          json['data'],
+          'SamplingImageContent.data',
+        ),
         mimeType: json['mimeType'] as String,
         annotations: _asJsonObjectOrNull(
           json['annotations'],
@@ -429,7 +437,10 @@ class SamplingAudioContent extends SamplingContent {
 
   factory SamplingAudioContent.fromJson(Map<String, dynamic> json) =>
       SamplingAudioContent(
-        data: json['data'] as String,
+        data: readRequiredBase64String(
+          json['data'],
+          'SamplingAudioContent.data',
+        ),
         mimeType: json['mimeType'] as String,
         annotations: _asJsonObjectOrNull(
           json['annotations'],

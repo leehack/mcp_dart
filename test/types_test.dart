@@ -482,21 +482,22 @@ void main() {
     });
 
     test('ImageContent serialization and deserialization', () {
+      const imageData = 'YmFzZTY0ZGF0YQ==';
       final content =
-          const ImageContent(data: 'base64data', mimeType: 'image/png');
+          const ImageContent(data: imageData, mimeType: 'image/png');
       final json = content.toJson();
       expect(json['type'], equals('image'));
-      expect(json['data'], equals('base64data'));
+      expect(json['data'], equals(imageData));
       expect(json['mimeType'], equals('image/png'));
 
       final deserialized = ImageContent.fromJson(json);
-      expect(deserialized.data, equals('base64data'));
+      expect(deserialized.data, equals(imageData));
       expect(deserialized.mimeType, equals('image/png'));
     });
 
     test('ImageContent parses legacy theme without serializing it', () {
       final content = const ImageContent(
-        data: 'base64data',
+        data: 'YmFzZTY0ZGF0YQ==',
         mimeType: 'image/png',
         theme: 'dark',
       );
@@ -509,6 +510,32 @@ void main() {
         'theme': 'dark',
       });
       expect(deserialized.theme, equals('dark'));
+    });
+
+    test('ImageContent validates base64 byte data', () {
+      expect(
+        () => ImageContent.fromJson({
+          'type': 'image',
+          'data': 'not base64!',
+          'mimeType': 'image/png',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ImageContent.fromJson({
+          'type': 'image',
+          'data': 'a-b_',
+          'mimeType': 'image/png',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ImageContent(
+          data: 'not base64!',
+          mimeType: 'image/png',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('McpIcon parses stable wire fields', () {
@@ -684,7 +711,7 @@ void main() {
 
     test('ImageContent supports annotations and meta', () {
       final content = const ImageContent(
-        data: 'base64data',
+        data: 'YmFzZTY0ZGF0YQ==',
         mimeType: 'image/png',
         annotations: Annotations(
           audience: [AnnotationAudience.user],
@@ -704,21 +731,22 @@ void main() {
     });
 
     test('AudioContent serialization and deserialization', () {
+      const audioData = 'YmFzZTY0ZGF0YQ==';
       final content =
-          const AudioContent(data: 'base64data', mimeType: 'audio/wav');
+          const AudioContent(data: audioData, mimeType: 'audio/wav');
       final json = content.toJson();
       expect(json['type'], equals('audio'));
-      expect(json['data'], equals('base64data'));
+      expect(json['data'], equals(audioData));
       expect(json['mimeType'], equals('audio/wav'));
 
       final deserialized = AudioContent.fromJson(json);
-      expect(deserialized.data, equals('base64data'));
+      expect(deserialized.data, equals(audioData));
       expect(deserialized.mimeType, equals('audio/wav'));
     });
 
     test('AudioContent supports annotations and meta', () {
       final content = const AudioContent(
-        data: 'base64data',
+        data: 'YmFzZTY0ZGF0YQ==',
         mimeType: 'audio/wav',
         annotations: Annotations(priority: 0.3),
         meta: {
@@ -733,6 +761,24 @@ void main() {
       final deserialized = AudioContent.fromJson(json);
       expect(deserialized.annotations?.priority, equals(0.3));
       expect(deserialized.meta?['traceId'], equals('audio-1'));
+    });
+
+    test('AudioContent validates base64 byte data', () {
+      expect(
+        () => AudioContent.fromJson({
+          'type': 'audio',
+          'data': 'not base64!',
+          'mimeType': 'audio/wav',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const AudioContent(
+          data: 'not base64!',
+          mimeType: 'audio/wav',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('UnknownContent serialization and deserialization', () {
@@ -910,21 +956,39 @@ void main() {
     });
 
     test('BlobResourceContents serialization and deserialization', () {
+      const blobData = 'YmFzZTY0ZGF0YQ==';
       final contents = const BlobResourceContents(
         uri: 'file://example.bin',
-        blob: 'base64data',
+        blob: blobData,
         mimeType: 'application/octet-stream',
       );
 
       final json = contents.toJson();
       expect(json['uri'], equals('file://example.bin'));
-      expect(json['blob'], equals('base64data'));
+      expect(json['blob'], equals(blobData));
       expect(json['mimeType'], equals('application/octet-stream'));
 
       final deserialized =
           ResourceContents.fromJson(json) as BlobResourceContents;
       expect(deserialized.uri, equals('file://example.bin'));
-      expect(deserialized.blob, equals('base64data'));
+      expect(deserialized.blob, equals(blobData));
+    });
+
+    test('BlobResourceContents validates base64 byte data', () {
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file://example.bin',
+          'blob': 'not base64!',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const BlobResourceContents(
+          uri: 'file://example.bin',
+          blob: 'not base64!',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('ResourceContents rejects non-JSON metadata and passthrough maps', () {

@@ -56,7 +56,8 @@ void main() {
     });
 
     test('Icon Field Support', () {
-      final icon = const ImageContent(data: 'base64', mimeType: 'image/png');
+      const iconData = 'YmFzZTY0';
+      final icon = const ImageContent(data: iconData, mimeType: 'image/png');
       final icons = [
         const McpIcon(
           src: 'https://example.com/icon.png',
@@ -71,12 +72,12 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(tool.icon?.data, 'base64');
+      expect(tool.icon?.data, iconData);
       expect(tool.toJson().containsKey('icon'), isFalse);
       expect((tool.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Tool.fromJson({...tool.toJson(), 'icon': icon.toJson()}).icon?.data,
-        'base64',
+        iconData,
       );
 
       final resource = Resource(
@@ -85,14 +86,14 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(resource.icon?.data, 'base64');
+      expect(resource.icon?.data, iconData);
       expect(resource.toJson().containsKey('icon'), isFalse);
       expect((resource.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Resource.fromJson(
           {...resource.toJson(), 'icon': icon.toJson()},
         ).icon?.data,
-        'base64',
+        iconData,
       );
 
       final prompt = Prompt(
@@ -100,12 +101,12 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(prompt.icon?.data, 'base64');
+      expect(prompt.icon?.data, iconData);
       expect(prompt.toJson().containsKey('icon'), isFalse);
       expect((prompt.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Prompt.fromJson({...prompt.toJson(), 'icon': icon.toJson()}).icon?.data,
-        'base64',
+        iconData,
       );
 
       final template = ResourceTemplate(
@@ -114,14 +115,14 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(template.icon?.data, 'base64');
+      expect(template.icon?.data, iconData);
       expect(template.toJson().containsKey('icon'), isFalse);
       expect((template.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         ResourceTemplate.fromJson(
           {...template.toJson(), 'icon': icon.toJson()},
         ).icon?.data,
-        'base64',
+        iconData,
       );
     });
 
@@ -347,7 +348,7 @@ void main() {
     test('McpServer Metadata Logic', () {
       final server =
           McpServer(const Implementation(name: 'test', version: '1.0'));
-      final icon = const ImageContent(data: 'data', mimeType: 'image/png');
+      final icon = const ImageContent(data: 'ZGF0YQ==', mimeType: 'image/png');
       // We can rely on the fact that we updated the code to pass it through.
 
       // Let's rely on the previous unit tests for `Tool` serialization, and here just ensure `McpServer` methods don't crash.
