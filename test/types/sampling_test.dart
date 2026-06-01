@@ -1,5 +1,6 @@
 import 'package:mcp_dart/src/types/content.dart';
 import 'package:mcp_dart/src/types/sampling.dart';
+import 'package:mcp_dart/src/types/validation.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -112,6 +113,34 @@ void main() {
         expect(content, isA<SamplingTextContent>());
         expect((content as SamplingTextContent).text, equals('Parsed text'));
       });
+
+      test('preserves annotations and metadata JSON objects', () {
+        const content = SamplingTextContent(
+          text: 'With metadata',
+          annotations: {
+            'audience': ['user'],
+          },
+          meta: {'trace': true},
+        );
+
+        final json = content.toJson();
+        expect(
+          json['annotations'],
+          equals({
+            'audience': ['user'],
+          }),
+        );
+        expect(json['_meta'], equals({'trace': true}));
+
+        final parsed = SamplingContent.fromJson(json) as SamplingTextContent;
+        expect(
+          parsed.annotations,
+          equals({
+            'audience': ['user'],
+          }),
+        );
+        expect(parsed.meta, equals({'trace': true}));
+      });
     });
 
     group('SamplingImageContent', () {
@@ -142,6 +171,23 @@ void main() {
         final img = content as SamplingImageContent;
         expect(img.data, equals('encoded'));
         expect(img.mimeType, equals('image/gif'));
+      });
+
+      test('preserves annotations and metadata JSON objects', () {
+        const content = SamplingImageContent(
+          data: 'imgdata',
+          mimeType: 'image/png',
+          annotations: {'priority': 1},
+          meta: {'source': 'camera'},
+        );
+
+        final json = content.toJson();
+        expect(json['annotations'], equals({'priority': 1}));
+        expect(json['_meta'], equals({'source': 'camera'}));
+
+        final parsed = SamplingContent.fromJson(json) as SamplingImageContent;
+        expect(parsed.annotations, equals({'priority': 1}));
+        expect(parsed.meta, equals({'source': 'camera'}));
       });
     });
 
@@ -177,6 +223,23 @@ void main() {
         final audio = content as SamplingAudioContent;
         expect(audio.data, equals('encoded-audio'));
         expect(audio.mimeType, equals('audio/ogg'));
+      });
+
+      test('preserves annotations and metadata JSON objects', () {
+        const content = SamplingAudioContent(
+          data: 'audio-data',
+          mimeType: 'audio/wav',
+          annotations: {'language': 'en'},
+          meta: {'channel': 'left'},
+        );
+
+        final json = content.toJson();
+        expect(json['annotations'], equals({'language': 'en'}));
+        expect(json['_meta'], equals({'channel': 'left'}));
+
+        final parsed = SamplingContent.fromJson(json) as SamplingAudioContent;
+        expect(parsed.annotations, equals({'language': 'en'}));
+        expect(parsed.meta, equals({'channel': 'left'}));
       });
     });
 
@@ -218,7 +281,31 @@ void main() {
         expect(tool.id, equals('tu1'));
       });
 
+      test('preserves metadata JSON objects', () {
+        const content = SamplingToolUseContent(
+          id: 'tu1',
+          name: 'fetch',
+          input: {'url': 'http://test.com'},
+          meta: {'origin': 'model'},
+        );
+
+        final json = content.toJson();
+        expect(json['_meta'], equals({'origin': 'model'}));
+
+        final parsed = SamplingContent.fromJson(json) as SamplingToolUseContent;
+        expect(parsed.meta, equals({'origin': 'model'}));
+      });
+
       test('rejects non-JSON input objects', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_use',
+            'id': 'tu1',
+            'name': 'fetch',
+            'input': 'not an object',
+          }),
+          throwsA(isA<FormatException>()),
+        );
         expect(
           () => SamplingContent.fromJson({
             'type': 'tool_use',
@@ -340,6 +427,23 @@ void main() {
         expect(nullContent.hasStructuredContent, isTrue);
         expect(nullContent.structuredContent, isNull);
       });
+
+      test('preserves metadata JSON objects', () {
+        const content = SamplingToolResultContent(
+          toolUseId: 'tr1',
+          content: [
+            TextContent(text: 'result data'),
+          ],
+          meta: {'origin': 'tool'},
+        );
+
+        final json = content.toJson();
+        expect(json['_meta'], equals({'origin': 'tool'}));
+
+        final parsed =
+            SamplingContent.fromJson(json) as SamplingToolResultContent;
+        expect(parsed.meta, equals({'origin': 'tool'}));
+      });
     });
   });
 
@@ -368,10 +472,12 @@ void main() {
       final json = {
         'role': 'user',
         'content': {'type': 'text', 'text': 'Question'},
+        '_meta': {'requestId': 'abc'},
       };
       final msg = SamplingMessage.fromJson(json);
       expect(msg.role, equals(SamplingMessageRole.user));
       expect(msg.content, isA<SamplingTextContent>());
+      expect(msg.meta, equals({'requestId': 'abc'}));
     });
 
     test('supports array content with normalized contentBlocks', () {
@@ -433,6 +539,7 @@ void main() {
         ],
         maxTokens: 500,
         includeContext: IncludeContext.thisServer,
+        metadata: {'provider': 'test'},
         modelPreferences: ModelPreferences(costPriority: 0.5),
         stopSequences: ['STOP'],
         temperature: 0.7,
@@ -440,6 +547,7 @@ void main() {
       final json = params.toJson();
       expect(json['maxTokens'], equals(500));
       expect(json['includeContext'], equals('thisServer'));
+      expect(json['metadata'], equals({'provider': 'test'}));
       expect(json['stopSequences'], contains('STOP'));
       expect(json['temperature'], equals(0.7));
     });
@@ -487,11 +595,13 @@ void main() {
         ],
         'maxTokens': 200,
         'includeContext': 'allServers',
+        'metadata': {'provider': 'test'},
       };
       final params = CreateMessageRequestParams.fromJson(json);
       expect(params.messages, hasLength(1));
       expect(params.maxTokens, equals(200));
       expect(params.includeContext, equals(IncludeContext.allServers));
+      expect(params.metadata, equals({'provider': 'test'}));
     });
 
     test('rejects non-finite temperature values', () {
@@ -602,11 +712,13 @@ void main() {
         'content': {'type': 'text', 'text': 'Message'},
         'model': 'gemini',
         'stopReason': 'stopSequence',
+        '_meta': {'trace': true},
       };
       final result = CreateMessageResult.fromJson(json);
       expect(result.role, equals(SamplingMessageRole.assistant));
       expect(result.model, equals('gemini'));
       expect(result.stopReason, equals(StopReason.stopSequence));
+      expect(result.meta, equals({'trace': true}));
     });
 
     test('handles string stopReason', () {
@@ -717,6 +829,30 @@ void main() {
       expect(SamplingMessageRole.values, hasLength(2));
       expect(SamplingMessageRole.user.name, equals('user'));
       expect(SamplingMessageRole.assistant.name, equals('assistant'));
+    });
+  });
+
+  group('JSON object validation helpers', () {
+    test('accept optional JSON object values', () {
+      expect(readOptionalJsonObject(null, 'field'), isNull);
+      expect(
+        readOptionalJsonObject(
+          {
+            'nested': ['value'],
+          },
+          'field',
+        ),
+        equals({
+          'nested': ['value'],
+        }),
+      );
+    });
+
+    test('reject non-object JSON object values', () {
+      expect(
+        () => readJsonObject('bad', 'field'),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 }
