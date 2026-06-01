@@ -112,6 +112,13 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-malformed-error-object',
+            description:
+                'Rejects JSON-RPC error responses whose error member is malformed.',
+            check: _rejectsMalformedJsonRpcErrorObject,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.preserves-string-response-id',
             description:
                 'Parses and serializes successful responses with string JSON-RPC IDs.',
@@ -758,6 +765,19 @@ Future<void> _rejectsResultErrorJsonRpcResponse() async {
       'error': <String, dynamic>{
         'code': ErrorCode.internalError.value,
         'message': 'Internal error',
+      },
+    }),
+  );
+}
+
+Future<void> _rejectsMalformedJsonRpcErrorObject() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(const <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'error': <String, dynamic>{
+        'code': 'not-a-number',
+        'message': 'Invalid request',
       },
     }),
   );

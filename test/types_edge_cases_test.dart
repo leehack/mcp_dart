@@ -54,6 +54,50 @@ void main() {
       expect(restored.data['nested']['level'], equals(2));
     });
 
+    test('JsonRpcErrorData validates required code and message fields', () {
+      for (final code in [
+        null,
+        false,
+        'not-code',
+        1.5,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
+        expect(
+          () => JsonRpcErrorData.fromJson({
+            'code': code,
+            'message': 'Bad code',
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('code')),
+          ),
+        );
+      }
+
+      for (final message in [null, false, 1, <String, dynamic>{}, <Object>[]]) {
+        expect(
+          () => JsonRpcErrorData.fromJson({
+            'code': ErrorCode.invalidRequest.value,
+            'message': message,
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('message')),
+          ),
+        );
+      }
+    });
+
+    test('JsonRpcErrorData accepts whole-number numeric code values', () {
+      final errorData = JsonRpcErrorData.fromJson({
+        'code': -32600.0,
+        'message': 'Whole-number JSON code',
+      });
+
+      expect(errorData.code, ErrorCode.invalidRequest.value);
+    });
+
     test('JsonRpcErrorData rejects non-JSON data values', () {
       expect(
         () => const JsonRpcErrorData(
@@ -79,6 +123,22 @@ void main() {
         }),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('JsonRpcError rejects malformed error object wire values', () {
+      for (final error in [null, false, 1, 'not-error', <Object>[]]) {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'error': error,
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('error')),
+          ),
+        );
+      }
     });
   });
 

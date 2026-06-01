@@ -210,6 +210,22 @@ String _parseMethod(Object? value) {
   );
 }
 
+int _parseErrorCode(Object? value) {
+  final code = readOptionalInteger(value, 'JsonRpcErrorData.code');
+  if (code == null) {
+    throw const FormatException('JsonRpcErrorData.code is required');
+  }
+  return code;
+}
+
+String _parseErrorMessage(Object? value) {
+  final message = readOptionalString(value, 'JsonRpcErrorData.message');
+  if (message == null) {
+    throw const FormatException('JsonRpcErrorData.message is required');
+  }
+  return message;
+}
+
 RequestId _parseResultResponseId(Object? value) {
   return parseRequestId(value);
 }
@@ -600,8 +616,8 @@ class JsonRpcErrorData {
 
   factory JsonRpcErrorData.fromJson(Map<String, dynamic> json) =>
       JsonRpcErrorData(
-        code: json['code'] as int,
-        message: json['message'] as String,
+        code: _parseErrorCode(json['code']),
+        message: _parseErrorMessage(json['message']),
         data: json.containsKey('data')
             ? readJsonValue(json['data'], 'JsonRpcErrorData.data')
             : null,
@@ -623,7 +639,9 @@ class JsonRpcError extends JsonRpcMessage {
 
   factory JsonRpcError.fromJson(Map<String, dynamic> json) => JsonRpcError(
         id: _parseErrorResponseId(json),
-        error: JsonRpcErrorData.fromJson(json['error'] as Map<String, dynamic>),
+        error: JsonRpcErrorData.fromJson(
+          readJsonObject(json['error'], 'JsonRpcError.error'),
+        ),
       );
 
   @override

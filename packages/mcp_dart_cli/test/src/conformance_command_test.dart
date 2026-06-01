@@ -22,6 +22,7 @@ void main() {
           'jsonrpc.rejects-malformed-message',
           'jsonrpc.rejects-non-string-method',
           'jsonrpc.rejects-result-error-response',
+          'jsonrpc.rejects-malformed-error-object',
           'jsonrpc.preserves-string-response-id',
           'jsonrpc.preserves-numeric-response-id',
           'jsonrpc.preserves-string-progress-token',
