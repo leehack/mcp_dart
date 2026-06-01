@@ -185,7 +185,13 @@ void main() {
           return const EmptyResult();
         },
         (id, params, meta) => JsonRpcCallToolRequest.fromJson(
-          {'id': id, 'params': params, '_meta': meta},
+          {
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': Method.toolsCall,
+            'params': params,
+            '_meta': meta,
+          },
         ),
       );
 

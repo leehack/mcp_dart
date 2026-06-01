@@ -15,6 +15,22 @@ typedef ToolInputSchema = JsonObject;
 /// [JsonSchema] directly when the output schema root is not an object.
 typedef ToolOutputSchema = JsonObject;
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 /// Additional properties describing a Tool to clients.
 ///
 /// NOTE: all properties in ToolAnnotations are **hints**.
@@ -509,8 +525,14 @@ class JsonRpcToolListChangedNotification extends JsonRpcNotification {
 
   factory JsonRpcToolListChangedNotification.fromJson(
     Map<String, dynamic> json,
-  ) =>
-      JsonRpcToolListChangedNotification(meta: extractRequestMeta(json));
+  ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsToolsListChanged,
+      'JsonRpcToolListChangedNotification',
+    );
+    return JsonRpcToolListChangedNotification(meta: extractRequestMeta(json));
+  }
 }
 
 void _validateObjectRootSchema(

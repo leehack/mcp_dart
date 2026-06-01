@@ -583,11 +583,41 @@ void main() {
               'method': Method.toolsList,
               'params': 'bad',
             }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.toolsList,
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsList,
+            }),
         () => JsonRpcCallToolRequest.fromJson({
               'jsonrpc': jsonRpcVersion,
               'id': 1,
               'method': Method.toolsCall,
               'params': 'bad',
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': {'name': 'tool'},
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsGet,
+              'params': {'name': 'tool'},
+            }),
+        () => JsonRpcToolListChangedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsToolsListChanged,
+            }),
+        () => JsonRpcToolListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsPromptsListChanged,
             }),
       ]) {
         expect(parse, throwsA(isA<FormatException>()));

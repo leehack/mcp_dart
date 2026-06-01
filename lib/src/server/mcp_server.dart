@@ -1494,7 +1494,9 @@ class McpServer {
         );
       },
       (id, params, meta) => JsonRpcListToolsRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.toolsList,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -1635,7 +1637,9 @@ class McpServer {
         }
       },
       (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.toolsCall,
         'params': params,
         if (meta != null) '_meta': meta,
       }),

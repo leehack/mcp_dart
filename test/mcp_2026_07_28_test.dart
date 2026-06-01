@@ -1530,11 +1530,41 @@ void main() {
               'method': Method.toolsList,
               'params': 'bad',
             }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.toolsList,
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsList,
+            }),
         () => JsonRpcCallToolRequest.fromJson({
               'jsonrpc': jsonRpcVersion,
               'id': 1,
               'method': Method.toolsCall,
               'params': 'bad',
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': {'name': 'tool'},
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsGet,
+              'params': {'name': 'tool'},
+            }),
+        () => JsonRpcToolListChangedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsToolsListChanged,
+            }),
+        () => JsonRpcToolListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsPromptsListChanged,
             }),
       ]) {
         expect(parse, throwsFormatException);
@@ -1868,7 +1898,9 @@ void main() {
           cacheScope: CacheScope.public,
         ),
         (id, params, meta) => JsonRpcListToolsRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2369,7 +2401,9 @@ void main() {
           ),
         ),
         (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsCall,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2419,7 +2453,9 @@ void main() {
           ),
         ),
         (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsCall,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2455,7 +2491,9 @@ void main() {
         (request, extra) async =>
             const InputRequiredResult(requestState: 'retry-state'),
         (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsCall,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2528,7 +2566,9 @@ void main() {
           );
         },
         (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsCall,
           'params': params,
           if (meta != null) '_meta': meta,
         }),

@@ -336,6 +336,22 @@ Map<String, dynamic>? extractRequestMeta(Map<String, dynamic> json) {
   return paramsMeta ?? topLevelMeta;
 }
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 /// Base class for all JSON-RPC messages (requests, notifications, responses, errors).
 sealed class JsonRpcMessage {
   /// The JSON-RPC version string. Always "2.0".
@@ -1058,6 +1074,7 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
   }
 
   factory JsonRpcListToolsRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.toolsList, 'JsonRpcListToolsRequest');
     return JsonRpcListToolsRequest(
       id: parseRequestId(json['id']),
       params: readOptionalJsonObject(
@@ -1086,6 +1103,7 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
   }) : super(method: Method.toolsCall, params: params);
 
   factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.toolsCall, 'JsonRpcCallToolRequest');
     return JsonRpcCallToolRequest(
       id: parseRequestId(json['id']),
       params: readOptionalJsonObject(
