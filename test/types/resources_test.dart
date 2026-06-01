@@ -75,6 +75,13 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
     });
+
+    test('rejects malformed string wire fields', () {
+      expect(
+        () => ResourceAnnotations.fromJson({'title': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('Resource', () {
@@ -172,6 +179,48 @@ void main() {
           'uri': 'file:///test.txt',
           'name': 'Test File',
           'size': '123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects malformed string and icon wire fields', () {
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'title': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'icon': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'icons': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'icons': ['bad'],
         }),
         throwsA(isA<FormatException>()),
       );
@@ -340,6 +389,40 @@ void main() {
       expect(json['_meta'], isNotNull);
       expect(json['_meta']['ui']['prefersBorder'], isFalse);
     });
+
+    test('fromJson rejects malformed string and icon wire fields', () {
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 'File Template',
+          'description': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 'File Template',
+          'icon': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 'File Template',
+          'icons': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('ListResourcesRequest', () {
@@ -365,6 +448,13 @@ void main() {
       const request = ListResourcesRequest();
       final json = request.toJson();
       expect(json.containsKey('cursor'), isFalse);
+    });
+
+    test('fromJson rejects malformed cursor', () {
+      expect(
+        () => ListResourcesRequest.fromJson({'cursor': 1}),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -406,6 +496,17 @@ void main() {
       expect(request.id, equals(4));
       expect(request.listParams.cursor, isNull);
     });
+
+    test('fromJson rejects non-object params', () {
+      expect(
+        () => JsonRpcListResourcesRequest.fromJson({
+          'id': 5,
+          'method': 'resources/list',
+          'params': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('ListResourcesResult', () {
@@ -443,6 +544,22 @@ void main() {
       expect(result.meta!['customKey'], equals('customValue'));
     });
 
+    test('fromJson rejects malformed resource items and cursor', () {
+      expect(
+        () => ListResourcesResult.fromJson({
+          'resources': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ListResourcesResult.fromJson({
+          'resources': [],
+          'nextCursor': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('toJson serializes correctly', () {
       const result = ListResourcesResult(
         resources: [
@@ -470,6 +587,13 @@ void main() {
       final json = request.toJson();
       expect(json['cursor'], equals('next_tmpl'));
     });
+
+    test('fromJson rejects malformed cursor', () {
+      expect(
+        () => ListResourceTemplatesRequest.fromJson({'cursor': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcListResourceTemplatesRequest', () {
@@ -488,6 +612,17 @@ void main() {
       final request = JsonRpcListResourceTemplatesRequest.fromJson(json);
       expect(request.id, equals(11));
       expect(request.listParams.cursor, equals('tmpl_page'));
+    });
+
+    test('fromJson rejects non-object params', () {
+      expect(
+        () => JsonRpcListResourceTemplatesRequest.fromJson({
+          'id': 12,
+          'method': 'resources/templates/list',
+          'params': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -510,6 +645,22 @@ void main() {
       final json = {'resourceTemplates': <dynamic>[]};
       final result = ListResourceTemplatesResult.fromJson(json);
       expect(result.resourceTemplates, isEmpty);
+    });
+
+    test('fromJson rejects malformed template items and cursor', () {
+      expect(
+        () => ListResourceTemplatesResult.fromJson({
+          'resourceTemplates': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ListResourceTemplatesResult.fromJson({
+          'resourceTemplates': [],
+          'nextCursor': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('toJson serializes correctly', () {
@@ -666,6 +817,26 @@ void main() {
       final roundTripped = (json['contents'] as List).single;
       expect(roundTripped['payload']['kind'], equals('custom'));
       expect(roundTripped['_meta']['ui']['prefersBorder'], isTrue);
+    });
+
+    test('fromJson rejects malformed content items', () {
+      expect(
+        () => ReadResourceResult.fromJson({
+          'contents': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ReadResourceResult.fromJson({
+          'contents': [
+            {
+              'uri': 'file:///content.txt',
+              'text': 1,
+            },
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 

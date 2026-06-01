@@ -1634,6 +1634,49 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        expect(
+          () => Content.fromJson({
+            'type': 1,
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => TextContent.fromJson({
+            'type': 'text',
+            'text': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceContents.fromJson({
+            'uri': 'file:///docs/readme.md',
+            'text': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceLink.fromJson({
+            'type': 'resource_link',
+            'uri': 'file:///docs/readme.md',
+            'name': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Resource.fromJson({
+            'uri': 'file:///docs/readme.md',
+            'name': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceTemplate.fromJson({
+            'uriTemplate': 'file:///{path}',
+            'name': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
 
       test('bare task containers strip task metadata', () {

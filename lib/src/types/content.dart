@@ -22,10 +22,7 @@ Map<String, dynamic> _asJsonObject(
 }
 
 String _readRequiredString(Object? value, String field) {
-  if (value is String) {
-    return value;
-  }
-  throw FormatException('$field must be a string');
+  return readRequiredString(value, field);
 }
 
 bool _isAbsoluteUri(String value) {
@@ -95,6 +92,26 @@ List<String>? _readOptionalPresentStringList(
         item
       else
         throw FormatException('$field items must be strings'),
+  ];
+}
+
+List<McpIcon>? _readOptionalIconList(
+  Map<String, dynamic> json,
+  String key,
+  String field,
+) {
+  if (!json.containsKey(key)) {
+    return null;
+  }
+
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('$field must be a list of objects');
+  }
+
+  return [
+    for (var i = 0; i < value.length; i++)
+      McpIcon.fromJson(readJsonObject(value[i], '$field[$i]')),
   ];
 }
 
@@ -176,7 +193,10 @@ sealed class ResourceContents {
       json['uri'],
       'ResourceContents.uri',
     );
-    final mimeType = json['mimeType'] as String?;
+    final mimeType = readOptionalString(
+      json['mimeType'],
+      'ResourceContents.mimeType',
+    );
     final meta = _asJsonObjectOrNull(
       json['_meta'],
       'ResourceContents._meta',
@@ -198,7 +218,10 @@ sealed class ResourceContents {
       return TextResourceContents(
         uri: uri,
         mimeType: mimeType,
-        text: json['text'] as String,
+        text: readRequiredString(
+          json['text'],
+          'TextResourceContents.text',
+        ),
         meta: meta,
         extra: passthrough,
       );
@@ -351,7 +374,7 @@ sealed class Content {
   });
 
   factory Content.fromJson(Map<String, dynamic> json) {
-    final type = json['type'] as String?;
+    final type = readOptionalString(json['type'], 'Content.type');
     return switch (type) {
       'text' => TextContent.fromJson(json),
       'image' => ImageContent.fromJson(json),
@@ -432,7 +455,7 @@ class TextContent extends Content {
 
   factory TextContent.fromJson(Map<String, dynamic> json) {
     return TextContent(
-      text: json['text'] as String,
+      text: readRequiredString(json['text'], 'TextContent.text'),
       annotations: json['annotations'] == null
           ? null
           : Annotations.fromJson(
@@ -475,8 +498,8 @@ class ImageContent extends Content {
   factory ImageContent.fromJson(Map<String, dynamic> json) {
     return ImageContent(
       data: readRequiredBase64String(json['data'], 'ImageContent.data'),
-      mimeType: json['mimeType'] as String,
-      theme: json['theme'] as String?,
+      mimeType: readRequiredString(json['mimeType'], 'ImageContent.mimeType'),
+      theme: readOptionalString(json['theme'], 'ImageContent.theme'),
       annotations: json['annotations'] == null
           ? null
           : Annotations.fromJson(
@@ -510,7 +533,7 @@ class AudioContent extends Content {
   factory AudioContent.fromJson(Map<String, dynamic> json) {
     return AudioContent(
       data: readRequiredBase64String(json['data'], 'AudioContent.data'),
-      mimeType: json['mimeType'] as String,
+      mimeType: readRequiredString(json['mimeType'], 'AudioContent.mimeType'),
       annotations: json['annotations'] == null
           ? null
           : Annotations.fromJson(
@@ -604,14 +627,15 @@ class ResourceLink extends Content {
   factory ResourceLink.fromJson(Map<String, dynamic> json) {
     return ResourceLink(
       uri: readRequiredAbsoluteUriString(json['uri'], 'ResourceLink.uri'),
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      mimeType: json['mimeType'] as String?,
+      name: readRequiredString(json['name'], 'ResourceLink.name'),
+      title: readOptionalString(json['title'], 'ResourceLink.title'),
+      description: readOptionalString(
+        json['description'],
+        'ResourceLink.description',
+      ),
+      mimeType: readOptionalString(json['mimeType'], 'ResourceLink.mimeType'),
       size: readOptionalInteger(json['size'], 'ResourceLink.size'),
-      icons: (json['icons'] as List<dynamic>?)
-          ?.map((icon) => McpIcon.fromJson(_asJsonObject(icon)))
-          .toList(),
+      icons: _readOptionalIconList(json, 'icons', 'ResourceLink.icons'),
       annotations: readOptionalAnnotationsObject(
         json['annotations'],
         'ResourceLink.annotations',

@@ -2,6 +2,26 @@ import '../types.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
+List<McpIcon>? _readOptionalIconList(
+  Map<String, dynamic> json,
+  String key,
+  String field,
+) {
+  if (!json.containsKey(key)) {
+    return null;
+  }
+
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('$field must be a list of objects');
+  }
+
+  return [
+    for (var i = 0; i < value.length; i++)
+      McpIcon.fromJson(readJsonObject(value[i], '$field[$i]')),
+  ];
+}
+
 /// Additional properties describing a Resource to clients.
 class ResourceAnnotations {
   /// A human-readable title for the resource.
@@ -31,7 +51,7 @@ class ResourceAnnotations {
 
   factory ResourceAnnotations.fromJson(Map<String, dynamic> json) {
     return ResourceAnnotations(
-      title: json['title'] as String?,
+      title: readOptionalString(json['title'], 'ResourceAnnotations.title'),
       audience: readOptionalAnnotationAudience(
         json['audience'],
         'ResourceAnnotations.audience',
@@ -111,16 +131,17 @@ class Resource {
   factory Resource.fromJson(Map<String, dynamic> json) {
     return Resource(
       uri: readRequiredAbsoluteUriString(json['uri'], 'Resource.uri'),
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      mimeType: json['mimeType'] as String?,
+      name: readRequiredString(json['name'], 'Resource.name'),
+      title: readOptionalString(json['title'], 'Resource.title'),
+      description: readOptionalString(
+        json['description'],
+        'Resource.description',
+      ),
+      mimeType: readOptionalString(json['mimeType'], 'Resource.mimeType'),
       icon: json['icon'] != null
-          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          ? ImageContent.fromJson(readJsonObject(json['icon'], 'Resource.icon'))
           : null,
-      icons: (json['icons'] as List<dynamic>?)
-          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      icons: _readOptionalIconList(json, 'icons', 'Resource.icons'),
       size: readOptionalInteger(json['size'], 'Resource.size'),
       annotations: json['annotations'] != null
           ? ResourceAnnotations.fromJson(
@@ -200,16 +221,26 @@ class ResourceTemplate {
         json['uriTemplate'],
         'ResourceTemplate.uriTemplate',
       ),
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      mimeType: json['mimeType'] as String?,
+      name: readRequiredString(json['name'], 'ResourceTemplate.name'),
+      title: readOptionalString(json['title'], 'ResourceTemplate.title'),
+      description: readOptionalString(
+        json['description'],
+        'ResourceTemplate.description',
+      ),
+      mimeType: readOptionalString(
+        json['mimeType'],
+        'ResourceTemplate.mimeType',
+      ),
       icon: json['icon'] != null
-          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          ? ImageContent.fromJson(
+              readJsonObject(json['icon'], 'ResourceTemplate.icon'),
+            )
           : null,
-      icons: (json['icons'] as List<dynamic>?)
-          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      icons: _readOptionalIconList(
+        json,
+        'icons',
+        'ResourceTemplate.icons',
+      ),
       annotations: json['annotations'] != null
           ? ResourceAnnotations.fromJson(
               readJsonObject(
@@ -251,7 +282,10 @@ class ListResourcesRequest {
 
   /// Creates from JSON.
   factory ListResourcesRequest.fromJson(Map<String, dynamic> json) =>
-      ListResourcesRequest(cursor: json['cursor'] as String?);
+      ListResourcesRequest(
+        cursor:
+            readOptionalString(json['cursor'], 'ListResourcesRequest.cursor'),
+      );
 
   /// Converts to JSON.
   Map<String, dynamic> toJson() => {if (cursor != null) 'cursor': cursor};
@@ -272,7 +306,10 @@ class JsonRpcListResourcesRequest extends JsonRpcRequest {
 
   /// Creates from JSON.
   factory JsonRpcListResourcesRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcListResourcesRequest.params',
+    );
     final meta = extractRequestMeta(json);
     return JsonRpcListResourcesRequest(
       id: parseRequestId(json['id']),
@@ -324,9 +361,16 @@ class ListResourcesResult implements CacheableResultData {
     }
     return ListResourcesResult(
       resources: resources
-          .map((e) => Resource.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => Resource.fromJson(
+              readJsonObject(e, 'ListResourcesResult.resources items'),
+            ),
+          )
           .toList(),
-      nextCursor: json['nextCursor'] as String?,
+      nextCursor: readOptionalString(
+        json['nextCursor'],
+        'ListResourcesResult.nextCursor',
+      ),
       ttlMs: readOptionalTtlMs(json['ttlMs'], 'ListResourcesResult.ttlMs'),
       cacheScope: readOptionalCacheScope(
         json['cacheScope'],
@@ -362,7 +406,12 @@ class ListResourceTemplatesRequest {
   factory ListResourceTemplatesRequest.fromJson(
     Map<String, dynamic> json,
   ) =>
-      ListResourceTemplatesRequest(cursor: json['cursor'] as String?);
+      ListResourceTemplatesRequest(
+        cursor: readOptionalString(
+          json['cursor'],
+          'ListResourceTemplatesRequest.cursor',
+        ),
+      );
 
   Map<String, dynamic> toJson() => {if (cursor != null) 'cursor': cursor};
 }
@@ -382,7 +431,10 @@ class JsonRpcListResourceTemplatesRequest extends JsonRpcRequest {
   factory JsonRpcListResourceTemplatesRequest.fromJson(
     Map<String, dynamic> json,
   ) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcListResourceTemplatesRequest.params',
+    );
     final meta = extractRequestMeta(json);
     return JsonRpcListResourceTemplatesRequest(
       id: parseRequestId(json['id']),
@@ -434,9 +486,19 @@ class ListResourceTemplatesResult implements CacheableResultData {
     }
     return ListResourceTemplatesResult(
       resourceTemplates: resourceTemplates
-          .map((e) => ResourceTemplate.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => ResourceTemplate.fromJson(
+              readJsonObject(
+                e,
+                'ListResourceTemplatesResult.resourceTemplates items',
+              ),
+            ),
+          )
           .toList(),
-      nextCursor: json['nextCursor'] as String?,
+      nextCursor: readOptionalString(
+        json['nextCursor'],
+        'ListResourceTemplatesResult.nextCursor',
+      ),
       ttlMs: readOptionalTtlMs(
         json['ttlMs'],
         'ListResourceTemplatesResult.ttlMs',
@@ -520,7 +582,10 @@ class JsonRpcReadResourceRequest extends JsonRpcRequest {
   }) : super(method: Method.resourcesRead, params: readParams.toJson());
 
   factory JsonRpcReadResourceRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcReadResourceRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for read resource request");
     }
@@ -567,7 +632,11 @@ class ReadResourceResult implements CacheableResultData {
     }
     return ReadResourceResult(
       contents: contents
-          .map((e) => ResourceContents.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => ResourceContents.fromJson(
+              readJsonObject(e, 'ReadResourceResult.contents items'),
+            ),
+          )
           .toList(),
       ttlMs: readOptionalTtlMs(json['ttlMs'], 'ReadResourceResult.ttlMs'),
       cacheScope: readOptionalCacheScope(
@@ -633,7 +702,10 @@ class JsonRpcSubscribeRequest extends JsonRpcRequest {
   }) : super(method: Method.resourcesSubscribe, params: subParams.toJson());
 
   factory JsonRpcSubscribeRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcSubscribeRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for subscribe request");
     }
@@ -679,7 +751,10 @@ class JsonRpcUnsubscribeRequest extends JsonRpcRequest {
   }) : super(method: Method.resourcesUnsubscribe, params: unsubParams.toJson());
 
   factory JsonRpcUnsubscribeRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcUnsubscribeRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for unsubscribe request");
     }
@@ -729,7 +804,10 @@ class JsonRpcResourceUpdatedNotification extends JsonRpcNotification {
   factory JsonRpcResourceUpdatedNotification.fromJson(
     Map<String, dynamic> json,
   ) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcResourceUpdatedNotification.params',
+    );
     if (paramsMap == null) {
       throw const FormatException(
         "Missing params for resource updated notification",

@@ -538,6 +538,89 @@ void main() {
       );
     });
 
+    test('content blocks reject malformed wire fields', () {
+      expect(
+        () => Content.fromJson({
+          'type': 1,
+          'text': 'Hello',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => TextContent.fromJson({
+          'type': 'text',
+          'text': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ImageContent.fromJson({
+          'type': 'image',
+          'data': 'YmFzZTY0ZGF0YQ==',
+          'mimeType': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ImageContent.fromJson({
+          'type': 'image',
+          'data': 'YmFzZTY0ZGF0YQ==',
+          'mimeType': 'image/png',
+          'theme': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => AudioContent.fromJson({
+          'type': 'audio',
+          'data': 'YmFzZTY0ZGF0YQ==',
+          'mimeType': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file:///docs/readme.md',
+          'mimeType': 1,
+          'text': 'README body',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file:///docs/readme.md',
+          'text': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'icons': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'icons': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('McpIcon parses stable wire fields', () {
       final icon = McpIcon.fromJson({
         'src': 'https://example.com/icon.png',
