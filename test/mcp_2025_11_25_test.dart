@@ -1883,6 +1883,54 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => SamplingTextContent.fromJson({
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingTextContent.fromJson({
+            'type': 'image',
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingImageContent.fromJson({
+            'type': 'text',
+            'data': 'aW1nZGF0YQ==',
+            'mimeType': 'image/png',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingAudioContent.fromJson({
+            'type': 'image',
+            'data': 'YXVkaW8tZGF0YQ==',
+            'mimeType': 'audio/wav',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolUseContent.fromJson({
+            'type': 'tool_result',
+            'id': 'call-1',
+            'name': 'search',
+            'input': <String, dynamic>{},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'type': 'tool_use',
+            'toolUseId': 'call-1',
+            'content': [
+              {'type': 'text', 'text': 'Hello'},
+            ],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => SamplingToolResultContent.fromJson({
             'type': 'tool_result',
             'toolUseId': 'call-1',

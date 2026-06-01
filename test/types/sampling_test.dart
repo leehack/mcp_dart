@@ -181,6 +181,19 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        expect(
+          () => SamplingTextContent.fromJson({
+            'text': 'Parsed text',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingTextContent.fromJson({
+            'type': 'image',
+            'text': 'Parsed text',
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
 
@@ -245,6 +258,21 @@ void main() {
             'type': 'image',
             'data': 'aW1nZGF0YQ==',
             'mimeType': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingImageContent.fromJson({
+            'data': 'aW1nZGF0YQ==',
+            'mimeType': 'image/png',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingImageContent.fromJson({
+            'type': 'text',
+            'data': 'aW1nZGF0YQ==',
+            'mimeType': 'image/png',
           }),
           throwsA(isA<FormatException>()),
         );
@@ -316,6 +344,21 @@ void main() {
             'type': 'audio',
             'data': 'YXVkaW8tZGF0YQ==',
             'mimeType': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingAudioContent.fromJson({
+            'data': 'YXVkaW8tZGF0YQ==',
+            'mimeType': 'audio/wav',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingAudioContent.fromJson({
+            'type': 'image',
+            'data': 'YXVkaW8tZGF0YQ==',
+            'mimeType': 'audio/wav',
           }),
           throwsA(isA<FormatException>()),
         );
@@ -395,6 +438,23 @@ void main() {
             'type': 'tool_use',
             'id': 'tu1',
             'name': 1,
+            'input': {'url': 'http://test.com'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolUseContent.fromJson({
+            'id': 'tu1',
+            'name': 'fetch',
+            'input': {'url': 'http://test.com'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolUseContent.fromJson({
+            'type': 'tool_result',
+            'id': 'tu1',
+            'name': 'fetch',
             'input': {'url': 'http://test.com'},
           }),
           throwsA(isA<FormatException>()),
@@ -522,6 +582,21 @@ void main() {
             'toolUseId': 'tr1',
             'content': content,
             'isError': 'false',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'toolUseId': 'tr1',
+            'content': content,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'type': 'tool_use',
+            'toolUseId': 'tr1',
+            'content': content,
           }),
           throwsA(isA<FormatException>()),
         );

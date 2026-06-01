@@ -39,6 +39,17 @@ Map<String, dynamic> _annotationsForJson(
   return result;
 }
 
+void _expectType(
+  Map<String, dynamic> json,
+  String expected,
+  String field,
+) {
+  final value = readRequiredString(json['type'], field);
+  if (value != expected) {
+    throw FormatException('$field must be "$expected"');
+  }
+}
+
 Object _parseSamplingMessageContent(dynamic value) {
   if (value is List) {
     return value
@@ -402,15 +413,17 @@ class SamplingTextContent extends SamplingContent {
     this.meta,
   }) : super(type: 'text');
 
-  factory SamplingTextContent.fromJson(Map<String, dynamic> json) =>
-      SamplingTextContent(
-        text: readRequiredString(json['text'], 'SamplingTextContent.text'),
-        annotations: readOptionalAnnotationsObject(
-          json['annotations'],
-          'SamplingTextContent.annotations',
-        ),
-        meta: _asJsonObjectOrNull(json['_meta'], 'SamplingTextContent._meta'),
-      );
+  factory SamplingTextContent.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'text', 'SamplingTextContent.type');
+    return SamplingTextContent(
+      text: readRequiredString(json['text'], 'SamplingTextContent.text'),
+      annotations: readOptionalAnnotationsObject(
+        json['annotations'],
+        'SamplingTextContent.annotations',
+      ),
+      meta: _asJsonObjectOrNull(json['_meta'], 'SamplingTextContent._meta'),
+    );
+  }
 }
 
 /// Image content for sampling messages.
@@ -434,22 +447,24 @@ class SamplingImageContent extends SamplingContent {
     this.meta,
   }) : super(type: 'image');
 
-  factory SamplingImageContent.fromJson(Map<String, dynamic> json) =>
-      SamplingImageContent(
-        data: readRequiredBase64String(
-          json['data'],
-          'SamplingImageContent.data',
-        ),
-        mimeType: readRequiredString(
-          json['mimeType'],
-          'SamplingImageContent.mimeType',
-        ),
-        annotations: readOptionalAnnotationsObject(
-          json['annotations'],
-          'SamplingImageContent.annotations',
-        ),
-        meta: _asJsonObjectOrNull(json['_meta'], 'SamplingImageContent._meta'),
-      );
+  factory SamplingImageContent.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'image', 'SamplingImageContent.type');
+    return SamplingImageContent(
+      data: readRequiredBase64String(
+        json['data'],
+        'SamplingImageContent.data',
+      ),
+      mimeType: readRequiredString(
+        json['mimeType'],
+        'SamplingImageContent.mimeType',
+      ),
+      annotations: readOptionalAnnotationsObject(
+        json['annotations'],
+        'SamplingImageContent.annotations',
+      ),
+      meta: _asJsonObjectOrNull(json['_meta'], 'SamplingImageContent._meta'),
+    );
+  }
 }
 
 /// Audio content for sampling messages.
@@ -473,22 +488,24 @@ class SamplingAudioContent extends SamplingContent {
     this.meta,
   }) : super(type: 'audio');
 
-  factory SamplingAudioContent.fromJson(Map<String, dynamic> json) =>
-      SamplingAudioContent(
-        data: readRequiredBase64String(
-          json['data'],
-          'SamplingAudioContent.data',
-        ),
-        mimeType: readRequiredString(
-          json['mimeType'],
-          'SamplingAudioContent.mimeType',
-        ),
-        annotations: readOptionalAnnotationsObject(
-          json['annotations'],
-          'SamplingAudioContent.annotations',
-        ),
-        meta: _asJsonObjectOrNull(json['_meta'], 'SamplingAudioContent._meta'),
-      );
+  factory SamplingAudioContent.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'audio', 'SamplingAudioContent.type');
+    return SamplingAudioContent(
+      data: readRequiredBase64String(
+        json['data'],
+        'SamplingAudioContent.data',
+      ),
+      mimeType: readRequiredString(
+        json['mimeType'],
+        'SamplingAudioContent.mimeType',
+      ),
+      annotations: readOptionalAnnotationsObject(
+        json['annotations'],
+        'SamplingAudioContent.annotations',
+      ),
+      meta: _asJsonObjectOrNull(json['_meta'], 'SamplingAudioContent._meta'),
+    );
+  }
 }
 
 /// Tool use content for sampling messages.
@@ -505,14 +522,15 @@ class SamplingToolUseContent extends SamplingContent {
     this.meta,
   }) : super(type: 'tool_use');
 
-  factory SamplingToolUseContent.fromJson(Map<String, dynamic> json) =>
-      SamplingToolUseContent(
-        id: readRequiredString(json['id'], 'SamplingToolUseContent.id'),
-        name: readRequiredString(json['name'], 'SamplingToolUseContent.name'),
-        input: _asJsonObject(json['input'], 'SamplingToolUseContent.input'),
-        meta:
-            _asJsonObjectOrNull(json['_meta'], 'SamplingToolUseContent._meta'),
-      );
+  factory SamplingToolUseContent.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'tool_use', 'SamplingToolUseContent.type');
+    return SamplingToolUseContent(
+      id: readRequiredString(json['id'], 'SamplingToolUseContent.id'),
+      name: readRequiredString(json['name'], 'SamplingToolUseContent.name'),
+      input: _asJsonObject(json['input'], 'SamplingToolUseContent.input'),
+      meta: _asJsonObjectOrNull(json['_meta'], 'SamplingToolUseContent._meta'),
+    );
+  }
 }
 
 /// Tool result content for sampling messages.
@@ -543,6 +561,7 @@ class SamplingToolResultContent extends SamplingContent {
   dynamic get legacyContent => content;
 
   factory SamplingToolResultContent.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'tool_result', 'SamplingToolResultContent.type');
     return SamplingToolResultContent(
       toolUseId: readRequiredString(
         json['toolUseId'],
