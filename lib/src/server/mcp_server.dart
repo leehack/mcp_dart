@@ -1773,7 +1773,9 @@ class McpServer {
         return ListResourcesResult(resources: [...fixed, ...templates]);
       },
       (id, params, meta) => JsonRpcListResourcesRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.resourcesList,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -1788,7 +1790,9 @@ class McpServer {
             .toList(),
       ),
       (id, params, meta) => JsonRpcListResourceTemplatesRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.resourcesTemplatesList,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -1831,7 +1835,9 @@ class McpServer {
         );
       },
       (id, params, meta) => JsonRpcReadResourceRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.resourcesRead,
         'params': params,
         if (meta != null) '_meta': meta,
       }),

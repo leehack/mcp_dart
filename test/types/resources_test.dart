@@ -476,6 +476,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 3,
         'method': 'resources/list',
         'params': {'cursor': 'xyz'},
@@ -488,6 +489,7 @@ void main() {
 
     test('fromJson without params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 4,
         'method': 'resources/list',
       };
@@ -500,9 +502,29 @@ void main() {
     test('fromJson rejects non-object params', () {
       expect(
         () => JsonRpcListResourcesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': 5,
           'method': 'resources/list',
           'params': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcListResourcesRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 5,
+          'method': 'resources/list',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcListResourcesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 5,
+          'method': 'resources/read',
         }),
         throwsA(isA<FormatException>()),
       );
@@ -604,6 +626,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 11,
         'method': 'resources/templates/list',
         'params': {'cursor': 'tmpl_page'},
@@ -617,9 +640,29 @@ void main() {
     test('fromJson rejects non-object params', () {
       expect(
         () => JsonRpcListResourceTemplatesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': 12,
           'method': 'resources/templates/list',
           'params': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcListResourceTemplatesRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 12,
+          'method': 'resources/templates/list',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcListResourceTemplatesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 12,
+          'method': 'resources/list',
         }),
         throwsA(isA<FormatException>()),
       );
@@ -702,6 +745,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 21,
         'method': 'resources/read',
         'params': {'uri': 'file:///parsed.txt'},
@@ -714,12 +758,34 @@ void main() {
 
     test('fromJson throws on missing params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 22,
         'method': 'resources/read',
       };
 
       expect(
         () => JsonRpcReadResourceRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcReadResourceRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 22,
+          'method': 'resources/read',
+          'params': {'uri': 'file:///parsed.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcReadResourceRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 22,
+          'method': 'resources/list',
+          'params': {'uri': 'file:///parsed.txt'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });
@@ -853,6 +919,7 @@ void main() {
 
     test('fromJson creates notification', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'method': 'notifications/resources/list_changed',
       };
 
@@ -861,6 +928,23 @@ void main() {
       expect(
         notification.method,
         equals('notifications/resources/list_changed'),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcResourceListChangedNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/resources/list_changed',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcResourceListChangedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'notifications/resources/updated',
+        }),
+        throwsA(isA<FormatException>()),
       );
     });
   });
@@ -890,6 +974,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 31,
         'method': 'resources/subscribe',
         'params': {'uri': 'file:///subscribed.txt'},
@@ -902,12 +987,34 @@ void main() {
 
     test('fromJson throws on missing params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 32,
         'method': 'resources/subscribe',
       };
 
       expect(
         () => JsonRpcSubscribeRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcSubscribeRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 32,
+          'method': 'resources/subscribe',
+          'params': {'uri': 'file:///subscribed.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcSubscribeRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 32,
+          'method': 'resources/unsubscribe',
+          'params': {'uri': 'file:///subscribed.txt'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });
@@ -938,6 +1045,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 41,
         'method': 'resources/unsubscribe',
         'params': {'uri': 'file:///unsubscribed.txt'},
@@ -950,12 +1058,34 @@ void main() {
 
     test('fromJson throws on missing params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 42,
         'method': 'resources/unsubscribe',
       };
 
       expect(
         () => JsonRpcUnsubscribeRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcUnsubscribeRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 42,
+          'method': 'resources/unsubscribe',
+          'params': {'uri': 'file:///unsubscribed.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcUnsubscribeRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 42,
+          'method': 'resources/subscribe',
+          'params': {'uri': 'file:///unsubscribed.txt'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });
@@ -991,6 +1121,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'method': 'notifications/resources/updated',
         'params': {'uri': 'file:///parsed_notify.txt'},
       };
@@ -1004,6 +1135,7 @@ void main() {
 
     test('fromJson throws on missing params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'method': 'notifications/resources/updated',
       };
 
@@ -1015,6 +1147,7 @@ void main() {
 
     test('fromJson with meta', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'method': 'notifications/resources/updated',
         'params': {
           'uri': 'file:///with_meta.txt',
@@ -1025,6 +1158,25 @@ void main() {
       final notification = JsonRpcResourceUpdatedNotification.fromJson(json);
       expect(notification.meta, isNotNull);
       expect(notification.meta!['key'], equals('value'));
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcResourceUpdatedNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/resources/updated',
+          'params': {'uri': 'file:///parsed_notify.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcResourceUpdatedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'notifications/resources/list_changed',
+          'params': {'uri': 'file:///parsed_notify.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 

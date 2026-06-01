@@ -1083,6 +1083,31 @@ void main() {
               'jsonrpc': jsonRpcVersion,
               'method': Method.notificationsResourcesListChanged,
             }),
+        () => JsonRpcListResourcesRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 'resources',
+              'method': Method.resourcesList,
+            }),
+        () => JsonRpcListResourceTemplatesRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'templates',
+              'method': Method.resourcesList,
+            }),
+        () => JsonRpcReadResourceRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'read',
+              'method': Method.resourcesList,
+              'params': {'uri': 'file:///a.txt'},
+            }),
+        () => JsonRpcResourceListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsResourcesUpdated,
+            }),
+        () => JsonRpcResourceUpdatedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsResourcesUpdated,
+              'params': {'uri': 'file:///a.txt'},
+            }),
         () => CompleteRequest.fromJson({
               'ref': {'type': 'ref/prompt', 'name': 'prompt'},
               'argument': {'name': 'arg', 'value': 1},
@@ -1863,7 +1888,9 @@ void main() {
         Method.resourcesList,
         (request, extra) async => const ListResourcesResult(resources: []),
         (id, params, meta) => JsonRpcListResourcesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.resourcesList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1873,7 +1900,9 @@ void main() {
         (request, extra) async =>
             const ListResourceTemplatesResult(resourceTemplates: []),
         (id, params, meta) => JsonRpcListResourceTemplatesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.resourcesTemplatesList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1884,7 +1913,9 @@ void main() {
           contents: [TextResourceContents(uri: 'file:///a.txt', text: 'a')],
         ),
         (id, params, meta) => JsonRpcReadResourceRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.resourcesRead,
           'params': params,
           if (meta != null) '_meta': meta,
         }),

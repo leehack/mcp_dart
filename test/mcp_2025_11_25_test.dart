@@ -1822,6 +1822,64 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => JsonRpcListResourcesRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'resources',
+            'method': Method.resourcesList,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcListResourceTemplatesRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'templates',
+            'method': Method.resourcesList,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcReadResourceRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'read',
+            'method': Method.resourcesList,
+            'params': {'uri': 'file:///a.txt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcSubscribeRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'subscribe',
+            'method': Method.resourcesSubscribe,
+            'params': {'uri': 'file:///a.txt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcUnsubscribeRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'unsubscribe',
+            'method': Method.resourcesSubscribe,
+            'params': {'uri': 'file:///a.txt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcResourceListChangedNotification.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsResourcesUpdated,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcResourceUpdatedNotification.fromJson({
+            'jsonrpc': '1.0',
+            'method': Method.notificationsResourcesUpdated,
+            'params': {'uri': 'file:///a.txt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => CompleteRequest.fromJson({
             'ref': {'type': 'ref/prompt', 'name': 'prompt'},
             'argument': {'name': 'arg', 'value': 1},

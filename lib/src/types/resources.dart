@@ -22,6 +22,22 @@ List<McpIcon>? _readOptionalIconList(
   ];
 }
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 /// Additional properties describing a Resource to clients.
 class ResourceAnnotations {
   /// A human-readable title for the resource.
@@ -306,6 +322,11 @@ class JsonRpcListResourcesRequest extends JsonRpcRequest {
 
   /// Creates from JSON.
   factory JsonRpcListResourcesRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.resourcesList,
+      'JsonRpcListResourcesRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcListResourcesRequest.params',
@@ -431,6 +452,11 @@ class JsonRpcListResourceTemplatesRequest extends JsonRpcRequest {
   factory JsonRpcListResourceTemplatesRequest.fromJson(
     Map<String, dynamic> json,
   ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.resourcesTemplatesList,
+      'JsonRpcListResourceTemplatesRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcListResourceTemplatesRequest.params',
@@ -582,6 +608,11 @@ class JsonRpcReadResourceRequest extends JsonRpcRequest {
   }) : super(method: Method.resourcesRead, params: readParams.toJson());
 
   factory JsonRpcReadResourceRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.resourcesRead,
+      'JsonRpcReadResourceRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcReadResourceRequest.params',
@@ -668,8 +699,16 @@ class JsonRpcResourceListChangedNotification extends JsonRpcNotification {
 
   factory JsonRpcResourceListChangedNotification.fromJson(
     Map<String, dynamic> json,
-  ) =>
-      JsonRpcResourceListChangedNotification(meta: extractRequestMeta(json));
+  ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsResourcesListChanged,
+      'JsonRpcResourceListChangedNotification',
+    );
+    return JsonRpcResourceListChangedNotification(
+      meta: extractRequestMeta(json),
+    );
+  }
 }
 
 /// Parameters for the `resources/subscribe` request.
@@ -702,6 +741,11 @@ class JsonRpcSubscribeRequest extends JsonRpcRequest {
   }) : super(method: Method.resourcesSubscribe, params: subParams.toJson());
 
   factory JsonRpcSubscribeRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.resourcesSubscribe,
+      'JsonRpcSubscribeRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcSubscribeRequest.params',
@@ -751,6 +795,11 @@ class JsonRpcUnsubscribeRequest extends JsonRpcRequest {
   }) : super(method: Method.resourcesUnsubscribe, params: unsubParams.toJson());
 
   factory JsonRpcUnsubscribeRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.resourcesUnsubscribe,
+      'JsonRpcUnsubscribeRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcUnsubscribeRequest.params',
@@ -804,6 +853,11 @@ class JsonRpcResourceUpdatedNotification extends JsonRpcNotification {
   factory JsonRpcResourceUpdatedNotification.fromJson(
     Map<String, dynamic> json,
   ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsResourcesUpdated,
+      'JsonRpcResourceUpdatedNotification',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcResourceUpdatedNotification.params',
