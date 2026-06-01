@@ -698,6 +698,21 @@ void main() {
         throwsFormatException,
       );
       expect(
+        () => InputRequiredResult.fromJson({
+          'resultType': resultTypeInputRequired,
+          'requestState': 'state',
+          '_meta': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const InputRequiredResult(
+          requestState: 'state',
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
         () => InputRequiredResult.fromJson(
           const {
             'resultType': resultTypeInputRequired,
@@ -712,6 +727,20 @@ void main() {
         () => CallToolRequest.fromJson(
           const {'name': 'deploy', 'requestState': 1},
         ),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolRequest.fromJson({
+          'name': 'deploy',
+          'arguments': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const CallToolRequest(
+          name: 'deploy',
+          arguments: {'bad': Object()},
+        ).toJson(),
         throwsFormatException,
       );
       expect(

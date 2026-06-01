@@ -276,15 +276,7 @@ Map<String, dynamic>? _parseRequestMeta(Object? value) {
   if (value == null) {
     return null;
   }
-  if (value is! Map) {
-    throw FormatException(
-      'Invalid _meta: expected object, got ${value.runtimeType}',
-    );
-  }
-  if (value.keys.any((key) => key is! String)) {
-    throw const FormatException('Invalid _meta: expected string keys');
-  }
-  return validateRequestMeta(Map<String, dynamic>.from(value));
+  return validateRequestMeta(readJsonObject(value, '_meta'));
 }
 
 /// Extracts request metadata from either top-level or params-nested `_meta`.
@@ -741,7 +733,8 @@ class InputRequest {
 
   Map<String, dynamic> toJson() => {
         'method': method,
-        if (params != null) 'params': params,
+        if (params != null)
+          'params': readJsonObject(params, 'InputRequest.params'),
       };
 }
 
@@ -788,7 +781,7 @@ class InputResponse {
     );
   }
 
-  Map<String, dynamic> toJson() => Map<String, dynamic>.from(value);
+  Map<String, dynamic> toJson() => readJsonObject(value, 'InputResponse');
 }
 
 bool _isValidInputResponse(Map<String, dynamic> json) {
@@ -875,22 +868,14 @@ class InputRequiredResult implements BaseResultData {
       if (inputRequests != null)
         'inputRequests': InputRequest.mapToJson(inputRequests!),
       if (requestState != null) 'requestState': requestState,
-      if (meta != null) '_meta': meta,
+      if (meta != null)
+        '_meta': readJsonObject(meta, 'InputRequiredResult._meta'),
     };
   }
 }
 
 Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    if (value.keys.any((key) => key is! String)) {
-      throw FormatException('$field must be an object with string keys');
-    }
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('$field must be an object');
+  return readJsonObject(value, field);
 }
 
 Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {

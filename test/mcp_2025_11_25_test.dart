@@ -588,6 +588,31 @@ void main() {
       );
     });
 
+    test('Tool JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => Tool.fromJson({
+          'name': 'search',
+          'inputSchema': {'type': 'object'},
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CallToolRequest.fromJson({
+          'name': 'search',
+          'arguments': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CallToolResult.fromJson({
+          'content': <Map<String, dynamic>>[],
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     group('Tasks API Types', () {
       test('GetTaskRequestParams serialization', () {
         final params = const GetTaskRequestParams(taskId: 'task-123');
@@ -1255,7 +1280,7 @@ void main() {
             isA<FormatException>().having(
               (error) => error.message,
               'message',
-              contains('Tool.inputSchema must be an object'),
+              contains('Tool.inputSchema must be a JSON object'),
             ),
           ),
         );
@@ -1269,7 +1294,7 @@ void main() {
             isA<FormatException>().having(
               (error) => error.message,
               'message',
-              contains('Tool.outputSchema must be an object'),
+              contains('Tool.outputSchema must be a JSON object'),
             ),
           ),
         );

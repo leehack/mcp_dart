@@ -284,6 +284,16 @@ void main() {
         ),
         throwsFormatException,
       );
+      expect(
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson({
+          'method': Method.notificationsSubscriptionsAcknowledged,
+          'params': {
+            'notifications': {'toolsListChanged': true},
+            '_meta': {'bad': Object()},
+          },
+        }),
+        throwsFormatException,
+      );
     });
   });
 

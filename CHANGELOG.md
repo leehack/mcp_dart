@@ -103,6 +103,8 @@
   `tool_use.input`, sampling metadata, annotations, and `_meta` maps.
 - Rejected non-JSON values in common content/resource metadata fields and
   `resource_link.annotations`.
+- Reused shared JSON-object validation for MRTR, task extension, subscription,
+  and tool object fields.
 
 ## 2.2.0
 

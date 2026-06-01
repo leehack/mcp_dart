@@ -1,5 +1,6 @@
 import '../types.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// The current state of a task execution.
 enum TaskStatus {
@@ -609,7 +610,8 @@ class TaskExtensionTask {
         if (pollIntervalMs != null) 'pollIntervalMs': pollIntervalMs,
         if (inputRequests != null)
           'inputRequests': InputRequest.mapToJson(inputRequests!),
-        if (result != null) 'result': result,
+        if (result != null)
+          'result': readJsonObject(result, 'TaskExtensionTask.result'),
         if (error != null) 'error': error!.toJson(),
       };
 }
@@ -643,7 +645,8 @@ class CreateTaskExtensionResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         ...task.toJson(resultType: resultTypeTask),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'CreateTaskExtensionResult._meta'),
       };
 }
 
@@ -676,7 +679,8 @@ class GetTaskExtensionResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         ...task.toJson(resultType: resultTypeComplete),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'GetTaskExtensionResult._meta'),
       };
 }
 
@@ -707,7 +711,11 @@ class TaskExtensionAcknowledgementResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'resultType': resultTypeComplete,
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(
+            meta,
+            'TaskExtensionAcknowledgementResult._meta',
+          ),
       };
 }
 
@@ -838,7 +846,10 @@ class JsonRpcTaskStatusNotification extends JsonRpcNotification {
         "Missing params for task status notification",
       );
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = _readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcTaskStatusNotification._meta',
+    );
     return JsonRpcTaskStatusNotification(
       statusParams: TaskStatusNotification.fromJson(paramsMap),
       meta: meta,
@@ -870,16 +881,7 @@ class JsonRpcTaskNotification extends JsonRpcNotification {
 }
 
 Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    if (value.keys.any((key) => key is! String)) {
-      throw FormatException('$field must be an object with string keys');
-    }
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('$field must be an object');
+  return readJsonObject(value, field);
 }
 
 Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
