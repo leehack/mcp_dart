@@ -428,6 +428,30 @@ void main() {
       );
     });
 
+    test('keeps top-level metadata as stateless detection fallback', () async {
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          const JsonRpcListToolsRequest(id: 12).toJson()
+            ..['_meta'] = const {
+              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+            },
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(
+        body['error']['message'],
+        contains('MCP-Protocol-Version header is required'),
+      );
+    });
+
     test('routes 2026 stateless non-POST methods without a session ID',
         () async {
       final client = HttpClient();
