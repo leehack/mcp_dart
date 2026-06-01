@@ -330,17 +330,17 @@ void main() {
         action: 'accept',
         content: {
           'text': 'answer',
-          'confidence': 0.75,
+          'confidence': 75,
           'selection': ['a', 'b'], // List<String>
         },
       );
-      expect(result.content?['confidence'], 0.75);
+      expect(result.content?['confidence'], 75);
       expect(result.content?['selection'], isA<List>());
       expect((result.content?['selection'] as List).first, 'a');
 
       final json = result.toJson();
       final deserialized = ElicitResult.fromJson(json);
-      expect(deserialized.content?['confidence'], 0.75);
+      expect(deserialized.content?['confidence'], 75);
       expect((deserialized.content?['selection'] as List).last, 'b');
     });
 
@@ -1417,6 +1417,24 @@ void main() {
             action: 'accept',
             content: {
               'bad': ['ok', 1],
+            },
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          () => ElicitResult.fromJson({
+            'action': 'accept',
+            'content': {
+              'fractional': 1.5,
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const ElicitResult(
+            action: 'accept',
+            content: {
+              'fractional': 1.5,
             },
           ).toJson(),
           throwsA(isA<ArgumentError>()),

@@ -301,10 +301,10 @@ class ElicitResult implements BaseResultData {
   Map<String, dynamic> toJson() {
     final resultAction = action;
     _validateElicitResultContentForAction(resultAction, content);
-    _validateElicitResultContent(content);
+    final normalizedContent = _normalizeElicitResultContent(content);
     return {
       'action': resultAction,
-      if (content != null) 'content': content,
+      if (normalizedContent != null) 'content': normalizedContent,
       if (meta != null) '_meta': readJsonObject(meta, 'ElicitResult._meta'),
     };
   }
@@ -726,39 +726,49 @@ Map<String, dynamic>? _parseElicitResultContent(Object? content) {
     throw const FormatException('ElicitResult.content must be an object.');
   }
   final result = content.cast<String, dynamic>();
-  _validateElicitResultContent(result, formatException: true);
-  return result;
+  return _normalizeElicitResultContent(result, formatException: true);
 }
 
-void _validateElicitResultContent(
+Map<String, dynamic>? _normalizeElicitResultContent(
   Map<String, dynamic>? content, {
   bool formatException = false,
 }) {
   if (content == null) {
-    return;
+    return null;
   }
+  final normalized = <String, dynamic>{};
   for (final entry in content.entries) {
     final value = entry.value;
     if (value is String || value is bool) {
+      normalized[entry.key] = value;
       continue;
     }
-    if (value is num && value.isFinite) {
+    if (value is int) {
+      normalized[entry.key] = value;
+      continue;
+    }
+    if (value is double &&
+        value.isFinite &&
+        value == value.truncateToDouble()) {
+      normalized[entry.key] = value.toInt();
       continue;
     }
     if (value is List && value.every((item) => item is String)) {
+      normalized[entry.key] = List<String>.from(value);
       continue;
     }
     if (formatException) {
       throw FormatException(
-        'ElicitResult.content.${entry.key} must be string, finite number, boolean, or string[]',
+        'ElicitResult.content.${entry.key} must be string, integer, boolean, or string[]',
       );
     }
     throw ArgumentError.value(
       value,
       'content.${entry.key}',
-      'ElicitResult content values must be string, finite number, boolean, or string[]',
+      'ElicitResult content values must be string, integer, boolean, or string[]',
     );
   }
+  return normalized;
 }
 
 void _validateElicitResultContentForAction(

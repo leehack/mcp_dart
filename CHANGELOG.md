@@ -91,8 +91,9 @@
   clamping malformed wire values to zero.
 - Validated MRTR `inputResponses` as `CreateMessageResult`, `ListRootsResult`,
   or `ElicitResult` instead of accepting arbitrary result objects.
-- Allowed finite numeric `ElicitResult.content` values to match the stable and
-  MCP 2026 `string | number | boolean | string[]` schema.
+- Restricted numeric `ElicitResult.content` values to integers, matching the
+  stable and MCP 2026 `string | integer | boolean | string[]` schemas while
+  still accepting whole-number JSON numeric values.
 - Rejected form elicitation schemas that provide legacy `enumNames` without the
   required string `enum`.
 - Rejected `ElicitResult.content` when the result action is `decline` or

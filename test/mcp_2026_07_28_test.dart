@@ -429,9 +429,23 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        () => ElicitResult.fromJson({
+          'action': 'accept',
+          'content': {'score': 1.5},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
         () => const ElicitResult(
           action: 'accept',
           content: {'score': double.nan},
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'accept',
+          content: {'score': 1.5},
         ).toJson(),
         throwsA(isA<ArgumentError>()),
       );
