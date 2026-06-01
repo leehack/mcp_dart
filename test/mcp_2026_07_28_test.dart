@@ -737,6 +737,7 @@ void main() {
                   ),
                 ),
               ],
+              task: TaskCreation(ttl: 1000),
               maxTokens: 100,
             ),
           ),
@@ -758,6 +759,10 @@ void main() {
         json['inputRequests']['capital_of_france']['method'],
         Method.samplingCreateMessage,
       );
+      expect(
+        json['inputRequests']['capital_of_france']['params'],
+        isNot(contains('task')),
+      );
       expect(json['inputRequests']['roots'], {'method': Method.rootsList});
 
       final parsed = InputRequiredResult.fromJson(json);
@@ -770,6 +775,10 @@ void main() {
         parsed
             .inputRequests!['capital_of_france']!.createMessageParams.maxTokens,
         100,
+      );
+      expect(
+        parsed.inputRequests!['capital_of_france']!.createMessageParams.task,
+        isNull,
       );
     });
 
@@ -898,6 +907,32 @@ void main() {
             'resultType': resultTypeInputRequired,
             'inputRequests': {
               'unsupported': {'method': Method.toolsCall},
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'inputRequests': {
+              'legacy_task_sampling': {
+                'method': Method.samplingCreateMessage,
+                'params': {
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': {
+                        'type': 'text',
+                        'text': 'Continue?',
+                      },
+                    },
+                  ],
+                  'maxTokens': 1,
+                  'task': {'ttl': 1000},
+                },
+              },
             },
           },
         ),

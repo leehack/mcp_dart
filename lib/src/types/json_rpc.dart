@@ -719,9 +719,10 @@ class InputRequest {
 
   /// Creates an embedded `sampling/createMessage` input request.
   factory InputRequest.createMessage(CreateMessageRequest params) {
+    final inputParams = params.toJson()..remove('task');
     return InputRequest._(
       method: Method.samplingCreateMessage,
-      params: params.toJson(),
+      params: inputParams,
     );
   }
 
@@ -752,6 +753,12 @@ class InputRequest {
           json['params'],
           'InputRequest.params',
         );
+        if (params.containsKey('task')) {
+          throw const FormatException(
+            'InputRequest sampling/createMessage params must not include '
+            'legacy task metadata',
+          );
+        }
         CreateMessageRequest.fromJson(params);
         return InputRequest._(method: method, params: params);
       case Method.rootsList:
