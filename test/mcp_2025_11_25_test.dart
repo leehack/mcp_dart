@@ -253,6 +253,26 @@ void main() {
       expect(deserialized.elicitationId, 'ui-123');
     });
 
+    test('Elicitation URL must be absolute URI', () {
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'test',
+          'url': '/relative/ui',
+          'elicitationId': 'ui-123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'test',
+          url: '/relative/ui',
+          elicitationId: 'ui-123',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('JsonEnum SEP-1330', () {
       final schema = const JsonEnum(
         [

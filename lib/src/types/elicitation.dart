@@ -114,6 +114,7 @@ class ElicitRequest {
       if (url is! String) {
         throw const FormatException('URL elicitation requires url.');
       }
+      _validateUrlElicitationUri(url, formatException: true);
       if (elicitationId is! String) {
         throw const FormatException('URL elicitation requires elicitationId.');
       }
@@ -159,6 +160,7 @@ class ElicitRequest {
       if (url == null) {
         throw ArgumentError('URL elicitation requires url.');
       }
+      _validateUrlElicitationUri(url!);
       if (elicitationId == null) {
         throw ArgumentError('URL elicitation requires elicitationId.');
       }
@@ -685,4 +687,24 @@ void _validateUrlElicitations(
       );
     }
   }
+}
+
+void _validateUrlElicitationUri(
+  String url, {
+  bool formatException = false,
+}) {
+  final uri = Uri.tryParse(url);
+  if (uri != null && uri.hasScheme) {
+    return;
+  }
+  if (formatException) {
+    throw const FormatException(
+      'URL elicitation url must be an absolute URI.',
+    );
+  }
+  throw ArgumentError.value(
+    url,
+    'url',
+    'URL elicitation url must be an absolute URI.',
+  );
 }

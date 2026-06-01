@@ -317,6 +317,26 @@ void main() {
       }
     });
 
+    test('rejects URL elicitation relative URI values', () {
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'Open browser',
+          'url': 'authorize/callback',
+          'elicitationId': 'auth-1',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'Open browser',
+          url: 'authorize/callback',
+          elicitationId: 'auth-1',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('serializes server/discover request and result', () {
       final request = JsonRpcServerDiscoverRequest(
         id: 'discover-1',

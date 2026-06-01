@@ -94,6 +94,8 @@
   required string `enum`.
 - Rejected `ElicitResult.content` when the result action is `decline` or
   `cancel`.
+- Rejected URL elicitation values that are not absolute URIs to match the stable
+  and MCP 2026 `format: uri` schemas.
 
 ## 2.2.0
 

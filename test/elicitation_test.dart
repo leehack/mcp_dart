@@ -746,6 +746,23 @@ void main() {
         () => ElicitRequestParams.fromJson({
           'mode': 'url',
           'message': 'Please authenticate',
+          'url': 'relative/callback',
+          'elicitationId': 'oauth-123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'Please authenticate',
+          url: 'relative/callback',
+          elicitationId: 'oauth-123',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'Please authenticate',
           'url': 'https://oauth.example.com/authorize',
           'elicitationId': 'oauth-123',
           'requestedSchema': {
