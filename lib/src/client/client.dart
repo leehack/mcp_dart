@@ -1086,6 +1086,8 @@ class McpClient extends Protocol {
     return ListToolsResult(
       tools: tools,
       nextCursor: result.nextCursor,
+      ttlMs: result.ttlMs,
+      cacheScope: result.cacheScope,
       meta: result.meta,
     );
   }

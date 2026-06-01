@@ -139,6 +139,8 @@
   preserving embedded MRTR input request parsing.
 - Preserved `Result._meta` while parsing empty results for high-level ping,
   logging, and subscription acknowledgments.
+- Preserved MCP 2026 `tools/list` cache hints when client-side tool metadata
+  filtering removes invalid tool definitions.
 - Rejected missing and mismatched completion reference type discriminators with
   protocol parse errors.
 - Rejected malformed completion JSON-RPC wrapper constants with protocol parse

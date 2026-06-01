@@ -4389,6 +4389,45 @@ void main() {
       expect(result.tools, isEmpty);
     });
 
+    test('client preserves cache hints when filtering invalid tools', () async {
+      final transport = DiscoveringClientTransport(
+        toolsListResult: const {
+          'resultType': resultTypeComplete,
+          'tools': [
+            {
+              'name': 'valid',
+              'inputSchema': {'type': 'object'},
+            },
+            {
+              'name': 'invalid_header',
+              'inputSchema': {
+                'type': 'object',
+                'properties': {
+                  'ratio': {
+                    'type': 'number',
+                    'x-mcp-header': 'Ratio',
+                  },
+                },
+              },
+            },
+          ],
+          'ttlMs': 300000,
+          'cacheScope': CacheScope.public,
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+
+      await client.connect(transport);
+
+      final result = await client.listTools();
+      expect(result.tools.map((tool) => tool.name), ['valid']);
+      expect(result.ttlMs, 300000);
+      expect(result.cacheScope, CacheScope.public);
+    });
+
     test('stable client sessions do not validate future resultType values',
         () async {
       final transport = LegacyFallbackTransport(
