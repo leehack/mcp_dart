@@ -257,6 +257,22 @@ class Server extends Protocol {
     );
   }
 
+  McpError _missingInputRequestClientCapabilityError(
+    String inputRequestKey,
+    String method,
+    Map<String, dynamic> requiredCapabilities,
+  ) {
+    return McpError(
+      ErrorCode.missingRequiredClientCapability.value,
+      'Missing required client capability for input request',
+      {
+        'inputRequest': inputRequestKey,
+        'method': method,
+        'requiredCapabilities': requiredCapabilities,
+      },
+    );
+  }
+
   bool _isStatelessRequest(JsonRpcRequest request) {
     final requestedProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
     return requestedProtocolVersion is String &&
@@ -412,6 +428,80 @@ class Server extends Protocol {
     }
   }
 
+  McpError? _validateInputRequiredClientCapabilities(
+    InputRequiredResult result,
+    JsonRpcRequest request,
+  ) {
+    final inputRequests = result.inputRequests;
+    if (inputRequests == null || inputRequests.isEmpty) {
+      return null;
+    }
+
+    final parsed = _clientCapabilitiesForRequest(request);
+    if (parsed.error != null) {
+      return parsed.error;
+    }
+
+    for (final entry in inputRequests.entries) {
+      final requiredCapabilities = _missingCapabilitiesForInputRequest(
+        entry.value,
+        parsed.capabilities,
+      );
+      if (requiredCapabilities != null) {
+        return _missingInputRequestClientCapabilityError(
+          entry.key,
+          entry.value.method,
+          requiredCapabilities,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _missingCapabilitiesForInputRequest(
+    InputRequest inputRequest,
+    ClientCapabilities? capabilities,
+  ) {
+    switch (inputRequest.method) {
+      case Method.elicitationCreate:
+        final elicitParams = inputRequest.elicitParams;
+        final requiredMode = elicitParams.isUrlMode ? 'url' : 'form';
+        final elicitation = capabilities?.elicitation;
+        final supportsMode = requiredMode == 'url'
+            ? elicitation?.url != null
+            : elicitation?.form != null;
+        if (!supportsMode) {
+          return {
+            'elicitation': {
+              requiredMode: <String, dynamic>{},
+            },
+          };
+        }
+        return null;
+      case Method.samplingCreateMessage:
+        final createParams = inputRequest.createMessageParams;
+        final sampling = capabilities?.sampling;
+        if (sampling == null) {
+          return {'sampling': <String, dynamic>{}};
+        }
+        if ((createParams.tools != null || createParams.toolChoice != null) &&
+            !sampling.tools) {
+          return {
+            'sampling': {'tools': <String, dynamic>{}},
+          };
+        }
+        return null;
+      case Method.rootsList:
+        if (capabilities?.roots == null) {
+          return {'roots': <String, dynamic>{}};
+        }
+        return null;
+      default:
+        return null;
+    }
+  }
+
   McpError? _validateRequestTaskSemantics(JsonRpcRequest request) {
     final removedMethodError = _validateDraftTaskMethods(request);
     if (removedMethodError != null) {
@@ -464,9 +554,21 @@ class Server extends Protocol {
     BaseResultData result,
     JsonRpcRequest request,
   ) {
-    return result is InputRequiredResult &&
-        _isStatelessRequest(request) &&
-        _inputRequiredResultMethods.contains(request.method);
+    if (result is! InputRequiredResult ||
+        !_isStatelessRequest(request) ||
+        !_inputRequiredResultMethods.contains(request.method)) {
+      return false;
+    }
+
+    final capabilityError = _validateInputRequiredClientCapabilities(
+      result,
+      request,
+    );
+    if (capabilityError != null) {
+      throw capabilityError;
+    }
+
+    return true;
   }
 
   void _validateUnsupportedInputRequiredResult(

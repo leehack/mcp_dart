@@ -75,6 +75,8 @@
 - Allowed MCP 2026 `prompts/get` and `resources/read` handlers to return
   `InputRequiredResult`, and rejected MRTR input-required results on unsupported
   request methods.
+- Rejected MCP 2026 MRTR `inputRequests` whose embedded client request type is
+  not declared in the caller's per-request client capabilities.
 - Returned version-appropriate resource-not-found errors from high-level
   `resources/read` handlers: stable 2025 uses legacy `-32002`, while MCP 2026
   stateless requests use `-32602` with the missing `uri` in error data.

@@ -1402,6 +1402,152 @@ void main() {
       expect(response.result['requestState'], 'retry-state');
     });
 
+    test('stateless input required requests require client capabilities',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async {
+          final inputRequest = switch (request.callParams.name) {
+            'needs-form' => InputRequest.elicit(
+                ElicitRequest.form(
+                  message: 'Enter name',
+                  requestedSchema: JsonSchema.object(
+                    properties: {'name': JsonSchema.string()},
+                    required: ['name'],
+                  ),
+                ),
+              ),
+            'needs-url' => InputRequest.elicit(
+                const ElicitRequest.url(
+                  message: 'Open browser',
+                  url: 'https://example.com/authorize',
+                  elicitationId: 'auth-1',
+                ),
+              ),
+            'needs-roots' => InputRequest.listRoots(),
+            'needs-sampling-tools' => InputRequest.createMessage(
+                const CreateMessageRequest(
+                  messages: [
+                    SamplingMessage(
+                      role: SamplingMessageRole.user,
+                      content: SamplingTextContent(text: 'Search'),
+                    ),
+                  ],
+                  maxTokens: 16,
+                  tools: [
+                    Tool(name: 'lookup', inputSchema: JsonObject()),
+                  ],
+                ),
+              ),
+            _ => throw StateError('Unknown tool ${request.callParams.name}'),
+          };
+
+          return InputRequiredResult(
+            inputRequests: {request.callParams.name: inputRequest},
+          );
+        },
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      final missingCapabilityCases = [
+        (
+          name: 'needs-form',
+          meta: _clientMeta(),
+          method: Method.elicitationCreate,
+          requiredCapabilities: {
+            'elicitation': {'form': <String, dynamic>{}},
+          },
+        ),
+        (
+          name: 'needs-url',
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+          ),
+          method: Method.elicitationCreate,
+          requiredCapabilities: {
+            'elicitation': {'url': <String, dynamic>{}},
+          },
+        ),
+        (
+          name: 'needs-roots',
+          meta: _clientMeta(),
+          method: Method.rootsList,
+          requiredCapabilities: {'roots': <String, dynamic>{}},
+        ),
+        (
+          name: 'needs-sampling-tools',
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              sampling: ClientCapabilitiesSampling(),
+            ),
+          ),
+          method: Method.samplingCreateMessage,
+          requiredCapabilities: {
+            'sampling': {'tools': <String, dynamic>{}},
+          },
+        ),
+      ];
+
+      for (final scenario in missingCapabilityCases) {
+        transport.sentMessages.clear();
+        transport.receive(
+          JsonRpcCallToolRequest(
+            id: scenario.name,
+            params: CallToolRequest(name: scenario.name).toJson(),
+            meta: scenario.meta,
+          ),
+        );
+        await _pump();
+
+        final response = transport.sentMessages.single as JsonRpcError;
+        expect(
+          response.error.code,
+          ErrorCode.missingRequiredClientCapability.value,
+        );
+        expect(response.error.data['inputRequest'], scenario.name);
+        expect(response.error.data['method'], scenario.method);
+        expect(
+          response.error.data['requiredCapabilities'],
+          scenario.requiredCapabilities,
+        );
+      }
+
+      transport.sentMessages.clear();
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'allowed-form',
+          params: const CallToolRequest(name: 'needs-form').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeInputRequired);
+      expect(
+        response.result['inputRequests']['needs-form']['method'],
+        Method.elicitationCreate,
+      );
+    });
+
     test('stateless prompts/get permits input required results', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
