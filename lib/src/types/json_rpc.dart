@@ -821,7 +821,9 @@ class InputResponse {
 
 Map<String, dynamic> _inputResponseJsonForResult(BaseResultData result) {
   final json = Map<String, dynamic>.from(result.toJson());
-  if (result is ElicitResult || result is ListRootsResult) {
+  if (result is CreateMessageResult ||
+      result is ElicitResult ||
+      result is ListRootsResult) {
     json.remove('_meta');
   }
   _validateInputResponse(json);
@@ -830,6 +832,7 @@ Map<String, dynamic> _inputResponseJsonForResult(BaseResultData result) {
 
 void _validateInputResponse(Map<String, dynamic> json) {
   if (_canParseInputResponse(CreateMessageResult.fromJson, json)) {
+    _rejectInputResponseMeta(json, 'CreateMessageResult');
     return;
   }
 

@@ -723,9 +723,10 @@ void main() {
         isNot(contains('_meta')),
       );
       expect(toolJson['inputResponses']['roots'], isNot(contains('_meta')));
-      expect(toolJson['inputResponses']['capital_of_france']['_meta'], {
-        'preserved': true,
-      });
+      expect(
+        toolJson['inputResponses']['capital_of_france'],
+        isNot(contains('_meta')),
+      );
       expect(toolJson['requestState'], 'opaque-state');
 
       final parsedToolRequest = CallToolRequest.fromJson(toolJson);
@@ -872,6 +873,15 @@ void main() {
       expect(
         () => const InputResponse.raw({
           'action': 'accept',
+          '_meta': {'trace': 'not-in-draft-client-result'},
+        }).toJson(),
+        throwsFormatException,
+      );
+      expect(
+        () => const InputResponse.raw({
+          'model': 'model',
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Paris'},
           '_meta': {'trace': 'not-in-draft-client-result'},
         }).toJson(),
         throwsFormatException,
