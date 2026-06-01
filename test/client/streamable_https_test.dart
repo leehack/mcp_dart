@@ -1089,6 +1089,11 @@ void main() {
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
         opts: const StreamableHttpClientTransportOptions(
+          requestInit: {
+            'headers': {
+              'Mcp-Session-Id': 'custom-session',
+            },
+          },
           sessionId: 'legacy-session',
         ),
       )..protocolVersion = draftProtocolVersion2026_07_28;

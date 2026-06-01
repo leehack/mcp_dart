@@ -537,6 +537,19 @@ class StreamableHttpClientTransport
     return headers;
   }
 
+  void _removeHeaderCaseInsensitive(
+    Map<String, String> headers,
+    String headerName,
+  ) {
+    final normalizedHeaderName = headerName.toLowerCase();
+    final matchingKeys = headers.keys
+        .where((key) => key.toLowerCase() == normalizedHeaderName)
+        .toList();
+    for (final key in matchingKeys) {
+      headers.remove(key);
+    }
+  }
+
   Map<String, String> _headersForMessage(JsonRpcMessage message) {
     final headers = <String, String>{};
     final protocolVersion = _protocolVersion ?? _protocolVersionFrom(message);
@@ -1218,7 +1231,7 @@ class StreamableHttpClientTransport
       final isStatelessRequest = protocolVersion != null &&
           isStatelessProtocolVersion(protocolVersion);
       if (isStatelessRequest) {
-        headers.remove('mcp-session-id');
+        _removeHeaderCaseInsensitive(headers, 'mcp-session-id');
       }
       final requestSessionId = headers['mcp-session-id'];
       headers['content-type'] = 'application/json';

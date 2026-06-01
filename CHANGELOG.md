@@ -113,6 +113,8 @@
   clients on generic transports.
 - Rejected stateless MCP 2026 responses that omit `resultType` or required
   cacheable-result fields.
+- Stripped caller-supplied `Mcp-Session-Id` headers case-insensitively from
+  MCP 2026 stateless Streamable HTTP requests.
 
 ## 2.2.0
 
