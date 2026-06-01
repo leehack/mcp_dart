@@ -201,6 +201,15 @@ RequestId parseRequestId(Object? value, {String fieldName = 'id'}) {
   );
 }
 
+String _parseMethod(Object? value) {
+  if (value is String) {
+    return value;
+  }
+  throw FormatException(
+    'Invalid method: expected string, got ${value.runtimeType}',
+  );
+}
+
 RequestId _parseResultResponseId(Object? value) {
   return parseRequestId(value);
 }
@@ -317,7 +326,7 @@ sealed class JsonRpcMessage {
     final hasError = json.containsKey('error');
 
     if (json.containsKey('method')) {
-      final method = json['method'] as String;
+      final method = _parseMethod(json['method']);
       final hasId = json.containsKey('id');
 
       if (hasId) {
@@ -353,7 +362,10 @@ sealed class JsonRpcMessage {
           _ => JsonRpcRequest(
               id: parseRequestId(json['id']),
               method: method,
-              params: json['params'] as Map<String, dynamic>?,
+              params: readOptionalJsonObject(
+                json['params'],
+                'JsonRpcRequest.params',
+              ),
               meta: extractRequestMeta(json),
             ),
         };

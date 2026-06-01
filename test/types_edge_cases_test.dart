@@ -367,6 +367,47 @@ void main() {
       );
     });
 
+    test('rejects malformed method wire values', () {
+      for (final method in [
+        null,
+        false,
+        1,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
+        for (final hasId in [true, false]) {
+          expect(
+            () => JsonRpcMessage.fromJson({
+              'jsonrpc': '2.0',
+              if (hasId) 'id': 'request-1',
+              'method': method,
+            }),
+            throwsA(
+              isA<FormatException>()
+                  .having((e) => e.message, 'message', contains('method')),
+            ),
+          );
+        }
+      }
+    });
+
+    test('rejects malformed generic request params wire values', () {
+      for (final params in [false, 1, 'not-params', <Object>[]]) {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': '2.0',
+            'id': 'request-1',
+            'method': 'unknown/request',
+            'params': params,
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('params')),
+          ),
+        );
+      }
+    });
+
     test('rejects malformed request id wire values', () {
       for (final id in [
         null,

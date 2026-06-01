@@ -98,6 +98,13 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-non-string-method',
+            description:
+                'Rejects JSON-RPC requests whose method member is not a string.',
+            check: _rejectsNonStringJsonRpcMethod,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.rejects-result-error-response',
             description:
                 'Rejects JSON-RPC responses that include both result and error members.',
@@ -728,6 +735,16 @@ Future<void> _rejectsMalformedJsonRpcMessage() async {
     () => JsonRpcMessage.fromJson(const <String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': 1,
+    }),
+  );
+}
+
+Future<void> _rejectsNonStringJsonRpcMethod() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(const <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'method': 1,
     }),
   );
 }

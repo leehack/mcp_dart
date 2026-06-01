@@ -111,6 +111,8 @@
   boundaries.
 - Rejected JSON-RPC response envelopes that include both `result` and `error`
   instead of silently treating them as successful responses.
+- Rejected JSON-RPC request and notification envelopes whose `method` member is
+  not a string, and validated generic request `params` as JSON objects.
 - Prevented stateless MCP 2026 clients from sending core request and
   notification methods removed from that protocol revision.
 - Rejected server-initiated JSON-RPC requests received by stateless MCP 2026
