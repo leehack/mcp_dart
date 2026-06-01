@@ -1023,10 +1023,28 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        () => ElicitResult.fromJson({
+          'action': 'accept',
+          'content': {
+            'ratio': 0.5,
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
         () => const ElicitResult(
           action: 'accept',
           content: {
             'values': [1, 2],
+          },
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'accept',
+          content: {
+            'ratio': 0.5,
           },
         ).toJson(),
         throwsA(isA<ArgumentError>()),

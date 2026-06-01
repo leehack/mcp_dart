@@ -84,6 +84,8 @@
   clamping malformed wire values to zero.
 - Validated MRTR `inputResponses` as `CreateMessageResult`, `ListRootsResult`,
   or `ElicitResult` instead of accepting arbitrary result objects.
+- Rejected non-integer numeric `ElicitResult.content` values to match the
+  stable and MCP 2026 schemas.
 
 ## 2.2.0
 

@@ -616,7 +616,7 @@ void _validateElicitResultContent(
   }
   for (final entry in content.entries) {
     final value = entry.value;
-    if (value is String || value is num || value is bool) {
+    if (value is String || value is int || value is bool) {
       continue;
     }
     if (value is List && value.every((item) => item is String)) {
@@ -624,13 +624,13 @@ void _validateElicitResultContent(
     }
     if (formatException) {
       throw FormatException(
-        'ElicitResult.content.${entry.key} must be string, number, boolean, or string[]',
+        'ElicitResult.content.${entry.key} must be string, integer, boolean, or string[]',
       );
     }
     throw ArgumentError.value(
       value,
       'content.${entry.key}',
-      'ElicitResult content values must be string, number, boolean, or string[]',
+      'ElicitResult content values must be string, integer, boolean, or string[]',
     );
   }
 }
