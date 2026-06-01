@@ -1,4 +1,5 @@
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Severity levels for log messages (syslog levels).
 enum LoggingLevel {
@@ -102,7 +103,10 @@ class JsonRpcLoggingMessageNotification extends JsonRpcNotification {
         "Missing params for logging message notification",
       );
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcLoggingMessageNotification._meta',
+    );
     return JsonRpcLoggingMessageNotification(
       logParams: LoggingMessageNotification.fromJson(paramsMap),
       meta: meta,

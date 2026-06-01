@@ -47,7 +47,12 @@ class DiscoveringClientTransport extends Transport
     this.capabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
-    this.toolsListResult = const {'tools': []},
+    this.toolsListResult = const {
+      'resultType': resultTypeComplete,
+      'tools': [],
+      'ttlMs': 0,
+      'cacheScope': CacheScope.private,
+    },
   });
 
   final List<String> discoverVersions;
@@ -317,6 +322,218 @@ void main() {
       }
     });
 
+    test('request parsing does not let top-level metadata override params', () {
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 'tools',
+        'method': Method.toolsList,
+        '_meta': {
+          McpMetaKey.protocolVersion: latestProtocolVersion,
+        },
+        'params': {
+          '_meta': _clientMeta(),
+        },
+      });
+
+      expect(parsed, isA<JsonRpcListToolsRequest>());
+      final request = parsed as JsonRpcListToolsRequest;
+      expect(
+        request.meta?[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(request.meta?[McpMetaKey.clientInfo], {
+        'name': 'client',
+        'version': '1.0.0',
+      });
+    });
+
+    test('preserves integer request ids and progress tokens', () {
+      final message = JsonRpcMessage.fromJson(
+        const {
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.toolsList,
+          'params': {
+            '_meta': {'progressToken': 2},
+          },
+        },
+      );
+
+      expect(message, isA<JsonRpcListToolsRequest>());
+      final request = message as JsonRpcListToolsRequest;
+      expect(request.id, 1);
+      expect(request.progressToken, 2);
+      expect(request.toJson()['id'], 1);
+      expect(request.toJson()['params']['_meta']['progressToken'], 2);
+    });
+
+    test('rejects URL elicitation relative URI values', () {
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'Open browser',
+          'url': 'authorize/callback',
+          'elicitationId': 'auth-1',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'Open browser',
+          url: 'authorize/callback',
+          elicitationId: 'auth-1',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('rejects non-finite JSON numbers', () {
+      expect(
+        () => ProgressNotification.fromJson({
+          'progressToken': 'progress-1',
+          'progress': double.nan,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ProgressNotification(
+          progressToken: 'progress-1',
+          progress: double.infinity,
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => CreateMessageRequest.fromJson({
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 16,
+          'temperature': double.nan,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitResult.fromJson({
+          'action': 'accept',
+          'content': {'score': double.infinity},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'accept',
+          content: {'score': double.nan},
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('rejects non-JSON sampling object values', () {
+      expect(
+        () => SamplingToolUseContent.fromJson({
+          'type': 'tool_use',
+          'id': 'call-1',
+          'name': 'lookup',
+          'input': {'query': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Hello'},
+          'model': 'model-x',
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequest.fromJson({
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 16,
+          'metadata': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-JSON content object values', () {
+      expect(
+        () => TextContent.fromJson({
+          'type': 'text',
+          'text': 'Hello',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file:///docs/readme.md',
+          'text': 'README body',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'annotations': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-JSON result metadata values', () {
+      expect(
+        () => DiscoverResult.fromJson({
+          'resultType': 'complete',
+          'supportedVersions': [draftProtocolVersion2026_07_28],
+          'capabilities': <String, dynamic>{},
+          'serverInfo': {'name': 'server', 'version': '1.0.0'},
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const DiscoverResult(
+          supportedVersions: [draftProtocolVersion2026_07_28],
+          capabilities: ServerCapabilities(),
+          serverInfo: Implementation(name: 'server', version: '1.0.0'),
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'result': {
+            'resultType': 'complete',
+            '_meta': {'bad': Object()},
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('serializes server/discover request and result', () {
       final request = JsonRpcServerDiscoverRequest(
         id: 'discover-1',
@@ -347,6 +564,63 @@ void main() {
       expect(
         DiscoverResult.fromJson(resultJson).instructions,
         'Use the tools.',
+      );
+    });
+
+    test('requires server/discover request metadata in params', () {
+      expect(
+        () => JsonRpcServerDiscoverRequest(id: 'discover-1').toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('params._meta'),
+          ),
+        ),
+      );
+
+      for (final message in [
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-1',
+          'method': Method.serverDiscover,
+        },
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-1',
+          'method': Method.serverDiscover,
+          '_meta': _clientMeta(),
+        },
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-1',
+          'method': Method.serverDiscover,
+          'params': <String, dynamic>{},
+        },
+      ]) {
+        expect(
+          () => JsonRpcMessage.fromJson(message),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              anyOf(contains('params'), contains('params._meta')),
+            ),
+          ),
+        );
+      }
+
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 'discover-1',
+        'method': Method.serverDiscover,
+        'params': {'_meta': _clientMeta()},
+      });
+      expect(parsed, isA<JsonRpcServerDiscoverRequest>());
+      expect(
+        (parsed as JsonRpcServerDiscoverRequest)
+            .meta?[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
       );
     });
 
@@ -499,10 +773,22 @@ void main() {
           const ElicitResult(
             action: 'accept',
             content: {'name': 'octocat'},
+            meta: {'stable': true},
           ),
         ),
         'roots': InputResponse.fromResult(
-          ListRootsResult(roots: [Root(uri: 'file:///repo')]),
+          ListRootsResult(
+            roots: [Root(uri: 'file:///repo')],
+            meta: const {'stable': true},
+          ),
+        ),
+        'capital_of_france': InputResponse.fromResult(
+          const CreateMessageResult(
+            model: 'model',
+            role: SamplingMessageRole.assistant,
+            content: SamplingTextContent(text: 'Paris'),
+            meta: {'preserved': true},
+          ),
         ),
       };
 
@@ -514,6 +800,14 @@ void main() {
       );
       final toolJson = toolRequest.toJson();
       expect(toolJson['inputResponses']['github_login']['action'], 'accept');
+      expect(
+        toolJson['inputResponses']['github_login'],
+        isNot(contains('_meta')),
+      );
+      expect(toolJson['inputResponses']['roots'], isNot(contains('_meta')));
+      expect(toolJson['inputResponses']['capital_of_france']['_meta'], {
+        'preserved': true,
+      });
       expect(toolJson['requestState'], 'opaque-state');
 
       final parsedToolRequest = CallToolRequest.fromJson(toolJson);
@@ -578,6 +872,21 @@ void main() {
         throwsFormatException,
       );
       expect(
+        () => InputRequiredResult.fromJson({
+          'resultType': resultTypeInputRequired,
+          'requestState': 'state',
+          '_meta': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const InputRequiredResult(
+          requestState: 'state',
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
         () => InputRequiredResult.fromJson(
           const {
             'resultType': resultTypeInputRequired,
@@ -592,6 +901,20 @@ void main() {
         () => CallToolRequest.fromJson(
           const {'name': 'deploy', 'requestState': 1},
         ),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolRequest.fromJson({
+          'name': 'deploy',
+          'arguments': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const CallToolRequest(
+          name: 'deploy',
+          arguments: {'bad': Object()},
+        ).toJson(),
         throwsFormatException,
       );
       expect(
@@ -612,6 +935,27 @@ void main() {
             },
           },
         ),
+        throwsFormatException,
+      );
+      expect(
+        () => ReadResourceRequest.fromJson(
+          const {
+            'uri': 'file:///repo/README.md',
+            'inputResponses': {
+              'roots': {
+                'roots': [],
+                '_meta': {'trace': 'not-in-draft-client-result'},
+              },
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => const InputResponse.raw({
+          'action': 'accept',
+          '_meta': {'trace': 'not-in-draft-client-result'},
+        }).toJson(),
         throwsFormatException,
       );
     });
@@ -1898,6 +2242,23 @@ void main() {
         ),
       );
       expect(
+        validateToolRequest({
+          McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+          McpMetaKey.clientInfo: {
+            'name': 'client',
+            'version': '1.0.0',
+          },
+          McpMetaKey.clientCapabilities: {
+            'experimental': {'feature': true},
+          },
+        }),
+        isA<McpError>().having(
+          (error) => error.message,
+          'message',
+          contains('Invalid stateless request metadata.'),
+        ),
+      );
+      expect(
         validateToolRequest(_clientMeta(logLevel: 'verbose')),
         isA<McpError>().having(
           (error) => error.message,
@@ -2154,6 +2515,159 @@ void main() {
         'version': '1.0.0',
       });
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
+    });
+
+    test('stateless client rejects removed request methods before send',
+        () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final removedRequests = <({String method, Future<void> Function() call})>[
+        (
+          method: Method.ping,
+          call: () async {
+            await client.ping();
+          },
+        ),
+        (
+          method: Method.loggingSetLevel,
+          call: () async {
+            await client.setLoggingLevel(LoggingLevel.debug);
+          },
+        ),
+        (
+          method: Method.resourcesSubscribe,
+          call: () async {
+            await client.subscribeResource(
+              const SubscribeRequest(uri: 'file:///tmp/example.txt'),
+            );
+          },
+        ),
+        (
+          method: Method.resourcesUnsubscribe,
+          call: () async {
+            await client.unsubscribeResource(
+              const UnsubscribeRequest(uri: 'file:///tmp/example.txt'),
+            );
+          },
+        ),
+        (
+          method: Method.tasksList,
+          call: () async {
+            await client.request<ListTasksResult>(
+              JsonRpcListTasksRequest(id: -1),
+              ListTasksResult.fromJson,
+            );
+          },
+        ),
+        (
+          method: Method.tasksResult,
+          call: () async {
+            await client.request<CallToolResult>(
+              JsonRpcTaskResultRequest(
+                id: -1,
+                resultParams: const TaskResultRequest(taskId: 'task-1'),
+              ),
+              CallToolResult.fromJson,
+            );
+          },
+        ),
+      ];
+
+      for (final scenario in removedRequests) {
+        await expectLater(
+          scenario.call(),
+          throwsA(
+            isA<McpError>()
+                .having(
+                  (error) => error.code,
+                  'code',
+                  ErrorCode.methodNotFound.value,
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains(scenario.method),
+                ),
+          ),
+        );
+      }
+
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test('stateless client rejects removed notifications before send',
+        () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final removedNotifications =
+          <({String method, Future<void> Function() call})>[
+        (
+          method: Method.notificationsInitialized,
+          call: () => client.notification(
+                const JsonRpcInitializedNotification(),
+              ),
+        ),
+        (
+          method: Method.notificationsRootsListChanged,
+          call: client.sendRootsListChanged,
+        ),
+      ];
+
+      for (final scenario in removedNotifications) {
+        await expectLater(
+          scenario.call(),
+          throwsA(
+            isA<McpError>()
+                .having(
+                  (error) => error.code,
+                  'code',
+                  ErrorCode.methodNotFound.value,
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains(scenario.method),
+                ),
+          ),
+        );
+      }
+
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test('stateless client rejects server-initiated requests on transport',
+        () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          capabilities: ClientCapabilities(roots: ClientCapabilitiesRoots()),
+          useServerDiscover: true,
+        ),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      transport.onmessage?.call(const JsonRpcListRootsRequest(id: 'roots-1'));
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.id, 'roots-1');
+      expect(response.error.code, ErrorCode.invalidRequest.value);
+      expect(response.error.message, contains('input_required'));
+      expect(response.error.message, contains('inputRequests'));
     });
 
     test('client listenSubscriptions requires a connected transport', () {
@@ -2576,12 +3090,45 @@ void main() {
       transport.onmessage?.call(
         JsonRpcResponse(
           id: subscription.id,
-          result: const EmptyResult().toJson(),
+          result: const {'resultType': resultTypeComplete},
         ),
       );
 
       await acknowledgedExpectation;
       await doneExpectation;
+    });
+
+    test('client rejects missing stateless resultType values', () async {
+      final transport = DiscoveringClientTransport(
+        toolsListResult: const {
+          'tools': [],
+          'ttlMs': 0,
+          'cacheScope': CacheScope.private,
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(useServerDiscover: true),
+      );
+
+      await client.connect(transport);
+
+      await expectLater(
+        client.listTools(),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains('must include resultType'),
+              ),
+        ),
+      );
     });
 
     test('client rejects unrecognized stateless resultType values', () async {
@@ -2652,6 +3199,77 @@ void main() {
         ),
       );
     });
+
+    for (final scenario in [
+      (
+        name: 'missing ttlMs',
+        result: const {
+          'resultType': resultTypeComplete,
+          'tools': [],
+          'cacheScope': CacheScope.private,
+        },
+        message: 'ttlMs',
+      ),
+      (
+        name: 'missing cacheScope',
+        result: const {
+          'resultType': resultTypeComplete,
+          'tools': [],
+          'ttlMs': 0,
+        },
+        message: 'cacheScope',
+      ),
+      (
+        name: 'negative ttlMs',
+        result: const {
+          'resultType': resultTypeComplete,
+          'tools': [],
+          'ttlMs': -1,
+          'cacheScope': CacheScope.private,
+        },
+        message: 'ttlMs',
+      ),
+      (
+        name: 'invalid cacheScope',
+        result: const {
+          'resultType': resultTypeComplete,
+          'tools': [],
+          'ttlMs': 0,
+          'cacheScope': 'shared',
+        },
+        message: 'cacheScope',
+      ),
+    ]) {
+      test('client rejects stateless cacheable result ${scenario.name}',
+          () async {
+        final transport = DiscoveringClientTransport(
+          toolsListResult: scenario.result,
+        );
+        final client = McpClient(
+          const Implementation(name: 'client', version: '1.0.0'),
+          options: const McpClientOptions(useServerDiscover: true),
+        );
+
+        await client.connect(transport);
+
+        await expectLater(
+          client.listTools(),
+          throwsA(
+            isA<McpError>()
+                .having(
+                  (error) => error.code,
+                  'code',
+                  ErrorCode.internalError.value,
+                )
+                .having(
+                  (error) => error.data.toString(),
+                  'data',
+                  contains(scenario.message),
+                ),
+          ),
+        );
+      });
+    }
 
     test('client accepts advertised task extension resultType values',
         () async {

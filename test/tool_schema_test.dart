@@ -232,6 +232,60 @@ void main() {
       expect(parsedNull.structuredContent, isNull);
     });
 
+    test('Tool JSON object fields reject non-JSON Dart map values', () {
+      expect(
+        () => Tool.fromJson({
+          'name': 'search',
+          'inputSchema': {'type': 'object'},
+          '_meta': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const Tool(
+          name: 'search',
+          inputSchema: JsonObject(),
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolRequest.fromJson({
+          'name': 'search',
+          'arguments': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const CallToolRequest(
+          name: 'search',
+          arguments: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolResult.fromJson({
+          'content': <Map<String, dynamic>>[],
+          '_meta': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const CallToolResult(
+          content: [],
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolResult.fromJson({
+          'content': <Map<String, dynamic>>[],
+          'x-extra': Object(),
+        }),
+        throwsFormatException,
+      );
+    });
+
     test('Tool serializes JsonEnum properties as standard enum schema', () {
       const tool = Tool(
         name: 'configure_mode',

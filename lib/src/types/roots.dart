@@ -1,4 +1,5 @@
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Represents a root directory or file the server can operate on.
 class Root {
@@ -25,14 +26,14 @@ class Root {
     return Root(
       uri: json['uri'] as String,
       name: json['name'] as String?,
-      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
+      meta: readOptionalJsonObject(json['_meta'], 'Root._meta'),
     );
   }
 
   Map<String, dynamic> toJson() => {
         'uri': uri,
         if (name != null) 'name': name,
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'Root._meta'),
       };
 }
 
@@ -61,7 +62,7 @@ class ListRootsResult implements BaseResultData {
   const ListRootsResult({required this.roots, this.meta});
 
   factory ListRootsResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(json['_meta'], 'ListRootsResult._meta');
     final roots = json['roots'];
     if (roots is! List) {
       throw const FormatException('ListRootsResult.roots is required');
@@ -76,7 +77,8 @@ class ListRootsResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'roots': roots.map((r) => r.toJson()).toList(),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'ListRootsResult._meta'),
       };
 }
 

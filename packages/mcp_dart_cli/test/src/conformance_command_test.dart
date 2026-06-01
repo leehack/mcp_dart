@@ -20,8 +20,16 @@ void main() {
         containsAll(<String>[
           'jsonrpc.rejects-invalid-version',
           'jsonrpc.rejects-malformed-message',
+          'jsonrpc.rejects-non-string-method',
+          'jsonrpc.rejects-result-error-response',
+          'jsonrpc.rejects-malformed-error-object',
+          'jsonrpc.rejects-null-error-response-id',
+          'jsonrpc.rejects-null-params-member',
           'jsonrpc.preserves-string-response-id',
+          'jsonrpc.preserves-integer-response-id',
           'jsonrpc.preserves-string-progress-token',
+          'jsonrpc.preserves-integer-progress-token',
+          'jsonrpc.rejects-fractional-ids-and-progress-tokens',
           'protocol-version.advertises-latest-2025-11-25',
         ]),
       );
@@ -36,10 +44,12 @@ void main() {
         result.caseNames,
         containsAll(<String>[
           'lifecycle.rejects-pre-initialize-request',
+          'server-discover.requires-request-meta',
           'capabilities.rejects-unnegotiated-sampling-tools',
           'elicitation.rejects-invalid-form-url-union',
           'tasks.strips-unnegotiated-related-task-metadata',
           'progress.rejects-malformed-progress-token',
+          'progress.dispatches-integer-progress-token',
         ]),
       );
       expect(

@@ -353,10 +353,11 @@ mcp_dart call-tool search --url http://localhost:3000/mcp --json-args '{"q":"mcp
 
 Run built-in fixture checks, MCP 2025-11-25 spec-critical checks, and
 deterministic fuzz checks for protocol edge cases in this Dart SDK/CLI package.
-The fixture suite covers JSON-RPC malformed-message handling, string request
-IDs, string progress tokens, and advertised protocol-version support. The spec
-suite covers raw-wire lifecycle, capability, elicitation, task-metadata, and
-progress-token negative cases.
+The fixture suite covers JSON-RPC malformed-message handling, string and
+integer request IDs, string and integer progress tokens, fractional ID/token
+rejection, and advertised protocol-version support. The spec suite covers
+raw-wire lifecycle, capability, elicitation, task-metadata, progress-token
+dispatch, and negative cases.
 
 This command is useful as a regression gate for the Dart SDK and CLI, but it is
 not a live compliance scanner for arbitrary MCP servers or clients. For external

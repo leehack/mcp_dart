@@ -1,5 +1,6 @@
 import 'content.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 Map<String, dynamic>? _asJsonObject(dynamic value) {
   if (value == null) {
@@ -15,6 +16,74 @@ Map<String, dynamic>? _asJsonObject(dynamic value) {
     return value ? <String, dynamic>{} : null;
   }
   throw FormatException('Expected object capability, got ${value.runtimeType}');
+}
+
+Map<String, dynamic>? _asStrictJsonObject(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    if (value.keys.any((key) => key is! String)) {
+      throw FormatException('$field must be an object with string keys');
+    }
+    return value.cast<String, dynamic>();
+  }
+  throw FormatException('$field must be an object');
+}
+
+Map<String, dynamic>? _asJsonObjectMap(Object? value, String field) {
+  final map = _asStrictJsonObject(value, field);
+  if (map == null) {
+    return null;
+  }
+
+  return map.map((key, item) {
+    final object = _asStrictJsonObject(item, '$field.$key');
+    if (object == null) {
+      throw FormatException('$field.$key must be an object');
+    }
+    return MapEntry(key, object);
+  });
+}
+
+Map<String, dynamic>? _serializeJsonObjectMap(
+  Map<String, dynamic>? value,
+  String field,
+) {
+  if (value == null) {
+    return null;
+  }
+
+  return value.map((key, item) {
+    final object = _asStrictJsonObject(item, '$field.$key');
+    if (object == null) {
+      throw ArgumentError.value(item, '$field.$key', 'must be an object');
+    }
+    return MapEntry(key, object);
+  });
+}
+
+Map<String, Map<String, dynamic>>? _asExtensionMap(
+  Object? value,
+  String field,
+) {
+  final map = _asJsonObjectMap(value, field);
+  return map?.map(
+    (key, value) => MapEntry(key, value.cast<String, dynamic>()),
+  );
+}
+
+Map<String, Map<String, dynamic>>? _serializeExtensionMap(
+  Map<String, Map<String, dynamic>>? value,
+  String field,
+) {
+  final map = _serializeJsonObjectMap(value, field);
+  return map?.map(
+    (key, value) => MapEntry(key, value.cast<String, dynamic>()),
+  );
 }
 
 bool? _capabilityDeclared(dynamic value) {
@@ -380,6 +449,9 @@ class ClientCapabilitiesTasks {
 /// Capabilities a client may support.
 class ClientCapabilities {
   /// Experimental, non-standard capabilities.
+  ///
+  /// Each capability value must be a JSON object. Use an empty object to
+  /// advertise support without settings.
   final Map<String, dynamic>? experimental;
 
   /// Present if the client supports sampling (`sampling/createMessage`).
@@ -414,10 +486,16 @@ class ClientCapabilities {
     final elicitationMap = _asJsonObject(json['elicitation']);
     final tasksMap = _asJsonObject(json['tasks']);
     final samplingMap = _asJsonObject(json['sampling']);
-    final extensionsMap = _asJsonObject(json['extensions']);
+    final extensionsMap = _asExtensionMap(
+      json['extensions'],
+      'ClientCapabilities.extensions',
+    );
 
     return ClientCapabilities(
-      experimental: json['experimental'] as Map<String, dynamic>?,
+      experimental: _asJsonObjectMap(
+        json['experimental'],
+        'ClientCapabilities.experimental',
+      ),
       sampling: samplingMap == null
           ? null
           : ClientCapabilitiesSampling.fromJson(samplingMap),
@@ -428,19 +506,25 @@ class ClientCapabilities {
           : ClientElicitation.fromJson(elicitationMap),
       tasks:
           tasksMap == null ? null : ClientCapabilitiesTasks.fromJson(tasksMap),
-      extensions: extensionsMap?.map(
-        (key, value) => MapEntry(key, Map<String, dynamic>.from(value as Map)),
-      ),
+      extensions: extensionsMap,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        if (experimental != null) 'experimental': experimental,
+        if (experimental != null)
+          'experimental': _serializeJsonObjectMap(
+            experimental,
+            'ClientCapabilities.experimental',
+          ),
         if (sampling != null) 'sampling': sampling!.toJson(),
         if (roots != null) 'roots': roots!.toJson(),
         if (elicitation != null) 'elicitation': elicitation!.toJson(),
         if (tasks != null) 'tasks': tasks!.toJson(),
-        if (extensions != null) 'extensions': extensions,
+        if (extensions != null)
+          'extensions': _serializeExtensionMap(
+            extensions,
+            'ClientCapabilities.extensions',
+          ),
       };
 
   /// Whether the MCP Tasks extension is declared.
@@ -516,10 +600,43 @@ class JsonRpcServerDiscoverRequest extends JsonRpcRequest {
   }) : super(method: Method.serverDiscover);
 
   factory JsonRpcServerDiscoverRequest.fromJson(Map<String, dynamic> json) {
+    final params = readJsonObject(
+      json['params'],
+      'JsonRpcServerDiscoverRequest.params',
+    );
+    final meta = validateRequestMeta(
+      readJsonObject(
+        params['_meta'],
+        'JsonRpcServerDiscoverRequest.params._meta',
+      ),
+      validateKeys: true,
+    )!;
+
     return JsonRpcServerDiscoverRequest(
       id: parseRequestId(json['id']),
-      meta: extractRequestMeta(json),
+      meta: meta,
     );
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    final meta = this.meta;
+    if (meta == null) {
+      throw const FormatException(
+        'JsonRpcServerDiscoverRequest.params._meta is required',
+      );
+    }
+    return {
+      'jsonrpc': jsonrpc,
+      'id': parseRequestId(id, fieldName: 'JsonRpcServerDiscoverRequest.id'),
+      'method': method,
+      'params': <String, dynamic>{
+        '_meta': readJsonObject(
+          validateRequestMeta(meta, validateKeys: true),
+          'JsonRpcServerDiscoverRequest.params._meta',
+        ),
+      },
+    };
   }
 }
 
@@ -778,6 +895,9 @@ class ServerCapabilitiesTasks {
 /// Capabilities a server may support.
 class ServerCapabilities {
   /// Experimental, non-standard capabilities.
+  ///
+  /// Each capability value must be a JSON object. Use an empty object to
+  /// advertise support without settings.
   final Map<String, dynamic>? experimental;
 
   /// Present if the server supports sending log messages (`notifications/message`).
@@ -829,10 +949,16 @@ class ServerCapabilities {
     final tMap = _asJsonObject(json['tools']);
     final tasksMap = _asJsonObject(json['tasks']);
     final elicitationMap = _asJsonObject(json['elicitation']);
-    final extensionsMap = _asJsonObject(json['extensions']);
+    final extensionsMap = _asExtensionMap(
+      json['extensions'],
+      'ServerCapabilities.extensions',
+    );
 
     return ServerCapabilities(
-      experimental: json['experimental'] as Map<String, dynamic>?,
+      experimental: _asJsonObjectMap(
+        json['experimental'],
+        'ServerCapabilities.experimental',
+      ),
       logging: json['logging'] as Map<String, dynamic>?,
       prompts: pMap == null ? null : ServerCapabilitiesPrompts.fromJson(pMap),
       resources:
@@ -845,21 +971,27 @@ class ServerCapabilities {
       elicitation: elicitationMap == null
           ? null
           : ServerCapabilitiesElicitation.fromJson(elicitationMap),
-      extensions: extensionsMap?.map(
-        (key, value) => MapEntry(key, Map<String, dynamic>.from(value as Map)),
-      ),
+      extensions: extensionsMap,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        if (experimental != null) 'experimental': experimental,
+        if (experimental != null)
+          'experimental': _serializeJsonObjectMap(
+            experimental,
+            'ServerCapabilities.experimental',
+          ),
         if (logging != null) 'logging': logging,
         if (prompts != null) 'prompts': prompts!.toJson(),
         if (resources != null) 'resources': resources!.toJson(),
         if (tools != null) 'tools': tools!.toJson(),
         if (completions != null) 'completions': completions!.toJson(),
         if (tasks != null) 'tasks': tasks!.toJson(),
-        if (extensions != null) 'extensions': extensions,
+        if (extensions != null)
+          'extensions': _serializeExtensionMap(
+            extensions,
+            'ServerCapabilities.extensions',
+          ),
       };
 
   /// Whether the MCP Tasks extension is declared.
@@ -894,7 +1026,8 @@ class InitializeResult implements BaseResultData {
   });
 
   factory InitializeResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta =
+        readOptionalJsonObject(json['_meta'], 'InitializeResult._meta');
     return InitializeResult(
       protocolVersion: json['protocolVersion'] as String,
       capabilities: ServerCapabilities.fromJson(
@@ -914,7 +1047,8 @@ class InitializeResult implements BaseResultData {
         'capabilities': capabilities.toJson(),
         'serverInfo': serverInfo.toJson(),
         if (instructions != null) 'instructions': instructions,
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'InitializeResult._meta'),
       };
 }
 
@@ -966,7 +1100,7 @@ class DiscoverResult implements BaseResultData {
         json['serverInfo'] as Map<String, dynamic>,
       ),
       instructions: json['instructions'] as String?,
-      meta: json['_meta'] as Map<String, dynamic>?,
+      meta: readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta'),
     );
   }
 
@@ -977,7 +1111,7 @@ class DiscoverResult implements BaseResultData {
         'capabilities': capabilities.toJson(),
         'serverInfo': serverInfo.toJson(),
         if (instructions != null) 'instructions': instructions,
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
       };
 }
 

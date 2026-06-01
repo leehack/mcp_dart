@@ -77,6 +77,8 @@
   request methods.
 - Rejected MCP 2026 MRTR `inputRequests` whose embedded client request type is
   not declared in the caller's per-request client capabilities.
+- Rejected non-object `experimental` and `extensions` capability entries to
+  match the stable and MCP 2026 capability schemas.
 - Returned version-appropriate resource-not-found errors from high-level
   `resources/read` handlers: stable 2025 uses legacy `-32002`, while MCP 2026
   stateless requests use `-32602` with the missing `uri` in error data.
@@ -86,12 +88,58 @@
   clamping malformed wire values to zero.
 - Validated MRTR `inputResponses` as `CreateMessageResult`, `ListRootsResult`,
   or `ElicitResult` instead of accepting arbitrary result objects.
-- Rejected non-integer numeric `ElicitResult.content` values to match the
-  stable and MCP 2026 schemas.
+- Allowed finite numeric `ElicitResult.content` values to match the stable and
+  MCP 2026 `string | number | boolean | string[]` schema.
 - Rejected form elicitation schemas that provide legacy `enumNames` without the
   required string `enum`.
 - Rejected `ElicitResult.content` when the result action is `decline` or
   `cancel`.
+- Rejected URL elicitation values that are not absolute URIs to match the stable
+  and MCP 2026 `format: uri` schemas.
+- Rejected non-finite numeric values for progress, annotation priority, model
+  priority, and sampling temperature fields so SDK-built payloads remain valid
+  JSON numbers.
+- Rejected non-JSON values in sampling JSON object fields, including
+  `tool_use.input`, sampling metadata, annotations, and `_meta` maps.
+- Rejected non-JSON values in common content/resource metadata fields and
+  `resource_link.annotations`.
+- Reused shared JSON-object validation for MRTR, task extension, subscription,
+  and tool object fields.
+- Rejected non-JSON values in JSON-RPC envelope and remaining typed result
+  metadata fields.
+- Rejected non-JSON JSON-RPC error `data` values at parse and serialize
+  boundaries.
+- Rejected JSON-RPC response envelopes that include both `result` and `error`
+  instead of silently treating them as successful responses.
+- Rejected JSON-RPC request and notification envelopes whose `method` member is
+  not a string, and validated generic request `params` as JSON objects.
+- Rejected malformed JSON-RPC `error` objects with missing or invalid `code` or
+  `message` fields instead of surfacing Dart cast errors.
+- Rejected JSON-RPC error responses that include an explicit `id: null` member
+  while continuing to allow omitted IDs for malformed-request error cases.
+- Rejected JSON-RPC request and notification envelopes that include an explicit
+  `params: null` member, since `params` must be an object when present.
+- Prevented stateless MCP 2026 clients from sending core request and
+  notification methods removed from that protocol revision.
+- Rejected server-initiated JSON-RPC requests received by stateless MCP 2026
+  clients on generic transports.
+- Rejected stateless MCP 2026 responses that omit `resultType` or required
+  cacheable-result fields.
+- Stripped caller-supplied `Mcp-Session-Id` headers case-insensitively from
+  MCP 2026 stateless Streamable HTTP requests.
+- Derived MCP 2026 stateless Streamable HTTP headers from nested
+  `params._meta` metadata for direct JSON-RPC transport sends.
+- Allowed Streamable MCP server CORS preflights for 2026 stateless routing and
+  tool parameter headers, including requested `Mcp-Param-*` headers.
+- Serialized MRTR `ElicitResult` and `ListRootsResult` input responses with the
+  MCP 2026 embedded client-result shapes that omit common Result `_meta`.
+- Accepted finite numeric JSON-RPC request IDs and progress tokens, matching
+  the stable and MCP 2026 `string | number` schema while continuing to reject
+  non-finite numbers.
+- Allowed protocol progress handlers and `RequestHandlerExtra.sendProgress` to
+  dispatch finite numeric progress tokens end-to-end.
+- Widened protocol `relatedRequestId` API parameters to preserve string and
+  finite numeric JSON-RPC request IDs through request and notification routing.
 
 ## 2.2.0
 

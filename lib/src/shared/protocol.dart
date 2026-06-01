@@ -9,7 +9,18 @@ import 'transport.dart';
 
 final _logger = Logger("mcp_dart.shared.protocol");
 
-bool _isProgressToken(Object? token) => token is int || token is String;
+bool _isProgressToken(Object? token) =>
+    token is String ||
+    token is int ||
+    (token is double && token.isFinite && token == token.truncateToDouble());
+
+const Set<String> _statelessCacheableResultMethods = {
+  Method.toolsList,
+  Method.promptsList,
+  Method.resourcesList,
+  Method.resourcesTemplatesList,
+  Method.resourcesRead,
+};
 
 final _lastProgressByExtra = Expando<double>();
 final _subscriptionStateByExtra = Expando<_SubscriptionStreamState>();
@@ -192,10 +203,10 @@ class RequestHandlerExtra {
       return;
     }
 
-    // progressToken can be int or string
-    if (progressToken is! int && progressToken is! String) {
+    if (!_isProgressToken(progressToken)) {
       _logger.warn(
-        "Invalid progressToken type: ${progressToken.runtimeType}. Expected int or String.",
+        "Invalid progressToken type: ${progressToken.runtimeType}. "
+        "Expected string or integer.",
       );
       return;
     }
@@ -508,13 +519,41 @@ abstract class Protocol {
 
     final resultType = resultJson['resultType'];
     if (resultType == null) {
-      return;
+      throw const FormatException(
+        'MCP stateless responses must include resultType',
+      );
     }
     if (resultType is! String) {
       throw const FormatException('MCP resultType must be a string');
     }
     if (!isRecognizedResultType(resultType)) {
       throw FormatException('Unrecognized MCP resultType "$resultType"');
+    }
+
+    if (resultType == resultTypeComplete &&
+        _statelessCacheableResultMethods.contains(request.method)) {
+      _validateStatelessCacheableResult(request, resultJson);
+    }
+  }
+
+  void _validateStatelessCacheableResult(
+    JsonRpcRequest request,
+    Map<String, dynamic> resultJson,
+  ) {
+    final ttlMs = resultJson['ttlMs'];
+    if (ttlMs is! int || ttlMs < 0) {
+      throw FormatException(
+        'MCP stateless ${request.method} responses must include '
+        'a non-negative integer ttlMs',
+      );
+    }
+
+    final cacheScope = resultJson['cacheScope'];
+    if (cacheScope != CacheScope.private && cacheScope != CacheScope.public) {
+      throw FormatException(
+        'MCP stateless ${request.method} responses must include '
+        'cacheScope "private" or "public"',
+      );
     }
   }
 
@@ -1390,7 +1429,8 @@ abstract class Protocol {
     if (!_isProgressToken(progressToken)) {
       _onerror(
         ArgumentError(
-          "Received invalid progressToken: $progressToken. Expected int or String.",
+          "Received invalid progressToken: $progressToken. "
+          "Expected string or integer.",
         ),
       );
       return;
@@ -1536,7 +1576,7 @@ abstract class Protocol {
     JsonRpcRequest requestData,
     T Function(Map<String, dynamic> resultJson) resultFactory, [
     RequestOptions? options,
-    int? relatedRequestId,
+    RequestId? relatedRequestId,
   ]) {
     return _requestWithRequestId(
       requestData,
@@ -1612,7 +1652,8 @@ abstract class Protocol {
         if (!_isProgressToken(requestedProgressToken)) {
           return Future.error(
             ArgumentError(
-              'progressToken must be an int or String when onprogress is set.',
+              'progressToken must be a string or integer when '
+              'onprogress is set.',
             ),
           );
         }
@@ -1922,7 +1963,7 @@ abstract class Protocol {
   Future<void> notification(
     JsonRpcNotification notificationData, {
     RelatedTaskMetadata? relatedTask,
-    int? relatedRequestId,
+    RequestId? relatedRequestId,
   }) {
     return _notificationWithRequestId(
       notificationData,

@@ -29,7 +29,7 @@ class MockClient implements McpClient {
     JsonRpcRequest request,
     T Function(Map<String, dynamic> json) parser, [
     RequestOptions? options,
-    int? relatedRequestId,
+    RequestId? relatedRequestId,
   ]) async {
     requests.add(request);
 

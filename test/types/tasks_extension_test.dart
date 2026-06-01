@@ -127,6 +127,46 @@ void main() {
       expect(parsed.meta, {'trace': 'abc'});
     });
 
+    test('rejects non-JSON task extension object values', () {
+      final taskJson = {
+        'taskId': 'task-1',
+        'status': 'completed',
+        'createdAt': '2026-07-28T00:00:00Z',
+        'lastUpdatedAt': '2026-07-28T00:02:00Z',
+        'ttlMs': 60000,
+        'result': {'bad': Object()},
+      };
+
+      expect(
+        () => TaskExtensionTask.fromJson(taskJson),
+        throwsFormatException,
+      );
+      expect(
+        () => const TaskExtensionTask(
+          taskId: 'task-1',
+          status: TaskStatus.completed,
+          createdAt: '2026-07-28T00:00:00Z',
+          lastUpdatedAt: '2026-07-28T00:02:00Z',
+          ttlMs: 60000,
+          result: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
+        () => TaskExtensionAcknowledgementResult.fromJson({
+          'resultType': resultTypeComplete,
+          '_meta': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const TaskExtensionAcknowledgementResult(
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+    });
+
     test('serializes notifications/tasks with detailed task state', () {
       final notification = JsonRpcTaskNotification(
         task: const TaskExtensionTask(

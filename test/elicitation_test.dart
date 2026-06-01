@@ -746,6 +746,23 @@ void main() {
         () => ElicitRequestParams.fromJson({
           'mode': 'url',
           'message': 'Please authenticate',
+          'url': 'relative/callback',
+          'elicitationId': 'oauth-123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'Please authenticate',
+          url: 'relative/callback',
+          elicitationId: 'oauth-123',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'Please authenticate',
           'url': 'https://oauth.example.com/authorize',
           'elicitationId': 'oauth-123',
           'requestedSchema': {
@@ -1043,13 +1060,13 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
-        () => ElicitResult.fromJson({
+        ElicitResult.fromJson({
           'action': 'accept',
           'content': {
             'ratio': 0.5,
           },
-        }),
-        throwsA(isA<FormatException>()),
+        }).content?['ratio'],
+        0.5,
       );
       expect(
         () => ElicitResult.fromJson({
@@ -1070,13 +1087,13 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
       expect(
-        () => const ElicitResult(
+        const ElicitResult(
           action: 'accept',
           content: {
             'ratio': 0.5,
           },
-        ).toJson(),
-        throwsA(isA<ArgumentError>()),
+        ).toJson()['content'],
+        containsPair('ratio', 0.5),
       );
       expect(
         () => const ElicitResult(

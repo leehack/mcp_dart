@@ -264,6 +264,92 @@ void main() {
       expect(msg3, isA<JsonRpcResponse>());
     });
 
+    test('Server sends progress with integer progress token', () async {
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/integer-token-task',
+        (request, extra) async {
+          await extra.sendProgress(10, total: 100, message: 'Starting');
+          return TestResult(value: 'success');
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/integer-token-task',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      const progressToken = 12345;
+      transport.receiveMessage(
+        const JsonRpcRequest(
+          id: 99,
+          method: 'test/integer-token-task',
+          meta: {'progressToken': progressToken},
+        ),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(transport.sentMessages.length, 2);
+
+      final msg1 = transport.sentMessages[0];
+      expect(msg1, isA<JsonRpcNotification>());
+      expect((msg1 as JsonRpcNotification).method, 'notifications/progress');
+      expect(msg1.params, isNotNull);
+      expect(msg1.params!['progressToken'], progressToken);
+      expect(msg1.params!['progress'], 10);
+      expect(msg1.params!['message'], 'Starting');
+
+      final msg2 = transport.sentMessages[1];
+      expect(msg2, isA<JsonRpcResponse>());
+    });
+
+    test('RequestHandlerExtra ignores malformed progress token', () async {
+      final sentNotifications = <JsonRpcNotification>[];
+      final extra = RequestHandlerExtra(
+        signal: BasicAbortController().signal,
+        requestId: 101,
+        meta: const {'progressToken': double.nan},
+        sendNotification: (notification, {relatedTask}) async {
+          sentNotifications.add(notification);
+        },
+        sendRequest: <T extends BaseResultData>(
+          JsonRpcRequest request,
+          T Function(Map<String, dynamic>) resultFactory,
+          RequestOptions options,
+        ) async {
+          return resultFactory({});
+        },
+      );
+
+      await extra.sendProgress(10);
+
+      expect(sentNotifications, isEmpty);
+    });
+
+    test('RequestHandlerExtra ignores fractional progress token', () async {
+      final sentNotifications = <JsonRpcNotification>[];
+      final extra = RequestHandlerExtra(
+        signal: BasicAbortController().signal,
+        requestId: 101,
+        meta: const {'progressToken': 123.5},
+        sendNotification: (notification, {relatedTask}) async {
+          sentNotifications.add(notification);
+        },
+        sendRequest: <T extends BaseResultData>(
+          JsonRpcRequest request,
+          T Function(Map<String, dynamic>) resultFactory,
+          RequestOptions options,
+        ) async {
+          return resultFactory({});
+        },
+      );
+
+      await extra.sendProgress(10);
+
+      expect(sentNotifications, isEmpty);
+    });
+
     test('RequestHandlerExtra rejects non-increasing progress', () async {
       final sentNotifications = <JsonRpcNotification>[];
       final extra = RequestHandlerExtra(

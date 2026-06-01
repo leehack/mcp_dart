@@ -30,7 +30,7 @@ class LegacyTransport implements Transport {
   Future<void> start() async {}
 }
 
-class StringAwareTransport extends LegacyTransport
+class FullRequestIdAwareTransport extends LegacyTransport
     implements RequestIdAwareTransport {
   RequestId? lastRequestIdAwareRelatedRequestId;
 
@@ -59,9 +59,10 @@ void main() {
       expect(transport.lastRelatedRequestId, isNull);
     });
 
-    test('request-id-aware transports preserve string relatedRequestId',
+    test(
+        'request-id-aware transports preserve string and integer relatedRequestId',
         () async {
-      final transport = StringAwareTransport();
+      final transport = FullRequestIdAwareTransport();
 
       await transport.sendPreservingRequestId(
         const JsonRpcNotification(method: 'test/notification'),
@@ -71,6 +72,13 @@ void main() {
       expect(transport.lastMessage, isA<JsonRpcNotification>());
       expect(transport.lastRelatedRequestId, isNull);
       expect(transport.lastRequestIdAwareRelatedRequestId, 'client-req-1');
+
+      await transport.sendPreservingRequestId(
+        const JsonRpcNotification(method: 'test/notification'),
+        relatedRequestId: 15,
+      );
+
+      expect(transport.lastRequestIdAwareRelatedRequestId, 15);
     });
   });
 }

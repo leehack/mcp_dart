@@ -1,5 +1,6 @@
 import '../shared/json_schema/json_schema.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Legacy alias for [JsonSchema] used in elicitation requests.
 typedef ElicitationInputSchema = JsonSchema;
@@ -114,6 +115,7 @@ class ElicitRequest {
       if (url is! String) {
         throw const FormatException('URL elicitation requires url.');
       }
+      _validateUrlElicitationUri(url, formatException: true);
       if (elicitationId is! String) {
         throw const FormatException('URL elicitation requires elicitationId.');
       }
@@ -159,6 +161,7 @@ class ElicitRequest {
       if (url == null) {
         throw ArgumentError('URL elicitation requires url.');
       }
+      _validateUrlElicitationUri(url!);
       if (elicitationId == null) {
         throw ArgumentError('URL elicitation requires elicitationId.');
       }
@@ -279,7 +282,7 @@ class ElicitResult implements BaseResultData {
       content: content,
       url: json['url'] as String?,
       elicitationId: json['elicitationId'] as String?,
-      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
+      meta: readOptionalJsonObject(json['_meta'], 'ElicitResult._meta'),
     );
   }
 
@@ -291,7 +294,7 @@ class ElicitResult implements BaseResultData {
     return {
       'action': resultAction,
       if (content != null) 'content': content,
-      if (meta != null) '_meta': meta,
+      if (meta != null) '_meta': readJsonObject(meta, 'ElicitResult._meta'),
     };
   }
 
@@ -366,7 +369,10 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
         "Missing params for elicitation complete notification",
       );
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcElicitationCompleteNotification._meta',
+    );
     return JsonRpcElicitationCompleteNotification(
       completeParams: ElicitationCompleteNotification.fromJson(paramsMap),
       meta: meta,
@@ -628,7 +634,10 @@ void _validateElicitResultContent(
   }
   for (final entry in content.entries) {
     final value = entry.value;
-    if (value is String || value is int || value is bool) {
+    if (value is String || value is bool) {
+      continue;
+    }
+    if (value is num && value.isFinite) {
       continue;
     }
     if (value is List && value.every((item) => item is String)) {
@@ -636,13 +645,13 @@ void _validateElicitResultContent(
     }
     if (formatException) {
       throw FormatException(
-        'ElicitResult.content.${entry.key} must be string, integer, boolean, or string[]',
+        'ElicitResult.content.${entry.key} must be string, finite number, boolean, or string[]',
       );
     }
     throw ArgumentError.value(
       value,
       'content.${entry.key}',
-      'ElicitResult content values must be string, integer, boolean, or string[]',
+      'ElicitResult content values must be string, finite number, boolean, or string[]',
     );
   }
 }
@@ -685,4 +694,24 @@ void _validateUrlElicitations(
       );
     }
   }
+}
+
+void _validateUrlElicitationUri(
+  String url, {
+  bool formatException = false,
+}) {
+  final uri = Uri.tryParse(url);
+  if (uri != null && uri.hasScheme) {
+    return;
+  }
+  if (formatException) {
+    throw const FormatException(
+      'URL elicitation url must be an absolute URI.',
+    );
+  }
+  throw ArgumentError.value(
+    url,
+    'url',
+    'URL elicitation url must be an absolute URI.',
+  );
 }

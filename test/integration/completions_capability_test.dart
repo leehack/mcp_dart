@@ -92,7 +92,7 @@ void main() {
     test('Completions capability survives serialization round-trip', () {
       final originalCaps = const ServerCapabilities(
         completions: ServerCapabilitiesCompletions(listChanged: true),
-        experimental: {'test': true},
+        experimental: {'test': {}},
       );
 
       final json = originalCaps.toJson();
@@ -100,7 +100,7 @@ void main() {
 
       expect(deserializedCaps.completions, isNotNull);
       expect(json['completions'], isEmpty);
-      expect(deserializedCaps.experimental?['test'], equals(true));
+      expect(deserializedCaps.experimental?['test'], isEmpty);
     });
 
     test('legacy completions listChanged payload still parses', () {

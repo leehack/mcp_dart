@@ -56,14 +56,14 @@ void main() {
 
     test('registerCapabilities merges capabilities', () {
       final initialCapabilities =
-          const ClientCapabilities(experimental: {'feature1': true});
+          const ClientCapabilities(experimental: {'feature1': {}});
       client = Client(
         clientInfo,
         options: McpClientOptions(capabilities: initialCapabilities),
       );
 
       final additionalCapabilities = const ClientCapabilities(
-        experimental: {'feature2': true},
+        experimental: {'feature2': {}},
         roots: ClientCapabilitiesRoots(listChanged: true),
       );
 

@@ -1,25 +1,22 @@
 import 'validation.dart';
 
-Map<String, dynamic>? _asJsonObjectOrNull(dynamic value) {
+Map<String, dynamic>? _asJsonObjectOrNull(
+  dynamic value, [
+  String field = 'object',
+]) {
   if (value == null) {
     return null;
   }
-
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-
-  if (value is Map) {
-    return value.cast<String, dynamic>();
-  }
-
-  throw FormatException('Expected object, got ${value.runtimeType}');
+  return readJsonObject(value, field);
 }
 
-Map<String, dynamic> _asJsonObject(dynamic value) {
-  final map = _asJsonObjectOrNull(value);
+Map<String, dynamic> _asJsonObject(
+  dynamic value, [
+  String field = 'object',
+]) {
+  final map = _asJsonObjectOrNull(value, field);
   if (map == null) {
-    throw const FormatException('Expected object, got null');
+    throw FormatException('$field must be a JSON object');
   }
   return map;
 }
@@ -93,7 +90,10 @@ sealed class ResourceContents {
   factory ResourceContents.fromJson(Map<String, dynamic> json) {
     final uri = json['uri'] as String;
     final mimeType = json['mimeType'] as String?;
-    final meta = _asJsonObjectOrNull(json['_meta']);
+    final meta = _asJsonObjectOrNull(
+      json['_meta'],
+      'ResourceContents._meta',
+    );
     final extra = Map<String, dynamic>.from(json)
       ..removeWhere(
         (key, value) =>
@@ -104,7 +104,8 @@ sealed class ResourceContents {
             key == '_meta',
       );
 
-    final passthrough = extra.isEmpty ? null : extra;
+    final passthrough =
+        extra.isEmpty ? null : readJsonObject(extra, 'ResourceContents.extra');
 
     if (json.containsKey('text')) {
       return TextResourceContents(
@@ -141,8 +142,9 @@ sealed class ResourceContents {
           final BlobResourceContents c => {'blob': c.blob},
           UnknownResourceContents _ => {},
         },
-        if (meta != null) '_meta': meta,
-        ...?extra,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'ResourceContents._meta'),
+        if (extra != null) ...readJsonObject(extra, 'ResourceContents.extra'),
       };
 }
 
@@ -259,20 +261,23 @@ sealed class Content {
           final TextContent c => {
               'text': c.text,
               if (c.annotations != null) 'annotations': c.annotations!.toJson(),
-              if (c.meta != null) '_meta': c.meta,
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'TextContent._meta'),
             },
           final ImageContent c => {
               'data': c.data,
               'mimeType': c.mimeType,
               if (c.theme != null) 'theme': c.theme,
               if (c.annotations != null) 'annotations': c.annotations!.toJson(),
-              if (c.meta != null) '_meta': c.meta,
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'ImageContent._meta'),
             },
           final AudioContent c => {
               'data': c.data,
               'mimeType': c.mimeType,
               if (c.annotations != null) 'annotations': c.annotations!.toJson(),
-              if (c.meta != null) '_meta': c.meta,
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'AudioContent._meta'),
             },
           final ResourceLink c => {
               'uri': c.uri,
@@ -283,13 +288,19 @@ sealed class Content {
               if (c.size != null) 'size': c.size,
               if (c.icons != null)
                 'icons': c.icons!.map((icon) => icon.toJson()).toList(),
-              if (c.annotations != null) 'annotations': c.annotations,
-              if (c.meta != null) '_meta': c.meta,
+              if (c.annotations != null)
+                'annotations': readJsonObject(
+                  c.annotations,
+                  'ResourceLink.annotations',
+                ),
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'ResourceLink._meta'),
             },
           final EmbeddedResource c => {
               'resource': c.resource.toJson(),
               if (c.annotations != null) 'annotations': c.annotations!.toJson(),
-              if (c.meta != null) '_meta': c.meta,
+              if (c.meta != null)
+                '_meta': readJsonObject(c.meta, 'EmbeddedResource._meta'),
             },
           UnknownContent _ => {},
         },
@@ -318,8 +329,10 @@ class TextContent extends Content {
       text: json['text'] as String,
       annotations: json['annotations'] == null
           ? null
-          : Annotations.fromJson(_asJsonObject(json['annotations'])),
-      meta: _asJsonObjectOrNull(json['_meta']),
+          : Annotations.fromJson(
+              _asJsonObject(json['annotations'], 'TextContent.annotations'),
+            ),
+      meta: _asJsonObjectOrNull(json['_meta'], 'TextContent._meta'),
     );
   }
 }
@@ -356,8 +369,10 @@ class ImageContent extends Content {
       theme: json['theme'] as String?,
       annotations: json['annotations'] == null
           ? null
-          : Annotations.fromJson(_asJsonObject(json['annotations'])),
-      meta: _asJsonObjectOrNull(json['_meta']),
+          : Annotations.fromJson(
+              _asJsonObject(json['annotations'], 'ImageContent.annotations'),
+            ),
+      meta: _asJsonObjectOrNull(json['_meta'], 'ImageContent._meta'),
     );
   }
 }
@@ -388,8 +403,10 @@ class AudioContent extends Content {
       mimeType: json['mimeType'] as String,
       annotations: json['annotations'] == null
           ? null
-          : Annotations.fromJson(_asJsonObject(json['annotations'])),
-      meta: _asJsonObjectOrNull(json['_meta']),
+          : Annotations.fromJson(
+              _asJsonObject(json['annotations'], 'AudioContent.annotations'),
+            ),
+      meta: _asJsonObjectOrNull(json['_meta'], 'AudioContent._meta'),
     );
   }
 }
@@ -414,12 +431,17 @@ class EmbeddedResource extends Content {
   factory EmbeddedResource.fromJson(Map<String, dynamic> json) {
     return EmbeddedResource(
       resource: ResourceContents.fromJson(
-        _asJsonObject(json['resource']),
+        _asJsonObject(json['resource'], 'EmbeddedResource.resource'),
       ),
       annotations: json['annotations'] == null
           ? null
-          : Annotations.fromJson(_asJsonObject(json['annotations'])),
-      meta: _asJsonObjectOrNull(json['_meta']),
+          : Annotations.fromJson(
+              _asJsonObject(
+                json['annotations'],
+                'EmbeddedResource.annotations',
+              ),
+            ),
+      meta: _asJsonObjectOrNull(json['_meta'], 'EmbeddedResource._meta'),
     );
   }
 }
@@ -480,8 +502,11 @@ class ResourceLink extends Content {
       icons: (json['icons'] as List<dynamic>?)
           ?.map((icon) => McpIcon.fromJson(_asJsonObject(icon)))
           .toList(),
-      annotations: _asJsonObjectOrNull(json['annotations']),
-      meta: _asJsonObjectOrNull(json['_meta']),
+      annotations: _asJsonObjectOrNull(
+        json['annotations'],
+        'ResourceLink.annotations',
+      ),
+      meta: _asJsonObjectOrNull(json['_meta'], 'ResourceLink._meta'),
     );
   }
 }
