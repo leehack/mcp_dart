@@ -32,14 +32,24 @@ class ResourceAnnotations {
   factory ResourceAnnotations.fromJson(Map<String, dynamic> json) {
     return ResourceAnnotations(
       title: json['title'] as String?,
-      audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
+      audience: readOptionalAnnotationAudience(
+        json['audience'],
+        'ResourceAnnotations.audience',
+      ),
       priority:
           readUnitDouble(json['priority'], 'ResourceAnnotations.priority'),
-      lastModified: json['lastModified'] as String?,
+      lastModified: readOptionalString(
+        json['lastModified'],
+        'ResourceAnnotations.lastModified',
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
+    validateAnnotationAudience(
+      audience,
+      'ResourceAnnotations.audience',
+    );
     validateUnitDouble(priority, 'ResourceAnnotations.priority');
     return {
       if (audience != null) 'audience': audience,
@@ -114,7 +124,7 @@ class Resource {
       size: readOptionalInteger(json['size'], 'Resource.size'),
       annotations: json['annotations'] != null
           ? ResourceAnnotations.fromJson(
-              json['annotations'] as Map<String, dynamic>,
+              readJsonObject(json['annotations'], 'Resource.annotations'),
             )
           : null,
       meta: readOptionalJsonObject(json['_meta'], 'Resource._meta'),
@@ -202,7 +212,10 @@ class ResourceTemplate {
           .toList(),
       annotations: json['annotations'] != null
           ? ResourceAnnotations.fromJson(
-              json['annotations'] as Map<String, dynamic>,
+              readJsonObject(
+                json['annotations'],
+                'ResourceTemplate.annotations',
+              ),
             )
           : null,
       meta: readOptionalJsonObject(json['_meta'], 'ResourceTemplate._meta'),

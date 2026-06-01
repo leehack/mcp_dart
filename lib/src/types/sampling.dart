@@ -30,6 +30,15 @@ String _base64ForJson(String value, String field) {
   return value;
 }
 
+Map<String, dynamic> _annotationsForJson(
+  Map<String, dynamic> value,
+  String field,
+) {
+  final result = readJsonObject(value, field);
+  validateAnnotationsObject(result, field);
+  return result;
+}
+
 Object _parseSamplingMessageContent(dynamic value) {
   if (value is List) {
     return value
@@ -292,8 +301,8 @@ sealed class SamplingContent {
           final SamplingTextContent c => {
               'text': c.text,
               if (c.annotations != null)
-                'annotations': readJsonObject(
-                  c.annotations,
+                'annotations': _annotationsForJson(
+                  c.annotations!,
                   'SamplingTextContent.annotations',
                 ),
               if (c.meta != null)
@@ -303,8 +312,8 @@ sealed class SamplingContent {
               'data': _base64ForJson(c.data, 'SamplingImageContent.data'),
               'mimeType': c.mimeType,
               if (c.annotations != null)
-                'annotations': readJsonObject(
-                  c.annotations,
+                'annotations': _annotationsForJson(
+                  c.annotations!,
                   'SamplingImageContent.annotations',
                 ),
               if (c.meta != null)
@@ -314,8 +323,8 @@ sealed class SamplingContent {
               'data': _base64ForJson(c.data, 'SamplingAudioContent.data'),
               'mimeType': c.mimeType,
               if (c.annotations != null)
-                'annotations': readJsonObject(
-                  c.annotations,
+                'annotations': _annotationsForJson(
+                  c.annotations!,
                   'SamplingAudioContent.annotations',
                 ),
               if (c.meta != null)
@@ -370,7 +379,7 @@ class SamplingTextContent extends SamplingContent {
   factory SamplingTextContent.fromJson(Map<String, dynamic> json) =>
       SamplingTextContent(
         text: json['text'] as String,
-        annotations: _asJsonObjectOrNull(
+        annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingTextContent.annotations',
         ),
@@ -406,7 +415,7 @@ class SamplingImageContent extends SamplingContent {
           'SamplingImageContent.data',
         ),
         mimeType: json['mimeType'] as String,
-        annotations: _asJsonObjectOrNull(
+        annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingImageContent.annotations',
         ),
@@ -442,7 +451,7 @@ class SamplingAudioContent extends SamplingContent {
           'SamplingAudioContent.data',
         ),
         mimeType: json['mimeType'] as String,
-        annotations: _asJsonObjectOrNull(
+        annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingAudioContent.annotations',
         ),

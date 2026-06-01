@@ -107,6 +107,8 @@
   match stable and MCP 2026 `format: uri` and `format: uri-template` schemas.
 - Rejected malformed base64 payloads for image, audio, and blob resource
   content to match stable and MCP 2026 `format: byte` schemas.
+- Rejected malformed shared annotation fields, including non-role audiences,
+  out-of-range priorities, and non-string `lastModified` values.
 - Rejected non-finite numeric values for progress, annotation priority, model
   priority, and sampling temperature fields so SDK-built payloads remain valid
   JSON numbers.

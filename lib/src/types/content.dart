@@ -56,6 +56,15 @@ String _base64ForJson(String value, String field) {
   return value;
 }
 
+Map<String, dynamic> _annotationsForJson(
+  Map<String, dynamic> value,
+  String field,
+) {
+  final result = readJsonObject(value, field);
+  validateAnnotationsObject(result, field);
+  return result;
+}
+
 String? _readOptionalPresentString(
   Map<String, dynamic> json,
   String key,
@@ -113,12 +122,19 @@ class Annotations {
         );
 
   factory Annotations.fromJson(Map<String, dynamic> json) {
+    final audience = readOptionalAnnotationAudience(
+      json['audience'],
+      'Annotations.audience',
+    );
     return Annotations(
-      audience: (json['audience'] as List<dynamic>?)
-          ?.map((value) => AnnotationAudience.values.byName(value as String))
+      audience: audience
+          ?.map((value) => AnnotationAudience.values.byName(value))
           .toList(),
       priority: readUnitDouble(json['priority'], 'Annotations.priority'),
-      lastModified: json['lastModified'] as String?,
+      lastModified: readOptionalString(
+        json['lastModified'],
+        'Annotations.lastModified',
+      ),
     );
   }
 
@@ -379,8 +395,8 @@ sealed class Content {
               if (c.icons != null)
                 'icons': c.icons!.map((icon) => icon.toJson()).toList(),
               if (c.annotations != null)
-                'annotations': readJsonObject(
-                  c.annotations,
+                'annotations': _annotationsForJson(
+                  c.annotations!,
                   'ResourceLink.annotations',
                 ),
               if (c.meta != null)
@@ -596,7 +612,7 @@ class ResourceLink extends Content {
       icons: (json['icons'] as List<dynamic>?)
           ?.map((icon) => McpIcon.fromJson(_asJsonObject(icon)))
           .toList(),
-      annotations: _asJsonObjectOrNull(
+      annotations: readOptionalAnnotationsObject(
         json['annotations'],
         'ResourceLink.annotations',
       ),

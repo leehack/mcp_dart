@@ -85,6 +85,55 @@ void validateBase64String(String value, String field) {
   }
 }
 
+List<String>? readOptionalAnnotationAudience(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! List) {
+    throw FormatException('$field must be a list of roles');
+  }
+  return [
+    for (final item in value)
+      if (item is String && (item == 'user' || item == 'assistant'))
+        item
+      else
+        throw FormatException('$field items must be "user" or "assistant"'),
+  ];
+}
+
+void validateAnnotationAudience(List<String>? value, String field) {
+  if (value == null) {
+    return;
+  }
+  for (final item in value) {
+    if (item != 'user' && item != 'assistant') {
+      throw ArgumentError.value(
+        item,
+        field,
+        'items must be "user" or "assistant"',
+      );
+    }
+  }
+}
+
+void validateAnnotationsObject(Map<String, dynamic>? value, String field) {
+  if (value == null) {
+    return;
+  }
+  readOptionalAnnotationAudience(value['audience'], '$field.audience');
+  readUnitDouble(value['priority'], '$field.priority');
+  readOptionalString(value['lastModified'], '$field.lastModified');
+}
+
+Map<String, dynamic>? readOptionalAnnotationsObject(
+  Object? value,
+  String field,
+) {
+  final result = readOptionalJsonObject(value, field);
+  validateAnnotationsObject(result, field);
+  return result;
+}
+
 double? readUnitDouble(Object? value, String field) {
   final number = readOptionalFiniteNumber(value, field);
   final result = number?.toDouble();

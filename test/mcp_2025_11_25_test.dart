@@ -1483,6 +1483,16 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => Annotations.fromJson({
+            'audience': ['model'],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Annotations.fromJson({'lastModified': 1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => CompletionResultData(
             values: List.generate(101, (index) => '$index'),
           ).toJson(),

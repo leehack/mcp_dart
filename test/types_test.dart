@@ -799,6 +799,7 @@ void main() {
         annotations: {
           'audience': ['assistant'],
           'priority': 0.5,
+          'vendor': {'hint': true},
         },
       );
 
@@ -812,9 +813,44 @@ void main() {
       expect(deserialized.name, equals('readme'));
       expect(deserialized.mimeType, equals('text/markdown'));
       expect(deserialized.annotations?['priority'], equals(0.5));
+      expect(deserialized.annotations?['vendor'], equals({'hint': true}));
       expect(
         deserialized.parsedAnnotations?.audience,
         equals([AnnotationAudience.assistant]),
+      );
+    });
+
+    test('ResourceLink validates shared annotation fields', () {
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'annotations': {
+            'audience': ['model'],
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'file:///docs/readme.md',
+          name: 'readme',
+          annotations: {
+            'priority': 2,
+          },
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'file:///docs/readme.md',
+          name: 'readme',
+          annotations: {
+            'lastModified': 1,
+          },
+        ).toJson(),
+        throwsA(isA<FormatException>()),
       );
     });
 

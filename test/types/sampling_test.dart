@@ -107,10 +107,41 @@ void main() {
       });
 
       test('fromJson parses correctly', () {
-        final json = {'type': 'text', 'text': 'Parsed text'};
+        final json = {
+          'type': 'text',
+          'text': 'Parsed text',
+          'annotations': {
+            'audience': ['user'],
+            'vendor': {'hint': true},
+          },
+        };
         final content = SamplingContent.fromJson(json);
         expect(content, isA<SamplingTextContent>());
-        expect((content as SamplingTextContent).text, equals('Parsed text'));
+        final text = content as SamplingTextContent;
+        expect(text.text, equals('Parsed text'));
+        expect(text.annotations?['vendor'], equals({'hint': true}));
+      });
+
+      test('validates shared annotation fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'text',
+            'text': 'Parsed text',
+            'annotations': {
+              'audience': ['model'],
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingTextContent(
+            text: 'Parsed text',
+            annotations: {
+              'priority': 2,
+            },
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
 
@@ -139,12 +170,16 @@ void main() {
           'type': 'image',
           'data': imageData,
           'mimeType': 'image/gif',
+          'annotations': {
+            'audience': ['assistant'],
+          },
         };
         final content = SamplingContent.fromJson(json);
         expect(content, isA<SamplingImageContent>());
         final img = content as SamplingImageContent;
         expect(img.data, equals(imageData));
         expect(img.mimeType, equals('image/gif'));
+        expect(img.annotations?['audience'], equals(['assistant']));
       });
 
       test('validates base64 byte data', () {
@@ -195,12 +230,16 @@ void main() {
           'type': 'audio',
           'data': audioData,
           'mimeType': 'audio/ogg',
+          'annotations': {
+            'priority': 0.2,
+          },
         };
         final content = SamplingContent.fromJson(json);
         expect(content, isA<SamplingAudioContent>());
         final audio = content as SamplingAudioContent;
         expect(audio.data, equals(audioData));
         expect(audio.mimeType, equals('audio/ogg'));
+        expect(audio.annotations?['priority'], equals(0.2));
       });
 
       test('validates base64 byte data', () {

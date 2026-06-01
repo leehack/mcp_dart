@@ -50,6 +50,31 @@ void main() {
       expect(json.containsKey('priority'), isFalse);
       expect(json.containsKey('lastModified'), isFalse);
     });
+
+    test('validates shared annotation fields', () {
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'audience': ['model'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'audience': 'user',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'lastModified': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceAnnotations(audience: ['model']).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
   });
 
   group('Resource', () {
