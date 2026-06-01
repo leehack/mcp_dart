@@ -9,7 +9,9 @@ void main() {
         initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
           capabilities: ClientCapabilities(
-            experimental: {'featureX': true},
+            experimental: {
+              'featureX': <String, dynamic>{},
+            },
             sampling: ClientCapabilitiesSampling(),
           ),
           clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
@@ -165,7 +167,9 @@ void main() {
 
     test('ServerCapabilities includes completions', () {
       final capabilities = const ServerCapabilities(
-        experimental: {'featureY': true},
+        experimental: {
+          'featureY': <String, dynamic>{},
+        },
         logging: {'enabled': true},
         prompts: ServerCapabilitiesPrompts(listChanged: true),
         resources:
@@ -175,7 +179,7 @@ void main() {
       );
 
       final json = capabilities.toJson();
-      expect(json['experimental']['featureY'], equals(true));
+      expect(json['experimental']['featureY'], isEmpty);
       expect(json['logging']['enabled'], equals(true));
       expect(json['prompts']['listChanged'], equals(true));
       expect(json['resources']['subscribe'], equals(true));
@@ -190,7 +194,9 @@ void main() {
 
     test('ServerCapabilities serialization and deserialization', () {
       final capabilities = const ServerCapabilities(
-        experimental: {'featureY': true},
+        experimental: {
+          'featureY': <String, dynamic>{},
+        },
         logging: {'enabled': true},
         prompts: ServerCapabilitiesPrompts(listChanged: true),
         resources:
@@ -199,7 +205,7 @@ void main() {
       );
 
       final json = capabilities.toJson();
-      expect(json['experimental']['featureY'], equals(true));
+      expect(json['experimental']['featureY'], isEmpty);
       expect(json['logging']['enabled'], equals(true));
       expect(json['prompts']['listChanged'], equals(true));
       expect(json['resources']['subscribe'], equals(true));
@@ -212,18 +218,70 @@ void main() {
 
     test('ClientCapabilities serialization and deserialization', () {
       final capabilities = const ClientCapabilities(
-        experimental: {'featureZ': true},
+        experimental: {
+          'featureZ': <String, dynamic>{},
+        },
         sampling: ClientCapabilitiesSampling(),
         roots: ClientCapabilitiesRoots(listChanged: true),
       );
 
       final json = capabilities.toJson();
-      expect(json['experimental']['featureZ'], equals(true));
+      expect(json['experimental']['featureZ'], isEmpty);
       expect(json['sampling'], isNotNull);
       expect(json['roots']['listChanged'], equals(true));
 
       final deserialized = ClientCapabilities.fromJson(json);
       expect(deserialized.roots?.listChanged, equals(true));
+    });
+
+    test('experimental capability values must be objects', () {
+      expect(
+        () => ClientCapabilities.fromJson(
+          const {
+            'experimental': {'feature': true},
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ServerCapabilities.fromJson(
+          const {
+            'experimental': {'feature': true},
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ClientCapabilities(
+          experimental: {'feature': true},
+        ).toJson(),
+        throwsA(anyOf(isA<FormatException>(), isA<ArgumentError>())),
+      );
+      expect(
+        () => const ServerCapabilities(
+          experimental: {'feature': true},
+        ).toJson(),
+        throwsA(anyOf(isA<FormatException>(), isA<ArgumentError>())),
+      );
+    });
+
+    test('extension capability values must be objects', () {
+      expect(
+        () => ClientCapabilities.fromJson(
+          const {
+            'extensions': {'io.example/feature': true},
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ServerCapabilities.fromJson(
+          const {
+            'extensions': {'io.example/feature': true},
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 

@@ -1898,6 +1898,23 @@ void main() {
         ),
       );
       expect(
+        validateToolRequest({
+          McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+          McpMetaKey.clientInfo: {
+            'name': 'client',
+            'version': '1.0.0',
+          },
+          McpMetaKey.clientCapabilities: {
+            'experimental': {'feature': true},
+          },
+        }),
+        isA<McpError>().having(
+          (error) => error.message,
+          'message',
+          contains('Invalid stateless request metadata.'),
+        ),
+      );
+      expect(
         validateToolRequest(_clientMeta(logLevel: 'verbose')),
         isA<McpError>().having(
           (error) => error.message,

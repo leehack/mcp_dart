@@ -510,7 +510,7 @@ void main() {
 
     test('handles null roots and elicitation maps', () {
       final json = {
-        'experimental': {'feature': true},
+        'experimental': {'feature': <String, dynamic>{}},
         'sampling': {'enabled': true},
         'roots': null,
         'elicitation': null,
@@ -542,7 +542,7 @@ void main() {
 
     test('handles null capability maps', () {
       final json = {
-        'experimental': {'feature': true},
+        'experimental': {'feature': <String, dynamic>{}},
         'logging': {'level': 'info'},
         'prompts': null,
         'resources': null,

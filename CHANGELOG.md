@@ -77,6 +77,8 @@
   request methods.
 - Rejected MCP 2026 MRTR `inputRequests` whose embedded client request type is
   not declared in the caller's per-request client capabilities.
+- Rejected non-object `experimental` and `extensions` capability entries to
+  match the stable and MCP 2026 capability schemas.
 - Returned version-appropriate resource-not-found errors from high-level
   `resources/read` handlers: stable 2025 uses legacy `-32002`, while MCP 2026
   stateless requests use `-32602` with the missing `uri` in error data.
