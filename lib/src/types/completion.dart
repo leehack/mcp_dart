@@ -1,6 +1,21 @@
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 void _expectType(
   Map<String, dynamic> json,
   String expected,
@@ -186,6 +201,11 @@ class JsonRpcCompleteRequest extends JsonRpcRequest {
         );
 
   factory JsonRpcCompleteRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.completionComplete,
+      'JsonRpcCompleteRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcCompleteRequest.params',

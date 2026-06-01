@@ -1805,6 +1805,30 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => JsonRpcCompleteRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'complete',
+            'method': Method.completionComplete,
+            'params': {
+              'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+              'argument': {'name': 'arg', 'value': 'prefix'},
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcCompleteRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'complete',
+            'method': Method.promptsGet,
+            'params': {
+              'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+              'argument': {'name': 'arg', 'value': 'prefix'},
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => ResourceReference.fromJson({
             'uri': 'file:///{path}',
           }),

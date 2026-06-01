@@ -1663,6 +1663,24 @@ void main() {
               'context': 'bad',
             }),
         () => JsonRpcCompleteRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.completionComplete,
+              'params': {
+                'ref': validRef,
+                'argument': validArgument,
+              },
+            }),
+        () => JsonRpcCompleteRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsGet,
+              'params': {
+                'ref': validRef,
+                'argument': validArgument,
+              },
+            }),
+        () => JsonRpcCompleteRequest.fromJson({
               'jsonrpc': jsonRpcVersion,
               'id': 1,
               'method': Method.completionComplete,

@@ -1072,6 +1072,24 @@ void main() {
               'ref': {'type': 'ref/prompt', 'name': 'prompt'},
               'argument': {'name': 'arg', 'value': 1},
             }),
+        () => JsonRpcCompleteRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 'complete',
+              'method': Method.completionComplete,
+              'params': {
+                'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+                'argument': {'name': 'arg', 'value': 'prefix'},
+              },
+            }),
+        () => JsonRpcCompleteRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'complete',
+              'method': Method.promptsGet,
+              'params': {
+                'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+                'argument': {'name': 'arg', 'value': 'prefix'},
+              },
+            }),
         () => ResourceReference.fromJson({
               'uri': 'file:///{path}',
             }),

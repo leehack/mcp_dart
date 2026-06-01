@@ -1666,7 +1666,9 @@ class McpServer {
           ),
       },
       (id, params, meta) => JsonRpcCompleteRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.completionComplete,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
