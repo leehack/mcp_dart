@@ -1570,6 +1570,16 @@ void main() {
               'icons': [1],
             }),
         () => ListPromptsRequest.fromJson({'cursor': 1}),
+        () => JsonRpcListPromptsRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.promptsList,
+            }),
+        () => JsonRpcListPromptsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.resourcesList,
+            }),
         () => ListPromptsResult.fromJson({
               'prompts': [1],
             }),
@@ -1587,10 +1597,30 @@ void main() {
               'arguments': {'arg': 1},
             }),
         () => JsonRpcGetPromptRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.promptsGet,
+              'params': {'name': 'prompt'},
+            }),
+        () => JsonRpcGetPromptRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.resourcesRead,
+              'params': {'name': 'prompt'},
+            }),
+        () => JsonRpcGetPromptRequest.fromJson({
               'jsonrpc': jsonRpcVersion,
               'id': 1,
               'method': Method.promptsGet,
               'params': 'bad',
+            }),
+        () => JsonRpcPromptListChangedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsPromptsListChanged,
+            }),
+        () => JsonRpcPromptListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsResourcesListChanged,
             }),
         () => PromptMessage.fromJson({
               'role': 'user',

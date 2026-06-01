@@ -2,6 +2,21 @@ import '../types.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 List<T>? _readOptionalObjectList<T>(
   Object? value,
   String field,
@@ -159,6 +174,11 @@ class JsonRpcListPromptsRequest extends JsonRpcRequest {
         super(method: Method.promptsList, params: params?.toJson());
 
   factory JsonRpcListPromptsRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.promptsList,
+      'JsonRpcListPromptsRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcListPromptsRequest.params',
@@ -302,6 +322,11 @@ class JsonRpcGetPromptRequest extends JsonRpcRequest {
   }) : super(method: Method.promptsGet, params: getParams.toJson());
 
   factory JsonRpcGetPromptRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.promptsGet,
+      'JsonRpcGetPromptRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcGetPromptRequest.params',
@@ -403,8 +428,14 @@ class JsonRpcPromptListChangedNotification extends JsonRpcNotification {
 
   factory JsonRpcPromptListChangedNotification.fromJson(
     Map<String, dynamic> json,
-  ) =>
-      JsonRpcPromptListChangedNotification(meta: extractRequestMeta(json));
+  ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsPromptsListChanged,
+      'JsonRpcPromptListChangedNotification',
+    );
+    return JsonRpcPromptListChangedNotification(meta: extractRequestMeta(json));
+  }
 }
 
 /// Deprecated alias for [ListPromptsRequest].

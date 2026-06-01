@@ -1858,7 +1858,9 @@ class McpServer {
             .toList(),
       ),
       (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.promptsList,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -1906,7 +1908,9 @@ class McpServer {
         }
       },
       (id, params, meta) => JsonRpcGetPromptRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.promptsGet,
         'params': params,
         if (meta != null) '_meta': meta,
       }),

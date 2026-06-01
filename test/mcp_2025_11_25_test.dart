@@ -1798,6 +1798,30 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => JsonRpcListPromptsRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'prompts',
+            'method': Method.resourcesList,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcGetPromptRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'prompt',
+            'method': Method.promptsGet,
+            'params': {'name': 'prompt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcPromptListChangedNotification.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsResourcesListChanged,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => CompleteRequest.fromJson({
             'ref': {'type': 'ref/prompt', 'name': 'prompt'},
             'argument': {'name': 'arg', 'value': 1},

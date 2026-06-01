@@ -1068,6 +1068,21 @@ void main() {
               'name': 'prompt',
               'arguments': {'arg': 1},
             }),
+        () => JsonRpcListPromptsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'prompts',
+              'method': Method.resourcesList,
+            }),
+        () => JsonRpcGetPromptRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 'prompt',
+              'method': Method.promptsGet,
+              'params': {'name': 'prompt'},
+            }),
+        () => JsonRpcPromptListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsResourcesListChanged,
+            }),
         () => CompleteRequest.fromJson({
               'ref': {'type': 'ref/prompt', 'name': 'prompt'},
               'argument': {'name': 'arg', 'value': 1},
@@ -1837,7 +1852,9 @@ void main() {
         Method.promptsList,
         (request, extra) async => const ListPromptsResult(prompts: []),
         (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.promptsList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -2643,7 +2660,9 @@ void main() {
         (request, extra) async =>
             const InputRequiredResult(requestState: 'list-state'),
         (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.promptsList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
