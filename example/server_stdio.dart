@@ -63,7 +63,11 @@ void main() async {
     final text = 'Sample log content';
     return ReadResourceResult(
       contents: [
-        TextResourceContents(uri: uri.path, mimeType: 'text/plain', text: text),
+        TextResourceContents(
+          uri: uri.toString(),
+          mimeType: 'text/plain',
+          text: text,
+        ),
       ],
     );
   });

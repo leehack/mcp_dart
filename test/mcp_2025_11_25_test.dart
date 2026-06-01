@@ -1511,6 +1511,10 @@ void main() {
           throwsA(isA<ArgumentError>()),
         );
         expect(
+          () => Root.fromJson({'uri': 'relative/path'}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => ModelPreferences(costPriority: 2).toJson(),
           throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
         );

@@ -829,4 +829,106 @@ void main() {
       expect(notification.meta!['key'], equals('value'));
     });
   });
+
+  group('Resource URI format validation', () {
+    test('rejects non-absolute resource URIs from wire JSON', () {
+      expect(
+        () => Resource.fromJson({'uri': 'relative/path', 'name': 'Relative'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'relative/path',
+          'name': 'Relative',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ReadResourceRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SubscribeRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => UnsubscribeRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceUpdatedNotification.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-absolute resource URIs during serialization', () {
+      expect(
+        () => const Resource(uri: 'relative/path', name: 'Relative').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const TextResourceContents(
+          uri: 'relative/path',
+          text: 'Relative',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'relative/path',
+          name: 'Relative',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ReadResourceRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const SubscribeRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const UnsubscribeRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ResourceUpdatedNotification(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('rejects malformed resource URI templates', () {
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path',
+          'name': 'Bad Template',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceTemplate(
+          uriTemplate: 'file:///{path',
+          name: 'Bad Template',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => ResourceReference.fromJson({
+          'type': 'ref/resource',
+          'uri': 'file:///{path',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceReference(uri: 'file:///{path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+  });
 }

@@ -19,16 +19,24 @@ sealed class Reference {
     };
   }
 
-  Map<String, dynamic> toJson() => {
-        'type': type,
-        ...switch (this) {
-          final ResourceReference r => {'uri': r.uri},
-          final PromptReference p => {
-              'name': p.name,
-              if (p.title != null) 'title': p.title,
-            },
+  Map<String, dynamic> toJson() {
+    return switch (this) {
+      final ResourceReference r => _resourceReferenceToJson(r),
+      final PromptReference p => {
+          'type': p.type,
+          'name': p.name,
+          if (p.title != null) 'title': p.title,
         },
-      };
+    };
+  }
+}
+
+Map<String, dynamic> _resourceReferenceToJson(ResourceReference reference) {
+  validateUriTemplateString(reference.uri, 'ResourceReference.uri');
+  return {
+    'type': reference.type,
+    'uri': reference.uri,
+  };
 }
 
 /// Reference to a resource or resource template URI.
@@ -39,7 +47,7 @@ class ResourceReference extends Reference {
 
   factory ResourceReference.fromJson(Map<String, dynamic> json) {
     return ResourceReference(
-      uri: json['uri'] as String,
+      uri: readRequiredUriTemplateString(json['uri'], 'ResourceReference.uri'),
     );
   }
 }

@@ -1,3 +1,54 @@
+import '../shared/uri_template.dart';
+
+String readRequiredString(Object? value, String field) {
+  if (value is String) {
+    return value;
+  }
+  throw FormatException('$field must be a string');
+}
+
+bool isAbsoluteUriString(String value) {
+  return Uri.tryParse(value)?.hasScheme ?? false;
+}
+
+String readRequiredAbsoluteUriString(Object? value, String field) {
+  final result = readRequiredString(value, field);
+  if (!isAbsoluteUriString(result)) {
+    throw FormatException('$field must be an absolute URI');
+  }
+  return result;
+}
+
+void validateAbsoluteUriString(String value, String field) {
+  if (!isAbsoluteUriString(value)) {
+    throw ArgumentError.value(value, field, 'must be an absolute URI');
+  }
+}
+
+String readRequiredUriTemplateString(Object? value, String field) {
+  final result = readRequiredString(value, field);
+  try {
+    UriTemplateExpander(result);
+  } on ArgumentError catch (error) {
+    throw FormatException(
+      '$field must be a URI template: ${error.message}',
+    );
+  }
+  return result;
+}
+
+void validateUriTemplateString(String value, String field) {
+  try {
+    UriTemplateExpander(value);
+  } on ArgumentError catch (error) {
+    throw ArgumentError.value(
+        value,
+        field,
+        'must be a URI template: '
+        '${error.message}');
+  }
+}
+
 double? readUnitDouble(Object? value, String field) {
   final number = readOptionalFiniteNumber(value, field);
   final result = number?.toDouble();

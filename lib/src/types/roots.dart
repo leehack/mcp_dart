@@ -1,6 +1,24 @@
 import 'json_rpc.dart';
 import 'validation.dart';
 
+String _readRootUri(Object? value) {
+  final uri = readRequiredString(value, 'Root.uri');
+  if (!isAbsoluteUriString(uri)) {
+    throw const FormatException('Root.uri must be an absolute URI');
+  }
+  if (!uri.startsWith('file://')) {
+    throw const FormatException('Root.uri must start with file://');
+  }
+  return uri;
+}
+
+void _validateRootUri(String uri) {
+  validateAbsoluteUriString(uri, 'Root.uri');
+  if (!uri.startsWith('file://')) {
+    throw ArgumentError.value(uri, 'uri', 'Root.uri must start with file://');
+  }
+}
+
 /// Represents a root directory or file the server can operate on.
 class Root {
   /// URI identifying the root (must start with `file://`).
@@ -17,24 +35,25 @@ class Root {
     this.name,
     this.meta,
   }) {
-    if (!uri.startsWith('file://')) {
-      throw ArgumentError.value(uri, 'uri', 'Root.uri must start with file://');
-    }
+    _validateRootUri(uri);
   }
 
   factory Root.fromJson(Map<String, dynamic> json) {
     return Root(
-      uri: json['uri'] as String,
+      uri: _readRootUri(json['uri']),
       name: json['name'] as String?,
       meta: readOptionalJsonObject(json['_meta'], 'Root._meta'),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'uri': uri,
-        if (name != null) 'name': name,
-        if (meta != null) '_meta': readJsonObject(meta, 'Root._meta'),
-      };
+  Map<String, dynamic> toJson() {
+    _validateRootUri(uri);
+    return {
+      'uri': uri,
+      if (name != null) 'name': name,
+      if (meta != null) '_meta': readJsonObject(meta, 'Root._meta'),
+    };
+  }
 }
 
 /// Request sent from server to client to get the list of root URIs.

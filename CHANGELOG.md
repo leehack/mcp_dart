@@ -103,6 +103,8 @@
   `cancel`.
 - Rejected URL elicitation values that are not absolute URIs to match the stable
   and MCP 2026 `format: uri` schemas.
+- Rejected non-absolute resource URIs and malformed resource URI templates to
+  match stable and MCP 2026 `format: uri` and `format: uri-template` schemas.
 - Rejected non-finite numeric values for progress, annotation priority, model
   priority, and sampling temperature fields so SDK-built payloads remain valid
   JSON numbers.

@@ -46,6 +46,11 @@ void _validateAbsoluteUriString(String value, String field) {
   }
 }
 
+String _absoluteUriForJson(String value, String field) {
+  validateAbsoluteUriString(value, field);
+  return value;
+}
+
 String? _readOptionalPresentString(
   Map<String, dynamic> json,
   String key,
@@ -146,7 +151,10 @@ sealed class ResourceContents {
 
   /// Creates a specific [ResourceContents] subclass from JSON.
   factory ResourceContents.fromJson(Map<String, dynamic> json) {
-    final uri = json['uri'] as String;
+    final uri = readRequiredAbsoluteUriString(
+      json['uri'],
+      'ResourceContents.uri',
+    );
     final mimeType = json['mimeType'] as String?;
     final meta = _asJsonObjectOrNull(
       json['_meta'],
@@ -193,7 +201,7 @@ sealed class ResourceContents {
 
   /// Converts resource contents to JSON.
   Map<String, dynamic> toJson() => {
-        'uri': uri,
+        'uri': _absoluteUriForJson(uri, 'ResourceContents.uri'),
         if (mimeType != null) 'mimeType': mimeType,
         ...switch (this) {
           final TextResourceContents c => {'text': c.text},
@@ -352,7 +360,7 @@ sealed class Content {
                 '_meta': readJsonObject(c.meta, 'AudioContent._meta'),
             },
           final ResourceLink c => {
-              'uri': c.uri,
+              'uri': _absoluteUriForJson(c.uri, 'ResourceLink.uri'),
               'name': c.name,
               if (c.title != null) 'title': c.title,
               if (c.description != null) 'description': c.description,
@@ -569,7 +577,7 @@ class ResourceLink extends Content {
 
   factory ResourceLink.fromJson(Map<String, dynamic> json) {
     return ResourceLink(
-      uri: json['uri'] as String,
+      uri: readRequiredAbsoluteUriString(json['uri'], 'ResourceLink.uri'),
       name: json['name'] as String,
       title: json['title'] as String?,
       description: json['description'] as String?,

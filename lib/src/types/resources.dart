@@ -100,7 +100,7 @@ class Resource {
   /// Creates from JSON.
   factory Resource.fromJson(Map<String, dynamic> json) {
     return Resource(
-      uri: json['uri'] as String,
+      uri: readRequiredAbsoluteUriString(json['uri'], 'Resource.uri'),
       name: json['name'] as String,
       title: json['title'] as String?,
       description: json['description'] as String?,
@@ -122,18 +122,20 @@ class Resource {
   }
 
   /// Converts to JSON.
-  Map<String, dynamic> toJson() => {
-        'uri': uri,
-        'name': name,
-        if (title != null) 'title': title,
-        if (description != null) 'description': description,
-        if (mimeType != null) 'mimeType': mimeType,
-        if (icons != null)
-          'icons': icons!.map((icon) => icon.toJson()).toList(),
-        if (size != null) 'size': size,
-        if (annotations != null) 'annotations': annotations!.toJson(),
-        if (meta != null) '_meta': readJsonObject(meta, 'Resource._meta'),
-      };
+  Map<String, dynamic> toJson() {
+    validateAbsoluteUriString(uri, 'Resource.uri');
+    return {
+      'uri': uri,
+      'name': name,
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (mimeType != null) 'mimeType': mimeType,
+      if (icons != null) 'icons': icons!.map((icon) => icon.toJson()).toList(),
+      if (size != null) 'size': size,
+      if (annotations != null) 'annotations': annotations!.toJson(),
+      if (meta != null) '_meta': readJsonObject(meta, 'Resource._meta'),
+    };
+  }
 }
 
 /// A template description for resources available on the server.
@@ -184,7 +186,10 @@ class ResourceTemplate {
   /// Creates from JSON.
   factory ResourceTemplate.fromJson(Map<String, dynamic> json) {
     return ResourceTemplate(
-      uriTemplate: json['uriTemplate'] as String,
+      uriTemplate: readRequiredUriTemplateString(
+        json['uriTemplate'],
+        'ResourceTemplate.uriTemplate',
+      ),
       name: json['name'] as String,
       title: json['title'] as String?,
       description: json['description'] as String?,
@@ -205,18 +210,22 @@ class ResourceTemplate {
   }
 
   /// Converts to JSON.
-  Map<String, dynamic> toJson() => {
-        'uriTemplate': uriTemplate,
-        'name': name,
-        if (title != null) 'title': title,
-        if (description != null) 'description': description,
-        if (mimeType != null) 'mimeType': mimeType,
-        if (icons != null)
-          'icons': icons!.map((icon) => icon.toJson()).toList(),
-        if (annotations != null) 'annotations': annotations!.toJson(),
-        if (meta != null)
-          '_meta': readJsonObject(meta, 'ResourceTemplate._meta'),
-      };
+  Map<String, dynamic> toJson() {
+    validateUriTemplateString(
+      uriTemplate,
+      'ResourceTemplate.uriTemplate',
+    );
+    return {
+      'uriTemplate': uriTemplate,
+      'name': name,
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (mimeType != null) 'mimeType': mimeType,
+      if (icons != null) 'icons': icons!.map((icon) => icon.toJson()).toList(),
+      if (annotations != null) 'annotations': annotations!.toJson(),
+      if (meta != null) '_meta': readJsonObject(meta, 'ResourceTemplate._meta'),
+    };
+  }
 }
 
 /// Parameters for the `resources/list` request. Includes pagination.
@@ -461,7 +470,10 @@ class ReadResourceRequest {
 
   factory ReadResourceRequest.fromJson(Map<String, dynamic> json) =>
       ReadResourceRequest(
-        uri: json['uri'] as String,
+        uri: readRequiredAbsoluteUriString(
+          json['uri'],
+          'ReadResourceRequest.uri',
+        ),
         inputResponses: InputResponse.mapFromJson(
           json['inputResponses'],
           'ReadResourceRequest.inputResponses',
@@ -472,12 +484,15 @@ class ReadResourceRequest {
         ),
       );
 
-  Map<String, dynamic> toJson() => {
-        'uri': uri,
-        if (inputResponses != null)
-          'inputResponses': InputResponse.mapToJson(inputResponses!),
-        if (requestState != null) 'requestState': requestState,
-      };
+  Map<String, dynamic> toJson() {
+    validateAbsoluteUriString(uri, 'ReadResourceRequest.uri');
+    return {
+      'uri': uri,
+      if (inputResponses != null)
+        'inputResponses': InputResponse.mapToJson(inputResponses!),
+      if (requestState != null) 'requestState': requestState,
+    };
+  }
 }
 
 /// Request sent from client to read a specific resource.
@@ -583,9 +598,14 @@ class SubscribeRequest {
   const SubscribeRequest({required this.uri});
 
   factory SubscribeRequest.fromJson(Map<String, dynamic> json) =>
-      SubscribeRequest(uri: json['uri'] as String);
+      SubscribeRequest(
+        uri: readRequiredAbsoluteUriString(json['uri'], 'SubscribeRequest.uri'),
+      );
 
-  Map<String, dynamic> toJson() => {'uri': uri};
+  Map<String, dynamic> toJson() {
+    validateAbsoluteUriString(uri, 'SubscribeRequest.uri');
+    return {'uri': uri};
+  }
 }
 
 /// Request sent from client to subscribe to updates for a resource.
@@ -621,9 +641,17 @@ class UnsubscribeRequest {
   const UnsubscribeRequest({required this.uri});
 
   factory UnsubscribeRequest.fromJson(Map<String, dynamic> json) =>
-      UnsubscribeRequest(uri: json['uri'] as String);
+      UnsubscribeRequest(
+        uri: readRequiredAbsoluteUriString(
+          json['uri'],
+          'UnsubscribeRequest.uri',
+        ),
+      );
 
-  Map<String, dynamic> toJson() => {'uri': uri};
+  Map<String, dynamic> toJson() {
+    validateAbsoluteUriString(uri, 'UnsubscribeRequest.uri');
+    return {'uri': uri};
+  }
 }
 
 /// Request sent from client to cancel a resource subscription.
@@ -661,9 +689,17 @@ class ResourceUpdatedNotification {
   factory ResourceUpdatedNotification.fromJson(
     Map<String, dynamic> json,
   ) =>
-      ResourceUpdatedNotification(uri: json['uri'] as String);
+      ResourceUpdatedNotification(
+        uri: readRequiredAbsoluteUriString(
+          json['uri'],
+          'ResourceUpdatedNotification.uri',
+        ),
+      );
 
-  Map<String, dynamic> toJson() => {'uri': uri};
+  Map<String, dynamic> toJson() {
+    validateAbsoluteUriString(uri, 'ResourceUpdatedNotification.uri');
+    return {'uri': uri};
+  }
 }
 
 /// Notification from server indicating a subscribed resource has changed.
