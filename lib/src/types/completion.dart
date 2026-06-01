@@ -1,6 +1,17 @@
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectType(
+  Map<String, dynamic> json,
+  String expected,
+  String field,
+) {
+  final value = readRequiredString(json['type'], field);
+  if (value != expected) {
+    throw FormatException('$field must be "$expected"');
+  }
+}
+
 /// Sealed class representing a reference for autocompletion targets.
 sealed class Reference {
   /// The type of reference ("ref/resource" or "ref/prompt").
@@ -46,6 +57,7 @@ class ResourceReference extends Reference {
   const ResourceReference({required this.uri}) : super(type: 'ref/resource');
 
   factory ResourceReference.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'ref/resource', 'ResourceReference.type');
     return ResourceReference(
       uri: readRequiredUriTemplateString(json['uri'], 'ResourceReference.uri'),
     );
@@ -65,6 +77,7 @@ class PromptReference extends Reference {
   }) : super(type: 'ref/prompt');
 
   factory PromptReference.fromJson(Map<String, dynamic> json) {
+    _expectType(json, 'ref/prompt', 'PromptReference.type');
     return PromptReference(
       name: readRequiredString(json['name'], 'PromptReference.name'),
       title: readOptionalString(json['title'], 'PromptReference.title'),

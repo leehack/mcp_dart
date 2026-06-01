@@ -1633,6 +1633,16 @@ void main() {
 
       for (final parse in <Object Function()>[
         () => Reference.fromJson({'type': 1}),
+        () => ResourceReference.fromJson({'uri': 'file:///{path}'}),
+        () => ResourceReference.fromJson({
+              'type': 'ref/prompt',
+              'uri': 'file:///{path}',
+            }),
+        () => PromptReference.fromJson({'name': 'prompt'}),
+        () => PromptReference.fromJson({
+              'type': 'ref/resource',
+              'name': 'prompt',
+            }),
         () => PromptReference.fromJson({'name': 1}),
         () => ArgumentCompletionInfo.fromJson({'name': 1, 'value': 'v'}),
         () => ArgumentCompletionInfo.fromJson({'name': 'arg', 'value': 1}),

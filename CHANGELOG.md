@@ -121,6 +121,8 @@
   parse errors.
 - Rejected malformed prompt, completion, logging, and common notification wire
   fields with protocol parse errors.
+- Rejected missing and mismatched completion reference type discriminators with
+  protocol parse errors.
 - Rejected malformed tool definition, tool-list, and tool-call wire fields with
   protocol parse errors.
 - Rejected malformed root-list wire fields with protocol parse errors.

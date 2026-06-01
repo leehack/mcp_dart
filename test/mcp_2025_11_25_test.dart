@@ -1805,6 +1805,32 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => ResourceReference.fromJson({
+            'uri': 'file:///{path}',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceReference.fromJson({
+            'type': 'ref/prompt',
+            'uri': 'file:///{path}',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptReference.fromJson({
+            'name': 'prompt',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptReference.fromJson({
+            'type': 'ref/resource',
+            'name': 'prompt',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => CompletionResultData.fromJson({
             'values': ['a'],
             'hasMore': 'true',

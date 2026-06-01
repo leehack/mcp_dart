@@ -1072,6 +1072,20 @@ void main() {
               'ref': {'type': 'ref/prompt', 'name': 'prompt'},
               'argument': {'name': 'arg', 'value': 1},
             }),
+        () => ResourceReference.fromJson({
+              'uri': 'file:///{path}',
+            }),
+        () => ResourceReference.fromJson({
+              'type': 'ref/prompt',
+              'uri': 'file:///{path}',
+            }),
+        () => PromptReference.fromJson({
+              'name': 'prompt',
+            }),
+        () => PromptReference.fromJson({
+              'type': 'ref/resource',
+              'name': 'prompt',
+            }),
         () => CompletionResultData.fromJson({
               'values': ['a'],
               'hasMore': 'true',
