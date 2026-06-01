@@ -1,4 +1,5 @@
 import 'package:mcp_dart/src/types/content.dart';
+import 'package:mcp_dart/src/types/json_rpc.dart';
 import 'package:mcp_dart/src/types/sampling.dart';
 import 'package:test/test.dart';
 
@@ -1161,6 +1162,55 @@ void main() {
         () => JsonRpcCreateMessageRequest.fromJson(json),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      final params = {
+        'messages': [
+          {
+            'role': 'user',
+            'content': {'type': 'text', 'text': 'Question'},
+          },
+        ],
+        'maxTokens': 100,
+      };
+
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.samplingCreateMessage,
+          'params': params,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': params,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('embedded input requests do not require JSON-RPC wrapper fields', () {
+      final request = InputRequest.fromJson({
+        'method': Method.samplingCreateMessage,
+        'params': {
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Question'},
+            },
+          ],
+          'maxTokens': 100,
+        },
+      });
+
+      expect(request.method, Method.samplingCreateMessage);
+      expect(request.createMessageParams.maxTokens, 100);
     });
   });
 

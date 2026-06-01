@@ -3,6 +3,22 @@ import 'json_rpc.dart';
 import 'tasks.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 /// Legacy alias for [JsonSchema] used in elicitation requests.
 typedef ElicitationInputSchema = JsonSchema;
 
@@ -239,6 +255,11 @@ class JsonRpcElicitRequest extends JsonRpcRequest {
         );
 
   factory JsonRpcElicitRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.elicitationCreate,
+      'JsonRpcElicitRequest',
+    );
     final paramsMap =
         _readRequiredParamsObject(json, 'JsonRpcElicitRequest.params');
     final meta = extractRequestMeta(json);
@@ -401,6 +422,11 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
   factory JsonRpcElicitationCompleteNotification.fromJson(
     Map<String, dynamic> json,
   ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsElicitationComplete,
+      'JsonRpcElicitationCompleteNotification',
+    );
     final paramsMap = _readRequiredParamsObject(
       json,
       'JsonRpcElicitationCompleteNotification.params',

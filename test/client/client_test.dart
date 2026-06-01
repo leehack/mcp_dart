@@ -1122,7 +1122,9 @@ void _addCriticalPathTests() {
             content: SamplingTextContent(text: 'response'),
           ),
           (id, params, meta) => JsonRpcCreateMessageRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.samplingCreateMessage,
             'params': params ?? {},
             if (meta != null) '_meta': meta,
           }),
@@ -1311,7 +1313,9 @@ void _addCriticalPathTests() {
             content: {},
           ),
           (id, params, meta) => JsonRpcElicitRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.elicitationCreate,
             'params': params ?? {},
             if (meta != null) '_meta': meta,
           }),

@@ -1006,7 +1006,9 @@ void main() {
       );
 
       final rpc = JsonRpcElicitRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': 1,
+        'method': Method.elicitationCreate,
         'params': {
           ...params,
           '_meta': {

@@ -566,6 +566,33 @@ void main() {
         }),
         throwsA(isA<FormatException>()),
       );
+      final createMessageParams = {
+        'messages': [
+          {
+            'role': 'user',
+            'content': {'type': 'text', 'text': 'Hello'},
+          },
+        ],
+        'maxTokens': 100,
+      };
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.samplingCreateMessage,
+          'params': createMessageParams,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': createMessageParams,
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('Content JSON object fields reject non-JSON Dart maps', () {
@@ -1714,12 +1741,34 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        final elicitParams = {
+          'message': 'Choose option',
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'option': {'type': 'string'},
+            },
+          },
+        };
+        final completeParams = {'elicitationId': 'elicitation-1'};
         for (final parse in <Object Function()>[
           () => JsonRpcElicitRequest.fromJson({
                 'jsonrpc': jsonRpcVersion,
                 'id': 1,
                 'method': Method.elicitationCreate,
                 'params': 'bad',
+              }),
+          () => JsonRpcElicitRequest.fromJson({
+                'jsonrpc': '1.0',
+                'id': 1,
+                'method': Method.elicitationCreate,
+                'params': elicitParams,
+              }),
+          () => JsonRpcElicitRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.samplingCreateMessage,
+                'params': elicitParams,
               }),
           () => ElicitRequest.fromJson({
                 'message': 'Bad schema',
@@ -1736,6 +1785,16 @@ void main() {
                 'jsonrpc': jsonRpcVersion,
                 'method': Method.notificationsElicitationComplete,
                 'params': null,
+              }),
+          () => JsonRpcElicitationCompleteNotification.fromJson({
+                'jsonrpc': '1.0',
+                'method': Method.notificationsElicitationComplete,
+                'params': completeParams,
+              }),
+          () => JsonRpcElicitationCompleteNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsInitialized,
+                'params': completeParams,
               }),
           () => URLElicitationRequiredErrorData.fromJson({
                 'elicitations': [1],

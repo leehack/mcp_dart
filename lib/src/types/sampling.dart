@@ -25,6 +25,22 @@ Map<String, dynamic> _asJsonObject(
   return map;
 }
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
 String _base64ForJson(String value, String field) {
   validateBase64String(value, field);
   return value;
@@ -820,6 +836,11 @@ class JsonRpcCreateMessageRequest extends JsonRpcRequest {
         );
 
   factory JsonRpcCreateMessageRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.samplingCreateMessage,
+      'JsonRpcCreateMessageRequest',
+    );
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcCreateMessageRequest.params',

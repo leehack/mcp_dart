@@ -432,6 +432,17 @@ void main() {
     });
 
     test('rejects malformed elicitation wire shapes', () {
+      final elicitParams = {
+        'message': 'Choose option',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': {
+            'option': {'type': 'string'},
+          },
+        },
+      };
+      final completeParams = {'elicitationId': 'elicitation-1'};
+
       for (final parse in <Object Function()>[
         () => JsonRpcElicitRequest.fromJson({
               'jsonrpc': jsonRpcVersion,
@@ -444,6 +455,18 @@ void main() {
               'id': 1,
               'method': Method.elicitationCreate,
               'params': null,
+            }),
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.elicitationCreate,
+              'params': elicitParams,
+            }),
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.samplingCreateMessage,
+              'params': elicitParams,
             }),
         () => ElicitRequest.fromJson({
               'message': 'Bad properties',
@@ -470,12 +493,52 @@ void main() {
               'method': Method.notificationsElicitationComplete,
               'params': 'bad',
             }),
+        () => JsonRpcElicitationCompleteNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsElicitationComplete,
+              'params': completeParams,
+            }),
+        () => JsonRpcElicitationCompleteNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsInitialized,
+              'params': completeParams,
+            }),
         () => URLElicitationRequiredErrorData.fromJson({
               'elicitations': [1],
             }),
       ]) {
         expect(parse, throwsFormatException);
       }
+    });
+
+    test('embedded MRTR input requests keep method and params shape', () {
+      final elicitInput = InputRequest.fromJson({
+        'method': Method.elicitationCreate,
+        'params': {
+          'message': 'Choose option',
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'option': {'type': 'string'},
+            },
+          },
+        },
+      });
+      final samplingInput = InputRequest.fromJson({
+        'method': Method.samplingCreateMessage,
+        'params': {
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 16,
+        },
+      });
+
+      expect(elicitInput.elicitParams.message, 'Choose option');
+      expect(samplingInput.createMessageParams.maxTokens, 16);
     });
 
     test('rejects non-finite JSON numbers', () {
@@ -551,6 +614,33 @@ void main() {
           'role': 'user',
           'content': {'type': 'text', 'text': 'Hello'},
           '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      final createMessageParams = {
+        'messages': [
+          {
+            'role': 'user',
+            'content': {'type': 'text', 'text': 'Hello'},
+          },
+        ],
+        'maxTokens': 16,
+      };
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.samplingCreateMessage,
+          'params': createMessageParams,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': createMessageParams,
         }),
         throwsA(isA<FormatException>()),
       );
