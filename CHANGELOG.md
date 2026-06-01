@@ -137,6 +137,8 @@
   protocol parse errors.
 - Rejected malformed sampling and elicitation JSON-RPC wrapper constants while
   preserving embedded MRTR input request parsing.
+- Preserved `Result._meta` while parsing empty results for high-level ping,
+  logging, and subscription acknowledgments.
 - Rejected missing and mismatched completion reference type discriminators with
   protocol parse errors.
 - Rejected malformed completion JSON-RPC wrapper constants with protocol parse

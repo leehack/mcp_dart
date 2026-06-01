@@ -13,6 +13,7 @@ class MockTransport extends Transport {
   bool isStarted = false;
   bool isClosed = false;
   ClientCapabilities? clientCapabilities;
+  Map<String, dynamic>? emptyResponseMeta;
 
   @override
   String? get sessionId => null;
@@ -35,7 +36,10 @@ class MockTransport extends Transport {
     if (message is JsonRpcRequest) {
       final request = message;
       if (request.method == 'ping') {
-        final response = JsonRpcResponse(id: request.id, result: {});
+        final response = JsonRpcResponse(
+          id: request.id,
+          result: EmptyResult(meta: emptyResponseMeta).toJson(),
+        );
         if (onmessage != null) {
           onmessage!(response);
         }
@@ -386,6 +390,7 @@ void main() {
 
       // Initialize client capabilities
       await _initializeClient(transport, server);
+      transport.emptyResponseMeta = {'traceId': 'server-ping'};
 
       // Send ping request
       final result = await server.ping();
@@ -399,6 +404,7 @@ void main() {
 
       // Verify response was received
       expect(result, isA<EmptyResult>());
+      expect(result.meta, {'traceId': 'server-ping'});
     });
 
     test('Can send createMessage request when client has sampling capability',

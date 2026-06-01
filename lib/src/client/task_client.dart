@@ -232,7 +232,7 @@ class TaskClient {
     );
     await client.request<EmptyResult>(
       req,
-      (json) => const EmptyResult(),
+      EmptyResult.fromJson,
     );
   }
 

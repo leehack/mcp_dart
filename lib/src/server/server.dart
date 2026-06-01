@@ -1243,7 +1243,7 @@ class Server extends Protocol {
   Future<EmptyResult> ping([RequestOptions? options]) {
     return request<EmptyResult>(
       const JsonRpcPingRequest(id: -1),
-      (json) => const EmptyResult(),
+      EmptyResult.fromJson,
       options,
     );
   }

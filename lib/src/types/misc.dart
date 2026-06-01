@@ -31,6 +31,10 @@ class EmptyResult implements BaseResultData {
 
   const EmptyResult({this.meta});
 
+  factory EmptyResult.fromJson(Map<String, dynamic> json) => EmptyResult(
+        meta: readOptionalJsonObject(json['_meta'], 'EmptyResult._meta'),
+      );
+
   @override
   Map<String, dynamic> toJson() => {
         if (meta != null) '_meta': readJsonObject(meta, 'EmptyResult._meta'),

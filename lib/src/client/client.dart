@@ -879,7 +879,7 @@ class McpClient extends Protocol {
   Future<EmptyResult> ping([RequestOptions? options]) {
     return request<EmptyResult>(
       const JsonRpcPingRequest(id: -1),
-      (json) => const EmptyResult(),
+      EmptyResult.fromJson,
       options,
     );
   }
@@ -904,7 +904,7 @@ class McpClient extends Protocol {
   ]) {
     final params = SetLevelRequest(level: level);
     final req = JsonRpcSetLevelRequest(id: -1, setParams: params);
-    return request<EmptyResult>(req, (json) => const EmptyResult(), options);
+    return request<EmptyResult>(req, EmptyResult.fromJson, options);
   }
 
   /// Sends a `prompts/get` request to retrieve a specific prompt/template.
@@ -978,7 +978,7 @@ class McpClient extends Protocol {
     RequestOptions? options,
   ]) {
     final req = JsonRpcSubscribeRequest(id: -1, subParams: params);
-    return request<EmptyResult>(req, (json) => const EmptyResult(), options);
+    return request<EmptyResult>(req, EmptyResult.fromJson, options);
   }
 
   /// Sends a `resources/unsubscribe` request to cancel a resource subscription.
@@ -987,7 +987,7 @@ class McpClient extends Protocol {
     RequestOptions? options,
   ]) {
     final req = JsonRpcUnsubscribeRequest(id: -1, unsubParams: params);
-    return request<EmptyResult>(req, (json) => const EmptyResult(), options);
+    return request<EmptyResult>(req, EmptyResult.fromJson, options);
   }
 
   /// Opens a `subscriptions/listen` stream and demultiplexes notifications.
@@ -1014,7 +1014,7 @@ class McpClient extends Protocol {
     final requestDone = super.requestWithReservedId<EmptyResult>(
       requestId,
       requestData,
-      (json) => const EmptyResult(),
+      EmptyResult.fromJson,
       RequestOptions(
         signal: abortController.signal,
         timeoutEnabled: false,

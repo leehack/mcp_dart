@@ -1064,6 +1064,24 @@ void main() {
         }),
       );
     });
+
+    test('parses meta when present', () {
+      final result = EmptyResult.fromJson({
+        '_meta': {'key': 'value'},
+      });
+
+      expect(result.meta, equals({'key': 'value'}));
+      expect(result.toJson(), {
+        '_meta': {'key': 'value'},
+      });
+    });
+
+    test('rejects malformed meta', () {
+      expect(
+        () => EmptyResult.fromJson({'_meta': 'bad'}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('ClientCapabilitiesRoots Edge Cases', () {

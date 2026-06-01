@@ -268,11 +268,12 @@ void main() {
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
+      transport.emptyResponseMeta = {'traceId': 'ping-trace'};
       await client.connect(transport);
 
       transport.clearSentMessages();
 
-      await client.ping();
+      final result = await client.ping();
 
       // Verify a ping request was sent
       expect(transport.sentMessages.length, equals(1));
@@ -280,6 +281,7 @@ void main() {
         (transport.sentMessages.first as JsonRpcRequest).method,
         equals('ping'),
       );
+      expect(result.meta, {'traceId': 'ping-trace'});
     });
 
     test('complete sends completion request', () async {
@@ -570,6 +572,7 @@ void main() {
 class MockTransport extends Transport {
   final List<JsonRpcMessage> sentMessages = [];
   InitializeResult? mockInitializeResponse;
+  Map<String, dynamic>? emptyResponseMeta;
   bool shouldThrowOnStart = false;
 
   void clearSentMessages() {
@@ -741,7 +744,7 @@ class MockTransport extends Transport {
         onmessage!(
           JsonRpcResponse(
             id: message.id,
-            result: const EmptyResult().toJson(),
+            result: EmptyResult(meta: emptyResponseMeta).toJson(),
           ),
         );
       }
