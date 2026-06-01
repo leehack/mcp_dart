@@ -442,6 +442,11 @@ void _validateFormRequestedSchemaJson(Map<String, dynamic> json) {
     const {r'$schema', 'type', 'properties', 'required'},
     'ElicitRequest.requestedSchema',
   );
+  _validateOptionalStringKeyword(
+    json,
+    r'$schema',
+    'ElicitRequest.requestedSchema',
+  );
   if (json['type'] != 'object') {
     throw const FormatException(
       'Form elicitation requestedSchema must have type object.',
@@ -493,6 +498,8 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
         },
         context,
       );
+      _validatePrimitiveBaseKeywords(json, context);
+      _validateNumberSchemaKeywords(json, context, type as String);
       return;
     case 'boolean':
       _ensureAllowedKeys(
@@ -500,6 +507,10 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
         const {'type', 'title', 'description', 'default'},
         context,
       );
+      _validatePrimitiveBaseKeywords(json, context);
+      if (json['default'] != null && json['default'] is! bool) {
+        throw FormatException('$context.default must be a boolean.');
+      }
       return;
     case 'array':
       _validateMultiSelectEnumSchema(json, context);
@@ -508,6 +519,34 @@ void _validatePrimitiveSchema(Map<String, dynamic> json, String context) {
       throw FormatException(
         '$context must be a primitive elicitation schema.',
       );
+  }
+}
+
+void _validatePrimitiveBaseKeywords(
+  Map<String, dynamic> json,
+  String context,
+) {
+  _validateOptionalStringKeyword(json, 'title', context);
+  _validateOptionalStringKeyword(json, 'description', context);
+}
+
+void _validateNumberSchemaKeywords(
+  Map<String, dynamic> json,
+  String context,
+  String type,
+) {
+  if (type == 'integer') {
+    _validateOptionalIntegerKeyword(json, 'default', context);
+  }
+
+  for (final key in const ['minimum', 'maximum']) {
+    if (json[key] != null) {
+      readFiniteNumber(json[key], '$context.$key');
+    }
+  }
+
+  if (type == 'number' && json['default'] != null) {
+    readFiniteNumber(json['default'], '$context.default');
   }
 }
 
@@ -521,6 +560,8 @@ void _validateStringOrSingleEnumSchema(
       const {'type', 'title', 'description', 'oneOf', 'default'},
       context,
     );
+    _validatePrimitiveBaseKeywords(json, context);
+    _validateOptionalStringKeyword(json, 'default', context);
     final oneOf = json['oneOf'];
     if (oneOf is! List ||
         oneOf.any(
@@ -549,6 +590,10 @@ void _validateStringOrSingleEnumSchema(
     },
     context,
   );
+  _validatePrimitiveBaseKeywords(json, context);
+  _validateOptionalStringKeyword(json, 'default', context);
+  _validateOptionalIntegerKeyword(json, 'minLength', context);
+  _validateOptionalIntegerKeyword(json, 'maxLength', context);
   final enumValues = json['enum'];
   if (enumValues != null &&
       (enumValues is! List || enumValues.any((value) => value is! String))) {
@@ -586,16 +631,21 @@ void _validateMultiSelectEnumSchema(
     },
     context,
   );
+  _validatePrimitiveBaseKeywords(json, context);
+  _validateOptionalIntegerKeyword(json, 'minItems', context);
+  _validateOptionalIntegerKeyword(json, 'maxItems', context);
+  _validateOptionalStringListKeyword(json, 'default', context);
   final items = json['items'];
   if (items is! Map) {
     throw FormatException('$context.items is required for array schemas.');
   }
   final itemMap = items.cast<String, dynamic>();
-  if (itemMap['type'] == 'string' && itemMap['enum'] is List) {
-    final enumValues = itemMap['enum'] as List;
-    if (enumValues.any((value) => value is! String)) {
-      throw FormatException('$context.items.enum must be a string array.');
+  if (itemMap.containsKey('enum')) {
+    _ensureAllowedKeys(itemMap, const {'type', 'enum'}, '$context.items');
+    if (itemMap['type'] != 'string') {
+      throw FormatException('$context.items.type must be string.');
     }
+    _validateRequiredStringListKeyword(itemMap, 'enum', '$context.items');
     return;
   }
   final anyOf = itemMap['anyOf'];
@@ -609,6 +659,50 @@ void _validateMultiSelectEnumSchema(
     return;
   }
   throw FormatException('$context.items must define a string enum.');
+}
+
+void _validateOptionalStringKeyword(
+  Map<String, dynamic> json,
+  String key,
+  String context,
+) {
+  final value = json[key];
+  if (value != null && value is! String) {
+    throw FormatException('$context.$key must be a string.');
+  }
+}
+
+void _validateOptionalIntegerKeyword(
+  Map<String, dynamic> json,
+  String key,
+  String context,
+) {
+  if (json[key] == null) {
+    return;
+  }
+  readOptionalInteger(json[key], '$context.$key');
+}
+
+void _validateOptionalStringListKeyword(
+  Map<String, dynamic> json,
+  String key,
+  String context,
+) {
+  if (json[key] == null) {
+    return;
+  }
+  _validateRequiredStringListKeyword(json, key, context);
+}
+
+void _validateRequiredStringListKeyword(
+  Map<String, dynamic> json,
+  String key,
+  String context,
+) {
+  final value = json[key];
+  if (value is! List || value.any((item) => item is! String)) {
+    throw FormatException('$context.$key must be a string array.');
+  }
 }
 
 void _ensureAllowedKeys(

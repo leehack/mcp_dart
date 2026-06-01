@@ -823,6 +823,7 @@ void main() {
         'mode': 'form',
         'message': 'Configure deployment',
         'requestedSchema': {
+          r'$schema': 'https://json-schema.org/draft/2020-12/schema',
           'type': 'object',
           'properties': {
             'email': {
@@ -831,6 +832,8 @@ void main() {
               'title': 'Email',
               'description': 'Contact address',
               'default': 'ops@example.com',
+              'minLength': 3,
+              'maxLength': 320,
             },
             'size': {
               'type': 'string',
@@ -861,6 +864,9 @@ void main() {
             },
             'features': {
               'type': 'array',
+              'minItems': 1,
+              'maxItems': 2,
+              'default': ['logs'],
               'items': {
                 'type': 'string',
                 'enum': ['logs', 'metrics'],
@@ -932,6 +938,68 @@ void main() {
         }),
         throwsA(isA<FormatException>()),
       );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'message': 'Bad schema URI',
+          'requestedSchema': {
+            r'$schema': 2020,
+            'type': 'object',
+            'properties': {
+              'value': {'type': 'string'},
+            },
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      for (final property in <String, Map<String, dynamic>>{
+        'badStringTitle': {
+          'type': 'string',
+          'title': 1,
+        },
+        'badStringDefault': {
+          'type': 'string',
+          'default': false,
+        },
+        'badStringMinLength': {
+          'type': 'string',
+          'minLength': 1.5,
+        },
+        'badNumberDefault': {
+          'type': 'number',
+          'default': '0',
+        },
+        'badIntegerDefault': {
+          'type': 'integer',
+          'default': 1.5,
+        },
+        'badBooleanDefault': {
+          'type': 'boolean',
+          'default': 'false',
+        },
+        'badArrayDefault': {
+          'type': 'array',
+          'default': ['ok', 1],
+          'items': {
+            'type': 'string',
+            'enum': ['ok'],
+          },
+        },
+        'badArrayMinItems': {
+          'type': 'array',
+          'minItems': '1',
+          'items': {
+            'type': 'string',
+            'enum': ['ok'],
+          },
+        },
+      }.entries) {
+        expect(
+          () => ElicitRequestParams.fromJson(
+            requestWithProperty(property.key, property.value),
+          ),
+          throwsA(isA<FormatException>()),
+        );
+      }
       expect(
         () => ElicitRequestParams.fromJson(
           requestWithProperty('value', {
