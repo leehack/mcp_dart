@@ -994,6 +994,26 @@ void main() {
               'values': ['a'],
               'hasMore': 'true',
             }),
+        () => CreateMessageRequestParams.fromJson({
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': {'type': 'text', 'text': 'Hello'},
+                },
+              ],
+              'maxTokens': 100,
+              'tools': 'bad',
+            }),
+        () => CreateMessageRequestParams.fromJson({
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': {'type': 'text', 'text': 'Hello'},
+                },
+              ],
+              'maxTokens': 100,
+              'tools': [1],
+            }),
         () => LoggingMessageNotification.fromJson({
               'level': 'info',
               'data': Object(),

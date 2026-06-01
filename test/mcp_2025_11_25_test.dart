@@ -1846,6 +1846,32 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'tools': 'bad',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'tools': [1],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
           () => ModelHint.fromJson({'name': 1}),
           throwsA(isA<FormatException>()),
         );

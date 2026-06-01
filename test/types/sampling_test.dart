@@ -525,6 +525,13 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        expect(
+          () => const SamplingToolResultContent(
+            toolUseId: 'tr1',
+            content: {1: 'bad'},
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
   });
@@ -736,6 +743,19 @@ void main() {
         }),
         throwsA(isA<FormatException>()),
       );
+      expect(
+        () => const CreateMessageRequestParams(
+          messages: [
+            SamplingMessage(
+              role: SamplingMessageRole.user,
+              content: SamplingTextContent(text: 'Hello'),
+            ),
+          ],
+          maxTokens: 100,
+          toolChoice: {1: 'required'},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('validates string wire fields', () {
@@ -766,6 +786,31 @@ void main() {
           'messages': messages,
           'maxTokens': 100,
           'stopSequences': ['STOP', 1],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('validates tool wire fields', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'tools': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'tools': [1],
         }),
         throwsA(isA<FormatException>()),
       );

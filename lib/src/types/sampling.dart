@@ -114,7 +114,7 @@ ToolChoice? _parseToolChoice(dynamic value) {
   }
 
   if (value is Map) {
-    return ToolChoice.fromJson(value.cast<String, dynamic>());
+    return ToolChoice.fromJson(readJsonObject(value, 'toolChoice'));
   }
 
   throw FormatException(
@@ -132,7 +132,7 @@ Map<String, dynamic>? _toolChoiceToLegacyMap(dynamic value) {
   }
 
   if (value is Map) {
-    return value.cast<String, dynamic>();
+    return readJsonObject(value, 'toolChoice');
   }
 
   if (value is ToolChoice) {
@@ -164,7 +164,9 @@ List<Content> _parseToolResultContent(dynamic rawContent) {
       }
 
       if (item is Map) {
-        return Content.fromJson(item.cast<String, dynamic>());
+        return Content.fromJson(
+          readJsonObject(item, 'SamplingToolResultContent.content[]'),
+        );
       }
 
       return TextContent(text: item.toString());
@@ -172,7 +174,7 @@ List<Content> _parseToolResultContent(dynamic rawContent) {
   }
 
   if (rawContent is Map) {
-    final map = rawContent.cast<String, dynamic>();
+    final map = readJsonObject(rawContent, 'SamplingToolResultContent.content');
     if (map.containsKey('type')) {
       return [Content.fromJson(map)];
     }
@@ -190,6 +192,22 @@ List<Content> _parseToolResultWireContent(dynamic rawContent) {
   }
   return rawContent
       .map((item) => Content.fromJson(_asJsonObject(item)))
+      .toList();
+}
+
+List<Tool>? _parseSamplingTools(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! List) {
+    throw const FormatException('CreateMessageRequest.tools must be a list');
+  }
+  return value.indexed
+      .map(
+        (entry) => Tool.fromJson(
+          _asJsonObject(entry.$2, 'CreateMessageRequest.tools[${entry.$1}]'),
+        ),
+      )
       .toList();
 }
 
@@ -736,9 +754,7 @@ class CreateMessageRequest {
           : ModelPreferences.fromJson(
               _asJsonObject(json['modelPreferences']),
             ),
-      tools: (json['tools'] as List<dynamic>?)
-          ?.map((t) => Tool.fromJson(_asJsonObject(t)))
-          .toList(),
+      tools: _parseSamplingTools(json['tools']),
       toolChoice: toolChoice,
     );
   }
