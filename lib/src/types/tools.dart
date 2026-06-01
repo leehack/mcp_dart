@@ -9,7 +9,10 @@ import 'validation.dart';
 /// Legacy alias for [JsonObject] used as tool input schema.
 typedef ToolInputSchema = JsonObject;
 
-/// Legacy alias for [JsonObject] used as tool output schema.
+/// Legacy alias for object-root tool output schemas.
+///
+/// MCP 2026-07-28 allows [Tool.outputSchema] to be any JSON Schema. Use
+/// [JsonSchema] directly when the output schema root is not an object.
 typedef ToolOutputSchema = JsonObject;
 
 /// Additional properties describing a Tool to clients.
@@ -149,7 +152,7 @@ class Tool {
   /// JSON Schema defining the tool's input parameters.
   final JsonSchema inputSchema;
 
-  /// JSON Schema defining the tool's output parameters.
+  /// JSON Schema defining the tool's structured output.
   final JsonSchema? outputSchema;
 
   /// Optional additional properties describing the tool.
@@ -197,13 +200,6 @@ class Tool {
         _readOptionalJsonObject(json['outputSchema'], 'Tool.outputSchema');
     final outputSchema =
         outputSchemaJson == null ? null : JsonSchema.fromJson(outputSchemaJson);
-    if (outputSchema != null) {
-      _validateObjectRootSchema(
-        outputSchema,
-        'Tool.outputSchema',
-        formatException: true,
-      );
-    }
 
     return Tool(
       name: json['name'] as String,
@@ -231,9 +227,6 @@ class Tool {
 
   Map<String, dynamic> toJson() {
     _validateObjectRootSchema(inputSchema, 'Tool.inputSchema');
-    if (outputSchema != null) {
-      _validateObjectRootSchema(outputSchema!, 'Tool.outputSchema');
-    }
 
     return {
       'name': name,
@@ -390,7 +383,15 @@ class CallToolResult implements BaseResultData {
   final bool isError;
 
   /// Structured content returned by the tool.
-  final Map<String, dynamic>? structuredContent;
+  ///
+  /// MCP 2026-07-28 allows any JSON value: object, array, string, number,
+  /// boolean, or null.
+  final Object? structuredContent;
+
+  /// Whether [structuredContent] was explicitly present.
+  ///
+  /// This distinguishes an omitted field from an explicit JSON `null`.
+  final bool hasStructuredContent;
 
   /// Optional metadata.
   @override
@@ -403,24 +404,26 @@ class CallToolResult implements BaseResultData {
     required this.content,
     this.isError = false,
     this.structuredContent,
+    bool? hasStructuredContent,
     this.meta,
     this.extra,
-  });
+  }) : hasStructuredContent = hasStructuredContent ?? structuredContent != null;
 
   /// Creates a result from a list of content items.
   factory CallToolResult.fromContent(List<Content> content) {
     return CallToolResult(content: content);
   }
 
-  /// Creates a result from arbitrary structured data.
+  /// Creates a result from arbitrary structured JSON data.
   ///
   /// Automatically populates [content] with a JSON-serialized version of
   /// [content] for backward compatibility with clients that do not support
   /// [structuredContent].
-  factory CallToolResult.fromStructuredContent(Map<String, dynamic> content) {
+  factory CallToolResult.fromStructuredContent(Object? content) {
     return CallToolResult(
       content: [TextContent(text: jsonEncode(content))],
       structuredContent: content,
+      hasStructuredContent: true,
     );
   }
 
@@ -438,7 +441,13 @@ class CallToolResult implements BaseResultData {
           .map((e) => Content.fromJson(e as Map<String, dynamic>))
           .toList(),
       isError: json['isError'] as bool? ?? false,
-      structuredContent: json['structuredContent'] as Map<String, dynamic>?,
+      structuredContent: json.containsKey('structuredContent')
+          ? readJsonValue(
+              json['structuredContent'],
+              'CallToolResult.structuredContent',
+            )
+          : null,
+      hasStructuredContent: json.containsKey('structuredContent'),
       meta: json['_meta'] as Map<String, dynamic>?,
       extra: extra.isEmpty ? null : extra,
     );
@@ -448,7 +457,11 @@ class CallToolResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'content': content.map((e) => e.toJson()).toList(),
         if (isError) 'isError': isError,
-        if (structuredContent != null) 'structuredContent': structuredContent,
+        if (hasStructuredContent)
+          'structuredContent': readJsonValue(
+            structuredContent,
+            'CallToolResult.structuredContent',
+          ),
         if (meta != null) '_meta': meta,
         ...?extra,
       };

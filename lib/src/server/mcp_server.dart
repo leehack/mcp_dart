@@ -46,6 +46,66 @@ List<McpIcon>? _iconsFromLegacyImage(ImageContent? image) {
   ];
 }
 
+bool _isDraft2026Request(String? protocolVersion) =>
+    protocolVersion != null && isStatelessProtocolVersion(protocolVersion);
+
+bool _isStableStructuredContentValue(Object? value) {
+  if (value is Map<String, dynamic>) {
+    return true;
+  }
+  if (value is Map) {
+    return value.keys.every((key) => key is String);
+  }
+  return false;
+}
+
+JsonSchema? _outputSchemaForProtocol(
+  JsonSchema? schema,
+  String? protocolVersion,
+) {
+  if (schema == null || _isDraft2026Request(protocolVersion)) {
+    return schema;
+  }
+
+  // MCP 2025-11-25 restricts tool output schemas to object roots. MCP 2026
+  // allows any JSON Schema, so omit non-object schemas for stable callers.
+  if (schema.toJson()['type'] == 'object') {
+    return schema;
+  }
+  return null;
+}
+
+CallToolResult _toolResultForProtocol(
+  CallToolResult result,
+  String? protocolVersion,
+) {
+  if (_isDraft2026Request(protocolVersion) ||
+      !result.hasStructuredContent ||
+      _isStableStructuredContentValue(result.structuredContent)) {
+    return result;
+  }
+
+  return CallToolResult(
+    content: result.content,
+    isError: result.isError,
+    meta: result.meta,
+    extra: result.extra,
+  );
+}
+
+McpError _resourceNotFoundErrorForProtocol(
+  String uri,
+  String? protocolVersion,
+) {
+  return McpError(
+    _isDraft2026Request(protocolVersion)
+        ? ErrorCode.invalidParams.value
+        : ErrorCode.resourceNotFound.value,
+    'Resource not found',
+    {'uri': uri},
+  );
+}
+
 /// Definition for a completable argument.
 class CompletableDef {
   /// The callback to invoke to get completion suggestions.
@@ -110,7 +170,7 @@ final class InterfaceToolCallback extends ToolCallback {
 }
 
 /// Callback signature for prompts.
-typedef PromptCallback = FutureOr<GetPromptResult> Function(
+typedef PromptCallback = FutureOr<BaseResultData> Function(
   Map<String, dynamic>? args,
   RequestHandlerExtra? extra,
 );
@@ -149,13 +209,13 @@ typedef ListResourcesCallback = FutureOr<ListResourcesResult> Function(
 );
 
 /// Callback to read a specific resource.
-typedef ReadResourceCallback = FutureOr<ReadResourceResult> Function(
+typedef ReadResourceCallback = FutureOr<BaseResultData> Function(
   Uri uri,
   RequestHandlerExtra extra,
 );
 
 /// Callback to read a resource template.
-typedef ReadResourceTemplateCallback = FutureOr<ReadResourceResult> Function(
+typedef ReadResourceTemplateCallback = FutureOr<BaseResultData> Function(
   Uri uri,
   TemplateVariables variables,
   RequestHandlerExtra extra,
@@ -219,6 +279,7 @@ CallToolResult _withRelatedTaskMeta(CallToolResult result, String taskId) {
     content: result.content,
     isError: result.isError,
     structuredContent: result.structuredContent,
+    hasStructuredContent: result.hasStructuredContent,
     meta: meta,
     extra: result.extra,
   );
@@ -516,7 +577,7 @@ abstract class RegisteredTool {
   ToolInputSchema? get inputSchema;
 
   /// The output schema for the tool.
-  ToolOutputSchema? get outputSchema;
+  JsonSchema? get outputSchema;
 
   /// Annotations for the tool.
   ToolAnnotations? get annotations;
@@ -545,7 +606,7 @@ abstract class RegisteredTool {
     String? title,
     String? description,
     ToolInputSchema? inputSchema,
-    ToolOutputSchema? outputSchema,
+    JsonSchema? outputSchema,
     ToolAnnotations? annotations,
     ToolExecution? execution,
     ToolCallback? callback,
@@ -563,7 +624,7 @@ class _RegisteredToolImpl implements RegisteredTool {
   @override
   ToolInputSchema? inputSchema;
   @override
-  ToolOutputSchema? outputSchema;
+  JsonSchema? outputSchema;
   @override
   ToolAnnotations? annotations;
   final ImageContent? icon;
@@ -596,6 +657,7 @@ class _RegisteredToolImpl implements RegisteredTool {
   Tool toTool({
     bool includeExecution = true,
     ToolInputSchema? inputSchemaOverride,
+    String? protocolVersion,
   }) {
     return Tool(
       name: name,
@@ -603,7 +665,7 @@ class _RegisteredToolImpl implements RegisteredTool {
       description: description,
       inputSchema:
           inputSchemaOverride ?? inputSchema ?? const ToolInputSchema(),
-      outputSchema: outputSchema,
+      outputSchema: _outputSchemaForProtocol(outputSchema, protocolVersion),
       annotations: annotations,
       icon: icon,
       icons: _iconsFromLegacyImage(icon),
@@ -627,7 +689,7 @@ class _RegisteredToolImpl implements RegisteredTool {
     String? title,
     String? description,
     ToolInputSchema? inputSchema,
-    ToolOutputSchema? outputSchema,
+    JsonSchema? outputSchema,
     ToolAnnotations? annotations,
     ToolExecution? execution,
     ToolCallback? callback,
@@ -785,7 +847,7 @@ class ExperimentalMcpServerTasks {
     String? title,
     String? description,
     ToolInputSchema? inputSchema,
-    ToolOutputSchema? outputSchema,
+    JsonSchema? outputSchema,
     ToolAnnotations? annotations,
     Map<String, dynamic>? meta,
     ToolExecution? execution,
@@ -1424,6 +1486,8 @@ class McpServer {
                   inputSchemaOverride: isStatelessRequest
                       ? _toolInputSchemaForStatelessList(tool)
                       : null,
+                  protocolVersion:
+                      protocolVersion is String ? protocolVersion : null,
                 ),
               )
               .toList(),
@@ -1549,6 +1613,13 @@ class McpServer {
                 );
               }
             }
+          }
+
+          if (result is CallToolResult) {
+            return _toolResultForProtocol(
+              result,
+              protocolVersion is String ? protocolVersion : null,
+            );
           }
 
           return result;
@@ -1751,9 +1822,10 @@ class McpServer {
             return await Future.value(entry.readCallback(uri, vars, extra));
           }
         }
-        throw McpError(
-          ErrorCode.invalidParams.value,
-          "Resource not found: $uriString",
+        final protocolVersion = extra.meta?[McpMetaKey.protocolVersion];
+        throw _resourceNotFoundErrorForProtocol(
+          uriString,
+          protocolVersion is String ? protocolVersion : null,
         );
       },
       (id, params, meta) => JsonRpcReadResourceRequest.fromJson({
@@ -1963,7 +2035,7 @@ class McpServer {
     String? title,
     String? description,
     ToolInputSchema? inputSchema,
-    ToolOutputSchema? outputSchema,
+    JsonSchema? outputSchema,
     ToolAnnotations? annotations,
     Map<String, dynamic>? meta,
     required ToolFunction callback,
@@ -1987,7 +2059,7 @@ class McpServer {
     String? title,
     String? description,
     ToolInputSchema? inputSchema,
-    ToolOutputSchema? outputSchema,
+    JsonSchema? outputSchema,
     ToolAnnotations? annotations,
     Map<String, dynamic>? meta,
     ToolExecution? execution,

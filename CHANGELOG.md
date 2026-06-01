@@ -69,6 +69,29 @@
 - Added client-side `subscriptions/listen` handles that correlate stream
   notifications by `io.modelcontextprotocol/subscriptionId`, validate the
   acknowledgment, and cancel long-lived streams with `notifications/cancelled`.
+- Allowed MCP 2026 tool `outputSchema` declarations to use any JSON Schema and
+  `structuredContent` results to carry any JSON value, while omitting non-object
+  structured output from stable 2025 responses.
+- Allowed MCP 2026 `prompts/get` and `resources/read` handlers to return
+  `InputRequiredResult`, and rejected MRTR input-required results on unsupported
+  request methods.
+- Rejected MCP 2026 MRTR `inputRequests` whose embedded client request type is
+  not declared in the caller's per-request client capabilities.
+- Returned version-appropriate resource-not-found errors from high-level
+  `resources/read` handlers: stable 2025 uses legacy `-32002`, while MCP 2026
+  stateless requests use `-32602` with the missing `uri` in error data.
+- Enforced MCP 2026 `_meta` key-name grammar on stateless request metadata and
+  the 2026 request metadata builder while preserving legacy metadata parsing.
+- Rejected negative cacheable-result `ttlMs` values during parsing instead of
+  clamping malformed wire values to zero.
+- Validated MRTR `inputResponses` as `CreateMessageResult`, `ListRootsResult`,
+  or `ElicitResult` instead of accepting arbitrary result objects.
+- Rejected non-integer numeric `ElicitResult.content` values to match the
+  stable and MCP 2026 schemas.
+- Rejected form elicitation schemas that provide legacy `enumNames` without the
+  required string `enum`.
+- Rejected `ElicitResult.content` when the result action is `decline` or
+  `cancel`.
 
 ## 2.2.0
 

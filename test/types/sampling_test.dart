@@ -235,6 +235,30 @@ void main() {
         expect((json['content'] as List).first['type'], equals('text'));
       });
 
+      test('toJson preserves arbitrary structured JSON values', () {
+        const content = SamplingToolResultContent(
+          toolUseId: 'res1',
+          content: [
+            TextContent(text: 'array result'),
+          ],
+          structuredContent: ['alpha', 'beta'],
+        );
+        final json = content.toJson();
+        expect(json['structuredContent'], equals(['alpha', 'beta']));
+
+        const nullContent = SamplingToolResultContent(
+          toolUseId: 'res2',
+          content: [
+            TextContent(text: 'null result'),
+          ],
+          structuredContent: null,
+          hasStructuredContent: true,
+        );
+        final nullJson = nullContent.toJson();
+        expect(nullJson.containsKey('structuredContent'), isTrue);
+        expect(nullJson['structuredContent'], isNull);
+      });
+
       test('fromJson parses correctly', () {
         final json = {
           'type': 'tool_result',
@@ -253,6 +277,35 @@ void main() {
         expect(result.structuredContent, equals({'status': 'ok'}));
         expect(result.content, hasLength(1));
         expect(result.content.first, isA<TextContent>());
+      });
+
+      test('fromJson parses arbitrary structured JSON values', () {
+        final json = {
+          'type': 'tool_result',
+          'toolUseId': 'tr1',
+          'content': [
+            {'type': 'text', 'text': 'result data'},
+          ],
+          'structuredContent': ['alpha', 'beta'],
+        };
+        final content = SamplingContent.fromJson(json);
+        expect(content, isA<SamplingToolResultContent>());
+        final result = content as SamplingToolResultContent;
+        expect(result.hasStructuredContent, isTrue);
+        expect(result.structuredContent, equals(['alpha', 'beta']));
+
+        final nullJson = {
+          'type': 'tool_result',
+          'toolUseId': 'tr2',
+          'content': [
+            {'type': 'text', 'text': 'result data'},
+          ],
+          'structuredContent': null,
+        };
+        final nullContent =
+            SamplingContent.fromJson(nullJson) as SamplingToolResultContent;
+        expect(nullContent.hasStructuredContent, isTrue);
+        expect(nullContent.structuredContent, isNull);
       });
     });
   });

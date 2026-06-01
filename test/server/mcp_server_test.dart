@@ -695,6 +695,63 @@ void main() {
       final contents = response.result['contents'] as List;
       expect(contents.first['text'], equals('Hello from resource'));
     });
+
+    test('legacy resource miss uses stable resource-not-found error', () async {
+      server.registerResource(
+        'Known Resource',
+        'test://known',
+        null,
+        (uri, extra) async => ReadResourceResult(
+          contents: [
+            TextResourceContents(uri: uri.toString(), text: 'known'),
+          ],
+        ),
+      );
+
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcReadResourceRequest(
+          id: 'missing-resource',
+          readParams: const ReadResourceRequestParams(uri: 'test://missing'),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.resourceNotFound.value);
+      expect(response.error.message, 'Resource not found');
+      expect(response.error.data, {'uri': 'test://missing'});
+    });
+
+    test('stateless resource miss uses 2026 invalid params error', () async {
+      server.registerResource(
+        'Known Resource',
+        'test://known',
+        null,
+        (uri, extra) async => ReadResourceResult(
+          contents: [
+            TextResourceContents(uri: uri.toString(), text: 'known'),
+          ],
+        ),
+      );
+
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcReadResourceRequest(
+          id: 'missing-resource',
+          readParams: const ReadResourceRequestParams(uri: 'test://missing'),
+          meta: _statelessMeta(),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, 'Resource not found');
+      expect(response.error.data, {'uri': 'test://missing'});
+    });
   });
 
   group('McpServer Prompt Registration', () {
