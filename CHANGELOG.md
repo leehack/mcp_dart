@@ -101,6 +101,8 @@
   JSON numbers.
 - Rejected non-JSON values in sampling JSON object fields, including
   `tool_use.input`, sampling metadata, annotations, and `_meta` maps.
+- Rejected non-JSON values in common content/resource metadata fields and
+  `resource_link.annotations`.
 
 ## 2.2.0
 

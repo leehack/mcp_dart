@@ -474,6 +474,41 @@ void main() {
       );
       expect(deserialized.meta?['display'], equals('inline'));
     });
+
+    test('content JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => TextContent.fromJson({
+          'type': 'text',
+          'text': 'Hello',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const TextContent(
+          text: 'Hello',
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'annotations': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'file:///docs/readme.md',
+          name: 'readme',
+          annotations: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('Resource Tests', () {
@@ -530,6 +565,41 @@ void main() {
           ResourceContents.fromJson(json) as BlobResourceContents;
       expect(deserialized.uri, equals('file://example.bin'));
       expect(deserialized.blob, equals('base64data'));
+    });
+
+    test('ResourceContents rejects non-JSON metadata and passthrough maps', () {
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file://example.txt',
+          'text': 'Sample text content',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file://example.txt',
+          'text': 'Sample text content',
+          'x-extra': Object(),
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const TextResourceContents(
+          uri: 'file://example.txt',
+          text: 'Sample text content',
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const TextResourceContents(
+          uri: 'file://example.txt',
+          text: 'Sample text content',
+          extra: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
