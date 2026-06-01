@@ -158,6 +158,13 @@ final result = await client.callTool(
 
 ### Task-Augmented Tool Calls
 
+For MCP 2026 stateless servers that advertise the
+`io.modelcontextprotocol/tasks` extension, task creation is server-directed.
+Call `client.callTool()` normally, or call `TaskClient.callToolStream()` without
+the legacy `task` argument; the client follows `resultType: "task"` with
+`tasks/get`, using `tasks/update` only when the server requests more input,
+until the final tool result is available.
+
 For task-capable tools, use `TaskClient.callToolStream()` and pass task creation
 parameters through the `task` argument. The server must advertise
 `tasks.requests.tools.call`, and the target tool must be visible from
