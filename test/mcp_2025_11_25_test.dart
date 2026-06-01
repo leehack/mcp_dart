@@ -1591,6 +1591,49 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        expect(
+          () => ModelHint.fromJson({'name': 1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'text',
+            'text': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'type': 'tool_result',
+            'toolUseId': 'call-1',
+            'content': [
+              {'type': 'text', 'text': 'Hello'},
+            ],
+            'isError': 'false',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'stopSequences': ['STOP', 1],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageResult.fromJson({
+            'role': 'assistant',
+            'content': {'type': 'text', 'text': 'Hello'},
+            'model': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
 
       test('bare task containers strip task metadata', () {

@@ -20,6 +20,13 @@ void main() {
       final hint = ModelHint.fromJson(json);
       expect(hint.name, equals('gemini-pro'));
     });
+
+    test('rejects malformed wire fields', () {
+      expect(
+        () => ModelHint.fromJson({'name': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('ModelPreferences', () {
@@ -89,6 +96,21 @@ void main() {
         );
       }
     });
+
+    test('rejects malformed hint lists', () {
+      expect(
+        () => ModelPreferences.fromJson({'hints': 'model-a'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ModelPreferences.fromJson({
+          'hints': [
+            {'name': 1},
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('SamplingContent', () {
@@ -140,6 +162,23 @@ void main() {
               'priority': 2,
             },
           ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('rejects malformed text wire fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 1,
+            'text': 'Parsed text',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'text',
+            'text': 1,
+          }),
           throwsA(isA<FormatException>()),
         );
       });
@@ -197,6 +236,17 @@ void main() {
             mimeType: 'image/png',
           ).toJson(),
           throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('rejects malformed image wire fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'image',
+            'data': 'aW1nZGF0YQ==',
+            'mimeType': 1,
+          }),
+          throwsA(isA<FormatException>()),
         );
       });
     });
@@ -259,6 +309,17 @@ void main() {
           throwsA(isA<ArgumentError>()),
         );
       });
+
+      test('rejects malformed audio wire fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'audio',
+            'data': 'YXVkaW8tZGF0YQ==',
+            'mimeType': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+      });
     });
 
     group('SamplingToolUseContent', () {
@@ -315,6 +376,27 @@ void main() {
             name: 'fetch',
             input: {'bad': Object()},
           ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('rejects malformed tool use wire fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_use',
+            'id': 1,
+            'name': 'fetch',
+            'input': {'url': 'http://test.com'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_use',
+            'id': 'tu1',
+            'name': 1,
+            'input': {'url': 'http://test.com'},
+          }),
           throwsA(isA<FormatException>()),
         );
       });
@@ -420,6 +502,29 @@ void main() {
             SamplingContent.fromJson(nullJson) as SamplingToolResultContent;
         expect(nullContent.hasStructuredContent, isTrue);
         expect(nullContent.structuredContent, isNull);
+      });
+
+      test('rejects malformed tool result wire fields', () {
+        final content = [
+          {'type': 'text', 'text': 'result data'},
+        ];
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_result',
+            'toolUseId': 1,
+            'content': content,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_result',
+            'toolUseId': 'tr1',
+            'content': content,
+            'isError': 'false',
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
   });
@@ -633,6 +738,39 @@ void main() {
       );
     });
 
+    test('validates string wire fields', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'systemPrompt': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'stopSequences': 'STOP',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'stopSequences': ['STOP', 1],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('accepts whole-number JSON maxTokens values', () {
       final messages = [
         {
@@ -809,6 +947,17 @@ void main() {
       );
     });
 
+    test('validates model wire field', () {
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Msg'},
+          'model': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('rejects non-JSON metadata objects', () {
       expect(
         () => CreateMessageResult.fromJson({
@@ -874,6 +1023,19 @@ void main() {
         'jsonrpc': '2.0',
         'id': 1,
         'method': 'sampling/createMessage',
+      };
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects non-object params', () {
+      final json = {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'sampling/createMessage',
+        'params': 'bad',
       };
       expect(
         () => JsonRpcCreateMessageRequest.fromJson(json),

@@ -251,6 +251,32 @@ String? readOptionalString(Object? value, String field) {
   throw FormatException('$field must be a string');
 }
 
+bool readRequiredBool(Object? value, String field) {
+  if (value is bool) {
+    return value;
+  }
+  throw FormatException('$field must be a boolean');
+}
+
+bool? readOptionalBool(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return readRequiredBool(value, field);
+}
+
+List<String>? readOptionalStringList(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! List) {
+    throw FormatException('$field must be a list of strings');
+  }
+  return [
+    for (final item in value) readRequiredString(item, '$field items'),
+  ];
+}
+
 int? readOptionalTtlMs(Object? value, String field) {
   final ttlMs = readOptionalInteger(value, field);
   if (ttlMs == null) {

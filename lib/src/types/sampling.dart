@@ -67,7 +67,9 @@ List<SamplingContent> _asSamplingContentBlocks(
         return item;
       }
       if (item is Map) {
-        return SamplingContent.fromJson(item.cast<String, dynamic>());
+        return SamplingContent.fromJson(
+          readJsonObject(item, '$context items'),
+        );
       }
       throw FormatException(
         'Expected $context items to be SamplingContent or object, got ${item.runtimeType}',
@@ -76,7 +78,7 @@ List<SamplingContent> _asSamplingContentBlocks(
   }
 
   if (value is Map) {
-    return [SamplingContent.fromJson(value.cast<String, dynamic>())];
+    return [SamplingContent.fromJson(readJsonObject(value, context))];
   }
 
   throw FormatException(
@@ -199,7 +201,9 @@ class ModelHint {
   const ModelHint({this.name});
 
   factory ModelHint.fromJson(Map<String, dynamic> json) {
-    return ModelHint(name: json['name'] as String?);
+    return ModelHint(
+      name: readOptionalString(json['name'], 'ModelHint.name'),
+    );
   }
 
   Map<String, dynamic> toJson() => {
@@ -238,9 +242,13 @@ class ModelPreferences {
         );
 
   factory ModelPreferences.fromJson(Map<String, dynamic> json) {
+    final hints = json['hints'];
+    if (hints != null && hints is! List) {
+      throw const FormatException('ModelPreferences.hints must be a list');
+    }
     return ModelPreferences(
-      hints: (json['hints'] as List<dynamic>?)
-          ?.map((h) => ModelHint.fromJson(_asJsonObject(h)))
+      hints: hints
+          ?.map<ModelHint>((h) => ModelHint.fromJson(_asJsonObject(h)))
           .toList(),
       costPriority: readUnitDouble(
         json['costPriority'],
@@ -283,7 +291,7 @@ sealed class SamplingContent {
 
   /// Creates specific subclass from JSON.
   factory SamplingContent.fromJson(Map<String, dynamic> json) {
-    final type = json['type'] as String?;
+    final type = readRequiredString(json['type'], 'SamplingContent.type');
     return switch (type) {
       'text' => SamplingTextContent.fromJson(json),
       'image' => SamplingImageContent.fromJson(json),
@@ -378,7 +386,7 @@ class SamplingTextContent extends SamplingContent {
 
   factory SamplingTextContent.fromJson(Map<String, dynamic> json) =>
       SamplingTextContent(
-        text: json['text'] as String,
+        text: readRequiredString(json['text'], 'SamplingTextContent.text'),
         annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingTextContent.annotations',
@@ -414,7 +422,10 @@ class SamplingImageContent extends SamplingContent {
           json['data'],
           'SamplingImageContent.data',
         ),
-        mimeType: json['mimeType'] as String,
+        mimeType: readRequiredString(
+          json['mimeType'],
+          'SamplingImageContent.mimeType',
+        ),
         annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingImageContent.annotations',
@@ -450,7 +461,10 @@ class SamplingAudioContent extends SamplingContent {
           json['data'],
           'SamplingAudioContent.data',
         ),
-        mimeType: json['mimeType'] as String,
+        mimeType: readRequiredString(
+          json['mimeType'],
+          'SamplingAudioContent.mimeType',
+        ),
         annotations: readOptionalAnnotationsObject(
           json['annotations'],
           'SamplingAudioContent.annotations',
@@ -475,8 +489,8 @@ class SamplingToolUseContent extends SamplingContent {
 
   factory SamplingToolUseContent.fromJson(Map<String, dynamic> json) =>
       SamplingToolUseContent(
-        id: json['id'] as String,
-        name: json['name'] as String,
+        id: readRequiredString(json['id'], 'SamplingToolUseContent.id'),
+        name: readRequiredString(json['name'], 'SamplingToolUseContent.name'),
         input: _asJsonObject(json['input'], 'SamplingToolUseContent.input'),
         meta:
             _asJsonObjectOrNull(json['_meta'], 'SamplingToolUseContent._meta'),
@@ -512,7 +526,10 @@ class SamplingToolResultContent extends SamplingContent {
 
   factory SamplingToolResultContent.fromJson(Map<String, dynamic> json) {
     return SamplingToolResultContent(
-      toolUseId: json['toolUseId'] as String,
+      toolUseId: readRequiredString(
+        json['toolUseId'],
+        'SamplingToolResultContent.toolUseId',
+      ),
       content: _parseToolResultWireContent(json['content']),
       structuredContent: json.containsKey('structuredContent')
           ? readJsonValue(
@@ -521,7 +538,10 @@ class SamplingToolResultContent extends SamplingContent {
             )
           : null,
       hasStructuredContent: json.containsKey('structuredContent'),
-      isError: json['isError'] as bool?,
+      isError: readOptionalBool(
+        json['isError'],
+        'SamplingToolResultContent.isError',
+      ),
       meta:
           _asJsonObjectOrNull(json['_meta'], 'SamplingToolResultContent._meta'),
     );
@@ -686,7 +706,10 @@ class CreateMessageRequest {
           .map((m) => SamplingMessage.fromJson(_asJsonObject(m)))
           .toList(),
       task: task == null ? null : TaskCreation.fromJson(task),
-      systemPrompt: json['systemPrompt'] as String?,
+      systemPrompt: readOptionalString(
+        json['systemPrompt'],
+        'CreateMessageRequest.systemPrompt',
+      ),
       includeContext: readOptionalEnumValue(
         json['includeContext'],
         IncludeContext.values,
@@ -700,7 +723,10 @@ class CreateMessageRequest {
         json['maxTokens'],
         'CreateMessageRequest.maxTokens',
       ),
-      stopSequences: (json['stopSequences'] as List<dynamic>?)?.cast<String>(),
+      stopSequences: readOptionalStringList(
+        json['stopSequences'],
+        'CreateMessageRequest.stopSequences',
+      ),
       metadata: _asJsonObjectOrNull(
         json['metadata'],
         'CreateMessageRequest.metadata',
@@ -759,7 +785,10 @@ class JsonRpcCreateMessageRequest extends JsonRpcRequest {
         );
 
   factory JsonRpcCreateMessageRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcCreateMessageRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for create message request");
     }
@@ -828,7 +857,7 @@ class CreateMessageResult implements BaseResultData {
       );
     }
     return CreateMessageResult(
-      model: json['model'] as String,
+      model: readRequiredString(json['model'], 'CreateMessageResult.model'),
       stopReason: reason,
       role: SamplingMessageRole.values.byName(
         readRequiredRoleString(json['role'], 'CreateMessageResult.role'),
