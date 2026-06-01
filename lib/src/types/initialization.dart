@@ -27,6 +27,29 @@ bool _isAbsoluteUri(String value) {
   return Uri.tryParse(value)?.hasScheme ?? false;
 }
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+}
+
+void _readOptionalParamsObject(Map<String, dynamic> json, String field) {
+  if (!json.containsKey('params')) {
+    return;
+  }
+  readJsonObject(json['params'], field);
+}
+
 String? _readOptionalPresentUriString(
   Map<String, dynamic> json,
   String key,
@@ -682,6 +705,7 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
   }) : super(method: Method.initialize, params: initParams.toJson());
 
   factory JsonRpcInitializeRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.initialize, 'JsonRpcInitializeRequest');
     final paramsMap = readOptionalJsonObject(
       json['params'],
       'JsonRpcInitializeRequest.params',
@@ -706,6 +730,11 @@ class JsonRpcServerDiscoverRequest extends JsonRpcRequest {
   }) : super(method: Method.serverDiscover);
 
   factory JsonRpcServerDiscoverRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(
+      json,
+      Method.serverDiscover,
+      'JsonRpcServerDiscoverRequest',
+    );
     final params = readJsonObject(
       json['params'],
       'JsonRpcServerDiscoverRequest.params',
@@ -1312,8 +1341,20 @@ class JsonRpcInitializedNotification extends JsonRpcNotification {
   const JsonRpcInitializedNotification({super.meta})
       : super(method: Method.notificationsInitialized);
 
-  factory JsonRpcInitializedNotification.fromJson(Map<String, dynamic> json) =>
-      JsonRpcInitializedNotification(meta: extractRequestMeta(json));
+  factory JsonRpcInitializedNotification.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsInitialized,
+      'JsonRpcInitializedNotification',
+    );
+    _readOptionalParamsObject(
+      json,
+      'JsonRpcInitializedNotification.params',
+    );
+    return JsonRpcInitializedNotification(meta: extractRequestMeta(json));
+  }
 }
 
 /// Deprecated alias for [InitializeRequest].

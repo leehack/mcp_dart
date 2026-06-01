@@ -303,6 +303,33 @@ void main() {
       );
     });
 
+    test('rejects wrong wrapper constants', () {
+      final params = {
+        'protocolVersion': latestProtocolVersion,
+        'capabilities': <String, dynamic>{},
+        'clientInfo': <String, dynamic>{'name': 'test', 'version': '1.0'},
+      };
+
+      expect(
+        () => JsonRpcInitializeRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.initialize,
+          'params': params,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcInitializeRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.ping,
+          'params': params,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('handles meta field in initialize request', () {
       final json = <String, dynamic>{
         'jsonrpc': '2.0',
@@ -318,6 +345,45 @@ void main() {
 
       final request = JsonRpcInitializeRequest.fromJson(json);
       expect(request.meta, equals({'sessionId': 'abc123'}));
+    });
+  });
+
+  group('JsonRpcInitializedNotification Edge Cases', () {
+    test('rejects wrong wrapper constants and malformed params', () {
+      expect(
+        () => JsonRpcInitializedNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': Method.notificationsInitialized,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcInitializedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsCancelled,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcInitializedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsInitialized,
+          'params': null,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('handles metadata in params', () {
+      final notification = JsonRpcInitializedNotification.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsInitialized,
+        'params': {
+          '_meta': {'sessionId': 'abc123'},
+        },
+      });
+
+      expect(notification.meta, equals({'sessionId': 'abc123'}));
     });
   });
 

@@ -104,7 +104,9 @@ class Server extends Protocol {
       Method.initialize,
       (request, extra) async => _oninitialize(request.initParams),
       (id, params, meta) => JsonRpcInitializeRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
         'id': id,
+        'method': Method.initialize,
         'params': params,
         if (meta != null) '_meta': meta,
       }),
@@ -117,7 +119,9 @@ class Server extends Protocol {
         _lifecycleState = _ServerLifecycleState.ready;
       },
       (params, meta) => JsonRpcInitializedNotification.fromJson({
-        'params': params,
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsInitialized,
+        if (params != null) 'params': params,
         if (meta != null) '_meta': meta,
       }),
     );

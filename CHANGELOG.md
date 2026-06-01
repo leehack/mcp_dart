@@ -131,6 +131,8 @@
   errors.
 - Rejected malformed common notification and logging JSON-RPC wrapper
   constants with protocol parse errors.
+- Rejected malformed initialization and `server/discover` JSON-RPC wrapper
+  constants with protocol parse errors.
 - Rejected missing and mismatched completion reference type discriminators with
   protocol parse errors.
 - Rejected malformed completion JSON-RPC wrapper constants with protocol parse

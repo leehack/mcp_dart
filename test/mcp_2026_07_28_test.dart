@@ -957,6 +957,23 @@ void main() {
         );
       }
 
+      for (final parse in <Object Function()>[
+        () => JsonRpcServerDiscoverRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 'discover-1',
+              'method': Method.serverDiscover,
+              'params': {'_meta': _clientMeta()},
+            }),
+        () => JsonRpcServerDiscoverRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'discover-1',
+              'method': Method.initialize,
+              'params': {'_meta': _clientMeta()},
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+
       final parsed = JsonRpcMessage.fromJson({
         'jsonrpc': jsonRpcVersion,
         'id': 'discover-1',

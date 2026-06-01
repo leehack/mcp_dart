@@ -57,6 +57,37 @@ void main() {
               'method': Method.initialize,
               'params': 'bad',
             }),
+        () => JsonRpcInitializeRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.initialize,
+              'params': params,
+            }),
+        () => JsonRpcInitializeRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.ping,
+              'params': params,
+            }),
+        () => JsonRpcInitializeRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.initialize,
+              'params': null,
+            }),
+        () => JsonRpcInitializedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsInitialized,
+            }),
+        () => JsonRpcInitializedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsCancelled,
+            }),
+        () => JsonRpcInitializedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsInitialized,
+              'params': null,
+            }),
       ]) {
         expect(parse, throwsA(isA<FormatException>()));
       }

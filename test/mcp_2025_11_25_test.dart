@@ -1705,6 +1705,31 @@ void main() {
                 ...initializeRequest,
                 'clientInfo': 'bad',
               }),
+          () => JsonRpcInitializeRequest.fromJson({
+                'jsonrpc': '1.0',
+                'id': 1,
+                'method': Method.initialize,
+                'params': initializeRequest,
+              }),
+          () => JsonRpcInitializeRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.ping,
+                'params': initializeRequest,
+              }),
+          () => JsonRpcInitializedNotification.fromJson({
+                'jsonrpc': '1.0',
+                'method': Method.notificationsInitialized,
+              }),
+          () => JsonRpcInitializedNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsCancelled,
+              }),
+          () => JsonRpcInitializedNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsInitialized,
+                'params': null,
+              }),
           () => InitializeResult.fromJson({
                 ...initializeResult,
                 'capabilities': 'bad',
