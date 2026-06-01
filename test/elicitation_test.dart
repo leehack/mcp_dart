@@ -949,6 +949,26 @@ void main() {
         () => ElicitRequestParams.fromJson(
           requestWithProperty('value', {
             'type': 'string',
+            'enumNames': ['Ok'],
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.form(
+          message: 'Bad enum names',
+          requestedSchema: JsonObject(
+            properties: {
+              'value': JsonString(enumNames: ['Ok']),
+            },
+          ),
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'string',
             'oneOf': [
               {'const': 'ok'},
             ],

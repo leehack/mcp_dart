@@ -533,6 +533,9 @@ void _validateStringOrSingleEnumSchema(
       (enumNames is! List || enumNames.any((value) => value is! String))) {
     throw FormatException('$context.enumNames must be a string array.');
   }
+  if (enumNames != null && enumValues == null) {
+    throw FormatException('$context.enumNames requires enum.');
+  }
   final format = json['format'];
   if (format != null &&
       !const {'email', 'uri', 'date', 'date-time'}.contains(format)) {

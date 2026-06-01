@@ -86,6 +86,8 @@
   or `ElicitResult` instead of accepting arbitrary result objects.
 - Rejected non-integer numeric `ElicitResult.content` values to match the
   stable and MCP 2026 schemas.
+- Rejected form elicitation schemas that provide legacy `enumNames` without the
+  required string `enum`.
 
 ## 2.2.0
 
