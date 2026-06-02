@@ -20,6 +20,10 @@ bool shouldCheckForUpdate(List<String> arguments) {
     return false;
   }
 
+  if (arguments.isNotEmpty && arguments.first == 'serve') {
+    return false;
+  }
+
   if (arguments.isNotEmpty && arguments.first == 'inspect-client') {
     return false;
   }

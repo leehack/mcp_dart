@@ -8,6 +8,10 @@ void main() {
       expect(cli.shouldCheckForUpdate(['update']), isFalse);
     });
 
+    test('skips serve because stdout is MCP protocol traffic', () {
+      expect(cli.shouldCheckForUpdate(['serve']), isFalse);
+    });
+
     test('skips conformance JSON mode to keep stdout machine-readable', () {
       expect(cli.shouldCheckForUpdate(['conformance', '--json']), isFalse);
     });

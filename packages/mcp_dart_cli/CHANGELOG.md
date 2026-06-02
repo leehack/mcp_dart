@@ -1,4 +1,4 @@
-## Unreleased
+## 0.1.9
 
 - Add `mcp_dart inspect-server` for structured MCP server inspection reports
   covering handshake, capabilities, ping, tools, resources, resource templates,

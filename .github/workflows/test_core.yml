@@ -2,13 +2,9 @@ name: Run Core Tests on PR
 
 on:
   pull_request:
-    paths-ignore:
-      - 'packages/mcp_dart_cli/**'
   push:
     branches:
       - main
-    paths-ignore:
-      - 'packages/mcp_dart_cli/**'
 
 jobs:
   test:
