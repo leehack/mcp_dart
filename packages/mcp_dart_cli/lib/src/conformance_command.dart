@@ -6,14 +6,14 @@ import 'package:mason/mason.dart';
 
 import 'conformance_runner.dart';
 
-/// Runs MCP protocol conformance checks against built-in fixtures.
+/// Runs MCP protocol conformance regression checks against built-in fixtures.
 class ConformanceCommand extends Command<int> {
   @override
   final name = 'conformance';
 
   @override
   final description =
-      'Runs MCP conformance checks for JSON-RPC and protocol-version edge cases.';
+      'Runs built-in MCP conformance regression checks; not a live target inspector.';
 
   final Logger _logger;
   final ConformanceRunner _runner;

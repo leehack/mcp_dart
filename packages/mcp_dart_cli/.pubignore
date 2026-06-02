@@ -1,0 +1,6 @@
+coverage/
+.dart_tool/
+test/e2e/
+test/fixtures/dart_mcp_project/
+test/fixtures/**/.dart_tool/
+test/fixtures/**/pubspec.lock

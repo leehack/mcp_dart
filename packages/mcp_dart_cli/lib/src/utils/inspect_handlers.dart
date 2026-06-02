@@ -5,7 +5,13 @@ import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 
 /// Manages client-side handlers for server notifications and requests.
 class InspectHandlers {
+  InspectHandlers(this._logger, {bool silent = false}) : _silent = silent;
+
   final Logger _logger;
+  final bool _silent;
+  final List<Map<String, dynamic>> _notifications = <Map<String, dynamic>>[];
+  final Map<String, num> _lastProgressByToken = <String, num>{};
+  final List<Map<String, dynamic>> _progressIssues = <Map<String, dynamic>>[];
 
   /// Callback invoked when tools list changes.
   void Function()? onToolsListChanged;
@@ -16,7 +22,13 @@ class InspectHandlers {
   /// Callback invoked when prompts list changes.
   void Function()? onPromptsListChanged;
 
-  InspectHandlers(this._logger);
+  /// Notifications observed while the inspector was connected.
+  List<Map<String, dynamic>> get notifications =>
+      List.unmodifiable(_notifications);
+
+  /// Progress notification shape or monotonicity issues observed.
+  List<Map<String, dynamic>> get progressIssues =>
+      List.unmodifiable(_progressIssues);
 
   /// Registers all handlers with the given client.
   void registerHandlers(McpClient client) {
@@ -30,15 +42,17 @@ class InspectHandlers {
   /// Handles sampling/createMessage requests from the server.
   Future<CreateMessageResult> _handleSamplingRequest(
       CreateMessageRequest params) async {
-    _logger.info('\n[Sampling Request]');
-    _logger.info('System Prompt: ${params.systemPrompt ?? "(none)"}');
-    _logger.info('Messages:');
-    for (final msg in params.messages) {
-      _logger.info('  ${msg.role}: ${msg.content}');
-    }
+    if (!_silent) {
+      _logger.info('\n[Sampling Request]');
+      _logger.info('System Prompt: ${params.systemPrompt ?? "(none)"}');
+      _logger.info('Messages:');
+      for (final msg in params.messages) {
+        _logger.info('  ${msg.role}: ${msg.content}');
+      }
 
-    _logger.info(
-        '\n(Interactive sampling not supported yet. Returning placeholder response.)');
+      _logger.info(
+          '\n(Interactive sampling not supported yet. Returning placeholder response.)');
+    }
 
     return CreateMessageResult(
       role: SamplingMessageRole.assistant,
@@ -54,6 +68,10 @@ class InspectHandlers {
   /// Fallback handler for notifications not handled by specific handlers.
   Future<void> _handleNotification(JsonRpcNotification notification) async {
     final method = notification.method;
+    _notifications.add(<String, dynamic>{
+      'method': method,
+      if (notification.params != null) 'params': notification.params,
+    });
 
     switch (method) {
       case 'notifications/message':
@@ -72,7 +90,7 @@ class InspectHandlers {
         _handlePromptsListChanged();
         break;
       default:
-        _logger.detail('[Notification] $method');
+        if (!_silent) _logger.detail('[Notification] $method');
     }
   }
 
@@ -86,6 +104,7 @@ class InspectHandlers {
     final data = params['data'];
 
     final prefix = loggerName != null ? '[$loggerName] ' : '';
+    if (_silent) return;
 
     switch (level) {
       case 'debug':
@@ -120,6 +139,40 @@ class InspectHandlers {
     final total = params['total'];
     final progressToken = params['progressToken'];
 
+    if (progress is! num) {
+      _progressIssues.add(<String, dynamic>{
+        'issue': 'progress must be numeric',
+        'params': params,
+      });
+    }
+    if (total != null && total is! num) {
+      _progressIssues.add(<String, dynamic>{
+        'issue': 'total must be numeric when present',
+        'params': params,
+      });
+    }
+    if (progressToken is! String && progressToken is! int) {
+      _progressIssues.add(<String, dynamic>{
+        'issue': 'progressToken must be a string or integer',
+        'params': params,
+      });
+    }
+    if (progress is num && (progressToken is String || progressToken is int)) {
+      final tokenKey = progressToken.toString();
+      final lastProgress = _lastProgressByToken[tokenKey];
+      if (lastProgress != null && progress < lastProgress) {
+        _progressIssues.add(<String, dynamic>{
+          'issue': 'progress decreased for token',
+          'progressToken': tokenKey,
+          'previous': lastProgress,
+          'current': progress,
+        });
+      }
+      _lastProgressByToken[tokenKey] = progress;
+    }
+
+    if (_silent) return;
+
     if (total != null) {
       _logger.detail('[Progress $progressToken] $progress / $total');
     } else {
@@ -129,19 +182,19 @@ class InspectHandlers {
 
   /// Handles tools list changed notification.
   void _handleToolsListChanged() {
-    _logger.info('[Server] Tools list changed');
+    if (!_silent) _logger.info('[Server] Tools list changed');
     onToolsListChanged?.call();
   }
 
   /// Handles resources list changed notification.
   void _handleResourcesListChanged() {
-    _logger.info('[Server] Resources list changed');
+    if (!_silent) _logger.info('[Server] Resources list changed');
     onResourcesListChanged?.call();
   }
 
   /// Handles prompts list changed notification.
   void _handlePromptsListChanged() {
-    _logger.info('[Server] Prompts list changed');
+    if (!_silent) _logger.info('[Server] Prompts list changed');
     onPromptsListChanged?.call();
   }
 }

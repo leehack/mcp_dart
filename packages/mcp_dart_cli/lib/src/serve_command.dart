@@ -89,11 +89,19 @@ class ServeCommand extends Command<int> {
 
     Future<void> startServer() async {
       if (process != null) {
-        _logger.info('Restarting server...');
+        if (transport == 'stdio') {
+          _logger.detail('Restarting MCP server...');
+        } else {
+          _logger.info('Restarting server...');
+        }
         process!.kill();
         await process!.exitCode;
       } else {
-        _logger.info('Starting MCP server ($packageName)...');
+        if (transport == 'stdio') {
+          _logger.detail('Starting MCP server ($packageName)...');
+        } else {
+          _logger.info('Starting MCP server ($packageName)...');
+        }
       }
 
       process = await Process.start(
