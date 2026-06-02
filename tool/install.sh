@@ -34,8 +34,9 @@ detect_arch() {
   esac
 }
 
-latest_cli_tag() {
-  curl -fsSL "https://api.github.com/repos/$repo/releases?per_page=50" |
+latest_cli_tag_from_api() {
+  response="$(curl -fsSL "https://api.github.com/repos/$repo/releases?per_page=50" 2>/dev/null)" || return 1
+  printf '%s\n' "$response" |
     awk '
       function reset_release() {
         tag = ""
@@ -74,6 +75,27 @@ latest_cli_tag() {
         depth += opens - closes
       }
     '
+}
+
+latest_cli_tag_from_releases_page() {
+  response="$(curl -fsSL "https://github.com/$repo/releases")" || return 1
+  printf '%s\n' "$response" |
+    awk '
+      match($0, /mcp_dart_cli-v[0-9]+[.][0-9]+[.][0-9]+([-+][0-9A-Za-z.-]+)?/) {
+        print substr($0, RSTART, RLENGTH)
+        exit
+      }
+    '
+}
+
+latest_cli_tag() {
+  tag="$(latest_cli_tag_from_api || true)"
+  if [ -n "$tag" ]; then
+    echo "$tag"
+    return 0
+  fi
+
+  latest_cli_tag_from_releases_page
 }
 
 require curl

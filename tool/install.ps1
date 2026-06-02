@@ -16,14 +16,33 @@ switch ($Arch) {
 }
 
 if ($Version -eq "latest") {
-  $Releases = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases?per_page=50"
-  $Release = $Releases | Where-Object {
-    $_.tag_name -like "mcp_dart_cli-v*" -and -not $_.prerelease
-  } | Select-Object -First 1
-  if (-not $Release) {
+  $Tag = $null
+  try {
+    $Releases = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases?per_page=50"
+    $Release = $Releases | Where-Object {
+      $_.tag_name -like "mcp_dart_cli-v*" -and -not $_.prerelease
+    } | Select-Object -First 1
+    if ($Release) {
+      $Tag = $Release.tag_name
+    }
+  } catch {
+    # Fall through to the public releases page, which avoids API rate limits.
+  }
+
+  if (-not $Tag) {
+    $ReleasesPage = Invoke-WebRequest "https://github.com/$Repo/releases"
+    $Match = [regex]::Match(
+      $ReleasesPage.Content,
+      "mcp_dart_cli-v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?"
+    )
+    if ($Match.Success) {
+      $Tag = $Match.Value
+    }
+  }
+
+  if (-not $Tag) {
     throw "Could not find a mcp_dart_cli GitHub release."
   }
-  $Tag = $Release.tag_name
 } elseif ($Version.StartsWith("mcp_dart_cli-v")) {
   $Tag = $Version
 } else {
