@@ -37,24 +37,46 @@ detect_arch() {
 latest_cli_tag() {
   curl -fsSL "https://api.github.com/repos/$repo/releases?per_page=50" |
     awk '
+      function reset_release() {
+        tag = ""
+        prerelease = ""
+        seen_tag = 0
+        seen_prerelease = 0
+      }
+      function maybe_print() {
+        if (seen_tag && seen_prerelease && tag ~ /^mcp_dart_cli-v/ && prerelease == "false") {
+          print tag
+          exit
+        }
+      }
+      /^[[:space:]]*\{[[:space:]]*$/ && depth == 0 {
+        reset_release()
+      }
       /"tag_name":/ {
         tag = $0
         sub(/.*"tag_name": *"/, "", tag)
         sub(/".*/, "", tag)
+        seen_tag = 1
+        maybe_print()
       }
       /"prerelease":/ {
         prerelease = $0
-        gsub(/[ ,]/, "", prerelease)
-        if (tag ~ /^mcp_dart_cli-v/ && prerelease ~ /"prerelease":false/) {
-          print tag
-          exit
-        }
+        sub(/.*"prerelease": */, "", prerelease)
+        sub(/[ ,].*/, "", prerelease)
+        seen_prerelease = 1
+        maybe_print()
+      }
+      {
+        line = $0
+        opens = gsub(/\{/, "{", line)
+        line = $0
+        closes = gsub(/\}/, "}", line)
+        depth += opens - closes
       }
     '
 }
 
 require curl
-require sed
 require uname
 require awk
 

@@ -155,6 +155,23 @@ void main() {
       );
     });
 
+    test('describes unsupported standalone hosts by OS and architecture', () {
+      expect(
+        standaloneHostDescription(
+          operatingSystem: 'linux',
+          architecture: 'arm64',
+        ),
+        equals('linux/arm64'),
+      );
+      expect(
+        standaloneHostDescription(
+          operatingSystem: 'windows',
+          architecture: 'arm64',
+        ),
+        equals('windows/arm64'),
+      );
+    });
+
     test('standalone updater downloads binary and bundled skill', () async {
       final assetName = releaseAssetNameForCurrentPlatform();
       if (assetName == null) {

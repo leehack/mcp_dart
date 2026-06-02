@@ -109,7 +109,8 @@ class GitHubBinaryUpdater {
     final platformAsset = releaseAssetNameForCurrentPlatform();
     if (platformAsset == null) {
       _logger.err(
-        'Standalone binary updates are not available for ${Platform.operatingSystem}/${Platform.version}.',
+        'Standalone binary updates are not available for '
+        '${standaloneHostDescription()}.',
       );
       return ExitCode.unavailable.code;
     }
@@ -413,4 +414,14 @@ String? _normalizedArchitecture() {
     return 'x64';
   }
   return null;
+}
+
+/// Host tuple used in standalone update diagnostics.
+@visibleForTesting
+String standaloneHostDescription({
+  String? operatingSystem,
+  String? architecture,
+}) {
+  return '${operatingSystem ?? Platform.operatingSystem}/'
+      '${architecture ?? _normalizedArchitecture() ?? 'unknown'}';
 }
