@@ -169,7 +169,8 @@ class StdioTraceProxy {
   /// Whether the trace should be treated as failed.
   bool get failed => _hadMalformedTraffic || _timedOut;
 
-  /// Runs the proxy until the client closes, the server exits, or timeout fires.
+  /// Runs the proxy until the server exits, server stdout closes, or timeout
+  /// fires.
   Future<void> run() async {
     _stopwatch.start();
     _server = await Process.start(
@@ -179,10 +180,12 @@ class StdioTraceProxy {
       environment: environment.isEmpty ? null : environment,
       mode: ProcessStartMode.normal,
     );
-    unawaited(_server!.exitCode.then((code) {
-      _serverExitCode = code;
-      _finish();
-    }));
+    unawaited(
+      _server!.exitCode.then((code) {
+        _serverExitCode = code;
+        _finish();
+      }),
+    );
 
     _maxTimer = Timer(maxRuntime, () {
       _timedOut = true;
@@ -206,7 +209,7 @@ class StdioTraceProxy {
         );
         _finish();
       },
-      onDone: _finish,
+      onDone: _closeServerInput,
       cancelOnError: false,
     );
     _serverSubscription = _server!.stdout
@@ -262,6 +265,22 @@ class StdioTraceProxy {
         _recordEvent(
           direction: 'proxy',
           raw: 'server stdin write failed',
+          extra: <String, dynamic>{'error': error.toString()},
+        );
+        _finish();
+      }
+    });
+  }
+
+  void _closeServerInput() {
+    _recordEvent(direction: 'proxy', raw: 'client stdin closed');
+    _serverStdinWriteQueue = _serverStdinWriteQueue.then((_) async {
+      try {
+        await _server?.stdin.close();
+      } catch (error) {
+        _recordEvent(
+          direction: 'proxy',
+          raw: 'server stdin close failed',
           extra: <String, dynamic>{'error': error.toString()},
         );
         _finish();

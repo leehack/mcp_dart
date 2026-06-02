@@ -50,8 +50,9 @@ void main() {
         'dart',
       ]);
       expect(result, equals(ExitCode.usage.code));
-      verify(() => logger.err('--max-runtime-ms must be a positive integer.'))
-          .called(1);
+      verify(
+        () => logger.err('--max-runtime-ms must be a positive integer.'),
+      ).called(1);
 
       result = await runner.run([
         'trace',
@@ -63,22 +64,20 @@ void main() {
         'dart',
       ]);
       expect(result, equals(ExitCode.usage.code));
-      verify(() => logger.err('--env values must use KEY=VALUE syntax.'))
-          .called(1);
+      verify(
+        () => logger.err('--env values must use KEY=VALUE syntax.'),
+      ).called(1);
     });
 
     test('requires proxied server command', () async {
       final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
 
-      final result = await runner.run([
-        'trace',
-        '--report',
-        'trace.json',
-      ]);
+      final result = await runner.run(['trace', '--report', 'trace.json']);
 
       expect(result, equals(ExitCode.usage.code));
-      verify(() => logger.err('Missing proxied server command after --.'))
-          .called(1);
+      verify(
+        () => logger.err('Missing proxied server command after --.'),
+      ).called(1);
     });
 
     test('timeout marks report failed and exits non-zero', () async {
@@ -86,22 +85,21 @@ void main() {
       addTearDown(() => tempDir.delete(recursive: true));
       final report = File('${tempDir.path}/trace.json');
       final process = await Process.start(
-        'dart',
-        <String>[
-          'run',
-          'bin/mcp_dart.dart',
-          'trace',
-          '--report',
-          report.path,
-          '--max-runtime-ms',
-          '100',
-          '--',
           'dart',
-          'run',
-          'test/fixtures/hanging_process.dart',
-        ],
-        workingDirectory: Directory.current.path,
-      );
+          <String>[
+            'run',
+            'bin/mcp_dart.dart',
+            'trace',
+            '--report',
+            report.path,
+            '--max-runtime-ms',
+            '100',
+            '--',
+            'dart',
+            'run',
+            'test/fixtures/hanging_process.dart',
+          ],
+          workingDirectory: Directory.current.path);
 
       await process.stdout.drain<void>();
       await process.stderr.drain<void>();
@@ -125,10 +123,7 @@ void main() {
       });
       final proxy = StdioTraceProxy(
         command: 'dart',
-        args: const <String>[
-          'run',
-          'test/fixtures/hanging_process.dart',
-        ],
+        args: const <String>['run', 'test/fixtures/hanging_process.dart'],
         workingDirectory: Directory.current.path,
         environment: const <String, String>{},
         reportFile: report,
@@ -158,10 +153,7 @@ void main() {
       });
       final proxy = StdioTraceProxy(
         command: 'dart',
-        args: const <String>[
-          'run',
-          'test/fixtures/raw_stdio_server.dart',
-        ],
+        args: const <String>['run', 'test/fixtures/raw_stdio_server.dart'],
         workingDirectory: Directory.current.path,
         environment: const <String, String>{},
         reportFile: report,
@@ -171,19 +163,21 @@ void main() {
       );
 
       final runFuture = proxy.run();
-      clientLines.add(jsonEncode(<String, dynamic>{
-        'jsonrpc': '2.0',
-        'id': 1,
-        'method': 'initialize',
-        'params': <String, dynamic>{
-          'protocolVersion': latestProtocolVersion,
-          'capabilities': <String, dynamic>{},
-          'clientInfo': <String, dynamic>{
-            'name': 'trace-fixture',
-            'version': '1.0.0',
+      clientLines.add(
+        jsonEncode(<String, dynamic>{
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'initialize',
+          'params': <String, dynamic>{
+            'protocolVersion': latestProtocolVersion,
+            'capabilities': <String, dynamic>{},
+            'clientInfo': <String, dynamic>{
+              'name': 'trace-fixture',
+              'version': '1.0.0',
+            },
           },
-        },
-      }));
+        }),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await clientLines.close();
       await runFuture;
@@ -198,6 +192,64 @@ void main() {
       expect(summary['malformedTraffic'], isFalse);
     });
 
+    test(
+      'piped one-shot trace captures server response before finishing',
+      () async {
+        final tempDir = await Directory.systemTemp.createTemp('trace_pipe_');
+        addTearDown(() => tempDir.delete(recursive: true));
+        final report = File('${tempDir.path}/trace.json');
+        final process = await Process.start(
+            'dart',
+            <String>[
+              'run',
+              'bin/mcp_dart.dart',
+              'trace',
+              '--report',
+              report.path,
+              '--max-runtime-ms',
+              '2000',
+              '--',
+              'dart',
+              'run',
+              'test/fixtures/raw_stdio_server.dart',
+            ],
+            workingDirectory: Directory.current.path);
+
+        process.stdin.writeln(
+          jsonEncode(<String, dynamic>{
+            'jsonrpc': jsonRpcVersion,
+            'id': 1,
+            'method': Method.initialize,
+            'params': <String, dynamic>{
+              'protocolVersion': latestProtocolVersion,
+              'capabilities': <String, dynamic>{},
+              'clientInfo': <String, dynamic>{
+                'name': 'trace-pipe-fixture',
+                'version': '1.0.0',
+              },
+            },
+          }),
+        );
+        await process.stdin.close();
+        final stdoutText = await process.stdout.transform(utf8.decoder).join();
+        await process.stderr.drain<void>();
+        final exitCode = await process.exitCode;
+
+        expect(exitCode, equals(ExitCode.success.code));
+        expect(stdoutText, contains('"result"'));
+        final json =
+            jsonDecode(await report.readAsString()) as Map<String, dynamic>;
+        expect(json['passed'], isTrue);
+        expect(json['serverExitCode'], equals(0));
+        final events =
+            (json['events'] as List<dynamic>).cast<Map<String, dynamic>>();
+        expect(
+          events.map((event) => event['direction']),
+          contains('server_to_client'),
+        );
+      },
+    );
+
     test('proxy marks malformed JSON-RPC traffic as failed', () async {
       final tempDir = await Directory.systemTemp.createTemp('trace_proxy_');
       addTearDown(() => tempDir.delete(recursive: true));
@@ -206,10 +258,7 @@ void main() {
       addTearDown(clientLines.close);
       final proxy = StdioTraceProxy(
         command: 'dart',
-        args: const <String>[
-          'run',
-          'test/fixtures/raw_stdio_server.dart',
-        ],
+        args: const <String>['run', 'test/fixtures/raw_stdio_server.dart'],
         workingDirectory: Directory.current.path,
         environment: const <String, String>{},
         reportFile: report,

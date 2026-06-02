@@ -63,8 +63,8 @@ class InspectClientCommand extends Command<int> {
       idleTimeout: idleTimeout,
       maxRuntime: maxRuntime,
     );
-    await harness.run();
-    return ExitCode.success.code;
+    final report = await harness.run();
+    return report.passed ? ExitCode.success.code : ExitCode.software.code;
   }
 
   Duration? _parseDurationOption(String name) {
@@ -128,7 +128,7 @@ class ClientInspectorHarness {
   int _nextActiveProbeId = 1000;
 
   /// Runs the harness until stdin closes or a timeout expires.
-  Future<void> run() async {
+  Future<InspectionReport> run() async {
     _stopwatch.start();
     _maxTimer = Timer(maxRuntime, _finish);
 
@@ -160,6 +160,7 @@ class ClientInspectorHarness {
     await reportFile.writeAsString(
       const JsonEncoder.withIndent('  ').convert(report.toJson()),
     );
+    return report;
   }
 
   void _handleLine(String line) {
@@ -354,11 +355,7 @@ class ClientInspectorHarness {
     }
   }
 
-  void _sendProbe(
-    String id,
-    String method,
-    Map<String, dynamic> params,
-  ) {
+  void _sendProbe(String id, String method, Map<String, dynamic> params) {
     final requestId = _nextActiveProbeId++;
     _pendingActiveProbes[requestId] = _ActiveProbe(id, method);
     _send(<String, dynamic>{
@@ -509,10 +506,7 @@ class ClientInspectorHarness {
     _send(<String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': id,
-      'error': <String, dynamic>{
-        'code': code,
-        'message': message,
-      },
+      'error': <String, dynamic>{'code': code, 'message': message},
     });
   }
 
@@ -643,10 +637,7 @@ class ClientInspectorHarness {
 
   void _checkInitializeParams() {
     if (!_sawInitialize) {
-      _checks.fail(
-        'lifecycle.initialize',
-        'Client never sent initialize.',
-      );
+      _checks.fail('lifecycle.initialize', 'Client never sent initialize.');
       return;
     }
 
@@ -787,11 +778,7 @@ class ClientInspectorHarness {
       return;
     }
 
-    _checks.pass(
-      id,
-      'Client handled active $label probe.',
-      details: result,
-    );
+    _checks.pass(id, 'Client handled active $label probe.', details: result);
   }
 }
 
