@@ -949,6 +949,26 @@ void main() {
         () => ElicitRequestParams.fromJson(
           requestWithProperty('value', {
             'type': 'string',
+            'enumNames': ['Ok'],
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.form(
+          message: 'Bad enum names',
+          requestedSchema: JsonObject(
+            properties: {
+              'value': JsonString(enumNames: ['Ok']),
+            },
+          ),
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'string',
             'oneOf': [
               {'const': 'ok'},
             ],
@@ -1023,10 +1043,46 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        () => ElicitResult.fromJson({
+          'action': 'accept',
+          'content': {
+            'ratio': 0.5,
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitResult.fromJson({
+          'action': 'decline',
+          'content': {
+            'name': 'Alice',
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
         () => const ElicitResult(
           action: 'accept',
           content: {
             'values': [1, 2],
+          },
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'accept',
+          content: {
+            'ratio': 0.5,
+          },
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'cancel',
+          content: {
+            'name': 'Alice',
           },
         ).toJson(),
         throwsA(isA<ArgumentError>()),

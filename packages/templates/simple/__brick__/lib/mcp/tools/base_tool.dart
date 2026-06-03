@@ -25,8 +25,7 @@ abstract class BaseTool {
   ToolInputSchema get inputSchema;
 
   /// Optional JSON schema defining the output format.
-  /// Use [JsonSchema.object()] to create an object schema.
-  ToolOutputSchema? get outputSchema => null;
+  JsonSchema? get outputSchema => null;
 
   /// Optional tool annotations with hints about tool behavior.
   /// Includes readOnlyHint, destructiveHint, idempotentHint, etc.

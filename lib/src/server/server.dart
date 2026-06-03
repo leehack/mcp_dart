@@ -4,6 +4,7 @@ import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
+import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 
 final _logger = Logger("mcp_dart.server");
 
@@ -75,6 +76,12 @@ class Server extends Protocol {
   static const Set<String> _statelessRemovedNotificationMethods = {
     Method.notificationsInitialized,
     Method.notificationsRootsListChanged,
+  };
+
+  static const Set<String> _inputRequiredResultMethods = {
+    Method.toolsCall,
+    Method.promptsGet,
+    Method.resourcesRead,
   };
 
   /// Callback to be notified when the server is fully initialized.
@@ -150,6 +157,16 @@ class Server extends Protocol {
 
   McpError? _validateStatelessRequestMetadata(JsonRpcRequest request) {
     final meta = request.meta;
+    try {
+      json_rpc.validateRequestMeta(meta, validateKeys: true);
+    } on FormatException catch (error) {
+      return McpError(
+        ErrorCode.invalidRequest.value,
+        'Invalid stateless request metadata.',
+        error.message,
+      );
+    }
+
     final requestedVersion = meta?[McpMetaKey.protocolVersion];
     if (requestedVersion is! String || requestedVersion.isEmpty) {
       return McpError(
@@ -236,6 +253,22 @@ class Server extends Protocol {
         'requiredCapabilities': {
           'extensions': {mcpTasksExtensionId: <String, dynamic>{}},
         },
+      },
+    );
+  }
+
+  McpError _missingInputRequestClientCapabilityError(
+    String inputRequestKey,
+    String method,
+    Map<String, dynamic> requiredCapabilities,
+  ) {
+    return McpError(
+      ErrorCode.missingRequiredClientCapability.value,
+      'Missing required client capability for input request',
+      {
+        'inputRequest': inputRequestKey,
+        'method': method,
+        'requiredCapabilities': requiredCapabilities,
       },
     );
   }
@@ -395,6 +428,80 @@ class Server extends Protocol {
     }
   }
 
+  McpError? _validateInputRequiredClientCapabilities(
+    InputRequiredResult result,
+    JsonRpcRequest request,
+  ) {
+    final inputRequests = result.inputRequests;
+    if (inputRequests == null || inputRequests.isEmpty) {
+      return null;
+    }
+
+    final parsed = _clientCapabilitiesForRequest(request);
+    if (parsed.error != null) {
+      return parsed.error;
+    }
+
+    for (final entry in inputRequests.entries) {
+      final requiredCapabilities = _missingCapabilitiesForInputRequest(
+        entry.value,
+        parsed.capabilities,
+      );
+      if (requiredCapabilities != null) {
+        return _missingInputRequestClientCapabilityError(
+          entry.key,
+          entry.value.method,
+          requiredCapabilities,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _missingCapabilitiesForInputRequest(
+    InputRequest inputRequest,
+    ClientCapabilities? capabilities,
+  ) {
+    switch (inputRequest.method) {
+      case Method.elicitationCreate:
+        final elicitParams = inputRequest.elicitParams;
+        final requiredMode = elicitParams.isUrlMode ? 'url' : 'form';
+        final elicitation = capabilities?.elicitation;
+        final supportsMode = requiredMode == 'url'
+            ? elicitation?.url != null
+            : elicitation?.form != null;
+        if (!supportsMode) {
+          return {
+            'elicitation': {
+              requiredMode: <String, dynamic>{},
+            },
+          };
+        }
+        return null;
+      case Method.samplingCreateMessage:
+        final createParams = inputRequest.createMessageParams;
+        final sampling = capabilities?.sampling;
+        if (sampling == null) {
+          return {'sampling': <String, dynamic>{}};
+        }
+        if ((createParams.tools != null || createParams.toolChoice != null) &&
+            !sampling.tools) {
+          return {
+            'sampling': {'tools': <String, dynamic>{}},
+          };
+        }
+        return null;
+      case Method.rootsList:
+        if (capabilities?.roots == null) {
+          return {'roots': <String, dynamic>{}};
+        }
+        return null;
+      default:
+        return null;
+    }
+  }
+
   McpError? _validateRequestTaskSemantics(JsonRpcRequest request) {
     final removedMethodError = _validateDraftTaskMethods(request);
     if (removedMethodError != null) {
@@ -419,7 +526,7 @@ class Server extends Protocol {
     if (result is CallToolResult) {
       return true;
     }
-    if (result is InputRequiredResult && _isStatelessRequest(request)) {
+    if (_allowsInputRequiredResult(result, request)) {
       return true;
     }
     if (result is CreateTaskExtensionResult && _isStatelessRequest(request)) {
@@ -428,6 +535,55 @@ class Server extends Protocol {
     }
 
     return false;
+  }
+
+  bool _allowsPromptGetResult(BaseResultData result, JsonRpcRequest request) {
+    return result is GetPromptResult ||
+        _allowsInputRequiredResult(result, request);
+  }
+
+  bool _allowsResourceReadResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    return result is ReadResourceResult ||
+        _allowsInputRequiredResult(result, request);
+  }
+
+  bool _allowsInputRequiredResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    if (result is! InputRequiredResult ||
+        !_isStatelessRequest(request) ||
+        !_inputRequiredResultMethods.contains(request.method)) {
+      return false;
+    }
+
+    final capabilityError = _validateInputRequiredClientCapabilities(
+      result,
+      request,
+    );
+    if (capabilityError != null) {
+      throw capabilityError;
+    }
+
+    return true;
+  }
+
+  void _validateUnsupportedInputRequiredResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    if (result is! InputRequiredResult) {
+      return;
+    }
+
+    throw McpError(
+      ErrorCode.invalidParams.value,
+      'Invalid ${request.method} result: InputRequiredResult is only supported '
+      'by ${_inputRequiredResultMethods.join(', ')} in MCP stateless requests.',
+    );
   }
 
   bool _allowsTaskExtensionResult(
@@ -708,6 +864,38 @@ class Server extends Protocol {
       }
 
       super.setRequestHandler(method, wrappedHandler, requestFactory);
+    } else if (method == Method.promptsGet) {
+      Future<BaseResultData> wrappedHandler(
+        ReqT request,
+        RequestHandlerExtra extra,
+      ) async {
+        final result = await handler(request, extra);
+        if (!_allowsPromptGetResult(result, request)) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'Invalid prompts/get result: Expected GetPromptResult',
+          );
+        }
+        return result;
+      }
+
+      super.setRequestHandler(method, wrappedHandler, requestFactory);
+    } else if (method == Method.resourcesRead) {
+      Future<BaseResultData> wrappedHandler(
+        ReqT request,
+        RequestHandlerExtra extra,
+      ) async {
+        final result = await handler(request, extra);
+        if (!_allowsResourceReadResult(result, request)) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'Invalid resources/read result: Expected ReadResourceResult',
+          );
+        }
+        return result;
+      }
+
+      super.setRequestHandler(method, wrappedHandler, requestFactory);
     } else if (method == Method.tasksGet ||
         method == Method.tasksCancel ||
         method == Method.tasksUpdate) {
@@ -727,7 +915,16 @@ class Server extends Protocol {
 
       super.setRequestHandler(method, wrappedHandler, requestFactory);
     } else {
-      super.setRequestHandler(method, handler, requestFactory);
+      Future<BaseResultData> wrappedHandler(
+        ReqT request,
+        RequestHandlerExtra extra,
+      ) async {
+        final result = await handler(request, extra);
+        _validateUnsupportedInputRequiredResult(result, request);
+        return result;
+      }
+
+      super.setRequestHandler(method, wrappedHandler, requestFactory);
     }
   }
 

@@ -184,6 +184,54 @@ void main() {
       );
     });
 
+    test('Tool preserves non-object output schemas for MCP 2026', () {
+      final tool = Tool(
+        name: 'list_results',
+        inputSchema: const JsonObject(),
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+      );
+
+      final json = tool.toJson();
+      expect(json['outputSchema']['type'], equals('array'));
+      expect(json['outputSchema']['items']['type'], equals('string'));
+
+      final deserialized = Tool.fromJson(json);
+      expect(
+        deserialized.outputSchema?.toJson(),
+        equals(json['outputSchema']),
+      );
+    });
+
+    test('CallToolResult preserves arbitrary JSON structured content', () {
+      final values = <Object?>[
+        {'status': 'ok'},
+        ['alpha', 'beta'],
+        'complete',
+        42,
+        true,
+      ];
+
+      for (final value in values) {
+        final result = CallToolResult.fromStructuredContent(value);
+        final json = result.toJson();
+
+        expect(json['structuredContent'], equals(value));
+
+        final parsed = CallToolResult.fromJson(json);
+        expect(parsed.hasStructuredContent, isTrue);
+        expect(parsed.structuredContent, equals(value));
+      }
+
+      final nullResult = CallToolResult.fromStructuredContent(null);
+      final nullJson = nullResult.toJson();
+      expect(nullJson.containsKey('structuredContent'), isTrue);
+      expect(nullJson['structuredContent'], isNull);
+
+      final parsedNull = CallToolResult.fromJson(nullJson);
+      expect(parsedNull.hasStructuredContent, isTrue);
+      expect(parsedNull.structuredContent, isNull);
+    });
+
     test('Tool serializes JsonEnum properties as standard enum schema', () {
       const tool = Tool(
         name: 'configure_mode',

@@ -82,6 +82,7 @@ Map<String, dynamic> buildProtocolRequestMeta({
   Map<String, dynamic>? meta,
   Object? logLevel,
 }) {
+  validateRequestMeta(meta, validateKeys: true);
   return <String, dynamic>{
     ...?meta,
     McpMetaKey.protocolVersion: protocolVersion,
@@ -203,12 +204,66 @@ RequestId? _parseErrorResponseId(Map<String, dynamic> json) {
   return parseRequestId(json['id']);
 }
 
+final _metaPrefixLabelPattern = RegExp(
+  r'^[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$',
+);
+final _metaNamePattern = RegExp(
+  r'^(?:[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?)?$',
+);
+
+/// Validates an MCP 2026 `_meta` key name.
+///
+/// MCP 2026 constrains metadata keys to an optional dot-separated prefix
+/// followed by `/`, plus a name segment. Earlier protocol versions did not
+/// define this grammar, so callers choose when to enforce it.
+void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
+  final slashIndex = key.indexOf('/');
+  final prefix = slashIndex == -1 ? null : key.substring(0, slashIndex);
+  final name = slashIndex == -1 ? key : key.substring(slashIndex + 1);
+
+  if (prefix != null) {
+    if (prefix.isEmpty) {
+      throw FormatException(
+        'Invalid $fieldName key "$key": prefix must not be empty',
+      );
+    }
+    final labels = prefix.split('.');
+    for (final label in labels) {
+      if (!_metaPrefixLabelPattern.hasMatch(label)) {
+        throw FormatException(
+          'Invalid $fieldName key "$key": invalid prefix label "$label"',
+        );
+      }
+    }
+  }
+
+  if (!_metaNamePattern.hasMatch(name)) {
+    throw FormatException(
+      'Invalid $fieldName key "$key": invalid name segment "$name"',
+    );
+  }
+}
+
 /// Validates request metadata that can affect protocol behavior.
 ///
 /// `_meta.progressToken` is an MCP wire token and must be a string or integer
-/// when present. Other `_meta` fields are preserved without interpretation.
-Map<String, dynamic>? validateRequestMeta(Map<String, dynamic>? meta) {
-  if (meta != null && meta.containsKey('progressToken')) {
+/// when present. [validateKeys] opts in to the MCP 2026 `_meta` key-name
+/// grammar without changing stable/legacy request parsing.
+Map<String, dynamic>? validateRequestMeta(
+  Map<String, dynamic>? meta, {
+  bool validateKeys = false,
+}) {
+  if (meta == null) {
+    return null;
+  }
+
+  if (validateKeys) {
+    for (final key in meta.keys) {
+      validateMetaKeyName(key);
+    }
+  }
+
+  if (meta.containsKey('progressToken')) {
     parseProgressToken(
       meta['progressToken'],
       fieldName: '_meta.progressToken',
@@ -457,6 +512,9 @@ enum ErrorCode {
   /// code. [requestTimeout] is retained for older SDK behavior.
   headerMismatch(-32001),
 
+  /// Resource not found in stable MCP 2025-11-25.
+  resourceNotFound(-32002),
+
   /// Required per-request client capabilities were not declared.
   missingRequiredClientCapability(-32003),
 
@@ -700,6 +758,12 @@ class InputResponse {
   }
 
   factory InputResponse.fromJson(Map<String, dynamic> json) {
+    if (!_isValidInputResponse(json)) {
+      throw const FormatException(
+        'InputResponse must be a CreateMessageResult, ListRootsResult, '
+        'or ElicitResult',
+      );
+    }
     return InputResponse.raw(Map<String, dynamic>.from(json));
   }
 
@@ -725,6 +789,28 @@ class InputResponse {
   }
 
   Map<String, dynamic> toJson() => Map<String, dynamic>.from(value);
+}
+
+bool _isValidInputResponse(Map<String, dynamic> json) {
+  return _canParseInputResponse(CreateMessageResult.fromJson, json) ||
+      _canParseInputResponse(ListRootsResult.fromJson, json) ||
+      _canParseInputResponse(ElicitResult.fromJson, json);
+}
+
+bool _canParseInputResponse(
+  BaseResultData Function(Map<String, dynamic> json) parser,
+  Map<String, dynamic> json,
+) {
+  try {
+    parser(json);
+    return true;
+  } on FormatException {
+    return false;
+  } on ArgumentError {
+    return false;
+  } on TypeError {
+    return false;
+  }
 }
 
 /// Result returned when a request needs extra client input before retry.

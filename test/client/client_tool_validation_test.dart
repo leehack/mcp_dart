@@ -59,6 +59,21 @@ class MockTransport extends Transport
                 .toJson(),
           ),
         );
+      } else if (name == 'array_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: CallToolResult.fromStructuredContent(['alpha', 'beta'])
+                .toJson(),
+          ),
+        );
+      } else if (name == 'broken_array_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: CallToolResult.fromStructuredContent(['alpha', 1]).toJson(),
+          ),
+        );
       } else if (name == 'broken_tool') {
         // Returns data that violates the schema (missing 'result')
         _respond(
@@ -112,6 +127,16 @@ class MockTransport extends Transport
           },
           required: ['result'],
         ),
+      ),
+      Tool(
+        name: 'array_tool',
+        inputSchema: const ToolInputSchema(),
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+      ),
+      Tool(
+        name: 'broken_array_tool',
+        inputSchema: const ToolInputSchema(),
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
       ),
       const Tool(
         name: 'task_required_tool',
@@ -248,7 +273,37 @@ void main() {
         const CallToolRequest(name: 'validated_tool'),
       );
 
-      expect(result.structuredContent?['result'], equals('success'));
+      final structured = result.structuredContent as Map<String, dynamic>;
+      expect(structured['result'], equals('success'));
+    });
+
+    test('validates non-object tool output schemas successfully', () async {
+      await client.connect(transport);
+      await client.listTools();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'array_tool'),
+      );
+
+      expect(result.structuredContent, equals(['alpha', 'beta']));
+    });
+
+    test('throws when non-object tool output validation fails', () async {
+      await client.connect(transport);
+      await client.listTools();
+
+      expect(
+        () => client.callTool(
+          const CallToolRequest(name: 'broken_array_tool'),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.message,
+            'message',
+            contains('Structured content does not match'),
+          ),
+        ),
+      );
     });
 
     test('throws when tool output validation fails', () async {

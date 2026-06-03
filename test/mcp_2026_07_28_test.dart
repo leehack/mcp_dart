@@ -234,12 +234,14 @@ class CompletedTaskHandler extends CancelTaskResultHandler {
 Map<String, dynamic> _clientMeta({
   String? protocolVersion,
   ClientCapabilities clientCapabilities = const ClientCapabilities(),
+  Map<String, dynamic>? meta,
   Object? logLevel,
 }) {
   return buildProtocolRequestMeta(
     protocolVersion: protocolVersion ?? draftProtocolVersion2026_07_28,
     clientInfo: const Implementation(name: 'client', version: '1.0.0'),
     clientCapabilities: clientCapabilities,
+    meta: meta,
     logLevel: logLevel,
   );
 }
@@ -265,11 +267,15 @@ void main() {
         protocolVersion: draftProtocolVersion2026_07_28,
         clientInfo: const Implementation(name: 'client', version: '1.0.0'),
         clientCapabilities: const ClientCapabilities(),
-        meta: const {'caller': 'value'},
+        meta: const {
+          'caller': 'value',
+          'com.example.trace/id': 'trace-1',
+        },
         logLevel: 'debug',
       );
 
       expect(meta['caller'], 'value');
+      expect(meta['com.example.trace/id'], 'trace-1');
       expect(
         meta[McpMetaKey.protocolVersion],
         draftProtocolVersion2026_07_28,
@@ -280,6 +286,35 @@ void main() {
       });
       expect(meta[McpMetaKey.clientCapabilities], <String, dynamic>{});
       expect(meta[McpMetaKey.logLevel], 'debug');
+    });
+
+    test('rejects invalid 2026 request metadata keys during construction', () {
+      for (final key in [
+        '/name',
+        '1bad/name',
+        'bad prefix/value',
+        'com.example./name',
+        'com.example/name_',
+      ]) {
+        expect(
+          () => buildProtocolRequestMeta(
+            protocolVersion: draftProtocolVersion2026_07_28,
+            clientInfo: const Implementation(
+              name: 'client',
+              version: '1.0.0',
+            ),
+            clientCapabilities: const ClientCapabilities(),
+            meta: {key: 'value'},
+          ),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains(key),
+            ),
+          ),
+        );
+      }
     });
 
     test('serializes server/discover request and result', () {
@@ -378,8 +413,8 @@ void main() {
 
       expect(const ListToolsResult(tools: []).toJson(), {'tools': []});
       expect(
-        ListToolsResult.fromJson(const {'tools': [], 'ttlMs': -1}).ttlMs,
-        0,
+        () => ListToolsResult.fromJson(const {'tools': [], 'ttlMs': -1}),
+        throwsFormatException,
       );
       expect(
         () => ListToolsResult.fromJson(
@@ -564,6 +599,17 @@ void main() {
           const {
             'uri': 'file:///repo/README.md',
             'inputResponses': {'roots': []},
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => ReadResourceRequest.fromJson(
+          const {
+            'uri': 'file:///repo/README.md',
+            'inputResponses': {
+              'unknown': {'unexpected': true},
+            },
           },
         ),
         throwsFormatException,
@@ -1356,6 +1402,241 @@ void main() {
       expect(response.result['requestState'], 'retry-state');
     });
 
+    test('stateless input required requests require client capabilities',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async {
+          final inputRequest = switch (request.callParams.name) {
+            'needs-form' => InputRequest.elicit(
+                ElicitRequest.form(
+                  message: 'Enter name',
+                  requestedSchema: JsonSchema.object(
+                    properties: {'name': JsonSchema.string()},
+                    required: ['name'],
+                  ),
+                ),
+              ),
+            'needs-url' => InputRequest.elicit(
+                const ElicitRequest.url(
+                  message: 'Open browser',
+                  url: 'https://example.com/authorize',
+                  elicitationId: 'auth-1',
+                ),
+              ),
+            'needs-roots' => InputRequest.listRoots(),
+            'needs-sampling-tools' => InputRequest.createMessage(
+                const CreateMessageRequest(
+                  messages: [
+                    SamplingMessage(
+                      role: SamplingMessageRole.user,
+                      content: SamplingTextContent(text: 'Search'),
+                    ),
+                  ],
+                  maxTokens: 16,
+                  tools: [
+                    Tool(name: 'lookup', inputSchema: JsonObject()),
+                  ],
+                ),
+              ),
+            _ => throw StateError('Unknown tool ${request.callParams.name}'),
+          };
+
+          return InputRequiredResult(
+            inputRequests: {request.callParams.name: inputRequest},
+          );
+        },
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      final missingCapabilityCases = [
+        (
+          name: 'needs-form',
+          meta: _clientMeta(),
+          method: Method.elicitationCreate,
+          requiredCapabilities: {
+            'elicitation': {'form': <String, dynamic>{}},
+          },
+        ),
+        (
+          name: 'needs-url',
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+          ),
+          method: Method.elicitationCreate,
+          requiredCapabilities: {
+            'elicitation': {'url': <String, dynamic>{}},
+          },
+        ),
+        (
+          name: 'needs-roots',
+          meta: _clientMeta(),
+          method: Method.rootsList,
+          requiredCapabilities: {'roots': <String, dynamic>{}},
+        ),
+        (
+          name: 'needs-sampling-tools',
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              sampling: ClientCapabilitiesSampling(),
+            ),
+          ),
+          method: Method.samplingCreateMessage,
+          requiredCapabilities: {
+            'sampling': {'tools': <String, dynamic>{}},
+          },
+        ),
+      ];
+
+      for (final scenario in missingCapabilityCases) {
+        transport.sentMessages.clear();
+        transport.receive(
+          JsonRpcCallToolRequest(
+            id: scenario.name,
+            params: CallToolRequest(name: scenario.name).toJson(),
+            meta: scenario.meta,
+          ),
+        );
+        await _pump();
+
+        final response = transport.sentMessages.single as JsonRpcError;
+        expect(
+          response.error.code,
+          ErrorCode.missingRequiredClientCapability.value,
+        );
+        expect(response.error.data['inputRequest'], scenario.name);
+        expect(response.error.data['method'], scenario.method);
+        expect(
+          response.error.data['requiredCapabilities'],
+          scenario.requiredCapabilities,
+        );
+      }
+
+      transport.sentMessages.clear();
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'allowed-form',
+          params: const CallToolRequest(name: 'needs-form').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeInputRequired);
+      expect(
+        response.result['inputRequests']['needs-form']['method'],
+        Method.elicitationCreate,
+      );
+    });
+
+    test('stateless prompts/get permits input required results', () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      server.registerPrompt(
+        'needs_input',
+        callback: (args, extra) =>
+            const InputRequiredResult(requestState: 'prompt-state'),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcGetPromptRequest(
+          id: 'prompt-1',
+          getParams: const GetPromptRequest(name: 'needs_input'),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeInputRequired);
+      expect(response.result['requestState'], 'prompt-state');
+    });
+
+    test('stateless resources/read permits input required results', () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      server.registerResource(
+        'needs_input',
+        'memory://needs-input',
+        null,
+        (uri, extra) =>
+            const InputRequiredResult(requestState: 'resource-state'),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcReadResourceRequest(
+          id: 'resource-1',
+          readParams: const ReadResourceRequest(uri: 'memory://needs-input'),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeInputRequired);
+      expect(response.result['requestState'], 'resource-state');
+    });
+
+    test('stateless unsupported methods reject input required results',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          capabilities:
+              ServerCapabilities(prompts: ServerCapabilitiesPrompts()),
+        ),
+      );
+      server.setRequestHandler<JsonRpcListPromptsRequest>(
+        Method.promptsList,
+        (request, extra) async =>
+            const InputRequiredResult(requestState: 'list-state'),
+        (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
+          'id': id,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcListPromptsRequest(id: 'prompts', meta: _clientMeta()),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, contains('InputRequiredResult'));
+      expect(response.error.message, contains(Method.promptsGet));
+      expect(response.error.message, contains(Method.resourcesRead));
+      expect(response.error.message, contains(Method.toolsCall));
+    });
+
     test('stateless required legacy task tool resolves to final result',
         () async {
       final server = McpServer(
@@ -1623,6 +1904,29 @@ void main() {
           'message',
           contains(McpMetaKey.logLevel),
         ),
+      );
+      expect(
+        validateToolRequest({
+          ..._clientMeta(),
+          'bad prefix/value': 'value',
+        }),
+        isA<McpError>()
+            .having(
+              (error) => error.code,
+              'code',
+              ErrorCode.invalidRequest.value,
+            )
+            .having(
+              (error) => error.data,
+              'data',
+              contains('bad prefix/value'),
+            ),
+      );
+      expect(
+        validateToolRequest(
+          _clientMeta(meta: const {'com.example.trace/id': 'trace-1'}),
+        ),
+        isNull,
       );
     });
 
