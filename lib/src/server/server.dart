@@ -172,7 +172,7 @@ class Server extends Protocol {
       json_rpc.validateRequestMeta(meta, validateKeys: true);
     } on FormatException catch (error) {
       return McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.invalidParams.value,
         'Invalid stateless request metadata.',
         error.message,
       );
@@ -181,7 +181,7 @@ class Server extends Protocol {
     final requestedVersion = meta?[McpMetaKey.protocolVersion];
     if (requestedVersion is! String || requestedVersion.isEmpty) {
       return McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.invalidParams.value,
         'Missing required request metadata: ${McpMetaKey.protocolVersion}',
       );
     }
@@ -190,7 +190,7 @@ class Server extends Protocol {
     }
     if (!isStatelessProtocolVersion(requestedVersion)) {
       return McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.invalidParams.value,
         'server/discover and stateless requests require a stateless protocol version.',
       );
     }
@@ -198,7 +198,7 @@ class Server extends Protocol {
     final clientInfo = meta?[McpMetaKey.clientInfo];
     if (clientInfo is! Map) {
       return McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.invalidParams.value,
         'Missing required request metadata: ${McpMetaKey.clientInfo}',
       );
     }
@@ -206,7 +206,7 @@ class Server extends Protocol {
     final clientCapabilities = meta?[McpMetaKey.clientCapabilities];
     if (clientCapabilities is! Map) {
       return McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.invalidParams.value,
         'Missing required request metadata: ${McpMetaKey.clientCapabilities}',
       );
     }
@@ -216,7 +216,7 @@ class Server extends Protocol {
       ClientCapabilities.fromJson(clientCapabilities.cast<String, dynamic>());
     } catch (error) {
       return McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.invalidParams.value,
         'Invalid stateless request metadata.',
         error.toString(),
       );
@@ -225,7 +225,7 @@ class Server extends Protocol {
     final logLevel = meta?[McpMetaKey.logLevel];
     if (logLevel != null && _parseLoggingLevel(logLevel) == null) {
       return McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.invalidParams.value,
         'Invalid stateless request metadata: ${McpMetaKey.logLevel}',
       );
     }

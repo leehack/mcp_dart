@@ -143,13 +143,13 @@ class CompletableField {
 }
 
 /// Function signature for a tool implementation.
-typedef ToolFunction = FutureOr<CallToolResult> Function(
+typedef ToolFunction = FutureOr<BaseResultData> Function(
   Map<String, dynamic> args,
   RequestHandlerExtra extra,
 );
 
 /// Legacy callback signature for tools (deprecated style).
-typedef LegacyToolCallback = FutureOr<CallToolResult> Function({
+typedef LegacyToolCallback = FutureOr<BaseResultData> Function({
   Map<String, dynamic>? args,
   RequestHandlerExtra? extra,
 });

@@ -262,6 +262,7 @@ void main() {
 
       expect(result.tools.map((tool) => tool.name), [
         'valid_headers',
+        'number_header',
       ]);
       expect(transport.toolParameterHeaderMappings, {
         'valid_headers': {
@@ -271,10 +272,11 @@ void main() {
           'count': 'Count',
           '/auth/tenant': 'Tenant',
         },
+        'number_header': {'ratio': 'Ratio'},
       });
       expect(
         warnings.where((message) => message.contains('Rejecting tool')),
-        hasLength(6),
+        hasLength(5),
       );
     });
 

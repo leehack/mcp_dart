@@ -150,6 +150,8 @@ class StreamableHttpClientTransport
   final StreamableHttpReconnectionOptions _reconnectionOptions;
   bool _isClosed = false;
   _PendingOAuthAuthorization? _pendingOAuthAuthorization;
+  final Map<String, _OAuthClientRegistration> _oauthRegistrations = {};
+  final Set<String> _oauthRequestedScopes = {};
 
   @override
   void Function()? onclose;
@@ -251,9 +253,15 @@ class StreamableHttpClientTransport
       );
     }
 
-    final scope = challenge?.scope ??
-        (provider.scopes.isEmpty ? null : provider.scopes.join(' ')) ??
-        protectedResourceMetadata.scopesSupported?.join(' ');
+    final clientRegistration = await _resolveOAuthClientRegistration(
+      provider,
+      authorizationServerMetadata,
+    );
+    final scope = _authorizationScope(
+      challenge,
+      provider,
+      protectedResourceMetadata,
+    );
     final codeVerifier = _generatePkceCodeVerifier();
     final codeChallenge = _generatePkceS256Challenge(codeVerifier);
     final state = _generateOAuthState();
@@ -262,7 +270,7 @@ class StreamableHttpClientTransport
       queryParameters: {
         ...authorizationEndpoint.queryParameters,
         'response_type': 'code',
-        'client_id': provider.clientId,
+        'client_id': clientRegistration.clientId,
         'redirect_uri': provider.redirectUri.toString(),
         'code_challenge': codeChallenge,
         'code_challenge_method': 'S256',
@@ -284,13 +292,181 @@ class StreamableHttpClientTransport
     _pendingOAuthAuthorization = _PendingOAuthAuthorization(
       tokenEndpoint: tokenEndpoint,
       codeVerifier: codeVerifier,
-      clientId: provider.clientId,
-      clientSecret: provider.clientSecret,
+      clientId: clientRegistration.clientId,
+      clientSecret: clientRegistration.clientSecret,
+      tokenEndpointAuthMethod: clientRegistration.tokenEndpointAuthMethod,
       redirectUri: provider.redirectUri,
       resource: protectedResourceMetadata.resource,
+      issuer: authorizationServerMetadata.issuer.toString(),
+      state: state,
+      scope: scope,
+      authorizationResponseIssParameterSupported: authorizationServerMetadata
+          .authorizationResponseIssParameterSupported,
     );
 
     return authorizationRequest;
+  }
+
+  String? _authorizationScope(
+    OAuthBearerChallengeParameters? challenge,
+    OAuthAuthorizationCodeProvider provider,
+    OAuthProtectedResourceMetadataDocument protectedResourceMetadata,
+  ) {
+    final requestedScopes = <String>{..._oauthRequestedScopes};
+    final challengedScopes = _splitOAuthScopes(challenge?.scope);
+    if (challengedScopes.isNotEmpty) {
+      requestedScopes.addAll(challengedScopes);
+      return requestedScopes.join(' ');
+    }
+
+    if (provider.scopes.isNotEmpty) {
+      requestedScopes.addAll(provider.scopes);
+      return requestedScopes.join(' ');
+    }
+
+    final supportedScopes = protectedResourceMetadata.scopesSupported;
+    if (supportedScopes != null && supportedScopes.isNotEmpty) {
+      requestedScopes.addAll(supportedScopes);
+      return requestedScopes.join(' ');
+    }
+
+    return null;
+  }
+
+  List<String> _splitOAuthScopes(String? scope) {
+    if (scope == null || scope.trim().isEmpty) {
+      return const [];
+    }
+    return scope
+        .split(RegExp(r'\s+'))
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+
+  Future<_OAuthClientRegistration> _resolveOAuthClientRegistration(
+    OAuthAuthorizationCodeProvider provider,
+    OAuthAuthorizationServerMetadataDocument authorizationServerMetadata,
+  ) async {
+    final issuerKey = authorizationServerMetadata.issuer.toString();
+    if (authorizationServerMetadata.clientIdMetadataDocumentSupported == true &&
+        _isAbsoluteHttpUri(provider.clientId)) {
+      return _OAuthClientRegistration(
+        clientId: provider.clientId,
+        clientSecret: provider.clientSecret,
+        tokenEndpointAuthMethod: _selectTokenEndpointAuthMethod(
+          authorizationServerMetadata,
+          provider.clientSecret,
+        ),
+      );
+    }
+
+    final registrationEndpoint =
+        authorizationServerMetadata.registrationEndpoint;
+    if (registrationEndpoint != null) {
+      final existingRegistration = _oauthRegistrations[issuerKey];
+      if (existingRegistration != null) {
+        return existingRegistration;
+      }
+
+      final registration = await _registerOAuthClient(
+        provider,
+        authorizationServerMetadata,
+        registrationEndpoint,
+      );
+      _oauthRegistrations[issuerKey] = registration;
+      return registration;
+    }
+
+    return _OAuthClientRegistration(
+      clientId: provider.clientId,
+      clientSecret: provider.clientSecret,
+      tokenEndpointAuthMethod: _selectTokenEndpointAuthMethod(
+        authorizationServerMetadata,
+        provider.clientSecret,
+      ),
+    );
+  }
+
+  bool _isAbsoluteHttpUri(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
+  }
+
+  Future<_OAuthClientRegistration> _registerOAuthClient(
+    OAuthAuthorizationCodeProvider provider,
+    OAuthAuthorizationServerMetadataDocument authorizationServerMetadata,
+    Uri registrationEndpoint,
+  ) async {
+    final tokenEndpointAuthMethod = _selectTokenEndpointAuthMethod(
+      authorizationServerMetadata,
+      provider.clientSecret,
+    );
+    final response = await _httpClient.post(
+      registrationEndpoint,
+      headers: const {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode({
+        'client_name': provider.clientId,
+        'redirect_uris': [provider.redirectUri.toString()],
+        'grant_types': ['authorization_code', 'refresh_token'],
+        'response_types': ['code'],
+        'application_type': 'native',
+        'token_endpoint_auth_method': tokenEndpointAuthMethod,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw UnauthorizedError(
+        'Dynamic client registration failed with HTTP ${response.statusCode}',
+      );
+    }
+
+    final json = jsonDecode(response.body);
+    if (json is! Map<String, dynamic>) {
+      throw UnauthorizedError('Client registration response must be an object');
+    }
+    final clientId = json['client_id'];
+    if (clientId is! String || clientId.isEmpty) {
+      throw UnauthorizedError('Client registration did not include client_id');
+    }
+    final clientSecret = json['client_secret'];
+    final registeredAuthMethod = json['token_endpoint_auth_method'];
+    return _OAuthClientRegistration(
+      clientId: clientId,
+      clientSecret: clientSecret is String ? clientSecret : null,
+      tokenEndpointAuthMethod: registeredAuthMethod is String
+          ? registeredAuthMethod
+          : tokenEndpointAuthMethod,
+    );
+  }
+
+  String _selectTokenEndpointAuthMethod(
+    OAuthAuthorizationServerMetadataDocument metadata,
+    String? clientSecret,
+  ) {
+    final supportedMethods =
+        metadata.tokenEndpointAuthMethodsSupported ?? const ['none'];
+    if (clientSecret != null) {
+      if (supportedMethods.contains('client_secret_basic')) {
+        return 'client_secret_basic';
+      }
+      if (supportedMethods.contains('client_secret_post')) {
+        return 'client_secret_post';
+      }
+    }
+    if (supportedMethods.contains('none')) {
+      return 'none';
+    }
+    if (supportedMethods.contains('client_secret_basic')) {
+      return 'client_secret_basic';
+    }
+    if (supportedMethods.contains('client_secret_post')) {
+      return 'client_secret_post';
+    }
+    return supportedMethods.isEmpty ? 'none' : supportedMethods.first;
   }
 
   Future<OAuthProtectedResourceMetadataDocument>
@@ -360,7 +536,28 @@ class StreamableHttpClientTransport
         'Protected-resource metadata must be a JSON object',
       );
     }
-    return OAuthProtectedResourceMetadataDocument.fromJson(json);
+    final metadata = OAuthProtectedResourceMetadataDocument.fromJson(json);
+    if (!_isProtectedResourceForEndpoint(metadata.resource)) {
+      throw UnauthorizedError(
+        'Protected-resource metadata resource does not match server URL',
+      );
+    }
+    return metadata;
+  }
+
+  bool _isProtectedResourceForEndpoint(Uri resource) {
+    if (resource.fragment.isNotEmpty) {
+      return false;
+    }
+    if (resource.scheme != _url.scheme ||
+        resource.host != _url.host ||
+        resource.port != _url.port) {
+      return false;
+    }
+
+    final resourcePath = resource.path.isEmpty ? '/' : resource.path;
+    final endpointPath = _url.path.isEmpty ? '/' : _url.path;
+    return resourcePath == endpointPath || resourcePath == '/';
   }
 
   Future<OAuthAuthorizationServerMetadataDocument>
@@ -368,7 +565,13 @@ class StreamableHttpClientTransport
     final errors = <Object>[];
     for (final uri in _authorizationServerMetadataCandidates(issuer)) {
       try {
-        return await _fetchAuthorizationServerMetadata(uri);
+        final metadata = await _fetchAuthorizationServerMetadata(uri);
+        if (metadata.issuer.toString() != issuer.toString()) {
+          throw UnauthorizedError(
+            'Authorization-server metadata issuer does not match $issuer',
+          );
+        }
+        return metadata;
       } catch (error) {
         errors.add(error);
       }
@@ -438,22 +641,52 @@ class StreamableHttpClientTransport
     String authorizationCode,
     _PendingOAuthAuthorization pendingAuthorization,
   ) async {
+    final headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+    };
+    final body = {
+      'grant_type': 'authorization_code',
+      'code': authorizationCode,
+      'redirect_uri': pendingAuthorization.redirectUri.toString(),
+      'client_id': pendingAuthorization.clientId,
+      'code_verifier': pendingAuthorization.codeVerifier,
+      'resource': pendingAuthorization.resource.toString(),
+    };
+    switch (pendingAuthorization.tokenEndpointAuthMethod) {
+      case 'client_secret_basic':
+        final clientSecret = pendingAuthorization.clientSecret;
+        if (clientSecret == null) {
+          throw UnauthorizedError(
+            'Token endpoint requires client_secret_basic but no secret is available',
+          );
+        }
+        headers['Authorization'] = _basicAuthorizationHeader(
+          pendingAuthorization.clientId,
+          clientSecret,
+        );
+        break;
+      case 'client_secret_post':
+        final clientSecret = pendingAuthorization.clientSecret;
+        if (clientSecret == null) {
+          throw UnauthorizedError(
+            'Token endpoint requires client_secret_post but no secret is available',
+          );
+        }
+        body['client_secret'] = clientSecret;
+        break;
+      case 'none':
+        break;
+      default:
+        if (pendingAuthorization.clientSecret != null) {
+          body['client_secret'] = pendingAuthorization.clientSecret!;
+        }
+    }
+
     final response = await _httpClient.post(
       pendingAuthorization.tokenEndpoint,
-      headers: const {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      body: {
-        'grant_type': 'authorization_code',
-        'code': authorizationCode,
-        'redirect_uri': pendingAuthorization.redirectUri.toString(),
-        'client_id': pendingAuthorization.clientId,
-        if (pendingAuthorization.clientSecret != null)
-          'client_secret': pendingAuthorization.clientSecret!,
-        'code_verifier': pendingAuthorization.codeVerifier,
-        'resource': pendingAuthorization.resource.toString(),
-      },
+      headers: headers,
+      body: body,
     );
     if (response.statusCode != 200) {
       throw UnauthorizedError(
@@ -477,8 +710,15 @@ class StreamableHttpClientTransport
       expiresIn: _parseExpiresIn(json['expires_in']),
       scope: json['scope'] as String?,
     );
+    _oauthRequestedScopes.addAll(_splitOAuthScopes(pendingAuthorization.scope));
+    _oauthRequestedScopes.addAll(_splitOAuthScopes(tokens.scope));
     await provider.saveTokens(tokens);
     return tokens;
+  }
+
+  String _basicAuthorizationHeader(String clientId, String clientSecret) {
+    final credentials = base64Encode(utf8.encode('$clientId:$clientSecret'));
+    return 'Basic $credentials';
   }
 
   int? _parseExpiresIn(Object? value) {
@@ -645,6 +885,12 @@ class StreamableHttpClientTransport
   String? _toolParameterHeaderString(Object? value) {
     if (value is int) {
       if (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger) {
+        return null;
+      }
+      return value.toString();
+    }
+    if (value is double) {
+      if (!value.isFinite) {
         return null;
       }
       return value.toString();
@@ -1120,7 +1366,11 @@ class StreamableHttpClientTransport
   /// Call this method after the user has finished authorizing via their user agent and is redirected
   /// back to the MCP client application. This will exchange the authorization code for an access token,
   /// enabling the next connection attempt to successfully auth.
-  Future<void> finishAuth(String authorizationCode) async {
+  Future<void> finishAuth(
+    String authorizationCode, {
+    String? state,
+    String? issuer,
+  }) async {
     if (_authProvider == null) {
       throw UnauthorizedError("No auth provider");
     }
@@ -1129,6 +1379,11 @@ class StreamableHttpClientTransport
     final pendingAuthorization = _pendingOAuthAuthorization;
     if (authProvider is OAuthAuthorizationCodeProvider &&
         pendingAuthorization != null) {
+      _validateOAuthAuthorizationRedirect(
+        pendingAuthorization,
+        state: state,
+        issuer: issuer,
+      );
       await _exchangeAuthorizationCode(
         authProvider,
         authorizationCode,
@@ -1145,6 +1400,30 @@ class StreamableHttpClientTransport
     );
     if (result != "AUTHORIZED") {
       throw UnauthorizedError("Failed to authorize");
+    }
+  }
+
+  void _validateOAuthAuthorizationRedirect(
+    _PendingOAuthAuthorization pendingAuthorization, {
+    String? state,
+    String? issuer,
+  }) {
+    if (state != null && state != pendingAuthorization.state) {
+      throw UnauthorizedError('Authorization redirect state mismatch');
+    }
+
+    if (pendingAuthorization.authorizationResponseIssParameterSupported ==
+            true &&
+        (issuer == null || issuer.isEmpty)) {
+      throw UnauthorizedError(
+        'Authorization response did not include required iss parameter',
+      );
+    }
+
+    if (issuer != null && issuer != pendingAuthorization.issuer) {
+      throw UnauthorizedError(
+        'Authorization response issuer does not match authorization server',
+      );
     }
   }
 
@@ -1344,7 +1623,8 @@ class StreamableHttpClientTransport
             response,
             StartSseOptions(
               onResumptionToken: onResumptionToken,
-              shouldReconnect: false, // Do not reconnect for POST responses
+              replayMessageId: message.id,
+              shouldReconnect: !isStatelessRequest,
               rejectServerRequests: isStatelessRequest,
             ),
           );
@@ -1662,14 +1942,22 @@ class OAuthAuthorizationServerMetadataDocument {
   final Uri issuer;
   final Uri? authorizationEndpoint;
   final Uri? tokenEndpoint;
+  final Uri? registrationEndpoint;
   final List<String>? codeChallengeMethodsSupported;
+  final List<String>? tokenEndpointAuthMethodsSupported;
+  final bool? clientIdMetadataDocumentSupported;
+  final bool? authorizationResponseIssParameterSupported;
   final Map<String, dynamic> additionalFields;
 
   const OAuthAuthorizationServerMetadataDocument({
     required this.issuer,
     this.authorizationEndpoint,
     this.tokenEndpoint,
+    this.registrationEndpoint,
     this.codeChallengeMethodsSupported,
+    this.tokenEndpointAuthMethodsSupported,
+    this.clientIdMetadataDocumentSupported,
+    this.authorizationResponseIssParameterSupported,
     this.additionalFields = const {},
   });
 
@@ -1691,15 +1979,29 @@ class OAuthAuthorizationServerMetadataDocument {
           ? Uri.parse(authorizationEndpoint)
           : null,
       tokenEndpoint: tokenEndpoint is String ? Uri.parse(tokenEndpoint) : null,
+      registrationEndpoint: json['registration_endpoint'] is String
+          ? Uri.parse(json['registration_endpoint'] as String)
+          : null,
       codeChallengeMethodsSupported:
           (json['code_challenge_methods_supported'] as List?)?.cast<String>(),
+      tokenEndpointAuthMethodsSupported:
+          (json['token_endpoint_auth_methods_supported'] as List?)
+              ?.cast<String>(),
+      clientIdMetadataDocumentSupported:
+          json['client_id_metadata_document_supported'] as bool?,
+      authorizationResponseIssParameterSupported:
+          json['authorization_response_iss_parameter_supported'] as bool?,
       additionalFields: Map<String, dynamic>.from(json)
         ..removeWhere(
           (key, value) => {
             'issuer',
             'authorization_endpoint',
             'token_endpoint',
+            'registration_endpoint',
             'code_challenge_methods_supported',
+            'token_endpoint_auth_methods_supported',
+            'client_id_metadata_document_supported',
+            'authorization_response_iss_parameter_supported',
           }.contains(key),
         ),
     );
@@ -1760,16 +2062,38 @@ class _PendingOAuthAuthorization {
   final String codeVerifier;
   final String clientId;
   final String? clientSecret;
+  final String tokenEndpointAuthMethod;
   final Uri redirectUri;
   final Uri resource;
+  final String issuer;
+  final String state;
+  final String? scope;
+  final bool? authorizationResponseIssParameterSupported;
 
   const _PendingOAuthAuthorization({
     required this.tokenEndpoint,
     required this.codeVerifier,
     required this.clientId,
     required this.clientSecret,
+    required this.tokenEndpointAuthMethod,
     required this.redirectUri,
     required this.resource,
+    required this.issuer,
+    required this.state,
+    required this.scope,
+    required this.authorizationResponseIssParameterSupported,
+  });
+}
+
+class _OAuthClientRegistration {
+  final String clientId;
+  final String? clientSecret;
+  final String tokenEndpointAuthMethod;
+
+  const _OAuthClientRegistration({
+    required this.clientId,
+    required this.clientSecret,
+    required this.tokenEndpointAuthMethod,
   });
 }
 

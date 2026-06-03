@@ -1290,6 +1290,7 @@ void main() {
         'content': {
           'text': 'value',
           'count': 3.0,
+          'ratio': 0.5,
           'confirmed': true,
           'selections': ['a', 'b'],
         },
@@ -1297,6 +1298,7 @@ void main() {
       });
 
       expect(parsed.toJson()['content'], containsPair('count', 3));
+      expect(parsed.toJson()['content'], containsPair('ratio', 0.5));
       expect(parsed.toJson()['_meta'], containsPair('trace', 'abc'));
 
       expect(
@@ -1311,15 +1313,6 @@ void main() {
           'action': 'accept',
           'content': {
             'nested': {'value': true},
-          },
-        }),
-        throwsA(isA<FormatException>()),
-      );
-      expect(
-        () => ElicitResult.fromJson({
-          'action': 'accept',
-          'content': {
-            'ratio': 0.5,
           },
         }),
         throwsA(isA<FormatException>()),
@@ -1343,13 +1336,13 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
       expect(
-        () => const ElicitResult(
+        const ElicitResult(
           action: 'accept',
           content: {
             'ratio': 0.5,
           },
-        ).toJson(),
-        throwsA(isA<ArgumentError>()),
+        ).toJson()['content'],
+        containsPair('ratio', 0.5),
       );
       expect(
         const ElicitResult(

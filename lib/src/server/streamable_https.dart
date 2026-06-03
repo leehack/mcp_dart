@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
+import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 
 import '../shared/transport.dart';
 import '../types.dart';
@@ -161,6 +162,14 @@ class StreamableHTTPServerTransport
         RequestIdAwareTransport,
         IncomingRequestValidationAwareTransport,
         ToolParameterHeaderAwareTransport {
+  static const Set<String> _statelessRemovedRequestMethods = {
+    Method.initialize,
+    Method.ping,
+    Method.loggingSetLevel,
+    Method.resourcesSubscribe,
+    Method.resourcesUnsubscribe,
+  };
+
   // when sessionId is not set (null), it means the transport is in stateless mode
   final String? Function()? _sessionIdGenerator;
   bool _started = false;
@@ -266,7 +275,11 @@ class StreamableHTTPServerTransport
       return;
     }
 
-    if (!await _validateProtocolVersionHeader(req, req.response)) {
+    if (!await _validateProtocolVersionHeader(
+      req,
+      req.response,
+      parsedBody: parsedBody,
+    )) {
       return;
     }
 
@@ -285,8 +298,9 @@ class StreamableHTTPServerTransport
 
   Future<bool> _validateProtocolVersionHeader(
     HttpRequest req,
-    HttpResponse res,
-  ) async {
+    HttpResponse res, {
+    dynamic parsedBody,
+  }) async {
     if (!_strictProtocolVersionHeaderValidation) {
       return true;
     }
@@ -306,6 +320,7 @@ class StreamableHTTPServerTransport
       httpStatus: HttpStatus.badRequest,
       errorCode: ErrorCode.unsupportedProtocolVersion,
       message: 'Unsupported protocol version',
+      id: _requestIdFromParsedBody(parsedBody),
       data: {
         'requested': requestedVersion,
         'supported': supportedProtocolVersionsWithDraft,
@@ -447,6 +462,65 @@ class StreamableHTTPServerTransport
       }
     }
     return null;
+  }
+
+  RequestId? _requestIdFromParsedBody(dynamic parsedBody) {
+    if (parsedBody is! Map || !parsedBody.containsKey('id')) {
+      return null;
+    }
+
+    try {
+      return json_rpc.parseRequestId(parsedBody['id']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  RequestId? _rawRequestId(Map<String, dynamic> messageJson) {
+    if (!messageJson.containsKey('id')) {
+      return null;
+    }
+    try {
+      return json_rpc.parseRequestId(messageJson['id']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isStatelessServerDiscoverJson(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    if (messageJson['method'] != Method.serverDiscover) {
+      return false;
+    }
+
+    return _isStatelessRequestJson(req, messageJson);
+  }
+
+  bool _isStatelessRemovedRequestJson(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    final method = messageJson['method'];
+    return method is String &&
+        _statelessRemovedRequestMethods.contains(method) &&
+        messageJson.containsKey('id') &&
+        _isStatelessRequestJson(req, messageJson);
+  }
+
+  bool _isStatelessRequestJson(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    final headerVersion = req.headers.value('mcp-protocol-version')?.trim();
+    if (headerVersion != null && isStatelessProtocolVersion(headerVersion)) {
+      return true;
+    }
+
+    final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
+    return metadataVersion != null &&
+        isStatelessProtocolVersion(metadataVersion);
   }
 
   bool _usesStatelessHttpValidation(
@@ -799,14 +873,15 @@ class StreamableHTTPServerTransport
 
     final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
     if (metadataVersion == null) {
-      await _writeHeaderMismatchResponse(
-        req.response,
-        message,
-        'MCP-Protocol-Version header has no matching request _meta protocol version in params._meta',
-      );
-      return false;
-    }
-    if (protocolHeader != metadataVersion) {
+      if (message is! JsonRpcServerDiscoverRequest) {
+        await _writeHeaderMismatchResponse(
+          req.response,
+          message,
+          'MCP-Protocol-Version header has no matching request _meta protocol version in params._meta',
+        );
+        return false;
+      }
+    } else if (protocolHeader != metadataVersion) {
       await _writeHeaderMismatchResponse(
         req.response,
         message,
@@ -1369,9 +1444,37 @@ class StreamableHTTPServerTransport
           final messageJson = rawItem is Map<String, dynamic>
               ? rawItem
               : rawItem.cast<String, dynamic>();
+          if (_isStatelessRemovedRequestJson(req, messageJson)) {
+            final method = messageJson['method'] as String;
+            await _writeJsonRpcErrorResponse(
+              req.response,
+              httpStatus: HttpStatus.notFound,
+              errorCode: ErrorCode.methodNotFound,
+              id: _rawRequestId(messageJson),
+              message:
+                  '$method is not part of MCP stateless protocol versions.',
+            );
+            return;
+          }
           messageJsons.add(messageJson);
           messages.add(JsonRpcMessage.fromJson(messageJson));
         } catch (e) {
+          final messageJson = rawItem is Map<String, dynamic>
+              ? rawItem
+              : rawItem.cast<String, dynamic>();
+          if (_isStatelessServerDiscoverJson(req, messageJson)) {
+            await _writeJsonRpcErrorResponse(
+              req.response,
+              httpStatus: HttpStatus.badRequest,
+              errorCode: ErrorCode.invalidParams,
+              id: _rawRequestId(messageJson),
+              message: 'Invalid params',
+              data: e.toString(),
+            );
+            onerror?.call(e is Error ? e : StateError(e.toString()));
+            return;
+          }
+
           await _writeJsonRpcErrorResponse(
             req.response,
             httpStatus: HttpStatus.badRequest,
@@ -1827,7 +1930,7 @@ class StreamableHTTPServerTransport
       }
     }
 
-    if (_isJsonRpcResponse(message)) {
+    if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
       if (!_requestToStreamMapping.containsKey(requestId)) {
         return;
       }
@@ -1865,6 +1968,14 @@ class StreamableHTTPServerTransport
 
           final responses =
               relatedIds.map((id) => _requestResponseMap[id]!).toList();
+
+          if (isStatelessResponse &&
+              responses.length == 1 &&
+              responses.single is JsonRpcError) {
+            final error = responses.single as JsonRpcError;
+            response!.statusCode =
+                _statelessHttpStatusForErrorCode(error.error.code);
+          }
 
           headers.forEach((key, value) {
             response!.headers.set(key, value);

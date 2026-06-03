@@ -333,7 +333,12 @@ void main() {
         supportedProtocolVersionsWithDraft,
         contains(draftProtocolVersion2026_07_28),
       );
+      expect(
+        supportedProtocolVersionsWithDraft,
+        contains(draftProtocolVersion2026V1),
+      );
       expect(isStatelessProtocolVersion(draftProtocolVersion2026_07_28), true);
+      expect(isStatelessProtocolVersion(draftProtocolVersion2026V1), true);
       expect(isStatelessProtocolVersion(latestProtocolVersion), false);
     });
 
@@ -680,11 +685,11 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
-        () => ElicitResult.fromJson({
+        ElicitResult.fromJson({
           'action': 'accept',
           'content': {'score': 1.5},
-        }),
-        throwsA(isA<FormatException>()),
+        }).content,
+        containsPair('score', 1.5),
       );
       expect(
         () => const ElicitResult(
@@ -694,11 +699,11 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
       expect(
-        () => const ElicitResult(
+        const ElicitResult(
           action: 'accept',
           content: {'score': 1.5},
-        ).toJson(),
-        throwsA(isA<ArgumentError>()),
+        ).toJson()['content'],
+        containsPair('score', 1.5),
       );
     });
 
@@ -3399,6 +3404,92 @@ void main() {
       expect(response.result['requestState'], 'retry-state');
     });
 
+    test('stateless registerTool receives input responses and request state',
+        () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      server.registerTool(
+        'needs_input',
+        callback: (args, extra) {
+          final response = extra.inputResponses?['profile'];
+          if (response == null) {
+            expect(extra.requestState, isNull);
+            return InputRequiredResult(
+              inputRequests: {
+                'profile': InputRequest.elicit(
+                  ElicitRequest.form(
+                    message: 'Enter profile details',
+                    requestedSchema: JsonSchema.object(
+                      properties: {'name': JsonSchema.string()},
+                      required: ['name'],
+                    ),
+                  ),
+                ),
+              },
+              requestState: 'state-1',
+            );
+          }
+
+          expect(extra.requestState, 'state-1');
+          final responseJson = response.toJson();
+          final content = responseJson['content'] as Map<String, dynamic>;
+          return CallToolResult(
+            content: [TextContent(text: 'Hello ${content['name']}')],
+          );
+        },
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'needs_input').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final inputRequired = transport.sentMessages.single as JsonRpcResponse;
+      expect(inputRequired.result['resultType'], resultTypeInputRequired);
+      expect(inputRequired.result['requestState'], 'state-1');
+      expect(inputRequired.result['inputRequests'], contains('profile'));
+
+      transport.sentMessages.clear();
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-2',
+          params: CallToolRequest(
+            name: 'needs_input',
+            inputResponses: {
+              'profile': InputResponse.fromResult(
+                const ElicitResult(
+                  action: 'accept',
+                  content: {'name': 'Alice'},
+                ),
+              ),
+            },
+            requestState: 'state-1',
+          ).toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final completed = transport.sentMessages.single as JsonRpcResponse;
+      expect(completed.result['resultType'], resultTypeComplete);
+      expect(completed.result['content'][0]['text'], 'Hello Alice');
+    });
+
     test('stateless input required requests require client capabilities',
         () async {
       final server = Server(
@@ -4160,7 +4251,7 @@ void main() {
             .having(
               (error) => error.code,
               'code',
-              ErrorCode.invalidRequest.value,
+              ErrorCode.invalidParams.value,
             )
             .having(
               (error) => error.data,

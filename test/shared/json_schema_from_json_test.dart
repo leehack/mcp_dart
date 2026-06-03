@@ -308,6 +308,54 @@ void main() {
       });
     });
 
+    test('preserves object-level JSON Schema extension keywords', () {
+      final json = {
+        r'$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'type': 'object',
+        r'$defs': {
+          'address': {
+            r'$anchor': 'addressDef',
+            'type': 'object',
+          },
+        },
+        'properties': {
+          'contactMethod': {
+            'type': 'string',
+            'enum': ['phone', 'email'],
+          },
+        },
+        'allOf': [
+          {
+            'anyOf': [
+              {
+                'required': ['phone'],
+              },
+              {
+                'required': ['email'],
+              },
+            ],
+          },
+        ],
+        'if': {
+          'properties': {
+            'contactMethod': {'const': 'phone'},
+          },
+        },
+        'then': {
+          'required': ['phone'],
+        },
+        'else': {
+          'required': ['email'],
+        },
+        'additionalProperties': false,
+      };
+
+      final schema = JsonSchema.fromJson(json);
+
+      expect(schema, isA<JsonObject>());
+      expect(schema.toJson(), json);
+    });
+
     test('parses object schema with additionalProperties as schema', () {
       final json = {
         'type': 'object',

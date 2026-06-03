@@ -1495,9 +1495,9 @@ void main() {
         '=?base64?${base64Encode(utf8.encode('Hello, 世界'))}?=',
       );
       expect(capturedHeaders['limit'], '42');
-      expect(capturedHeaders['rounded'], isNull);
+      expect(capturedHeaders['rounded'], '42.0');
       expect(capturedHeaders['unsafe'], isNull);
-      expect(capturedHeaders['ratio'], isNull);
+      expect(capturedHeaders['ratio'], '1.5');
       expect(capturedHeaders['dryRun'], 'false');
       expect(capturedHeaders['text'], '=?base64?IHBhZGRlZCA=?=');
       expect(capturedHeaders['payload'], isNull);

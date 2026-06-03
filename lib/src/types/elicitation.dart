@@ -818,10 +818,9 @@ Map<String, dynamic>? _normalizeElicitResultContent(
       normalized[entry.key] = value;
       continue;
     }
-    if (value is double &&
-        value.isFinite &&
-        value == value.truncateToDouble()) {
-      normalized[entry.key] = value.toInt();
+    if (value is double && value.isFinite) {
+      normalized[entry.key] =
+          value == value.truncateToDouble() ? value.toInt() : value;
       continue;
     }
     if (value is List && value.every((item) => item is String)) {
@@ -830,13 +829,13 @@ Map<String, dynamic>? _normalizeElicitResultContent(
     }
     if (formatException) {
       throw FormatException(
-        'ElicitResult.content.${entry.key} must be string, integer, boolean, or string[]',
+        'ElicitResult.content.${entry.key} must be string, number, boolean, or string[]',
       );
     }
     throw ArgumentError.value(
       value,
       'content.${entry.key}',
-      'ElicitResult content values must be string, integer, boolean, or string[]',
+      'ElicitResult content values must be string, number, boolean, or string[]',
     );
   }
   return normalized;

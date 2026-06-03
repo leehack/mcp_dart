@@ -317,6 +317,10 @@ extension JsonSchemaValidation on JsonSchema {
         _validate(apSchema, data[key], [...path, key]);
       }
     }
+
+    if (schema.extra != null) {
+      _validateCompositionKeywords(schema.extra!, data, path);
+    }
   }
 
   void _validateEnum(JsonEnum schema, dynamic data, List<String> path) {

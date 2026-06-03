@@ -1730,22 +1730,22 @@ void main() {
           throwsA(isA<ArgumentError>()),
         );
         expect(
-          () => ElicitResult.fromJson({
+          ElicitResult.fromJson({
             'action': 'accept',
             'content': {
               'fractional': 1.5,
             },
-          }),
-          throwsA(isA<FormatException>()),
+          }).content,
+          containsPair('fractional', 1.5),
         );
         expect(
-          () => const ElicitResult(
+          const ElicitResult(
             action: 'accept',
             content: {
               'fractional': 1.5,
             },
-          ).toJson(),
-          throwsA(isA<ArgumentError>()),
+          ).toJson()['content'],
+          containsPair('fractional', 1.5),
         );
         expect(
           () => URLElicitationRequiredErrorData.fromJson({

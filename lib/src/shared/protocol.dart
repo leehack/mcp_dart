@@ -128,6 +128,12 @@ class RequestHandlerExtra {
   /// Metadata from the original request.
   final Map<String, dynamic>? meta;
 
+  /// Client responses to MRTR input requests when retrying this request.
+  final InputResponses? inputResponses;
+
+  /// Opaque MRTR state returned by the server and echoed by the client on retry.
+  final String? requestState;
+
   /// MCP protocol version from the request metadata, when present.
   String? get protocolVersion {
     final value = meta?[McpMetaKey.protocolVersion];
@@ -194,6 +200,8 @@ class RequestHandlerExtra {
     this.sessionId,
     required this.requestId,
     this.meta,
+    this.inputResponses,
+    this.requestState,
     this.authInfo,
     this.requestInfo,
     this.taskId,
@@ -532,6 +540,28 @@ abstract class Protocol {
     String resultType,
   ) =>
       isRecognizedResultType(resultType);
+
+  InputResponses? _inputResponsesFromRequest(JsonRpcRequest request) {
+    return switch (request) {
+      final JsonRpcCallToolRequest request => request.callParams.inputResponses,
+      final JsonRpcGetPromptRequest request => request.getParams.inputResponses,
+      final JsonRpcReadResourceRequest request =>
+        request.readParams.inputResponses,
+      final JsonRpcUpdateTaskRequest request =>
+        request.updateParams.inputResponses,
+      _ => null,
+    };
+  }
+
+  String? _requestStateFromRequest(JsonRpcRequest request) {
+    return switch (request) {
+      final JsonRpcCallToolRequest request => request.callParams.requestState,
+      final JsonRpcGetPromptRequest request => request.getParams.requestState,
+      final JsonRpcReadResourceRequest request =>
+        request.readParams.requestState,
+      _ => null,
+    };
+  }
 
   bool _usesStatelessResultTypes(JsonRpcRequest request) {
     final requestProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
@@ -1260,6 +1290,8 @@ abstract class Protocol {
       sessionId: _transport?.sessionId,
       requestId: request.id,
       meta: request.meta,
+      inputResponses: _inputResponsesFromRequest(request),
+      requestState: _requestStateFromRequest(request),
       sendNotification: (notification, {relatedTask}) {
         return _notificationWithRequestId(
           notification,
@@ -1486,6 +1518,8 @@ abstract class Protocol {
       sessionId: requestSessionId,
       requestId: request.id,
       meta: request.meta,
+      inputResponses: _inputResponsesFromRequest(request),
+      requestState: _requestStateFromRequest(request),
       taskId: relatedTaskId,
       taskStore: _taskStore != null
           ? _RequestTaskStoreImpl(

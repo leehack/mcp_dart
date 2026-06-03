@@ -536,6 +536,7 @@ void main(List<String> args) async {
 
   // Parse args
   var transportType = 'stdio';
+  var enableJsonResponse = false;
   int? port;
 
   for (var i = 0; i < args.length; i++) {
@@ -544,6 +545,9 @@ void main(List<String> args) async {
     }
     if (args[i] == '--port' && i + 1 < args.length) {
       port = int.tryParse(args[i + 1]);
+    }
+    if (args[i] == '--json-response') {
+      enableJsonResponse = true;
     }
   }
 
@@ -560,6 +564,7 @@ void main(List<String> args) async {
     final transport = StreamableMcpServer(
       serverFactory: (sessionId) => createServer(),
       port: port,
+      enableJsonResponse: enableJsonResponse,
     );
     await transport.start();
     // Keep alive? StreamableMcpServer listens on http

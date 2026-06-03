@@ -68,6 +68,20 @@ class McpSubscription {
   }
 }
 
+ElicitResult _withElicitationDefaults(
+  ElicitResult result,
+  JsonSchema schema,
+) {
+  final content = _deepCopy(result.content ?? const <String, dynamic>{})
+      as Map<String, dynamic>;
+  _applyElicitationDefaults(schema, content);
+  return ElicitResult(
+    action: result.action,
+    content: content,
+    meta: result.meta,
+  );
+}
+
 // Recursively applies default values from a JSON Schema to a data object.
 void _applyElicitationDefaults(JsonSchema schema, Map<String, dynamic> data) {
   if (schema is! JsonObject) return;
@@ -207,17 +221,16 @@ class McpClient extends Protocol {
               "No elicit handler registered",
             );
           }
-          final result = await onElicitRequest!(request.elicitParams);
+          var result = await onElicitRequest!(request.elicitParams);
 
           // Apply defaults if client supports it and it's a form elicitation
           if (request.elicitParams.isFormMode &&
               result.action == 'accept' &&
-              result.content is Map &&
               request.elicitParams.requestedSchema != null &&
               _capabilities.elicitation?.form?.applyDefaults == true) {
-            _applyElicitationDefaults(
+            result = _withElicitationDefaults(
+              result,
               request.elicitParams.requestedSchema!,
-              result.content!,
             );
           }
           return result;
@@ -1618,6 +1631,7 @@ class McpClient extends Protocol {
 
   bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
     return schema is JsonString ||
+        schema is JsonNumber ||
         schema is JsonInteger ||
         schema is JsonBoolean;
   }

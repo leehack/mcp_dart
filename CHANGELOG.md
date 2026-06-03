@@ -259,6 +259,9 @@
 - Accepted numeric `minimum`, `maximum`, `exclusiveMinimum`,
   `exclusiveMaximum`, `multipleOf`, and `default` values on JSON Schema
   `integer` schemas, matching the stable and MCP 2026 schema definitions.
+- Preserved object-level JSON Schema 2020-12 keywords on `JsonObject`
+  round-trips and added official MCP conformance gates for stable 2025 and
+  2026 RC client/server coverage in core CI.
 
 ## 2.2.0
 

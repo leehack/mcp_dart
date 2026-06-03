@@ -56,6 +56,11 @@ class MockTransport extends Transport {
   Future<void> start() async {}
 }
 
+Map<String, dynamic> _lastElicitContent(MockTransport transport) {
+  final response = transport.sentMessages.whereType<JsonRpcResponse>().last;
+  return response.result['content'] as Map<String, dynamic>;
+}
+
 void main() {
   group('Client - Elicitation Defaults', () {
     late Client client;
@@ -111,11 +116,15 @@ void main() {
         const Duration(milliseconds: 10),
       ); // Allow microtasks to run
 
-      // Verify that defaults were applied to the `receivedContent`
+      // Verify that defaults were applied to the submitted response without
+      // mutating the callback-owned map.
       expect(receivedContent, isNotNull);
-      expect(receivedContent!['name'], equals('John Doe'));
-      expect(receivedContent!['age'], equals(30));
-      expect(receivedContent!['addressStreet'], equals('Main St'));
+      expect(receivedContent, isEmpty);
+
+      final submittedContent = _lastElicitContent(transport);
+      expect(submittedContent['name'], equals('John Doe'));
+      expect(submittedContent['age'], equals(30));
+      expect(submittedContent['addressStreet'], equals('Main St'));
     });
 
     test('does not override existing values with defaults', () async {
@@ -151,7 +160,10 @@ void main() {
         receivedContent!['name'],
         equals('Jane Smith'),
       ); // Should retain existing
-      expect(receivedContent!['age'], equals(30)); // Default should be applied
+
+      final submittedContent = _lastElicitContent(transport);
+      expect(submittedContent['name'], equals('Jane Smith'));
+      expect(submittedContent['age'], equals(30));
     });
 
     test('does not apply defaults if applyDefaults is false', () async {

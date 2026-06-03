@@ -66,6 +66,10 @@ sealed class JsonSchema {
       return conjunctiveSchema;
     }
 
+    if (type == 'object') {
+      return JsonObject.fromJson(json);
+    }
+
     if (json.containsKey('const')) {
       return JsonConst.fromJson(json);
     }
@@ -114,6 +118,12 @@ sealed class JsonSchema {
   static JsonSchema? _splitConjunctiveSchema(Map<String, dynamic> json) {
     final primaryKeys = _primaryKeysForConjunctiveSplit(json);
     if (primaryKeys == null) {
+      return null;
+    }
+
+    if (json['type'] == 'object' &&
+        primaryKeys.length == 1 &&
+        _jsonSchemaCompositionKeys.contains(primaryKeys.single)) {
       return null;
     }
 
@@ -204,6 +214,13 @@ sealed class JsonSchema {
     'null',
     'array',
     'object',
+  };
+
+  static const Set<String> _jsonSchemaCompositionKeys = {
+    'allOf',
+    'anyOf',
+    'oneOf',
+    'not',
   };
 
   static bool _hasMcpHeaderOnNonPrimitiveSchema(Map<String, dynamic> json) {
@@ -923,11 +940,18 @@ class JsonObject extends JsonSchema {
   final Object? additionalProperties;
   final Map<String, List<String>>? dependentRequired;
 
+  /// Object-level JSON Schema keywords not modeled by the typed convenience API.
+  ///
+  /// This preserves wire-level schema keywords such as `$schema`, `$defs`,
+  /// `allOf`, `if`, `then`, and `else` during parse/serialize round-trips.
+  final Map<String, dynamic>? extra;
+
   const JsonObject({
     this.properties,
     this.required,
     this.additionalProperties,
     this.dependentRequired,
+    this.extra,
     this.defaultValue,
     super.title,
     super.description,
@@ -938,6 +962,7 @@ class JsonObject extends JsonSchema {
     this.required,
     this.additionalProperties,
     this.dependentRequired,
+    this.extra,
     this.defaultValue,
     super.title,
     super.description,
@@ -967,6 +992,7 @@ class JsonObject extends JsonSchema {
       additionalProperties: parsedAdditionalProps,
       dependentRequired: (json['dependentRequired'] as Map<String, dynamic>?)
           ?.map((key, value) => MapEntry(key, (value as List).cast<String>())),
+      extra: _jsonObjectExtra(json),
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as Map<String, dynamic>?,
@@ -989,8 +1015,26 @@ class JsonObject extends JsonSchema {
             ? (additionalProperties as JsonSchema).toJson()
             : additionalProperties,
       if (dependentRequired != null) 'dependentRequired': dependentRequired,
+      ...?extra,
     };
   }
+}
+
+Map<String, dynamic>? _jsonObjectExtra(Map<String, dynamic> json) {
+  final extra = Map<String, dynamic>.from(json)
+    ..removeWhere(_isKnownJsonObjectKey);
+  return extra.isEmpty ? null : Map.unmodifiable(extra);
+}
+
+bool _isKnownJsonObjectKey(String key, dynamic value) {
+  return key == 'title' ||
+      key == 'description' ||
+      key == 'default' ||
+      key == 'type' ||
+      key == 'properties' ||
+      key == 'required' ||
+      key == 'additionalProperties' ||
+      key == 'dependentRequired';
 }
 
 /// A schema that accepts any value, potentially with additional constraints not captured by other types.
@@ -1218,6 +1262,7 @@ class JsonUnion extends JsonSchema {
         required: null,
         additionalProperties: null,
         dependentRequired: null,
+        extra: null,
       ) =>
         'object',
       _ => null,

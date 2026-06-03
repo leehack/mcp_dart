@@ -362,6 +362,248 @@ void main() {
       expect(messages.single['result']['tools'][0]['name'], 'echo');
     });
 
+    test('can return JSON responses for stateless requests', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcListToolsRequest(id: 3, meta: statelessMeta()).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['content-type'], startsWith('application/json'));
+      final message = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(message['id'], 3);
+      expect(message['result']['tools'][0]['name'], 'echo');
+    });
+
+    test('can return JSON errors for stateless request handlers', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcCallToolRequest(
+            id: 4,
+            params: const {
+              'name': 'missing_tool',
+              'arguments': <String, dynamic>{},
+            },
+            meta: statelessMeta(),
+          ).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'missing_tool',
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      expect(response.headers['content-type'], startsWith('application/json'));
+      final message = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(message['id'], 4);
+      expect(message['error']['code'], ErrorCode.invalidParams.value);
+      expect(message['error']['message'], contains('missing_tool'));
+    });
+
+    test('rejects unsupported stateless version before session routing',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          return McpServer(
+            const Implementation(name: 'VersionServer', version: '1.0.0'),
+          );
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final meta = statelessMeta()..[McpMetaKey.protocolVersion] = 'v999.0.0';
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode({
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-unsupported',
+          'method': Method.serverDiscover,
+          'params': {'_meta': meta},
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': 'v999.0.0',
+          'Mcp-Method': Method.serverDiscover,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final message = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(
+        message['error']['code'],
+        ErrorCode.unsupportedProtocolVersion.value,
+      );
+      expect(message['id'], 'discover-unsupported');
+      expect(message['error']['data']['requested'], 'v999.0.0');
+    });
+
+    test('preserves id for malformed stateless server discover metadata',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          return McpServer(
+            const Implementation(name: 'DiscoverServer', version: '1.0.0'),
+          );
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      Future<Map<String, dynamic>> postDiscover(
+        Map<String, dynamic> body,
+      ) async {
+        final response = await http.post(
+          Uri.parse(baseUrl),
+          body: jsonEncode(body),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'MCP-Protocol-Version': draftProtocolVersion2026V1,
+            'Mcp-Method': Method.serverDiscover,
+          },
+        );
+
+        expect(response.statusCode, HttpStatus.badRequest);
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+
+      var message = await postDiscover({
+        'jsonrpc': jsonRpcVersion,
+        'id': 101,
+        'method': Method.serverDiscover,
+        'params': <String, dynamic>{},
+      });
+      expect(message['id'], 101);
+      expect(message['error']['code'], ErrorCode.invalidParams.value);
+
+      message = await postDiscover({
+        'jsonrpc': jsonRpcVersion,
+        'id': 102,
+        'method': Method.serverDiscover,
+        'params': {'_meta': <String, dynamic>{}},
+      });
+      expect(message['id'], 102);
+      expect(message['error']['code'], ErrorCode.invalidParams.value);
+      expect(
+        message['error']['message'],
+        contains(McpMetaKey.protocolVersion),
+      );
+    });
+
+    test('rejects removed stateless request methods before legacy parsing',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          return McpServer(
+            const Implementation(name: 'RemovedMethodsServer', version: '1.0'),
+          );
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final methods = [
+        Method.initialize,
+        Method.ping,
+        Method.loggingSetLevel,
+        Method.resourcesSubscribe,
+        Method.resourcesUnsubscribe,
+      ];
+      for (var i = 0; i < methods.length; i++) {
+        final method = methods[i];
+        final id = 200 + i;
+        final response = await http.post(
+          Uri.parse(baseUrl),
+          body: jsonEncode({
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': method,
+            'params': {
+              '_meta': statelessMeta(),
+              if (method == Method.loggingSetLevel) 'level': 'info',
+              if (method == Method.resourcesSubscribe ||
+                  method == Method.resourcesUnsubscribe)
+                'uri': 'file:///tmp/example.txt',
+            },
+          }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'MCP-Protocol-Version': draftProtocolVersion2026V1,
+            'Mcp-Method': method,
+          },
+        );
+
+        expect(response.statusCode, HttpStatus.notFound);
+        final message = jsonDecode(response.body) as Map<String, dynamic>;
+        expect(message['id'], id);
+        expect(message['error']['code'], ErrorCode.methodNotFound.value);
+        expect(message['error']['message'], contains(method));
+      }
+    });
+
     test('handles 2026 stateless request with unknown session ID', () async {
       await server.stop();
       server = StreamableMcpServer(

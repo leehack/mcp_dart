@@ -305,6 +305,10 @@ class StreamableMcpServer {
   /// If true, reject JSON-RPC batch payloads for Streamable HTTP POST requests.
   final bool rejectBatchJsonRpcPayloads;
 
+  /// If true, return JSON responses instead of SSE streams for request/response
+  /// interactions.
+  final bool enableJsonResponse;
+
   final Set<String> _defaultDnsRebindingAllowedHosts;
 
   HttpServer? _httpServer;
@@ -326,6 +330,7 @@ class StreamableMcpServer {
     this.allowedOrigins,
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
+    this.enableJsonResponse = false,
   })  : _serverFactory = serverFactory,
         _defaultDnsRebindingAllowedHosts = {
           normalizeDnsHost(host),
@@ -439,7 +444,7 @@ class StreamableMcpServer {
     try {
       if (request.method == 'POST') {
         await _handlePostRequest(request);
-      } else if (_isStatelessProtocolVersionRequest(request)) {
+      } else if (_requiresStatelessTransport(request)) {
         await _createStatelessTransport().handleRequest(request);
       } else if (request.method == 'GET') {
         await _handleGetRequest(request);
@@ -486,7 +491,7 @@ class StreamableMcpServer {
     } catch (e) {
       if (sessionId != null &&
           !_transports.containsKey(sessionId) &&
-          !_isStatelessProtocolVersionRequest(request)) {
+          !_requiresStatelessTransport(request)) {
         await _respondWithJsonRpcError(
           request.response,
           httpStatus: HttpStatus.notFound,
@@ -571,7 +576,7 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleGetRequest(HttpRequest request) async {
-    if (_isStatelessProtocolVersionRequest(request)) {
+    if (_requiresStatelessTransport(request)) {
       await _createStatelessTransport().handleRequest(request);
       return;
     }
@@ -597,7 +602,7 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleDeleteRequest(HttpRequest request) async {
-    if (_isStatelessProtocolVersionRequest(request)) {
+    if (_requiresStatelessTransport(request)) {
       await _createStatelessTransport().handleRequest(request);
       return;
     }
@@ -632,6 +637,7 @@ class StreamableMcpServer {
         enableDnsRebindingProtection: enableDnsRebindingProtection,
         allowedHosts: allowedHosts ?? {host},
         allowedOrigins: allowedOrigins,
+        enableJsonResponse: enableJsonResponse,
         strictProtocolVersionHeaderValidation:
             strictProtocolVersionHeaderValidation,
         rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
@@ -682,6 +688,7 @@ class StreamableMcpServer {
         enableDnsRebindingProtection: enableDnsRebindingProtection,
         allowedHosts: allowedHosts ?? {host},
         allowedOrigins: allowedOrigins,
+        enableJsonResponse: enableJsonResponse,
         strictProtocolVersionHeaderValidation:
             strictProtocolVersionHeaderValidation,
         rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
@@ -689,24 +696,36 @@ class StreamableMcpServer {
     );
   }
 
-  bool _isStatelessProtocolVersionRequest(HttpRequest request) {
+  bool _requiresStatelessTransport(HttpRequest request) {
     final versionHeader = request.headers.value('mcp-protocol-version');
-    return versionHeader != null &&
-        isStatelessProtocolVersion(versionHeader.trim());
+    if (versionHeader == null || versionHeader.trim().isEmpty) {
+      return false;
+    }
+
+    final version = versionHeader.trim();
+    return isStatelessProtocolVersion(version) ||
+        strictProtocolVersionHeaderValidation &&
+            !supportedProtocolVersionsWithDraft.contains(version);
   }
 
   bool _isStatelessRequest(HttpRequest request, dynamic body) {
-    if (_isStatelessProtocolVersionRequest(request)) {
+    if (_requiresStatelessTransport(request)) {
       return true;
     }
     if (body is Map<String, dynamic>) {
       final version = _bodyProtocolVersion(body);
-      return version != null && isStatelessProtocolVersion(version);
+      return version != null &&
+          (isStatelessProtocolVersion(version) ||
+              strictProtocolVersionHeaderValidation &&
+                  !supportedProtocolVersionsWithDraft.contains(version));
     }
     if (body is List) {
       return body.whereType<Map<String, dynamic>>().any((item) {
         final version = _bodyProtocolVersion(item);
-        return version != null && isStatelessProtocolVersion(version);
+        return version != null &&
+            (isStatelessProtocolVersion(version) ||
+                strictProtocolVersionHeaderValidation &&
+                    !supportedProtocolVersionsWithDraft.contains(version));
       });
     }
     return false;
