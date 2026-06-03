@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
+import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
@@ -37,6 +39,36 @@ class McpClientOptions extends ProtocolOptions {
 /// Deprecated alias for [McpClientOptions].
 @Deprecated('Use McpClientOptions instead')
 typedef ClientOptions = McpClientOptions;
+
+/// Handle for an active `subscriptions/listen` stream opened by [McpClient].
+class McpSubscription {
+  final void Function([Object? reason]) _cancel;
+
+  /// JSON-RPC request ID that identifies this subscription stream.
+  final int id;
+
+  /// Acknowledgment sent as the first message on the subscription stream.
+  final Future<SubscriptionsAcknowledgedNotification> acknowledged;
+
+  /// Notifications delivered on this subscription stream after acknowledgment.
+  final Stream<JsonRpcNotification> notifications;
+
+  /// Completes when the `subscriptions/listen` request ends.
+  final Future<EmptyResult> done;
+
+  McpSubscription._({
+    required this.id,
+    required this.acknowledged,
+    required this.notifications,
+    required this.done,
+    required void Function([Object? reason]) cancel,
+  }) : _cancel = cancel;
+
+  /// Cancels this subscription stream.
+  void cancel([Object? reason]) {
+    _cancel(reason);
+  }
+}
 
 // Recursively applies default values from a JSON Schema to a data object.
 void _applyElicitationDefaults(JsonSchema schema, Map<String, dynamic> data) {
@@ -97,6 +129,7 @@ class McpClient extends Protocol {
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
   final Set<String> _cachedRequiredTaskTools = {};
   final ToolParameterHeaderMappings _cachedToolParameterHeaders = {};
+  final Map<Object, _ClientSubscriptionState> _activeSubscriptions = {};
 
   /// Callback for handling elicitation requests from the server.
   ///
@@ -294,19 +327,56 @@ class McpClient extends Protocol {
     );
   }
 
-  Future<DiscoverResult> discoverServer() async {
+  String? _retryableDiscoveryProtocolVersion(
+    McpError error,
+    String attemptedVersion,
+  ) {
+    if (error.code != ErrorCode.unsupportedProtocolVersion.value) {
+      return null;
+    }
+
+    final data = error.data;
+    if (data is! Map) {
+      return null;
+    }
+
+    final supported = data['supported'];
+    if (supported is! Iterable) {
+      return null;
+    }
+
+    final advertisedVersions = <String>[];
+    for (final version in supported) {
+      if (version is String) {
+        advertisedVersions.add(version);
+      }
+    }
+
+    final retryVersion = negotiateProtocolVersion(
+      advertisedVersions,
+      localSupportedVersions: statelessProtocolVersions,
+    );
+    if (retryVersion == null || retryVersion == attemptedVersion) {
+      return null;
+    }
+    return retryVersion;
+  }
+
+  Future<DiscoverResult> _discoverServerWithVersion(
+    String protocolVersion,
+  ) async {
     final activeTransport = transport;
     final ProtocolVersionAwareTransport? versionedTransport =
         activeTransport is ProtocolVersionAwareTransport
             ? activeTransport as ProtocolVersionAwareTransport
             : null;
-    versionedTransport?.protocolVersion = _preferredProtocolVersion;
+    versionedTransport?.protocolVersion = protocolVersion;
 
     final result = await super.request<DiscoverResult>(
       JsonRpcServerDiscoverRequest(
         id: -1,
         meta: buildProtocolRequestMeta(
-          protocolVersion: _preferredProtocolVersion,
+          protocolVersion: protocolVersion,
           clientInfo: _clientInfo,
           clientCapabilities: _capabilities,
         ),
@@ -314,17 +384,17 @@ class McpClient extends Protocol {
       (json) => DiscoverResult.fromJson(json),
     );
 
-    final protocolVersion = negotiateProtocolVersion(
+    final negotiatedProtocolVersion = negotiateProtocolVersion(
       result.supportedVersions,
       localSupportedVersions: supportedProtocolVersionsWithDraft,
     );
-    if (protocolVersion == null) {
+    if (negotiatedProtocolVersion == null) {
       throw McpError(
         ErrorCode.unsupportedProtocolVersion.value,
         "Server does not support a compatible MCP protocol version.",
         {
           'supported': result.supportedVersions,
-          'requested': _preferredProtocolVersion,
+          'requested': protocolVersion,
         },
       );
     }
@@ -332,17 +402,43 @@ class McpClient extends Protocol {
     _serverCapabilities = result.capabilities;
     _serverVersion = result.serverInfo;
     _instructions = result.instructions;
-    _negotiatedProtocolVersion = protocolVersion;
-    _usesStatelessProtocol = isStatelessProtocolVersion(protocolVersion);
+    _negotiatedProtocolVersion = negotiatedProtocolVersion;
+    _usesStatelessProtocol = isStatelessProtocolVersion(
+      negotiatedProtocolVersion,
+    );
     _sentInitialized = true;
 
-    versionedTransport?.protocolVersion = protocolVersion;
+    versionedTransport?.protocolVersion = negotiatedProtocolVersion;
 
     _logger.debug(
-      "MCP Server Discovered. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: $protocolVersion",
+      "MCP Server Discovered. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: $negotiatedProtocolVersion",
     );
 
     return result;
+  }
+
+  Future<DiscoverResult> discoverServer() async {
+    try {
+      return await _discoverServerWithVersion(_preferredProtocolVersion);
+    } catch (error) {
+      if (error is! McpError) {
+        rethrow;
+      }
+
+      final retryVersion = _retryableDiscoveryProtocolVersion(
+        error,
+        _preferredProtocolVersion,
+      );
+      if (retryVersion == null) {
+        rethrow;
+      }
+
+      _logger.debug(
+        "server/discover rejected protocol $_preferredProtocolVersion; "
+        "retrying with $retryVersion.",
+      );
+      return await _discoverServerWithVersion(retryVersion);
+    }
   }
 
   /// Connects to the server using the given [transport].
@@ -454,6 +550,16 @@ class McpClient extends Protocol {
   String? getProtocolVersion() => _negotiatedProtocolVersion;
 
   @override
+  bool isRecognizedResultType(String resultType) {
+    if (super.isRecognizedResultType(resultType)) {
+      return true;
+    }
+
+    return resultType == resultTypeTask &&
+        (_serverCapabilities?.supportsTasksExtension ?? false);
+  }
+
+  @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
     if (_sentInitialized || request.method == Method.ping) {
       return null;
@@ -481,6 +587,31 @@ class McpClient extends Protocol {
           ErrorCode.invalidRequest.value,
           "Received ${notification.method} before notifications/initialized was sent.",
         );
+    }
+  }
+
+  @override
+  void onIncomingNotificationAccepted(JsonRpcNotification notification) {
+    final subscriptionId = notification.meta?[McpMetaKey.subscriptionId];
+    if (subscriptionId is! int && subscriptionId is! String) {
+      return;
+    }
+
+    final activeSubscription = _activeSubscriptions[subscriptionId];
+    activeSubscription?.handleNotification(notification);
+  }
+
+  @override
+  void onConnectionClosed() {
+    final subscriptions = List<_ClientSubscriptionState>.from(
+      _activeSubscriptions.values,
+    );
+    _activeSubscriptions.clear();
+    for (final subscription in subscriptions) {
+      subscription.fail(
+        McpError(ErrorCode.connectionClosed.value, 'Connection closed'),
+        StackTrace.current,
+      );
     }
   }
 
@@ -762,6 +893,47 @@ class McpClient extends Protocol {
     return request<EmptyResult>(req, (json) => const EmptyResult(), options);
   }
 
+  /// Opens a `subscriptions/listen` stream and demultiplexes notifications.
+  McpSubscription listenSubscriptions(SubscriptionsListenRequest params) {
+    if (transport == null) {
+      throw StateError('Not connected to a transport.');
+    }
+
+    final requestId = reserveRequestId();
+    final abortController = BasicAbortController();
+    final state = _ClientSubscriptionState(
+      id: requestId,
+      requestedNotifications: params.notifications,
+      abortController: abortController,
+      onClose: () => _activeSubscriptions.remove(requestId),
+    );
+    _activeSubscriptions[requestId] = state;
+
+    final requestData = JsonRpcSubscriptionsListenRequest(
+      id: requestId,
+      listenParams: params,
+      meta: _usesStatelessProtocol ? _statelessRequestMeta(null) : null,
+    );
+    final requestDone = super.requestWithReservedId<EmptyResult>(
+      requestId,
+      requestData,
+      (json) => const EmptyResult(),
+      RequestOptions(
+        signal: abortController.signal,
+        timeoutEnabled: false,
+      ),
+    );
+    state.trackRequest(requestDone);
+
+    return McpSubscription._(
+      id: requestId,
+      acknowledged: state.acknowledged,
+      notifications: state.notifications,
+      done: state.done,
+      cancel: state.cancel,
+    );
+  }
+
   /// Sends a `tools/call` request to invoke a tool on the server.
   Future<CallToolResult> callTool(
     CallToolRequest params, {
@@ -879,60 +1051,104 @@ class McpClient extends Protocol {
 
     final mappings = <String, String>{};
     final seenHeaders = <String>{};
-    for (final entry in properties.entries) {
-      final propertyJson = entry.value.toJson();
-      if (!propertyJson.containsKey('x-mcp-header')) {
-        continue;
-      }
+    final rejectionReason = _collectToolParameterHeaderMappings(
+      properties: properties,
+      path: const [],
+      mappings: mappings,
+      seenHeaders: seenHeaders,
+    );
 
-      final rawHeader = propertyJson['x-mcp-header'];
-      if (rawHeader is! String) {
-        return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" has a non-string x-mcp-header value',
-        );
-      }
-
-      if (rawHeader.isEmpty) {
-        return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" has an empty x-mcp-header value',
-        );
-      }
-
-      if (!_isValidMcpHeaderNameSuffix(rawHeader)) {
-        return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" has invalid x-mcp-header value '
-          '"$rawHeader"',
-        );
-      }
-
-      final normalizedHeader = rawHeader.toLowerCase();
-      if (!seenHeaders.add(normalizedHeader)) {
-        return _ToolParameterHeaderValidation.invalid(
-          'x-mcp-header value "$rawHeader" is not unique',
-        );
-      }
-
-      if (!_isToolParameterHeaderPrimitive(entry.value)) {
-        return _ToolParameterHeaderValidation.invalid(
-          'parameter "${entry.key}" uses x-mcp-header on a non-primitive type',
-        );
-      }
-
-      mappings[entry.key] = rawHeader;
+    if (rejectionReason != null) {
+      return _ToolParameterHeaderValidation.invalid(rejectionReason);
     }
 
     return _ToolParameterHeaderValidation.valid(mappings);
   }
 
+  String? _collectToolParameterHeaderMappings({
+    required Map<String, JsonSchema> properties,
+    required List<String> path,
+    required Map<String, String> mappings,
+    required Set<String> seenHeaders,
+  }) {
+    for (final entry in properties.entries) {
+      final parameterPath = [...path, entry.key];
+      final parameterName = _toolParameterHeaderParameterName(parameterPath);
+      final propertyJson = entry.value.toJson();
+      if (!propertyJson.containsKey('x-mcp-header')) {
+        if (entry.value is JsonObject) {
+          final childProperties = (entry.value as JsonObject).properties;
+          if (childProperties != null && childProperties.isNotEmpty) {
+            final rejectionReason = _collectToolParameterHeaderMappings(
+              properties: childProperties,
+              path: parameterPath,
+              mappings: mappings,
+              seenHeaders: seenHeaders,
+            );
+            if (rejectionReason != null) {
+              return rejectionReason;
+            }
+          }
+        }
+        continue;
+      }
+
+      final rawHeader = propertyJson['x-mcp-header'];
+      if (rawHeader is! String) {
+        return 'parameter "$parameterName" has a non-string x-mcp-header value';
+      }
+
+      if (rawHeader.isEmpty) {
+        return 'parameter "$parameterName" has an empty x-mcp-header value';
+      }
+
+      if (!_isValidMcpHeaderNameSuffix(rawHeader)) {
+        return 'parameter "$parameterName" has invalid x-mcp-header value '
+            '"$rawHeader"';
+      }
+
+      final normalizedHeader = rawHeader.toLowerCase();
+      if (!seenHeaders.add(normalizedHeader)) {
+        return 'x-mcp-header value "$rawHeader" is not unique';
+      }
+
+      if (!_isToolParameterHeaderPrimitive(entry.value)) {
+        return 'parameter "$parameterName" uses x-mcp-header on a schema that '
+            'is not string, integer, or boolean';
+      }
+
+      mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;
+    }
+
+    return null;
+  }
+
+  String _toolParameterHeaderSelector(List<String> path) {
+    if (path.length == 1) {
+      return path.single;
+    }
+
+    return '/${path.map(_escapeJsonPointerSegment).join('/')}';
+  }
+
+  String _toolParameterHeaderParameterName(List<String> path) {
+    if (path.length == 1) {
+      return path.single;
+    }
+
+    return _toolParameterHeaderSelector(path);
+  }
+
+  String _escapeJsonPointerSegment(String segment) {
+    return segment.replaceAll('~', '~0').replaceAll('/', '~1');
+  }
+
   bool _isValidMcpHeaderNameSuffix(String value) {
-    return value.codeUnits.every(
-      (unit) => unit >= 0x21 && unit <= 0x7E && unit != 0x3A,
-    );
+    return isValidMcpHeaderNameSuffix(value);
   }
 
   bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
     return schema is JsonString ||
-        schema is JsonNumber ||
         schema is JsonInteger ||
         schema is JsonBoolean;
   }
@@ -947,6 +1163,174 @@ class McpClient extends Protocol {
 /// Deprecated alias for [McpClient].
 @Deprecated('Use McpClient instead')
 typedef Client = McpClient;
+
+class _ClientSubscriptionState {
+  final int id;
+  final SubscriptionFilter requestedNotifications;
+  final BasicAbortController abortController;
+  final void Function() onClose;
+  final StreamController<JsonRpcNotification> _notifications =
+      StreamController<JsonRpcNotification>.broadcast();
+  final Completer<SubscriptionsAcknowledgedNotification> _acknowledged =
+      Completer<SubscriptionsAcknowledgedNotification>();
+  final Completer<EmptyResult> _done = Completer<EmptyResult>();
+
+  SubscriptionFilter? _acknowledgedNotifications;
+  bool _closed = false;
+  bool _localCancellation = false;
+
+  _ClientSubscriptionState({
+    required this.id,
+    required this.requestedNotifications,
+    required this.abortController,
+    required this.onClose,
+  });
+
+  Future<SubscriptionsAcknowledgedNotification> get acknowledged =>
+      _acknowledged.future;
+
+  Stream<JsonRpcNotification> get notifications => _notifications.stream;
+
+  Future<EmptyResult> get done => _done.future;
+
+  void handleNotification(JsonRpcNotification notification) {
+    if (_closed) {
+      return;
+    }
+
+    if (_acknowledgedNotifications == null) {
+      if (notification.method !=
+          Method.notificationsSubscriptionsAcknowledged) {
+        fail(
+          McpError(
+            ErrorCode.invalidRequest.value,
+            'Subscription $id received ${notification.method} before '
+            '${Method.notificationsSubscriptionsAcknowledged}.',
+          ),
+          StackTrace.current,
+        );
+        return;
+      }
+
+      final acknowledgedParams =
+          (notification as JsonRpcSubscriptionsAcknowledgedNotification)
+              .acknowledgedParams;
+      final acknowledgedNotifications = acknowledgedParams.notifications;
+      if (!acknowledgedNotifications.isSubsetOf(requestedNotifications)) {
+        fail(
+          McpError(
+            ErrorCode.invalidRequest.value,
+            'Subscription $id acknowledged notifications that were not '
+            'requested.',
+          ),
+          StackTrace.current,
+        );
+        return;
+      }
+
+      _acknowledgedNotifications = acknowledgedNotifications;
+      if (!_acknowledged.isCompleted) {
+        _acknowledged.complete(acknowledgedParams);
+      }
+      return;
+    }
+
+    final acknowledgedNotifications = _acknowledgedNotifications!;
+    if (!acknowledgedNotifications.allowsNotification(notification)) {
+      fail(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          '${notification.method} was not requested or acknowledged for '
+          'subscription $id.',
+        ),
+        StackTrace.current,
+      );
+      return;
+    }
+
+    _notifications.add(notification);
+  }
+
+  void trackRequest(Future<EmptyResult> requestDone) {
+    requestDone.then(
+      complete,
+      onError: (Object error, StackTrace stackTrace) {
+        if (_localCancellation) {
+          complete(const EmptyResult());
+        } else {
+          fail(error, stackTrace, abort: false);
+        }
+      },
+    );
+  }
+
+  void cancel([Object? reason]) {
+    if (_closed) {
+      return;
+    }
+
+    _localCancellation = true;
+    if (!_acknowledged.isCompleted) {
+      _acknowledged.completeError(AbortError(reason), StackTrace.current);
+    }
+    abortController.abort(reason);
+    complete(const EmptyResult());
+  }
+
+  void complete(EmptyResult result) {
+    if (_closed) {
+      return;
+    }
+
+    final missingAcknowledgment = _acknowledgedNotifications == null &&
+        !_localCancellation &&
+        !abortController.signal.aborted;
+    if (missingAcknowledgment) {
+      fail(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'Subscription $id completed before '
+          '${Method.notificationsSubscriptionsAcknowledged}.',
+        ),
+        StackTrace.current,
+        abort: false,
+      );
+      return;
+    }
+
+    _closed = true;
+    onClose();
+    if (!_done.isCompleted) {
+      _done.complete(result);
+    }
+    _notifications.close();
+  }
+
+  void fail(
+    Object error,
+    StackTrace stackTrace, {
+    bool abort = true,
+  }) {
+    if (_closed) {
+      return;
+    }
+
+    _closed = true;
+    onClose();
+    if (abort && !abortController.signal.aborted) {
+      abortController.abort(error);
+    }
+    if (!_acknowledged.isCompleted) {
+      _acknowledged.completeError(error, stackTrace);
+    }
+    if (!_done.isCompleted) {
+      _done.completeError(error, stackTrace);
+    }
+    _notifications
+      ..addError(error, stackTrace)
+      ..close();
+  }
+}
 
 class _ToolParameterHeaderValidation {
   final Map<String, String> mappings;

@@ -82,11 +82,11 @@ class ListRootsResult implements BaseResultData {
 
 /// Notification from client indicating the list of roots has changed.
 class JsonRpcRootsListChangedNotification extends JsonRpcNotification {
-  const JsonRpcRootsListChangedNotification()
+  const JsonRpcRootsListChangedNotification({super.meta})
       : super(method: Method.notificationsRootsListChanged);
 
   factory JsonRpcRootsListChangedNotification.fromJson(
     Map<String, dynamic> json,
   ) =>
-      const JsonRpcRootsListChangedNotification();
+      JsonRpcRootsListChangedNotification(meta: extractRequestMeta(json));
 }

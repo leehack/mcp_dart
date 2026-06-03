@@ -361,7 +361,8 @@ void main() {
       );
     });
 
-    test('routes 2026 stateless GET and DELETE without a session ID', () async {
+    test('routes 2026 stateless non-POST methods without a session ID',
+        () async {
       final client = HttpClient();
       addTearDown(() => client.close(force: true));
 
@@ -384,6 +385,16 @@ void main() {
       expect(deleteResponse.statusCode, HttpStatus.methodNotAllowed);
       expect(deleteResponse.headers.value(HttpHeaders.allowHeader), 'POST');
       await deleteResponse.drain<void>();
+
+      final patchRequest = await client.openUrl('PATCH', Uri.parse(baseUrl));
+      patchRequest.headers.set(
+        'MCP-Protocol-Version',
+        draftProtocolVersion2026_07_28,
+      );
+      final patchResponse = await patchRequest.close();
+      expect(patchResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(patchResponse.headers.value(HttpHeaders.allowHeader), 'POST');
+      await patchResponse.drain<void>();
     });
 
     test('rejects unsupported MCP-Protocol-Version header by default',

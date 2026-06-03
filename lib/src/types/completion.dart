@@ -260,13 +260,13 @@ class CompleteResult implements BaseResultData {
   'Stable MCP 2025-11-25 does not define completion list-changed notifications.',
 )
 class JsonRpcCompletionListChangedNotification extends JsonRpcNotification {
-  const JsonRpcCompletionListChangedNotification()
+  const JsonRpcCompletionListChangedNotification({super.meta})
       : super(method: Method.notificationsExperimentalCompletionsListChanged);
 
   factory JsonRpcCompletionListChangedNotification.fromJson(
     Map<String, dynamic> json,
   ) =>
-      const JsonRpcCompletionListChangedNotification();
+      JsonRpcCompletionListChangedNotification(meta: extractRequestMeta(json));
 }
 
 /// Deprecated alias for [CompleteRequest].

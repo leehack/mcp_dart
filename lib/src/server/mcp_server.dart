@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
+import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/tool_name_validation.dart';
@@ -592,12 +593,16 @@ class _RegisteredToolImpl implements RegisteredTool {
     _server._registeredTools[name] = this;
   }
 
-  Tool toTool({bool includeExecution = true}) {
+  Tool toTool({
+    bool includeExecution = true,
+    ToolInputSchema? inputSchemaOverride,
+  }) {
     return Tool(
       name: name,
       title: title,
       description: description,
-      inputSchema: inputSchema ?? const ToolInputSchema(),
+      inputSchema:
+          inputSchemaOverride ?? inputSchema ?? const ToolInputSchema(),
       outputSchema: outputSchema,
       annotations: annotations,
       icon: icon,
@@ -972,6 +977,7 @@ class McpServer {
 
   /// Connects the server to a communication [transport].
   Future<void> connect(Transport transport) async {
+    _syncToolParameterHeaderMappings(transport);
     return await server.connect(transport);
   }
 
@@ -984,11 +990,20 @@ class McpServer {
   bool get isConnected => server.transport != null;
 
   /// Sends a logging message to the client, if connected.
+  ///
+  /// For stateless MCP requests, pass [requestMeta] from
+  /// [RequestHandlerExtra.meta] so log notifications honor the request-scoped
+  /// `io.modelcontextprotocol/logLevel` opt-in.
   Future<void> sendLoggingMessage(
     LoggingMessageNotification params, {
     String? sessionId,
+    Map<String, dynamic>? requestMeta,
   }) async {
-    return server.sendLoggingMessage(params, sessionId: sessionId);
+    return server.sendLoggingMessage(
+      params,
+      sessionId: sessionId,
+      requestMeta: requestMeta,
+    );
   }
 
   /// Sets the error handler for the server.
@@ -1026,8 +1041,243 @@ class McpServer {
   /// Notifies clients that the list of available tools has changed.
   void sendToolListChanged() {
     if (server.transport != null) {
+      _syncToolParameterHeaderMappings();
       server.sendToolListChanged();
     }
+  }
+
+  void _syncToolParameterHeaderMappings([Transport? target]) {
+    final activeTransport = target ?? server.transport;
+    final headerAwareTransport =
+        activeTransport is ToolParameterHeaderAwareTransport
+            ? activeTransport as ToolParameterHeaderAwareTransport
+            : null;
+    if (headerAwareTransport != null) {
+      headerAwareTransport.setToolParameterHeaderMappings(
+        _buildToolParameterHeaderMappings(),
+      );
+    }
+  }
+
+  ToolParameterHeaderMappings _buildToolParameterHeaderMappings() {
+    final mappings = <String, Map<String, String>>{};
+
+    for (final tool in _registeredTools.values) {
+      if (!tool.enabled) {
+        continue;
+      }
+
+      final toolMappings = _toolParameterHeaderMappingsFor(tool);
+      if (toolMappings.isNotEmpty) {
+        mappings[tool.name] = toolMappings;
+      }
+    }
+
+    return mappings;
+  }
+
+  ToolInputSchema _toolInputSchemaForStatelessList(
+    _RegisteredToolImpl tool,
+  ) {
+    final inputSchema = tool.inputSchema ?? const ToolInputSchema();
+    final properties = inputSchema.properties;
+    if (properties == null || properties.isEmpty) {
+      return inputSchema;
+    }
+
+    final ignoredReason = _collectToolParameterHeaderMappings(
+      toolName: tool.name,
+      properties: properties,
+      path: const [],
+      mappings: <String, String>{},
+      seenHeaders: <String>{},
+    );
+    if (ignoredReason == null) {
+      return inputSchema;
+    }
+
+    return _stripToolParameterHeaderMetadata(inputSchema);
+  }
+
+  ToolInputSchema _stripToolParameterHeaderMetadata(ToolInputSchema schema) {
+    return JsonSchema.fromJson(
+      _stripToolParameterHeaderMetadataFromJson(schema.toJson()),
+    ) as ToolInputSchema;
+  }
+
+  Map<String, dynamic> _stripToolParameterHeaderMetadataFromJson(
+    Map<String, dynamic> json,
+  ) {
+    final stripped = Map<String, dynamic>.from(json)..remove('x-mcp-header');
+
+    final properties = stripped['properties'];
+    if (properties is Map) {
+      final strippedProperties = <String, dynamic>{};
+      for (final entry in properties.entries) {
+        final propertyName = entry.key as String;
+        final propertyValue = entry.value;
+        strippedProperties[propertyName] = propertyValue is Map
+            ? _stripToolParameterHeaderMetadataFromJson(
+                Map<String, dynamic>.from(propertyValue),
+              )
+            : propertyValue;
+      }
+      stripped['properties'] = strippedProperties;
+    }
+
+    final items = stripped['items'];
+    if (items is Map) {
+      stripped['items'] = _stripToolParameterHeaderMetadataFromJson(
+        Map<String, dynamic>.from(items),
+      );
+    }
+
+    final additionalProperties = stripped['additionalProperties'];
+    if (additionalProperties is Map) {
+      stripped['additionalProperties'] =
+          _stripToolParameterHeaderMetadataFromJson(
+        Map<String, dynamic>.from(additionalProperties),
+      );
+    }
+
+    for (final keyword in const ['allOf', 'anyOf', 'oneOf']) {
+      final schemas = stripped[keyword];
+      if (schemas is List) {
+        stripped[keyword] = [
+          for (final schema in schemas)
+            if (schema is Map)
+              _stripToolParameterHeaderMetadataFromJson(
+                Map<String, dynamic>.from(schema),
+              )
+            else
+              schema,
+        ];
+      }
+    }
+
+    final notSchema = stripped['not'];
+    if (notSchema is Map) {
+      stripped['not'] = _stripToolParameterHeaderMetadataFromJson(
+        Map<String, dynamic>.from(notSchema),
+      );
+    }
+
+    return stripped;
+  }
+
+  Map<String, String> _toolParameterHeaderMappingsFor(
+    _RegisteredToolImpl tool,
+  ) {
+    final properties = tool.inputSchema?.properties;
+    if (properties == null || properties.isEmpty) {
+      return const {};
+    }
+
+    final mappings = <String, String>{};
+    final seenHeaders = <String>{};
+    final ignoredReason = _collectToolParameterHeaderMappings(
+      toolName: tool.name,
+      properties: properties,
+      path: const [],
+      mappings: mappings,
+      seenHeaders: seenHeaders,
+    );
+
+    if (ignoredReason != null) {
+      _logger.warn(ignoredReason);
+      return const {};
+    }
+
+    return mappings;
+  }
+
+  String? _collectToolParameterHeaderMappings({
+    required String toolName,
+    required Map<String, JsonSchema> properties,
+    required List<String> path,
+    required Map<String, String> mappings,
+    required Set<String> seenHeaders,
+  }) {
+    for (final entry in properties.entries) {
+      final parameterPath = [...path, entry.key];
+      final parameterName = _toolParameterHeaderParameterName(parameterPath);
+      final propertyJson = entry.value.toJson();
+      if (!propertyJson.containsKey('x-mcp-header')) {
+        if (entry.value is JsonObject) {
+          final childProperties = (entry.value as JsonObject).properties;
+          if (childProperties != null && childProperties.isNotEmpty) {
+            final ignoredReason = _collectToolParameterHeaderMappings(
+              toolName: toolName,
+              properties: childProperties,
+              path: parameterPath,
+              mappings: mappings,
+              seenHeaders: seenHeaders,
+            );
+            if (ignoredReason != null) {
+              return ignoredReason;
+            }
+          }
+        }
+        continue;
+      }
+
+      final rawHeader = propertyJson['x-mcp-header'];
+      if (rawHeader is! String || rawHeader.isEmpty) {
+        return 'Ignoring x-mcp-header mapping for tool "$toolName" parameter '
+            '"$parameterName": value must be a non-empty string.';
+      }
+
+      if (!_isValidMcpHeaderNameSuffix(rawHeader)) {
+        return 'Ignoring x-mcp-header mapping for tool "$toolName" parameter '
+            '"$parameterName": "$rawHeader" is not a valid Mcp-Param suffix.';
+      }
+
+      final normalizedHeader = rawHeader.toLowerCase();
+      if (!seenHeaders.add(normalizedHeader)) {
+        return 'Ignoring x-mcp-header mappings for tool "$toolName": '
+            '"$rawHeader" is not unique.';
+      }
+
+      if (!_isToolParameterHeaderPrimitive(entry.value)) {
+        return 'Ignoring x-mcp-header mapping for tool "$toolName" parameter '
+            '"$parameterName": only string, integer, and boolean schemas can '
+            'be mirrored.';
+      }
+
+      mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;
+    }
+
+    return null;
+  }
+
+  String _toolParameterHeaderSelector(List<String> path) {
+    if (path.length == 1) {
+      return path.single;
+    }
+
+    return '/${path.map(_escapeJsonPointerSegment).join('/')}';
+  }
+
+  String _toolParameterHeaderParameterName(List<String> path) {
+    if (path.length == 1) {
+      return path.single;
+    }
+
+    return _toolParameterHeaderSelector(path);
+  }
+
+  String _escapeJsonPointerSegment(String segment) {
+    return segment.replaceAll('~', '~0').replaceAll('/', '~1');
+  }
+
+  bool _isValidMcpHeaderNameSuffix(String value) {
+    return isValidMcpHeaderNameSuffix(value);
+  }
+
+  bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
+    return schema is JsonString ||
+        schema is JsonInteger ||
+        schema is JsonBoolean;
   }
 
   /// Notifies clients that the list of available prompts has changed.
@@ -1158,15 +1408,22 @@ class McpServer {
       Method.toolsList,
       (request, extra) async {
         final protocolVersion = request.meta?[McpMetaKey.protocolVersion];
-        final includeLegacyTaskExecution = protocolVersion is! String ||
-            !isStatelessProtocolVersion(protocolVersion);
+        final isStatelessRequest = protocolVersion is String &&
+            isStatelessProtocolVersion(protocolVersion);
+        final includeLegacyTaskExecution = !isStatelessRequest;
+        final tools = _registeredTools.values.where((t) => t.enabled).toList();
+        if (isStatelessRequest) {
+          tools.sort((a, b) => a.name.compareTo(b.name));
+        }
 
         return ListToolsResult(
-          tools: _registeredTools.values
-              .where((t) => t.enabled)
+          tools: tools
               .map(
-                (e) => e.toTool(
+                (tool) => tool.toTool(
                   includeExecution: includeLegacyTaskExecution,
+                  inputSchemaOverride: isStatelessRequest
+                      ? _toolInputSchemaForStatelessList(tool)
+                      : null,
                 ),
               )
               .toList(),

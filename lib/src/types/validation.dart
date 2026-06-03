@@ -43,3 +43,48 @@ String? readOptionalString(Object? value, String field) {
   }
   throw FormatException('$field must be a string');
 }
+
+int? readOptionalTtlMs(Object? value, String field) {
+  final ttlMs = readOptionalInteger(value, field);
+  if (ttlMs == null) {
+    return null;
+  }
+  return ttlMs < 0 ? 0 : ttlMs;
+}
+
+void validateTtlMs(int? value, String field) {
+  if (value == null) {
+    return;
+  }
+  if (value < 0) {
+    throw ArgumentError.value(
+      value,
+      field,
+      'must be greater than or equal to 0',
+    );
+  }
+}
+
+String? readOptionalCacheScope(Object? value, String field) {
+  final scope = readOptionalString(value, field);
+  if (scope == null) {
+    return null;
+  }
+  if (scope == 'public' || scope == 'private') {
+    return scope;
+  }
+  throw FormatException('$field must be either "public" or "private"');
+}
+
+void validateCacheScope(String? value, String field) {
+  if (value == null) {
+    return;
+  }
+  if (value != 'public' && value != 'private') {
+    throw ArgumentError.value(
+      value,
+      field,
+      'must be either "public" or "private"',
+    );
+  }
+}

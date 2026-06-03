@@ -540,6 +540,23 @@ abstract class BaseResultData {
   Map<String, dynamic> toJson();
 }
 
+/// Result data that carries MCP cache freshness hints.
+abstract class CacheableResultData implements BaseResultData {
+  /// How long, in milliseconds, the client may consider this result fresh.
+  int? get ttlMs;
+
+  /// Intended cache visibility: [CacheScope.public] or [CacheScope.private].
+  String? get cacheScope;
+}
+
+/// Allowed cache scopes for MCP cacheable results.
+class CacheScope {
+  static const public = 'public';
+  static const private = 'private';
+
+  const CacheScope._();
+}
+
 /// Result type for completed MCP requests.
 const resultTypeComplete = 'complete';
 

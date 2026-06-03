@@ -1,5 +1,26 @@
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
+
+Future<T> _unusedRequest<T extends BaseResultData>(
+  JsonRpcRequest request,
+  T Function(Map<String, dynamic> resultJson) resultFactory,
+  RequestOptions options,
+) {
+  throw StateError('Unexpected request from subscription helper test');
+}
+
+RequestHandlerExtra _subscriptionExtra(List<JsonRpcNotification> sent) {
+  final abort = BasicAbortController();
+  return RequestHandlerExtra(
+    signal: abort.signal,
+    requestId: 'sub-1',
+    sendNotification: (notification, {relatedTask}) async {
+      sent.add(notification);
+    },
+    sendRequest: _unusedRequest,
+  );
+}
 
 void main() {
   group('SubscriptionFilter', () {
@@ -53,6 +74,73 @@ void main() {
 
       final acknowledged = requested.acknowledgedBy(const ServerCapabilities());
       expect(acknowledged.toJson(), isEmpty);
+    });
+
+    test('checks acknowledged subsets and allowed notifications', () {
+      const requested = SubscriptionFilter(
+        toolsListChanged: true,
+        resourceSubscriptions: [
+          'file:///project/config.json',
+          'file:///project/other.json',
+        ],
+      );
+      const acknowledged = SubscriptionFilter(
+        toolsListChanged: true,
+        resourceSubscriptions: ['file:///project/config.json'],
+      );
+
+      expect(acknowledged.isSubsetOf(requested), isTrue);
+      expect(
+        const SubscriptionFilter(promptsListChanged: true).isSubsetOf(
+          requested,
+        ),
+        isFalse,
+      );
+      expect(
+        const SubscriptionFilter(resourcesListChanged: true).isSubsetOf(
+          requested,
+        ),
+        isFalse,
+      );
+      expect(
+        const SubscriptionFilter(
+          resourceSubscriptions: ['file:///project/missing.json'],
+        ).isSubsetOf(requested),
+        isFalse,
+      );
+
+      expect(
+        acknowledged.allowsNotification(
+          const JsonRpcToolListChangedNotification(),
+        ),
+        isTrue,
+      );
+      expect(
+        acknowledged.allowsNotification(
+          JsonRpcResourceUpdatedNotification(
+            updatedParams: const ResourceUpdatedNotification(
+              uri: 'file:///project/config.json',
+            ),
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        acknowledged.allowsNotification(
+          JsonRpcResourceUpdatedNotification(
+            updatedParams: const ResourceUpdatedNotification(
+              uri: 'file:///project/missing.json',
+            ),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        acknowledged.allowsNotification(
+          const JsonRpcPromptListChangedNotification(),
+        ),
+        isFalse,
+      );
     });
 
     test('rejects malformed filters', () {
@@ -130,6 +218,29 @@ void main() {
   });
 
   group('JsonRpcSubscriptionsAcknowledgedNotification', () {
+    test('preserves subscription metadata on list changed notifications', () {
+      for (final notification in [
+        const JsonRpcToolListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: 'sub-1'},
+        ),
+        const JsonRpcPromptListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: 'sub-1'},
+        ),
+        const JsonRpcResourceListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: 'sub-1'},
+        ),
+        // ignore: deprecated_member_use_from_same_package, deprecated_member_use
+        const JsonRpcCompletionListChangedNotification(
+          meta: {McpMetaKey.subscriptionId: 'sub-1'},
+        ),
+      ]) {
+        final parsed = JsonRpcMessage.fromJson(notification.toJson())
+            as JsonRpcNotification;
+
+        expect(parsed.meta?[McpMetaKey.subscriptionId], 'sub-1');
+      }
+    });
+
     test('serializes and parses subscription acknowledgments', () {
       final notification = JsonRpcSubscriptionsAcknowledgedNotification(
         acknowledgedParams: const SubscriptionsAcknowledgedNotification(
@@ -172,6 +283,117 @@ void main() {
           },
         ),
         throwsFormatException,
+      );
+    });
+  });
+
+  group('RequestHandlerExtra subscription helpers', () {
+    test('require acknowledgment before stream notifications', () async {
+      final sent = <JsonRpcNotification>[];
+      final extra = _subscriptionExtra(sent);
+
+      expect(
+        () => extra.sendSubscriptionNotification(
+          const JsonRpcToolListChangedNotification(),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains(Method.notificationsSubscriptionsAcknowledged),
+          ),
+        ),
+      );
+      expect(sent, isEmpty);
+    });
+
+    test('allow only acknowledged notification filters', () async {
+      final sent = <JsonRpcNotification>[];
+      final extra = _subscriptionExtra(sent);
+
+      await extra.sendSubscriptionAcknowledged(
+        const SubscriptionFilter(
+          toolsListChanged: true,
+          resourcesListChanged: true,
+          resourceSubscriptions: ['file:///project/config.json'],
+          taskIds: ['task-1'],
+        ),
+      );
+      expect(sent.single.method, Method.notificationsSubscriptionsAcknowledged);
+      sent.clear();
+
+      await extra.sendSubscriptionNotification(
+        const JsonRpcToolListChangedNotification(),
+      );
+      await extra.sendSubscriptionNotification(
+        JsonRpcResourceUpdatedNotification(
+          updatedParams: const ResourceUpdatedNotification(
+            uri: 'file:///project/config.json',
+          ),
+        ),
+      );
+      await extra.sendSubscriptionNotification(
+        const JsonRpcResourceListChangedNotification(),
+      );
+      await extra.sendSubscriptionNotification(
+        JsonRpcTaskNotification(
+          task: const TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:01:00Z',
+            ttlMs: 300000,
+          ),
+        ),
+      );
+
+      expect(sent, hasLength(4));
+      expect(
+        sent.map(
+          (notification) => notification.meta?[McpMetaKey.subscriptionId],
+        ),
+        everyElement('sub-1'),
+      );
+
+      expect(
+        () => extra.sendSubscriptionNotification(
+          const JsonRpcPromptListChangedNotification(),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('not requested or acknowledged'),
+          ),
+        ),
+      );
+      expect(
+        () => extra.sendSubscriptionNotification(
+          JsonRpcResourceUpdatedNotification(
+            updatedParams: const ResourceUpdatedNotification(
+              uri: 'file:///project/other.json',
+            ),
+          ),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('not requested or acknowledged'),
+          ),
+        ),
+      );
+      expect(
+        () => extra.sendSubscriptionNotification(
+          const JsonRpcNotification(method: 'notifications/custom'),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('not requested or acknowledged'),
+          ),
+        ),
       );
     });
   });

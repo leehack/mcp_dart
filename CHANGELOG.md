@@ -11,6 +11,64 @@
 - Added opt-in client discovery via `McpClientOptions(useServerDiscover: true)`
   while keeping the stable `initialize` flow as the default until the 2026
   stateless transport and MRTR implementation is complete.
+- Added 2026 cacheable result support for `tools/list`, `prompts/list`,
+  `resources/list`, `resources/templates/list`, and `resources/read`, including
+  stateless server defaults for `resultType`, `ttlMs`, and `cacheScope` while
+  keeping legacy result serialization unchanged unless cache hints are set.
+- Rejected core RPCs removed from stateless MCP 2026 requests
+  (`initialize`, `ping`, `logging/setLevel`, `resources/subscribe`,
+  `resources/unsubscribe`, `notifications/initialized`, and
+  `notifications/roots/list_changed`) while preserving legacy session behavior.
+- Synced registered tool `x-mcp-header` metadata into Streamable HTTP server
+  transports so 2026 stateless `tools/call` requests reject missing or
+  mismatched `Mcp-Param-*` argument headers.
+- Rejected `x-mcp-header` usage on JSON Schema `number` parameters, keeping
+  mirrored tool headers limited to string, JavaScript-safe integer, and boolean
+  parameters.
+- Removed `Mcp-Session-Id` from 2026 stateless Streamable HTTP requests by
+  stripping it from client sends and ignoring it on stateless server POSTs.
+- Enforced 2026 stateless Streamable HTTP POST-only behavior by skipping
+  legacy client GET/DELETE session paths and returning `Allow: POST` for
+  stateless non-POST server requests.
+- Rejected server-initiated JSON-RPC requests on 2026 stateless Streamable HTTP
+  response streams so client input is routed through MRTR input-required
+  results instead.
+- Escaped sentinel-shaped `Mcp-Param-*` values with Base64 encoding so literal
+  values beginning with `=?base64?` and ending with `?=` round-trip correctly.
+- Synced nested 2026 `x-mcp-header` mappings into Streamable HTTP transports
+  using JSON Pointer selectors for nested tool arguments.
+- Returned HTTP 404 with JSON-RPC `Method not found` for unsupported or removed
+  2026 stateless Streamable HTTP request methods before opening response
+  streams.
+- Treated client closure of a 2026 stateless Streamable HTTP SSE response stream
+  as cancellation of that pending request.
+- Sorted 2026 stateless high-level `tools/list` responses by tool name for
+  deterministic list results while preserving legacy registration-order output.
+- Gated 2026 stateless task extension methods on advertised server extension
+  support and rejected legacy task result shapes on extension `tasks/get`,
+  `tasks/update`, and `tasks/cancel` handlers.
+- Added request-scoped stateless logging gating via
+  `io.modelcontextprotocol/logLevel` metadata so 2026 log notifications are
+  emitted only when the current request opts in.
+- Rejected unrecognized 2026 stateless response `resultType` values on the
+  client while keeping absent `resultType` compatible with stable result parsing.
+- Added `X-Accel-Buffering: no` to Streamable HTTP SSE responses and marked
+  JSON-RPC error bodies with `Content-Type: application/json`.
+- Tightened `x-mcp-header` and `Mcp-Param-*` suffix validation to RFC 9110
+  HTTP field-name token syntax.
+- Removed invalid `x-mcp-header` annotations from 2026 stateless `tools/list`
+  responses when the server has already rejected those header mappings.
+- Rejected server-initiated JSON-RPC requests received on 2026 stateless
+  Streamable HTTP client response streams; servers must use MRTR
+  `input_required` results instead.
+- Enforced `subscriptions/listen` stream ordering and filters for 2026
+  subscription notifications.
+- Retried `server/discover` with an advertised compatible stateless protocol
+  version after `UnsupportedProtocolVersionError` instead of falling back to
+  legacy initialization.
+- Added client-side `subscriptions/listen` handles that correlate stream
+  notifications by `io.modelcontextprotocol/subscriptionId`, validate the
+  acknowledgment, and cancel long-lived streams with `notifications/cancelled`.
 
 ## 2.2.0
 
