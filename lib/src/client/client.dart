@@ -1596,7 +1596,7 @@ class McpClient extends Protocol {
 
       if (!_isToolParameterHeaderPrimitive(entry.value)) {
         return 'parameter "$parameterName" uses x-mcp-header on a schema that '
-            'is not string, integer, or boolean';
+            'is not string, number, integer, or boolean';
       }
 
       mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;

@@ -893,6 +893,10 @@ class StreamableHttpClientTransport
       if (!value.isFinite) {
         return null;
       }
+      if (value == value.truncateToDouble() &&
+          (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger)) {
+        return null;
+      }
       return value.toString();
     }
 

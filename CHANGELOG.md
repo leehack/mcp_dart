@@ -38,9 +38,8 @@
 - Synced nested 2026 `x-mcp-header` mappings into Streamable HTTP transports
   using JSON Pointer selectors for nested tool arguments.
 - Limited 2026 Streamable HTTP `x-mcp-header` mirroring to string, boolean,
-  and JavaScript-safe integer argument values; fractional numbers and unsafe
-  integers are omitted, and `number` schemas are rejected from advertised
-  header mappings.
+  finite number, and JavaScript-safe integer argument values; unsafe integers
+  and non-finite numbers are omitted.
 - Returned HTTP 404 with JSON-RPC `Method not found` for unsupported or removed
   2026 stateless Streamable HTTP request methods before opening response
   streams.

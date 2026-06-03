@@ -597,9 +597,8 @@ class JsonNumber extends JsonSchema {
 
   /// MCP `x-mcp-header` extension metadata.
   ///
-  /// This is preserved for schema round-tripping. MCP 2026 stateless
-  /// Streamable HTTP header mirroring only accepts string, integer, and boolean
-  /// schemas, so number schemas carrying this metadata are not mirrored.
+  /// MCP 2026 stateless Streamable HTTP clients mirror finite number argument
+  /// values into `Mcp-Param-*` headers when this metadata is present.
   final String? mcpHeader;
 
   const JsonNumber({

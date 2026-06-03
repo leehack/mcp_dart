@@ -139,6 +139,7 @@ void main() {
           properties: {
             'dryRun': JsonBoolean(mcpHeader: 'Dry-Run'),
             'region': JsonString(mcpHeader: 'Region'),
+            'ratio': JsonNumber(mcpHeader: 'Ratio'),
             'auth': JsonObject(
               properties: {
                 'tenant': JsonString(mcpHeader: 'Tenant'),
@@ -159,6 +160,7 @@ void main() {
             'header-tool': {
               'dryRun': 'Dry-Run',
               'region': 'Region',
+              'ratio': 'Ratio',
               '/auth/tenant': 'Tenant',
             },
           },
@@ -177,6 +179,7 @@ void main() {
       final properties = inputSchema['properties'] as Map;
       final authProperties = (properties['auth'] as Map)['properties'] as Map;
       expect((properties['region'] as Map)['x-mcp-header'], 'Region');
+      expect((properties['ratio'] as Map)['x-mcp-header'], 'Ratio');
       expect((authProperties['tenant'] as Map)['x-mcp-header'], 'Tenant');
     });
 
@@ -243,15 +246,6 @@ void main() {
         callback: (args, extra) async => const CallToolResult(content: []),
       );
       server.registerTool(
-        'number-header-tool',
-        inputSchema: const ToolInputSchema(
-          properties: {
-            'value': JsonNumber(mcpHeader: 'Value'),
-          },
-        ),
-        callback: (args, extra) async => const CallToolResult(content: []),
-      );
-      server.registerTool(
         'duplicate-header-tool',
         inputSchema: const ToolInputSchema(
           properties: {
@@ -285,7 +279,7 @@ void main() {
 
       final response = transport.sentMessages.last as JsonRpcResponse;
       final tools = response.result['tools'] as List;
-      expect(tools, hasLength(6));
+      expect(tools, hasLength(5));
       for (final tool in tools.cast<Map>()) {
         expect(_containsMcpHeader(tool['inputSchema']), isFalse);
       }

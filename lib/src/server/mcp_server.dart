@@ -1302,8 +1302,8 @@ class McpServer {
 
       if (!_isToolParameterHeaderPrimitive(entry.value)) {
         return 'Ignoring x-mcp-header mapping for tool "$toolName" parameter '
-            '"$parameterName": only string, integer, and boolean schemas can '
-            'be mirrored.';
+            '"$parameterName": only string, number, integer, and boolean '
+            'schemas can be mirrored.';
       }
 
       mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;
@@ -1338,6 +1338,7 @@ class McpServer {
 
   bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
     return schema is JsonString ||
+        schema is JsonNumber ||
         schema is JsonInteger ||
         schema is JsonBoolean;
   }
