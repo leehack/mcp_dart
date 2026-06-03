@@ -19,6 +19,10 @@ sealed class JsonSchema {
   }
 
   static JsonSchema _fromJson(Map<String, dynamic> json) {
+    if (_hasMcpHeaderOnNonPrimitiveSchema(json)) {
+      return JsonAny.fromJson(json);
+    }
+
     if (JsonEnum._canParse(json)) {
       return JsonEnum.fromJson(json);
     }
@@ -172,6 +176,19 @@ sealed class JsonSchema {
     'object',
   };
 
+  static bool _hasMcpHeaderOnNonPrimitiveSchema(Map<String, dynamic> json) {
+    if (!json.containsKey('x-mcp-header')) {
+      return false;
+    }
+
+    return !const {
+      'string',
+      'number',
+      'integer',
+      'boolean',
+    }.contains(json['type']);
+  }
+
   static bool _hasOnlyAnnotationAnd(
     Map<String, dynamic> json,
     Set<String> keys,
@@ -195,6 +212,7 @@ sealed class JsonSchema {
     String? title,
     String? description,
     String? defaultValue,
+    String? mcpHeader,
   }) {
     return JsonString(
       minLength: minLength,
@@ -206,6 +224,7 @@ sealed class JsonSchema {
       title: title,
       description: description,
       defaultValue: defaultValue,
+      mcpHeader: mcpHeader,
     );
   }
 
@@ -219,6 +238,7 @@ sealed class JsonSchema {
     String? title,
     String? description,
     num? defaultValue,
+    String? mcpHeader,
   }) {
     return JsonNumber(
       minimum: minimum,
@@ -229,6 +249,7 @@ sealed class JsonSchema {
       title: title,
       description: description,
       defaultValue: defaultValue,
+      mcpHeader: mcpHeader,
     );
   }
 
@@ -242,6 +263,7 @@ sealed class JsonSchema {
     String? title,
     String? description,
     int? defaultValue,
+    String? mcpHeader,
   }) {
     return JsonInteger(
       minimum: minimum,
@@ -252,6 +274,7 @@ sealed class JsonSchema {
       title: title,
       description: description,
       defaultValue: defaultValue,
+      mcpHeader: mcpHeader,
     );
   }
 
@@ -260,11 +283,13 @@ sealed class JsonSchema {
     String? title,
     String? description,
     bool? defaultValue,
+    String? mcpHeader,
   }) {
     return JsonBoolean(
       title: title,
       description: description,
       defaultValue: defaultValue,
+      mcpHeader: mcpHeader,
     );
   }
 
@@ -417,6 +442,8 @@ sealed class JsonSchema {
 /// A schema for string values.
 class JsonString extends JsonSchema {
   final bool _hasDefault;
+  final bool _hasMcpHeader;
+  final Object? _rawMcpHeader;
   final int? minLength;
   final int? maxLength;
   final String? pattern;
@@ -426,6 +453,9 @@ class JsonString extends JsonSchema {
   /// (Legacy) Display names for enum values.
   /// Non-standard according to JSON schema 2020-12.
   final List<String>? enumNames;
+
+  /// MCP `x-mcp-header` extension for mirroring this parameter into HTTP.
+  final String? mcpHeader;
 
   const JsonString({
     this.minLength,
@@ -437,7 +467,10 @@ class JsonString extends JsonSchema {
     super.title,
     super.description,
     this.defaultValue,
-  }) : _hasDefault = defaultValue != null;
+    this.mcpHeader,
+  })  : _hasDefault = defaultValue != null,
+        _hasMcpHeader = mcpHeader != null,
+        _rawMcpHeader = mcpHeader;
 
   const JsonString._({
     this.minLength,
@@ -449,13 +482,19 @@ class JsonString extends JsonSchema {
     super.title,
     super.description,
     this.defaultValue,
+    this.mcpHeader,
+    required Object? rawMcpHeader,
     required bool hasDefault,
-  }) : _hasDefault = hasDefault;
+    required bool hasMcpHeader,
+  })  : _hasDefault = hasDefault,
+        _hasMcpHeader = hasMcpHeader,
+        _rawMcpHeader = rawMcpHeader;
 
   @override
   final String? defaultValue;
 
   factory JsonString.fromJson(Map<String, dynamic> json) {
+    final rawMcpHeader = json['x-mcp-header'];
     return JsonString._(
       minLength: json['minLength'] as int?,
       maxLength: json['maxLength'] as int?,
@@ -467,7 +506,10 @@ class JsonString extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as String?,
+      mcpHeader: rawMcpHeader is String ? rawMcpHeader : null,
+      rawMcpHeader: rawMcpHeader,
       hasDefault: json.containsKey('default'),
+      hasMcpHeader: json.containsKey('x-mcp-header'),
     );
   }
 
@@ -484,6 +526,7 @@ class JsonString extends JsonSchema {
       if (format != null) 'format': format,
       if (enumValues != null) 'enum': enumValues,
       if (enumNames != null) 'enumNames': enumNames,
+      if (_hasMcpHeader) 'x-mcp-header': _rawMcpHeader,
     };
   }
 }
@@ -491,11 +534,16 @@ class JsonString extends JsonSchema {
 /// A schema for number values.
 class JsonNumber extends JsonSchema {
   final bool _hasDefault;
+  final bool _hasMcpHeader;
+  final Object? _rawMcpHeader;
   final num? minimum;
   final num? maximum;
   final num? exclusiveMinimum;
   final num? exclusiveMaximum;
   final num? multipleOf;
+
+  /// MCP `x-mcp-header` extension for mirroring this parameter into HTTP.
+  final String? mcpHeader;
 
   const JsonNumber({
     this.minimum,
@@ -506,7 +554,10 @@ class JsonNumber extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  }) : _hasDefault = defaultValue != null;
+    this.mcpHeader,
+  })  : _hasDefault = defaultValue != null,
+        _hasMcpHeader = mcpHeader != null,
+        _rawMcpHeader = mcpHeader;
 
   const JsonNumber._({
     this.minimum,
@@ -517,13 +568,19 @@ class JsonNumber extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
+    this.mcpHeader,
+    required Object? rawMcpHeader,
     required bool hasDefault,
-  }) : _hasDefault = hasDefault;
+    required bool hasMcpHeader,
+  })  : _hasDefault = hasDefault,
+        _hasMcpHeader = hasMcpHeader,
+        _rawMcpHeader = rawMcpHeader;
 
   @override
   final num? defaultValue;
 
   factory JsonNumber.fromJson(Map<String, dynamic> json) {
+    final rawMcpHeader = json['x-mcp-header'];
     return JsonNumber._(
       minimum: json['minimum'] as num?,
       maximum: json['maximum'] as num?,
@@ -533,7 +590,10 @@ class JsonNumber extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as num?,
+      mcpHeader: rawMcpHeader is String ? rawMcpHeader : null,
+      rawMcpHeader: rawMcpHeader,
       hasDefault: json.containsKey('default'),
+      hasMcpHeader: json.containsKey('x-mcp-header'),
     );
   }
 
@@ -549,6 +609,7 @@ class JsonNumber extends JsonSchema {
       if (exclusiveMinimum != null) 'exclusiveMinimum': exclusiveMinimum,
       if (exclusiveMaximum != null) 'exclusiveMaximum': exclusiveMaximum,
       if (multipleOf != null) 'multipleOf': multipleOf,
+      if (_hasMcpHeader) 'x-mcp-header': _rawMcpHeader,
     };
   }
 }
@@ -556,11 +617,16 @@ class JsonNumber extends JsonSchema {
 /// A schema for integer values.
 class JsonInteger extends JsonSchema {
   final bool _hasDefault;
+  final bool _hasMcpHeader;
+  final Object? _rawMcpHeader;
   final int? minimum;
   final int? maximum;
   final int? exclusiveMinimum;
   final int? exclusiveMaximum;
   final int? multipleOf;
+
+  /// MCP `x-mcp-header` extension for mirroring this parameter into HTTP.
+  final String? mcpHeader;
 
   const JsonInteger({
     this.minimum,
@@ -571,7 +637,10 @@ class JsonInteger extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
-  }) : _hasDefault = defaultValue != null;
+    this.mcpHeader,
+  })  : _hasDefault = defaultValue != null,
+        _hasMcpHeader = mcpHeader != null,
+        _rawMcpHeader = mcpHeader;
 
   const JsonInteger._({
     this.minimum,
@@ -582,13 +651,19 @@ class JsonInteger extends JsonSchema {
     this.defaultValue,
     super.title,
     super.description,
+    this.mcpHeader,
+    required Object? rawMcpHeader,
     required bool hasDefault,
-  }) : _hasDefault = hasDefault;
+    required bool hasMcpHeader,
+  })  : _hasDefault = hasDefault,
+        _hasMcpHeader = hasMcpHeader,
+        _rawMcpHeader = rawMcpHeader;
 
   @override
   final int? defaultValue;
 
   factory JsonInteger.fromJson(Map<String, dynamic> json) {
+    final rawMcpHeader = json['x-mcp-header'];
     return JsonInteger._(
       minimum: json['minimum'] as int?,
       maximum: json['maximum'] as int?,
@@ -598,7 +673,10 @@ class JsonInteger extends JsonSchema {
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as int?,
+      mcpHeader: rawMcpHeader is String ? rawMcpHeader : null,
+      rawMcpHeader: rawMcpHeader,
       hasDefault: json.containsKey('default'),
+      hasMcpHeader: json.containsKey('x-mcp-header'),
     );
   }
 
@@ -614,6 +692,7 @@ class JsonInteger extends JsonSchema {
       if (exclusiveMinimum != null) 'exclusiveMinimum': exclusiveMinimum,
       if (exclusiveMaximum != null) 'exclusiveMaximum': exclusiveMaximum,
       if (multipleOf != null) 'multipleOf': multipleOf,
+      if (_hasMcpHeader) 'x-mcp-header': _rawMcpHeader,
     };
   }
 }
@@ -621,29 +700,46 @@ class JsonInteger extends JsonSchema {
 /// A schema for boolean values.
 class JsonBoolean extends JsonSchema {
   final bool _hasDefault;
+  final bool _hasMcpHeader;
+  final Object? _rawMcpHeader;
+
+  /// MCP `x-mcp-header` extension for mirroring this parameter into HTTP.
+  final String? mcpHeader;
 
   const JsonBoolean({
     this.defaultValue,
     super.title,
     super.description,
-  }) : _hasDefault = defaultValue != null;
+    this.mcpHeader,
+  })  : _hasDefault = defaultValue != null,
+        _hasMcpHeader = mcpHeader != null,
+        _rawMcpHeader = mcpHeader;
 
   const JsonBoolean._({
     this.defaultValue,
     super.title,
     super.description,
+    this.mcpHeader,
+    required Object? rawMcpHeader,
     required bool hasDefault,
-  }) : _hasDefault = hasDefault;
+    required bool hasMcpHeader,
+  })  : _hasDefault = hasDefault,
+        _hasMcpHeader = hasMcpHeader,
+        _rawMcpHeader = rawMcpHeader;
 
   @override
   final bool? defaultValue;
 
   factory JsonBoolean.fromJson(Map<String, dynamic> json) {
+    final rawMcpHeader = json['x-mcp-header'];
     return JsonBoolean._(
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'] as bool?,
+      mcpHeader: rawMcpHeader is String ? rawMcpHeader : null,
+      rawMcpHeader: rawMcpHeader,
       hasDefault: json.containsKey('default'),
+      hasMcpHeader: json.containsKey('x-mcp-header'),
     );
   }
 
@@ -654,6 +750,7 @@ class JsonBoolean extends JsonSchema {
       if (description != null) 'description': description,
       if (_hasDefault) 'default': defaultValue,
       'type': 'boolean',
+      if (_hasMcpHeader) 'x-mcp-header': _rawMcpHeader,
     };
   }
 }

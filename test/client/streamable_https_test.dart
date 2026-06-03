@@ -81,6 +81,12 @@ class DiscoveryOAuthClientProvider implements OAuthAuthorizationCodeProvider {
   }
 }
 
+Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
+      protocolVersion: draftProtocolVersion2026_07_28,
+      clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
+      clientCapabilities: const ClientCapabilities(),
+    );
+
 void main() {
   late HttpServer testServer;
   late int serverPort;
@@ -1052,6 +1058,265 @@ void main() {
       expect((response as JsonRpcResponse).id, equals(123));
       expect(response.result['success'], isTrue);
       expect(response.result['echo']['data'], equals('test-data'));
+    });
+
+    test('send adds 2026 stateless HTTP metadata headers', () async {
+      final capturedHeaders = <String, String?>{};
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        capturedHeaders['protocolVersion'] =
+            request.headers.value('mcp-protocol-version');
+        capturedHeaders['method'] = request.headers.value('mcp-method');
+        capturedHeaders['name'] = request.headers.value('mcp-name');
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 1,
+                result: {'content': []},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = draftProtocolVersion2026_07_28;
+      await transport.start();
+
+      final completer = Completer<JsonRpcMessage>();
+      transport.onmessage = completer.complete;
+
+      await transport.send(
+        JsonRpcCallToolRequest(
+          id: 1,
+          params: const {
+            'name': 'echo',
+            'arguments': {'message': 'hello'},
+          },
+          meta: _statelessMeta(),
+        ),
+      );
+      await completer.future.timeout(const Duration(seconds: 5));
+
+      expect(
+        capturedHeaders['protocolVersion'],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(capturedHeaders['method'], Method.toolsCall);
+      expect(capturedHeaders['name'], 'echo');
+    });
+
+    test('send maps 2026 stateless headers for standard request types',
+        () async {
+      final capturedHeaders = <Map<String, String?>>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        capturedHeaders.add({
+          'method': request.headers.value('mcp-method'),
+          'name': request.headers.value('mcp-name'),
+        });
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        final id = body['id'];
+        if (id == null) {
+          request.response.statusCode = HttpStatus.accepted;
+        } else {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType.json
+            ..write(
+              jsonEncode(
+                JsonRpcResponse(id: id, result: const {}).toJson(),
+              ),
+            );
+        }
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = draftProtocolVersion2026_07_28;
+      await transport.start();
+
+      final responses = <JsonRpcMessage>[];
+      transport.onmessage = responses.add;
+
+      await transport.send(
+        JsonRpcReadResourceRequest(
+          id: 1,
+          readParams: const ReadResourceRequest(uri: 'file:///notes.md'),
+          meta: _statelessMeta(),
+        ),
+      );
+      await transport.send(
+        JsonRpcGetPromptRequest(
+          id: 2,
+          getParams: const GetPromptRequest(name: 'summarize'),
+          meta: _statelessMeta(),
+        ),
+      );
+      await transport.send(
+        JsonRpcNotification(
+          method: Method.notificationsCancelled,
+          params: const {'requestId': 1},
+          meta: _statelessMeta(),
+        ),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(responses, hasLength(2));
+      expect(capturedHeaders, hasLength(3));
+      expect(capturedHeaders[0], {
+        'method': Method.resourcesRead,
+        'name': 'file:///notes.md',
+      });
+      expect(capturedHeaders[1], {
+        'method': Method.promptsGet,
+        'name': 'summarize',
+      });
+      expect(capturedHeaders[2], {
+        'method': Method.notificationsCancelled,
+        'name': null,
+      });
+    });
+
+    test('send adds task id as 2026 stateless task name header', () async {
+      final capturedHeaders = <String, String?>{};
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        capturedHeaders['protocolVersion'] =
+            request.headers.value('mcp-protocol-version');
+        capturedHeaders['method'] = request.headers.value('mcp-method');
+        capturedHeaders['name'] = request.headers.value('mcp-name');
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 1,
+                result: {'resultType': resultTypeComplete},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = draftProtocolVersion2026_07_28;
+      await transport.start();
+
+      final completer = Completer<JsonRpcMessage>();
+      transport.onmessage = completer.complete;
+
+      await transport.send(
+        JsonRpcUpdateTaskRequest(
+          id: 1,
+          updateParams: const UpdateTaskRequest(
+            taskId: 'task-1',
+            inputResponses: {},
+          ),
+          meta: _statelessMeta(),
+        ),
+      );
+      await completer.future.timeout(const Duration(seconds: 5));
+
+      expect(
+        capturedHeaders['protocolVersion'],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(capturedHeaders['method'], Method.tasksUpdate);
+      expect(capturedHeaders['name'], 'task-1');
+    });
+
+    test('send mirrors mapped tool parameters into 2026 stateless headers',
+        () async {
+      final capturedHeaders = <String, String?>{};
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        capturedHeaders['region'] = request.headers.value('mcp-param-region');
+        capturedHeaders['greeting'] =
+            request.headers.value('mcp-param-greeting');
+        capturedHeaders['limit'] = request.headers.value('mcp-param-limit');
+        capturedHeaders['dryRun'] = request.headers.value('mcp-param-dry-run');
+        capturedHeaders['text'] = request.headers.value('mcp-param-text');
+        capturedHeaders['payload'] = request.headers.value('mcp-param-payload');
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 1,
+                result: {'content': []},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )
+        ..protocolVersion = draftProtocolVersion2026_07_28
+        ..setToolParameterHeaderMappings(
+          {
+            'execute_sql': {
+              'region': 'Region',
+              'greeting': 'Greeting',
+              'limit': 'Limit',
+              'dryRun': 'Dry-Run',
+              'text': 'Text',
+              'payload': 'Payload',
+            },
+          },
+        );
+      await transport.start();
+
+      final completer = Completer<JsonRpcMessage>();
+      transport.onmessage = completer.complete;
+
+      await transport.send(
+        JsonRpcCallToolRequest(
+          id: 1,
+          params: const {
+            'name': 'execute_sql',
+            'arguments': {
+              'region': 'us-west1',
+              'greeting': 'Hello, 世界',
+              'limit': 42,
+              'dryRun': false,
+              'text': ' padded ',
+              'payload': {'nested': true},
+            },
+          },
+          meta: _statelessMeta(),
+        ),
+      );
+      await completer.future.timeout(const Duration(seconds: 5));
+
+      expect(capturedHeaders['region'], 'us-west1');
+      expect(
+        capturedHeaders['greeting'],
+        '=?base64?${base64Encode(utf8.encode('Hello, 世界'))}?=',
+      );
+      expect(capturedHeaders['limit'], '42');
+      expect(capturedHeaders['dryRun'], 'false');
+      expect(capturedHeaders['text'], '=?base64?IHBhZGRlZCA=?=');
+      expect(capturedHeaders['payload'], isNull);
     });
 
     test('send with initialized notification triggers SSE establishment',

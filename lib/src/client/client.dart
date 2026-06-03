@@ -12,9 +12,25 @@ class McpClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
+  /// Preferred protocol version for opt-in `server/discover` negotiation.
+  ///
+  /// The current default keeps existing clients on the stable initialization
+  /// flow unless [useServerDiscover] is enabled.
+  final String protocolVersion;
+
+  /// Whether [McpClient.connect] should probe with `server/discover` first.
+  final bool useServerDiscover;
+
+  /// Whether a `server/discover` method-not-found response should fall back to
+  /// the legacy `initialize` handshake.
+  final bool allowLegacyInitializationFallback;
+
   const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
+    this.protocolVersion = latestDraftProtocolVersion,
+    this.useServerDiscover = false,
+    this.allowLegacyInitializationFallback = true,
   });
 }
 
@@ -69,12 +85,18 @@ class McpClient extends Protocol {
   Implementation? _serverVersion;
   ClientCapabilities _capabilities;
   final Implementation _clientInfo;
+  final String _preferredProtocolVersion;
+  final bool _useServerDiscover;
+  final bool _allowLegacyInitializationFallback;
   String? _instructions;
   Future<void>? _sessionRefresh;
+  String? _negotiatedProtocolVersion;
+  bool _usesStatelessProtocol = false;
   bool _sentInitialized = false;
 
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
   final Set<String> _cachedRequiredTaskTools = {};
+  final ToolParameterHeaderMappings _cachedToolParameterHeaders = {};
 
   /// Callback for handling elicitation requests from the server.
   ///
@@ -99,6 +121,11 @@ class McpClient extends Protocol {
   /// - [options]: Optional configuration settings including client capabilities.
   McpClient(this._clientInfo, {McpClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
+        _preferredProtocolVersion =
+            options?.protocolVersion ?? latestDraftProtocolVersion,
+        _useServerDiscover = options?.useServerDiscover ?? false,
+        _allowLegacyInitializationFallback =
+            options?.allowLegacyInitializationFallback ?? true,
         super(options) {
     // Register elicit handler if any elicitation mode is advertised.
     if (_capabilities.elicitation != null) {
@@ -209,6 +236,7 @@ class McpClient extends Protocol {
 
   Future<void> _initializeSession(Transport transport) async {
     _sentInitialized = false;
+    _usesStatelessProtocol = false;
 
     final initParams = InitializeRequest(
       protocolVersion: latestProtocolVersion,
@@ -236,6 +264,7 @@ class McpClient extends Protocol {
     _serverCapabilities = result.capabilities;
     _serverVersion = result.serverInfo;
     _instructions = result.instructions;
+    _negotiatedProtocolVersion = result.protocolVersion;
 
     if (transport is ProtocolVersionAwareTransport) {
       (transport as ProtocolVersionAwareTransport).protocolVersion =
@@ -256,6 +285,66 @@ class McpClient extends Protocol {
     );
   }
 
+  Map<String, dynamic> _statelessRequestMeta(Map<String, dynamic>? meta) {
+    return buildProtocolRequestMeta(
+      protocolVersion: _negotiatedProtocolVersion ?? _preferredProtocolVersion,
+      clientInfo: _clientInfo,
+      clientCapabilities: _capabilities,
+      meta: meta,
+    );
+  }
+
+  Future<DiscoverResult> discoverServer() async {
+    final activeTransport = transport;
+    final ProtocolVersionAwareTransport? versionedTransport =
+        activeTransport is ProtocolVersionAwareTransport
+            ? activeTransport as ProtocolVersionAwareTransport
+            : null;
+    versionedTransport?.protocolVersion = _preferredProtocolVersion;
+
+    final result = await super.request<DiscoverResult>(
+      JsonRpcServerDiscoverRequest(
+        id: -1,
+        meta: buildProtocolRequestMeta(
+          protocolVersion: _preferredProtocolVersion,
+          clientInfo: _clientInfo,
+          clientCapabilities: _capabilities,
+        ),
+      ),
+      (json) => DiscoverResult.fromJson(json),
+    );
+
+    final protocolVersion = negotiateProtocolVersion(
+      result.supportedVersions,
+      localSupportedVersions: supportedProtocolVersionsWithDraft,
+    );
+    if (protocolVersion == null) {
+      throw McpError(
+        ErrorCode.unsupportedProtocolVersion.value,
+        "Server does not support a compatible MCP protocol version.",
+        {
+          'supported': result.supportedVersions,
+          'requested': _preferredProtocolVersion,
+        },
+      );
+    }
+
+    _serverCapabilities = result.capabilities;
+    _serverVersion = result.serverInfo;
+    _instructions = result.instructions;
+    _negotiatedProtocolVersion = protocolVersion;
+    _usesStatelessProtocol = isStatelessProtocolVersion(protocolVersion);
+    _sentInitialized = true;
+
+    versionedTransport?.protocolVersion = protocolVersion;
+
+    _logger.debug(
+      "MCP Server Discovered. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: $protocolVersion",
+    );
+
+    return result;
+  }
+
   /// Connects to the server using the given [transport].
   ///
   /// Initiates the MCP initialization handshake and processes the result.
@@ -264,6 +353,23 @@ class McpClient extends Protocol {
     await super.connect(transport);
 
     try {
+      if (_useServerDiscover) {
+        try {
+          await discoverServer();
+          return;
+        } catch (error) {
+          final canFallback = _allowLegacyInitializationFallback &&
+              error is McpError &&
+              error.code == ErrorCode.methodNotFound.value;
+          if (!canFallback) {
+            rethrow;
+          }
+          _logger.debug(
+            "server/discover not available; falling back to initialize.",
+          );
+        }
+      }
+
       await _initializeSession(transport);
     } catch (error) {
       _logger.error("MCP Client Initialization Failed: $error");
@@ -279,15 +385,26 @@ class McpClient extends Protocol {
     RequestOptions? options,
     int? relatedRequestId,
   ]) async {
+    final outboundRequest =
+        _usesStatelessProtocol && requestData.method != Method.serverDiscover
+            ? JsonRpcRequest(
+                id: requestData.id,
+                method: requestData.method,
+                params: requestData.params,
+                meta: _statelessRequestMeta(requestData.meta),
+              )
+            : requestData;
+
     try {
       return await super.request<T>(
-        requestData,
+        outboundRequest,
         resultFactory,
         options,
         relatedRequestId,
       );
     } catch (error) {
-      if (error is! StaleSessionError || requestData.method == 'initialize') {
+      if (error is! StaleSessionError ||
+          outboundRequest.method == 'initialize') {
         rethrow;
       }
 
@@ -316,7 +433,7 @@ class McpClient extends Protocol {
       }
 
       return await super.request<T>(
-        requestData,
+        outboundRequest,
         resultFactory,
         options,
         relatedRequestId,
@@ -332,6 +449,9 @@ class McpClient extends Protocol {
 
   /// Gets the server's instructions provided during initialization, if any.
   String? getInstructions() => _instructions;
+
+  /// Gets the negotiated protocol version after connection.
+  String? getProtocolVersion() => _negotiatedProtocolVersion;
 
   @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
@@ -397,10 +517,28 @@ class McpClient extends Protocol {
         supported = serverCaps.resources?.subscribe ?? false;
         requiredCapability = 'resources.subscribe';
         break;
+      case Method.subscriptionsListen:
+        supported = true;
+        break;
       case Method.toolsCall:
       case Method.toolsList:
         supported = serverCaps.tools != null;
         requiredCapability = 'tools';
+        break;
+      case Method.tasksGet:
+      case Method.tasksCancel:
+        supported =
+            serverCaps.tasks != null || serverCaps.supportsTasksExtension;
+        requiredCapability = 'tasks or $mcpTasksExtensionId';
+        break;
+      case Method.tasksUpdate:
+        supported = serverCaps.supportsTasksExtension;
+        requiredCapability = mcpTasksExtensionId;
+        break;
+      case Method.tasksList:
+      case Method.tasksResult:
+        supported = serverCaps.tasks != null;
+        requiredCapability = 'tasks';
         break;
       case Method.completionComplete:
         supported = serverCaps.completions != null;
@@ -670,16 +808,40 @@ class McpClient extends Protocol {
       options,
     );
 
-    _cacheToolMetadata(result.tools);
+    final tools = _cacheToolMetadata(result.tools);
 
-    return result;
+    if (identical(tools, result.tools)) {
+      return result;
+    }
+
+    return ListToolsResult(
+      tools: tools,
+      nextCursor: result.nextCursor,
+      meta: result.meta,
+    );
   }
 
-  void _cacheToolMetadata(List<Tool> tools) {
+  List<Tool> _cacheToolMetadata(List<Tool> tools) {
     _cachedToolOutputSchemas.clear();
     _cachedRequiredTaskTools.clear();
+    _cachedToolParameterHeaders.clear();
+
+    var filtered = false;
+    final validTools = <Tool>[];
 
     for (final tool in tools) {
+      final headerValidation = _validateToolParameterHeaders(tool);
+      if (headerValidation.rejectionReason != null) {
+        filtered = true;
+        _logger.warn(
+          'Rejecting tool "${tool.name}" from tools/list: '
+          '${headerValidation.rejectionReason}',
+        );
+        continue;
+      }
+
+      validTools.add(tool);
+
       if (tool.outputSchema != null) {
         _cachedToolOutputSchemas[tool.name] = tool.outputSchema!;
       }
@@ -687,7 +849,92 @@ class McpClient extends Protocol {
       if (tool.execution?.taskSupport == 'required') {
         _cachedRequiredTaskTools.add(tool.name);
       }
+
+      if (headerValidation.mappings.isNotEmpty) {
+        _cachedToolParameterHeaders[tool.name] = headerValidation.mappings;
+      }
     }
+
+    final activeTransport = transport;
+    final headerAwareTransport =
+        activeTransport is ToolParameterHeaderAwareTransport
+            ? activeTransport as ToolParameterHeaderAwareTransport
+            : null;
+    if (headerAwareTransport != null) {
+      headerAwareTransport.setToolParameterHeaderMappings(
+        _cachedToolParameterHeaders,
+      );
+    }
+
+    return filtered ? validTools : tools;
+  }
+
+  _ToolParameterHeaderValidation _validateToolParameterHeaders(Tool tool) {
+    final inputSchema = tool.inputSchema;
+    final properties =
+        inputSchema is JsonObject ? inputSchema.properties : null;
+    if (properties == null || properties.isEmpty) {
+      return const _ToolParameterHeaderValidation.valid({});
+    }
+
+    final mappings = <String, String>{};
+    final seenHeaders = <String>{};
+    for (final entry in properties.entries) {
+      final propertyJson = entry.value.toJson();
+      if (!propertyJson.containsKey('x-mcp-header')) {
+        continue;
+      }
+
+      final rawHeader = propertyJson['x-mcp-header'];
+      if (rawHeader is! String) {
+        return _ToolParameterHeaderValidation.invalid(
+          'parameter "${entry.key}" has a non-string x-mcp-header value',
+        );
+      }
+
+      if (rawHeader.isEmpty) {
+        return _ToolParameterHeaderValidation.invalid(
+          'parameter "${entry.key}" has an empty x-mcp-header value',
+        );
+      }
+
+      if (!_isValidMcpHeaderNameSuffix(rawHeader)) {
+        return _ToolParameterHeaderValidation.invalid(
+          'parameter "${entry.key}" has invalid x-mcp-header value '
+          '"$rawHeader"',
+        );
+      }
+
+      final normalizedHeader = rawHeader.toLowerCase();
+      if (!seenHeaders.add(normalizedHeader)) {
+        return _ToolParameterHeaderValidation.invalid(
+          'x-mcp-header value "$rawHeader" is not unique',
+        );
+      }
+
+      if (!_isToolParameterHeaderPrimitive(entry.value)) {
+        return _ToolParameterHeaderValidation.invalid(
+          'parameter "${entry.key}" uses x-mcp-header on a non-primitive type',
+        );
+      }
+
+      mappings[entry.key] = rawHeader;
+    }
+
+    return _ToolParameterHeaderValidation.valid(mappings);
+  }
+
+  bool _isValidMcpHeaderNameSuffix(String value) {
+    return value.codeUnits.every(
+      (unit) => unit >= 0x21 && unit <= 0x7E && unit != 0x3A,
+    );
+  }
+
+  bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
+    return schema is JsonString ||
+        schema is JsonNumber ||
+        schema is JsonInteger ||
+        schema is JsonBoolean;
   }
 
   /// Sends a `notifications/roots/list_changed` notification to the server.
@@ -700,3 +947,14 @@ class McpClient extends Protocol {
 /// Deprecated alias for [McpClient].
 @Deprecated('Use McpClient instead')
 typedef Client = McpClient;
+
+class _ToolParameterHeaderValidation {
+  final Map<String, String> mappings;
+  final String? rejectionReason;
+
+  const _ToolParameterHeaderValidation.valid(this.mappings)
+      : rejectionReason = null;
+
+  const _ToolParameterHeaderValidation.invalid(this.rejectionReason)
+      : mappings = const {};
+}

@@ -393,12 +393,37 @@ class ReadResourceRequest {
   /// The URI of the resource to read.
   final String uri;
 
-  const ReadResourceRequest({required this.uri});
+  /// Client responses to MRTR input requests when retrying this read request.
+  final InputResponses? inputResponses;
+
+  /// Opaque MRTR state returned by the server and echoed on retry.
+  final String? requestState;
+
+  const ReadResourceRequest({
+    required this.uri,
+    this.inputResponses,
+    this.requestState,
+  });
 
   factory ReadResourceRequest.fromJson(Map<String, dynamic> json) =>
-      ReadResourceRequest(uri: json['uri'] as String);
+      ReadResourceRequest(
+        uri: json['uri'] as String,
+        inputResponses: InputResponse.mapFromJson(
+          json['inputResponses'],
+          'ReadResourceRequest.inputResponses',
+        ),
+        requestState: readOptionalString(
+          json['requestState'],
+          'ReadResourceRequest.requestState',
+        ),
+      );
 
-  Map<String, dynamic> toJson() => {'uri': uri};
+  Map<String, dynamic> toJson() => {
+        'uri': uri,
+        if (inputResponses != null)
+          'inputResponses': InputResponse.mapToJson(inputResponses!),
+        if (requestState != null) 'requestState': requestState,
+      };
 }
 
 /// Request sent from client to read a specific resource.

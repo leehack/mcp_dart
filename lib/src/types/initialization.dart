@@ -37,6 +37,19 @@ Map<String, dynamic>? _serializeCapabilityObject(bool? declared) {
   return null;
 }
 
+/// MCP Tasks extension identifier.
+const mcpTasksExtensionId = 'io.modelcontextprotocol/tasks';
+
+/// Returns [extensions] with the MCP Tasks extension capability declared.
+Map<String, Map<String, dynamic>> withMcpTasksExtension([
+  Map<String, Map<String, dynamic>>? extensions,
+]) {
+  return {
+    ...?extensions,
+    mcpTasksExtensionId: <String, dynamic>{},
+  };
+}
+
 /// Describes an MCP implementation (client or server).
 class Implementation {
   /// The name of the implementation.
@@ -429,6 +442,10 @@ class ClientCapabilities {
         if (tasks != null) 'tasks': tasks!.toJson(),
         if (extensions != null) 'extensions': extensions,
       };
+
+  /// Whether the MCP Tasks extension is declared.
+  bool get supportsTasksExtension =>
+      extensions?.containsKey(mcpTasksExtensionId) ?? false;
 }
 
 /// Parameters for the `initialize` request.
@@ -487,6 +504,21 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
       id: parseRequestId(json['id']),
       initParams: InitializeRequest.fromJson(paramsMap),
       meta: meta,
+    );
+  }
+}
+
+/// Request sent by a 2026 client to discover server protocol support.
+class JsonRpcServerDiscoverRequest extends JsonRpcRequest {
+  JsonRpcServerDiscoverRequest({
+    required super.id,
+    super.meta,
+  }) : super(method: Method.serverDiscover);
+
+  factory JsonRpcServerDiscoverRequest.fromJson(Map<String, dynamic> json) {
+    return JsonRpcServerDiscoverRequest(
+      id: parseRequestId(json['id']),
+      meta: extractRequestMeta(json),
     );
   }
 }
@@ -829,6 +861,10 @@ class ServerCapabilities {
         if (tasks != null) 'tasks': tasks!.toJson(),
         if (extensions != null) 'extensions': extensions,
       };
+
+  /// Whether the MCP Tasks extension is declared.
+  bool get supportsTasksExtension =>
+      extensions?.containsKey(mcpTasksExtensionId) ?? false;
 }
 
 /// Result data for a successful `initialize` request.
@@ -875,6 +911,69 @@ class InitializeResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'protocolVersion': protocolVersion,
+        'capabilities': capabilities.toJson(),
+        'serverInfo': serverInfo.toJson(),
+        if (instructions != null) 'instructions': instructions,
+        if (meta != null) '_meta': meta,
+      };
+}
+
+/// Result data for a successful `server/discover` request.
+class DiscoverResult implements BaseResultData {
+  /// Result discriminator used by the 2026 result model.
+  final String resultType;
+
+  /// Protocol versions supported by the server.
+  final List<String> supportedVersions;
+
+  /// Capabilities the server supports.
+  final ServerCapabilities capabilities;
+
+  /// Information about the server implementation.
+  final Implementation serverInfo;
+
+  /// Instructions describing how to use the server and its features.
+  final String? instructions;
+
+  /// Optional metadata.
+  @override
+  final Map<String, dynamic>? meta;
+
+  const DiscoverResult({
+    this.resultType = 'complete',
+    required this.supportedVersions,
+    required this.capabilities,
+    required this.serverInfo,
+    this.instructions,
+    this.meta,
+  });
+
+  factory DiscoverResult.fromJson(Map<String, dynamic> json) {
+    final supportedVersions = json['supportedVersions'];
+    if (supportedVersions is! List) {
+      throw const FormatException(
+        'Missing or invalid supportedVersions for discover result',
+      );
+    }
+
+    return DiscoverResult(
+      resultType: json['resultType'] as String? ?? 'complete',
+      supportedVersions: supportedVersions.cast<String>(),
+      capabilities: ServerCapabilities.fromJson(
+        json['capabilities'] as Map<String, dynamic>,
+      ),
+      serverInfo: Implementation.fromJson(
+        json['serverInfo'] as Map<String, dynamic>,
+      ),
+      instructions: json['instructions'] as String?,
+      meta: json['_meta'] as Map<String, dynamic>?,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'resultType': resultType,
+        'supportedVersions': supportedVersions,
         'capabilities': capabilities.toJson(),
         'serverInfo': serverInfo.toJson(),
         if (instructions != null) 'instructions': instructions,

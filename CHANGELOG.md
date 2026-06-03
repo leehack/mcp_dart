@@ -1,3 +1,17 @@
+## Unreleased
+
+### MCP 2026-07-28 RC
+
+- Started the MCP 2026-07-28 RC development line with opt-in protocol
+  constants, stateless request metadata helpers, and `server/discover` request
+  and result types.
+- Added server-side `server/discover` handling before legacy initialization and
+  initial stateless request validation for per-request protocol version,
+  client identity, and client capability metadata.
+- Added opt-in client discovery via `McpClientOptions(useServerDiscover: true)`
+  while keeping the stable `initialize` flow as the default until the 2026
+  stateless transport and MRTR implementation is complete.
+
 ## 2.2.0
 
 ### Documentation

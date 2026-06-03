@@ -238,6 +238,9 @@ class StreamableHTTPServerTransport
 
     if (req.method == "POST") {
       await _handlePostRequest(req, parsedBody);
+    } else if (_isStatelessProtocolVersionRequest(req) &&
+        (req.method == "GET" || req.method == "DELETE")) {
+      await _handleStatelessUnsupportedRequest(req.response);
     } else if (req.method == "GET") {
       await _handleGetRequest(req);
     } else if (req.method == "DELETE") {
@@ -261,21 +264,37 @@ class StreamableHTTPServerTransport
     }
 
     final requestedVersion = versionHeader.trim();
-    if (supportedProtocolVersions.contains(requestedVersion)) {
+    if (supportedProtocolVersionsWithDraft.contains(requestedVersion)) {
       return true;
     }
 
     await _writeJsonRpcErrorResponse(
       res,
       httpStatus: HttpStatus.badRequest,
-      errorCode: ErrorCode.invalidRequest,
-      message: 'Invalid MCP-Protocol-Version header',
+      errorCode: ErrorCode.unsupportedProtocolVersion,
+      message: 'Unsupported protocol version',
       data: {
         'requested': requestedVersion,
-        'supported': supportedProtocolVersions,
+        'supported': supportedProtocolVersionsWithDraft,
       },
     );
     return false;
+  }
+
+  bool _isStatelessProtocolVersionRequest(HttpRequest req) {
+    final versionHeader = req.headers.value('mcp-protocol-version');
+    return versionHeader != null &&
+        isStatelessProtocolVersion(versionHeader.trim());
+  }
+
+  bool _isValidHeaderValue(String value) {
+    if (value.trim() != value) {
+      return false;
+    }
+
+    return value.codeUnits.every(
+      (unit) => unit == 0x09 || unit == 0x20 || unit >= 0x21 && unit <= 0x7E,
+    );
   }
 
   bool _isValidVisibleAsciiToken(String value) {
@@ -304,13 +323,14 @@ class StreamableHTTPServerTransport
     required int httpStatus,
     required ErrorCode errorCode,
     required String message,
+    RequestId? id,
     Object? data,
   }) async {
     response.statusCode = httpStatus;
     response.write(
       jsonEncode(
         JsonRpcError(
-          id: null,
+          id: id,
           error: JsonRpcErrorData(
             code: errorCode.value,
             message: message,
@@ -320,6 +340,270 @@ class StreamableHTTPServerTransport
       ),
     );
     await _safeClose(response);
+  }
+
+  Future<void> _writeHeaderMismatchResponse(
+    HttpResponse response,
+    JsonRpcMessage message,
+    String detail,
+  ) {
+    return _writeJsonRpcErrorResponse(
+      response,
+      httpStatus: HttpStatus.badRequest,
+      errorCode: ErrorCode.headerMismatch,
+      id: message is JsonRpcRequest ? message.id : null,
+      message: 'Header mismatch: $detail',
+    );
+  }
+
+  String? _metadataProtocolVersion(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      final version = message.meta?[McpMetaKey.protocolVersion];
+      return version is String ? version : null;
+    }
+    if (message is JsonRpcNotification) {
+      final version = message.meta?[McpMetaKey.protocolVersion];
+      return version is String ? version : null;
+    }
+    return null;
+  }
+
+  bool _usesStatelessHttpValidation(
+    HttpRequest req,
+    List<JsonRpcMessage> messages,
+  ) {
+    final headerVersion = req.headers.value('mcp-protocol-version')?.trim();
+    if (headerVersion != null && isStatelessProtocolVersion(headerVersion)) {
+      return true;
+    }
+
+    return messages.any((message) {
+      final version = _metadataProtocolVersion(message);
+      return version != null && isStatelessProtocolVersion(version);
+    });
+  }
+
+  String? _messageMethod(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      return message.method;
+    }
+    if (message is JsonRpcNotification) {
+      return message.method;
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _messageParams(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      return message.params;
+    }
+    if (message is JsonRpcNotification) {
+      return message.params;
+    }
+    return null;
+  }
+
+  String? _requiredNameHeaderValue(JsonRpcMessage message) {
+    final method = _messageMethod(message);
+    final params = _messageParams(message);
+    if (params == null) {
+      return null;
+    }
+
+    final value = switch (method) {
+      Method.toolsCall => params['name'],
+      Method.resourcesRead => params['uri'],
+      Method.promptsGet => params['name'],
+      Method.tasksCancel ||
+      Method.tasksGet ||
+      Method.tasksUpdate =>
+        params['taskId'],
+      _ => null,
+    };
+    return value is String ? value : null;
+  }
+
+  String? _decodeMcpParamHeaderValue(String value) {
+    if (value.startsWith('=?base64?') && value.endsWith('?=')) {
+      final encoded = value.substring('=?base64?'.length, value.length - 2);
+      try {
+        return utf8.decode(base64Decode(encoded));
+      } catch (_) {
+        return null;
+      }
+    }
+
+    return _isValidHeaderValue(value) ? value : null;
+  }
+
+  String? _primitiveHeaderString(Object? value) {
+    return switch (value) {
+      null => null,
+      String() => value,
+      num() => value.toString(),
+      bool() => value.toString(),
+      _ => null,
+    };
+  }
+
+  Future<bool> _validateMcpParamHeaders(
+    HttpRequest req,
+    HttpResponse res,
+    JsonRpcMessage message,
+  ) async {
+    final params = _messageParams(message);
+    final arguments = params?['arguments'];
+    if (arguments is! Map) {
+      return true;
+    }
+    final argumentMap = arguments.cast<String, dynamic>();
+
+    final headerNames = <String>[];
+    req.headers.forEach((name, values) {
+      headerNames.add(name);
+    });
+
+    for (final headerName in headerNames) {
+      const prefix = 'mcp-param-';
+      if (!headerName.toLowerCase().startsWith(prefix)) {
+        continue;
+      }
+
+      final headerSuffix = headerName.substring(prefix.length);
+      if (headerSuffix.isEmpty ||
+          !headerSuffix.codeUnits.every(
+            (unit) => unit >= 0x21 && unit <= 0x7E && unit != 0x3A,
+          )) {
+        await _writeHeaderMismatchResponse(
+          res,
+          message,
+          "$headerName header name is malformed",
+        );
+        return false;
+      }
+
+      if (!argumentMap.containsKey(headerSuffix)) {
+        continue;
+      }
+
+      final headerValue = req.headers.value(headerName);
+      final decodedValue =
+          headerValue == null ? null : _decodeMcpParamHeaderValue(headerValue);
+      final bodyValue = _primitiveHeaderString(argumentMap[headerSuffix]);
+      if (decodedValue == null || decodedValue != bodyValue) {
+        await _writeHeaderMismatchResponse(
+          res,
+          message,
+          "$headerName header value does not match body argument '$headerSuffix'",
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  Future<bool> _validateStatelessHttpHeaders(
+    HttpRequest req,
+    List<JsonRpcMessage> messages,
+  ) async {
+    if (!_usesStatelessHttpValidation(req, messages)) {
+      return true;
+    }
+
+    if (messages.length != 1) {
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.invalidRequest,
+        message:
+            'Invalid Request: stateless MCP POST body must contain one JSON-RPC message',
+      );
+      return false;
+    }
+
+    final message = messages.single;
+    final protocolHeader = req.headers.value('mcp-protocol-version')?.trim();
+    if (protocolHeader == null || protocolHeader.isEmpty) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        'MCP-Protocol-Version header is required',
+      );
+      return false;
+    }
+    if (!_isValidHeaderValue(protocolHeader)) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        'MCP-Protocol-Version header value is malformed',
+      );
+      return false;
+    }
+
+    final metadataVersion = _metadataProtocolVersion(message);
+    if (metadataVersion == null) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        'MCP-Protocol-Version header has no matching request _meta protocol version',
+      );
+      return false;
+    }
+    if (protocolHeader != metadataVersion) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        "MCP-Protocol-Version header value '$protocolHeader' does not match body value '$metadataVersion'",
+      );
+      return false;
+    }
+
+    final method = _messageMethod(message);
+    if (method == null) {
+      return true;
+    }
+
+    final methodHeader = req.headers.value('mcp-method');
+    if (methodHeader == null || methodHeader.isEmpty) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        'Mcp-Method header is required',
+      );
+      return false;
+    }
+    if (methodHeader != method) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        "Mcp-Method header value '$methodHeader' does not match body value '$method'",
+      );
+      return false;
+    }
+
+    final requiredName = _requiredNameHeaderValue(message);
+    if (requiredName != null) {
+      final nameHeader = req.headers.value('mcp-name');
+      if (nameHeader == null || nameHeader.isEmpty) {
+        await _writeHeaderMismatchResponse(
+          req.response,
+          message,
+          'Mcp-Name header is required',
+        );
+        return false;
+      }
+      if (nameHeader != requiredName) {
+        await _writeHeaderMismatchResponse(
+          req.response,
+          message,
+          "Mcp-Name header value '$nameHeader' does not match body value '$requiredName'",
+        );
+        return false;
+      }
+    }
+
+    return _validateMcpParamHeaders(req, req.response, message);
   }
 
   bool _isStandaloneSseStreamId(StreamId streamId) {
@@ -655,6 +939,23 @@ class StreamableHTTPServerTransport
     await _safeClose(res);
   }
 
+  Future<void> _handleStatelessUnsupportedRequest(HttpResponse res) async {
+    res.statusCode = HttpStatus.methodNotAllowed;
+    res.headers.set(HttpHeaders.allowHeader, "POST");
+    res.write(
+      jsonEncode(
+        JsonRpcError(
+          id: null,
+          error: JsonRpcErrorData(
+            code: ErrorCode.connectionClosed.value,
+            message: 'Method not allowed for stateless MCP requests.',
+          ),
+        ).toJson(),
+      ),
+    );
+    await _safeClose(res);
+  }
+
   /// Handles POST requests containing JSON-RPC messages
   Future<void> _handlePostRequest(HttpRequest req, [dynamic parsedBody]) async {
     try {
@@ -776,9 +1077,14 @@ class StreamableHTTPServerTransport
         }
       }
 
+      if (!await _validateStatelessHttpHeaders(req, messages)) {
+        return;
+      }
+
       // Check if this is an initialization request
       // https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle/
       final isInitializationRequest = messages.any(_isInitializeRequest);
+      final isStatelessRequest = messages.any(_isStatelessJsonRpcRequest);
       if (isInitializationRequest) {
         final requestSessionId = req.headers.value('mcp-session-id');
 
@@ -868,6 +1174,7 @@ class StreamableHTTPServerTransport
       // clients using the Streamable HTTP transport MUST include it
       // in the Mcp-Session-Id header on all of their subsequent HTTP requests.
       if (!isInitializationRequest &&
+          !isStatelessRequest &&
           !await _validateSession(req, req.response)) {
         return;
       }
@@ -1225,7 +1532,16 @@ class StreamableHTTPServerTransport
   /// Checks if a message is an initialize request
   bool _isInitializeRequest(JsonRpcMessage message) {
     if (message is JsonRpcRequest) {
-      return message.method == "initialize";
+      return message.method == Method.initialize;
+    }
+    return false;
+  }
+
+  /// Checks if a message uses the stateless 2026 protocol metadata.
+  bool _isStatelessJsonRpcRequest(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      final version = message.meta?[McpMetaKey.protocolVersion];
+      return version is String && isStatelessProtocolVersion(version);
     }
     return false;
   }
