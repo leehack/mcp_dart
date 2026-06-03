@@ -1,4 +1,5 @@
 import 'package:mcp_dart/src/types/content.dart';
+import 'package:mcp_dart/src/types/json_value.dart';
 import 'package:mcp_dart/src/types/json_rpc.dart';
 import 'package:mcp_dart/src/types/sampling.dart';
 import 'package:test/test.dart';
@@ -493,12 +494,12 @@ void main() {
       });
 
       test('toJson preserves arbitrary structured JSON values', () {
-        const content = SamplingToolResultContent(
+        final content = SamplingToolResultContent(
           toolUseId: 'res1',
           content: [
-            TextContent(text: 'array result'),
+            const TextContent(text: 'array result'),
           ],
-          structuredContent: ['alpha', 'beta'],
+          structuredContentJson: JsonValue.array(['alpha', 'beta']),
         );
         final json = content.toJson();
         expect(json['structuredContent'], equals(['alpha', 'beta']));
@@ -508,7 +509,7 @@ void main() {
           content: [
             TextContent(text: 'null result'),
           ],
-          structuredContent: null,
+          structuredContentJson: JsonValue.nullValue,
           hasStructuredContent: true,
         );
         final nullJson = nullContent.toJson();
@@ -549,7 +550,10 @@ void main() {
         expect(content, isA<SamplingToolResultContent>());
         final result = content as SamplingToolResultContent;
         expect(result.hasStructuredContent, isTrue);
-        expect(result.structuredContent, equals(['alpha', 'beta']));
+        expect(
+          result.structuredContentJson?.toJson(),
+          equals(['alpha', 'beta']),
+        );
 
         final nullJson = {
           'type': 'tool_result',
@@ -562,7 +566,7 @@ void main() {
         final nullContent =
             SamplingContent.fromJson(nullJson) as SamplingToolResultContent;
         expect(nullContent.hasStructuredContent, isTrue);
-        expect(nullContent.structuredContent, isNull);
+        expect(nullContent.structuredContentJson?.toJson(), isNull);
       });
 
       test('rejects malformed tool result wire fields', () {

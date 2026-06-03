@@ -1,4 +1,5 @@
 export 'types/content.dart';
+export 'types/json_value.dart';
 export 'types/resources.dart';
 export 'types/subscriptions.dart';
 export 'types/prompts.dart';

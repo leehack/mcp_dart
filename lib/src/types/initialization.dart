@@ -952,8 +952,9 @@ class ServerCapabilitiesPrompts {
 class ServerCapabilitiesResources {
   /// Whether the server supports resource update subscriptions.
   ///
-  /// MCP 2025 uses `resources/subscribe` and `resources/unsubscribe`; MCP 2026
-  /// uses `subscriptions/listen` with `resourceSubscriptions`.
+  /// MCP 2025 uses `resources/subscribe` and `resources/unsubscribe`; MCP
+  /// `2026-07-28` draft/RC uses `subscriptions/listen` with
+  /// `resourceSubscriptions`.
   final bool? subscribe;
 
   /// Whether the server supports `notifications/resources/list_changed`.

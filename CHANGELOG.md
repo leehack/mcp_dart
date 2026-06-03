@@ -1,6 +1,6 @@
-## Unreleased
+## 2.3.0-dev.0
 
-### MCP 2026-07-28 RC
+### MCP 2026-07-28 draft/RC
 
 - Started the MCP 2026-07-28 RC development line with opt-in protocol
   constants, stateless request metadata helpers, and `server/discover` request
@@ -13,6 +13,10 @@
   `McpServerOptions(protocol: McpProtocol.preview2026)` while keeping the stable
   `initialize` flow as the default. The lower-level `protocolVersion` and
   `useServerDiscover` options remain available for interoperability testing.
+- Kept stable public tool result APIs object-rooted while adding explicit
+  draft-only APIs for non-object values: `JsonValue`,
+  `CallToolResult.fromStructuredArray()`, `structuredContentJson`, and
+  server `outputJsonSchema`.
 - Added 2026 cacheable result support for `tools/list`, `prompts/list`,
   `resources/list`, `resources/templates/list`, and `resources/read`, including
   stateless server defaults for `resultType`, `ttlMs`, and `cacheScope` while

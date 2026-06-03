@@ -212,24 +212,26 @@ void main() {
       ];
 
       for (final value in values) {
-        final result = CallToolResult.fromStructuredContent(value);
+        final result = CallToolResult.fromStructuredValue(
+          JsonValue.fromJson(value),
+        );
         final json = result.toJson();
 
         expect(json['structuredContent'], equals(value));
 
         final parsed = CallToolResult.fromJson(json);
         expect(parsed.hasStructuredContent, isTrue);
-        expect(parsed.structuredContent, equals(value));
+        expect(parsed.structuredContentJson?.toJson(), equals(value));
       }
 
-      final nullResult = CallToolResult.fromStructuredContent(null);
+      final nullResult = CallToolResult.fromStructuredNull();
       final nullJson = nullResult.toJson();
       expect(nullJson.containsKey('structuredContent'), isTrue);
       expect(nullJson['structuredContent'], isNull);
 
       final parsedNull = CallToolResult.fromJson(nullJson);
       expect(parsedNull.hasStructuredContent, isTrue);
-      expect(parsedNull.structuredContent, isNull);
+      expect(parsedNull.structuredContentJson?.toJson(), isNull);
     });
 
     test('Tool JSON object fields reject non-JSON Dart map values', () {

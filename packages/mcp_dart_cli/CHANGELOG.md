@@ -1,3 +1,10 @@
+## 0.2.0-dev.0
+
+- Prepare the CLI for the MCP `2026-07-28` draft/RC SDK dev line with a
+  dependency on `mcp_dart ^2.3.0-dev.0`.
+- Keep the local monorepo SDK override in `pubspec_overrides.yaml` so published
+  CLI pubspec metadata does not expose path overrides.
+
 ## 0.1.9
 
 - Add `mcp_dart inspect-server` for structured MCP server inspection reports

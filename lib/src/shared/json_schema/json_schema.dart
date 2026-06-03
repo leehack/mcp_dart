@@ -13,6 +13,29 @@ int? _readOptionalInteger(Object? value, String field) {
   throw FormatException('$field must be an integer');
 }
 
+num? _readOptionalFiniteNumber(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (value is num && value.isFinite) {
+    return value;
+  }
+  throw FormatException('$field must be a finite JSON number');
+}
+
+int? _integerApiValue(num? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is int) {
+    return value;
+  }
+  if (value.isFinite && value == value.truncateToDouble()) {
+    return value.toInt();
+  }
+  return null;
+}
+
 /// A builder for creating JSON Schemas in a type-safe way.
 sealed class JsonSchema {
   final String? title;
@@ -20,8 +43,8 @@ sealed class JsonSchema {
 
   /// The default value for this schema.
   ///
-  /// The type of this value depends on the schema type (e.g., [String] for [JsonString],
-  /// [num] for [JsonNumber] and [JsonInteger], etc.).
+  /// The type of this value depends on the schema type (e.g., [String] for
+  /// [JsonString], [num] for [JsonNumber], [int] for [JsonInteger], etc.).
   dynamic get defaultValue;
 
   const JsonSchema({this.title, this.description});
@@ -302,14 +325,14 @@ sealed class JsonSchema {
 
   /// Creates an integer schema.
   static JsonInteger integer({
-    num? minimum,
-    num? maximum,
-    num? exclusiveMinimum,
-    num? exclusiveMaximum,
-    num? multipleOf,
+    int? minimum,
+    int? maximum,
+    int? exclusiveMinimum,
+    int? exclusiveMaximum,
+    int? multipleOf,
     String? title,
     String? description,
-    num? defaultValue,
+    int? defaultValue,
     String? mcpHeader,
   }) {
     return JsonInteger(
@@ -597,8 +620,9 @@ class JsonNumber extends JsonSchema {
 
   /// MCP `x-mcp-header` extension metadata.
   ///
-  /// MCP 2026 stateless Streamable HTTP clients mirror finite number argument
-  /// values into `Mcp-Param-*` headers when this metadata is present.
+  /// MCP `2026-07-28` draft/RC stateless Streamable HTTP clients mirror finite
+  /// number argument values into `Mcp-Param-*` headers when this metadata is
+  /// present.
   final String? mcpHeader;
 
   const JsonNumber({
@@ -675,60 +699,143 @@ class JsonInteger extends JsonSchema {
   final bool _hasDefault;
   final bool _hasMcpHeader;
   final Object? _rawMcpHeader;
-  final num? minimum;
-  final num? maximum;
-  final num? exclusiveMinimum;
-  final num? exclusiveMaximum;
-  final num? multipleOf;
+  final num? _minimum;
+  final num? _maximum;
+  final num? _exclusiveMinimum;
+  final num? _exclusiveMaximum;
+  final num? _multipleOf;
+  final num? _defaultValue;
+
+  /// The stable Dart API value for the JSON Schema `minimum` constraint.
+  ///
+  /// This is `null` when a parsed wire schema uses a fractional numeric value.
+  /// Use [minimumJson] when validating or reserializing raw JSON Schema data.
+  int? get minimum => _integerApiValue(_minimum);
+
+  /// The stable Dart API value for the JSON Schema `maximum` constraint.
+  ///
+  /// This is `null` when a parsed wire schema uses a fractional numeric value.
+  /// Use [maximumJson] when validating or reserializing raw JSON Schema data.
+  int? get maximum => _integerApiValue(_maximum);
+
+  /// The stable Dart API value for the JSON Schema `exclusiveMinimum`
+  /// constraint.
+  ///
+  /// This is `null` when a parsed wire schema uses a fractional numeric value.
+  /// Use [exclusiveMinimumJson] when validating or reserializing raw JSON Schema
+  /// data.
+  int? get exclusiveMinimum => _integerApiValue(_exclusiveMinimum);
+
+  /// The stable Dart API value for the JSON Schema `exclusiveMaximum`
+  /// constraint.
+  ///
+  /// This is `null` when a parsed wire schema uses a fractional numeric value.
+  /// Use [exclusiveMaximumJson] when validating or reserializing raw JSON Schema
+  /// data.
+  int? get exclusiveMaximum => _integerApiValue(_exclusiveMaximum);
+
+  /// The stable Dart API value for the JSON Schema `multipleOf` constraint.
+  ///
+  /// This is `null` when a parsed wire schema uses a fractional numeric value.
+  /// Use [multipleOfJson] when validating or reserializing raw JSON Schema data.
+  int? get multipleOf => _integerApiValue(_multipleOf);
+
+  /// Raw JSON Schema `minimum` constraint as parsed from the wire.
+  num? get minimumJson => _minimum;
+
+  /// Raw JSON Schema `maximum` constraint as parsed from the wire.
+  num? get maximumJson => _maximum;
+
+  /// Raw JSON Schema `exclusiveMinimum` constraint as parsed from the wire.
+  num? get exclusiveMinimumJson => _exclusiveMinimum;
+
+  /// Raw JSON Schema `exclusiveMaximum` constraint as parsed from the wire.
+  num? get exclusiveMaximumJson => _exclusiveMaximum;
+
+  /// Raw JSON Schema `multipleOf` constraint as parsed from the wire.
+  num? get multipleOfJson => _multipleOf;
+
+  /// Raw JSON Schema `default` value as parsed from the wire.
+  num? get defaultValueJson => _defaultValue;
 
   /// MCP `x-mcp-header` extension for mirroring this parameter into HTTP.
   final String? mcpHeader;
 
   const JsonInteger({
-    this.minimum,
-    this.maximum,
-    this.exclusiveMinimum,
-    this.exclusiveMaximum,
-    this.multipleOf,
-    this.defaultValue,
+    int? minimum,
+    int? maximum,
+    int? exclusiveMinimum,
+    int? exclusiveMaximum,
+    int? multipleOf,
+    int? defaultValue,
     super.title,
     super.description,
     this.mcpHeader,
-  })  : _hasDefault = defaultValue != null,
+  })  : _minimum = minimum,
+        _maximum = maximum,
+        _exclusiveMinimum = exclusiveMinimum,
+        _exclusiveMaximum = exclusiveMaximum,
+        _multipleOf = multipleOf,
+        _defaultValue = defaultValue,
+        _hasDefault = defaultValue != null,
         _hasMcpHeader = mcpHeader != null,
         _rawMcpHeader = mcpHeader;
 
   const JsonInteger._({
-    this.minimum,
-    this.maximum,
-    this.exclusiveMinimum,
-    this.exclusiveMaximum,
-    this.multipleOf,
-    this.defaultValue,
+    num? minimum,
+    num? maximum,
+    num? exclusiveMinimum,
+    num? exclusiveMaximum,
+    num? multipleOf,
+    num? defaultValue,
     super.title,
     super.description,
     this.mcpHeader,
     required Object? rawMcpHeader,
     required bool hasDefault,
     required bool hasMcpHeader,
-  })  : _hasDefault = hasDefault,
+  })  : _minimum = minimum,
+        _maximum = maximum,
+        _exclusiveMinimum = exclusiveMinimum,
+        _exclusiveMaximum = exclusiveMaximum,
+        _multipleOf = multipleOf,
+        _defaultValue = defaultValue,
+        _hasDefault = hasDefault,
         _hasMcpHeader = hasMcpHeader,
         _rawMcpHeader = rawMcpHeader;
 
   @override
-  final num? defaultValue;
+  int? get defaultValue => _integerApiValue(_defaultValue);
 
   factory JsonInteger.fromJson(Map<String, dynamic> json) {
     final rawMcpHeader = json['x-mcp-header'];
     return JsonInteger._(
-      minimum: json['minimum'] as num?,
-      maximum: json['maximum'] as num?,
-      exclusiveMinimum: json['exclusiveMinimum'] as num?,
-      exclusiveMaximum: json['exclusiveMaximum'] as num?,
-      multipleOf: json['multipleOf'] as num?,
+      minimum: _readOptionalFiniteNumber(
+        json['minimum'],
+        'JsonInteger.minimum',
+      ),
+      maximum: _readOptionalFiniteNumber(
+        json['maximum'],
+        'JsonInteger.maximum',
+      ),
+      exclusiveMinimum: _readOptionalFiniteNumber(
+        json['exclusiveMinimum'],
+        'JsonInteger.exclusiveMinimum',
+      ),
+      exclusiveMaximum: _readOptionalFiniteNumber(
+        json['exclusiveMaximum'],
+        'JsonInteger.exclusiveMaximum',
+      ),
+      multipleOf: _readOptionalFiniteNumber(
+        json['multipleOf'],
+        'JsonInteger.multipleOf',
+      ),
       title: json['title'] as String?,
       description: json['description'] as String?,
-      defaultValue: json['default'] as num?,
+      defaultValue: _readOptionalFiniteNumber(
+        json['default'],
+        'JsonInteger.default',
+      ),
       mcpHeader: rawMcpHeader is String ? rawMcpHeader : null,
       rawMcpHeader: rawMcpHeader,
       hasDefault: json.containsKey('default'),
@@ -741,13 +848,15 @@ class JsonInteger extends JsonSchema {
     return {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
-      if (_hasDefault) 'default': defaultValue,
+      if (_hasDefault) 'default': defaultValueJson,
       'type': 'integer',
-      if (minimum != null) 'minimum': minimum,
-      if (maximum != null) 'maximum': maximum,
-      if (exclusiveMinimum != null) 'exclusiveMinimum': exclusiveMinimum,
-      if (exclusiveMaximum != null) 'exclusiveMaximum': exclusiveMaximum,
-      if (multipleOf != null) 'multipleOf': multipleOf,
+      if (minimumJson != null) 'minimum': minimumJson,
+      if (maximumJson != null) 'maximum': maximumJson,
+      if (exclusiveMinimumJson != null)
+        'exclusiveMinimum': exclusiveMinimumJson,
+      if (exclusiveMaximumJson != null)
+        'exclusiveMaximum': exclusiveMaximumJson,
+      if (multipleOfJson != null) 'multipleOf': multipleOfJson,
       if (_hasMcpHeader) 'x-mcp-header': _rawMcpHeader,
     };
   }
@@ -1239,13 +1348,12 @@ class JsonUnion extends JsonSchema {
         multipleOf: null,
       ) =>
         'number',
-      JsonInteger(
-        minimum: null,
-        maximum: null,
-        exclusiveMinimum: null,
-        exclusiveMaximum: null,
-        multipleOf: null,
-      ) =>
+      JsonInteger()
+          when schema.minimumJson == null &&
+              schema.maximumJson == null &&
+              schema.exclusiveMinimumJson == null &&
+              schema.exclusiveMaximumJson == null &&
+              schema.multipleOfJson == null =>
         'integer',
       JsonBoolean _ => 'boolean',
       JsonNull _ => 'null',

@@ -159,38 +159,40 @@ extension JsonSchemaValidation on JsonSchema {
       );
     }
 
-    if (schema.minimum != null && data < schema.minimum!) {
+    if (schema.minimumJson != null && data < schema.minimumJson!) {
       throw JsonSchemaValidationException(
-        'Value must be >= ${schema.minimum}',
+        'Value must be >= ${schema.minimumJson}',
         path,
       );
     }
 
-    if (schema.maximum != null && data > schema.maximum!) {
+    if (schema.maximumJson != null && data > schema.maximumJson!) {
       throw JsonSchemaValidationException(
-        'Value must be <= ${schema.maximum}',
+        'Value must be <= ${schema.maximumJson}',
         path,
       );
     }
 
-    if (schema.exclusiveMinimum != null && data <= schema.exclusiveMinimum!) {
+    if (schema.exclusiveMinimumJson != null &&
+        data <= schema.exclusiveMinimumJson!) {
       throw JsonSchemaValidationException(
-        'Value must be > ${schema.exclusiveMinimum}',
+        'Value must be > ${schema.exclusiveMinimumJson}',
         path,
       );
     }
 
-    if (schema.exclusiveMaximum != null && data >= schema.exclusiveMaximum!) {
+    if (schema.exclusiveMaximumJson != null &&
+        data >= schema.exclusiveMaximumJson!) {
       throw JsonSchemaValidationException(
-        'Value must be < ${schema.exclusiveMaximum}',
+        'Value must be < ${schema.exclusiveMaximumJson}',
         path,
       );
     }
 
-    if (schema.multipleOf != null) {
-      if ((data % schema.multipleOf!).abs() > 1e-10) {
+    if (schema.multipleOfJson != null) {
+      if ((data % schema.multipleOfJson!).abs() > 1e-10) {
         throw JsonSchemaValidationException(
-          'Value must be multiple of ${schema.multipleOf}',
+          'Value must be multiple of ${schema.multipleOfJson}',
           path,
         );
       }

@@ -74,15 +74,15 @@ class MockTransport extends Transport
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredContent(['alpha', 'beta'])
-                .toJson(),
+            result:
+                CallToolResult.fromStructuredArray(['alpha', 'beta']).toJson(),
           ),
         );
       } else if (name == 'broken_array_tool') {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredContent(['alpha', 1]).toJson(),
+            result: CallToolResult.fromStructuredArray(['alpha', 1]).toJson(),
           ),
         );
       } else if (name == 'broken_tool') {
@@ -300,7 +300,7 @@ void main() {
         const CallToolRequest(name: 'array_tool'),
       );
 
-      expect(result.structuredContent, equals(['alpha', 'beta']));
+      expect(result.structuredContentJson?.toJson(), equals(['alpha', 'beta']));
     });
 
     test('throws when non-object tool output validation fails', () async {

@@ -441,6 +441,25 @@ To run the tests for this package:
 dart test
 ```
 
+## Release Validation
+
+The CLI package lives under `packages/`, while the root SDK package excludes
+that directory from its own pub archive. Run CLI publish validation from an
+exported tree outside the monorepo git/.pubignore context:
+
+```bash
+dart run tool/validate_cli_publish.dart
+```
+
+Before the matching `mcp_dart` SDK dev package is published, this uses
+`pubspec_overrides.yaml` so the CLI can validate against the local SDK checkout.
+After publishing the SDK package, validate the CLI against the pub.dev SDK
+version:
+
+```bash
+dart run tool/validate_cli_publish.dart --published-sdk
+```
+
 ## Contributing
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this project.

@@ -98,9 +98,9 @@ void main() {
       );
       mcpServer.registerTool(
         'array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+          return CallToolResult.fromStructuredArray(['alpha', 'beta']);
         },
       );
 
@@ -118,7 +118,7 @@ void main() {
       expect(response, isA<JsonRpcResponse>());
       final successResponse = response as JsonRpcResponse;
       final result = CallToolResult.fromJson(successResponse.result);
-      expect(result.structuredContent, equals(['alpha', 'beta']));
+      expect(result.structuredContentJson?.toJson(), equals(['alpha', 'beta']));
     });
 
     test('non-object output schema validation failures are rejected', () async {
@@ -133,9 +133,9 @@ void main() {
       );
       mcpServer.registerTool(
         'invalid_array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 1]);
+          return CallToolResult.fromStructuredArray(['alpha', 1]);
         },
       );
 
@@ -159,9 +159,9 @@ void main() {
     test('stable tools/list omits non-object output schemas', () async {
       mcpServer.registerTool(
         'array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+          return CallToolResult.fromStructuredArray(['alpha', 'beta']);
         },
       );
 
@@ -191,9 +191,9 @@ void main() {
       );
       mcpServer.registerTool(
         'array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+          return CallToolResult.fromStructuredArray(['alpha', 'beta']);
         },
       );
 
@@ -219,9 +219,9 @@ void main() {
     test('stable tool calls omit non-object structured content', () async {
       mcpServer.registerTool(
         'array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+          return CallToolResult.fromStructuredArray(['alpha', 'beta']);
         },
       );
 

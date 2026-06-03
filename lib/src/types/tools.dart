@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../shared/json_schema/json_schema.dart';
 
 import 'content.dart';
+import 'json_value.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
@@ -11,8 +12,8 @@ typedef ToolInputSchema = JsonObject;
 
 /// Legacy alias for object-root tool output schemas.
 ///
-/// MCP 2026-07-28 allows [Tool.outputSchema] to be any JSON Schema. Use
-/// [JsonSchema] directly when the output schema root is not an object.
+/// MCP `2026-07-28` draft/RC allows [Tool.outputSchema] to be any JSON Schema.
+/// Use [JsonSchema] directly when the output schema root is not an object.
 typedef ToolOutputSchema = JsonObject;
 
 void _expectJsonRpcMethod(
@@ -420,11 +421,33 @@ class CallToolResult implements BaseResultData {
   /// Whether the tool call returned an error.
   final bool isError;
 
-  /// Structured content returned by the tool.
+  final Map<String, dynamic>? _structuredContent;
+  final JsonValue? _structuredContentValue;
+
+  /// Object-root structured content returned by the tool.
   ///
-  /// MCP 2026-07-28 allows any JSON value: object, array, string, number,
-  /// boolean, or null.
-  final Object? structuredContent;
+  /// Stable MCP `2025-11-25` tool results use an object here. When working
+  /// with MCP `2026-07-28` draft/RC peers, use [structuredContentJson] to read
+  /// non-object JSON values such as arrays, strings, numbers, booleans, or an
+  /// explicit JSON `null`.
+  Map<String, dynamic>? get structuredContent {
+    return _structuredContentValue?.asObject ?? _structuredContent;
+  }
+
+  /// Structured content returned by an MCP `2026-07-28` draft/RC tool call.
+  ///
+  /// This exposes the wire-level JSON value and may be an object, array,
+  /// string, number, boolean, or null. Use [hasStructuredContent] to distinguish
+  /// an omitted field from an explicit JSON `null`.
+  JsonValue? get structuredContentJson {
+    if (!hasStructuredContent) {
+      return null;
+    }
+    return _structuredContentValue ??
+        (structuredContent == null
+            ? JsonValue.nullValue
+            : JsonValue.object(structuredContent!));
+  }
 
   /// Whether [structuredContent] was explicitly present.
   ///
@@ -441,28 +464,66 @@ class CallToolResult implements BaseResultData {
   const CallToolResult({
     required this.content,
     this.isError = false,
-    this.structuredContent,
+    Map<String, dynamic>? structuredContent,
+    JsonValue? structuredContentJson,
     bool? hasStructuredContent,
     this.meta,
     this.extra,
-  }) : hasStructuredContent = hasStructuredContent ?? structuredContent != null;
+  })  : _structuredContent = structuredContent,
+        _structuredContentValue = structuredContentJson,
+        hasStructuredContent = hasStructuredContent ??
+            (structuredContentJson != null || structuredContent != null);
 
   /// Creates a result from a list of content items.
   factory CallToolResult.fromContent(List<Content> content) {
     return CallToolResult(content: content);
   }
 
-  /// Creates a result from arbitrary structured JSON data.
+  /// Creates a result from object-root structured content.
   ///
   /// Automatically populates [content] with a JSON-serialized version of
   /// [content] for backward compatibility with clients that do not support
   /// [structuredContent].
-  factory CallToolResult.fromStructuredContent(Object? content) {
+  factory CallToolResult.fromStructuredContent(Map<String, dynamic> content) {
+    return CallToolResult.fromStructuredValue(JsonValue.object(content));
+  }
+
+  /// Creates a result from arbitrary MCP `2026-07-28` draft/RC structured JSON.
+  ///
+  /// This may be any JSON value, including arrays and explicit JSON `null`.
+  /// Stable MCP `2025-11-25` callers receive only the JSON-serialized
+  /// [content] fallback when the structured value is not an object.
+  factory CallToolResult.fromStructuredValue(JsonValue content) {
     return CallToolResult(
-      content: [TextContent(text: jsonEncode(content))],
-      structuredContent: content,
+      content: [TextContent(text: jsonEncode(content.toJson()))],
+      structuredContentJson: content,
       hasStructuredContent: true,
     );
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC array structured content.
+  factory CallToolResult.fromStructuredArray(List<dynamic> content) {
+    return CallToolResult.fromStructuredValue(JsonValue.array(content));
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC string structured content.
+  factory CallToolResult.fromStructuredString(String content) {
+    return CallToolResult.fromStructuredValue(JsonValue.string(content));
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC number structured content.
+  factory CallToolResult.fromStructuredNumber(num content) {
+    return CallToolResult.fromStructuredValue(JsonValue.number(content));
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC boolean structured content.
+  factory CallToolResult.fromStructuredBoolean(bool content) {
+    return CallToolResult.fromStructuredValue(JsonValue.boolean(content));
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC null structured content.
+  factory CallToolResult.fromStructuredNull() {
+    return CallToolResult.fromStructuredValue(JsonValue.nullValue);
   }
 
   factory CallToolResult.fromJson(Map<String, dynamic> json) {
@@ -483,11 +544,8 @@ class CallToolResult implements BaseResultData {
       ],
       isError:
           readOptionalBool(json['isError'], 'CallToolResult.isError') ?? false,
-      structuredContent: json.containsKey('structuredContent')
-          ? readJsonValue(
-              json['structuredContent'],
-              'CallToolResult.structuredContent',
-            )
+      structuredContentJson: json.containsKey('structuredContent')
+          ? JsonValue.fromJson(json['structuredContent'])
           : null,
       hasStructuredContent: json.containsKey('structuredContent'),
       meta: readOptionalJsonObject(json['_meta'], 'CallToolResult._meta'),
@@ -502,7 +560,7 @@ class CallToolResult implements BaseResultData {
         if (isError) 'isError': isError,
         if (hasStructuredContent)
           'structuredContent': readJsonValue(
-            structuredContent,
+            structuredContentJson?.toJson(),
             'CallToolResult.structuredContent',
           ),
         if (meta != null) '_meta': readJsonObject(meta, 'CallToolResult._meta'),

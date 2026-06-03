@@ -514,7 +514,7 @@ final server = McpServer(
 ```
 
 Clients that call task-augmented tools can use `TaskClient.callToolStream()`.
-With MCP 2026 stateless servers that advertise
+With MCP `2026-07-28` draft/RC stateless servers that advertise
 `io.modelcontextprotocol/tasks`, omit the legacy `task` argument; task creation
 is server-directed and the client follows the extension polling flow
 transparently.

@@ -25,7 +25,7 @@ cd ../../..
 dart test -t interop
 ```
 
-For MCP 2026 RC/final release audits, also run the upstream
+For MCP `2026-07-28` draft/RC or final release audits, also run the upstream
 machine-readable example corpus through the checked-in typed parsers after
 extracting the upstream `modelcontextprotocol` archive:
 

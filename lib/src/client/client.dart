@@ -18,8 +18,8 @@ class McpClientOptions extends ProtocolOptions {
   /// High-level protocol compatibility profile.
   ///
   /// Defaults to [McpProtocol.stable], which uses MCP 2025-11-25 behavior.
-  /// Set this to [McpProtocol.preview2026] to opt into MCP 2026-07-28 RC
-  /// negotiation with stable fallback.
+  /// Set this to [McpProtocol.preview2026] to opt into MCP `2026-07-28`
+  /// draft/RC negotiation with stable fallback.
   final McpProtocol protocol;
 
   final String? _protocolVersion;
@@ -44,8 +44,8 @@ class McpClientOptions extends ProtocolOptions {
   /// Whether [McpClient.connect] should probe with `server/discover` first.
   ///
   /// When omitted, this is derived from [protocol]. Stable clients use the
-  /// legacy `initialize` flow by default; 2026 preview clients probe with
-  /// `server/discover`.
+  /// legacy `initialize` flow by default; `2026-07-28` draft/RC preview
+  /// clients probe with `server/discover`.
   bool get useServerDiscover =>
       _useServerDiscover ?? protocol.useServerDiscoverByDefault;
 
@@ -1475,7 +1475,7 @@ class McpClient extends Protocol {
     final outputSchema = _cachedToolOutputSchemas[params.name];
     if (outputSchema != null && !result.isError) {
       try {
-        outputSchema.validate(result.structuredContent);
+        outputSchema.validate(result.structuredContentJson?.toJson());
       } catch (e) {
         throw McpError(
           ErrorCode.invalidParams.value,

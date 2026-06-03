@@ -30,23 +30,24 @@ const latestDraftProtocolVersion = draftProtocolVersion2026_07_28;
 /// High-level MCP protocol compatibility profiles.
 ///
 /// The SDK defaults to [stable], which keeps the 2025 initialization flow and
-/// avoids draft-only behavior. Use [preview2026] to prefer the 2026 RC while
-/// falling back to stable MCP servers where possible. Use [require2026] when a
-/// peer must support the 2026 RC stateless protocol.
+/// avoids draft-only behavior. Use [preview2026] to prefer MCP `2026-07-28`
+/// draft/RC while falling back to stable MCP servers where possible. Use
+/// [require2026] when a peer must support the `2026-07-28` draft/RC stateless
+/// protocol.
 enum McpProtocol {
   /// Stable MCP behavior using the latest released specification.
   ///
   /// This is the default SDK profile and currently targets MCP 2025-11-25.
   stable,
 
-  /// Prefer the MCP 2026-07-28 RC when a peer supports it.
+  /// Prefer MCP `2026-07-28` draft/RC when a peer supports it.
   ///
   /// This profile enables draft-only behavior such as `server/discover`,
   /// stateless request metadata, and stateless result types, while allowing
   /// fallback to the stable `initialize` flow for older peers.
   preview2026,
 
-  /// Require the MCP 2026-07-28 RC stateless protocol.
+  /// Require the MCP `2026-07-28` draft/RC stateless protocol.
   ///
   /// This profile is intended for conformance tests and deployments where
   /// connecting to older MCP servers would be a configuration error.
@@ -101,7 +102,7 @@ const supportedProtocolVersions = [
   "2024-10-07",
 ];
 
-/// Protocol versions supported by the 2026 RC development branch.
+/// Protocol versions supported by the `2026-07-28` draft/RC development branch.
 const supportedProtocolVersionsWithDraft = [
   latestDraftProtocolVersion,
   draftProtocolVersion2026V1,
@@ -114,7 +115,8 @@ const statelessProtocolVersions = [
   draftProtocolVersion2026V1,
 ];
 
-/// Returns true when [version] uses the 2026 stateless request model.
+/// Returns true when [version] uses the `2026-07-28` draft/RC stateless request
+/// model.
 bool isStatelessProtocolVersion(String version) =>
     statelessProtocolVersions.contains(version);
 
@@ -132,7 +134,8 @@ String? negotiateProtocolVersion(
   return null;
 }
 
-/// MCP-reserved `_meta` keys used by the 2026 stateless request model.
+/// MCP-reserved `_meta` keys used by the `2026-07-28` draft/RC stateless
+/// request model.
 class McpMetaKey {
   static const protocolVersion = 'io.modelcontextprotocol/protocolVersion';
   static const clientInfo = 'io.modelcontextprotocol/clientInfo';
@@ -144,7 +147,8 @@ class McpMetaKey {
   const McpMetaKey._();
 }
 
-/// Builds request metadata required by the 2026 stateless request model.
+/// Builds request metadata required by the `2026-07-28` draft/RC stateless
+/// request model.
 Map<String, dynamic> buildProtocolRequestMeta({
   required String protocolVersion,
   required Implementation clientInfo,
@@ -333,11 +337,11 @@ final _metaNamePattern = RegExp(
   r'^(?:[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?)?$',
 );
 
-/// Validates an MCP 2026 `_meta` key name.
+/// Validates an MCP `2026-07-28` draft/RC `_meta` key name.
 ///
-/// MCP 2026 constrains metadata keys to an optional dot-separated prefix
-/// followed by `/`, plus a name segment. Earlier protocol versions did not
-/// define this grammar, so callers choose when to enforce it.
+/// MCP `2026-07-28` draft/RC constrains metadata keys to an optional
+/// dot-separated prefix followed by `/`, plus a name segment. Earlier protocol
+/// versions did not define this grammar, so callers choose when to enforce it.
 void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
   final slashIndex = key.indexOf('/');
   final prefix = slashIndex == -1 ? null : key.substring(0, slashIndex);
@@ -369,8 +373,8 @@ void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
 /// Validates request metadata that can affect protocol behavior.
 ///
 /// `_meta.progressToken` is an MCP wire token and must be a string or integer
-/// when present. [validateKeys] opts in to the MCP 2026 `_meta`
-/// key-name grammar without changing stable/legacy request parsing.
+/// when present. [validateKeys] opts in to the MCP `2026-07-28` draft/RC
+/// `_meta` key-name grammar without changing stable/legacy request parsing.
 Map<String, dynamic>? validateRequestMeta(
   Map<String, dynamic>? meta, {
   bool validateKeys = false,
@@ -1049,7 +1053,7 @@ void _validateInputResponse(Map<String, dynamic> json) {
 void _rejectInputResponseMeta(Map<String, dynamic> json, String resultName) {
   if (json.containsKey('_meta')) {
     throw FormatException(
-      'InputResponse $resultName must not include _meta in MCP 2026',
+      'InputResponse $resultName must not include _meta in MCP 2026-07-28',
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'content.dart';
+import 'json_value.dart';
 import 'json_rpc.dart';
 import 'tasks.dart';
 import 'tools.dart';
@@ -390,7 +391,7 @@ sealed class SamplingContent {
               'content': c.contentBlocks.map((item) => item.toJson()).toList(),
               if (c.hasStructuredContent)
                 'structuredContent': readJsonValue(
-                  c.structuredContent,
+                  c.structuredContentJson?.toJson(),
                   'SamplingToolResultContent.structuredContent',
                 ),
               if (c.isError != null) 'isError': c.isError,
@@ -545,7 +546,34 @@ class SamplingToolUseContent extends SamplingContent {
 class SamplingToolResultContent extends SamplingContent {
   final String toolUseId;
   final dynamic content;
-  final Object? structuredContent;
+  final Map<String, dynamic>? _structuredContent;
+  final JsonValue? _structuredContentValue;
+
+  /// Object-root structured content returned by the tool.
+  ///
+  /// Stable MCP `2025-11-25` tool results use an object here. When working
+  /// with MCP `2026-07-28` draft/RC peers, use [structuredContentJson] to read
+  /// non-object JSON values such as arrays, strings, numbers, booleans, or an
+  /// explicit JSON `null`.
+  Map<String, dynamic>? get structuredContent {
+    return _structuredContentValue?.asObject ?? _structuredContent;
+  }
+
+  /// Structured content returned by an MCP `2026-07-28` draft/RC tool result.
+  ///
+  /// This exposes the wire-level JSON value and may be an object, array,
+  /// string, number, boolean, or null. Use [hasStructuredContent] to distinguish
+  /// an omitted field from an explicit JSON `null`.
+  JsonValue? get structuredContentJson {
+    if (!hasStructuredContent) {
+      return null;
+    }
+    return _structuredContentValue ??
+        (structuredContent == null
+            ? JsonValue.nullValue
+            : JsonValue.object(structuredContent!));
+  }
+
   final bool hasStructuredContent;
   final bool? isError;
   final Map<String, dynamic>? meta;
@@ -553,12 +581,15 @@ class SamplingToolResultContent extends SamplingContent {
   const SamplingToolResultContent({
     required this.toolUseId,
     required this.content,
-    this.structuredContent,
+    Map<String, dynamic>? structuredContent,
+    JsonValue? structuredContentJson,
     bool? hasStructuredContent,
     this.isError,
     this.meta,
-  })  : hasStructuredContent =
-            hasStructuredContent ?? structuredContent != null,
+  })  : hasStructuredContent = hasStructuredContent ??
+            (structuredContentJson != null || structuredContent != null),
+        _structuredContent = structuredContent,
+        _structuredContentValue = structuredContentJson,
         super(type: 'tool_result');
 
   /// Normalized content blocks for tool results.
@@ -576,11 +607,8 @@ class SamplingToolResultContent extends SamplingContent {
         'SamplingToolResultContent.toolUseId',
       ),
       content: _parseToolResultWireContent(json['content']),
-      structuredContent: json.containsKey('structuredContent')
-          ? readJsonValue(
-              json['structuredContent'],
-              'SamplingToolResultContent.structuredContent',
-            )
+      structuredContentJson: json.containsKey('structuredContent')
+          ? JsonValue.fromJson(json['structuredContent'])
           : null,
       hasStructuredContent: json.containsKey('structuredContent'),
       isError: readOptionalBool(

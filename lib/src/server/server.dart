@@ -26,9 +26,9 @@ class McpServerOptions extends ProtocolOptions {
   /// High-level protocol compatibility profile.
   ///
   /// Defaults to [McpProtocol.stable], which advertises stable MCP versions and
-  /// keeps MCP 2026 RC stateless behavior disabled unless explicitly requested.
-  /// Set this to [McpProtocol.preview2026] to enable draft-only stateless
-  /// methods such as `server/discover`.
+  /// keeps MCP `2026-07-28` draft/RC stateless behavior disabled unless
+  /// explicitly requested. Set this to [McpProtocol.preview2026] to enable
+  /// draft-only stateless methods such as `server/discover`.
   final McpProtocol protocol;
 
   /// Protocol versions this server advertises and accepts for this profile.

@@ -218,12 +218,18 @@ void main() {
       final schema = JsonSchema.fromJson(json);
       expect(schema, isA<JsonInteger>());
       final s = schema as JsonInteger;
-      expect(s.minimum, 1.5);
-      expect(s.maximum, 10.5);
-      expect(s.exclusiveMinimum, 0.5);
-      expect(s.exclusiveMaximum, 11.5);
-      expect(s.multipleOf, 0.5);
-      expect(s.defaultValue, 2.0);
+      expect(s.minimum, isNull);
+      expect(s.maximum, isNull);
+      expect(s.exclusiveMinimum, isNull);
+      expect(s.exclusiveMaximum, isNull);
+      expect(s.multipleOf, isNull);
+      expect(s.defaultValue, 2);
+      expect(s.minimumJson, 1.5);
+      expect(s.maximumJson, 10.5);
+      expect(s.exclusiveMinimumJson, 0.5);
+      expect(s.exclusiveMaximumJson, 11.5);
+      expect(s.multipleOfJson, 0.5);
+      expect(s.defaultValueJson, 2.0);
       expect(s.toJson(), json);
     });
 

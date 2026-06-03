@@ -63,7 +63,7 @@ final client = McpClient(
 ### Protocol Profile
 
 Clients use the stable MCP `2025-11-25` profile by default. Opt into MCP
-`2026-07-28` RC behavior with the preview profile:
+`2026-07-28` draft/RC behavior with the preview profile:
 
 ```dart
 final client = McpClient(
@@ -178,7 +178,7 @@ final result = await client.callTool(
 
 ### Task-Augmented Tool Calls
 
-For MCP 2026 stateless servers that advertise the
+For MCP `2026-07-28` draft/RC stateless servers that advertise the
 `io.modelcontextprotocol/tasks` extension, task creation is server-directed.
 Call `client.callTool()` normally, or call `TaskClient.callToolStream()` without
 the legacy `task` argument; the client follows `resultType: "task"` with
