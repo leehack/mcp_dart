@@ -211,6 +211,11 @@ class Method {
       "notifications/prompts/list_changed";
   static const notificationsToolsListChanged =
       "notifications/tools/list_changed";
+
+  /// Deprecated completion list-change notification method.
+  ///
+  /// Stable MCP `2025-11-25` does not include this method. Use
+  /// [notificationsExperimentalCompletionsListChanged] for extension behavior.
   @Deprecated(
     'notifications/completions/list_changed is not part of stable MCP 2025-11-25. '
     'Use notifications/experimental/completions/list_changed for extension behavior.',
@@ -1179,6 +1184,9 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
     super.meta,
   }) : super(method: Method.toolsList);
 
+  /// Deprecated typed-params constructor retained for compatibility.
+  ///
+  /// Prefer passing `params?.toJson()` to [JsonRpcListToolsRequest].
   @Deprecated(
     'Use JsonRpcListToolsRequest(id: ..., params: params?.toJson(), meta: meta) instead.',
   )

@@ -161,7 +161,8 @@ typedef ToolFunction = FutureOr<BaseResultData> Function(
   RequestHandlerExtra extra,
 );
 
-/// Legacy callback signature for tools (deprecated style).
+/// Legacy callback signature for the deprecated [McpServer.tool] helper.
+@Deprecated('Use ToolFunction with registerTool instead')
 typedef LegacyToolCallback = FutureOr<BaseResultData> Function({
   Map<String, dynamic>? args,
   RequestHandlerExtra? extra,
@@ -2240,16 +2241,24 @@ class McpServer {
     );
   }
 
-  /// Registers a tool the client can invoke.
-  /// Registers a tool the client can invoke.
+  /// Deprecated helper that registers a tool the client can invoke.
+  ///
+  /// Use [registerTool] with [ToolFunction]. The
+  /// [inputSchemaProperties] and [outputSchemaProperties] parameters are
+  /// deprecated compatibility shims for [toolInputSchema] and
+  /// [toolOutputSchema].
   @Deprecated('Use registerTool instead')
   RegisteredTool tool(
     String name, {
     String? description,
     ToolInputSchema? toolInputSchema,
     ToolOutputSchema? toolOutputSchema,
+
+    /// Deprecated schema-property map shim. Use [toolInputSchema].
     @Deprecated('Use toolInputSchema instead')
     Map<String, dynamic>? inputSchemaProperties,
+
+    /// Deprecated schema-property map shim. Use [toolOutputSchema].
     @Deprecated('Use toolOutputSchema instead')
     Map<String, dynamic>? outputSchemaProperties,
     ToolAnnotations? annotations,

@@ -294,6 +294,7 @@ class ListToolsRequest {
       };
 }
 
+/// Deprecated alias for [ListToolsRequest].
 @Deprecated('Use [ListToolsRequest] instead.')
 typedef ListToolsRequestParams = ListToolsRequest;
 
@@ -362,6 +363,7 @@ class ListToolsResult implements CacheableResultData {
   }
 }
 
+/// Deprecated alias for [CallToolRequest].
 @Deprecated('Use [CallToolRequest] instead.')
 typedef CallToolRequestParams = CallToolRequest;
 
