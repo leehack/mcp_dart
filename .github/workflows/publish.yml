@@ -43,6 +43,7 @@ jobs:
             rm -rf "$PUBLISH_ROOT"
             mkdir -p "$PUBLISH_ROOT"
             rsync -a --exclude .git --exclude .dart_tool --exclude pubspec.lock ./ "$PUBLISH_ROOT/"
+            rm -f "$PUBLISH_ROOT/packages/mcp_dart_cli/pubspec_overrides.yaml"
             echo "working_directory=$PUBLISH_ROOT/${{ steps.package-info.outputs.working_directory }}" >> "$GITHUB_OUTPUT"
           else
             echo "working_directory=${{ steps.package-info.outputs.working_directory }}" >> "$GITHUB_OUTPUT"

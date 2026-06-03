@@ -331,8 +331,10 @@ void main() {
 
       expect(initializeCount, 1);
       expect(initializedNotificationCount, 1);
-      expect(capturedSessionHeaders, isNotEmpty);
-      expect(capturedSessionHeaders, everyElement(preconfiguredSessionId));
+      expect(capturedSessionHeaders, [
+        preconfiguredSessionId,
+        preconfiguredSessionId,
+      ]);
       expect(client.getServerCapabilities()?.logging, isNotNull);
       expect(client.getServerVersion()?.name, 'PreconfiguredSessionServer');
       expect(
@@ -1262,7 +1264,7 @@ void main() {
       });
     });
 
-    test('send adds task id as 2026 stateless task name header', () async {
+    test('send adds 2026 stateless task name header', () async {
       final capturedHeaders = <String, String?>{};
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => server.close(force: true));
@@ -1492,9 +1494,9 @@ void main() {
         '=?base64?${base64Encode(utf8.encode('Hello, 世界'))}?=',
       );
       expect(capturedHeaders['limit'], '42');
-      expect(capturedHeaders['rounded'], '42');
+      expect(capturedHeaders['rounded'], '42.0');
       expect(capturedHeaders['unsafe'], isNull);
-      expect(capturedHeaders['ratio'], isNull);
+      expect(capturedHeaders['ratio'], '1.5');
       expect(capturedHeaders['dryRun'], 'false');
       expect(capturedHeaders['text'], '=?base64?IHBhZGRlZCA=?=');
       expect(capturedHeaders['payload'], isNull);

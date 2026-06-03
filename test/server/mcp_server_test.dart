@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -133,12 +134,19 @@ void main() {
 
     test('connect syncs tool parameter header mappings to transports',
         () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
       server.registerTool(
         'header-tool',
         inputSchema: const ToolInputSchema(
           properties: {
             'dryRun': JsonBoolean(mcpHeader: 'Dry-Run'),
             'region': JsonString(mcpHeader: 'Region'),
+            'ratio': JsonNumber(mcpHeader: 'Ratio'),
             'auth': JsonObject(
               properties: {
                 'tenant': JsonString(mcpHeader: 'Tenant'),
@@ -159,6 +167,7 @@ void main() {
             'header-tool': {
               'dryRun': 'Dry-Run',
               'region': 'Region',
+              'ratio': 'Ratio',
               '/auth/tenant': 'Tenant',
             },
           },
@@ -177,6 +186,7 @@ void main() {
       final properties = inputSchema['properties'] as Map;
       final authProperties = (properties['auth'] as Map)['properties'] as Map;
       expect((properties['region'] as Map)['x-mcp-header'], 'Region');
+      expect((properties['ratio'] as Map)['x-mcp-header'], 'Ratio');
       expect((authProperties['tenant'] as Map)['x-mcp-header'], 'Tenant');
     });
 
@@ -213,6 +223,12 @@ void main() {
     });
 
     test('invalid tool parameter header metadata is not synced', () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
       server.registerTool(
         'non-string-header-tool',
         inputSchema: ToolInputSchema(
@@ -238,15 +254,6 @@ void main() {
         inputSchema: const ToolInputSchema(
           properties: {
             'value': JsonString(mcpHeader: 'Bad/Header'),
-          },
-        ),
-        callback: (args, extra) async => const CallToolResult(content: []),
-      );
-      server.registerTool(
-        'number-header-tool',
-        inputSchema: const ToolInputSchema(
-          properties: {
-            'value': JsonNumber(mcpHeader: 'Value'),
           },
         ),
         callback: (args, extra) async => const CallToolResult(content: []),
@@ -285,7 +292,7 @@ void main() {
 
       final response = transport.sentMessages.last as JsonRpcResponse;
       final tools = response.result['tools'] as List;
-      expect(tools, hasLength(6));
+      expect(tools, hasLength(5));
       for (final tool in tools.cast<Map>()) {
         expect(_containsMcpHeader(tool['inputSchema']), isFalse);
       }
@@ -293,6 +300,12 @@ void main() {
 
     test('invalid stateless header metadata is stripped from nested schemas',
         () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
       server.registerTool(
         'nested-header-tool',
         inputSchema: ToolInputSchema.fromJson({
@@ -725,6 +738,12 @@ void main() {
     });
 
     test('stateless resource miss uses 2026 invalid params error', () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
       server.registerResource(
         'Known Resource',
         'test://known',

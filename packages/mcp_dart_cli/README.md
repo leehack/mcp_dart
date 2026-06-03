@@ -351,12 +351,13 @@ mcp_dart call-tool search --url http://localhost:3000/mcp --json-args '{"q":"mcp
 
 ### Conformance
 
-Run built-in fixture checks, MCP 2025-11-25 spec-critical checks, and
-deterministic fuzz checks for protocol edge cases in this Dart SDK/CLI package.
-The fixture suite covers JSON-RPC malformed-message handling, string and
-integer request IDs, string and integer progress tokens, fractional ID/token
-rejection, and advertised protocol-version support. The spec suite covers
-raw-wire lifecycle, capability, elicitation, task-metadata, progress-token
+Run built-in fixture checks, MCP 2025-11-25 spec-critical checks, MCP
+2026-07-28 RC stateless checks, and deterministic fuzz checks for protocol edge
+cases in this Dart SDK/CLI package. The fixture suite covers JSON-RPC
+malformed-message handling, string and integer request IDs, string and integer
+progress tokens, fractional ID/token rejection, and advertised protocol-version
+support. The spec suite covers raw-wire lifecycle, discovery, stateless
+result/cache behavior, capability, elicitation, task-metadata, progress-token
 dispatch, and negative cases.
 
 This command is useful as a regression gate for the Dart SDK and CLI, but it is
@@ -372,7 +373,7 @@ mcp_dart conformance
 # Run all stable non-fuzz suites
 mcp_dart conformance --suite all
 
-# Run only MCP 2025-11-25 raw-wire spec cases
+# Run only raw-wire spec cases
 mcp_dart conformance --suite spec
 
 # Run one case by exact name
@@ -438,6 +439,25 @@ To run the tests for this package:
 
 ```bash
 dart test
+```
+
+## Release Validation
+
+The CLI package lives under `packages/`, while the root SDK package excludes
+that directory from its own pub archive. Run CLI publish validation from an
+exported tree outside the monorepo git/.pubignore context:
+
+```bash
+dart run tool/validate_cli_publish.dart
+```
+
+Before the matching `mcp_dart` SDK dev package is published, this uses
+`pubspec_overrides.yaml` so the CLI can validate against the local SDK checkout.
+After publishing the SDK package, validate the CLI against the pub.dev SDK
+version:
+
+```bash
+dart run tool/validate_cli_publish.dart --published-sdk
 ```
 
 ## Contributing

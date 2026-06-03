@@ -109,8 +109,10 @@ void main() {
       expect(transport.sentMessages.length, greaterThan(0));
       expect(transport.sentMessages.first is JsonRpcRequest, isTrue);
       expect(
-        (transport.sentMessages.first as JsonRpcRequest).method,
-        equals('initialize'),
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.initialize],
       );
 
       // Verify that an initialized notification was sent
@@ -185,11 +187,23 @@ void main() {
       // Should throw for unsupported capabilities
       expect(
         () => limitedClient.assertCapabilityForMethod("logging/setLevel"),
-        throwsA(isA<McpError>()),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
       expect(
         () => limitedClient.assertCapabilityForMethod("prompts/list"),
-        throwsA(isA<McpError>()),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
       expect(
         () => limitedClient.assertCapabilityForMethod(
@@ -266,11 +280,12 @@ void main() {
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
+      transport.emptyResponseMeta = {'traceId': 'ping-trace'};
       await client.connect(transport);
 
       transport.clearSentMessages();
 
-      await client.ping();
+      final result = await client.ping();
 
       // Verify a ping request was sent
       expect(transport.sentMessages.length, equals(1));
@@ -278,6 +293,7 @@ void main() {
         (transport.sentMessages.first as JsonRpcRequest).method,
         equals('ping'),
       );
+      expect(result.meta, {'traceId': 'ping-trace'});
     });
 
     test('complete sends completion request', () async {
@@ -568,6 +584,7 @@ void main() {
 class MockTransport extends Transport {
   final List<JsonRpcMessage> sentMessages = [];
   InitializeResult? mockInitializeResponse;
+  Map<String, dynamic>? emptyResponseMeta;
   bool shouldThrowOnStart = false;
 
   void clearSentMessages() {
@@ -585,8 +602,20 @@ class MockTransport extends Transport {
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
 
-    // If it's an initialize request, respond with the mock response
-    if (message is JsonRpcRequest &&
+    // Simulate a legacy peer by rejecting discovery, then respond to initialize.
+    if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      if (onmessage != null) {
+        onmessage!(
+          JsonRpcError(
+            id: message.id,
+            error: const JsonRpcErrorData(
+              code: -32601,
+              message: 'Method not found',
+            ),
+          ),
+        );
+      }
+    } else if (message is JsonRpcRequest &&
         message.method == 'initialize' &&
         mockInitializeResponse != null) {
       if (onmessage != null) {
@@ -727,7 +756,7 @@ class MockTransport extends Transport {
         onmessage!(
           JsonRpcResponse(
             id: message.id,
-            result: const EmptyResult().toJson(),
+            result: EmptyResult(meta: emptyResponseMeta).toJson(),
           ),
         );
       }
@@ -916,6 +945,7 @@ void _addCriticalPathTests() {
         () => client.assertCapabilityForMethod('resources/read'),
         throwsA(
           isA<McpError>()
+              .having((e) => e.code, 'code', ErrorCode.methodNotFound.value)
               .having((e) => e.message, 'message', contains('resources')),
         ),
       );
@@ -1079,7 +1109,9 @@ void _addCriticalPathTests() {
           'roots/list',
           (request, extra) async => const ListRootsResult(roots: []),
           (id, params, meta) => JsonRpcListRootsRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.rootsList,
             if (params != null) 'params': params,
             if (meta != null) '_meta': meta,
           }),
@@ -1106,7 +1138,9 @@ void _addCriticalPathTests() {
             content: SamplingTextContent(text: 'response'),
           ),
           (id, params, meta) => JsonRpcCreateMessageRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.samplingCreateMessage,
             'params': params ?? {},
             if (meta != null) '_meta': meta,
           }),
@@ -1169,7 +1203,7 @@ void _addCriticalPathTests() {
       expect(transport.sentMessages.single, isA<JsonRpcError>());
       final error = transport.sentMessages.single as JsonRpcError;
       expect(error.id, 'sample-1');
-      expect(error.error.code, ErrorCode.invalidRequest.value);
+      expect(error.error.code, ErrorCode.methodNotFound.value);
       expect(error.error.message, contains('sampling.tools'));
     });
 
@@ -1223,7 +1257,7 @@ void _addCriticalPathTests() {
       expect(transport.sentMessages.single, isA<JsonRpcError>());
       final error = transport.sentMessages.single as JsonRpcError;
       expect(error.id, 7);
-      expect(error.error.code, ErrorCode.invalidRequest.value);
+      expect(error.error.code, ErrorCode.methodNotFound.value);
       expect(error.error.message, contains('sampling.tools'));
     });
 
@@ -1295,7 +1329,9 @@ void _addCriticalPathTests() {
             content: {},
           ),
           (id, params, meta) => JsonRpcElicitRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.elicitationCreate,
             'params': params ?? {},
             if (meta != null) '_meta': meta,
           }),

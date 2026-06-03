@@ -216,43 +216,70 @@ void main() {
       // Test passes if no exception is thrown
     });
 
-    test('fallback notification handler would be called if method parsed',
+    test('parses custom notification methods and calls fallback handler',
         () async {
-      // Note: This test documents that fallback handlers CAN'T be tested with
-      // custom methods because JsonRpcMessage.fromJson throws UnimplementedError
-      // for unknown notification methods. The fallback handler mechanism exists
-      // but only works for methods that successfully parse.
-
       await protocol.connect(transport);
 
-      // Set up fallback handler (it exists, just can't be triggered with unknown methods)
+      final received = Completer<JsonRpcNotification>();
       protocol.fallbackNotificationHandler = (notification) async {
-        // Would be called if a known notification type had no specific handler
+        received.complete(notification);
       };
 
-      // Verify fallback handler is set
-      expect(protocol.fallbackNotificationHandler, isNotNull);
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': 'extension/notification',
+        'params': {
+          'value': 'custom',
+          '_meta': {'vendor/trace': 'notification-1'},
+        },
+      });
+      transport.receiveMessage(parsed);
 
-      // Test passes to document this architectural limitation
+      final notification = await received.future.timeout(
+        const Duration(seconds: 1),
+      );
+
+      expect(notification.method, 'extension/notification');
+      expect(notification.params?['value'], 'custom');
+      expect(notification.meta, {'vendor/trace': 'notification-1'});
     });
 
-    test('fallback request handler would be called if method parsed', () async {
-      // Note: Similar to notifications, fallback request handlers can't be tested
-      // with custom methods because JsonRpcMessage.fromJson throws UnimplementedError
-      // for unknown request methods. The fallback mechanism exists but only works
-      // for methods that successfully parse.
-
+    test('parses custom request methods and calls fallback handler', () async {
       await protocol.connect(transport);
 
-      // Set up fallback handler
+      JsonRpcRequest? received;
       protocol.fallbackRequestHandler = (request) async {
-        return EdgeCaseResult(data: 'fallback');
+        received = request;
+        return EdgeCaseResult(
+          data: 'fallback',
+          meta: {'vendor/trace': 'response-1'},
+        );
       };
 
-      // Verify fallback handler is set
-      expect(protocol.fallbackRequestHandler, isNotNull);
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 'custom-request-1',
+        'method': 'extension/request',
+        'params': {
+          'value': 'custom',
+          '_meta': {'vendor/trace': 'request-1'},
+        },
+      });
+      transport.receiveMessage(parsed);
 
-      // Test passes to document this architectural limitation
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(received, isNotNull);
+      expect(received!.id, 'custom-request-1');
+      expect(received!.method, 'extension/request');
+      expect(received!.params?['value'], 'custom');
+      expect(received!.meta, {'vendor/trace': 'request-1'});
+
+      expect(transport.sentMessages, hasLength(1));
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.id, 'custom-request-1');
+      expect(response.result, {'data': 'fallback'});
+      expect(response.meta, {'vendor/trace': 'response-1'});
     });
 
     test('handles connection close with pending requests', () async {
@@ -329,21 +356,29 @@ void main() {
     });
 
     test('handles notification handler error gracefully', () async {
-      // Note: Custom notification methods throw UnimplementedError during parsing,
-      // so we can't test error handling for notification handlers since unknown
-      // methods never reach the handler. This test documents that errors in
-      // known notification handlers would be caught and passed to onerror.
-
       await protocol.connect(transport);
 
       final receivedErrors = <Error>[];
       protocol.onerror = (error) => receivedErrors.add(error);
 
-      // The built-in handlers exist and would propagate errors through _onerror
-      // if they threw exceptions. Since we can't create a scenario that triggers
-      // this without modifying protocol internals, we document the behavior.
+      protocol.fallbackNotificationHandler = (notification) async {
+        throw StateError('Notification handler error');
+      };
 
-      // Test passes to document error propagation architecture
+      transport.receiveMessage(
+        const JsonRpcNotification(
+          method: 'extension/notification',
+          params: {},
+        ),
+      );
+
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(receivedErrors, hasLength(1));
+      expect(
+        receivedErrors.single.toString(),
+        contains('Notification handler error'),
+      );
     });
   });
 

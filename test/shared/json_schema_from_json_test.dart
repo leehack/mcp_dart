@@ -22,6 +22,32 @@ void main() {
       expect(s.enumValues, ['a', 'b']);
     });
 
+    test('accepts whole-number numeric string schema bounds', () {
+      final schema = JsonSchema.fromJson({
+        'type': 'string',
+        'minLength': 5.0,
+        'maxLength': 10.0,
+      });
+
+      expect(schema, isA<JsonString>());
+      final stringSchema = schema as JsonString;
+      expect(stringSchema.minLength, 5);
+      expect(stringSchema.maxLength, 10);
+      expect(stringSchema.toJson(), {
+        'minLength': 5,
+        'maxLength': 10,
+        'type': 'string',
+      });
+
+      expect(
+        () => JsonSchema.fromJson({
+          'type': 'string',
+          'minLength': 1.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('preserves mixed typed enum schemas conjunctively', () {
       final json = {
         'type': 'string',
@@ -52,6 +78,42 @@ void main() {
       final s = schema as JsonEnum;
       expect(s.values, [1, 'a', null]);
       expect(s.toJson(), json);
+    });
+
+    test('rejects invalid explicit type values', () {
+      expect(
+        () => JsonSchema.fromJson({'type': 'unknown'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonSchema.fromJson({
+          'type': ['string', 'unknown'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonSchema.fromJson({
+          'type': ['string', 'string'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonSchema.fromJson({'type': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('keeps schemas without explicit type as any schemas', () {
+      final schema = JsonSchema.fromJson({
+        'title': 'Any JSON value',
+        'description': 'No type restriction.',
+      });
+
+      expect(schema, isA<JsonAny>());
+      expect(schema.toJson(), {
+        'title': 'Any JSON value',
+        'description': 'No type restriction.',
+      });
     });
 
     test('parses const schema', () {
@@ -146,20 +208,29 @@ void main() {
     test('parses integer schema', () {
       final json = {
         'type': 'integer',
-        'minimum': 1,
-        'maximum': 10,
-        'exclusiveMinimum': 0,
-        'exclusiveMaximum': 11,
-        'multipleOf': 2,
+        'minimum': 1.5,
+        'maximum': 10.5,
+        'exclusiveMinimum': 0.5,
+        'exclusiveMaximum': 11.5,
+        'multipleOf': 0.5,
+        'default': 2.0,
       };
       final schema = JsonSchema.fromJson(json);
       expect(schema, isA<JsonInteger>());
       final s = schema as JsonInteger;
-      expect(s.minimum, 1);
-      expect(s.maximum, 10);
-      expect(s.exclusiveMinimum, 0);
-      expect(s.exclusiveMaximum, 11);
-      expect(s.multipleOf, 2);
+      expect(s.minimum, isNull);
+      expect(s.maximum, isNull);
+      expect(s.exclusiveMinimum, isNull);
+      expect(s.exclusiveMaximum, isNull);
+      expect(s.multipleOf, isNull);
+      expect(s.defaultValue, 2);
+      expect(s.minimumJson, 1.5);
+      expect(s.maximumJson, 10.5);
+      expect(s.exclusiveMinimumJson, 0.5);
+      expect(s.exclusiveMaximumJson, 11.5);
+      expect(s.multipleOfJson, 0.5);
+      expect(s.defaultValueJson, 2.0);
+      expect(s.toJson(), json);
     });
 
     test('parses boolean schema', () {
@@ -191,6 +262,32 @@ void main() {
       expect(s.uniqueItems, true);
     });
 
+    test('accepts whole-number numeric array schema bounds', () {
+      final schema = JsonSchema.fromJson({
+        'type': 'array',
+        'minItems': 1.0,
+        'maxItems': 5.0,
+      });
+
+      expect(schema, isA<JsonArray>());
+      final arraySchema = schema as JsonArray;
+      expect(arraySchema.minItems, 1);
+      expect(arraySchema.maxItems, 5);
+      expect(arraySchema.toJson(), {
+        'minItems': 1,
+        'maxItems': 5,
+        'type': 'array',
+      });
+
+      expect(
+        () => JsonSchema.fromJson({
+          'type': 'array',
+          'minItems': 1.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('parses object schema', () {
       final json = {
         'type': 'object',
@@ -215,6 +312,54 @@ void main() {
       expect(s.dependentRequired, {
         'age': ['name'],
       });
+    });
+
+    test('preserves object-level JSON Schema extension keywords', () {
+      final json = {
+        r'$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'type': 'object',
+        r'$defs': {
+          'address': {
+            r'$anchor': 'addressDef',
+            'type': 'object',
+          },
+        },
+        'properties': {
+          'contactMethod': {
+            'type': 'string',
+            'enum': ['phone', 'email'],
+          },
+        },
+        'allOf': [
+          {
+            'anyOf': [
+              {
+                'required': ['phone'],
+              },
+              {
+                'required': ['email'],
+              },
+            ],
+          },
+        ],
+        'if': {
+          'properties': {
+            'contactMethod': {'const': 'phone'},
+          },
+        },
+        'then': {
+          'required': ['phone'],
+        },
+        'else': {
+          'required': ['email'],
+        },
+        'additionalProperties': false,
+      };
+
+      final schema = JsonSchema.fromJson(json);
+
+      expect(schema, isA<JsonObject>());
+      expect(schema.toJson(), json);
     });
 
     test('parses object schema with additionalProperties as schema', () {

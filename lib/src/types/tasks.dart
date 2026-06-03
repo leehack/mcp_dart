@@ -2,6 +2,14 @@ import '../types.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  expectJsonRpcMethod(json, expected, context);
+}
+
 /// The current state of a task execution.
 enum TaskStatus {
   working,
@@ -178,6 +186,9 @@ int? _readTaskInt(
   if (value == null || value is int) {
     return value as int?;
   }
+  if (value is double && value.isFinite && value == value.truncateToDouble()) {
+    return value.toInt();
+  }
 
   throw FormatException('$owner.$field must be an integer or null');
 }
@@ -190,7 +201,9 @@ class ListTasksRequest {
   const ListTasksRequest({this.cursor});
 
   factory ListTasksRequest.fromJson(Map<String, dynamic> json) =>
-      ListTasksRequest(cursor: json['cursor'] as String?);
+      ListTasksRequest(
+        cursor: readOptionalString(json['cursor'], 'ListTasksRequest.cursor'),
+      );
 
   Map<String, dynamic> toJson() => {if (cursor != null) 'cursor': cursor};
 }
@@ -208,7 +221,9 @@ class JsonRpcListTasksRequest extends JsonRpcRequest {
         super(method: Method.tasksList, params: params?.toJson());
 
   factory JsonRpcListTasksRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    _expectJsonRpcMethod(json, Method.tasksList, 'JsonRpcListTasksRequest');
+    final paramsMap =
+        _readOptionalParamsObject(json, 'JsonRpcListTasksRequest.params');
     final meta = extractRequestMeta(json);
     return JsonRpcListTasksRequest(
       id: parseRequestId(json['id']),
@@ -239,9 +254,14 @@ class ListTasksResult implements BaseResultData {
       throw const FormatException('ListTasksResult.tasks is required');
     }
     return ListTasksResult(
-      tasks:
-          tasks.map((e) => Task.fromJson(e as Map<String, dynamic>)).toList(),
-      nextCursor: json['nextCursor'] as String?,
+      tasks: [
+        for (var i = 0; i < tasks.length; i++)
+          Task.fromJson(
+            readJsonObject(tasks[i], 'ListTasksResult.tasks[$i]'),
+          ),
+      ],
+      nextCursor:
+          readOptionalString(json['nextCursor'], 'ListTasksResult.nextCursor'),
       meta: meta,
     );
   }
@@ -263,7 +283,9 @@ class CancelTaskRequest {
   const CancelTaskRequest({required this.taskId});
 
   factory CancelTaskRequest.fromJson(Map<String, dynamic> json) =>
-      CancelTaskRequest(taskId: json['taskId'] as String);
+      CancelTaskRequest(
+        taskId: readRequiredString(json['taskId'], 'CancelTaskRequest.taskId'),
+      );
 
   Map<String, dynamic> toJson() => {'taskId': taskId};
 }
@@ -280,10 +302,9 @@ class JsonRpcCancelTaskRequest extends JsonRpcRequest {
   }) : super(method: Method.tasksCancel, params: cancelParams.toJson());
 
   factory JsonRpcCancelTaskRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException("Missing params for cancel task request");
-    }
+    _expectJsonRpcMethod(json, Method.tasksCancel, 'JsonRpcCancelTaskRequest');
+    final paramsMap =
+        _readRequiredParamsObject(json, 'JsonRpcCancelTaskRequest.params');
     final meta = extractRequestMeta(json);
     return JsonRpcCancelTaskRequest(
       id: parseRequestId(json['id']),
@@ -300,8 +321,9 @@ class GetTaskRequest {
 
   const GetTaskRequest({required this.taskId});
 
-  factory GetTaskRequest.fromJson(Map<String, dynamic> json) =>
-      GetTaskRequest(taskId: json['taskId'] as String);
+  factory GetTaskRequest.fromJson(Map<String, dynamic> json) => GetTaskRequest(
+        taskId: readRequiredString(json['taskId'], 'GetTaskRequest.taskId'),
+      );
 
   Map<String, dynamic> toJson() => {'taskId': taskId};
 }
@@ -318,10 +340,9 @@ class JsonRpcGetTaskRequest extends JsonRpcRequest {
   }) : super(method: Method.tasksGet, params: getParams.toJson());
 
   factory JsonRpcGetTaskRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException("Missing params for get task request");
-    }
+    _expectJsonRpcMethod(json, Method.tasksGet, 'JsonRpcGetTaskRequest');
+    final paramsMap =
+        _readRequiredParamsObject(json, 'JsonRpcGetTaskRequest.params');
     final meta = extractRequestMeta(json);
     return JsonRpcGetTaskRequest(
       id: parseRequestId(json['id']),
@@ -339,7 +360,9 @@ class TaskResultRequest {
   const TaskResultRequest({required this.taskId});
 
   factory TaskResultRequest.fromJson(Map<String, dynamic> json) =>
-      TaskResultRequest(taskId: json['taskId'] as String);
+      TaskResultRequest(
+        taskId: readRequiredString(json['taskId'], 'TaskResultRequest.taskId'),
+      );
 
   Map<String, dynamic> toJson() => {'taskId': taskId};
 }
@@ -356,10 +379,9 @@ class JsonRpcTaskResultRequest extends JsonRpcRequest {
   }) : super(method: Method.tasksResult, params: resultParams.toJson());
 
   factory JsonRpcTaskResultRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException("Missing params for task result request");
-    }
+    _expectJsonRpcMethod(json, Method.tasksResult, 'JsonRpcTaskResultRequest');
+    final paramsMap =
+        _readRequiredParamsObject(json, 'JsonRpcTaskResultRequest.params');
     final meta = extractRequestMeta(json);
     return JsonRpcTaskResultRequest(
       id: parseRequestId(json['id']),
@@ -421,10 +443,9 @@ class JsonRpcUpdateTaskRequest extends JsonRpcRequest {
   }) : super(method: Method.tasksUpdate, params: updateParams.toJson());
 
   factory JsonRpcUpdateTaskRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException("Missing params for update task request");
-    }
+    _expectJsonRpcMethod(json, Method.tasksUpdate, 'JsonRpcUpdateTaskRequest');
+    final paramsMap =
+        _readRequiredParamsObject(json, 'JsonRpcUpdateTaskRequest.params');
     final meta = extractRequestMeta(json);
     return JsonRpcUpdateTaskRequest(
       id: parseRequestId(json['id']),
@@ -442,7 +463,7 @@ class TaskCreation {
   const TaskCreation({this.ttl});
 
   factory TaskCreation.fromJson(Map<String, dynamic> json) =>
-      TaskCreation(ttl: json['ttl'] as int?);
+      TaskCreation(ttl: readOptionalInteger(json['ttl'], 'TaskCreation.ttl'));
 
   Map<String, dynamic> toJson() => {
         if (ttl != null) 'ttl': ttl,
@@ -464,7 +485,9 @@ class CreateTaskResult implements BaseResultData {
     final meta =
         readOptionalJsonObject(json['_meta'], 'CreateTaskResult._meta');
     return CreateTaskResult(
-      task: Task.fromJson(json['task'] as Map<String, dynamic>),
+      task: Task.fromJson(
+        _readRequiredJsonObject(json['task'], 'CreateTaskResult.task'),
+      ),
       meta: meta,
     );
   }
@@ -549,7 +572,7 @@ class TaskExtensionTask {
   });
 
   factory TaskExtensionTask.fromJson(Map<String, dynamic> json) {
-    return TaskExtensionTask(
+    final task = TaskExtensionTask(
       taskId: _readRequiredTaskString(
         json,
         'taskId',
@@ -601,23 +624,57 @@ class TaskExtensionTask {
               ),
             ),
     );
+    task._validateStatusPayload();
+    return task;
   }
 
-  Map<String, dynamic> toJson({String? resultType}) => {
-        if (resultType != null) 'resultType': resultType,
-        'taskId': taskId,
-        'status': status.name,
-        if (statusMessage != null) 'statusMessage': statusMessage,
-        'createdAt': createdAt,
-        'lastUpdatedAt': lastUpdatedAt,
-        'ttlMs': ttlMs,
-        if (pollIntervalMs != null) 'pollIntervalMs': pollIntervalMs,
-        if (inputRequests != null)
-          'inputRequests': InputRequest.mapToJson(inputRequests!),
-        if (result != null)
-          'result': readJsonObject(result, 'TaskExtensionTask.result'),
-        if (error != null) 'error': error!.toJson(),
-      };
+  void _validateStatusPayload() {
+    switch (status) {
+      case TaskStatus.inputRequired:
+        if (inputRequests == null) {
+          throw const FormatException(
+            'TaskExtensionTask.inputRequests is required when status is input_required',
+          );
+        }
+        break;
+      case TaskStatus.completed:
+        if (result == null) {
+          throw const FormatException(
+            'TaskExtensionTask.result is required when status is completed',
+          );
+        }
+        break;
+      case TaskStatus.failed:
+        if (error == null) {
+          throw const FormatException(
+            'TaskExtensionTask.error is required when status is failed',
+          );
+        }
+        break;
+      case TaskStatus.working:
+      case TaskStatus.cancelled:
+        break;
+    }
+  }
+
+  Map<String, dynamic> toJson({String? resultType}) {
+    _validateStatusPayload();
+    return {
+      if (resultType != null) 'resultType': resultType,
+      'taskId': taskId,
+      'status': status.name,
+      if (statusMessage != null) 'statusMessage': statusMessage,
+      'createdAt': createdAt,
+      'lastUpdatedAt': lastUpdatedAt,
+      'ttlMs': ttlMs,
+      if (pollIntervalMs != null) 'pollIntervalMs': pollIntervalMs,
+      if (inputRequests != null)
+        'inputRequests': InputRequest.mapToJson(inputRequests!),
+      if (result != null)
+        'result': readJsonObject(result, 'TaskExtensionTask.result'),
+      if (error != null) 'error': error!.toJson(),
+    };
+  }
 }
 
 /// `resultType: "task"` response from the MCP Tasks extension.
@@ -844,12 +901,15 @@ class JsonRpcTaskStatusNotification extends JsonRpcNotification {
         );
 
   factory JsonRpcTaskStatusNotification.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException(
-        "Missing params for task status notification",
-      );
-    }
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsTasksStatus,
+      'JsonRpcTaskStatusNotification',
+    );
+    final paramsMap = _readRequiredParamsObject(
+      json,
+      'JsonRpcTaskStatusNotification.params',
+    );
     final meta = _readOptionalJsonObject(
       paramsMap['_meta'],
       'JsonRpcTaskStatusNotification._meta',
@@ -870,10 +930,13 @@ class JsonRpcTaskNotification extends JsonRpcNotification {
       : super(method: Method.notificationsTasks, params: task.toJson());
 
   factory JsonRpcTaskNotification.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException("Missing params for task notification");
-    }
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsTasks,
+      'JsonRpcTaskNotification',
+    );
+    final paramsMap =
+        _readRequiredParamsObject(json, 'JsonRpcTaskNotification.params');
     return JsonRpcTaskNotification(
       task: TaskExtensionTask.fromJson(paramsMap),
       meta: _readOptionalJsonObject(
@@ -886,6 +949,26 @@ class JsonRpcTaskNotification extends JsonRpcNotification {
 
 Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
   return readJsonObject(value, field);
+}
+
+Map<String, dynamic>? _readOptionalParamsObject(
+  Map<String, dynamic> json,
+  String field,
+) {
+  if (!json.containsKey('params')) {
+    return null;
+  }
+  return _readRequiredJsonObject(json['params'], field);
+}
+
+Map<String, dynamic> _readRequiredParamsObject(
+  Map<String, dynamic> json,
+  String field,
+) {
+  if (!json.containsKey('params')) {
+    throw FormatException('$field is required');
+  }
+  return _readRequiredJsonObject(json['params'], field);
 }
 
 Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {

@@ -3,19 +3,23 @@ import 'dart:async';
 import 'package:mcp_dart/src/client/client.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/server.dart';
-import 'package:mcp_dart/src/server/tasks/handler.dart';
+import 'package:mcp_dart/src/server/tasks.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
 class RecordingTransport extends Transport {
+  RecordingTransport({this.sessionIdValue});
+
   final List<JsonRpcMessage> sentMessages = [];
+  final List<int?> sentRelatedRequestIds = [];
+  final String? sessionIdValue;
   bool started = false;
   bool closed = false;
 
   @override
-  String? get sessionId => null;
+  String? get sessionId => sessionIdValue;
 
   @override
   Future<void> close() async {
@@ -26,6 +30,7 @@ class RecordingTransport extends Transport {
   @override
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
+    sentRelatedRequestIds.add(relatedRequestId);
   }
 
   @override
@@ -35,6 +40,33 @@ class RecordingTransport extends Transport {
 
   void receive(JsonRpcMessage message) {
     onmessage?.call(message);
+  }
+}
+
+class SessionRecordingTaskStore extends InMemoryTaskStore {
+  final List<String?> createTaskSessionIds = [];
+  final List<String?> updateTaskStatusSessionIds = [];
+
+  @override
+  Future<Task> createTask(
+    TaskCreation taskParams,
+    RequestId requestId,
+    Map<String, dynamic> requestData,
+    String? sessionId,
+  ) {
+    createTaskSessionIds.add(sessionId);
+    return super.createTask(taskParams, requestId, requestData, sessionId);
+  }
+
+  @override
+  Future<void> updateTaskStatus(
+    String taskId,
+    TaskStatus status, [
+    String? statusMessage,
+    String? sessionId,
+  ]) {
+    updateTaskStatusSessionIds.add(sessionId);
+    return super.updateTaskStatus(taskId, status, statusMessage, sessionId);
   }
 }
 
@@ -53,6 +85,7 @@ class DiscoveringClientTransport extends Transport
       'ttlMs': 0,
       'cacheScope': CacheScope.private,
     },
+    this.onRequest,
   });
 
   final List<String> discoverVersions;
@@ -60,6 +93,7 @@ class DiscoveringClientTransport extends Transport
   final Object? unsupportedDiscoverData;
   final ServerCapabilities capabilities;
   final Map<String, dynamic> toolsListResult;
+  final void Function(JsonRpcRequest request)? onRequest;
   final List<JsonRpcMessage> sentMessages = [];
 
   @override
@@ -120,6 +154,11 @@ class DiscoveringClientTransport extends Transport
           result: toolsListResult,
         ),
       );
+      return;
+    }
+
+    if (message is JsonRpcRequest) {
+      onRequest?.call(message);
     }
   }
 
@@ -130,9 +169,11 @@ class DiscoveringClientTransport extends Transport
 class LegacyFallbackTransport extends Transport
     implements ProtocolVersionAwareTransport {
   LegacyFallbackTransport({
+    this.discoveryError,
     this.toolsListResult = const {'tools': []},
   });
 
+  final McpError? discoveryError;
   final Map<String, dynamic> toolsListResult;
   final List<JsonRpcMessage> sentMessages = [];
 
@@ -152,6 +193,10 @@ class LegacyFallbackTransport extends Transport
     sentMessages.add(message);
 
     if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      final error = discoveryError;
+      if (error != null) {
+        throw error;
+      }
       onmessage?.call(
         JsonRpcError(
           id: message.id,
@@ -195,20 +240,24 @@ class LegacyFallbackTransport extends Transport
 }
 
 class CompletedTaskHandler extends CancelTaskResultHandler {
+  RequestHandlerExtra? lastCreateTaskExtra;
+
   @override
   Future<CreateTaskResult> createTask(
     Map<String, dynamic>? args,
     RequestHandlerExtra? extra,
-  ) async =>
-      const CreateTaskResult(
-        task: Task(
-          taskId: 'task-1',
-          status: TaskStatus.completed,
-          ttl: null,
-          createdAt: '2026-07-28T00:00:00Z',
-          lastUpdatedAt: '2026-07-28T00:01:00Z',
-        ),
-      );
+  ) async {
+    lastCreateTaskExtra = extra;
+    return const CreateTaskResult(
+      task: Task(
+        taskId: 'task-1',
+        status: TaskStatus.completed,
+        ttl: null,
+        createdAt: '2026-07-28T00:00:00Z',
+        lastUpdatedAt: '2026-07-28T00:01:00Z',
+      ),
+    );
+  }
 
   @override
   Future<Task> getTask(String taskId, RequestHandlerExtra? extra) async => Task(
@@ -253,6 +302,28 @@ Map<String, dynamic> _clientMeta({
 
 Future<void> _pump() => Future<void>.delayed(Duration.zero);
 
+void _registerTaskGetExtensionHandler(Server server) {
+  server.setRequestHandler<JsonRpcGetTaskRequest>(
+    Method.tasksGet,
+    (request, extra) async => GetTaskExtensionResult(
+      task: TaskExtensionTask(
+        taskId: request.getParams.taskId,
+        status: TaskStatus.working,
+        createdAt: '2026-07-28T00:00:00Z',
+        lastUpdatedAt: '2026-07-28T00:00:00Z',
+        ttlMs: null,
+      ),
+    ),
+    (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+      'jsonrpc': jsonRpcVersion,
+      'id': id,
+      'method': Method.tasksGet,
+      'params': params,
+      if (meta != null) '_meta': meta,
+    }),
+  );
+}
+
 void main() {
   group('MCP 2026-07-28 RC protocol foundation', () {
     test('defines draft protocol version separately from stable default', () {
@@ -262,7 +333,12 @@ void main() {
         supportedProtocolVersionsWithDraft,
         contains(draftProtocolVersion2026_07_28),
       );
+      expect(
+        supportedProtocolVersionsWithDraft,
+        contains(draftProtocolVersion2026V1),
+      );
       expect(isStatelessProtocolVersion(draftProtocolVersion2026_07_28), true);
+      expect(isStatelessProtocolVersion(draftProtocolVersion2026V1), true);
       expect(isStatelessProtocolVersion(latestProtocolVersion), false);
     });
 
@@ -387,6 +463,192 @@ void main() {
       );
     });
 
+    test('accepts fractional elicitation number schema keywords', () {
+      final request = ElicitRequestParams.form(
+        message: 'Configure ratio',
+        requestedSchema: JsonSchema.object(
+          properties: {
+            'ratio': JsonSchema.number(
+              minimum: 0.1,
+              maximum: 0.9,
+              defaultValue: 0.5,
+            ),
+          },
+        ),
+      );
+
+      final requestJson = request.toJson(
+        protocolVersion: draftProtocolVersion2026_07_28,
+      );
+      final ratioSchema = requestJson['requestedSchema']['properties']['ratio'];
+      expect(ratioSchema['minimum'], 0.1);
+      expect(ratioSchema['maximum'], 0.9);
+      expect(ratioSchema['default'], 0.5);
+
+      final inputRequestJson = InputRequest.elicit(request).toJson();
+      final inputRatioSchema =
+          inputRequestJson['params']['requestedSchema']['properties']['ratio'];
+      expect(inputRatioSchema['minimum'], 0.1);
+
+      final parsed = JsonRpcElicitRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 1,
+        'method': Method.elicitationCreate,
+        'params': {
+          'message': 'Configure ratio',
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'count': {
+                'type': 'integer',
+                'maximum': 10.5,
+              },
+            },
+          },
+          '_meta': {
+            McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+          },
+        },
+      });
+      final countSchema =
+          parsed.elicitParams.requestedSchema!.toJson()['properties']['count'];
+      expect(countSchema['maximum'], 10.5);
+
+      expect(
+        () => JsonRpcElicitRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': {
+            'message': 'Configure ratio',
+            'requestedSchema': {
+              'type': 'object',
+              'properties': {
+                'count': {
+                  'type': 'integer',
+                  'maximum': double.infinity,
+                },
+              },
+            },
+            '_meta': {
+              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+            },
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects malformed elicitation wire shapes', () {
+      final elicitParams = {
+        'message': 'Choose option',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': {
+            'option': {'type': 'string'},
+          },
+        },
+      };
+      final completeParams = {'elicitationId': 'elicitation-1'};
+
+      for (final parse in <Object Function()>[
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.elicitationCreate,
+              'params': 'bad',
+            }),
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.elicitationCreate,
+              'params': null,
+            }),
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.elicitationCreate,
+              'params': elicitParams,
+            }),
+        () => JsonRpcElicitRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.samplingCreateMessage,
+              'params': elicitParams,
+            }),
+        () => ElicitRequest.fromJson({
+              'message': 'Bad properties',
+              'requestedSchema': {
+                'type': 'object',
+                'properties': <Object?, Object?>{
+                  1: {'type': 'string'},
+                },
+              },
+            }),
+        () => ElicitResult.fromJson({
+              'action': 'accept',
+              'url': 1,
+            }),
+        () => ElicitResult.fromJson({
+              'action': 'accept',
+              'content': <Object?, Object?>{1: 'bad'},
+            }),
+        () => ElicitationCompleteNotification.fromJson({
+              'elicitationId': 1,
+            }),
+        () => JsonRpcElicitationCompleteNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsElicitationComplete,
+              'params': 'bad',
+            }),
+        () => JsonRpcElicitationCompleteNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsElicitationComplete,
+              'params': completeParams,
+            }),
+        () => JsonRpcElicitationCompleteNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsInitialized,
+              'params': completeParams,
+            }),
+        () => URLElicitationRequiredErrorData.fromJson({
+              'elicitations': [1],
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
+    test('embedded MRTR input requests keep method and params shape', () {
+      final elicitInput = InputRequest.fromJson({
+        'method': Method.elicitationCreate,
+        'params': {
+          'message': 'Choose option',
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'option': {'type': 'string'},
+            },
+          },
+        },
+      });
+      final samplingInput = InputRequest.fromJson({
+        'method': Method.samplingCreateMessage,
+        'params': {
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 16,
+        },
+      });
+
+      expect(elicitInput.elicitParams.message, 'Choose option');
+      expect(samplingInput.createMessageParams.maxTokens, 16);
+    });
+
     test('rejects non-finite JSON numbers', () {
       expect(
         () => ProgressNotification.fromJson({
@@ -423,11 +685,25 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        ElicitResult.fromJson({
+          'action': 'accept',
+          'content': {'score': 1.5},
+        }).content,
+        containsPair('score', 1.5),
+      );
+      expect(
         () => const ElicitResult(
           action: 'accept',
           content: {'score': double.nan},
         ).toJson(),
         throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        const ElicitResult(
+          action: 'accept',
+          content: {'score': 1.5},
+        ).toJson()['content'],
+        containsPair('score', 1.5),
       );
     });
 
@@ -446,6 +722,33 @@ void main() {
           'role': 'user',
           'content': {'type': 'text', 'text': 'Hello'},
           '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      final createMessageParams = {
+        'messages': [
+          {
+            'role': 'user',
+            'content': {'type': 'text', 'text': 'Hello'},
+          },
+        ],
+        'maxTokens': 16,
+      };
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.samplingCreateMessage,
+          'params': createMessageParams,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': createMessageParams,
         }),
         throwsA(isA<FormatException>()),
       );
@@ -468,6 +771,174 @@ void main() {
           ],
           'maxTokens': 16,
           'metadata': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ModelHint.fromJson({'name': 1}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingContent.fromJson({
+          'type': 'text',
+          'text': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingTextContent.fromJson({
+          'text': 'Hello',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingTextContent.fromJson({
+          'type': 'image',
+          'text': 'Hello',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingImageContent.fromJson({
+          'type': 'text',
+          'data': 'aW1nZGF0YQ==',
+          'mimeType': 'image/png',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingAudioContent.fromJson({
+          'type': 'image',
+          'data': 'YXVkaW8tZGF0YQ==',
+          'mimeType': 'audio/wav',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingToolUseContent.fromJson({
+          'type': 'tool_result',
+          'id': 'call-1',
+          'name': 'search',
+          'input': <String, dynamic>{},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingToolResultContent.fromJson({
+          'type': 'tool_use',
+          'toolUseId': 'call-1',
+          'content': [
+            {'type': 'text', 'text': 'Hello'},
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingToolResultContent.fromJson({
+          'type': 'tool_result',
+          'toolUseId': 'call-1',
+          'content': [
+            {'type': 'text', 'text': 'Hello'},
+          ],
+          'isError': 'false',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequest.fromJson({
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 16,
+          'stopSequences': ['STOP', 1],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Hello'},
+          'model': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Content.fromJson({
+          'type': 1,
+          'text': 'Hello',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Content.fromJson({
+          'text': 'Hello',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Content.fromJson({
+          'type': 'unknown',
+          'text': 'Hello',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => TextContent.fromJson({
+          'type': 'image',
+          'text': 'Hello',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => TextContent.fromJson({
+          'type': 'text',
+          'text': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file:///docs/readme.md',
+          'text': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file:///docs/readme.md',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///docs/readme.md',
+          'name': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 1,
         }),
         throwsA(isA<FormatException>()),
       );
@@ -567,6 +1038,149 @@ void main() {
       );
     });
 
+    test('stateless metadata omits legacy task capabilities', () {
+      const clientCapabilities = ClientCapabilities(
+        sampling: ClientCapabilitiesSampling(tools: true),
+        roots: ClientCapabilitiesRoots(listChanged: true),
+        tasks: ClientCapabilitiesTasks(
+          cancel: true,
+          list: true,
+          requests: ClientCapabilitiesTasksRequests(
+            sampling: ClientCapabilitiesTasksSampling(
+              createMessage: ClientCapabilitiesTasksSamplingCreateMessage(),
+            ),
+          ),
+        ),
+        extensions: {mcpTasksExtensionId: {}},
+      );
+      expect(clientCapabilities.toJson(), contains('tasks'));
+
+      final draftMeta = buildProtocolRequestMeta(
+        protocolVersion: draftProtocolVersion2026_07_28,
+        clientInfo: const Implementation(name: 'client', version: '1.0.0'),
+        clientCapabilities: clientCapabilities,
+      );
+      final draftCapabilities =
+          draftMeta[McpMetaKey.clientCapabilities] as Map<String, dynamic>;
+      expect(draftCapabilities, isNot(contains('tasks')));
+      expect(draftCapabilities['roots'], isNot(contains('listChanged')));
+      expect(
+        (draftCapabilities['extensions'] as Map)[mcpTasksExtensionId],
+        isEmpty,
+      );
+
+      final stableMeta = buildProtocolRequestMeta(
+        protocolVersion: stableProtocolVersion2025_11_25,
+        clientInfo: const Implementation(name: 'client', version: '1.0.0'),
+        clientCapabilities: clientCapabilities,
+      );
+      final stableCapabilities =
+          stableMeta[McpMetaKey.clientCapabilities] as Map<String, dynamic>;
+      expect(stableCapabilities, contains('tasks'));
+      expect(stableCapabilities['roots'], contains('listChanged'));
+    });
+
+    test('server/discover result omits legacy task capabilities', () {
+      const serverCapabilities = ServerCapabilities(
+        tools: ServerCapabilitiesTools(),
+        tasks: ServerCapabilitiesTasks(
+          list: true,
+          cancel: true,
+          requests: ServerCapabilitiesTasksRequests(
+            tools: ServerCapabilitiesTasksTools(
+              call: ServerCapabilitiesTasksToolsCall(),
+            ),
+          ),
+        ),
+        extensions: {mcpTasksExtensionId: {}},
+      );
+      expect(serverCapabilities.toJson(), contains('tasks'));
+
+      final json = const DiscoverResult(
+        supportedVersions: [draftProtocolVersion2026_07_28],
+        capabilities: serverCapabilities,
+        serverInfo: Implementation(name: 'server', version: '1.0.0'),
+      ).toJson();
+      final capabilities = json['capabilities'] as Map<String, dynamic>;
+      expect(capabilities, isNot(contains('tasks')));
+      expect(capabilities, contains('tools'));
+      expect((capabilities['extensions'] as Map)[mcpTasksExtensionId], isEmpty);
+    });
+
+    test('server/discover and capability fields reject malformed wire shapes',
+        () {
+      final result = {
+        'resultType': resultTypeComplete,
+        'supportedVersions': [draftProtocolVersion2026_07_28],
+        'capabilities': <String, dynamic>{},
+        'serverInfo': {'name': 'server', 'version': '1.0.0'},
+      };
+
+      for (final parse in <Object Function()>[
+        () => DiscoverResult.fromJson({
+              ...result,
+              'supportedVersions': [draftProtocolVersion2026_07_28, 1],
+            }),
+        () => DiscoverResult.fromJson({
+              ...result,
+              'capabilities': 'bad',
+            }),
+        () => DiscoverResult.fromJson({
+              ...result,
+              'serverInfo': 'bad',
+            }),
+        () => DiscoverResult.fromJson({
+              ...result,
+              'instructions': 1,
+            }),
+        () => ClientCapabilitiesSampling.fromJson({
+              'tools': {'bad': Object()},
+            }),
+        () => ServerCapabilities.fromJson({
+              'logging': {'bad': Object()},
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
+    test('requires complete resultType on server/discover results', () {
+      final validResult = const DiscoverResult(
+        supportedVersions: [draftProtocolVersion2026_07_28],
+        capabilities: ServerCapabilities(),
+        serverInfo: Implementation(name: 'server', version: '1.0.0'),
+      ).toJson();
+
+      for (final json in [
+        {
+          ...validResult,
+        }..remove('resultType'),
+        {
+          ...validResult,
+          'resultType': resultTypeInputRequired,
+        },
+        {
+          ...validResult,
+          'resultType': 1,
+        },
+      ]) {
+        expect(
+          () => DiscoverResult.fromJson(json),
+          throwsFormatException,
+        );
+      }
+
+      expect(
+        () => const DiscoverResult(
+          resultType: resultTypeInputRequired,
+          supportedVersions: [draftProtocolVersion2026_07_28],
+          capabilities: ServerCapabilities(),
+          serverInfo: Implementation(name: 'server', version: '1.0.0'),
+        ).toJson(),
+        throwsArgumentError,
+      );
+    });
+
     test('requires server/discover request metadata in params', () {
       expect(
         () => JsonRpcServerDiscoverRequest(id: 'discover-1').toJson(),
@@ -608,6 +1222,23 @@ void main() {
             ),
           ),
         );
+      }
+
+      for (final parse in <Object Function()>[
+        () => JsonRpcServerDiscoverRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 'discover-1',
+              'method': Method.serverDiscover,
+              'params': {'_meta': _clientMeta()},
+            }),
+        () => JsonRpcServerDiscoverRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'discover-1',
+              'method': Method.initialize,
+              'params': {'_meta': _clientMeta()},
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
       }
 
       final parsed = JsonRpcMessage.fromJson({
@@ -709,6 +1340,152 @@ void main() {
       );
     });
 
+    test(
+        'prompt completion and notification fields reject malformed wire shapes',
+        () {
+      for (final parse in <Object Function()>[
+        () => Prompt.fromJson({
+              'name': 'prompt',
+              'arguments': [1],
+            }),
+        () => GetPromptRequest.fromJson({
+              'name': 'prompt',
+              'arguments': {'arg': 1},
+            }),
+        () => JsonRpcListPromptsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'prompts',
+              'method': Method.resourcesList,
+            }),
+        () => JsonRpcGetPromptRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 'prompt',
+              'method': Method.promptsGet,
+              'params': {'name': 'prompt'},
+            }),
+        () => JsonRpcPromptListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsResourcesListChanged,
+            }),
+        () => JsonRpcListResourcesRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 'resources',
+              'method': Method.resourcesList,
+            }),
+        () => JsonRpcListResourceTemplatesRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'templates',
+              'method': Method.resourcesList,
+            }),
+        () => JsonRpcReadResourceRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'read',
+              'method': Method.resourcesList,
+              'params': {'uri': 'file:///a.txt'},
+            }),
+        () => JsonRpcResourceListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsResourcesUpdated,
+            }),
+        () => JsonRpcResourceUpdatedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsResourcesUpdated,
+              'params': {'uri': 'file:///a.txt'},
+            }),
+        () => CompleteRequest.fromJson({
+              'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+              'argument': {'name': 'arg', 'value': 1},
+            }),
+        () => JsonRpcCompleteRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 'complete',
+              'method': Method.completionComplete,
+              'params': {
+                'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+                'argument': {'name': 'arg', 'value': 'prefix'},
+              },
+            }),
+        () => JsonRpcCompleteRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'complete',
+              'method': Method.promptsGet,
+              'params': {
+                'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+                'argument': {'name': 'arg', 'value': 'prefix'},
+              },
+            }),
+        () => ResourceReference.fromJson({
+              'uri': 'file:///{path}',
+            }),
+        () => ResourceReference.fromJson({
+              'type': 'ref/prompt',
+              'uri': 'file:///{path}',
+            }),
+        () => PromptReference.fromJson({
+              'name': 'prompt',
+            }),
+        () => PromptReference.fromJson({
+              'type': 'ref/resource',
+              'name': 'prompt',
+            }),
+        () => CompletionResultData.fromJson({
+              'values': ['a'],
+              'hasMore': 'true',
+            }),
+        () => CreateMessageRequestParams.fromJson({
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': {'type': 'text', 'text': 'Hello'},
+                },
+              ],
+              'maxTokens': 100,
+              'tools': 'bad',
+            }),
+        () => CreateMessageRequestParams.fromJson({
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': {'type': 'text', 'text': 'Hello'},
+                },
+              ],
+              'maxTokens': 100,
+              'tools': [1],
+            }),
+        () => LoggingMessageNotification.fromJson({
+              'level': 'info',
+              'data': Object(),
+            }),
+        () => JsonRpcLoggingMessageNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsMessage,
+              'params': {'level': 'info', 'data': 'message'},
+            }),
+        () => JsonRpcLoggingMessageNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsProgress,
+              'params': {'level': 'info', 'data': 'message'},
+            }),
+        () => JsonRpcCancelledNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsProgress,
+              'params': {'requestId': 'request-1'},
+            }),
+        () => JsonRpcProgressNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsProgress,
+              'params': {'progressToken': 'progress-1', 'progress': 1},
+            }),
+        () => ProgressNotification.fromJson({
+              'progressToken': 'progress-1',
+              'progress': 1,
+              'message': 1,
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
     test('serializes MRTR input required results', () {
       final result = InputRequiredResult(
         inputRequests: {
@@ -719,6 +1496,7 @@ void main() {
                 properties: {'name': JsonSchema.string()},
                 required: ['name'],
               ),
+              task: const TaskCreation(ttl: 1000),
             ),
           ),
           'capital_of_france': InputRequest.createMessage(
@@ -731,7 +1509,15 @@ void main() {
                   ),
                 ),
               ],
+              task: TaskCreation(ttl: 1000),
               maxTokens: 100,
+              tools: [
+                Tool(
+                  name: 'lookup',
+                  inputSchema: JsonObject(),
+                  execution: ToolExecution(taskSupport: 'optional'),
+                ),
+              ],
             ),
           ),
           'roots': InputRequest.listRoots(),
@@ -749,8 +1535,20 @@ void main() {
         Method.elicitationCreate,
       );
       expect(
+        json['inputRequests']['github_login']['params'],
+        isNot(contains('task')),
+      );
+      expect(
         json['inputRequests']['capital_of_france']['method'],
         Method.samplingCreateMessage,
+      );
+      expect(
+        json['inputRequests']['capital_of_france']['params'],
+        isNot(contains('task')),
+      );
+      expect(
+        json['inputRequests']['capital_of_france']['params']['tools'][0],
+        isNot(contains('execution')),
       );
       expect(json['inputRequests']['roots'], {'method': Method.rootsList});
 
@@ -761,9 +1559,17 @@ void main() {
         'Please provide your GitHub username',
       );
       expect(
+        parsed.inputRequests!['github_login']!.elicitParams.task,
+        isNull,
+      );
+      expect(
         parsed
             .inputRequests!['capital_of_france']!.createMessageParams.maxTokens,
         100,
+      );
+      expect(
+        parsed.inputRequests!['capital_of_france']!.createMessageParams.task,
+        isNull,
       );
     });
 
@@ -898,6 +1704,56 @@ void main() {
         throwsFormatException,
       );
       expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'inputRequests': {
+              'legacy_task_elicit': {
+                'method': Method.elicitationCreate,
+                'params': {
+                  'mode': 'form',
+                  'message': 'Need username',
+                  'requestedSchema': {
+                    'type': 'object',
+                    'properties': {
+                      'name': {'type': 'string'},
+                    },
+                  },
+                  'task': {'ttl': 1000},
+                },
+              },
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => InputRequiredResult.fromJson(
+          const {
+            'resultType': resultTypeInputRequired,
+            'inputRequests': {
+              'legacy_task_sampling': {
+                'method': Method.samplingCreateMessage,
+                'params': {
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': {
+                        'type': 'text',
+                        'text': 'Continue?',
+                      },
+                    },
+                  ],
+                  'maxTokens': 1,
+                  'task': {'ttl': 1000},
+                },
+              },
+            },
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
         () => CallToolRequest.fromJson(
           const {'name': 'deploy', 'requestState': 1},
         ),
@@ -960,14 +1816,445 @@ void main() {
       );
     });
 
+    test('rejects malformed tool wire shapes', () {
+      for (final parse in <Object Function()>[
+        () => ToolAnnotations.fromJson({'openWorldHint': 'false'}),
+        () => ToolExecution.fromJson({'taskSupport': 1}),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'execution': 'bad',
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'icons': [1],
+            }),
+        () => ListToolsRequest.fromJson({'cursor': 1}),
+        () => ListToolsResult.fromJson({
+              'tools': [1],
+            }),
+        () => CallToolRequest.fromJson({'name': 1}),
+        () => CallToolResult.fromJson({
+              'content': <Map<String, dynamic>>[],
+              'isError': 'true',
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+              'params': 'bad',
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.toolsList,
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsList,
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': 'bad',
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': {'name': 'tool'},
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsGet,
+              'params': {'name': 'tool'},
+            }),
+        () => JsonRpcToolListChangedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsToolsListChanged,
+            }),
+        () => JsonRpcToolListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsPromptsListChanged,
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
+    test('rejects malformed root wire shapes', () {
+      for (final parse in <Object Function()>[
+        () => Root.fromJson({'uri': 'file:///repo', 'name': 1}),
+        () => ListRootsResult.fromJson({
+              'roots': [1],
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.rootsList,
+              'params': 'bad',
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.rootsList,
+              'params': null,
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.rootsList,
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsRootsListChanged,
+              'params': 'bad',
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsRootsListChanged,
+              'params': null,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsRootsListChanged,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsToolsListChanged,
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
+    test('rejects malformed task wire shapes', () {
+      final taskParams = {'taskId': 'task-1'};
+      final updateTaskParams = {
+        'taskId': 'task-1',
+        'inputResponses': <String, dynamic>{},
+      };
+      final taskStatusParams = {
+        'taskId': 'task-1',
+        'status': 'working',
+        'ttl': null,
+        'createdAt': '2026-07-28T00:00:00Z',
+        'lastUpdatedAt': '2026-07-28T00:00:01Z',
+      };
+      final taskExtensionParams = {
+        'taskId': 'task-1',
+        'status': 'working',
+        'createdAt': '2026-07-28T00:00:00Z',
+        'lastUpdatedAt': '2026-07-28T00:00:01Z',
+        'ttlMs': null,
+      };
+
+      for (final parse in <Object Function()>[
+        () => ListTasksRequest.fromJson({'cursor': 1}),
+        () => JsonRpcListTasksRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksList,
+              'params': null,
+            }),
+        () => JsonRpcListTasksRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksList,
+            }),
+        () => JsonRpcListTasksRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
+            }),
+        () => ListTasksResult.fromJson({
+              'tasks': [1],
+            }),
+        () => CancelTaskRequest.fromJson({'taskId': 1}),
+        () => JsonRpcCancelTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksCancel,
+              'params': 'bad',
+            }),
+        () => JsonRpcCancelTaskRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksCancel,
+              'params': taskParams,
+            }),
+        () => JsonRpcCancelTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': taskParams,
+            }),
+        () => GetTaskRequest.fromJson({'taskId': 1}),
+        () => JsonRpcGetTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': 'bad',
+            }),
+        () => JsonRpcGetTaskRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': taskParams,
+            }),
+        () => JsonRpcGetTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksCancel,
+              'params': taskParams,
+            }),
+        () => TaskResultRequest.fromJson({'taskId': 1}),
+        () => JsonRpcTaskResultRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksResult,
+              'params': null,
+            }),
+        () => JsonRpcTaskResultRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksResult,
+              'params': taskParams,
+            }),
+        () => JsonRpcTaskResultRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': taskParams,
+            }),
+        () => CreateTaskResult.fromJson({'task': 'bad'}),
+        () => JsonRpcUpdateTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksUpdate,
+              'params': 'bad',
+            }),
+        () => JsonRpcUpdateTaskRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.tasksUpdate,
+              'params': updateTaskParams,
+            }),
+        () => JsonRpcUpdateTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.tasksGet,
+              'params': updateTaskParams,
+            }),
+        () => JsonRpcTaskStatusNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsTasksStatus,
+              'params': 'bad',
+            }),
+        () => JsonRpcTaskStatusNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsTasksStatus,
+              'params': taskStatusParams,
+            }),
+        () => JsonRpcTaskStatusNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsTasks,
+              'params': taskStatusParams,
+            }),
+        () => JsonRpcTaskNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsTasks,
+              'params': null,
+            }),
+        () => JsonRpcTaskNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsTasks,
+              'params': taskExtensionParams,
+            }),
+        () => JsonRpcTaskNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsTasksStatus,
+              'params': taskExtensionParams,
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
+    test('rejects malformed subscription wire shapes', () {
+      for (final parse in <Object Function()>[
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': {
+                '_meta': _clientMeta(),
+                'notifications': <String, dynamic>{},
+              },
+            }),
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+              'params': {
+                '_meta': _clientMeta(),
+                'notifications': <String, dynamic>{},
+              },
+            }),
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': {
+                'notifications': <String, dynamic>{},
+              },
+            }),
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': {
+                '_meta': 'bad',
+                'notifications': <String, dynamic>{},
+              },
+            }),
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': 'bad',
+            }),
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': null,
+            }),
+        () => SubscriptionsListenRequest.fromJson({
+              'notifications': 'bad',
+            }),
+        () => SubscriptionsListenRequest.fromJson({
+              'notifications': <Object?, Object?>{
+                1: true,
+              },
+            }),
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsSubscriptionsAcknowledged,
+              'params': {
+                'notifications': <String, dynamic>{},
+              },
+            }),
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsProgress,
+              'params': {
+                'notifications': <String, dynamic>{},
+              },
+            }),
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsSubscriptionsAcknowledged,
+              'params': 'bad',
+            }),
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsSubscriptionsAcknowledged,
+              'params': null,
+            }),
+        () => SubscriptionsAcknowledgedNotification.fromJson({
+              'notifications': <Object?, Object?>{
+                1: true,
+              },
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
+    test('serializes subscriptions/listen with required request metadata', () {
+      final request = JsonRpcSubscriptionsListenRequest(
+        id: 'sub-1',
+        listenParams: const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+        meta: _clientMeta(),
+      );
+
+      final json = request.toJson();
+      expect(json['method'], Method.subscriptionsListen);
+      expect(json['params']['notifications'], {'toolsListChanged': true});
+      expect(
+        json['params']['_meta'][McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
+      );
+      expect(
+        json['params']['_meta'][McpMetaKey.clientCapabilities],
+        <String, dynamic>{},
+      );
+
+      final parsed = JsonRpcSubscriptionsListenRequest.fromJson(json);
+      expect(parsed.id, 'sub-1');
+      expect(parsed.meta, _clientMeta());
+      expect(parsed.listenParams.notifications.toolsListChanged, isTrue);
+      expect(
+        () => JsonRpcSubscriptionsListenRequest(
+          id: 'missing-meta',
+          listenParams: const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(toolsListChanged: true),
+          ),
+        ).toJson(),
+        throwsFormatException,
+      );
+    });
+
+    test('resource subscriptions require resources.subscribe capability', () {
+      const requested = SubscriptionFilter(
+        resourceSubscriptions: ['file:///project/config.json'],
+      );
+
+      expect(
+        requested
+            .acknowledgedBy(
+              const ServerCapabilities(
+                resources: ServerCapabilitiesResources(),
+              ),
+            )
+            .toJson(),
+        isEmpty,
+      );
+      expect(
+        requested
+            .acknowledgedBy(
+              const ServerCapabilities(
+                resources: ServerCapabilitiesResources(subscribe: true),
+              ),
+            )
+            .toJson(),
+        {
+          'resourceSubscriptions': ['file:///project/config.json'],
+        },
+      );
+    });
+
     test('server acknowledges subscriptions/listen with subscription id',
         () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(listChanged: true),
-            resources: ServerCapabilitiesResources(),
+            resources: ServerCapabilitiesResources(subscribe: true),
           ),
         ),
       );
@@ -978,7 +2265,7 @@ void main() {
             request.listenParams.notifications.acknowledgedBy(
               const ServerCapabilities(
                 tools: ServerCapabilitiesTools(listChanged: true),
-                resources: ServerCapabilitiesResources(),
+                resources: ServerCapabilitiesResources(subscribe: true),
               ),
             ),
           );
@@ -1031,6 +2318,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(listChanged: true),
           ),
@@ -1077,6 +2365,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(listChanged: true),
           ),
@@ -1142,6 +2431,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             prompts: ServerCapabilitiesPrompts(),
             resources: ServerCapabilitiesResources(),
@@ -1157,7 +2447,9 @@ void main() {
           cacheScope: CacheScope.public,
         ),
         (id, params, meta) => JsonRpcListToolsRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1166,7 +2458,9 @@ void main() {
         Method.promptsList,
         (request, extra) async => const ListPromptsResult(prompts: []),
         (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.promptsList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1175,7 +2469,9 @@ void main() {
         Method.resourcesList,
         (request, extra) async => const ListResourcesResult(resources: []),
         (id, params, meta) => JsonRpcListResourcesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.resourcesList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1185,7 +2481,9 @@ void main() {
         (request, extra) async =>
             const ListResourceTemplatesResult(resourceTemplates: []),
         (id, params, meta) => JsonRpcListResourceTemplatesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.resourcesTemplatesList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1196,7 +2494,9 @@ void main() {
           contents: [TextResourceContents(uri: 'file:///a.txt', text: 'a')],
         ),
         (id, params, meta) => JsonRpcReadResourceRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.resourcesRead,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1241,6 +2541,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             extensions: {mcpTasksExtensionId: {}},
           ),
@@ -1275,69 +2576,24 @@ void main() {
         ErrorCode.missingRequiredClientCapability.value,
       );
       expect(
-        response.error.data['requiredCapabilities']['extensions']
-            [mcpTasksExtensionId],
-        isEmpty,
+        response.error.message,
+        contains('Missing required client capability'),
       );
+      expect(response.error.data, {
+        'requiredCapabilities': {
+          'extensions': {
+            mcpTasksExtensionId: <String, dynamic>{},
+          },
+        },
+      });
     });
 
-    test('server rejects task extension methods without client capability',
+    test('server handles task extension methods without per-request capability',
         () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
-          capabilities: ServerCapabilities(
-            extensions: {mcpTasksExtensionId: {}},
-          ),
-        ),
-      );
-      final transport = RecordingTransport();
-      await server.connect(transport);
-
-      transport
-        ..receive(
-          JsonRpcGetTaskRequest(
-            id: 'get-task',
-            getParams: const GetTaskRequest(taskId: 'task-1'),
-            meta: _clientMeta(),
-          ),
-        )
-        ..receive(
-          JsonRpcCancelTaskRequest(
-            id: 'cancel-task',
-            cancelParams: const CancelTaskRequest(taskId: 'task-1'),
-            meta: _clientMeta(),
-          ),
-        )
-        ..receive(
-          JsonRpcUpdateTaskRequest(
-            id: 'update-task',
-            updateParams: const UpdateTaskRequest(
-              taskId: 'task-1',
-              inputResponses: {},
-            ),
-            meta: _clientMeta(),
-          ),
-        );
-      await _pump();
-
-      final errors = transport.sentMessages.cast<JsonRpcError>();
-      expect(
-        errors.map((response) => response.error.code),
-        everyElement(ErrorCode.missingRequiredClientCapability.value),
-      );
-      expect(
-        errors.first.error.data['requiredCapabilities']['extensions']
-            [mcpTasksExtensionId],
-        isEmpty,
-      );
-    });
-
-    test('server handles task extension methods with 2026 result shapes',
-        () async {
-      final server = Server(
-        const Implementation(name: 'server', version: '1.0.0'),
-        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             extensions: {mcpTasksExtensionId: {}},
           ),
@@ -1360,7 +2616,9 @@ void main() {
           ),
         ),
         (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksGet,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1369,7 +2627,9 @@ void main() {
         Method.tasksCancel,
         (request, extra) async => const TaskExtensionAcknowledgementResult(),
         (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksCancel,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1378,32 +2638,30 @@ void main() {
         Method.tasksUpdate,
         (request, extra) async => const EmptyResult(),
         (id, params, meta) => JsonRpcUpdateTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksUpdate,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
       );
       final transport = RecordingTransport();
       await server.connect(transport);
-      final taskExtensionMeta = _clientMeta(
-        clientCapabilities: const ClientCapabilities(
-          extensions: {mcpTasksExtensionId: {}},
-        ),
-      );
+      final statelessMeta = _clientMeta();
 
       transport
         ..receive(
           JsonRpcGetTaskRequest(
             id: 'get-task',
             getParams: const GetTaskRequest(taskId: 'task-1'),
-            meta: taskExtensionMeta,
+            meta: statelessMeta,
           ),
         )
         ..receive(
           JsonRpcCancelTaskRequest(
             id: 'cancel-task',
             cancelParams: const CancelTaskRequest(taskId: 'task-1'),
-            meta: taskExtensionMeta,
+            meta: statelessMeta,
           ),
         )
         ..receive(
@@ -1413,7 +2671,7 @@ void main() {
               taskId: 'task-1',
               inputResponses: {},
             ),
-            meta: taskExtensionMeta,
+            meta: statelessMeta,
           ),
         );
       await _pump();
@@ -1428,10 +2686,92 @@ void main() {
       expect(responses[2].result, {'resultType': resultTypeComplete});
     });
 
+    test('server task store uses task extension results for stateless requests',
+        () async {
+      final store = InMemoryTaskStore();
+      addTearDown(store.dispose);
+      final completedTask = await store.createTask(
+        const TaskCreation(ttl: 60000),
+        'source-request',
+        const {
+          'method': Method.toolsCall,
+          'params': {'name': 'long'},
+        },
+        null,
+      );
+      await store.storeTaskResult(
+        completedTask.taskId,
+        TaskStatus.completed,
+        const CallToolResult(content: [TextContent(text: 'done')]),
+      );
+      final workingTask = await store.createTask(
+        const TaskCreation(ttl: null),
+        'cancel-request',
+        const {
+          'method': Method.toolsCall,
+          'params': {'name': 'cancel-me'},
+        },
+        null,
+      );
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: const ServerCapabilities(
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+          taskStore: store,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      final meta = _clientMeta(
+        clientCapabilities: const ClientCapabilities(
+          extensions: {mcpTasksExtensionId: {}},
+        ),
+      );
+      transport
+        ..receive(
+          JsonRpcGetTaskRequest(
+            id: 'get-task',
+            getParams: GetTaskRequest(taskId: completedTask.taskId),
+            meta: meta,
+          ),
+        )
+        ..receive(
+          JsonRpcCancelTaskRequest(
+            id: 'cancel-task',
+            cancelParams: CancelTaskRequest(taskId: workingTask.taskId),
+            meta: meta,
+          ),
+        );
+      await _pump();
+
+      final responses = transport.sentMessages.cast<JsonRpcResponse>().toList();
+      expect(responses, hasLength(2));
+      expect(responses[0].result['resultType'], resultTypeComplete);
+      expect(responses[0].result['taskId'], completedTask.taskId);
+      expect(responses[0].result['status'], TaskStatus.completed.name);
+      expect(responses[0].result['ttlMs'], 60000);
+      expect(responses[0].result, isNot(contains('ttl')));
+      expect(responses[0].result['result']['content'], [
+        {'type': 'text', 'text': 'done'},
+      ]);
+      expect(responses[1].result, {'resultType': resultTypeComplete});
+      expect(
+        (await store.getTask(workingTask.taskId))?.status,
+        TaskStatus.cancelled,
+      );
+    });
+
     test('server does not expose legacy task handlers as task extension',
         () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       var handlerCalled = false;
       server.experimental.onGetTask((taskId, extra) async {
@@ -1471,6 +2811,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             extensions: {mcpTasksExtensionId: {}},
           ),
@@ -1486,7 +2827,9 @@ void main() {
           lastUpdatedAt: '2026-07-28T00:01:00Z',
         ),
         (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.tasksGet,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1517,6 +2860,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tasks: ServerCapabilitiesTasks(list: true),
             extensions: {mcpTasksExtensionId: {}},
@@ -1541,6 +2885,18 @@ void main() {
             resultParams: const TaskResultRequest(taskId: 'task-1'),
             meta: taskExtensionMeta,
           ),
+        )
+        ..receive(
+          JsonRpcTaskStatusNotification(
+            statusParams: const TaskStatusNotification(
+              taskId: 'task-1',
+              status: TaskStatus.working,
+              ttl: null,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ),
+            meta: taskExtensionMeta,
+          ),
         );
       await _pump();
 
@@ -1556,6 +2912,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tasks: ServerCapabilitiesTasks(
               list: true,
@@ -1589,6 +2946,9 @@ void main() {
     test('stateless tools/call ignores legacy task parameter', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerTool(
         'echo',
@@ -1620,12 +2980,14 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
           ),
         ),
       );
+      _registerTaskGetExtensionHandler(server);
       server.setRequestHandler<JsonRpcCallToolRequest>(
         Method.toolsCall,
         (request, extra) async => const CreateTaskExtensionResult(
@@ -1638,7 +3000,9 @@ void main() {
           ),
         ),
         (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsCall,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1664,12 +3028,138 @@ void main() {
       expect(response.result['taskId'], 'task-1');
     });
 
-    test(
-        'stateless tools/call rejects task extension result without capability',
+    test('stateless task support is not inferred from initialize capabilities',
         () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      _registerTaskGetExtensionHandler(server);
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async => const CreateTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.toolsCall,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcInitializeRequest(
+          id: 'init',
+          initParams: const InitializeRequest(
+            protocolVersion: stableProtocolVersion2025_11_25,
+            capabilities: ClientCapabilities(
+              extensions: {mcpTasksExtensionId: {}},
+            ),
+            clientInfo: Implementation(name: 'client', version: '1.0.0'),
+          ),
+        ),
+      );
+      await _pump();
+      transport.sentMessages.clear();
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'long').toJson(),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(
+        response.error.code,
+        ErrorCode.missingRequiredClientCapability.value,
+      );
+      expect(
+        response.error.message,
+        contains('Missing required client capability'),
+      );
+      expect(response.error.data, {
+        'requiredCapabilities': {
+          'extensions': {
+            mcpTasksExtensionId: <String, dynamic>{},
+          },
+        },
+      });
+    });
+
+    test('stateless tools/call rejects task result without server extension',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async => const CreateTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.toolsCall,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'long').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              extensions: {mcpTasksExtensionId: {}},
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, contains(mcpTasksExtensionId));
+    });
+
+    test('stateless tools/call rejects task result without tasks/get handler',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
@@ -1688,7 +3178,185 @@ void main() {
           ),
         ),
         (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsCall,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'long').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              extensions: {mcpTasksExtensionId: {}},
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, contains('tasks/get handler'));
+    });
+
+    test('stateless tools/call rejects task result before task is readable',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      var getTaskCalled = false;
+      server.setRequestHandler<JsonRpcGetTaskRequest>(
+        Method.tasksGet,
+        (request, extra) async {
+          getTaskCalled = true;
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'Task not found',
+          );
+        },
+        (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.tasksGet,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async => const CreateTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.toolsCall,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'long').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              extensions: {mcpTasksExtensionId: {}},
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(getTaskCalled, isTrue);
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, contains('must be resolvable'));
+      expect(response.error.data, contains('Task not found'));
+    });
+
+    test('stateless tools/call rejects CallToolResult resultType spoof',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async => const CallToolResult(
+          content: [TextContent(text: 'spoof')],
+          extra: {
+            'resultType': resultTypeTask,
+            'taskId': 'spoofed-task',
+          },
+        ),
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.toolsCall,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'spoof').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              extensions: {mcpTasksExtensionId: {}},
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, contains('CallToolResult'));
+      expect(response.error.message, contains('resultType'));
+    });
+
+    test(
+        'stateless tools/call rejects task extension result without capability',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async => const CreateTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.toolsCall,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1710,12 +3378,24 @@ void main() {
         response.error.code,
         ErrorCode.missingRequiredClientCapability.value,
       );
+      expect(
+        response.error.message,
+        contains('Missing required client capability'),
+      );
+      expect(response.error.data, {
+        'requiredCapabilities': {
+          'extensions': {
+            mcpTasksExtensionId: <String, dynamic>{},
+          },
+        },
+      });
     });
 
     test('stateless tools/call permits input required results', () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
         ),
       );
@@ -1724,7 +3404,9 @@ void main() {
         (request, extra) async =>
             const InputRequiredResult(requestState: 'retry-state'),
         (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsCall,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1746,11 +3428,101 @@ void main() {
       expect(response.result['requestState'], 'retry-state');
     });
 
+    test('stateless registerTool receives input responses and request state',
+        () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+      server.registerTool(
+        'needs_input',
+        callback: (args, extra) {
+          final response = extra.inputResponses?['profile'];
+          if (response == null) {
+            expect(extra.requestState, isNull);
+            return InputRequiredResult(
+              inputRequests: {
+                'profile': InputRequest.elicit(
+                  ElicitRequest.form(
+                    message: 'Enter profile details',
+                    requestedSchema: JsonSchema.object(
+                      properties: {'name': JsonSchema.string()},
+                      required: ['name'],
+                    ),
+                  ),
+                ),
+              },
+              requestState: 'state-1',
+            );
+          }
+
+          expect(extra.requestState, 'state-1');
+          final responseJson = response.toJson();
+          final content = responseJson['content'] as Map<String, dynamic>;
+          return CallToolResult(
+            content: [TextContent(text: 'Hello ${content['name']}')],
+          );
+        },
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'needs_input').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final inputRequired = transport.sentMessages.single as JsonRpcResponse;
+      expect(inputRequired.result['resultType'], resultTypeInputRequired);
+      expect(inputRequired.result['requestState'], 'state-1');
+      expect(inputRequired.result['inputRequests'], contains('profile'));
+
+      transport.sentMessages.clear();
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-2',
+          params: CallToolRequest(
+            name: 'needs_input',
+            inputResponses: {
+              'profile': InputResponse.fromResult(
+                const ElicitResult(
+                  action: 'accept',
+                  content: {'name': 'Alice'},
+                ),
+              ),
+            },
+            requestState: 'state-1',
+          ).toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+          ),
+        ),
+      );
+      await _pump();
+
+      final completed = transport.sentMessages.single as JsonRpcResponse;
+      expect(completed.result['resultType'], resultTypeComplete);
+      expect(completed.result['content'][0]['text'], 'Hello Alice');
+    });
+
     test('stateless input required requests require client capabilities',
         () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
         ),
       );
@@ -1797,7 +3569,9 @@ void main() {
           );
         },
         (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.toolsCall,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1895,6 +3669,9 @@ void main() {
     test('stateless prompts/get permits input required results', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerPrompt(
         'needs_input',
@@ -1921,6 +3698,9 @@ void main() {
     test('stateless resources/read permits input required results', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerResource(
         'needs_input',
@@ -1951,6 +3731,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities:
               ServerCapabilities(prompts: ServerCapabilitiesPrompts()),
         ),
@@ -1960,7 +3741,9 @@ void main() {
         (request, extra) async =>
             const InputRequiredResult(requestState: 'list-state'),
         (id, params, meta) => JsonRpcListPromptsRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
           'id': id,
+          'method': Method.promptsList,
           'params': params,
           if (meta != null) '_meta': meta,
         }),
@@ -1985,10 +3768,14 @@ void main() {
         () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
+      final handler = CompletedTaskHandler();
       server.experimental.registerToolTask(
         'long',
-        handler: CompletedTaskHandler(),
+        handler: handler,
       );
       final transport = RecordingTransport();
       await server.connect(transport);
@@ -1996,7 +3783,10 @@ void main() {
       transport.receive(
         JsonRpcCallToolRequest(
           id: 'call-1',
-          params: const CallToolRequest(name: 'long').toJson(),
+          params: {
+            ...const CallToolRequest(name: 'long').toJson(),
+            'task': {'ttl': 1000},
+          },
           meta: _clientMeta(),
         ),
       );
@@ -2004,11 +3794,15 @@ void main() {
 
       final response = transport.sentMessages.single as JsonRpcResponse;
       expect(response.result['content'][0]['text'], 'task complete');
+      expect(handler.lastCreateTaskExtra?.taskRequestedTtl, isNull);
     });
 
     test('stateless tools/list omits legacy task execution metadata', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerTool(
         'echo',
@@ -2028,9 +3822,55 @@ void main() {
       expect(tool, isNot(contains('execution')));
     });
 
+    test('stateless custom tools/list handlers omit legacy execution metadata',
+        () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      server.server.setRequestHandler<JsonRpcListToolsRequest>(
+        Method.toolsList,
+        (request, extra) async => const ListToolsResult(
+          tools: [
+            Tool(
+              name: 'task-tool',
+              inputSchema: JsonObject(),
+              execution: ToolExecution(taskSupport: 'required'),
+            ),
+          ],
+        ),
+        (id, params, meta) => JsonRpcListToolsRequest(
+          id: id,
+          params: params,
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport
+          .receive(JsonRpcListToolsRequest(id: 'tools', meta: _clientMeta()));
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      final tool = (response.result['tools'] as List).single as Map;
+      expect(tool, isNot(contains('execution')));
+      expect(response.result['resultType'], resultTypeComplete);
+      expect(response.result['ttlMs'], 0);
+      expect(response.result['cacheScope'], CacheScope.private);
+    });
+
     test('stateless tools/list returns tools sorted by name', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       for (final name in ['zeta', 'alpha', 'middle']) {
         server.registerTool(
@@ -2056,6 +3896,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tasks: ServerCapabilitiesTasks(),
           ),
@@ -2067,7 +3908,9 @@ void main() {
           Method.tasksUpdate,
           (request, extra) async => const TaskExtensionAcknowledgementResult(),
           (id, params, meta) => JsonRpcUpdateTaskRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.tasksUpdate,
             'params': params,
             if (meta != null) '_meta': meta,
           }),
@@ -2081,6 +3924,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -2109,18 +3953,21 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
         ),
       );
+      String? receivedProtocolVersion;
+      Implementation? receivedClientInfo;
+      ClientCapabilities? receivedClientCapabilities;
       server.setRequestHandler<JsonRpcListToolsRequest>(
         Method.toolsList,
         (request, extra) async {
-          expect(
-            extra.meta?[McpMetaKey.protocolVersion],
-            draftProtocolVersion2026_07_28,
-          );
+          receivedProtocolVersion = extra.protocolVersion;
+          receivedClientInfo = extra.clientInfo;
+          receivedClientCapabilities = extra.clientCapabilities;
           return const ListToolsResult(
             tools: [
               Tool(name: 'echo', inputSchema: JsonObject()),
@@ -2142,12 +3989,194 @@ void main() {
       final response = transport.sentMessages.single as JsonRpcResponse;
       final tools = response.result['tools'] as List<dynamic>;
       expect(tools.single['name'], 'echo');
+      expect(receivedProtocolVersion, draftProtocolVersion2026_07_28);
+      expect(receivedClientInfo?.name, 'client');
+      expect(receivedClientInfo?.version, '1.0.0');
+      expect(receivedClientCapabilities?.toJson(), isEmpty);
+    });
+
+    test('stateless handlers do not inherit transport session identity',
+        () async {
+      final taskStore = SessionRecordingTaskStore();
+      addTearDown(taskStore.dispose);
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: const ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+          taskStore: taskStore,
+        ),
+      );
+      RequestHandlerExtra? receivedExtra;
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async {
+          receivedExtra = extra;
+          await extra.taskStore!.createTask(const TaskCreation(ttl: 1000));
+          return const CallToolResult(
+            content: [TextContent(text: 'ok')],
+          );
+        },
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.toolsCall,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport =
+          RecordingTransport(sessionIdValue: 'stateful-session-id');
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'tool').toJson(),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['resultType'], resultTypeComplete);
+      expect(receivedExtra?.sessionId, isNull);
+      expect(taskStore.createTaskSessionIds, [isNull]);
+    });
+
+    test('server handler client requests stay associated with origin request',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async {
+          final result = await extra.sendRequest<ElicitResult>(
+            JsonRpcElicitRequest(
+              id: -1,
+              elicitParams: ElicitRequest.form(
+                message: 'Approve tool execution?',
+                requestedSchema: JsonSchema.object(
+                  properties: {'approved': JsonSchema.boolean()},
+                  required: ['approved'],
+                ),
+              ),
+            ),
+            ElicitResult.fromJson,
+            const RequestOptions(timeout: Duration(seconds: 1)),
+          );
+          expect(result.accepted, isTrue);
+          return const CallToolResult(
+            content: [TextContent(text: 'approved')],
+          );
+        },
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.toolsCall,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: stableProtocolVersion2025_11_25,
+            capabilities: ClientCapabilities(
+              elicitation: ClientElicitation.formOnly(),
+            ),
+            clientInfo: Implementation(name: 'client', version: '1.0.0'),
+          ),
+        ),
+      );
+      await _pump();
+      transport
+        ..sentMessages.clear()
+        ..sentRelatedRequestIds.clear()
+        ..receive(const JsonRpcInitializedNotification());
+      await _pump();
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 42,
+          params: const CallToolRequest(name: 'needs-approval').toJson(),
+        ),
+      );
+      await _pump();
+
+      final nestedRequest = transport.sentMessages.single as JsonRpcRequest;
+      expect(nestedRequest.method, Method.elicitationCreate);
+      expect(transport.sentRelatedRequestIds.single, 42);
+
+      transport.receive(
+        JsonRpcResponse(
+          id: nestedRequest.id,
+          result: const ElicitResult(
+            action: 'accept',
+            content: {'approved': true},
+          ).toJson(),
+        ),
+      );
+      await _pump();
+
+      expect(transport.sentMessages, hasLength(2));
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      expect(response.id, 42);
+      expect(response.result['content'][0]['text'], 'approved');
+    });
+
+    test('server initialize never negotiates stateless draft version',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: draftProtocolVersion2026_07_28,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'client', version: '1.0.0'),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(
+        response.result['protocolVersion'],
+        stableProtocolVersion2025_11_25,
+      );
+      expect(
+        response.result['protocolVersion'],
+        isNot(latestDraftProtocolVersion),
+      );
     });
 
     test('server returns unsupported protocol version for stateless metadata',
         () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       final transport = RecordingTransport();
       await server.connect(transport);
@@ -2172,6 +4201,9 @@ void main() {
     test('server rejects malformed stateless request metadata', () {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
 
       McpError? validateToolRequest(Map<String, dynamic>? meta) {
@@ -2275,7 +4307,7 @@ void main() {
             .having(
               (error) => error.code,
               'code',
-              ErrorCode.invalidRequest.value,
+              ErrorCode.invalidParams.value,
             )
             .having(
               (error) => error.data,
@@ -2289,11 +4321,26 @@ void main() {
         ),
         isNull,
       );
+      expect(
+        validateToolRequest(
+          _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              additionalCapabilities: {
+                'com.example/clientFeature': {'enabled': true},
+              },
+            ),
+          ),
+        ),
+        isNull,
+      );
     });
 
     test('server rejects core RPCs removed from stateless MCP', () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       final transport = RecordingTransport();
       await server.connect(transport);
@@ -2350,6 +4397,9 @@ void main() {
     test('server rejects notifications removed from stateless MCP', () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       final errors = <Error>[];
       server.onerror = errors.add;
@@ -2394,6 +4444,7 @@ void main() {
       server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             logging: {},
             tools: ServerCapabilitiesTools(),
@@ -2451,6 +4502,7 @@ void main() {
       server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             logging: {},
             tools: ServerCapabilitiesTools(),
@@ -2485,12 +4537,14 @@ void main() {
       expect(transport.sentMessages.single, isA<JsonRpcResponse>());
     });
 
-    test('client can opt in to server/discover and sends stateless metadata',
+    test('preview client uses server/discover and sends stateless metadata',
         () async {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
 
       await client.connect(transport);
@@ -2517,12 +4571,125 @@ void main() {
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
     });
 
+    test('stateless client rejects legacy task request options before send',
+        () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+
+      await client.connect(transport);
+      final sentBeforeCall = transport.sentMessages.length;
+
+      await expectLater(
+        client.callTool(
+          const CallToolRequest(name: 'echo'),
+          options: const RequestOptions(task: TaskCreation(ttl: 1000)),
+        ),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.invalidRequest.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('RequestOptions.task'),
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains(mcpTasksExtensionId),
+              ),
+        ),
+      );
+
+      expect(transport.sentMessages, hasLength(sentBeforeCall));
+    });
+
+    test('client uses legacy initialization by default', () async {
+      final transport = LegacyFallbackTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+      );
+
+      await client.connect(transport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        isNot(contains(Method.serverDiscover)),
+      );
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        contains(Method.initialize),
+      );
+      final initializeRequest = transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((message) => message.method == Method.initialize);
+      expect(
+        initializeRequest.params?['protocolVersion'],
+        stableProtocolVersion2025_11_25,
+      );
+    });
+
+    test('client falls back when legacy HTTP rejects discovery before init',
+        () async {
+      final errors = [
+        McpError(
+          0,
+          'Error POSTing to endpoint (HTTP 400): '
+          '{"jsonrpc":"2.0","error":{"code":-32000,'
+          '"message":"Bad Request: Server not initialized"},"id":null}',
+        ),
+        McpError(0, 'Error POSTing to endpoint (HTTP 400): '),
+        McpError(
+          ErrorCode.invalidParams.value,
+          'Invalid request parameters',
+        ),
+      ];
+
+      for (final error in errors) {
+        final transport = LegacyFallbackTransport(discoveryError: error);
+        final client = McpClient(
+          const Implementation(name: 'client', version: '1.0.0'),
+          options: const McpClientOptions(
+            protocol: McpProtocol.preview2026,
+          ),
+        );
+
+        await client.connect(transport);
+
+        expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+        expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+        expect(
+          transport.sentMessages
+              .whereType<JsonRpcRequest>()
+              .map((message) => message.method),
+          [Method.serverDiscover, Method.initialize],
+        );
+      }
+    });
+
     test('stateless client rejects removed request methods before send',
         () async {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
       transport.sentMessages.clear();
@@ -2606,7 +4773,10 @@ void main() {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
       transport.sentMessages.clear();
@@ -2622,6 +4792,20 @@ void main() {
         (
           method: Method.notificationsRootsListChanged,
           call: client.sendRootsListChanged,
+        ),
+        (
+          method: Method.notificationsTasksStatus,
+          call: () => client.notification(
+                JsonRpcTaskStatusNotification(
+                  statusParams: const TaskStatusNotification(
+                    taskId: 'task-1',
+                    status: TaskStatus.working,
+                    ttl: null,
+                    createdAt: '2026-07-28T00:00:00Z',
+                    lastUpdatedAt: '2026-07-28T00:00:00Z',
+                  ),
+                ),
+              ),
         ),
       ];
 
@@ -2653,6 +4837,7 @@ void main() {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
         options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ClientCapabilities(roots: ClientCapabilitiesRoots()),
           useServerDiscover: true,
         ),
@@ -2668,6 +4853,578 @@ void main() {
       expect(response.error.code, ErrorCode.invalidRequest.value);
       expect(response.error.message, contains('input_required'));
       expect(response.error.message, contains('inputRequests'));
+    });
+
+    test(
+        'stateless client reports method not found for unadvertised peer method',
+        () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      transport.onmessage?.call(const JsonRpcListRootsRequest(id: 'roots-1'));
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.id, 'roots-1');
+      expect(response.error.code, ErrorCode.methodNotFound.value);
+      expect(response.error.message, contains('roots'));
+    });
+
+    test('client retries tools/call after fulfilling input_required requests',
+        () async {
+      late DiscoveringClientTransport transport;
+      final callRequests = <JsonRpcRequest>[];
+      transport = DiscoveringClientTransport(
+        onRequest: (request) {
+          if (request.method != Method.toolsCall) {
+            return;
+          }
+
+          callRequests.add(request);
+          if (callRequests.length == 1) {
+            transport.onmessage?.call(
+              JsonRpcResponse(
+                id: request.id,
+                result: InputRequiredResult(
+                  requestState: 'state-1',
+                  inputRequests: {
+                    'profile': InputRequest.elicit(
+                      ElicitRequest.form(
+                        message: 'Enter profile',
+                        requestedSchema: JsonSchema.object(
+                          properties: {'name': JsonSchema.string()},
+                          required: ['name'],
+                        ),
+                      ),
+                    ),
+                    'roots': InputRequest.listRoots(),
+                  },
+                ).toJson(),
+              ),
+            );
+            return;
+          }
+
+          expect(request.params?['requestState'], 'state-1');
+          final inputResponses =
+              request.params?['inputResponses'] as Map<String, dynamic>;
+          expect(inputResponses['profile'], {
+            'action': 'accept',
+            'content': {'name': 'Ada'},
+          });
+          expect(inputResponses['roots'], {
+            'roots': [
+              {'uri': 'file:///repo'},
+            ],
+          });
+          transport.onmessage?.call(
+            JsonRpcResponse(
+              id: request.id,
+              result: {
+                'resultType': resultTypeComplete,
+                ...const CallToolResult(
+                  content: [TextContent(text: 'ok')],
+                ).toJson(),
+              },
+            ),
+          );
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ClientCapabilities(
+            elicitation: ClientElicitation.formOnly(),
+            roots: ClientCapabilitiesRoots(),
+          ),
+        ),
+      );
+      client.onElicitRequest = (params) async {
+        expect(params.message, 'Enter profile');
+        return const ElicitResult(
+          action: 'accept',
+          content: {'name': 'Ada'},
+        );
+      };
+      client.setRequestHandler<JsonRpcListRootsRequest>(
+        Method.rootsList,
+        (request, extra) async => ListRootsResult(
+          roots: [Root(uri: 'file:///repo')],
+        ),
+        (id, params, meta) => JsonRpcListRootsRequest(id: id, meta: meta),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'lookup'),
+      );
+
+      expect((result.content.single as TextContent).text, 'ok');
+      expect(callRequests, hasLength(2));
+      expect(callRequests[1].id, isNot(callRequests[0].id));
+    });
+
+    test('client resolves task resultType tools/call responses', () async {
+      late DiscoveringClientTransport transport;
+      final requests = <JsonRpcRequest>[];
+      transport = DiscoveringClientTransport(
+        capabilities: ServerCapabilities(
+          tools: const ServerCapabilitiesTools(),
+          extensions: withMcpTasksExtension(null),
+        ),
+        onRequest: (request) {
+          requests.add(request);
+          switch (request.method) {
+            case Method.toolsCall:
+              expect(request.params?['name'], 'delayed');
+              final clientCapabilities = request
+                  .meta?[McpMetaKey.clientCapabilities] as Map<String, dynamic>;
+              expect(
+                clientCapabilities['extensions'][mcpTasksExtensionId],
+                <String, dynamic>{},
+              );
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const CreateTaskExtensionResult(
+                    task: TaskExtensionTask(
+                      taskId: 'task-1',
+                      status: TaskStatus.working,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:01Z',
+                      ttlMs: null,
+                      pollIntervalMs: 1,
+                    ),
+                  ).toJson(),
+                ),
+              );
+              break;
+
+            case Method.tasksGet:
+              expect(request.params?['taskId'], 'task-1');
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const GetTaskExtensionResult(
+                    task: TaskExtensionTask(
+                      taskId: 'task-1',
+                      status: TaskStatus.completed,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:02Z',
+                      ttlMs: null,
+                      result: {
+                        'content': [
+                          {'type': 'text', 'text': 'task done'},
+                        ],
+                        'isError': false,
+                      },
+                    ),
+                  ).toJson(),
+                ),
+              );
+              break;
+          }
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ClientCapabilities(
+            extensions: withMcpTasksExtension(null),
+          ),
+        ),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'delayed'),
+      );
+
+      expect((result.content.single as TextContent).text, 'task done');
+      expect(requests.map((request) => request.method), [
+        Method.toolsCall,
+        Method.tasksGet,
+      ]);
+    });
+
+    test('client handles input_required before task resultType tools/call',
+        () async {
+      late DiscoveringClientTransport transport;
+      final requests = <JsonRpcRequest>[];
+      transport = DiscoveringClientTransport(
+        capabilities: ServerCapabilities(
+          tools: const ServerCapabilitiesTools(),
+          extensions: withMcpTasksExtension(null),
+        ),
+        onRequest: (request) {
+          requests.add(request);
+          switch (request.method) {
+            case Method.toolsCall:
+              if (requests
+                      .where((sent) => sent.method == Method.toolsCall)
+                      .length ==
+                  1) {
+                transport.onmessage?.call(
+                  JsonRpcResponse(
+                    id: request.id,
+                    result: InputRequiredResult(
+                      requestState: 'approved-state',
+                      inputRequests: {
+                        'approval': InputRequest.elicit(
+                          ElicitRequest.form(
+                            message: 'Approve async work?',
+                            requestedSchema: JsonSchema.object(
+                              properties: {
+                                'approved': JsonSchema.boolean(),
+                              },
+                              required: ['approved'],
+                            ),
+                          ),
+                        ),
+                      },
+                    ).toJson(),
+                  ),
+                );
+                return;
+              }
+
+              expect(request.params?['requestState'], 'approved-state');
+              expect(
+                request.params?['inputResponses']['approval'],
+                {
+                  'action': 'accept',
+                  'content': {'approved': true},
+                },
+              );
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const CreateTaskExtensionResult(
+                    task: TaskExtensionTask(
+                      taskId: 'task-after-mrtr',
+                      status: TaskStatus.working,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:01Z',
+                      ttlMs: null,
+                      pollIntervalMs: 1,
+                    ),
+                  ).toJson(),
+                ),
+              );
+              break;
+
+            case Method.tasksGet:
+              expect(request.params?['taskId'], 'task-after-mrtr');
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const GetTaskExtensionResult(
+                    task: TaskExtensionTask(
+                      taskId: 'task-after-mrtr',
+                      status: TaskStatus.completed,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:02Z',
+                      ttlMs: null,
+                      result: {
+                        'content': [
+                          {'type': 'text', 'text': 'approved task done'},
+                        ],
+                      },
+                    ),
+                  ).toJson(),
+                ),
+              );
+              break;
+          }
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ClientCapabilities(
+            elicitation: const ClientElicitation.formOnly(),
+            extensions: withMcpTasksExtension(null),
+          ),
+        ),
+      );
+      client.onElicitRequest = (params) async {
+        expect(params.message, 'Approve async work?');
+        return const ElicitResult(
+          action: 'accept',
+          content: {'approved': true},
+        );
+      };
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'async-approval-tool'),
+      );
+
+      expect((result.content.single as TextContent).text, 'approved task done');
+      expect(requests.map((request) => request.method), [
+        Method.toolsCall,
+        Method.toolsCall,
+        Method.tasksGet,
+      ]);
+    });
+
+    test('client updates task input requests once while polling', () async {
+      late DiscoveringClientTransport transport;
+      var getCount = 0;
+      var updateCount = 0;
+      transport = DiscoveringClientTransport(
+        capabilities: ServerCapabilities(
+          tools: const ServerCapabilitiesTools(),
+          extensions: withMcpTasksExtension(null),
+        ),
+        onRequest: (request) {
+          switch (request.method) {
+            case Method.toolsCall:
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const CreateTaskExtensionResult(
+                    task: TaskExtensionTask(
+                      taskId: 'task-2',
+                      status: TaskStatus.working,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:01Z',
+                      ttlMs: null,
+                      pollIntervalMs: 1,
+                    ),
+                  ).toJson(),
+                ),
+              );
+              break;
+
+            case Method.tasksGet:
+              getCount += 1;
+              final task = getCount < 3
+                  ? TaskExtensionTask(
+                      taskId: 'task-2',
+                      status: TaskStatus.inputRequired,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:02Z',
+                      ttlMs: null,
+                      pollIntervalMs: 1,
+                      inputRequests: {
+                        'approval': InputRequest.elicit(
+                          ElicitRequest.form(
+                            message: 'Approve?',
+                            requestedSchema: JsonSchema.object(
+                              properties: {
+                                'approved': JsonSchema.boolean(),
+                              },
+                              required: ['approved'],
+                            ),
+                          ),
+                        ),
+                      },
+                    )
+                  : const TaskExtensionTask(
+                      taskId: 'task-2',
+                      status: TaskStatus.completed,
+                      createdAt: '2026-07-28T00:00:00Z',
+                      lastUpdatedAt: '2026-07-28T00:00:03Z',
+                      ttlMs: null,
+                      result: {
+                        'content': [
+                          {'type': 'text', 'text': 'approved'},
+                        ],
+                      },
+                    );
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: GetTaskExtensionResult(task: task).toJson(),
+                ),
+              );
+              break;
+
+            case Method.tasksUpdate:
+              updateCount += 1;
+              expect(request.params?['taskId'], 'task-2');
+              expect(
+                request.params?['inputResponses']['approval'],
+                {
+                  'action': 'accept',
+                  'content': {'approved': true},
+                },
+              );
+              transport.onmessage?.call(
+                JsonRpcResponse(
+                  id: request.id,
+                  result: const TaskExtensionAcknowledgementResult().toJson(),
+                ),
+              );
+              break;
+          }
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ClientCapabilities(
+            elicitation: const ClientElicitation.formOnly(),
+            extensions: withMcpTasksExtension(null),
+          ),
+        ),
+      );
+      client.onElicitRequest = (params) async {
+        expect(params.message, 'Approve?');
+        return const ElicitResult(
+          action: 'accept',
+          content: {'approved': true},
+        );
+      };
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'approval-tool'),
+      );
+
+      expect((result.content.single as TextContent).text, 'approved');
+      expect(getCount, 3);
+      expect(updateCount, 1);
+    });
+
+    test('client rejects task resultType when request lacks task extension',
+        () async {
+      late DiscoveringClientTransport transport;
+      transport = DiscoveringClientTransport(
+        capabilities: ServerCapabilities(
+          tools: const ServerCapabilitiesTools(),
+          extensions: withMcpTasksExtension(null),
+        ),
+        onRequest: (request) {
+          if (request.method != Method.toolsCall) {
+            return;
+          }
+          transport.onmessage?.call(
+            JsonRpcResponse(
+              id: request.id,
+              result: const CreateTaskExtensionResult(
+                task: TaskExtensionTask(
+                  taskId: 'task-3',
+                  status: TaskStatus.working,
+                  createdAt: '2026-07-28T00:00:00Z',
+                  lastUpdatedAt: '2026-07-28T00:00:01Z',
+                  ttlMs: null,
+                ),
+              ).toJson(),
+            ),
+          );
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+      await client.connect(transport);
+
+      await expectLater(
+        client.callTool(const CallToolRequest(name: 'delayed')),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains(
+                  'MCP resultType "$resultTypeTask" is not valid for '
+                  '${Method.toolsCall}',
+                ),
+              ),
+        ),
+      );
+    });
+
+    test('client retries requestState-only input_required without responses',
+        () async {
+      late DiscoveringClientTransport transport;
+      final readRequests = <JsonRpcRequest>[];
+      transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          resources: ServerCapabilitiesResources(),
+        ),
+        onRequest: (request) {
+          if (request.method != Method.resourcesRead) {
+            return;
+          }
+
+          readRequests.add(request);
+          if (readRequests.length == 1) {
+            transport.onmessage?.call(
+              JsonRpcResponse(
+                id: request.id,
+                result: const InputRequiredResult(
+                  requestState: 'read-state',
+                ).toJson(),
+              ),
+            );
+            return;
+          }
+
+          expect(request.params?['requestState'], 'read-state');
+          expect(request.params, isNot(contains('inputResponses')));
+          transport.onmessage?.call(
+            JsonRpcResponse(
+              id: request.id,
+              result: {
+                'resultType': resultTypeComplete,
+                ...const ReadResourceResult(
+                  contents: [
+                    TextResourceContents(
+                      uri: 'file:///doc.txt',
+                      text: 'hello',
+                    ),
+                  ],
+                  ttlMs: 0,
+                  cacheScope: CacheScope.private,
+                ).toJson(),
+              },
+            ),
+          );
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+      await client.connect(transport);
+      transport.sentMessages.clear();
+
+      final result = await client.readResource(
+        const ReadResourceRequest(uri: 'file:///doc.txt'),
+      );
+
+      expect((result.contents.single as TextResourceContents).text, 'hello');
+      expect(readRequests, hasLength(2));
+      expect(readRequests[1].id, isNot(readRequests[0].id));
     });
 
     test('client listenSubscriptions requires a connected transport', () {
@@ -2695,7 +5452,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -2804,7 +5564,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -2855,7 +5618,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -2904,7 +5670,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -2961,7 +5730,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -3017,7 +5789,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -3060,7 +5835,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -3108,7 +5886,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -3140,7 +5921,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -3177,7 +5961,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -3195,6 +5982,44 @@ void main() {
                 (error) => error.data.toString(),
                 'data',
                 contains('MCP resultType must be a string'),
+              ),
+        ),
+      );
+    });
+
+    test('client rejects input_required on non-MRTR requests', () async {
+      final transport = DiscoveringClientTransport(
+        toolsListResult: const {
+          'resultType': resultTypeInputRequired,
+          'requestState': 'list-state',
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
+      );
+
+      await client.connect(transport);
+
+      await expectLater(
+        client.listTools(),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains(
+                  'MCP resultType "$resultTypeInputRequired" is not valid for '
+                  '${Method.toolsList}',
+                ),
               ),
         ),
       );
@@ -3247,7 +6072,10 @@ void main() {
         );
         final client = McpClient(
           const Implementation(name: 'client', version: '1.0.0'),
-          options: const McpClientOptions(useServerDiscover: true),
+          options: const McpClientOptions(
+            protocol: McpProtocol.preview2026,
+            useServerDiscover: true,
+          ),
         );
 
         await client.connect(transport);
@@ -3271,7 +6099,7 @@ void main() {
       });
     }
 
-    test('client accepts advertised task extension resultType values',
+    test('client rejects task resultType on non-task-eligible requests',
         () async {
       final transport = DiscoveringClientTransport(
         capabilities: ServerCapabilities(
@@ -3285,13 +6113,75 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
+      );
+
+      await client.connect(transport);
+
+      await expectLater(
+        client.listTools(),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.data.toString(),
+                'data',
+                contains(
+                  'MCP resultType "$resultTypeTask" is not valid for '
+                  '${Method.toolsList}',
+                ),
+              ),
+        ),
+      );
+    });
+
+    test('client preserves cache hints when filtering invalid tools', () async {
+      final transport = DiscoveringClientTransport(
+        toolsListResult: const {
+          'resultType': resultTypeComplete,
+          'tools': [
+            {
+              'name': 'valid',
+              'inputSchema': {'type': 'object'},
+            },
+            {
+              'name': 'invalid_header',
+              'inputSchema': {
+                'type': 'object',
+                'properties': {
+                  'payload': {
+                    'type': 'object',
+                    'x-mcp-header': 'Payload',
+                  },
+                },
+              },
+            },
+          ],
+          'ttlMs': 300000,
+          'cacheScope': CacheScope.public,
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
 
       final result = await client.listTools();
-      expect(result.tools, isEmpty);
+      expect(result.tools.map((tool) => tool.name), ['valid']);
+      expect(result.ttlMs, 300000);
+      expect(result.cacheScope, CacheScope.public);
     });
 
     test('stable client sessions do not validate future resultType values',
@@ -3304,7 +6194,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -3321,7 +6214,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await expectLater(
@@ -3345,6 +6241,7 @@ void main() {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
         options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
           protocolVersion: '1900-01-01',
           useServerDiscover: true,
         ),
@@ -3414,6 +6311,7 @@ void main() {
           final client = McpClient(
             const Implementation(name: 'client', version: '1.0.0'),
             options: McpClientOptions(
+              protocol: McpProtocol.preview2026,
               protocolVersion: scenario.requested,
               useServerDiscover: true,
             ),
@@ -3444,7 +6342,9 @@ void main() {
       final transport = LegacyFallbackTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
 
       await client.connect(transport);
@@ -3456,6 +6356,13 @@ void main() {
             .whereType<JsonRpcRequest>()
             .map((message) => message.method),
         containsAllInOrder([Method.serverDiscover, Method.initialize]),
+      );
+      final initializeRequest = transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((message) => message.method == Method.initialize);
+      expect(
+        initializeRequest.params?['protocolVersion'],
+        stableProtocolVersion2025_11_25,
       );
       expect(
         transport.sentMessages.whereType<JsonRpcInitializedNotification>(),

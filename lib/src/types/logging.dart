@@ -1,6 +1,14 @@
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  expectJsonRpcMethod(json, expected, context);
+}
+
 /// Severity levels for log messages (syslog levels).
 enum LoggingLevel {
   debug,
@@ -22,7 +30,11 @@ class SetLevelRequest {
 
   factory SetLevelRequest.fromJson(Map<String, dynamic> json) =>
       SetLevelRequest(
-        level: LoggingLevel.values.byName(json['level'] as String),
+        level: readRequiredEnumValue(
+          json['level'],
+          LoggingLevel.values,
+          'SetLevelRequest.level',
+        ),
       );
 
   Map<String, dynamic> toJson() => {'level': level.name};
@@ -40,7 +52,15 @@ class JsonRpcSetLevelRequest extends JsonRpcRequest {
   }) : super(method: Method.loggingSetLevel, params: setParams.toJson());
 
   factory JsonRpcSetLevelRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    _expectJsonRpcMethod(
+      json,
+      Method.loggingSetLevel,
+      'JsonRpcSetLevelRequest',
+    );
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcSetLevelRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for set level request");
     }
@@ -74,15 +94,22 @@ class LoggingMessageNotification {
     Map<String, dynamic> json,
   ) =>
       LoggingMessageNotification(
-        level: LoggingLevel.values.byName(json['level'] as String),
-        logger: json['logger'] as String?,
-        data: json['data'],
+        level: readRequiredEnumValue(
+          json['level'],
+          LoggingLevel.values,
+          'LoggingMessageNotification.level',
+        ),
+        logger: readOptionalString(
+          json['logger'],
+          'LoggingMessageNotification.logger',
+        ),
+        data: readJsonValue(json['data'], 'LoggingMessageNotification.data'),
       );
 
   Map<String, dynamic> toJson() => {
         'level': level.name,
         if (logger != null) 'logger': logger,
-        'data': data,
+        'data': readJsonValue(data, 'LoggingMessageNotification.data'),
       };
 }
 
@@ -97,7 +124,15 @@ class JsonRpcLoggingMessageNotification extends JsonRpcNotification {
   factory JsonRpcLoggingMessageNotification.fromJson(
     Map<String, dynamic> json,
   ) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsMessage,
+      'JsonRpcLoggingMessageNotification',
+    );
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcLoggingMessageNotification.params',
+    );
     if (paramsMap == null) {
       throw const FormatException(
         "Missing params for logging message notification",

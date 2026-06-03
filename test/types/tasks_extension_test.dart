@@ -167,6 +167,103 @@ void main() {
       );
     });
 
+    test('rejects missing status-specific task payload fields', () {
+      final baseTask = {
+        'taskId': 'task-1',
+        'createdAt': '2026-07-28T00:00:00Z',
+        'lastUpdatedAt': '2026-07-28T00:02:00Z',
+        'ttlMs': null,
+      };
+
+      expect(
+        () => TaskExtensionTask.fromJson({
+          ...baseTask,
+          'status': 'input_required',
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('inputRequests'),
+          ),
+        ),
+      );
+      expect(
+        () => TaskExtensionTask.fromJson({
+          ...baseTask,
+          'status': 'completed',
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('result'),
+          ),
+        ),
+      );
+      expect(
+        () => TaskExtensionTask.fromJson({
+          ...baseTask,
+          'status': 'failed',
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('error'),
+          ),
+        ),
+      );
+      expect(
+        () => const TaskExtensionTask(
+          taskId: 'task-1',
+          status: TaskStatus.inputRequired,
+          createdAt: '2026-07-28T00:00:00Z',
+          lastUpdatedAt: '2026-07-28T00:02:00Z',
+          ttlMs: null,
+        ).toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('inputRequests'),
+          ),
+        ),
+      );
+      expect(
+        () => const TaskExtensionTask(
+          taskId: 'task-1',
+          status: TaskStatus.completed,
+          createdAt: '2026-07-28T00:00:00Z',
+          lastUpdatedAt: '2026-07-28T00:02:00Z',
+          ttlMs: null,
+        ).toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('result'),
+          ),
+        ),
+      );
+      expect(
+        () => const TaskExtensionTask(
+          taskId: 'task-1',
+          status: TaskStatus.failed,
+          createdAt: '2026-07-28T00:00:00Z',
+          lastUpdatedAt: '2026-07-28T00:02:00Z',
+          ttlMs: null,
+        ).toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('error'),
+          ),
+        ),
+      );
+    });
+
     test('serializes notifications/tasks with detailed task state', () {
       final notification = JsonRpcTaskNotification(
         task: const TaskExtensionTask(
@@ -196,6 +293,18 @@ void main() {
     });
 
     test('rejects malformed task extension payloads', () {
+      final updateParams = {
+        'taskId': 'task-1',
+        'inputResponses': <String, dynamic>{},
+      };
+      final taskParams = {
+        'taskId': 'task-1',
+        'status': 'working',
+        'createdAt': '2026-07-28T00:00:00Z',
+        'lastUpdatedAt': '2026-07-28T00:00:01Z',
+        'ttlMs': null,
+      };
+
       expect(
         () => CreateTaskExtensionResult.fromJson(
           const {
@@ -215,6 +324,82 @@ void main() {
         () => TaskExtensionAcknowledgementResult.fromJson(
           const {'resultType': resultTypeInputRequired},
         ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcUpdateTaskRequest.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'id': 1,
+            'method': Method.tasksUpdate,
+            'params': 'bad',
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcUpdateTaskRequest.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'id': 1,
+            'method': Method.tasksUpdate,
+            'params': null,
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcUpdateTaskRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.tasksUpdate,
+          'params': updateParams,
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcUpdateTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.tasksGet,
+          'params': updateParams,
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcTaskNotification.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsTasks,
+            'params': 'bad',
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcTaskNotification.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsTasks,
+            'params': null,
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcTaskNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': Method.notificationsTasks,
+          'params': taskParams,
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcTaskNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsTasksStatus,
+          'params': taskParams,
+        }),
         throwsFormatException,
       );
     });

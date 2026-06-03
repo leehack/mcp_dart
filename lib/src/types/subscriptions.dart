@@ -67,10 +67,10 @@ class SubscriptionFilter {
               (capabilities.resources?.listChanged ?? false)
           ? true
           : null,
-      resourceSubscriptions:
-          resourceSubscriptions != null && capabilities.resources != null
-              ? List<String>.unmodifiable(resourceSubscriptions!)
-              : null,
+      resourceSubscriptions: resourceSubscriptions != null &&
+              (capabilities.resources?.subscribe ?? false)
+          ? List<String>.unmodifiable(resourceSubscriptions!)
+          : null,
       taskIds: taskIds != null && capabilities.supportsTasksExtension
           ? List<String>.unmodifiable(taskIds!)
           : null,
@@ -112,7 +112,7 @@ class SubscriptionFilter {
         return resourcesListChanged == true;
       case Method.notificationsResourcesUpdated:
         final uri = notification.params?['uri'];
-        return uri is String && (resourceSubscriptions?.contains(uri) ?? false);
+        return uri is String && _allowsResourceUri(uri, resourceSubscriptions);
       case Method.notificationsTasks:
         final taskId = notification.params?['taskId'];
         return taskId is String && (taskIds?.contains(taskId) ?? false);
@@ -133,6 +133,41 @@ class SubscriptionFilter {
       };
 }
 
+bool _allowsResourceUri(String uri, List<String>? subscribedUris) {
+  if (subscribedUris == null) {
+    return false;
+  }
+  return subscribedUris.any((subscribedUri) {
+    if (uri == subscribedUri) {
+      return true;
+    }
+    return _isSubResourceUri(uri, subscribedUri);
+  });
+}
+
+bool _isSubResourceUri(String uri, String subscribedUri) {
+  final updated = Uri.tryParse(uri);
+  final subscribed = Uri.tryParse(subscribedUri);
+  if (updated == null ||
+      subscribed == null ||
+      !updated.hasScheme ||
+      !subscribed.hasScheme) {
+    return false;
+  }
+  if (updated.scheme != subscribed.scheme ||
+      updated.authority != subscribed.authority) {
+    return false;
+  }
+  if (subscribed.query.isNotEmpty || subscribed.fragment.isNotEmpty) {
+    return false;
+  }
+
+  final subscribedPath = subscribed.path.isEmpty ? '/' : subscribed.path;
+  final childPathPrefix =
+      subscribedPath.endsWith('/') ? subscribedPath : '$subscribedPath/';
+  return updated.path.startsWith(childPathPrefix);
+}
+
 /// Parameters for a `subscriptions/listen` request.
 class SubscriptionsListenRequest {
   /// Notifications the client opts into on this stream.
@@ -141,17 +176,13 @@ class SubscriptionsListenRequest {
   const SubscriptionsListenRequest({required this.notifications});
 
   factory SubscriptionsListenRequest.fromJson(Map<String, dynamic> json) {
-    final notifications = json['notifications'];
-    if (notifications is! Map) {
-      throw const FormatException(
-        'SubscriptionsListenRequest.notifications is required',
-      );
-    }
+    final notifications = _readRequiredJsonObject(
+      json['notifications'],
+      'SubscriptionsListenRequest.notifications',
+    );
 
     return SubscriptionsListenRequest(
-      notifications: SubscriptionFilter.fromJson(
-        notifications.cast<String, dynamic>(),
-      ),
+      notifications: SubscriptionFilter.fromJson(notifications),
     );
   }
 
@@ -177,18 +208,53 @@ class JsonRpcSubscriptionsListenRequest extends JsonRpcRequest {
   factory JsonRpcSubscriptionsListenRequest.fromJson(
     Map<String, dynamic> json,
   ) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException(
-        'Missing params for subscriptions/listen request',
-      );
-    }
+    _expectJsonRpcMethod(
+      json,
+      Method.subscriptionsListen,
+      'JsonRpcSubscriptionsListenRequest',
+    );
+    final paramsMap = _readRequiredParamsObject(
+      json,
+      'JsonRpcSubscriptionsListenRequest.params',
+    );
+    final meta = validateRequestMeta(
+      readJsonObject(
+        paramsMap['_meta'],
+        'JsonRpcSubscriptionsListenRequest.params._meta',
+      ),
+      validateKeys: true,
+    )!;
 
     return JsonRpcSubscriptionsListenRequest(
       id: parseRequestId(json['id']),
       listenParams: SubscriptionsListenRequest.fromJson(paramsMap),
-      meta: extractRequestMeta(json),
+      meta: meta,
     );
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    final meta = this.meta;
+    if (meta == null) {
+      throw const FormatException(
+        'JsonRpcSubscriptionsListenRequest.params._meta is required',
+      );
+    }
+    return {
+      'jsonrpc': jsonrpc,
+      'id': parseRequestId(
+        id,
+        fieldName: 'JsonRpcSubscriptionsListenRequest.id',
+      ),
+      'method': method,
+      'params': <String, dynamic>{
+        ...listenParams.toJson(),
+        '_meta': readJsonObject(
+          validateRequestMeta(meta, validateKeys: true),
+          'JsonRpcSubscriptionsListenRequest.params._meta',
+        ),
+      },
+    };
   }
 }
 
@@ -202,17 +268,13 @@ class SubscriptionsAcknowledgedNotification {
   factory SubscriptionsAcknowledgedNotification.fromJson(
     Map<String, dynamic> json,
   ) {
-    final notifications = json['notifications'];
-    if (notifications is! Map) {
-      throw const FormatException(
-        'SubscriptionsAcknowledgedNotification.notifications is required',
-      );
-    }
+    final notifications = _readRequiredJsonObject(
+      json['notifications'],
+      'SubscriptionsAcknowledgedNotification.notifications',
+    );
 
     return SubscriptionsAcknowledgedNotification(
-      notifications: SubscriptionFilter.fromJson(
-        notifications.cast<String, dynamic>(),
-      ),
+      notifications: SubscriptionFilter.fromJson(notifications),
     );
   }
 
@@ -237,12 +299,15 @@ class JsonRpcSubscriptionsAcknowledgedNotification extends JsonRpcNotification {
   factory JsonRpcSubscriptionsAcknowledgedNotification.fromJson(
     Map<String, dynamic> json,
   ) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
-    if (paramsMap == null) {
-      throw const FormatException(
-        'Missing params for subscriptions acknowledged notification',
-      );
-    }
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsSubscriptionsAcknowledged,
+      'JsonRpcSubscriptionsAcknowledgedNotification',
+    );
+    final paramsMap = _readRequiredParamsObject(
+      json,
+      'JsonRpcSubscriptionsAcknowledgedNotification.params',
+    );
 
     return JsonRpcSubscriptionsAcknowledgedNotification(
       acknowledgedParams:
@@ -253,6 +318,20 @@ class JsonRpcSubscriptionsAcknowledgedNotification extends JsonRpcNotification {
       ),
     );
   }
+}
+
+Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
+  return readJsonObject(value, field);
+}
+
+Map<String, dynamic> _readRequiredParamsObject(
+  Map<String, dynamic> json,
+  String field,
+) {
+  if (!json.containsKey('params')) {
+    throw FormatException('$field is required');
+  }
+  return _readRequiredJsonObject(json['params'], field);
 }
 
 bool? _readOptionalBool(Object? value, String field) {
@@ -294,4 +373,12 @@ Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
     return null;
   }
   return readJsonObject(value, field);
+}
+
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  expectJsonRpcMethod(json, expected, context);
 }

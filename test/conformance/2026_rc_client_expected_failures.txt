@@ -1,0 +1,7 @@
+# Expected failures for @modelcontextprotocol/conformance@0.2.0-alpha.1
+# against the 2026 RC/DRAFT client suite.
+#
+# Keep this list scenario-based so the baseline is easy to review. When a
+# scenario turns green, remove it from this file in the same PR as the fix.
+#
+# No expected client failures are currently tracked.

@@ -13,6 +13,7 @@ class MockTransport extends Transport {
   bool isStarted = false;
   bool isClosed = false;
   ClientCapabilities? clientCapabilities;
+  Map<String, dynamic>? emptyResponseMeta;
 
   @override
   String? get sessionId => null;
@@ -35,7 +36,10 @@ class MockTransport extends Transport {
     if (message is JsonRpcRequest) {
       final request = message;
       if (request.method == 'ping') {
-        final response = JsonRpcResponse(id: request.id, result: {});
+        final response = JsonRpcResponse(
+          id: request.id,
+          result: EmptyResult(meta: emptyResponseMeta).toJson(),
+        );
         if (onmessage != null) {
           onmessage!(response);
         }
@@ -288,11 +292,17 @@ void main() {
       expect(
         () => server.assertTaskCapability(Method.samplingCreateMessage),
         throwsA(
-          isA<McpError>().having(
-            (e) => e.message,
-            'message',
-            contains('tasks.requests.sampling.createMessage'),
-          ),
+          isA<McpError>()
+              .having(
+                (e) => e.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('tasks.requests.sampling.createMessage'),
+              ),
         ),
       );
     });
@@ -350,11 +360,17 @@ void main() {
       expect(
         () => server.assertTaskCapability(Method.rootsList),
         throwsA(
-          isA<McpError>().having(
-            (e) => e.message,
-            'message',
-            contains('tasks.requests.roots/list'),
-          ),
+          isA<McpError>()
+              .having(
+                (e) => e.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('tasks.requests.roots/list'),
+              ),
         ),
       );
     });
@@ -386,6 +402,7 @@ void main() {
 
       // Initialize client capabilities
       await _initializeClient(transport, server);
+      transport.emptyResponseMeta = {'traceId': 'server-ping'};
 
       // Send ping request
       final result = await server.ping();
@@ -399,6 +416,7 @@ void main() {
 
       // Verify response was received
       expect(result, isA<EmptyResult>());
+      expect(result.meta, {'traceId': 'server-ping'});
     });
 
     test('Can send createMessage request when client has sampling capability',
@@ -449,8 +467,155 @@ void main() {
       // Attempt to send create message request should throw synchronously
       expect(
         () => server.assertCapabilityForMethod('sampling/createMessage'),
-        throwsA(isA<McpError>()),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
+    });
+
+    test('Cannot send tool-enabled sampling without sampling.tools capability',
+        () async {
+      await server.connect(transport);
+      await _initializeClient(transport, server, withSampling: true);
+
+      const createParams = CreateMessageRequest(
+        messages: [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Use a tool'),
+          ),
+        ],
+        maxTokens: 100,
+        tools: [
+          Tool(name: 'search', inputSchema: JsonObject()),
+        ],
+      );
+
+      expect(
+        () => server.createMessage(createParams),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('sampling tools capability'),
+              ),
+        ),
+      );
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .where((message) => message.method == Method.samplingCreateMessage),
+        isEmpty,
+      );
+    });
+
+    test(
+        'Can send sampling with includeContext none without context capability',
+        () async {
+      await server.connect(transport);
+      await _initializeClient(transport, server, withSampling: true);
+
+      const createParams = CreateMessageRequest(
+        messages: [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Use no context'),
+          ),
+        ],
+        includeContext: IncludeContext.none,
+        maxTokens: 100,
+      );
+
+      final result = await server.createMessage(createParams);
+
+      expect(result.role, equals(SamplingMessageRole.assistant));
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .where((message) => message.method == Method.samplingCreateMessage),
+        hasLength(1),
+      );
+    });
+
+    test('Cannot send deprecated sampling context without context capability',
+        () async {
+      await server.connect(transport);
+      await _initializeClient(transport, server, withSampling: true);
+
+      const createParams = CreateMessageRequest(
+        messages: [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Use server context'),
+          ),
+        ],
+        includeContext: IncludeContext.thisServer,
+        maxTokens: 100,
+      );
+
+      expect(
+        () => server.createMessage(createParams),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('sampling context capability'),
+              ),
+        ),
+      );
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .where((message) => message.method == Method.samplingCreateMessage),
+        isEmpty,
+      );
+    });
+
+    test('Can send deprecated sampling context with context capability',
+        () async {
+      await server.connect(transport);
+      await _initializeClient(
+        transport,
+        server,
+        withSampling: true,
+        withSamplingContext: true,
+      );
+
+      const createParams = CreateMessageRequest(
+        messages: [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'Use all context'),
+          ),
+        ],
+        includeContext: IncludeContext.allServers,
+        maxTokens: 100,
+      );
+
+      final result = await server.createMessage(createParams);
+
+      expect(result.role, equals(SamplingMessageRole.assistant));
+      final request =
+          transport.sentMessages.whereType<JsonRpcRequest>().singleWhere(
+                (message) => message.method == Method.samplingCreateMessage,
+              );
+      expect(request.params?['includeContext'], IncludeContext.allServers.name);
     });
 
     test('Can send listRoots request when client has roots capability',
@@ -486,7 +651,13 @@ void main() {
       // Attempt to check capability directly should throw
       expect(
         () => server.assertCapabilityForMethod('roots/list'),
-        throwsA(isA<McpError>()),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
     });
 
@@ -507,7 +678,7 @@ void main() {
 
       // Send resource updated notification
       final resourceParams = const ResourceUpdatedNotification(
-        uri: 'test-resource',
+        uri: 'file:///test-resource',
       );
       await resourceServer.sendResourceUpdated(resourceParams);
 
@@ -542,7 +713,7 @@ void main() {
       );
 
       final resourceParams = const ResourceUpdatedNotification(
-        uri: 'test-resource',
+        uri: 'file:///test-resource',
       );
       expect(
         () => plainServer.sendResourceUpdated(resourceParams),
@@ -610,11 +781,14 @@ Future<void> _initializeClient(
   MockTransport transport,
   Server server, {
   bool withSampling = false,
+  bool withSamplingContext = false,
   bool withRoots = false,
   bool withElicitation = false,
 }) async {
   final clientCapabilities = ClientCapabilities(
-    sampling: withSampling ? const ClientCapabilitiesSampling() : null,
+    sampling: withSampling
+        ? ClientCapabilitiesSampling(context: withSamplingContext)
+        : null,
     roots: withRoots ? const ClientCapabilitiesRoots() : null,
     elicitation: withElicitation ? const ClientElicitation.formOnly() : null,
   );
@@ -663,6 +837,7 @@ void _addCriticalPathTests() {
         () => server.assertCapabilityForMethod('elicitation/create'),
         throwsA(
           isA<McpError>()
+              .having((e) => e.code, 'code', ErrorCode.methodNotFound.value)
               .having((e) => e.message, 'message', contains('elicitation')),
         ),
       );

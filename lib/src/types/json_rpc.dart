@@ -15,6 +15,9 @@ import 'validation.dart';
 /// The draft/RC MCP protocol version being prepared for the next major release.
 const draftProtocolVersion2026_07_28 = "2026-07-28";
 
+/// Upstream conformance-suite alias for the in-progress 2026 draft.
+const draftProtocolVersion2026V1 = "DRAFT-2026-v1";
+
 /// The latest stable version of the Model Context Protocol supported.
 const stableProtocolVersion2025_11_25 = "2025-11-25";
 
@@ -23,6 +26,72 @@ const latestProtocolVersion = stableProtocolVersion2025_11_25;
 
 /// The latest draft/RC protocol version implemented behind opt-in paths.
 const latestDraftProtocolVersion = draftProtocolVersion2026_07_28;
+
+/// High-level MCP protocol compatibility profiles.
+///
+/// The SDK defaults to [stable], which keeps the 2025 initialization flow and
+/// avoids draft-only behavior. Use [preview2026] to prefer MCP `2026-07-28`
+/// draft/RC while falling back to stable MCP servers where possible. Use
+/// [require2026] when a peer must support the `2026-07-28` draft/RC stateless
+/// protocol.
+enum McpProtocol {
+  /// Stable MCP behavior using the latest released specification.
+  ///
+  /// This is the default SDK profile and currently targets MCP 2025-11-25.
+  stable,
+
+  /// Prefer MCP `2026-07-28` draft/RC when a peer supports it.
+  ///
+  /// This profile enables draft-only behavior such as `server/discover`,
+  /// stateless request metadata, and stateless result types, while allowing
+  /// fallback to the stable `initialize` flow for older peers.
+  preview2026,
+
+  /// Require the MCP `2026-07-28` draft/RC stateless protocol.
+  ///
+  /// This profile is intended for conformance tests and deployments where
+  /// connecting to older MCP servers would be a configuration error.
+  require2026;
+
+  /// Preferred protocol version for outgoing negotiation.
+  String get preferredProtocolVersion {
+    return switch (this) {
+      McpProtocol.stable => latestProtocolVersion,
+      McpProtocol.preview2026 ||
+      McpProtocol.require2026 =>
+        latestDraftProtocolVersion,
+    };
+  }
+
+  /// Protocol versions this profile advertises or accepts.
+  List<String> get supportedVersions {
+    return switch (this) {
+      McpProtocol.stable => supportedProtocolVersions,
+      McpProtocol.preview2026 => supportedProtocolVersionsWithDraft,
+      McpProtocol.require2026 => statelessProtocolVersions,
+    };
+  }
+
+  /// Whether clients should probe with `server/discover` by default.
+  bool get useServerDiscoverByDefault {
+    return switch (this) {
+      McpProtocol.stable => false,
+      McpProtocol.preview2026 || McpProtocol.require2026 => true,
+    };
+  }
+
+  /// Whether failed discovery should fall back to legacy initialization.
+  bool get allowLegacyInitializationFallbackByDefault {
+    return switch (this) {
+      McpProtocol.stable || McpProtocol.preview2026 => true,
+      McpProtocol.require2026 => false,
+    };
+  }
+
+  /// Whether this profile advertises support for stateless MCP versions.
+  bool get supportsStatelessProtocol =>
+      supportedProtocolVersions.any(isStatelessProtocolVersion);
+}
 
 /// List of supported Model Context Protocol versions.
 const supportedProtocolVersions = [
@@ -33,18 +102,21 @@ const supportedProtocolVersions = [
   "2024-10-07",
 ];
 
-/// Protocol versions supported by the 2026 RC development branch.
+/// Protocol versions supported by the `2026-07-28` draft/RC development branch.
 const supportedProtocolVersionsWithDraft = [
   latestDraftProtocolVersion,
+  draftProtocolVersion2026V1,
   ...supportedProtocolVersions,
 ];
 
 /// Protocol versions that use per-request metadata instead of initialization.
 const statelessProtocolVersions = [
   draftProtocolVersion2026_07_28,
+  draftProtocolVersion2026V1,
 ];
 
-/// Returns true when [version] uses the 2026 stateless request model.
+/// Returns true when [version] uses the `2026-07-28` draft/RC stateless request
+/// model.
 bool isStatelessProtocolVersion(String version) =>
     statelessProtocolVersions.contains(version);
 
@@ -62,7 +134,8 @@ String? negotiateProtocolVersion(
   return null;
 }
 
-/// MCP-reserved `_meta` keys used by the 2026 stateless request model.
+/// MCP-reserved `_meta` keys used by the `2026-07-28` draft/RC stateless
+/// request model.
 class McpMetaKey {
   static const protocolVersion = 'io.modelcontextprotocol/protocolVersion';
   static const clientInfo = 'io.modelcontextprotocol/clientInfo';
@@ -74,7 +147,8 @@ class McpMetaKey {
   const McpMetaKey._();
 }
 
-/// Builds request metadata required by the 2026 stateless request model.
+/// Builds request metadata required by the `2026-07-28` draft/RC stateless
+/// request model.
 Map<String, dynamic> buildProtocolRequestMeta({
   required String protocolVersion,
   required Implementation clientInfo,
@@ -87,7 +161,10 @@ Map<String, dynamic> buildProtocolRequestMeta({
     ...?meta,
     McpMetaKey.protocolVersion: protocolVersion,
     McpMetaKey.clientInfo: clientInfo.toJson(),
-    McpMetaKey.clientCapabilities: clientCapabilities.toJson(),
+    McpMetaKey.clientCapabilities: clientCapabilities.toJson(
+      omitLegacyTasks: isStatelessProtocolVersion(protocolVersion),
+      omitLegacyRootsListChanged: isStatelessProtocolVersion(protocolVersion),
+    ),
     if (logLevel != null) McpMetaKey.logLevel: logLevel,
   };
 }
@@ -134,6 +211,11 @@ class Method {
       "notifications/prompts/list_changed";
   static const notificationsToolsListChanged =
       "notifications/tools/list_changed";
+
+  /// Deprecated completion list-change notification method.
+  ///
+  /// Stable MCP `2025-11-25` does not include this method. Use
+  /// [notificationsExperimentalCompletionsListChanged] for extension behavior.
   @Deprecated(
     'notifications/completions/list_changed is not part of stable MCP 2025-11-25. '
     'Use notifications/experimental/completions/list_changed for extension behavior.',
@@ -260,11 +342,11 @@ final _metaNamePattern = RegExp(
   r'^(?:[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?)?$',
 );
 
-/// Validates an MCP 2026 `_meta` key name.
+/// Validates an MCP `2026-07-28` draft/RC `_meta` key name.
 ///
-/// MCP 2026 constrains metadata keys to an optional dot-separated prefix
-/// followed by `/`, plus a name segment. Earlier protocol versions did not
-/// define this grammar, so callers choose when to enforce it.
+/// MCP `2026-07-28` draft/RC constrains metadata keys to an optional
+/// dot-separated prefix followed by `/`, plus a name segment. Earlier protocol
+/// versions did not define this grammar, so callers choose when to enforce it.
 void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
   final slashIndex = key.indexOf('/');
   final prefix = slashIndex == -1 ? null : key.substring(0, slashIndex);
@@ -296,8 +378,8 @@ void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
 /// Validates request metadata that can affect protocol behavior.
 ///
 /// `_meta.progressToken` is an MCP wire token and must be a string or integer
-/// when present. [validateKeys] opts in to the MCP 2026 `_meta`
-/// key-name grammar without changing stable/legacy request parsing.
+/// when present. [validateKeys] opts in to the MCP `2026-07-28` draft/RC
+/// `_meta` key-name grammar without changing stable/legacy request parsing.
 Map<String, dynamic>? validateRequestMeta(
   Map<String, dynamic>? meta, {
   bool validateKeys = false,
@@ -336,6 +418,44 @@ Map<String, dynamic>? extractRequestMeta(Map<String, dynamic> json) {
   return paramsMeta ?? topLevelMeta;
 }
 
+void _expectJsonRpcVersion(Map<String, dynamic> json, String context) {
+  final version = readRequiredString(json['jsonrpc'], '$context.jsonrpc');
+  if (version != jsonRpcVersion) {
+    throw FormatException('$context.jsonrpc must be "$jsonRpcVersion"');
+  }
+}
+
+/// Validates the JSON-RPC wrapper fields for a typed request or notification.
+///
+/// This is hidden from the public `mcp_dart` export surface but shared by the
+/// typed protocol modules so direct parser calls enforce the same envelope
+/// constraints as [JsonRpcMessage.fromJson].
+void expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  _expectJsonRpcVersion(json, context);
+
+  final method = readRequiredString(json['method'], '$context.method');
+  if (method != expected) {
+    throw FormatException('$context.method must be "$expected"');
+  }
+  if (json.containsKey('result') || json.containsKey('error')) {
+    throw const FormatException(
+      'Invalid JSON-RPC message: method cannot be combined with result or error',
+    );
+  }
+}
+
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  expectJsonRpcMethod(json, expected, context);
+}
+
 /// Base class for all JSON-RPC messages (requests, notifications, responses, errors).
 sealed class JsonRpcMessage {
   /// The JSON-RPC version string. Always "2.0".
@@ -350,10 +470,22 @@ sealed class JsonRpcMessage {
       throw FormatException('Invalid JSON-RPC version: ${json['jsonrpc']}');
     }
 
+    final hasMethod = json.containsKey('method');
     final hasResult = json.containsKey('result');
     final hasError = json.containsKey('error');
 
-    if (json.containsKey('method')) {
+    if (hasResult && hasError) {
+      throw const FormatException(
+        'Invalid JSON-RPC response: result and error are mutually exclusive',
+      );
+    }
+    if (hasMethod && (hasResult || hasError)) {
+      throw const FormatException(
+        'Invalid JSON-RPC message: method cannot be combined with result or error',
+      );
+    }
+
+    if (hasMethod) {
       final method = _parseMethod(json['method']);
       final hasId = json.containsKey('id');
       final params = _parseOptionalParamsObject(
@@ -439,10 +571,6 @@ sealed class JsonRpcMessage {
             ),
         };
       }
-    } else if (hasResult && hasError) {
-      throw const FormatException(
-        'Invalid JSON-RPC response: result and error are mutually exclusive',
-      );
     } else if (hasResult) {
       final id = _parseResultResponseId(json['id']);
       final resultData =
@@ -640,12 +768,26 @@ class JsonRpcError extends JsonRpcMessage {
 
   const JsonRpcError({required this.id, required this.error});
 
-  factory JsonRpcError.fromJson(Map<String, dynamic> json) => JsonRpcError(
-        id: _parseErrorResponseId(json),
-        error: JsonRpcErrorData.fromJson(
-          readJsonObject(json['error'], 'JsonRpcError.error'),
-        ),
+  factory JsonRpcError.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcVersion(json, 'JsonRpcError');
+    if (json.containsKey('method')) {
+      throw const FormatException(
+        'Invalid JSON-RPC error response: method cannot be combined with error',
       );
+    }
+    if (json.containsKey('result')) {
+      throw const FormatException(
+        'Invalid JSON-RPC error response: result and error are mutually exclusive',
+      );
+    }
+
+    return JsonRpcError(
+      id: _parseErrorResponseId(json),
+      error: JsonRpcErrorData.fromJson(
+        readJsonObject(json['error'], 'JsonRpcError.error'),
+      ),
+    );
+  }
 
   @override
   Map<String, dynamic> toJson() => {
@@ -711,17 +853,21 @@ class InputRequest {
 
   /// Creates an embedded `elicitation/create` input request.
   factory InputRequest.elicit(ElicitRequest params) {
+    final inputParams = params.toJson(
+      protocolVersion: latestDraftProtocolVersion,
+    )..remove('task');
     return InputRequest._(
       method: Method.elicitationCreate,
-      params: params.toJson(),
+      params: inputParams,
     );
   }
 
   /// Creates an embedded `sampling/createMessage` input request.
   factory InputRequest.createMessage(CreateMessageRequest params) {
+    final inputParams = params.toJson(omitToolExecution: true)..remove('task');
     return InputRequest._(
       method: Method.samplingCreateMessage,
-      params: params.toJson(),
+      params: inputParams,
     );
   }
 
@@ -745,13 +891,28 @@ class InputRequest {
           json['params'],
           'InputRequest.params',
         );
-        ElicitRequest.fromJson(params);
+        if (params.containsKey('task')) {
+          throw const FormatException(
+            'InputRequest elicitation/create params must not include '
+            'legacy task metadata',
+          );
+        }
+        ElicitRequest.fromJson(
+          params,
+          protocolVersion: latestDraftProtocolVersion,
+        );
         return InputRequest._(method: method, params: params);
       case Method.samplingCreateMessage:
         final params = _readRequiredJsonObject(
           json['params'],
           'InputRequest.params',
         );
+        if (params.containsKey('task')) {
+          throw const FormatException(
+            'InputRequest sampling/createMessage params must not include '
+            'legacy task metadata',
+          );
+        }
         CreateMessageRequest.fromJson(params);
         return InputRequest._(method: method, params: params);
       case Method.rootsList:
@@ -797,7 +958,10 @@ class InputRequest {
     if (method != Method.elicitationCreate || params == null) {
       throw StateError('InputRequest is not an elicitation/create request');
     }
-    return ElicitRequest.fromJson(params!);
+    return ElicitRequest.fromJson(
+      params!,
+      protocolVersion: latestDraftProtocolVersion,
+    );
   }
 
   /// The typed params for an embedded `sampling/createMessage` request.
@@ -894,7 +1058,7 @@ void _validateInputResponse(Map<String, dynamic> json) {
 void _rejectInputResponseMeta(Map<String, dynamic> json, String resultName) {
   if (json.containsKey('_meta')) {
     throw FormatException(
-      'InputResponse $resultName must not include _meta in MCP 2026',
+      'InputResponse $resultName must not include _meta in MCP 2026-07-28',
     );
   }
 }
@@ -1020,6 +1184,9 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
     super.meta,
   }) : super(method: Method.toolsList);
 
+  /// Deprecated typed-params constructor retained for compatibility.
+  ///
+  /// Prefer passing `params?.toJson()` to [JsonRpcListToolsRequest].
   @Deprecated(
     'Use JsonRpcListToolsRequest(id: ..., params: params?.toJson(), meta: meta) instead.',
   )
@@ -1036,9 +1203,13 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
   }
 
   factory JsonRpcListToolsRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.toolsList, 'JsonRpcListToolsRequest');
     return JsonRpcListToolsRequest(
       id: parseRequestId(json['id']),
-      params: json['params'] as Map<String, dynamic>?,
+      params: readOptionalJsonObject(
+        json['params'],
+        'JsonRpcListToolsRequest.params',
+      ),
       meta: extractRequestMeta(json),
     );
   }
@@ -1061,9 +1232,19 @@ class JsonRpcCallToolRequest extends JsonRpcRequest {
   }) : super(method: Method.toolsCall, params: params);
 
   factory JsonRpcCallToolRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.toolsCall, 'JsonRpcCallToolRequest');
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcCallToolRequest.params',
+    );
+    if (paramsMap == null) {
+      throw const FormatException(
+        'JsonRpcCallToolRequest.params is required',
+      );
+    }
     return JsonRpcCallToolRequest(
       id: parseRequestId(json['id']),
-      params: json['params'] as Map<String, dynamic>? ?? {},
+      params: paramsMap,
       meta: extractRequestMeta(json),
     );
   }

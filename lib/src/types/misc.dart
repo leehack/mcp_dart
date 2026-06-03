@@ -1,12 +1,31 @@
 import 'json_rpc.dart';
 import 'validation.dart';
 
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  expectJsonRpcMethod(json, expected, context);
+}
+
+void _readOptionalParamsObject(Map<String, dynamic> json, String field) {
+  if (!json.containsKey('params')) {
+    return;
+  }
+  readJsonObject(json['params'], field);
+}
+
 /// A response that indicates success but carries no specific data.
 class EmptyResult implements BaseResultData {
   @override
   final Map<String, dynamic>? meta;
 
   const EmptyResult({this.meta});
+
+  factory EmptyResult.fromJson(Map<String, dynamic> json) => EmptyResult(
+        meta: readOptionalJsonObject(json['_meta'], 'EmptyResult._meta'),
+      );
 
   @override
   Map<String, dynamic> toJson() => {
@@ -27,7 +46,10 @@ class CancelledNotification {
   factory CancelledNotification.fromJson(Map<String, dynamic> json) =>
       CancelledNotification(
         requestId: parseRequestId(json['requestId'], fieldName: 'requestId'),
-        reason: json['reason'] as String?,
+        reason: readOptionalString(
+          json['reason'],
+          'CancelledNotification.reason',
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -48,7 +70,15 @@ class JsonRpcCancelledNotification extends JsonRpcNotification {
         );
 
   factory JsonRpcCancelledNotification.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsCancelled,
+      'JsonRpcCancelledNotification',
+    );
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcCancelledNotification.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for cancelled notification");
     }
@@ -69,6 +99,8 @@ class JsonRpcPingRequest extends JsonRpcRequest {
       : super(method: Method.ping);
 
   factory JsonRpcPingRequest.fromJson(Map<String, dynamic> json) {
+    _expectJsonRpcMethod(json, Method.ping, 'JsonRpcPingRequest');
+    _readOptionalParamsObject(json, 'JsonRpcPingRequest.params');
     return JsonRpcPingRequest(
       id: parseRequestId(json['id']),
       meta: extractRequestMeta(json),
@@ -97,7 +129,7 @@ class Progress {
     return Progress(
       progress: readFiniteNumber(json['progress'], 'Progress.progress'),
       total: readOptionalFiniteNumber(json['total'], 'Progress.total'),
-      message: json['message'] as String?,
+      message: readOptionalString(json['message'], 'Progress.message'),
     );
   }
 
@@ -171,7 +203,15 @@ class JsonRpcProgressNotification extends JsonRpcNotification {
 
   /// Creates from JSON.
   factory JsonRpcProgressNotification.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsProgress,
+      'JsonRpcProgressNotification',
+    );
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcProgressNotification.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for progress notification");
     }

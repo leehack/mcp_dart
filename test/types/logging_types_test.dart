@@ -1,3 +1,4 @@
+import 'package:mcp_dart/src/types/json_rpc.dart';
 import 'package:mcp_dart/src/types/logging.dart';
 import 'package:test/test.dart';
 
@@ -48,6 +49,17 @@ void main() {
         expect(params.level, equals(level));
       }
     });
+
+    test('rejects malformed logging levels', () {
+      expect(
+        () => SetLevelRequestParams.fromJson({'level': 'verbose'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SetLevelRequestParams.fromJson({'level': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcSetLevelRequest', () {
@@ -96,6 +108,40 @@ void main() {
       };
       expect(
         () => JsonRpcSetLevelRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects non-object params', () {
+      final json = {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'logging/setLevel',
+        'params': 'bad',
+      };
+      expect(
+        () => JsonRpcSetLevelRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcSetLevelRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': 'logging/setLevel',
+          'params': {'level': 'info'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcSetLevelRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': 'notifications/message',
+          'params': {'level': 'info'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });
@@ -187,6 +233,47 @@ void main() {
       expect(restored.logger, equals(original.logger));
       expect(restored.data, equals(original.data));
     });
+
+    test('rejects malformed logging levels', () {
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({
+          'level': 'verbose',
+          'data': 'message',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({
+          'level': 1,
+          'data': 'message',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects malformed logger and non-JSON data values', () {
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({
+          'level': 'info',
+          'logger': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({
+          'level': 'info',
+          'data': Object(),
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const LoggingMessageNotificationParams(
+          level: LoggingLevel.info,
+          data: Object(),
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcLoggingMessageNotification', () {
@@ -238,6 +325,37 @@ void main() {
       };
       expect(
         () => JsonRpcLoggingMessageNotification.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects non-object params', () {
+      final json = {
+        'jsonrpc': '2.0',
+        'method': 'notifications/message',
+        'params': 'bad',
+      };
+      expect(
+        () => JsonRpcLoggingMessageNotification.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcLoggingMessageNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/message',
+          'params': {'level': 'info', 'data': 'message'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcLoggingMessageNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'logging/setLevel',
+          'params': {'level': 'info', 'data': 'message'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });

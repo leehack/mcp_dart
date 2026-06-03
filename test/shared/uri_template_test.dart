@@ -295,6 +295,49 @@ void main() {
       );
     });
 
+    test('throws on unmatched closing expression', () {
+      expect(
+        () => UriTemplateExpander('/path/}'),
+        throwsA(
+          isA<ArgumentError>()
+              .having((e) => e.message, 'message', contains('Unmatched')),
+        ),
+      );
+    });
+
+    test('throws on invalid variable specs', () {
+      expect(
+        () => UriTemplateExpander('/path/{valid,}'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid variable name'),
+          ),
+        ),
+      );
+      expect(
+        () => UriTemplateExpander('/path/{invalid-name}'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid variable name'),
+          ),
+        ),
+      );
+      expect(
+        () => UriTemplateExpander('/path/{var:0}'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid prefix modifier'),
+          ),
+        ),
+      );
+    });
+
     test('throws on template too long', () {
       final longTemplate = 'a' * (maxTemplateLength + 1);
       expect(

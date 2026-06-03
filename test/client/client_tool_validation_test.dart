@@ -28,7 +28,18 @@ class MockTransport extends Transport
   @override
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
-    if (message is JsonRpcRequest && message.method == Method.initialize) {
+    if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      _respond(
+        JsonRpcError(
+          id: message.id,
+          error: const JsonRpcErrorData(
+            code: -32601,
+            message: 'Method not found',
+          ),
+        ),
+      );
+    } else if (message is JsonRpcRequest &&
+        message.method == Method.initialize) {
       _respond(
         JsonRpcResponse(
           id: message.id,
@@ -63,15 +74,15 @@ class MockTransport extends Transport
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredContent(['alpha', 'beta'])
-                .toJson(),
+            result:
+                CallToolResult.fromStructuredArray(['alpha', 'beta']).toJson(),
           ),
         );
       } else if (name == 'broken_array_tool') {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredContent(['alpha', 1]).toJson(),
+            result: CallToolResult.fromStructuredArray(['alpha', 1]).toJson(),
           ),
         );
       } else if (name == 'broken_tool') {
@@ -249,7 +260,10 @@ void main() {
       await client.connect(transport);
       final result = await client.listTools();
 
-      expect(result.tools.map((tool) => tool.name), ['valid_headers']);
+      expect(result.tools.map((tool) => tool.name), [
+        'valid_headers',
+        'number_header',
+      ]);
       expect(transport.toolParameterHeaderMappings, {
         'valid_headers': {
           'region': 'Region',
@@ -258,10 +272,11 @@ void main() {
           'count': 'Count',
           '/auth/tenant': 'Tenant',
         },
+        'number_header': {'ratio': 'Ratio'},
       });
       expect(
         warnings.where((message) => message.contains('Rejecting tool')),
-        hasLength(6),
+        hasLength(5),
       );
     });
 
@@ -285,7 +300,7 @@ void main() {
         const CallToolRequest(name: 'array_tool'),
       );
 
-      expect(result.structuredContent, equals(['alpha', 'beta']));
+      expect(result.structuredContentJson?.toJson(), equals(['alpha', 'beta']));
     });
 
     test('throws when non-object tool output validation fails', () async {
@@ -354,11 +369,17 @@ void main() {
       expect(
         () => client.assertTaskCapability(Method.toolsCall),
         throwsA(
-          isA<McpError>().having(
-            (e) => e.message,
-            'message',
-            contains('tasks.requests.tools.call'),
-          ),
+          isA<McpError>()
+              .having(
+                (e) => e.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('tasks.requests.tools.call'),
+              ),
         ),
       );
     });
@@ -375,11 +396,17 @@ void main() {
       expect(
         () => client.assertTaskCapability(Method.completionComplete),
         throwsA(
-          isA<McpError>().having(
-            (e) => e.message,
-            'message',
-            contains('tasks.requests.completion/complete'),
-          ),
+          isA<McpError>()
+              .having(
+                (e) => e.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('tasks.requests.completion/complete'),
+              ),
         ),
       );
     });

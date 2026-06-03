@@ -8,7 +8,11 @@ import 'sse.dart';
 
 final _logger = Logger("mcp_dart.server.sse.manager");
 
-/// Manages Server-Sent Events (SSE) connections and routes HTTP requests.
+/// Legacy manager for Server-Sent Events (SSE) connections.
+///
+/// Prefer `StreamableHTTPServerTransport` for new servers. This manager is
+/// retained for backward compatibility with existing SSE integrations.
+@Deprecated('Use StreamableHTTPServerTransport instead')
 class SseServerManager {
   /// Map to store active SSE transports, keyed by session ID.
   final Map<String, SseServerTransport> activeSseTransports = {};

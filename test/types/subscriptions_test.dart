@@ -57,13 +57,25 @@ void main() {
       const capabilities = ServerCapabilities(
         extensions: {mcpTasksExtensionId: {}},
         tools: ServerCapabilitiesTools(listChanged: true),
-        resources: ServerCapabilitiesResources(),
+        resources: ServerCapabilitiesResources(subscribe: true),
       );
 
       final acknowledged = requested.acknowledgedBy(capabilities);
       expect(acknowledged.toJson(), {
         'toolsListChanged': true,
         'resourceSubscriptions': ['file:///project/config.json'],
+        'taskIds': ['task-1'],
+      });
+
+      final withoutResourceSubscribe = requested.acknowledgedBy(
+        const ServerCapabilities(
+          extensions: {mcpTasksExtensionId: {}},
+          tools: ServerCapabilitiesTools(listChanged: true),
+          resources: ServerCapabilitiesResources(),
+        ),
+      );
+      expect(withoutResourceSubscribe.toJson(), {
+        'toolsListChanged': true,
         'taskIds': ['task-1'],
       });
     });
@@ -124,6 +136,30 @@ void main() {
           ),
         ),
         isTrue,
+      );
+      expect(
+        const SubscriptionFilter(
+          resourceSubscriptions: ['file:///project'],
+        ).allowsNotification(
+          JsonRpcResourceUpdatedNotification(
+            updatedParams: const ResourceUpdatedNotification(
+              uri: 'file:///project/config.json',
+            ),
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        const SubscriptionFilter(
+          resourceSubscriptions: ['file:///project'],
+        ).allowsNotification(
+          JsonRpcResourceUpdatedNotification(
+            updatedParams: const ResourceUpdatedNotification(
+              uri: 'file:///project-other/config.json',
+            ),
+          ),
+        ),
+        isFalse,
       );
       expect(
         acknowledged.allowsNotification(
@@ -215,6 +251,33 @@ void main() {
         throwsFormatException,
       );
     });
+
+    test('rejects malformed listen wire fields', () {
+      for (final parse in <Object Function()>[
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': 'bad',
+            }),
+        () => JsonRpcSubscriptionsListenRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.subscriptionsListen,
+              'params': null,
+            }),
+        () => SubscriptionsListenRequest.fromJson({
+              'notifications': 'bad',
+            }),
+        () => SubscriptionsListenRequest.fromJson({
+              'notifications': <Object?, Object?>{
+                1: true,
+              },
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
   });
 
   group('JsonRpcSubscriptionsAcknowledgedNotification', () {
@@ -238,6 +301,46 @@ void main() {
             as JsonRpcNotification;
 
         expect(parsed.meta?[McpMetaKey.subscriptionId], 'sub-1');
+      }
+    });
+
+    test('experimental completion list changed validates wrapper directly', () {
+      // ignore: deprecated_member_use_from_same_package, deprecated_member_use
+      final valid = JsonRpcCompletionListChangedNotification.fromJson({
+        'jsonrpc': '2.0',
+        'method': Method.notificationsExperimentalCompletionsListChanged,
+        'params': {
+          '_meta': {McpMetaKey.subscriptionId: 'sub-1'},
+        },
+      });
+      expect(valid.meta?[McpMetaKey.subscriptionId], 'sub-1');
+
+      for (final json in [
+        {
+          'jsonrpc': '1.0',
+          'method': Method.notificationsExperimentalCompletionsListChanged,
+        },
+        {
+          'jsonrpc': '2.0',
+          // ignore: deprecated_member_use
+          'method': Method.notificationsCompletionsListChanged,
+        },
+        {
+          'jsonrpc': '2.0',
+          'method': Method.notificationsExperimentalCompletionsListChanged,
+          'result': {'ok': true},
+        },
+        {
+          'jsonrpc': '2.0',
+          'method': Method.notificationsExperimentalCompletionsListChanged,
+          'error': {'code': -32600, 'message': 'Invalid request'},
+        },
+      ]) {
+        expect(
+          // ignore: deprecated_member_use_from_same_package, deprecated_member_use
+          () => JsonRpcCompletionListChangedNotification.fromJson(json),
+          throwsA(isA<FormatException>()),
+        );
       }
     });
 
@@ -290,6 +393,32 @@ void main() {
           'params': {
             'notifications': {'toolsListChanged': true},
             '_meta': {'bad': Object()},
+          },
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson(
+          const {
+            'method': Method.notificationsSubscriptionsAcknowledged,
+            'params': 'bad',
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => JsonRpcSubscriptionsAcknowledgedNotification.fromJson(
+          const {
+            'method': Method.notificationsSubscriptionsAcknowledged,
+            'params': null,
+          },
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => SubscriptionsAcknowledgedNotification.fromJson({
+          'notifications': <Object?, Object?>{
+            1: true,
           },
         }),
         throwsFormatException,

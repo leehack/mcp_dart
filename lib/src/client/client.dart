@@ -15,26 +15,62 @@ class McpClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
-  /// Preferred protocol version for opt-in `server/discover` negotiation.
+  /// High-level protocol compatibility profile.
   ///
-  /// The current default keeps existing clients on the stable initialization
-  /// flow unless [useServerDiscover] is enabled.
-  final String protocolVersion;
+  /// Defaults to [McpProtocol.stable], which uses MCP 2025-11-25 behavior.
+  /// Set this to [McpProtocol.preview2026] to opt into MCP `2026-07-28`
+  /// draft/RC negotiation with stable fallback.
+  final McpProtocol protocol;
+
+  final String? _protocolVersion;
+
+  /// Preferred protocol version for negotiation.
+  ///
+  /// When omitted, this is derived from [protocol]. Passing this explicitly is
+  /// a low-level override; most callers should prefer [protocol].
+  String get protocolVersion {
+    final protocolVersion = _protocolVersion;
+    if (protocolVersion != null) {
+      return protocolVersion;
+    }
+    if (protocol == McpProtocol.stable && _useServerDiscover == true) {
+      return latestDraftProtocolVersion;
+    }
+    return protocol.preferredProtocolVersion;
+  }
+
+  final bool? _useServerDiscover;
 
   /// Whether [McpClient.connect] should probe with `server/discover` first.
-  final bool useServerDiscover;
+  ///
+  /// When omitted, this is derived from [protocol]. Stable clients use the
+  /// legacy `initialize` flow by default; `2026-07-28` draft/RC preview
+  /// clients probe with `server/discover`.
+  bool get useServerDiscover =>
+      _useServerDiscover ?? protocol.useServerDiscoverByDefault;
 
-  /// Whether a `server/discover` method-not-found response should fall back to
-  /// the legacy `initialize` handshake.
-  final bool allowLegacyInitializationFallback;
+  /// Whether a failed `server/discover` probe should fall back to the legacy
+  /// `initialize` handshake when the peer looks like a pre-discovery server.
+  final bool? _allowLegacyInitializationFallback;
+
+  /// Whether a failed `server/discover` probe should fall back to `initialize`.
+  ///
+  /// When omitted, this is derived from [protocol]. [McpProtocol.require2026]
+  /// disables fallback.
+  bool get allowLegacyInitializationFallback =>
+      _allowLegacyInitializationFallback ??
+      protocol.allowLegacyInitializationFallbackByDefault;
 
   const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
-    this.protocolVersion = latestDraftProtocolVersion,
-    this.useServerDiscover = false,
-    this.allowLegacyInitializationFallback = true,
-  });
+    this.protocol = McpProtocol.stable,
+    String? protocolVersion,
+    bool? useServerDiscover,
+    bool? allowLegacyInitializationFallback,
+  })  : _protocolVersion = protocolVersion,
+        _useServerDiscover = useServerDiscover,
+        _allowLegacyInitializationFallback = allowLegacyInitializationFallback;
 }
 
 /// Deprecated alias for [McpClientOptions].
@@ -69,6 +105,20 @@ class McpSubscription {
   void cancel([Object? reason]) {
     _cancel(reason);
   }
+}
+
+ElicitResult _withElicitationDefaults(
+  ElicitResult result,
+  JsonSchema schema,
+) {
+  final content = _deepCopy(result.content ?? const <String, dynamic>{})
+      as Map<String, dynamic>;
+  _applyElicitationDefaults(schema, content);
+  return ElicitResult(
+    action: result.action,
+    content: content,
+    meta: result.meta,
+  );
 }
 
 // Recursively applies default values from a JSON Schema to a data object.
@@ -122,7 +172,16 @@ const Set<String> _statelessRemovedRequestMethods = {
 const Set<String> _statelessRemovedNotificationMethods = {
   Method.notificationsInitialized,
   Method.notificationsRootsListChanged,
+  Method.notificationsTasksStatus,
 };
+
+const Set<String> _statelessInputRequiredResultMethods = {
+  Method.toolsCall,
+  Method.promptsGet,
+  Method.resourcesRead,
+};
+
+const int _maxInputRequiredRetries = 16;
 
 /// An MCP client implementation built on top of a pluggable [Transport].
 ///
@@ -171,7 +230,7 @@ class McpClient extends Protocol {
   McpClient(this._clientInfo, {McpClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         _preferredProtocolVersion =
-            options?.protocolVersion ?? latestDraftProtocolVersion,
+            options?.protocolVersion ?? latestProtocolVersion,
         _useServerDiscover = options?.useServerDiscover ?? false,
         _allowLegacyInitializationFallback =
             options?.allowLegacyInitializationFallback ?? true,
@@ -201,26 +260,32 @@ class McpClient extends Protocol {
               "No elicit handler registered",
             );
           }
-          final result = await onElicitRequest!(request.elicitParams);
+          var result = await onElicitRequest!(request.elicitParams);
 
           // Apply defaults if client supports it and it's a form elicitation
           if (request.elicitParams.isFormMode &&
               result.action == 'accept' &&
-              result.content is Map &&
               request.elicitParams.requestedSchema != null &&
               _capabilities.elicitation?.form?.applyDefaults == true) {
-            _applyElicitationDefaults(
+            result = _withElicitationDefaults(
+              result,
               request.elicitParams.requestedSchema!,
-              result.content!,
             );
           }
           return result;
         },
-        (id, params, meta) => JsonRpcElicitRequest(
-          id: id,
-          elicitParams: ElicitRequest.fromJson(params ?? {}),
-          meta: meta,
-        ),
+        (id, params, meta) {
+          final protocolVersion = _protocolVersionForIncomingRequest(meta);
+          return JsonRpcElicitRequest(
+            id: id,
+            elicitParams: ElicitRequest.fromJson(
+              params ?? {},
+              protocolVersion: protocolVersion,
+            ),
+            meta: meta,
+            protocolVersion: protocolVersion,
+          );
+        },
       );
     }
 
@@ -253,7 +318,7 @@ class McpClient extends Protocol {
                   request.createParams.toolChoice != null) &&
               _capabilities.sampling?.tools != true) {
             throw McpError(
-              ErrorCode.invalidRequest.value,
+              ErrorCode.methodNotFound.value,
               "Client does not support 'sampling.tools' capability required by sampling/createMessage request.",
             );
           }
@@ -470,10 +535,7 @@ class McpClient extends Protocol {
           await discoverServer();
           return;
         } catch (error) {
-          final canFallback = _allowLegacyInitializationFallback &&
-              error is McpError &&
-              error.code == ErrorCode.methodNotFound.value;
-          if (!canFallback) {
+          if (!_isLegacyDiscoveryFallbackError(error)) {
             rethrow;
           }
           _logger.debug(
@@ -491,6 +553,30 @@ class McpClient extends Protocol {
       await close();
       rethrow;
     }
+  }
+
+  bool _isLegacyDiscoveryFallbackError(Object error) {
+    if (!_allowLegacyInitializationFallback || error is! McpError) {
+      return false;
+    }
+    if (error.code == ErrorCode.methodNotFound.value) {
+      return true;
+    }
+    if (error.code == ErrorCode.invalidParams.value &&
+        error.message.contains('Invalid request parameters')) {
+      return true;
+    }
+
+    final message = error.message;
+    if (error.code == 0 &&
+        message.contains('Error POSTing to endpoint (HTTP 400)')) {
+      return true;
+    }
+
+    return (error.code == 0 ||
+            error.code == ErrorCode.connectionClosed.value ||
+            error.code == ErrorCode.invalidRequest.value) &&
+        message.contains('Server not initialized');
   }
 
   @override
@@ -558,6 +644,312 @@ class McpClient extends Protocol {
     }
   }
 
+  BaseResultData _parseExpectedOrInputRequired<T extends BaseResultData>(
+    Map<String, dynamic> json,
+    T Function(Map<String, dynamic>) resultFactory,
+  ) {
+    if (json['resultType'] == resultTypeInputRequired) {
+      return InputRequiredResult.fromJson(json);
+    }
+    return resultFactory(json);
+  }
+
+  BaseResultData _parseToolCallResult(Map<String, dynamic> json) {
+    switch (json['resultType']) {
+      case resultTypeInputRequired:
+        return InputRequiredResult.fromJson(json);
+      case resultTypeTask:
+        if (!_usesStatelessProtocol ||
+            !_capabilities.supportsTasksExtension ||
+            !(_serverCapabilities?.supportsTasksExtension ?? false)) {
+          throw const FormatException(
+            'MCP resultType "task" is not valid for tools/call',
+          );
+        }
+        return CreateTaskExtensionResult.fromJson(json);
+      default:
+        return CallToolResult.fromJson(json);
+    }
+  }
+
+  Future<InputResponses?> _resolveInputRequests(
+    InputRequests? inputRequests,
+    AbortSignal? signal,
+  ) async {
+    if (inputRequests == null) {
+      return null;
+    }
+
+    final inputResponses = <String, InputResponse>{};
+    for (final entry in inputRequests.entries) {
+      signal?.throwIfAborted();
+      final result = await handleEmbeddedInputRequest(
+        entry.key,
+        entry.value,
+        signal: signal,
+      );
+      inputResponses[entry.key] = InputResponse.fromResult(result);
+    }
+    return inputResponses;
+  }
+
+  Future<InputResponses?> _resolveNewInputRequests(
+    InputRequests? inputRequests,
+    Set<String> answeredKeys,
+    AbortSignal? signal,
+  ) async {
+    if (inputRequests == null) {
+      return null;
+    }
+
+    final pendingRequests = <String, InputRequest>{};
+    for (final entry in inputRequests.entries) {
+      if (!answeredKeys.contains(entry.key)) {
+        pendingRequests[entry.key] = entry.value;
+      }
+    }
+    if (pendingRequests.isEmpty) {
+      return null;
+    }
+
+    final inputResponses = await _resolveInputRequests(
+      pendingRequests,
+      signal,
+    );
+    if (inputResponses != null) {
+      answeredKeys.addAll(inputResponses.keys);
+    }
+    return inputResponses;
+  }
+
+  Future<T> _requestResolvingInputRequired<T extends BaseResultData>(
+    String method,
+    JsonRpcRequest Function(
+      InputResponses? inputResponses,
+      String? requestState,
+      bool isRetry,
+    ) buildRequest,
+    T Function(Map<String, dynamic>) resultFactory, [
+    RequestOptions? options,
+  ]) async {
+    InputResponses? inputResponses;
+    String? requestState;
+
+    for (var attempt = 0; attempt <= _maxInputRequiredRetries; attempt++) {
+      final result = await request<BaseResultData>(
+        buildRequest(inputResponses, requestState, attempt > 0),
+        (json) => _parseExpectedOrInputRequired<T>(json, resultFactory),
+        options,
+      );
+
+      if (result is T) {
+        return result;
+      }
+
+      if (result is! InputRequiredResult) {
+        throw McpError(
+          ErrorCode.internalError.value,
+          'Unexpected result type ${result.runtimeType} for $method.',
+        );
+      }
+
+      if (attempt == _maxInputRequiredRetries) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          'Exceeded $_maxInputRequiredRetries input_required retries for $method.',
+        );
+      }
+
+      inputResponses = await _resolveInputRequests(
+        result.inputRequests,
+        options?.signal,
+      );
+      requestState = result.requestState;
+    }
+
+    throw StateError('Unreachable input_required retry state for $method.');
+  }
+
+  Future<BaseResultData> _requestResolvingToolCall(
+    CallToolRequest params,
+    RequestOptions? options,
+  ) async {
+    InputResponses? inputResponses;
+    String? requestState;
+
+    for (var attempt = 0; attempt <= _maxInputRequiredRetries; attempt++) {
+      final result = await request<BaseResultData>(
+        JsonRpcCallToolRequest(
+          id: -1,
+          params: CallToolRequest(
+            name: params.name,
+            arguments: params.arguments,
+            inputResponses:
+                attempt > 0 ? inputResponses : params.inputResponses,
+            requestState: attempt > 0 ? requestState : params.requestState,
+          ).toJson(),
+        ),
+        _parseToolCallResult,
+        options,
+      );
+
+      if (result is CallToolResult || result is CreateTaskExtensionResult) {
+        return result;
+      }
+
+      if (result is! InputRequiredResult) {
+        throw McpError(
+          ErrorCode.internalError.value,
+          'Unexpected result type ${result.runtimeType} for ${Method.toolsCall}.',
+        );
+      }
+
+      if (attempt == _maxInputRequiredRetries) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          'Exceeded $_maxInputRequiredRetries input_required retries for ${Method.toolsCall}.',
+        );
+      }
+
+      inputResponses = await _resolveInputRequests(
+        result.inputRequests,
+        options?.signal,
+      );
+      requestState = result.requestState;
+    }
+
+    throw StateError(
+      'Unreachable input_required retry state for ${Method.toolsCall}.',
+    );
+  }
+
+  Future<CallToolResult> _resolveTaskExtensionToolResult(
+    TaskExtensionTask initialTask,
+    RequestOptions? options,
+  ) async {
+    var currentTask = initialTask;
+    final answeredInputKeys = <String>{};
+
+    while (true) {
+      options?.signal?.throwIfAborted();
+
+      switch (currentTask.status) {
+        case TaskStatus.completed:
+          final result = currentTask.result;
+          if (result == null) {
+            throw McpError(
+              ErrorCode.internalError.value,
+              'Completed task ${currentTask.taskId} is missing a result.',
+            );
+          }
+          return CallToolResult.fromJson(result);
+
+        case TaskStatus.failed:
+          final error = currentTask.error;
+          if (error != null) {
+            throw McpError(error.code, error.message, error.data);
+          }
+          throw McpError(
+            ErrorCode.internalError.value,
+            'Task ${currentTask.taskId} failed without error details.',
+          );
+
+        case TaskStatus.cancelled:
+          throw McpError(
+            ErrorCode.invalidRequest.value,
+            'Task ${currentTask.taskId} was cancelled.',
+          );
+
+        case TaskStatus.inputRequired:
+          final inputResponses = await _resolveNewInputRequests(
+            currentTask.inputRequests,
+            answeredInputKeys,
+            options?.signal,
+          );
+          if (inputResponses != null && inputResponses.isNotEmpty) {
+            await request<TaskExtensionAcknowledgementResult>(
+              JsonRpcUpdateTaskRequest(
+                id: -1,
+                updateParams: UpdateTaskRequest(
+                  taskId: currentTask.taskId,
+                  inputResponses: inputResponses,
+                ),
+              ),
+              TaskExtensionAcknowledgementResult.fromJson,
+              _taskFollowUpOptions(options),
+            );
+          }
+          break;
+
+        case TaskStatus.working:
+          break;
+      }
+
+      await _waitForTaskExtensionPoll(currentTask, options?.signal);
+      currentTask = await _getTaskExtension(currentTask.taskId, options);
+    }
+  }
+
+  Future<TaskExtensionTask> _getTaskExtension(
+    String taskId,
+    RequestOptions? options,
+  ) async {
+    final result = await request<GetTaskExtensionResult>(
+      JsonRpcGetTaskRequest(
+        id: -1,
+        getParams: GetTaskRequest(taskId: taskId),
+      ),
+      GetTaskExtensionResult.fromJson,
+      _taskFollowUpOptions(options),
+    );
+    return result.task;
+  }
+
+  RequestOptions? _taskFollowUpOptions(RequestOptions? options) {
+    if (options == null) {
+      return null;
+    }
+    return RequestOptions(
+      signal: options.signal,
+      timeout: options.timeout,
+      resetTimeoutOnProgress: options.resetTimeoutOnProgress,
+      maxTotalTimeout: options.maxTotalTimeout,
+      timeoutEnabled: options.timeoutEnabled,
+    );
+  }
+
+  Future<void> _waitForTaskExtensionPoll(
+    TaskExtensionTask task,
+    AbortSignal? signal,
+  ) async {
+    signal?.throwIfAborted();
+
+    final interval = task.pollIntervalMs ?? 1000;
+    final completer = Completer<void>();
+    final timer = Timer(Duration(milliseconds: interval), () {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    StreamSubscription? abortSubscription;
+    if (signal != null) {
+      abortSubscription = signal.onAbort.listen((_) {
+        timer.cancel();
+        if (!completer.isCompleted) {
+          completer.completeError(AbortError(signal.reason));
+        }
+      });
+    }
+
+    try {
+      await completer.future;
+    } finally {
+      timer.cancel();
+      await abortSubscription?.cancel();
+    }
+  }
+
   @override
   Future<void> notification(
     JsonRpcNotification notificationData, {
@@ -608,6 +1000,14 @@ class McpClient extends Protocol {
   /// Gets the negotiated protocol version after connection.
   String? getProtocolVersion() => _negotiatedProtocolVersion;
 
+  String? _protocolVersionForIncomingRequest(Map<String, dynamic>? meta) {
+    final protocolVersion = meta?[McpMetaKey.protocolVersion];
+    if (protocolVersion is String) {
+      return protocolVersion;
+    }
+    return _negotiatedProtocolVersion ?? _preferredProtocolVersion;
+  }
+
   @override
   bool isRecognizedResultType(String resultType) {
     if (super.isRecognizedResultType(resultType)) {
@@ -619,8 +1019,33 @@ class McpClient extends Protocol {
   }
 
   @override
+  bool isResultTypeAllowedForRequest(
+    JsonRpcRequest request,
+    String resultType,
+  ) {
+    if (resultType == resultTypeInputRequired) {
+      return _statelessInputRequiredResultMethods.contains(request.method);
+    }
+    if (resultType == resultTypeTask) {
+      return request.method == Method.toolsCall &&
+          _capabilities.supportsTasksExtension &&
+          (_serverCapabilities?.supportsTasksExtension ?? false);
+    }
+    return super.isResultTypeAllowedForRequest(request, resultType);
+  }
+
+  @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
     if (_usesStatelessProtocol) {
+      final missingPeerCapability =
+          _missingPeerCapabilityForIncomingRequest(request.method);
+      if (missingPeerCapability != null) {
+        return McpError(
+          ErrorCode.methodNotFound.value,
+          "Client does not support capability '$missingPeerCapability' "
+          "required for method '${request.method}'",
+        );
+      }
       return McpError(
         ErrorCode.invalidRequest.value,
         'Server-initiated JSON-RPC requests are not supported in stateless '
@@ -636,6 +1061,17 @@ class McpClient extends Protocol {
       ErrorCode.invalidRequest.value,
       "Received ${request.method} before notifications/initialized was sent.",
     );
+  }
+
+  String? _missingPeerCapabilityForIncomingRequest(String method) {
+    return switch (method) {
+      Method.rootsList => _capabilities.roots == null ? 'roots' : null,
+      Method.samplingCreateMessage =>
+        _capabilities.sampling == null ? 'sampling' : null,
+      Method.elicitationCreate =>
+        _capabilities.elicitation == null ? 'elicitation' : null,
+      _ => null,
+    };
   }
 
   @override
@@ -751,7 +1187,7 @@ class McpClient extends Protocol {
 
     if (!supported) {
       throw McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.methodNotFound.value,
         "Server does not support capability '$requiredCapability' required for method '$method'",
       );
     }
@@ -818,7 +1254,7 @@ class McpClient extends Protocol {
 
     if (missingCapability != null) {
       throw McpError(
-        ErrorCode.invalidRequest.value,
+        ErrorCode.methodNotFound.value,
         "Server does not support capability '$missingCapability' required for task-based '$method'",
       );
     }
@@ -849,7 +1285,7 @@ class McpClient extends Protocol {
   Future<EmptyResult> ping([RequestOptions? options]) {
     return request<EmptyResult>(
       const JsonRpcPingRequest(id: -1),
-      (json) => const EmptyResult(),
+      EmptyResult.fromJson,
       options,
     );
   }
@@ -874,7 +1310,7 @@ class McpClient extends Protocol {
   ]) {
     final params = SetLevelRequest(level: level);
     final req = JsonRpcSetLevelRequest(id: -1, setParams: params);
-    return request<EmptyResult>(req, (json) => const EmptyResult(), options);
+    return request<EmptyResult>(req, EmptyResult.fromJson, options);
   }
 
   /// Sends a `prompts/get` request to retrieve a specific prompt/template.
@@ -882,10 +1318,18 @@ class McpClient extends Protocol {
     GetPromptRequest params, [
     RequestOptions? options,
   ]) {
-    final req = JsonRpcGetPromptRequest(id: -1, getParams: params);
-    return request<GetPromptResult>(
-      req,
-      (json) => GetPromptResult.fromJson(json),
+    return _requestResolvingInputRequired<GetPromptResult>(
+      Method.promptsGet,
+      (inputResponses, requestState, isRetry) => JsonRpcGetPromptRequest(
+        id: -1,
+        getParams: GetPromptRequest(
+          name: params.name,
+          arguments: params.arguments,
+          inputResponses: isRetry ? inputResponses : params.inputResponses,
+          requestState: isRetry ? requestState : params.requestState,
+        ),
+      ),
+      GetPromptResult.fromJson,
       options,
     );
   }
@@ -934,10 +1378,17 @@ class McpClient extends Protocol {
     ReadResourceRequest params, [
     RequestOptions? options,
   ]) {
-    final req = JsonRpcReadResourceRequest(id: -1, readParams: params);
-    return request<ReadResourceResult>(
-      req,
-      (json) => ReadResourceResult.fromJson(json),
+    return _requestResolvingInputRequired<ReadResourceResult>(
+      Method.resourcesRead,
+      (inputResponses, requestState, isRetry) => JsonRpcReadResourceRequest(
+        id: -1,
+        readParams: ReadResourceRequest(
+          uri: params.uri,
+          inputResponses: isRetry ? inputResponses : params.inputResponses,
+          requestState: isRetry ? requestState : params.requestState,
+        ),
+      ),
+      ReadResourceResult.fromJson,
       options,
     );
   }
@@ -948,7 +1399,7 @@ class McpClient extends Protocol {
     RequestOptions? options,
   ]) {
     final req = JsonRpcSubscribeRequest(id: -1, subParams: params);
-    return request<EmptyResult>(req, (json) => const EmptyResult(), options);
+    return request<EmptyResult>(req, EmptyResult.fromJson, options);
   }
 
   /// Sends a `resources/unsubscribe` request to cancel a resource subscription.
@@ -957,7 +1408,7 @@ class McpClient extends Protocol {
     RequestOptions? options,
   ]) {
     final req = JsonRpcUnsubscribeRequest(id: -1, unsubParams: params);
-    return request<EmptyResult>(req, (json) => const EmptyResult(), options);
+    return request<EmptyResult>(req, EmptyResult.fromJson, options);
   }
 
   /// Opens a `subscriptions/listen` stream and demultiplexes notifications.
@@ -984,7 +1435,7 @@ class McpClient extends Protocol {
     final requestDone = super.requestWithReservedId<EmptyResult>(
       requestId,
       requestData,
-      (json) => const EmptyResult(),
+      EmptyResult.fromJson,
       RequestOptions(
         signal: abortController.signal,
         timeoutEnabled: false,
@@ -1013,17 +1464,18 @@ class McpClient extends Protocol {
       );
     }
 
-    final req = JsonRpcCallToolRequest(id: -1, params: params.toJson());
-    final result = await request<CallToolResult>(
-      req,
-      (json) => CallToolResult.fromJson(json),
-      options,
-    );
+    final taskOrToolResult = await _requestResolvingToolCall(params, options);
+    final result = taskOrToolResult is CreateTaskExtensionResult
+        ? await _resolveTaskExtensionToolResult(
+            taskOrToolResult.task,
+            options,
+          )
+        : taskOrToolResult as CallToolResult;
 
     final outputSchema = _cachedToolOutputSchemas[params.name];
     if (outputSchema != null && !result.isError) {
       try {
-        outputSchema.validate(result.structuredContent);
+        outputSchema.validate(result.structuredContentJson?.toJson());
       } catch (e) {
         throw McpError(
           ErrorCode.invalidParams.value,
@@ -1056,6 +1508,8 @@ class McpClient extends Protocol {
     return ListToolsResult(
       tools: tools,
       nextCursor: result.nextCursor,
+      ttlMs: result.ttlMs,
+      cacheScope: result.cacheScope,
       meta: result.meta,
     );
   }
@@ -1181,7 +1635,7 @@ class McpClient extends Protocol {
 
       if (!_isToolParameterHeaderPrimitive(entry.value)) {
         return 'parameter "$parameterName" uses x-mcp-header on a schema that '
-            'is not string, integer, or boolean';
+            'is not string, number, integer, or boolean';
       }
 
       mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;
@@ -1216,6 +1670,7 @@ class McpClient extends Protocol {
 
   bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
     return schema is JsonString ||
+        schema is JsonNumber ||
         schema is JsonInteger ||
         schema is JsonBoolean;
   }

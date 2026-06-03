@@ -87,11 +87,20 @@ void main() {
     });
 
     test('non-object output schema validates for MCP 2026 calls', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
       mcpServer.registerTool(
         'array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+          return CallToolResult.fromStructuredArray(['alpha', 'beta']);
         },
       );
 
@@ -109,15 +118,24 @@ void main() {
       expect(response, isA<JsonRpcResponse>());
       final successResponse = response as JsonRpcResponse;
       final result = CallToolResult.fromJson(successResponse.result);
-      expect(result.structuredContent, equals(['alpha', 'beta']));
+      expect(result.structuredContentJson?.toJson(), equals(['alpha', 'beta']));
     });
 
     test('non-object output schema validation failures are rejected', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
       mcpServer.registerTool(
         'invalid_array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 1]);
+          return CallToolResult.fromStructuredArray(['alpha', 1]);
         },
       );
 
@@ -141,9 +159,9 @@ void main() {
     test('stable tools/list omits non-object output schemas', () async {
       mcpServer.registerTool(
         'array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+          return CallToolResult.fromStructuredArray(['alpha', 'beta']);
         },
       );
 
@@ -162,11 +180,20 @@ void main() {
     });
 
     test('MCP 2026 tools/list includes non-object output schemas', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
       mcpServer.registerTool(
         'array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+          return CallToolResult.fromStructuredArray(['alpha', 'beta']);
         },
       );
 
@@ -192,9 +219,9 @@ void main() {
     test('stable tool calls omit non-object structured content', () async {
       mcpServer.registerTool(
         'array_tool',
-        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          return CallToolResult.fromStructuredContent(['alpha', 'beta']);
+          return CallToolResult.fromStructuredArray(['alpha', 'beta']);
         },
       );
 
