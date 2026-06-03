@@ -53,6 +53,10 @@ jobs:
         working-directory: ${{ steps.publish-dir.outputs.working_directory }}
         run: dart pub get
 
+      - name: Validate package for publishing
+        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+        run: dart pub publish --dry-run
+
       - name: Publish to pub.dev
         working-directory: ${{ steps.publish-dir.outputs.working_directory }}
         run: dart pub publish --force
