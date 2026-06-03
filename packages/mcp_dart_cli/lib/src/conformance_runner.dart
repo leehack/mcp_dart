@@ -1303,6 +1303,7 @@ Future<void> _serverDiscoverReturnsDraftCapabilities() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -1354,6 +1355,9 @@ Future<void> _rejectsUnsupportedStatelessProtocolVersion() async {
   final transport = _ConformanceTransport();
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
+    options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
 
   await server.connect(transport);
@@ -1403,6 +1407,9 @@ Future<void> _statelessRequestsRequireCompleteRequestMeta() async {
   final transport = _ConformanceTransport();
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
+    options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
 
   await server.connect(transport);
@@ -1509,6 +1516,7 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
       protocolVersion: '1900-01-01',
       useServerDiscover: true,
     ),
@@ -1599,6 +1607,7 @@ Future<void> _httpModernMissingCapabilityErrorsDoNotFallback() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
       protocolVersion: _draftProtocolVersion2026_07_28,
       useServerDiscover: true,
     ),
@@ -1684,6 +1693,9 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
   final clientTransport = _ConformanceTransport();
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
+    options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
   final connectFuture = client.connect(clientTransport);
   await _settle();
@@ -1730,6 +1742,7 @@ Future<void> _statelessDoesNotInferInitializeExtensions() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -2100,6 +2113,7 @@ Future<void> _taskRequestsRequireStatelessHttpNameHeader() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -2833,6 +2847,7 @@ Future<void> _taskSubscriptionRequiresClientCapability() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -2916,6 +2931,7 @@ Future<void> _relatedTaskUsesExplicitIdAcrossTransports() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -3022,6 +3038,7 @@ Future<void> _statelessIgnoresLegacyTaskParameter() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         tasks: ServerCapabilitiesTasks(
@@ -3097,6 +3114,9 @@ Future<void> _statelessClientRejectsLegacyTaskOptions() async {
   );
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
+    options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
 
   await client.connect(transport);
@@ -3140,6 +3160,7 @@ Future<void> _statelessAddsResultTypeAndCacheDefaults() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         prompts: ServerCapabilitiesPrompts(),
         resources: ServerCapabilitiesResources(),
@@ -3297,6 +3318,7 @@ Future<void> _statelessToolsListReturnsDeterministicOrder() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -3355,6 +3377,7 @@ Future<void> _statelessToolsListOmitsLegacyExecution() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -3448,6 +3471,9 @@ Future<void> _missingResourceErrorCodeByVersion() async {
   final statelessTransport = _ConformanceTransport();
   final statelessServer = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
+    options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
   statelessServer.registerResource(
     'Known Resource',
@@ -3498,6 +3524,9 @@ Future<void> _statelessRejectsUnrecognizedResultType() async {
   );
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
+    options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
 
   try {
@@ -3538,6 +3567,7 @@ Future<void> _mrtrInputRequiredSupportedRequests() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         prompts: ServerCapabilitiesPrompts(),
         resources: ServerCapabilitiesResources(),
@@ -3647,6 +3677,7 @@ Future<void> _mrtrRejectsUnsupportedInputRequiredResults() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
     ),
   );
@@ -3688,6 +3719,7 @@ Future<void> _mrtrInputRequestsRequireClientCapabilities() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
     ),
   );
@@ -3863,6 +3895,7 @@ Future<void> _callToolResultCannotSpoofTaskResult() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         extensions: <String, Map<String, dynamic>>{
@@ -3945,6 +3978,9 @@ Future<void> _taskResultRequiresClientExtension() async {
   );
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
+    options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
 
   try {
@@ -3982,6 +4018,9 @@ Future<void> _rejectsRemovedStatelessCoreRpcs() async {
   // ignore: deprecated_member_use
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
+    options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
   await server.connect(transport);
 
@@ -4117,6 +4156,7 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
   server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         logging: <String, dynamic>{},
         tools: ServerCapabilitiesTools(),
@@ -4209,6 +4249,7 @@ Future<void> _taskLifecycleMethodsAllowResumedClientCapability() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -4387,6 +4428,7 @@ McpServerOptions _mcpServerOptionsWithTaskStore({
     <Symbol, Object?>{
       #capabilities: capabilities,
       #taskStore: taskStore,
+      #protocol: McpProtocol.preview2026,
     },
   ) as McpServerOptions;
 }
@@ -4399,6 +4441,7 @@ Future<void> _subscriptionTaskIdsRequireClientCapability() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -4768,6 +4811,9 @@ Future<void> _unadvertisedPeerMethodsUseMethodNotFound() async {
   );
   final statelessClient = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
+    options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
+    ),
   );
   await statelessClient.connect(statelessClientTransport);
   statelessClientTransport.sentMessages.clear();
@@ -4937,6 +4983,7 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: clientCapabilities,
       useServerDiscover: true,
     ),
@@ -4978,7 +5025,10 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
   // ignore: deprecated_member_use
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
-    options: const McpServerOptions(capabilities: serverCapabilities),
+    options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
+      capabilities: serverCapabilities,
+    ),
   );
   await server.connect(serverTransport);
   serverTransport.emit(
@@ -5655,6 +5705,7 @@ Future<void> _advertisesDraftProtocolVersion() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(),
     ),
   );
