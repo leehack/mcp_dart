@@ -13,6 +13,13 @@ With the Dart SDK:
 dart pub global activate mcp_dart_cli
 ```
 
+For the MCP `2026-07-28` draft/RC dev release, pass the prerelease version
+explicitly:
+
+```bash
+dart pub global activate mcp_dart_cli 0.2.0-dev.0
+```
+
 Without the Dart SDK, install the latest standalone binary from GitHub Releases:
 
 ```bash
@@ -32,6 +39,9 @@ same command upgrades the binary. Installed binaries can also run:
 mcp_dart update
 ```
 
+Standalone installers track stable GitHub releases. Use Dart SDK activation
+with an explicit prerelease version when testing a dev CLI release.
+
 ## Usage
 
 ### Create a new project
@@ -48,6 +58,9 @@ mcp_dart create path/to/my_project
 
 If `directory` is omitted, the project will be created in the current directory with the name `<project_name>`.
 
+Generated projects resolve the stable `mcp_dart` SDK by default. For MCP
+`2026-07-28` draft/RC testing, update the generated `pubspec.yaml` to depend on
+`mcp_dart: ^2.3.0-dev.0`.
 
 ### Create from a specific template
 

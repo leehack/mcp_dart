@@ -4,6 +4,10 @@
   dependency on `mcp_dart ^2.3.0-dev.0`.
 - Keep the local monorepo SDK override in `pubspec_overrides.yaml` so published
   CLI pubspec metadata does not expose path overrides.
+- Point dev CLI package documentation metadata at the `dev/2026-07-28-rc`
+  branch and document explicit prerelease activation.
+- Document that generated projects still resolve the stable SDK by default and
+  need an explicit `mcp_dart ^2.3.0-dev.0` dependency for draft/RC testing.
 
 ## 0.1.9
 
