@@ -87,6 +87,15 @@ void main() {
     });
 
     test('non-object output schema validates for MCP 2026 calls', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
       mcpServer.registerTool(
         'array_tool',
         outputSchema: JsonSchema.array(items: JsonSchema.string()),
@@ -113,6 +122,15 @@ void main() {
     });
 
     test('non-object output schema validation failures are rejected', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
       mcpServer.registerTool(
         'invalid_array_tool',
         outputSchema: JsonSchema.array(items: JsonSchema.string()),
@@ -162,6 +180,15 @@ void main() {
     });
 
     test('MCP 2026 tools/list includes non-object output schemas', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
       mcpServer.registerTool(
         'array_tool',
         outputSchema: JsonSchema.array(items: JsonSchema.string()),

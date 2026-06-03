@@ -27,6 +27,71 @@ const latestProtocolVersion = stableProtocolVersion2025_11_25;
 /// The latest draft/RC protocol version implemented behind opt-in paths.
 const latestDraftProtocolVersion = draftProtocolVersion2026_07_28;
 
+/// High-level MCP protocol compatibility profiles.
+///
+/// The SDK defaults to [stable], which keeps the 2025 initialization flow and
+/// avoids draft-only behavior. Use [preview2026] to prefer the 2026 RC while
+/// falling back to stable MCP servers where possible. Use [require2026] when a
+/// peer must support the 2026 RC stateless protocol.
+enum McpProtocol {
+  /// Stable MCP behavior using the latest released specification.
+  ///
+  /// This is the default SDK profile and currently targets MCP 2025-11-25.
+  stable,
+
+  /// Prefer the MCP 2026-07-28 RC when a peer supports it.
+  ///
+  /// This profile enables draft-only behavior such as `server/discover`,
+  /// stateless request metadata, and stateless result types, while allowing
+  /// fallback to the stable `initialize` flow for older peers.
+  preview2026,
+
+  /// Require the MCP 2026-07-28 RC stateless protocol.
+  ///
+  /// This profile is intended for conformance tests and deployments where
+  /// connecting to older MCP servers would be a configuration error.
+  require2026;
+
+  /// Preferred protocol version for outgoing negotiation.
+  String get preferredProtocolVersion {
+    return switch (this) {
+      McpProtocol.stable => latestProtocolVersion,
+      McpProtocol.preview2026 ||
+      McpProtocol.require2026 =>
+        latestDraftProtocolVersion,
+    };
+  }
+
+  /// Protocol versions this profile advertises or accepts.
+  List<String> get supportedVersions {
+    return switch (this) {
+      McpProtocol.stable => supportedProtocolVersions,
+      McpProtocol.preview2026 => supportedProtocolVersionsWithDraft,
+      McpProtocol.require2026 => statelessProtocolVersions,
+    };
+  }
+
+  /// Whether clients should probe with `server/discover` by default.
+  bool get useServerDiscoverByDefault {
+    return switch (this) {
+      McpProtocol.stable => false,
+      McpProtocol.preview2026 || McpProtocol.require2026 => true,
+    };
+  }
+
+  /// Whether failed discovery should fall back to legacy initialization.
+  bool get allowLegacyInitializationFallbackByDefault {
+    return switch (this) {
+      McpProtocol.stable || McpProtocol.preview2026 => true,
+      McpProtocol.require2026 => false,
+    };
+  }
+
+  /// Whether this profile advertises support for stateless MCP versions.
+  bool get supportsStatelessProtocol =>
+      supportedProtocolVersions.any(isStatelessProtocolVersion);
+}
+
 /// List of supported Model Context Protocol versions.
 const supportedProtocolVersions = [
   latestProtocolVersion,

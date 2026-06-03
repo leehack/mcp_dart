@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 
-McpServer createServer() {
+McpServer createServer({McpServerOptions? options}) {
   // Define Server
   final server = McpServer(
     const Implementation(name: 'dart-test-server', version: '1.0.0'),
+    options: options,
   );
   const metadataIcon = ImageContent(
     data: 'iVBORw0KGgo=',

@@ -63,6 +63,28 @@ final server = McpServer(
 );
 ```
 
+### Protocol Profile
+
+Servers use the stable MCP `2025-11-25` profile by default. Opt into MCP
+`2026-07-28` RC behavior with the preview profile:
+
+```dart
+final server = McpServer(
+  const Implementation(name: 'my-server', version: '1.0.0'),
+  options: const McpServerOptions(
+    protocol: McpProtocol.preview2026,
+    capabilities: ServerCapabilities(
+      tools: ServerCapabilitiesTools(),
+    ),
+  ),
+);
+```
+
+`McpServerOptions(protocol: McpProtocol.preview2026)` advertises and accepts
+2026 RC stateless protocol versions, including `server/discover`. Use
+`McpServerOptions(protocol: McpProtocol.require2026)` when the server should
+reject stable initialization.
+
 ## Server Capabilities
 
 The server automatically advertises its capabilities based on what you register:

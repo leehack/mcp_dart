@@ -15,23 +15,62 @@ class McpClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
   final ClientCapabilities? capabilities;
 
-  /// Preferred protocol version for `server/discover` negotiation.
-  final String protocolVersion;
+  /// High-level protocol compatibility profile.
+  ///
+  /// Defaults to [McpProtocol.stable], which uses MCP 2025-11-25 behavior.
+  /// Set this to [McpProtocol.preview2026] to opt into MCP 2026-07-28 RC
+  /// negotiation with stable fallback.
+  final McpProtocol protocol;
+
+  final String? _protocolVersion;
+
+  /// Preferred protocol version for negotiation.
+  ///
+  /// When omitted, this is derived from [protocol]. Passing this explicitly is
+  /// a low-level override; most callers should prefer [protocol].
+  String get protocolVersion {
+    final protocolVersion = _protocolVersion;
+    if (protocolVersion != null) {
+      return protocolVersion;
+    }
+    if (protocol == McpProtocol.stable && _useServerDiscover == true) {
+      return latestDraftProtocolVersion;
+    }
+    return protocol.preferredProtocolVersion;
+  }
+
+  final bool? _useServerDiscover;
 
   /// Whether [McpClient.connect] should probe with `server/discover` first.
-  final bool useServerDiscover;
+  ///
+  /// When omitted, this is derived from [protocol]. Stable clients use the
+  /// legacy `initialize` flow by default; 2026 preview clients probe with
+  /// `server/discover`.
+  bool get useServerDiscover =>
+      _useServerDiscover ?? protocol.useServerDiscoverByDefault;
 
   /// Whether a failed `server/discover` probe should fall back to the legacy
   /// `initialize` handshake when the peer looks like a pre-discovery server.
-  final bool allowLegacyInitializationFallback;
+  final bool? _allowLegacyInitializationFallback;
+
+  /// Whether a failed `server/discover` probe should fall back to `initialize`.
+  ///
+  /// When omitted, this is derived from [protocol]. [McpProtocol.require2026]
+  /// disables fallback.
+  bool get allowLegacyInitializationFallback =>
+      _allowLegacyInitializationFallback ??
+      protocol.allowLegacyInitializationFallbackByDefault;
 
   const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
-    this.protocolVersion = latestDraftProtocolVersion,
-    this.useServerDiscover = true,
-    this.allowLegacyInitializationFallback = true,
-  });
+    this.protocol = McpProtocol.stable,
+    String? protocolVersion,
+    bool? useServerDiscover,
+    bool? allowLegacyInitializationFallback,
+  })  : _protocolVersion = protocolVersion,
+        _useServerDiscover = useServerDiscover,
+        _allowLegacyInitializationFallback = allowLegacyInitializationFallback;
 }
 
 /// Deprecated alias for [McpClientOptions].
@@ -191,8 +230,8 @@ class McpClient extends Protocol {
   McpClient(this._clientInfo, {McpClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         _preferredProtocolVersion =
-            options?.protocolVersion ?? latestDraftProtocolVersion,
-        _useServerDiscover = options?.useServerDiscover ?? true,
+            options?.protocolVersion ?? latestProtocolVersion,
+        _useServerDiscover = options?.useServerDiscover ?? false,
         _allowLegacyInitializationFallback =
             options?.allowLegacyInitializationFallback ?? true,
         super(options) {

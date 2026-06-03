@@ -332,7 +332,6 @@ void main() {
       expect(initializeCount, 1);
       expect(initializedNotificationCount, 1);
       expect(capturedSessionHeaders, [
-        null,
         preconfiguredSessionId,
         preconfiguredSessionId,
       ]);

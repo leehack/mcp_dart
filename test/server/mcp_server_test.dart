@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -133,6 +134,12 @@ void main() {
 
     test('connect syncs tool parameter header mappings to transports',
         () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
       server.registerTool(
         'header-tool',
         inputSchema: const ToolInputSchema(
@@ -216,6 +223,12 @@ void main() {
     });
 
     test('invalid tool parameter header metadata is not synced', () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
       server.registerTool(
         'non-string-header-tool',
         inputSchema: ToolInputSchema(
@@ -287,6 +300,12 @@ void main() {
 
     test('invalid stateless header metadata is stripped from nested schemas',
         () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
       server.registerTool(
         'nested-header-tool',
         inputSchema: ToolInputSchema.fromJson({
@@ -719,6 +738,12 @@ void main() {
     });
 
     test('stateless resource miss uses 2026 invalid params error', () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
       server.registerResource(
         'Known Resource',
         'test://known',

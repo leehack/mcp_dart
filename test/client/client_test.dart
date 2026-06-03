@@ -112,7 +112,7 @@ void main() {
         transport.sentMessages
             .whereType<JsonRpcRequest>()
             .map((message) => message.method),
-        containsAllInOrder([Method.serverDiscover, Method.initialize]),
+        [Method.initialize],
       );
 
       // Verify that an initialized notification was sent

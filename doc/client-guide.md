@@ -60,6 +60,26 @@ final client = McpClient(
 // Set up handlers after client creation if needed
 ```
 
+### Protocol Profile
+
+Clients use the stable MCP `2025-11-25` profile by default. Opt into MCP
+`2026-07-28` RC behavior with the preview profile:
+
+```dart
+final client = McpClient(
+  const Implementation(name: 'my-client', version: '1.0.0'),
+  options: const McpClientOptions(
+    protocol: McpProtocol.preview2026,
+  ),
+);
+```
+
+`McpClientOptions(protocol: McpProtocol.preview2026)` enables
+`server/discover` and stateless request metadata, then falls back to the stable
+`initialize` flow when discovery is not available. Use
+`McpClientOptions(protocol: McpProtocol.require2026)` when fallback should be
+treated as an error.
+
 ## Client Capabilities
 
 Declare what your client supports:

@@ -54,7 +54,11 @@ Future<void> main(List<String> args) async {
 }
 
 McpServer _createConformanceServer() {
-  final server = interop.createServer();
+  final server = interop.createServer(
+    options: const McpServerOptions(
+      protocol: McpProtocol.preview2026,
+    ),
+  );
 
   server.registerTool(
     'a_header_probe',

@@ -330,6 +330,9 @@ void main() {
         serverFactory: (sessionId) {
           final mcpServer = McpServer(
             const Implementation(name: 'StatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
           );
           mcpServer.registerTool(
             'echo',
@@ -368,6 +371,9 @@ void main() {
         serverFactory: (sessionId) {
           final mcpServer = McpServer(
             const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
           );
           mcpServer.registerTool(
             'echo',
@@ -408,6 +414,9 @@ void main() {
         serverFactory: (sessionId) {
           final mcpServer = McpServer(
             const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
           );
           mcpServer.registerTool(
             'echo',
@@ -610,6 +619,9 @@ void main() {
         serverFactory: (sessionId) {
           final mcpServer = McpServer(
             const Implementation(name: 'StatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
           );
           mcpServer.registerTool(
             'echo',
@@ -653,6 +665,7 @@ void main() {
           final mcpServer = McpServer(
             const Implementation(name: 'StatelessServer', version: '1.0.0'),
             options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
               capabilities: ServerCapabilities(
                 tools: ServerCapabilitiesTools(),
                 extensions: {mcpTasksExtensionId: <String, dynamic>{}},
@@ -777,6 +790,9 @@ void main() {
         serverFactory: (sessionId) {
           final mcpServer = McpServer(
             const Implementation(name: 'StatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
           );
           mcpServer.registerTool(
             'echo',

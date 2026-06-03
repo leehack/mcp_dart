@@ -8,9 +8,11 @@
 - Added server-side `server/discover` handling before legacy initialization and
   initial stateless request validation for per-request protocol version,
   client identity, and client capability metadata.
-- Added opt-in client discovery via `McpClientOptions(useServerDiscover: true)`
-  while keeping the stable `initialize` flow as the default until the 2026
-  stateless transport and MRTR implementation is complete.
+- Added explicit protocol profiles via
+  `McpClientOptions(protocol: McpProtocol.preview2026)` and
+  `McpServerOptions(protocol: McpProtocol.preview2026)` while keeping the stable
+  `initialize` flow as the default. The lower-level `protocolVersion` and
+  `useServerDiscover` options remain available for interoperability testing.
 - Added 2026 cacheable result support for `tools/list`, `prompts/list`,
   `resources/list`, `resources/templates/list`, and `resources/read`, including
   stateless server defaults for `resultType`, `ttlMs`, and `cacheScope` while

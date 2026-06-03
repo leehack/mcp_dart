@@ -2251,6 +2251,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(listChanged: true),
             resources: ServerCapabilitiesResources(subscribe: true),
@@ -2317,6 +2318,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(listChanged: true),
           ),
@@ -2363,6 +2365,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(listChanged: true),
           ),
@@ -2428,6 +2431,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             prompts: ServerCapabilitiesPrompts(),
             resources: ServerCapabilitiesResources(),
@@ -2537,6 +2541,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             extensions: {mcpTasksExtensionId: {}},
           ),
@@ -2588,6 +2593,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             extensions: {mcpTasksExtensionId: {}},
           ),
@@ -2710,6 +2716,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: const ServerCapabilities(
             extensions: {mcpTasksExtensionId: {}},
           ),
@@ -2762,6 +2769,9 @@ void main() {
         () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       var handlerCalled = false;
       server.experimental.onGetTask((taskId, extra) async {
@@ -2801,6 +2811,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             extensions: {mcpTasksExtensionId: {}},
           ),
@@ -2849,6 +2860,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tasks: ServerCapabilitiesTasks(list: true),
             extensions: {mcpTasksExtensionId: {}},
@@ -2900,6 +2912,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tasks: ServerCapabilitiesTasks(
               list: true,
@@ -2933,6 +2946,9 @@ void main() {
     test('stateless tools/call ignores legacy task parameter', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerTool(
         'echo',
@@ -2964,6 +2980,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
@@ -3016,6 +3033,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
@@ -3092,6 +3110,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
         ),
       );
@@ -3140,6 +3159,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
@@ -3191,6 +3211,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
@@ -3262,6 +3283,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
@@ -3313,6 +3335,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
@@ -3372,6 +3395,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
         ),
       );
@@ -3408,6 +3432,9 @@ void main() {
         () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerTool(
         'needs_input',
@@ -3495,6 +3522,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
         ),
       );
@@ -3641,6 +3669,9 @@ void main() {
     test('stateless prompts/get permits input required results', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerPrompt(
         'needs_input',
@@ -3667,6 +3698,9 @@ void main() {
     test('stateless resources/read permits input required results', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerResource(
         'needs_input',
@@ -3697,6 +3731,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities:
               ServerCapabilities(prompts: ServerCapabilitiesPrompts()),
         ),
@@ -3733,6 +3768,9 @@ void main() {
         () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       final handler = CompletedTaskHandler();
       server.experimental.registerToolTask(
@@ -3762,6 +3800,9 @@ void main() {
     test('stateless tools/list omits legacy task execution metadata', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       server.registerTool(
         'echo',
@@ -3786,6 +3827,7 @@ void main() {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -3826,6 +3868,9 @@ void main() {
     test('stateless tools/list returns tools sorted by name', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       for (final name in ['zeta', 'alpha', 'middle']) {
         server.registerTool(
@@ -3851,6 +3896,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tasks: ServerCapabilitiesTasks(),
           ),
@@ -3878,6 +3924,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -3906,6 +3953,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -3954,6 +4002,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: const ServerCapabilities(
             tools: ServerCapabilitiesTools(),
             extensions: {mcpTasksExtensionId: {}},
@@ -4003,6 +4052,7 @@ void main() {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -4124,6 +4174,9 @@ void main() {
         () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       final transport = RecordingTransport();
       await server.connect(transport);
@@ -4148,6 +4201,9 @@ void main() {
     test('server rejects malformed stateless request metadata', () {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
 
       McpError? validateToolRequest(Map<String, dynamic>? meta) {
@@ -4282,6 +4338,9 @@ void main() {
     test('server rejects core RPCs removed from stateless MCP', () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       final transport = RecordingTransport();
       await server.connect(transport);
@@ -4338,6 +4397,9 @@ void main() {
     test('server rejects notifications removed from stateless MCP', () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       final errors = <Error>[];
       server.onerror = errors.add;
@@ -4382,6 +4444,7 @@ void main() {
       server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             logging: {},
             tools: ServerCapabilitiesTools(),
@@ -4439,6 +4502,7 @@ void main() {
       server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ServerCapabilities(
             logging: {},
             tools: ServerCapabilitiesTools(),
@@ -4473,11 +4537,14 @@ void main() {
       expect(transport.sentMessages.single, isA<JsonRpcResponse>());
     });
 
-    test('client defaults to server/discover and sends stateless metadata',
+    test('preview client uses server/discover and sends stateless metadata',
         () async {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
 
       await client.connect(transport);
@@ -4509,6 +4576,9 @@ void main() {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
 
       await client.connect(transport);
@@ -4542,11 +4612,10 @@ void main() {
       expect(transport.sentMessages, hasLength(sentBeforeCall));
     });
 
-    test('client can opt out of discovery for legacy initialization', () async {
+    test('client uses legacy initialization by default', () async {
       final transport = LegacyFallbackTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: false),
       );
 
       await client.connect(transport);
@@ -4594,6 +4663,9 @@ void main() {
         final transport = LegacyFallbackTransport(discoveryError: error);
         final client = McpClient(
           const Implementation(name: 'client', version: '1.0.0'),
+          options: const McpClientOptions(
+            protocol: McpProtocol.preview2026,
+          ),
         );
 
         await client.connect(transport);
@@ -4614,7 +4686,10 @@ void main() {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
       transport.sentMessages.clear();
@@ -4698,7 +4773,10 @@ void main() {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
       transport.sentMessages.clear();
@@ -4759,6 +4837,7 @@ void main() {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
         options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ClientCapabilities(roots: ClientCapabilitiesRoots()),
           useServerDiscover: true,
         ),
@@ -4782,7 +4861,10 @@ void main() {
       final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
       transport.sentMessages.clear();
@@ -4859,6 +4941,7 @@ void main() {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
         options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ClientCapabilities(
             elicitation: ClientElicitation.formOnly(),
             roots: ClientCapabilitiesRoots(),
@@ -4956,6 +5039,7 @@ void main() {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
         options: McpClientOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ClientCapabilities(
             extensions: withMcpTasksExtension(null),
           ),
@@ -5069,6 +5153,7 @@ void main() {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
         options: McpClientOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ClientCapabilities(
             elicitation: const ClientElicitation.formOnly(),
             extensions: withMcpTasksExtension(null),
@@ -5193,6 +5278,7 @@ void main() {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
         options: McpClientOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ClientCapabilities(
             elicitation: const ClientElicitation.formOnly(),
             extensions: withMcpTasksExtension(null),
@@ -5248,6 +5334,9 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       await client.connect(transport);
 
@@ -5322,6 +5411,9 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       await client.connect(transport);
       transport.sentMessages.clear();
@@ -5360,7 +5452,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -5469,7 +5564,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -5520,7 +5618,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -5569,7 +5670,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -5626,7 +5730,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -5682,7 +5789,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -5725,7 +5835,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
       await client.connect(transport);
 
@@ -5773,7 +5886,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -5805,7 +5921,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -5842,7 +5961,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -5874,7 +5996,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -5947,7 +6072,10 @@ void main() {
         );
         final client = McpClient(
           const Implementation(name: 'client', version: '1.0.0'),
-          options: const McpClientOptions(useServerDiscover: true),
+          options: const McpClientOptions(
+            protocol: McpProtocol.preview2026,
+            useServerDiscover: true,
+          ),
         );
 
         await client.connect(transport);
@@ -5985,7 +6113,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -6039,7 +6170,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -6060,7 +6194,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await client.connect(transport);
@@ -6077,7 +6214,10 @@ void main() {
       );
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
-        options: const McpClientOptions(useServerDiscover: true),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
       );
 
       await expectLater(
@@ -6101,6 +6241,7 @@ void main() {
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
         options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
           protocolVersion: '1900-01-01',
           useServerDiscover: true,
         ),
@@ -6170,6 +6311,7 @@ void main() {
           final client = McpClient(
             const Implementation(name: 'client', version: '1.0.0'),
             options: McpClientOptions(
+              protocol: McpProtocol.preview2026,
               protocolVersion: scenario.requested,
               useServerDiscover: true,
             ),
@@ -6200,6 +6342,9 @@ void main() {
       final transport = LegacyFallbackTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
 
       await client.connect(transport);

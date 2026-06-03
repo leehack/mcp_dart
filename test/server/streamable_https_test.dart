@@ -3187,6 +3187,9 @@ void main() {
       );
       final server = Server(
         const Implementation(name: 'StatelessServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
       );
       addTearDown(server.close);
       await server.connect(transport);

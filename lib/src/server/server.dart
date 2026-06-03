@@ -23,6 +23,17 @@ class McpServerOptions extends ProtocolOptions {
   /// Optional instructions describing how to use the server and its features.
   final String? instructions;
 
+  /// High-level protocol compatibility profile.
+  ///
+  /// Defaults to [McpProtocol.stable], which advertises stable MCP versions and
+  /// keeps MCP 2026 RC stateless behavior disabled unless explicitly requested.
+  /// Set this to [McpProtocol.preview2026] to enable draft-only stateless
+  /// methods such as `server/discover`.
+  final McpProtocol protocol;
+
+  /// Protocol versions this server advertises and accepts for this profile.
+  List<String> get supportedVersions => protocol.supportedVersions;
+
   const McpServerOptions({
     super.enforceStrictCapabilities,
     super.taskStore,
@@ -31,6 +42,7 @@ class McpServerOptions extends ProtocolOptions {
     super.maxTaskQueueSize,
     this.capabilities,
     this.instructions,
+    this.protocol = McpProtocol.stable,
   });
 }
 
@@ -53,6 +65,7 @@ class Server extends Protocol {
   ServerCapabilities _capabilities;
   final String? _instructions;
   final Implementation _serverInfo;
+  final List<String> _supportedVersions;
 
   /// Map of session IDs to their configured logging level.
   final Map<String?, LoggingLevel> _loggingLevels = {};
@@ -97,6 +110,8 @@ class Server extends Protocol {
   Server(this._serverInfo, {McpServerOptions? options})
       : _capabilities = options?.capabilities ?? const ServerCapabilities(),
         _instructions = options?.instructions,
+        _supportedVersions =
+            options?.supportedVersions ?? McpProtocol.stable.supportedVersions,
         super(options) {
     setRequestHandler<JsonRpcServerDiscoverRequest>(
       Method.serverDiscover,
@@ -160,7 +175,7 @@ class Server extends Protocol {
       ErrorCode.unsupportedProtocolVersion.value,
       'Unsupported protocol version',
       {
-        'supported': supportedProtocolVersionsWithDraft,
+        'supported': _supportedVersions,
         'requested': requestedVersion,
       },
     );
@@ -185,7 +200,7 @@ class Server extends Protocol {
         'Missing required request metadata: ${McpMetaKey.protocolVersion}',
       );
     }
-    if (!supportedProtocolVersionsWithDraft.contains(requestedVersion)) {
+    if (!_supportedVersions.contains(requestedVersion)) {
       return _unsupportedProtocolVersionError(requestedVersion);
     }
     if (!isStatelessProtocolVersion(requestedVersion)) {
@@ -732,8 +747,7 @@ class Server extends Protocol {
 
     final requestedProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
     if (requestedProtocolVersion is String &&
-        !supportedProtocolVersionsWithDraft
-            .contains(requestedProtocolVersion)) {
+        !_supportedVersions.contains(requestedProtocolVersion)) {
       return _unsupportedProtocolVersionError(requestedProtocolVersion);
     }
     if (requestedProtocolVersion is String &&
@@ -752,6 +766,9 @@ class Server extends Protocol {
     }
 
     if (request.method == Method.initialize) {
+      if (!_supportsLegacyInitialization) {
+        return _unsupportedProtocolVersionError(latestProtocolVersion);
+      }
       if (_lifecycleState != _ServerLifecycleState.uninitialized) {
         return McpError(
           ErrorCode.invalidRequest.value,
@@ -1053,15 +1070,26 @@ class Server extends Protocol {
     _clientCapabilities = params.capabilities;
     _clientVersion = params.clientInfo;
 
-    final protocolVersion = supportedProtocolVersions.contains(requestedVersion)
+    final stableSupportedVersions = _supportedVersions
+        .where((version) => !isStatelessProtocolVersion(version))
+        .toList();
+    final protocolVersion = stableSupportedVersions.contains(requestedVersion)
         ? requestedVersion
-        : latestProtocolVersion;
+        : stableSupportedVersions.isNotEmpty
+            ? stableSupportedVersions.first
+            : latestProtocolVersion;
 
     return InitializeResult(
       protocolVersion: protocolVersion,
       capabilities: getCapabilities(),
       serverInfo: _serverInfo,
       instructions: _instructions,
+    );
+  }
+
+  bool get _supportsLegacyInitialization {
+    return _supportedVersions.any(
+      (version) => !isStatelessProtocolVersion(version),
     );
   }
 
@@ -1074,7 +1102,7 @@ class Server extends Protocol {
   /// Handles the client's `server/discover` request.
   Future<DiscoverResult> _onDiscover() async {
     return DiscoverResult(
-      supportedVersions: supportedProtocolVersionsWithDraft,
+      supportedVersions: _supportedVersions,
       capabilities: _discoveryCapabilities(),
       serverInfo: _serverInfo,
       instructions: _instructions,
