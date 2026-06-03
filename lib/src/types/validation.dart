@@ -1,11 +1,9 @@
 double? readUnitDouble(Object? value, String field) {
-  if (value == null) {
+  final number = readOptionalFiniteNumber(value, field);
+  final result = number?.toDouble();
+  if (result == null) {
     return null;
   }
-  if (value is! num) {
-    throw FormatException('$field must be a number between 0 and 1');
-  }
-  final result = value.toDouble();
   if (result < 0 || result > 1) {
     throw FormatException('$field must be between 0 and 1');
   }
@@ -16,9 +14,40 @@ void validateUnitDouble(double? value, String field) {
   if (value == null) {
     return;
   }
-  if (value < 0 || value > 1) {
+  if (!value.isFinite || value < 0 || value > 1) {
     throw ArgumentError.value(value, field, 'must be between 0 and 1');
   }
+}
+
+num readFiniteNumber(Object? value, String field) {
+  if (value is num && value.isFinite) {
+    return value;
+  }
+  throw FormatException('$field must be a finite JSON number');
+}
+
+num? readOptionalFiniteNumber(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return readFiniteNumber(value, field);
+}
+
+double? readOptionalFiniteDouble(Object? value, String field) {
+  return readOptionalFiniteNumber(value, field)?.toDouble();
+}
+
+void validateFiniteNumber(num value, String field) {
+  if (!value.isFinite) {
+    throw ArgumentError.value(value, field, 'must be a finite JSON number');
+  }
+}
+
+void validateOptionalFiniteNumber(num? value, String field) {
+  if (value == null) {
+    return;
+  }
+  validateFiniteNumber(value, field);
 }
 
 int? readOptionalInteger(Object? value, String field) {
@@ -118,4 +147,18 @@ Object? readJsonValue(Object? value, String field) {
     };
   }
   throw FormatException('$field must be a JSON value');
+}
+
+Map<String, dynamic> readJsonObject(Object? value, String field) {
+  if (value is! Map) {
+    throw FormatException('$field must be a JSON object');
+  }
+  return (readJsonValue(value, field) as Map).cast<String, dynamic>();
+}
+
+Map<String, dynamic>? readOptionalJsonObject(Object? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  return readJsonObject(value, field);
 }

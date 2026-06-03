@@ -90,7 +90,7 @@ class Prompt {
       icons: (json['icons'] as List<dynamic>?)
           ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
           .toList(),
-      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
+      meta: readOptionalJsonObject(json['_meta'], 'Prompt._meta'),
     );
   }
 
@@ -102,7 +102,7 @@ class Prompt {
           'arguments': arguments!.map((a) => a.toJson()).toList(),
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'Prompt._meta'),
       };
 }
 
@@ -171,7 +171,8 @@ class ListPromptsResult implements CacheableResultData {
   });
 
   factory ListPromptsResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta =
+        readOptionalJsonObject(json['_meta'], 'ListPromptsResult._meta');
     final prompts = json['prompts'];
     if (prompts is! List) {
       throw const FormatException('ListPromptsResult.prompts is required');
@@ -199,7 +200,8 @@ class ListPromptsResult implements CacheableResultData {
       if (nextCursor != null) 'nextCursor': nextCursor,
       if (ttlMs != null) 'ttlMs': ttlMs,
       if (cacheScope != null) 'cacheScope': cacheScope,
-      if (meta != null) '_meta': meta,
+      if (meta != null)
+        '_meta': readJsonObject(meta, 'ListPromptsResult._meta'),
     };
   }
 }
@@ -319,7 +321,7 @@ class GetPromptResult implements BaseResultData {
   const GetPromptResult({this.description, required this.messages, this.meta});
 
   factory GetPromptResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(json['_meta'], 'GetPromptResult._meta');
     final messages = json['messages'];
     if (messages is! List) {
       throw const FormatException('GetPromptResult.messages is required');
@@ -337,7 +339,8 @@ class GetPromptResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         if (description != null) 'description': description,
         'messages': messages.map((m) => m.toJson()).toList(),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'GetPromptResult._meta'),
       };
 }
 

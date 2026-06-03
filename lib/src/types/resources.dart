@@ -117,7 +117,7 @@ class Resource {
               json['annotations'] as Map<String, dynamic>,
             )
           : null,
-      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
+      meta: readOptionalJsonObject(json['_meta'], 'Resource._meta'),
     );
   }
 
@@ -132,7 +132,7 @@ class Resource {
           'icons': icons!.map((icon) => icon.toJson()).toList(),
         if (size != null) 'size': size,
         if (annotations != null) 'annotations': annotations!.toJson(),
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'Resource._meta'),
       };
 }
 
@@ -200,7 +200,7 @@ class ResourceTemplate {
               json['annotations'] as Map<String, dynamic>,
             )
           : null,
-      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
+      meta: readOptionalJsonObject(json['_meta'], 'ResourceTemplate._meta'),
     );
   }
 
@@ -214,7 +214,8 @@ class ResourceTemplate {
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
         if (annotations != null) 'annotations': annotations!.toJson(),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'ResourceTemplate._meta'),
       };
 }
 
@@ -291,7 +292,10 @@ class ListResourcesResult implements CacheableResultData {
 
   /// Creates from JSON.
   factory ListResourcesResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      json['_meta'],
+      'ListResourcesResult._meta',
+    );
     final resources = json['resources'];
     if (resources is! List) {
       throw const FormatException('ListResourcesResult.resources is required');
@@ -320,7 +324,8 @@ class ListResourcesResult implements CacheableResultData {
       if (nextCursor != null) 'nextCursor': nextCursor,
       if (ttlMs != null) 'ttlMs': ttlMs,
       if (cacheScope != null) 'cacheScope': cacheScope,
-      if (meta != null) '_meta': meta,
+      if (meta != null)
+        '_meta': readJsonObject(meta, 'ListResourcesResult._meta'),
     };
   }
 }
@@ -395,7 +400,10 @@ class ListResourceTemplatesResult implements CacheableResultData {
   });
 
   factory ListResourceTemplatesResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      json['_meta'],
+      'ListResourceTemplatesResult._meta',
+    );
     final resourceTemplates = json['resourceTemplates'];
     if (resourceTemplates is! List) {
       throw const FormatException(
@@ -428,7 +436,8 @@ class ListResourceTemplatesResult implements CacheableResultData {
       if (nextCursor != null) 'nextCursor': nextCursor,
       if (ttlMs != null) 'ttlMs': ttlMs,
       if (cacheScope != null) 'cacheScope': cacheScope,
-      if (meta != null) '_meta': meta,
+      if (meta != null)
+        '_meta': readJsonObject(meta, 'ListResourceTemplatesResult._meta'),
     };
   }
 }
@@ -520,7 +529,10 @@ class ReadResourceResult implements CacheableResultData {
   });
 
   factory ReadResourceResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      json['_meta'],
+      'ReadResourceResult._meta',
+    );
     final contents = json['contents'];
     if (contents is! List) {
       throw const FormatException('ReadResourceResult.contents is required');
@@ -546,7 +558,8 @@ class ReadResourceResult implements CacheableResultData {
       'contents': contents.map((c) => c.toJson()).toList(),
       if (ttlMs != null) 'ttlMs': ttlMs,
       if (cacheScope != null) 'cacheScope': cacheScope,
-      if (meta != null) '_meta': meta,
+      if (meta != null)
+        '_meta': readJsonObject(meta, 'ReadResourceResult._meta'),
     };
   }
 }
@@ -673,7 +686,10 @@ class JsonRpcResourceUpdatedNotification extends JsonRpcNotification {
         "Missing params for resource updated notification",
       );
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcResourceUpdatedNotification._meta',
+    );
     return JsonRpcResourceUpdatedNotification(
       updatedParams: ResourceUpdatedNotification.fromJson(paramsMap),
       meta: meta,

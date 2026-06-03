@@ -1,5 +1,6 @@
 import 'initialization.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// Notification filter requested by `subscriptions/listen`.
 class SubscriptionFilter {
@@ -292,14 +293,5 @@ Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
   if (value == null) {
     return null;
   }
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    if (value.keys.any((key) => key is! String)) {
-      throw FormatException('$field must be an object with string keys');
-    }
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('$field must be an object');
+  return readJsonObject(value, field);
 }

@@ -253,6 +253,26 @@ void main() {
       expect(deserialized.elicitationId, 'ui-123');
     });
 
+    test('Elicitation URL must be absolute URI', () {
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'test',
+          'url': '/relative/ui',
+          'elicitationId': 'ui-123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'test',
+          url: '/relative/ui',
+          elicitationId: 'ui-123',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('JsonEnum SEP-1330', () {
       final schema = const JsonEnum(
         [
@@ -306,14 +326,17 @@ void main() {
         action: 'accept',
         content: {
           'text': 'answer',
+          'confidence': 0.75,
           'selection': ['a', 'b'], // List<String>
         },
       );
+      expect(result.content?['confidence'], 0.75);
       expect(result.content?['selection'], isA<List>());
       expect((result.content?['selection'] as List).first, 'a');
 
       final json = result.toJson();
       final deserialized = ElicitResult.fromJson(json);
+      expect(deserialized.content?['confidence'], 0.75);
       expect((deserialized.content?['selection'] as List).last, 'b');
     });
 
@@ -496,6 +519,129 @@ void main() {
       final json = result.toJson();
       expect(json['stopReason'], 'toolUse');
       expect((json['content'] as List).single['type'], 'tool_use');
+    });
+
+    test('Sampling JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => SamplingToolUseContent.fromJson({
+          'type': 'tool_use',
+          'id': 'call-1',
+          'name': 'calculator',
+          'input': {'expr': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Hello'},
+          'model': 'model-x',
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 100,
+          'metadata': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Content JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => TextContent.fromJson({
+          'type': 'text',
+          'text': 'Hello',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file:///docs/readme.md',
+          'text': 'README body',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'annotations': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Tool JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => Tool.fromJson({
+          'name': 'search',
+          'inputSchema': {'type': 'object'},
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CallToolRequest.fromJson({
+          'name': 'search',
+          'arguments': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CallToolResult.fromJson({
+          'content': <Map<String, dynamic>>[],
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Result metadata fields reject non-JSON Dart maps', () {
+      expect(
+        () => Root.fromJson({
+          'uri': 'file:///repo',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ListResourcesResult.fromJson({
+          'resources': [],
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'result': {
+            'ok': true,
+            '_meta': {'bad': Object()},
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     group('Tasks API Types', () {
@@ -1080,6 +1226,26 @@ void main() {
         );
       });
 
+      test('request parsing prefers params metadata over top-level metadata',
+          () {
+        final parsed = JsonRpcMessage.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'id': 'tools',
+            'method': Method.toolsList,
+            '_meta': {'progressToken': 'top-level'},
+            'params': {
+              '_meta': {'progressToken': 'params-nested'},
+            },
+          },
+        );
+
+        expect(parsed, isA<JsonRpcListToolsRequest>());
+        final request = parsed as JsonRpcListToolsRequest;
+        expect(request.meta, {'progressToken': 'params-nested'});
+        expect(request.progressToken, 'params-nested');
+      });
+
       test('server capabilities omit non-stable fields while parsing legacy',
           () {
         final capabilities = const ServerCapabilities(
@@ -1165,7 +1331,7 @@ void main() {
             isA<FormatException>().having(
               (error) => error.message,
               'message',
-              contains('Tool.inputSchema must be an object'),
+              contains('Tool.inputSchema must be a JSON object'),
             ),
           ),
         );
@@ -1179,7 +1345,7 @@ void main() {
             isA<FormatException>().having(
               (error) => error.message,
               'message',
-              contains('Tool.outputSchema must be an object'),
+              contains('Tool.outputSchema must be a JSON object'),
             ),
           ),
         );
@@ -1241,6 +1407,14 @@ void main() {
         );
         expect(
           () => Annotations.fromJson({'priority': -0.1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Annotations(priority: double.nan).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+        expect(
+          () => Annotations.fromJson({'priority': double.infinity}),
           throwsA(isA<FormatException>()),
         );
         expect(

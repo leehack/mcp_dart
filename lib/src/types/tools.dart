@@ -212,7 +212,7 @@ class Tool {
               json['annotations'] as Map<String, dynamic>,
             )
           : null,
-      meta: json['_meta'] as Map<String, dynamic>?,
+      meta: readOptionalJsonObject(json['_meta'], 'Tool._meta'),
       execution: json['execution'] != null
           ? ToolExecution.fromJson(json['execution'] as Map<String, dynamic>)
           : null,
@@ -235,7 +235,7 @@ class Tool {
       'inputSchema': inputSchema.toJson(),
       if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
       if (annotations != null) 'annotations': annotations!.toJson(),
-      if (meta != null) '_meta': meta,
+      if (meta != null) '_meta': readJsonObject(meta, 'Tool._meta'),
       if (execution != null) 'execution': execution!.toJson(),
       if (icons != null) 'icons': icons!.map((icon) => icon.toJson()).toList(),
     };
@@ -305,7 +305,7 @@ class ListToolsResult implements CacheableResultData {
         json['cacheScope'],
         'ListToolsResult.cacheScope',
       ),
-      meta: json['_meta'] as Map<String, dynamic>?,
+      meta: readOptionalJsonObject(json['_meta'], 'ListToolsResult._meta'),
     );
   }
 
@@ -318,7 +318,7 @@ class ListToolsResult implements CacheableResultData {
       if (nextCursor != null) 'nextCursor': nextCursor,
       if (ttlMs != null) 'ttlMs': ttlMs,
       if (cacheScope != null) 'cacheScope': cacheScope,
-      if (meta != null) '_meta': meta,
+      if (meta != null) '_meta': readJsonObject(meta, 'ListToolsResult._meta'),
     };
   }
 }
@@ -353,7 +353,7 @@ class CallToolRequest {
       name: json['name'] as String,
       arguments: arguments == null
           ? const {}
-          : (arguments as Map).cast<String, dynamic>(),
+          : _readJsonObject(arguments, 'CallToolRequest.arguments'),
       inputResponses: InputResponse.mapFromJson(
         json['inputResponses'],
         'CallToolRequest.inputResponses',
@@ -367,7 +367,7 @@ class CallToolRequest {
 
   Map<String, dynamic> toJson() => {
         'name': name,
-        'arguments': arguments,
+        'arguments': readJsonObject(arguments, 'CallToolRequest.arguments'),
         if (inputResponses != null)
           'inputResponses': InputResponse.mapToJson(inputResponses!),
         if (requestState != null) 'requestState': requestState,
@@ -448,8 +448,9 @@ class CallToolResult implements BaseResultData {
             )
           : null,
       hasStructuredContent: json.containsKey('structuredContent'),
-      meta: json['_meta'] as Map<String, dynamic>?,
-      extra: extra.isEmpty ? null : extra,
+      meta: readOptionalJsonObject(json['_meta'], 'CallToolResult._meta'),
+      extra:
+          extra.isEmpty ? null : readJsonObject(extra, 'CallToolResult.extra'),
     );
   }
 
@@ -462,8 +463,8 @@ class CallToolResult implements BaseResultData {
             structuredContent,
             'CallToolResult.structuredContent',
           ),
-        if (meta != null) '_meta': meta,
-        ...?extra,
+        if (meta != null) '_meta': readJsonObject(meta, 'CallToolResult._meta'),
+        if (extra != null) ...readJsonObject(extra, 'CallToolResult.extra'),
       };
 }
 
@@ -511,14 +512,5 @@ Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
 }
 
 Map<String, dynamic> _readJsonObject(Object? value, String field) {
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    if (value.keys.any((key) => key is! String)) {
-      throw FormatException('$field must be an object with string keys');
-    }
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('$field must be an object');
+  return readJsonObject(value, field);
 }

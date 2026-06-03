@@ -9,7 +9,9 @@ void main() {
         initParams: const InitializeRequestParams(
           protocolVersion: latestProtocolVersion,
           capabilities: ClientCapabilities(
-            experimental: {'featureX': true},
+            experimental: {
+              'featureX': <String, dynamic>{},
+            },
             sampling: ClientCapabilitiesSampling(),
           ),
           clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
@@ -41,6 +43,41 @@ void main() {
       expect(json['id'], equals(1));
       expect(json['result']['key'], equals('value'));
       expect(json['result']['_meta']['metaKey'], equals('metaValue'));
+    });
+
+    test('JSON-RPC envelope metadata rejects non-JSON Dart maps', () {
+      final invalidMeta = {'bad': Object()};
+
+      expect(
+        () => JsonRpcRequest(
+          id: 1,
+          method: 'custom/request',
+          meta: invalidMeta,
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcNotification(
+          method: 'custom/notification',
+          meta: invalidMeta,
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'custom/notification',
+          'params': {'_meta': invalidMeta},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const JsonRpcResponse(
+          id: 1,
+          result: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('JsonRpcError serialization and deserialization', () {
@@ -131,6 +168,135 @@ void main() {
         expectMeta(result);
       }
     });
+
+    test('typed metadata rejects non-JSON Dart maps', () {
+      final invalidMeta = {'bad': Object()};
+      final task = Task(
+        taskId: 'task-1',
+        status: TaskStatus.completed,
+        ttl: null,
+        createdAt: '2026-05-25T00:00:00.000Z',
+        lastUpdatedAt: '2026-05-25T00:00:01.000Z',
+        meta: invalidMeta,
+      );
+
+      for (final serialize in <Map<String, dynamic> Function()>[
+        () => Root(uri: 'file:///repo', meta: invalidMeta).toJson(),
+        () => Resource(
+              uri: 'file:///repo/readme.md',
+              name: 'readme',
+              meta: invalidMeta,
+            ).toJson(),
+        () => ResourceTemplate(
+              uriTemplate: 'file:///repo/{name}',
+              name: 'repo-file',
+              meta: invalidMeta,
+            ).toJson(),
+        () => Prompt(name: 'summary', meta: invalidMeta).toJson(),
+        () => EmptyResult(meta: invalidMeta).toJson(),
+        () => InitializeResult(
+              protocolVersion: latestProtocolVersion,
+              capabilities: const ServerCapabilities(),
+              serverInfo: const Implementation(name: 'server', version: '1.0'),
+              meta: invalidMeta,
+            ).toJson(),
+        () => DiscoverResult(
+              supportedVersions: const [draftProtocolVersion2026_07_28],
+              capabilities: const ServerCapabilities(),
+              serverInfo: const Implementation(name: 'server', version: '1.0'),
+              meta: invalidMeta,
+            ).toJson(),
+        () => ListRootsResult(roots: const [], meta: invalidMeta).toJson(),
+        () => ListResourcesResult(resources: const [], meta: invalidMeta)
+            .toJson(),
+        () => ListResourceTemplatesResult(
+              resourceTemplates: const [],
+              meta: invalidMeta,
+            ).toJson(),
+        () =>
+            ReadResourceResult(contents: const [], meta: invalidMeta).toJson(),
+        () => ListPromptsResult(prompts: const [], meta: invalidMeta).toJson(),
+        () => GetPromptResult(messages: const [], meta: invalidMeta).toJson(),
+        () => CompleteResult(
+              completion: CompletionResultData(values: const []),
+              meta: invalidMeta,
+            ).toJson(),
+        () => ElicitResult(action: 'accept', meta: invalidMeta).toJson(),
+        () => ListToolsResult(tools: const [], meta: invalidMeta).toJson(),
+        () => task.toJson(),
+        () => ListTasksResult(tasks: const [], meta: invalidMeta).toJson(),
+        () => CreateTaskResult(task: task, meta: invalidMeta).toJson(),
+        () => JsonRpcResponse(
+              id: 1,
+              result: const {'ok': true},
+              meta: invalidMeta,
+            ).toJson(),
+      ]) {
+        expect(serialize, throwsA(isA<FormatException>()));
+      }
+
+      for (final parse in <Object Function()>[
+        () => Root.fromJson({'uri': 'file:///repo', '_meta': invalidMeta}),
+        () => Resource.fromJson({
+              'uri': 'file:///repo/readme.md',
+              'name': 'readme',
+              '_meta': invalidMeta,
+            }),
+        () => ResourceTemplate.fromJson({
+              'uriTemplate': 'file:///repo/{name}',
+              'name': 'repo-file',
+              '_meta': invalidMeta,
+            }),
+        () => Prompt.fromJson({'name': 'summary', '_meta': invalidMeta}),
+        () => ListRootsResult.fromJson({'roots': [], '_meta': invalidMeta}),
+        () => ListResourcesResult.fromJson({
+              'resources': [],
+              '_meta': invalidMeta,
+            }),
+        () => ListResourceTemplatesResult.fromJson({
+              'resourceTemplates': [],
+              '_meta': invalidMeta,
+            }),
+        () => ReadResourceResult.fromJson({
+              'contents': [],
+              '_meta': invalidMeta,
+            }),
+        () => ListPromptsResult.fromJson({'prompts': [], '_meta': invalidMeta}),
+        () => GetPromptResult.fromJson({'messages': [], '_meta': invalidMeta}),
+        () => CompleteResult.fromJson({
+              'completion': {'values': []},
+              '_meta': invalidMeta,
+            }),
+        () => ElicitResult.fromJson({'action': 'accept', '_meta': invalidMeta}),
+        () => ListToolsResult.fromJson({'tools': [], '_meta': invalidMeta}),
+        () => Task.fromJson({
+              'taskId': 'task-1',
+              'status': 'completed',
+              'ttl': null,
+              'createdAt': '2026-05-25T00:00:00.000Z',
+              'lastUpdatedAt': '2026-05-25T00:00:01.000Z',
+              '_meta': invalidMeta,
+            }),
+        () => ListTasksResult.fromJson({'tasks': [], '_meta': invalidMeta}),
+        () => CreateTaskResult.fromJson({
+              'task': const {
+                'taskId': 'task-1',
+                'status': 'completed',
+                'ttl': null,
+                'createdAt': '2026-05-25T00:00:00.000Z',
+                'lastUpdatedAt': '2026-05-25T00:00:01.000Z',
+              },
+              '_meta': invalidMeta,
+            }),
+        () => JsonRpcMessage.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'result': {'ok': true, '_meta': invalidMeta},
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
   });
 
   group('ToolExecution Tests', () {
@@ -165,7 +331,9 @@ void main() {
 
     test('ServerCapabilities includes completions', () {
       final capabilities = const ServerCapabilities(
-        experimental: {'featureY': true},
+        experimental: {
+          'featureY': <String, dynamic>{},
+        },
         logging: {'enabled': true},
         prompts: ServerCapabilitiesPrompts(listChanged: true),
         resources:
@@ -175,7 +343,7 @@ void main() {
       );
 
       final json = capabilities.toJson();
-      expect(json['experimental']['featureY'], equals(true));
+      expect(json['experimental']['featureY'], isEmpty);
       expect(json['logging']['enabled'], equals(true));
       expect(json['prompts']['listChanged'], equals(true));
       expect(json['resources']['subscribe'], equals(true));
@@ -190,7 +358,9 @@ void main() {
 
     test('ServerCapabilities serialization and deserialization', () {
       final capabilities = const ServerCapabilities(
-        experimental: {'featureY': true},
+        experimental: {
+          'featureY': <String, dynamic>{},
+        },
         logging: {'enabled': true},
         prompts: ServerCapabilitiesPrompts(listChanged: true),
         resources:
@@ -199,7 +369,7 @@ void main() {
       );
 
       final json = capabilities.toJson();
-      expect(json['experimental']['featureY'], equals(true));
+      expect(json['experimental']['featureY'], isEmpty);
       expect(json['logging']['enabled'], equals(true));
       expect(json['prompts']['listChanged'], equals(true));
       expect(json['resources']['subscribe'], equals(true));
@@ -212,18 +382,70 @@ void main() {
 
     test('ClientCapabilities serialization and deserialization', () {
       final capabilities = const ClientCapabilities(
-        experimental: {'featureZ': true},
+        experimental: {
+          'featureZ': <String, dynamic>{},
+        },
         sampling: ClientCapabilitiesSampling(),
         roots: ClientCapabilitiesRoots(listChanged: true),
       );
 
       final json = capabilities.toJson();
-      expect(json['experimental']['featureZ'], equals(true));
+      expect(json['experimental']['featureZ'], isEmpty);
       expect(json['sampling'], isNotNull);
       expect(json['roots']['listChanged'], equals(true));
 
       final deserialized = ClientCapabilities.fromJson(json);
       expect(deserialized.roots?.listChanged, equals(true));
+    });
+
+    test('experimental capability values must be objects', () {
+      expect(
+        () => ClientCapabilities.fromJson(
+          const {
+            'experimental': {'feature': true},
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ServerCapabilities.fromJson(
+          const {
+            'experimental': {'feature': true},
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ClientCapabilities(
+          experimental: {'feature': true},
+        ).toJson(),
+        throwsA(anyOf(isA<FormatException>(), isA<ArgumentError>())),
+      );
+      expect(
+        () => const ServerCapabilities(
+          experimental: {'feature': true},
+        ).toJson(),
+        throwsA(anyOf(isA<FormatException>(), isA<ArgumentError>())),
+      );
+    });
+
+    test('extension capability values must be objects', () {
+      expect(
+        () => ClientCapabilities.fromJson(
+          const {
+            'extensions': {'io.example/feature': true},
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ServerCapabilities.fromJson(
+          const {
+            'extensions': {'io.example/feature': true},
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -416,6 +638,41 @@ void main() {
       );
       expect(deserialized.meta?['display'], equals('inline'));
     });
+
+    test('content JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => TextContent.fromJson({
+          'type': 'text',
+          'text': 'Hello',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const TextContent(
+          text: 'Hello',
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'annotations': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'file:///docs/readme.md',
+          name: 'readme',
+          annotations: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('Resource Tests', () {
@@ -472,6 +729,41 @@ void main() {
           ResourceContents.fromJson(json) as BlobResourceContents;
       expect(deserialized.uri, equals('file://example.bin'));
       expect(deserialized.blob, equals('base64data'));
+    });
+
+    test('ResourceContents rejects non-JSON metadata and passthrough maps', () {
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file://example.txt',
+          'text': 'Sample text content',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file://example.txt',
+          'text': 'Sample text content',
+          'x-extra': Object(),
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const TextResourceContents(
+          uri: 'file://example.txt',
+          text: 'Sample text content',
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const TextResourceContents(
+          uri: 'file://example.txt',
+          text: 'Sample text content',
+          extra: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 

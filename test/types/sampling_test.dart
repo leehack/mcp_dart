@@ -76,6 +76,19 @@ void main() {
       expect(prefs.hints, isNull);
       expect(prefs.costPriority, isNull);
     });
+
+    test('rejects non-finite priorities', () {
+      for (final value in [double.nan, double.infinity]) {
+        expect(
+          () => ModelPreferences.fromJson({'costPriority': value}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ModelPreferences(costPriority: value).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+      }
+    });
   });
 
   group('SamplingContent', () {
@@ -203,6 +216,26 @@ void main() {
         final tool = content as SamplingToolUseContent;
         expect(tool.name, equals('fetch'));
         expect(tool.id, equals('tu1'));
+      });
+
+      test('rejects non-JSON input objects', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_use',
+            'id': 'tu1',
+            'name': 'fetch',
+            'input': {1: 'bad'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingToolUseContent(
+            id: 'tu1',
+            name: 'fetch',
+            input: {'bad': Object()},
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
 
@@ -354,6 +387,25 @@ void main() {
       expect(msg.contentBlocks, hasLength(2));
       expect(msg.toJson()['content'], isA<List>());
     });
+
+    test('rejects non-JSON metadata objects', () {
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+          '_meta': {1: 'bad'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const SamplingMessage(
+          role: SamplingMessageRole.user,
+          content: SamplingTextContent(text: 'Hello'),
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('CreateMessageRequestParams', () {
@@ -441,6 +493,68 @@ void main() {
       expect(params.maxTokens, equals(200));
       expect(params.includeContext, equals(IncludeContext.allServers));
     });
+
+    test('rejects non-finite temperature values', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      for (final value in [double.nan, double.infinity]) {
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': messages,
+            'maxTokens': 100,
+            'temperature': value,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams(
+            messages: const [
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: SamplingTextContent(text: 'Hello'),
+              ),
+            ],
+            maxTokens: 100,
+            temperature: value,
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      }
+    });
+
+    test('rejects non-JSON metadata objects', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'metadata': {1: 'bad'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const CreateMessageRequestParams(
+          messages: [
+            SamplingMessage(
+              role: SamplingMessageRole.user,
+              content: SamplingTextContent(text: 'Hello'),
+            ),
+          ],
+          maxTokens: 100,
+          metadata: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('CreateMessageResult', () {
@@ -504,6 +618,27 @@ void main() {
       };
       final result = CreateMessageResult.fromJson(json);
       expect(result.stopReason, equals('customReason'));
+    });
+
+    test('rejects non-JSON metadata objects', () {
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Message'},
+          'model': 'model-x',
+          '_meta': {1: 'bad'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const CreateMessageResult(
+          role: SamplingMessageRole.assistant,
+          content: SamplingTextContent(text: 'Message'),
+          model: 'model-x',
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 

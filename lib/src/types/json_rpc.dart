@@ -165,11 +165,16 @@ ProgressToken parseProgressToken(
   Object? value, {
   String fieldName = 'progressToken',
 }) {
-  if (value is String || value is int) {
+  if (value is String) {
     return value;
   }
+  final integer = readOptionalInteger(value, fieldName);
+  if (integer != null) {
+    return integer;
+  }
   throw FormatException(
-    'Invalid $fieldName: expected string or integer, got ${value.runtimeType}',
+    'Invalid $fieldName: expected string or integer, '
+    'got ${value.runtimeType}',
   );
 }
 
@@ -185,12 +190,42 @@ typedef RequestId = dynamic;
 /// boundaries. Notifications omit the `id` member entirely, and responses may
 /// omit the `id` member for JSON-RPC error cases.
 RequestId parseRequestId(Object? value, {String fieldName = 'id'}) {
-  if (value is String || value is int) {
+  if (value is String) {
+    return value;
+  }
+  final integer = readOptionalInteger(value, fieldName);
+  if (integer != null) {
+    return integer;
+  }
+  throw FormatException(
+    'Invalid $fieldName: expected string or integer, '
+    'got ${value.runtimeType}',
+  );
+}
+
+String _parseMethod(Object? value) {
+  if (value is String) {
     return value;
   }
   throw FormatException(
-    'Invalid $fieldName: expected string or integer, got ${value.runtimeType}',
+    'Invalid method: expected string, got ${value.runtimeType}',
   );
+}
+
+int _parseErrorCode(Object? value) {
+  final code = readOptionalInteger(value, 'JsonRpcErrorData.code');
+  if (code == null) {
+    throw const FormatException('JsonRpcErrorData.code is required');
+  }
+  return code;
+}
+
+String _parseErrorMessage(Object? value) {
+  final message = readOptionalString(value, 'JsonRpcErrorData.message');
+  if (message == null) {
+    throw const FormatException('JsonRpcErrorData.message is required');
+  }
+  return message;
 }
 
 RequestId _parseResultResponseId(Object? value) {
@@ -198,10 +233,24 @@ RequestId _parseResultResponseId(Object? value) {
 }
 
 RequestId? _parseErrorResponseId(Map<String, dynamic> json) {
-  if (!json.containsKey('id') || json['id'] == null) {
+  if (!json.containsKey('id')) {
     return null;
   }
   return parseRequestId(json['id']);
+}
+
+Map<String, dynamic>? _parseOptionalParamsObject(
+  Map<String, dynamic> json,
+  String fieldName,
+) {
+  if (!json.containsKey('params')) {
+    return null;
+  }
+  return readJsonObject(json['params'], fieldName);
+}
+
+Object _requestIdToJson(RequestId id, String fieldName) {
+  return parseRequestId(id, fieldName: fieldName);
 }
 
 final _metaPrefixLabelPattern = RegExp(
@@ -247,8 +296,8 @@ void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
 /// Validates request metadata that can affect protocol behavior.
 ///
 /// `_meta.progressToken` is an MCP wire token and must be a string or integer
-/// when present. [validateKeys] opts in to the MCP 2026 `_meta` key-name
-/// grammar without changing stable/legacy request parsing.
+/// when present. [validateKeys] opts in to the MCP 2026 `_meta`
+/// key-name grammar without changing stable/legacy request parsing.
 Map<String, dynamic>? validateRequestMeta(
   Map<String, dynamic>? meta, {
   bool validateKeys = false,
@@ -276,23 +325,15 @@ Map<String, dynamic>? _parseRequestMeta(Object? value) {
   if (value == null) {
     return null;
   }
-  if (value is! Map) {
-    throw FormatException(
-      'Invalid _meta: expected object, got ${value.runtimeType}',
-    );
-  }
-  if (value.keys.any((key) => key is! String)) {
-    throw const FormatException('Invalid _meta: expected string keys');
-  }
-  return validateRequestMeta(Map<String, dynamic>.from(value));
+  return validateRequestMeta(readJsonObject(value, '_meta'));
 }
 
-/// Extracts request metadata from either top-level or params-nested `_meta`.
+/// Extracts request metadata, preferring spec-defined params-nested `_meta`.
 Map<String, dynamic>? extractRequestMeta(Map<String, dynamic> json) {
   final topLevelMeta = _parseRequestMeta(json['_meta']);
   final params = json['params'];
   final paramsMeta = params is Map ? _parseRequestMeta(params['_meta']) : null;
-  return topLevelMeta ?? paramsMeta;
+  return paramsMeta ?? topLevelMeta;
 }
 
 /// Base class for all JSON-RPC messages (requests, notifications, responses, errors).
@@ -309,9 +350,16 @@ sealed class JsonRpcMessage {
       throw FormatException('Invalid JSON-RPC version: ${json['jsonrpc']}');
     }
 
+    final hasResult = json.containsKey('result');
+    final hasError = json.containsKey('error');
+
     if (json.containsKey('method')) {
-      final method = json['method'] as String;
+      final method = _parseMethod(json['method']);
       final hasId = json.containsKey('id');
+      final params = _parseOptionalParamsObject(
+        json,
+        hasId ? 'JsonRpcRequest.params' : 'JsonRpcNotification.params',
+      );
 
       if (hasId) {
         return switch (method) {
@@ -346,7 +394,7 @@ sealed class JsonRpcMessage {
           _ => JsonRpcRequest(
               id: parseRequestId(json['id']),
               method: method,
-              params: json['params'] as Map<String, dynamic>?,
+              params: params,
               meta: extractRequestMeta(json),
             ),
         };
@@ -386,21 +434,27 @@ sealed class JsonRpcMessage {
             JsonRpcElicitationCompleteNotification.fromJson(json),
           _ => JsonRpcNotification(
               method: method,
-              params: json['params'] as Map<String, dynamic>?,
-              meta: json['_meta'] as Map<String, dynamic>? ??
-                  (json['params'] as Map<String, dynamic>?)?['_meta']
-                      as Map<String, dynamic>?,
+              params: params,
+              meta: extractRequestMeta(json),
             ),
         };
       }
-    } else if (json.containsKey('result')) {
+    } else if (hasResult && hasError) {
+      throw const FormatException(
+        'Invalid JSON-RPC response: result and error are mutually exclusive',
+      );
+    } else if (hasResult) {
       final id = _parseResultResponseId(json['id']);
-      final resultData = json['result'] as Map<String, dynamic>;
-      final meta = resultData['_meta'] as Map<String, dynamic>?;
+      final resultData =
+          readJsonObject(json['result'], 'JsonRpcResponse.result');
+      final meta = readOptionalJsonObject(
+        resultData['_meta'],
+        'JsonRpcResponse._meta',
+      );
       final actualResult = Map<String, dynamic>.from(resultData)
         ..remove('_meta');
       return JsonRpcResponse(id: id, result: actualResult, meta: meta);
-    } else if (json.containsKey('error')) {
+    } else if (hasError) {
       return JsonRpcError.fromJson(json);
     } else {
       throw FormatException('Invalid JSON-RPC message format: $json');
@@ -442,12 +496,17 @@ class JsonRpcRequest extends JsonRpcMessage {
   @override
   Map<String, dynamic> toJson() => {
         'jsonrpc': jsonrpc,
-        'id': id,
+        'id': _requestIdToJson(id, 'JsonRpcRequest.id'),
         'method': method,
         if (params != null || meta != null)
           'params': <String, dynamic>{
-            ...?params,
-            if (meta != null) '_meta': meta,
+            if (params != null)
+              ...readJsonObject(params, 'JsonRpcRequest.params'),
+            if (meta != null)
+              '_meta': readJsonObject(
+                validateRequestMeta(meta),
+                'JsonRpcRequest._meta',
+              ),
           },
       };
 }
@@ -472,8 +531,10 @@ class JsonRpcNotification extends JsonRpcMessage {
         'method': method,
         if (params != null || meta != null)
           'params': <String, dynamic>{
-            ...?params,
-            if (meta != null) '_meta': meta,
+            if (params != null)
+              ...readJsonObject(params, 'JsonRpcNotification.params'),
+            if (meta != null)
+              '_meta': readJsonObject(meta, 'JsonRpcNotification._meta'),
           },
       };
 }
@@ -495,8 +556,12 @@ class JsonRpcResponse extends JsonRpcMessage {
   @override
   Map<String, dynamic> toJson() => {
         'jsonrpc': jsonrpc,
-        'id': id,
-        'result': <String, dynamic>{...result, if (meta != null) '_meta': meta},
+        'id': _requestIdToJson(id, 'JsonRpcResponse.id'),
+        'result': <String, dynamic>{
+          ...readJsonObject(result, 'JsonRpcResponse.result'),
+          if (meta != null)
+            '_meta': readJsonObject(meta, 'JsonRpcResponse._meta'),
+        },
       };
 }
 // --- JSON-RPC Error ---
@@ -554,15 +619,17 @@ class JsonRpcErrorData {
 
   factory JsonRpcErrorData.fromJson(Map<String, dynamic> json) =>
       JsonRpcErrorData(
-        code: json['code'] as int,
-        message: json['message'] as String,
-        data: json['data'],
+        code: _parseErrorCode(json['code']),
+        message: _parseErrorMessage(json['message']),
+        data: json.containsKey('data')
+            ? readJsonValue(json['data'], 'JsonRpcErrorData.data')
+            : null,
       );
 
   Map<String, dynamic> toJson() => {
         'code': code,
         'message': message,
-        if (data != null) 'data': data,
+        if (data != null) 'data': readJsonValue(data, 'JsonRpcErrorData.data'),
       };
 }
 
@@ -575,13 +642,15 @@ class JsonRpcError extends JsonRpcMessage {
 
   factory JsonRpcError.fromJson(Map<String, dynamic> json) => JsonRpcError(
         id: _parseErrorResponseId(json),
-        error: JsonRpcErrorData.fromJson(json['error'] as Map<String, dynamic>),
+        error: JsonRpcErrorData.fromJson(
+          readJsonObject(json['error'], 'JsonRpcError.error'),
+        ),
       );
 
   @override
   Map<String, dynamic> toJson() => {
         'jsonrpc': jsonrpc,
-        if (id != null) 'id': id,
+        if (id != null) 'id': _requestIdToJson(id, 'JsonRpcError.id'),
         'error': error.toJson(),
       };
 }
@@ -741,7 +810,8 @@ class InputRequest {
 
   Map<String, dynamic> toJson() => {
         'method': method,
-        if (params != null) 'params': params,
+        if (params != null)
+          'params': readJsonObject(params, 'InputRequest.params'),
       };
 }
 
@@ -754,17 +824,13 @@ class InputResponse {
 
   /// Creates an input response from a typed MCP result.
   factory InputResponse.fromResult(BaseResultData result) {
-    return InputResponse.raw(result.toJson());
+    return InputResponse.raw(_inputResponseJsonForResult(result));
   }
 
   factory InputResponse.fromJson(Map<String, dynamic> json) {
-    if (!_isValidInputResponse(json)) {
-      throw const FormatException(
-        'InputResponse must be a CreateMessageResult, ListRootsResult, '
-        'or ElicitResult',
-      );
-    }
-    return InputResponse.raw(Map<String, dynamic>.from(json));
+    final value = Map<String, dynamic>.from(json);
+    _validateInputResponse(value);
+    return InputResponse.raw(value);
   }
 
   /// Parses an input response map.
@@ -788,13 +854,49 @@ class InputResponse {
     );
   }
 
-  Map<String, dynamic> toJson() => Map<String, dynamic>.from(value);
+  Map<String, dynamic> toJson() {
+    final json = readJsonObject(value, 'InputResponse');
+    _validateInputResponse(json);
+    return json;
+  }
 }
 
-bool _isValidInputResponse(Map<String, dynamic> json) {
-  return _canParseInputResponse(CreateMessageResult.fromJson, json) ||
-      _canParseInputResponse(ListRootsResult.fromJson, json) ||
-      _canParseInputResponse(ElicitResult.fromJson, json);
+Map<String, dynamic> _inputResponseJsonForResult(BaseResultData result) {
+  final json = Map<String, dynamic>.from(result.toJson());
+  if (result is ElicitResult || result is ListRootsResult) {
+    json.remove('_meta');
+  }
+  _validateInputResponse(json);
+  return json;
+}
+
+void _validateInputResponse(Map<String, dynamic> json) {
+  if (_canParseInputResponse(CreateMessageResult.fromJson, json)) {
+    return;
+  }
+
+  if (_canParseInputResponse(ListRootsResult.fromJson, json)) {
+    _rejectInputResponseMeta(json, 'ListRootsResult');
+    return;
+  }
+
+  if (_canParseInputResponse(ElicitResult.fromJson, json)) {
+    _rejectInputResponseMeta(json, 'ElicitResult');
+    return;
+  }
+
+  throw const FormatException(
+    'InputResponse must be a CreateMessageResult, ListRootsResult, '
+    'or ElicitResult',
+  );
+}
+
+void _rejectInputResponseMeta(Map<String, dynamic> json, String resultName) {
+  if (json.containsKey('_meta')) {
+    throw FormatException(
+      'InputResponse $resultName must not include _meta in MCP 2026',
+    );
+  }
 }
 
 bool _canParseInputResponse(
@@ -875,22 +977,14 @@ class InputRequiredResult implements BaseResultData {
       if (inputRequests != null)
         'inputRequests': InputRequest.mapToJson(inputRequests!),
       if (requestState != null) 'requestState': requestState,
-      if (meta != null) '_meta': meta,
+      if (meta != null)
+        '_meta': readJsonObject(meta, 'InputRequiredResult._meta'),
     };
   }
 }
 
 Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    if (value.keys.any((key) => key is! String)) {
-      throw FormatException('$field must be an object with string keys');
-    }
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('$field must be an object');
+  return readJsonObject(value, field);
 }
 
 Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {

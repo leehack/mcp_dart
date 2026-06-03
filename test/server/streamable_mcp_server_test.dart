@@ -227,6 +227,28 @@ void main() {
       }
     });
 
+    test('CORS preflight allows stateless routing and parameter headers',
+        () async {
+      final client = http.Client();
+      try {
+        final req = http.Request('OPTIONS', Uri.parse(baseUrl))
+          ..headers['Access-Control-Request-Method'] = 'POST'
+          ..headers['Access-Control-Request-Headers'] =
+              'Mcp-Method, Mcp-Name, Mcp-Param-Region';
+        final streamedRes = await client.send(req);
+        final res = await http.Response.fromStream(streamedRes);
+        final allowedHeaders =
+            res.headers['access-control-allow-headers']!.toLowerCase();
+
+        expect(res.statusCode, HttpStatus.ok);
+        expect(allowedHeaders, contains('mcp-method'));
+        expect(allowedHeaders, contains('mcp-name'));
+        expect(allowedHeaders, contains('mcp-param-region'));
+      } finally {
+        client.close();
+      }
+    });
+
     test('initialize session flow', () async {
       final initRequest = JsonRpcRequest(
         id: 1,
@@ -326,6 +348,51 @@ void main() {
         body: jsonEncode(
           JsonRpcListToolsRequest(id: 1, meta: statelessMeta()).toJson(),
         ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['mcp-session-id'], isNull);
+      final messages = _decodeSseJsonMessages(response.body);
+      expect(messages.single['result']['tools'][0]['name'], 'echo');
+    });
+
+    test('detects stateless requests from nested metadata before top-level',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final request = JsonRpcListToolsRequest(
+        id: 11,
+        meta: statelessMeta(),
+      ).toJson()
+        ..['_meta'] = const {
+          McpMetaKey.protocolVersion: latestProtocolVersion,
+        };
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(request),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',

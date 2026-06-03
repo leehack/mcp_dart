@@ -6,6 +6,13 @@ import 'package:mcp_dart/mcp_dart.dart';
 const String _fixtureSuite = 'fixture';
 const String _specSuite = 'spec';
 const String _allSuites = 'all';
+const String _serverDiscoverMethod = 'server/discover';
+const String _draftProtocolVersion2026_07_28 = '2026-07-28';
+const String _protocolVersionMetaKey =
+    'io.modelcontextprotocol/protocolVersion';
+const String _clientInfoMetaKey = 'io.modelcontextprotocol/clientInfo';
+const String _clientCapabilitiesMetaKey =
+    'io.modelcontextprotocol/clientCapabilities';
 
 const List<String> conformanceSuiteNames = <String>[
   _fixtureSuite,
@@ -98,6 +105,41 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-non-string-method',
+            description:
+                'Rejects JSON-RPC requests whose method member is not a string.',
+            check: _rejectsNonStringJsonRpcMethod,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-result-error-response',
+            description:
+                'Rejects JSON-RPC responses that include both result and error members.',
+            check: _rejectsResultErrorJsonRpcResponse,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-malformed-error-object',
+            description:
+                'Rejects JSON-RPC error responses whose error member is malformed.',
+            check: _rejectsMalformedJsonRpcErrorObject,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-null-error-response-id',
+            description:
+                'Rejects JSON-RPC error responses whose id member is explicitly null.',
+            check: _rejectsNullJsonRpcErrorResponseId,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-null-params-member',
+            description:
+                'Rejects JSON-RPC request and notification envelopes whose params member is null.',
+            check: _rejectsNullJsonRpcParamsMember,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.preserves-string-response-id',
             description:
                 'Parses and serializes successful responses with string JSON-RPC IDs.',
@@ -105,10 +147,31 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
+            name: 'jsonrpc.preserves-integer-response-id',
+            description:
+                'Parses and serializes successful responses with integer JSON-RPC IDs.',
+            check: _preservesIntegerResponseId,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
             name: 'jsonrpc.preserves-string-progress-token',
             description:
                 'Parses and serializes progress notifications with string progress tokens.',
             check: _preservesStringProgressToken,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
+            name: 'jsonrpc.preserves-integer-progress-token',
+            description:
+                'Parses and serializes progress notifications with integer progress tokens.',
+            check: _preservesIntegerProgressToken,
+          ),
+          _ConformanceCase(
+            suite: _fixtureSuite,
+            name: 'jsonrpc.rejects-fractional-ids-and-progress-tokens',
+            description:
+                'Rejects fractional JSON-RPC request IDs, response IDs, and progress tokens.',
+            check: _rejectsFractionalIdsAndProgressTokens,
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
@@ -125,6 +188,13 @@ class ConformanceRunner {
             description:
                 'Rejects operation requests before the initialize handshake.',
             check: _rejectsPreInitializeRequest,
+          ),
+          _ConformanceCase(
+            suite: _specSuite,
+            name: 'server-discover.requires-request-meta',
+            description:
+                'Rejects server/discover requests that omit params._meta request metadata.',
+            check: _serverDiscoverRequiresRequestMeta,
           ),
           _ConformanceCase(
             suite: _specSuite,
@@ -153,6 +223,13 @@ class ConformanceRunner {
             description:
                 'Rejects progress notifications whose progressToken is not a string or integer.',
             check: _rejectsMalformedProgressToken,
+          ),
+          _ConformanceCase(
+            suite: _specSuite,
+            name: 'progress.dispatches-integer-progress-token',
+            description:
+                'Dispatches progress notifications for integer progress tokens.',
+            check: _dispatchesIntegerProgressToken,
           ),
         ];
 
@@ -282,9 +359,9 @@ class _GeneratedJsonRpcFixture {
 }
 
 _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
-  final numericId = random.nextInt(1000000);
+  final integerId = random.nextInt(1000000);
   final stringId = 'req-${random.nextInt(1000000)}';
-  final progressToken = random.nextBool() ? numericId : 'progress-$numericId';
+  final progressToken = random.nextBool() ? integerId : 'progress-$integerId';
 
   return switch (random.nextInt(6)) {
     0 => _GeneratedJsonRpcFixture(
@@ -293,7 +370,7 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
             'Generated request with an invalid JSON-RPC version is rejected.',
         message: <String, dynamic>{
           'jsonrpc': '2.${random.nextInt(9) + 1}',
-          'id': random.nextBool() ? numericId : stringId,
+          'id': random.nextBool() ? integerId : stringId,
           'method': Method.ping,
         },
         expectation: _expectFormatExceptionForPayload,
@@ -304,7 +381,7 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
             'Generated JSON-RPC envelope without request/response members is rejected.',
         message: <String, dynamic>{
           'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? numericId : stringId,
+          'id': random.nextBool() ? integerId : stringId,
           'params': <String, dynamic>{'noise': random.nextInt(100)},
         },
         expectation: _expectFormatExceptionForPayload,
@@ -314,7 +391,7 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
         description: 'Generated requests preserve string-or-integer IDs.',
         message: <String, dynamic>{
           'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? numericId : stringId,
+          'id': random.nextBool() ? integerId : stringId,
           'method': Method.ping,
         },
         expectation: _expectRequestIdRoundTrip,
@@ -324,7 +401,7 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
         description: 'Generated responses preserve string-or-integer IDs.',
         message: <String, dynamic>{
           'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? numericId : stringId,
+          'id': random.nextBool() ? integerId : stringId,
           'result': <String, dynamic>{},
         },
         expectation: _expectResponseIdRoundTrip,
@@ -350,7 +427,7 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
             'Generated error responses preserve string-or-integer IDs.',
         message: <String, dynamic>{
           'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? numericId : stringId,
+          'id': random.nextBool() ? integerId : stringId,
           'error': <String, dynamic>{
             'code': ErrorCode.invalidRequest.value,
             'message': 'generated invalid request',
@@ -490,6 +567,57 @@ Future<void> _rejectsPreInitializeRequest() async {
   await server.close();
 }
 
+Future<void> _serverDiscoverRequiresRequestMeta() async {
+  for (final message in [
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 'discover-1',
+      'method': _serverDiscoverMethod,
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 'discover-1',
+      'method': _serverDiscoverMethod,
+      '_meta': <String, dynamic>{
+        _protocolVersionMetaKey: _draftProtocolVersion2026_07_28,
+      },
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 'discover-1',
+      'method': _serverDiscoverMethod,
+      'params': <String, dynamic>{},
+    },
+  ]) {
+    _expectThrowsFormatException(() => JsonRpcMessage.fromJson(message));
+  }
+
+  final parsed = JsonRpcMessage.fromJson(<String, dynamic>{
+    'jsonrpc': jsonRpcVersion,
+    'id': 'discover-1',
+    'method': _serverDiscoverMethod,
+    'params': <String, dynamic>{
+      '_meta': <String, dynamic>{
+        _protocolVersionMetaKey: _draftProtocolVersion2026_07_28,
+        _clientInfoMetaKey: <String, dynamic>{
+          'name': 'client',
+          'version': '1.0.0',
+        },
+        _clientCapabilitiesMetaKey: <String, dynamic>{},
+      },
+    },
+  });
+  if (parsed is! JsonRpcRequest) {
+    throw StateError(
+      'Expected JsonRpcRequest, got ${parsed.runtimeType}.',
+    );
+  }
+  if (parsed.meta?[_protocolVersionMetaKey] !=
+      _draftProtocolVersion2026_07_28) {
+    throw StateError('Expected server/discover metadata to be preserved.');
+  }
+}
+
 Future<void> _rejectsUnnegotiatedSamplingTools() async {
   final transport = _ConformanceTransport();
   final client = McpClient(
@@ -625,6 +753,64 @@ Future<void> _rejectsMalformedProgressToken() async {
   );
 }
 
+Future<void> _dispatchesIntegerProgressToken() async {
+  final transport = _ConformanceTransport();
+  final server = McpServer(
+    const Implementation(name: 'server', version: '1.0.0'),
+    options: const McpServerOptions(
+      capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
+    ),
+  );
+  server.registerTool(
+    'progress_probe',
+    callback: (args, extra) async {
+      await extra.sendProgress(1, total: 2, message: 'halfway');
+      return const CallToolResult(
+        content: <Content>[TextContent(text: 'ok')],
+      );
+    },
+  );
+
+  await _initializeMcpServer(server, transport);
+  transport.emit(
+    const JsonRpcCallToolRequest(
+      id: 104,
+      params: <String, dynamic>{
+        'name': 'progress_probe',
+        'arguments': <String, dynamic>{},
+        '_meta': <String, dynamic>{
+          'progressToken': 15,
+        },
+      },
+    ),
+  );
+  await _settle();
+
+  final progressMessages = transport.sentMessages
+      .whereType<JsonRpcNotification>()
+      .where((message) => message.method == Method.notificationsProgress)
+      .toList();
+  if (progressMessages.length != 1) {
+    throw StateError(
+      'Expected one progress notification, got ${progressMessages.length}.',
+    );
+  }
+  final progress = ProgressNotification.fromJson(
+    progressMessages.single.params ?? const <String, dynamic>{},
+  );
+  if (progress.progressToken != 15) {
+    throw StateError('Expected integer progress token to be preserved.');
+  }
+  if (progress.progress != 1 || progress.total != 2) {
+    throw StateError('Expected progress values to be preserved.');
+  }
+
+  final responses =
+      transport.sentMessages.whereType<JsonRpcResponse>().toList();
+  _expectSingleErrorFreeResponse(responses, id: 104);
+  await server.close();
+}
+
 Future<void> _rejectsInvalidJsonRpcVersion() async {
   _expectThrowsFormatException(
     () => JsonRpcMessage.fromJson(const <String, dynamic>{
@@ -644,6 +830,115 @@ Future<void> _rejectsMalformedJsonRpcMessage() async {
   );
 }
 
+Future<void> _rejectsNonStringJsonRpcMethod() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(const <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'method': 1,
+    }),
+  );
+}
+
+Future<void> _rejectsResultErrorJsonRpcResponse() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(<String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'result': <String, dynamic>{},
+      'error': <String, dynamic>{
+        'code': ErrorCode.internalError.value,
+        'message': 'Internal error',
+      },
+    }),
+  );
+}
+
+Future<void> _rejectsMalformedJsonRpcErrorObject() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(const <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'error': <String, dynamic>{
+        'code': 'not-a-number',
+        'message': 'Invalid request',
+      },
+    }),
+  );
+}
+
+Future<void> _rejectsNullJsonRpcErrorResponseId() async {
+  _expectThrowsFormatException(
+    () => JsonRpcMessage.fromJson(const <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': null,
+      'error': <String, dynamic>{
+        'code': -32600,
+        'message': 'Invalid request',
+      },
+    }),
+  );
+}
+
+Future<void> _rejectsNullJsonRpcParamsMember() async {
+  for (final message in const [
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'method': Method.ping,
+      'params': null,
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'method': Method.notificationsInitialized,
+      'params': null,
+    },
+  ]) {
+    _expectThrowsFormatException(() => JsonRpcMessage.fromJson(message));
+  }
+}
+
+Future<void> _rejectsFractionalIdsAndProgressTokens() async {
+  for (final message in const [
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1.5,
+      'method': Method.ping,
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1.5,
+      'result': <String, dynamic>{},
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1.5,
+      'error': <String, dynamic>{
+        'code': -32600,
+        'message': 'Invalid request',
+      },
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'id': 1,
+      'method': Method.ping,
+      'params': <String, dynamic>{
+        '_meta': <String, dynamic>{'progressToken': 1.5},
+      },
+    },
+    <String, dynamic>{
+      'jsonrpc': jsonRpcVersion,
+      'method': Method.notificationsProgress,
+      'params': <String, dynamic>{
+        'progressToken': 1.5,
+        'progress': 1,
+      },
+    },
+  ]) {
+    _expectThrowsFormatException(() => JsonRpcMessage.fromJson(message));
+  }
+}
+
 Future<void> _preservesStringResponseId() async {
   final message = JsonRpcMessage.fromJson(const <String, dynamic>{
     'jsonrpc': jsonRpcVersion,
@@ -659,6 +954,24 @@ Future<void> _preservesStringResponseId() async {
   }
   if (message.toJson()['id'] != 'request-1') {
     throw StateError('Expected serialized response ID to stay a string.');
+  }
+}
+
+Future<void> _preservesIntegerResponseId() async {
+  final message = JsonRpcMessage.fromJson(const <String, dynamic>{
+    'jsonrpc': jsonRpcVersion,
+    'id': 15,
+    'result': <String, dynamic>{},
+  });
+
+  if (message is! JsonRpcResponse) {
+    throw StateError('Expected JsonRpcResponse, got ${message.runtimeType}.');
+  }
+  if (message.id != 15) {
+    throw StateError('Expected integer response ID to be preserved.');
+  }
+  if (message.toJson()['id'] != 15) {
+    throw StateError('Expected serialized response ID to stay an integer.');
   }
 }
 
@@ -728,6 +1041,30 @@ Future<void> _preservesStringProgressToken() async {
   }
   if (message.toJson()['params']['progressToken'] != 'progress-1') {
     throw StateError('Expected serialized progress token to stay a string.');
+  }
+}
+
+Future<void> _preservesIntegerProgressToken() async {
+  final message = JsonRpcMessage.fromJson(const <String, dynamic>{
+    'jsonrpc': jsonRpcVersion,
+    'method': Method.notificationsProgress,
+    'params': <String, dynamic>{
+      'progressToken': 15,
+      'progress': 1,
+      'total': 2,
+    },
+  });
+
+  if (message is! JsonRpcProgressNotification) {
+    throw StateError(
+      'Expected JsonRpcProgressNotification, got ${message.runtimeType}.',
+    );
+  }
+  if (message.progressParams.progressToken != 15) {
+    throw StateError('Expected integer progress token to be preserved.');
+  }
+  if (message.toJson()['params']['progressToken'] != 15) {
+    throw StateError('Expected serialized progress token to stay an integer.');
   }
 }
 

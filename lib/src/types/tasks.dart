@@ -1,5 +1,6 @@
 import '../types.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// The current state of a task execution.
 enum TaskStatus {
@@ -98,7 +99,7 @@ class Task implements BaseResultData {
     final createdAt = _readRequiredTaskString(json, 'createdAt');
     final lastUpdatedAt = _readRequiredTaskString(json, 'lastUpdatedAt');
 
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(json['_meta'], 'Task._meta');
     return Task(
       taskId: _readRequiredTaskString(json, 'taskId'),
       status: TaskStatusName.fromString(
@@ -122,7 +123,8 @@ class Task implements BaseResultData {
         if (pollInterval != null) 'pollInterval': pollInterval,
         'createdAt': createdAt,
         'lastUpdatedAt': lastUpdatedAt,
-        if (includeMeta && meta != null) '_meta': meta,
+        if (includeMeta && meta != null)
+          '_meta': readJsonObject(meta, 'Task._meta'),
       };
 
   /// Serializes this task where MCP expects the bare `Task` schema.
@@ -231,7 +233,7 @@ class ListTasksResult implements BaseResultData {
   const ListTasksResult({required this.tasks, this.nextCursor, this.meta});
 
   factory ListTasksResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(json['_meta'], 'ListTasksResult._meta');
     final tasks = json['tasks'];
     if (tasks is! List) {
       throw const FormatException('ListTasksResult.tasks is required');
@@ -248,7 +250,8 @@ class ListTasksResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'tasks': tasks.map((t) => t.toBareJson()).toList(),
         if (nextCursor != null) 'nextCursor': nextCursor,
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'ListTasksResult._meta'),
       };
 }
 
@@ -458,7 +461,8 @@ class CreateTaskResult implements BaseResultData {
   const CreateTaskResult({required this.task, this.meta});
 
   factory CreateTaskResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta =
+        readOptionalJsonObject(json['_meta'], 'CreateTaskResult._meta');
     return CreateTaskResult(
       task: Task.fromJson(json['task'] as Map<String, dynamic>),
       meta: meta,
@@ -468,7 +472,8 @@ class CreateTaskResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'task': task.toBareJson(),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'CreateTaskResult._meta'),
       };
 }
 
@@ -609,7 +614,8 @@ class TaskExtensionTask {
         if (pollIntervalMs != null) 'pollIntervalMs': pollIntervalMs,
         if (inputRequests != null)
           'inputRequests': InputRequest.mapToJson(inputRequests!),
-        if (result != null) 'result': result,
+        if (result != null)
+          'result': readJsonObject(result, 'TaskExtensionTask.result'),
         if (error != null) 'error': error!.toJson(),
       };
 }
@@ -643,7 +649,8 @@ class CreateTaskExtensionResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         ...task.toJson(resultType: resultTypeTask),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'CreateTaskExtensionResult._meta'),
       };
 }
 
@@ -676,7 +683,8 @@ class GetTaskExtensionResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         ...task.toJson(resultType: resultTypeComplete),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'GetTaskExtensionResult._meta'),
       };
 }
 
@@ -707,7 +715,11 @@ class TaskExtensionAcknowledgementResult implements BaseResultData {
   @override
   Map<String, dynamic> toJson() => {
         'resultType': resultTypeComplete,
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(
+            meta,
+            'TaskExtensionAcknowledgementResult._meta',
+          ),
       };
 }
 
@@ -838,7 +850,10 @@ class JsonRpcTaskStatusNotification extends JsonRpcNotification {
         "Missing params for task status notification",
       );
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = _readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcTaskStatusNotification._meta',
+    );
     return JsonRpcTaskStatusNotification(
       statusParams: TaskStatusNotification.fromJson(paramsMap),
       meta: meta,
@@ -870,16 +885,7 @@ class JsonRpcTaskNotification extends JsonRpcNotification {
 }
 
 Map<String, dynamic> _readRequiredJsonObject(Object? value, String field) {
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    if (value.keys.any((key) => key is! String)) {
-      throw FormatException('$field must be an object with string keys');
-    }
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('$field must be an object');
+  return readJsonObject(value, field);
 }
 
 Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {

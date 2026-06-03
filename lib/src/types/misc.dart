@@ -1,4 +1,5 @@
 import 'json_rpc.dart';
+import 'validation.dart';
 
 /// A response that indicates success but carries no specific data.
 class EmptyResult implements BaseResultData {
@@ -9,7 +10,7 @@ class EmptyResult implements BaseResultData {
 
   @override
   Map<String, dynamic> toJson() => {
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'EmptyResult._meta'),
       };
 }
 
@@ -30,7 +31,7 @@ class CancelledNotification {
       );
 
   Map<String, dynamic> toJson() => {
-        'requestId': requestId,
+        'requestId': parseRequestId(requestId, fieldName: 'requestId'),
         if (reason != null) 'reason': reason,
       };
 }
@@ -51,7 +52,10 @@ class JsonRpcCancelledNotification extends JsonRpcNotification {
     if (paramsMap == null) {
       throw const FormatException("Missing params for cancelled notification");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcCancelledNotification._meta',
+    );
     return JsonRpcCancelledNotification(
       cancelParams: CancelledNotification.fromJson(paramsMap),
       meta: meta,
@@ -91,17 +95,21 @@ class Progress {
 
   factory Progress.fromJson(Map<String, dynamic> json) {
     return Progress(
-      progress: json['progress'] as num,
-      total: json['total'] as num?,
+      progress: readFiniteNumber(json['progress'], 'Progress.progress'),
+      total: readOptionalFiniteNumber(json['total'], 'Progress.total'),
       message: json['message'] as String?,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'progress': progress,
-        if (total != null) 'total': total,
-        if (message != null) 'message': message,
-      };
+  Map<String, dynamic> toJson() {
+    validateFiniteNumber(progress, 'Progress.progress');
+    validateOptionalFiniteNumber(total, 'Progress.total');
+    return {
+      'progress': progress,
+      if (total != null) 'total': total,
+      if (message != null) 'message': message,
+    };
+  }
 }
 
 /// Parameters for the `notifications/progress` notification.
@@ -140,7 +148,7 @@ class ProgressNotification implements Progress {
 
   @override
   Map<String, dynamic> toJson() => {
-        'progressToken': progressToken,
+        'progressToken': parseProgressToken(progressToken),
         ...Progress(
           progress: progress,
           total: total,
@@ -167,7 +175,10 @@ class JsonRpcProgressNotification extends JsonRpcNotification {
     if (paramsMap == null) {
       throw const FormatException("Missing params for progress notification");
     }
-    final meta = paramsMap['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(
+      paramsMap['_meta'],
+      'JsonRpcProgressNotification._meta',
+    );
     return JsonRpcProgressNotification(
       progressParams: ProgressNotification.fromJson(paramsMap),
       meta: meta,
