@@ -24,23 +24,37 @@ Future<void> main(List<String> args) async {
 
   switch (scenario) {
     case 'initialize':
-      await _withClient(serverUrl, protocolVersion: latestProtocolVersion);
+      await _withClient(serverUrl, protocolVersion: protocolVersion);
     case 'tools_call':
-      await _withClient(
-        serverUrl,
-        protocolVersion: latestProtocolVersion,
-        action: (client) async {
+      if (isStatelessProtocolVersion(protocolVersion)) {
+        final client = _RawStatelessClient(serverUrl, protocolVersion);
+        try {
+          await client.request(Method.serverDiscover, const {});
           await client.listTools();
           await client.callTool(
-            const CallToolRequest(
-              name: 'add_numbers',
-              arguments: {'a': 2, 'b': 3},
-            ),
+            'add_numbers',
+            arguments: const {'a': 2, 'b': 3},
           );
-        },
-      );
+        } finally {
+          client.close();
+        }
+      } else {
+        await _withClient(
+          serverUrl,
+          protocolVersion: protocolVersion,
+          action: (client) async {
+            await client.listTools();
+            await client.callTool(
+              const CallToolRequest(
+                name: 'add_numbers',
+                arguments: {'a': 2, 'b': 3},
+              ),
+            );
+          },
+        );
+      }
     case 'elicitation-sep1034-client-defaults':
-      await _runElicitationDefaults(serverUrl);
+      await _runElicitationDefaults(serverUrl, protocolVersion);
     case 'request-metadata':
       await _runRequestMetadata(serverUrl, protocolVersion);
     case 'sep-2322-client-request-state':
@@ -52,11 +66,11 @@ Future<void> main(List<String> args) async {
     case 'http-invalid-tool-headers':
       await _runInvalidToolHeaders(serverUrl, protocolVersion);
     case 'json-schema-ref-no-deref':
-      await _runSchemaRefNoDeref(serverUrl, latestProtocolVersion);
+      await _runSchemaRefNoDeref(serverUrl, protocolVersion);
     case 'sse-retry':
       await _withClient(
         serverUrl,
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: protocolVersion,
         action: (client) async {
           await client.listTools();
           await client.callTool(
@@ -141,10 +155,13 @@ Future<void> _withClient(
   }
 }
 
-Future<void> _runElicitationDefaults(Uri serverUrl) async {
+Future<void> _runElicitationDefaults(
+  Uri serverUrl,
+  String protocolVersion,
+) async {
   await _withClient(
     serverUrl,
-    protocolVersion: latestProtocolVersion,
+    protocolVersion: protocolVersion,
     capabilities: const ClientCapabilities(
       elicitation: ClientElicitation(
         form: ClientElicitationForm(applyDefaults: true),
@@ -357,7 +374,7 @@ Future<void> _runAuthScenario(
   Map<String, dynamic> context,
 ) async {
   final provider = _ConformanceOAuthProvider(scenario, context);
-  final client = _RawOAuthClient(serverUrl, latestProtocolVersion, provider);
+  final client = _RawOAuthClient(serverUrl, protocolVersion, provider);
   const allowClientErrorScenarios = {
     'auth/resource-mismatch',
     'auth/scope-retry-limit',
@@ -370,7 +387,9 @@ Future<void> _runAuthScenario(
 
   try {
     await client.start();
-    await client.initialize();
+    await client.initialize(
+      maxAuthAttempts: scenario == 'auth/scope-retry-limit' ? 1 : 4,
+    );
 
     switch (scenario) {
       case 'auth/authorization-server-migration':
@@ -381,7 +400,7 @@ Future<void> _runAuthScenario(
         await client.callTool('test-tool');
       case 'auth/scope-retry-limit':
         try {
-          await client.listTools(maxAuthAttempts: 2);
+          await client.listTools(maxAuthAttempts: 1);
         } catch (_) {
           // The scenario only needs to observe a bounded number of auth
           // retries; the server intentionally never grants the scope.
@@ -416,6 +435,14 @@ class _RawStatelessClient {
   var _nextId = 1;
 
   _RawStatelessClient(this.serverUrl, this.protocolVersion);
+
+  void close() {
+    _httpClient.close(force: true);
+  }
+
+  Future<Map<String, dynamic>> listTools() {
+    return request(Method.toolsList, const {});
+  }
 
   Future<Map<String, dynamic>> callTool(
     String name, {
@@ -679,26 +706,41 @@ class _RawOAuthClient {
 
   Future<void> close() => transport.close();
 
-  Future<void> initialize() async {
-    final id = _nextId++;
-    await _request(
-      JsonRpcInitializeRequest(
-        id: id,
-        initParams: InitializeRequest(
-          protocolVersion: protocolVersion,
-          capabilities: _draftCapabilities,
-          clientInfo: _clientInfo,
+  Future<void> initialize({
+    int maxAuthAttempts = 4,
+  }) async {
+    if (isStatelessProtocolVersion(protocolVersion)) {
+      await _request(
+        JsonRpcRequest(
+          id: _nextId++,
+          method: Method.serverDiscover,
+          meta: _requestMeta(),
         ),
-      ),
-    );
-    await transport.send(const JsonRpcInitializedNotification());
+        maxAuthAttempts: maxAuthAttempts,
+      );
+    } else {
+      await _request(
+        JsonRpcInitializeRequest(
+          id: _nextId++,
+          initParams: InitializeRequest(
+            protocolVersion: protocolVersion,
+            capabilities: _draftCapabilities,
+            clientInfo: _clientInfo,
+          ),
+        ),
+      );
+      await transport.send(const JsonRpcInitializedNotification());
+    }
   }
 
   Future<Map<String, dynamic>> listTools({
     int maxAuthAttempts = 4,
   }) {
     return _request(
-      JsonRpcListToolsRequest(id: _nextId++),
+      JsonRpcListToolsRequest(
+        id: _nextId++,
+        meta: _requestMeta(),
+      ),
       maxAuthAttempts: maxAuthAttempts,
     );
   }
@@ -711,8 +753,20 @@ class _RawOAuthClient {
       JsonRpcCallToolRequest(
         id: _nextId++,
         params: CallToolRequest(name: name).toJson(),
+        meta: _requestMeta(),
       ),
       maxAuthAttempts: maxAuthAttempts,
+    );
+  }
+
+  Map<String, dynamic>? _requestMeta() {
+    if (!isStatelessProtocolVersion(protocolVersion)) {
+      return null;
+    }
+    return buildProtocolRequestMeta(
+      protocolVersion: protocolVersion,
+      clientInfo: _clientInfo,
+      clientCapabilities: _draftCapabilities,
     );
   }
 

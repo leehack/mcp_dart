@@ -1,3 +1,12 @@
+## Unreleased
+
+### Conformance and release readiness
+
+- Updated official conformance gates to
+  `@modelcontextprotocol/conformance@0.2.0-alpha.2`, with 2026 RC runs pinned
+  to `DRAFT-2026-v1` and the current upstream draft fixture gap tracked as an
+  expected failure.
+
 ## 2.3.0-dev.0
 
 This is a dev preview for MCP `2026-07-28` draft/RC support. MCP

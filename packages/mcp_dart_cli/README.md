@@ -464,9 +464,10 @@ exported tree outside the monorepo git/.pubignore context:
 dart run tool/validate_cli_publish.dart
 ```
 
-Before the matching `mcp_dart` SDK dev package is published, this uses
-`pubspec_overrides.yaml` so the CLI can validate against the local SDK checkout.
-After publishing the SDK package, validate the CLI against the pub.dev SDK
+For follow-up CLI dev releases whose matching `mcp_dart` SDK dev package is not
+published yet, this uses `pubspec_overrides.yaml` so the CLI can validate
+against the local SDK checkout. The initial `mcp_dart 2.3.0-dev.0` SDK package
+is already published, so release validation should also cover the pub.dev SDK
 version:
 
 ```bash

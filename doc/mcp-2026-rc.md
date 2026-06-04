@@ -116,13 +116,22 @@ behavior.
 ## Dev Release Checklist
 
 Use dev releases for MCP `2026-07-28` draft/RC testing until the official spec
-is released. Dev versions must include a prerelease suffix such as
-`2.3.0-dev.0` so pub.dev and GitHub treat them as preview builds.
+is released. The initial SDK dev release, `mcp_dart 2.3.0-dev.0`, is already
+published on pub.dev. Follow-up dev versions must increment the prerelease
+suffix, such as `2.3.0-dev.1`, so pub.dev and GitHub treat them as preview
+builds.
 
-Before creating tags from `dev/2026-07-28-rc`, run:
+Before creating follow-up dev tags from `dev/2026-07-28-rc`, run:
 
 ```sh
 dart analyze
+dart run test/conformance/run_2025_server_conformance.dart
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.2 client \
+  --command "dart run test/conformance/mcp_2026_rc_client.dart" \
+  --suite all \
+  --spec-version 2025-11-25
+dart run test/conformance/run_2026_rc_server_conformance.dart
+dart run test/conformance/run_2026_rc_client_conformance.dart
 dart pub publish --dry-run
 dart pub global run pana --no-warning
 dart run tool/validate_cli_publish.dart
@@ -132,10 +141,11 @@ For dev packages, keep package documentation links pointed at
 `dev/2026-07-28-rc` until the draft work is ready to merge back to `main`.
 Restore those links to `main` as part of the final spec release prep.
 
-Publish the SDK package first by running the `Create Release` workflow for
-`mcp_dart` from `dev/2026-07-28-rc`. The publish workflow runs a dry-run check
-before `dart pub publish --force`, and prerelease versions are marked as GitHub
-prereleases rather than repository latest releases.
+For follow-up dev releases, publish the SDK package first by running the
+`Create Release` workflow for `mcp_dart` from `dev/2026-07-28-rc`. The publish
+workflow runs a dry-run check before `dart pub publish --force`, and prerelease
+versions are marked as GitHub prereleases rather than repository latest
+releases.
 
 After `mcp_dart` is available on pub.dev, validate the CLI against the published
 SDK package:
@@ -145,8 +155,10 @@ dart run tool/validate_cli_publish.dart --published-sdk
 ```
 
 Then run the `Create Release` workflow for `mcp_dart_cli` from
-`dev/2026-07-28-rc`. The CLI publish workflow removes the local SDK override
-before publishing so users receive the published SDK dependency.
+`dev/2026-07-28-rc` when a matching CLI dev release is needed. The initial CLI
+dev release, `mcp_dart_cli 0.2.0-dev.0`, is already published. The CLI publish
+workflow removes the local SDK override before publishing so users receive the
+published SDK dependency.
 
 Install the dev CLI explicitly by version:
 
