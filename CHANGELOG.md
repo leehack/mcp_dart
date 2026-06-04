@@ -1,272 +1,57 @@
 ## 2.3.0-dev.0
 
-### MCP 2026-07-28 draft/RC
+This is a dev preview for MCP `2026-07-28` draft/RC support. MCP
+`2025-11-25` remains the default protocol profile; draft/RC behavior is enabled
+explicitly and may still change before the official spec release.
 
-- Started the MCP 2026-07-28 RC development line with opt-in protocol
-  constants, stateless request metadata helpers, and `server/discover` request
-  and result types.
-- Added server-side `server/discover` handling before legacy initialization and
-  initial stateless request validation for per-request protocol version,
-  client identity, and client capability metadata.
-- Added explicit protocol profiles via
-  `McpClientOptions(protocol: McpProtocol.preview2026)` and
-  `McpServerOptions(protocol: McpProtocol.preview2026)` while keeping the stable
-  `initialize` flow as the default. The lower-level `protocolVersion` and
-  `useServerDiscover` options remain available for interoperability testing.
-- Kept stable public tool result APIs object-rooted while adding explicit
-  draft-only APIs for non-object values: `JsonValue`,
-  `CallToolResult.fromStructuredArray()`, `structuredContentJson`, and
-  server `outputJsonSchema`.
-- Added 2026 cacheable result support for `tools/list`, `prompts/list`,
-  `resources/list`, `resources/templates/list`, and `resources/read`, including
-  stateless server defaults for `resultType`, `ttlMs`, and `cacheScope` while
-  keeping legacy result serialization unchanged unless cache hints are set.
-- Rejected core RPCs removed from stateless MCP 2026 requests
-  (`initialize`, `ping`, `logging/setLevel`, `resources/subscribe`,
-  `resources/unsubscribe`, `notifications/initialized`, and
-  `notifications/roots/list_changed`) while preserving legacy session behavior.
-- Synced registered tool `x-mcp-header` metadata into Streamable HTTP server
-  transports so 2026 stateless `tools/call` requests reject missing or
-  mismatched `Mcp-Param-*` argument headers.
-- Removed `Mcp-Session-Id` from 2026 stateless Streamable HTTP requests by
-  stripping it from client sends and ignoring it on stateless server POSTs.
-- Prevented 2026 stateless request handlers and task-store operations from
-  inheriting transport session IDs, including direct Streamable HTTP transport
-  responses after a prior stateful initialization.
-- Enforced 2026 stateless Streamable HTTP POST-only behavior by skipping
-  legacy client GET/DELETE session paths and returning `Allow: POST` for
-  stateless non-POST server requests.
-- Rejected server-initiated JSON-RPC requests on 2026 stateless Streamable HTTP
-  response streams so client input is routed through MRTR input-required
-  results instead.
-- Escaped sentinel-shaped `Mcp-Param-*` values with Base64 encoding so literal
-  values beginning with `=?base64?` and ending with `?=` round-trip correctly.
-- Synced nested 2026 `x-mcp-header` mappings into Streamable HTTP transports
-  using JSON Pointer selectors for nested tool arguments.
-- Limited 2026 Streamable HTTP `x-mcp-header` mirroring to string, boolean,
-  finite number, and JavaScript-safe integer argument values; unsafe integers
-  and non-finite numbers are omitted.
-- Returned HTTP 404 with JSON-RPC `Method not found` for unsupported or removed
-  2026 stateless Streamable HTTP request methods before opening response
-  streams.
-- Sent and required `Mcp-Name` for MCP 2026 task lifecycle requests over
-  Streamable HTTP, using the request body `taskId` as the routing value.
-- Accepted MCP 2026 stateless Streamable HTTP JSON-RPC response POSTs without
-  requiring request-only metadata in the response body.
-- Treated client closure of a 2026 stateless Streamable HTTP SSE response stream
-  as cancellation of that pending request.
-- Sorted 2026 stateless high-level `tools/list` responses by tool name for
-  deterministic list results while preserving legacy registration-order output.
-- Omitted stable-only `Tool.execution` metadata from 2026 stateless
-  `tools/list` responses and embedded MRTR sampling tool definitions while
-  preserving stable/default serialization.
-- Rejected legacy `RequestOptions.task` augmentation before sending 2026
-  stateless requests while preserving stable task augmentation.
-- Added `tool/spec_example_audit.dart` so upstream machine-readable spec
-  examples can be parsed through the checked-in typed SDK surfaces during
-  RC/final release audits.
-- Gated 2026 stateless task extension methods on advertised server extension
-  support and rejected legacy task result shapes on extension `tasks/get`,
-  `tasks/update`, and `tasks/cancel` handlers.
-- Ignored legacy `tools/call` `task` parameters on 2026 stateless requests so
-  handlers do not receive legacy task TTL hints through `RequestHandlerExtra`.
-- Required 2026 stateless task creation results to be immediately resolvable
-  through `tasks/get` before returning `resultType: "task"`.
-- Exposed task-store options on `McpServerOptions` and serialized built-in
-  task-store `tasks/get`/`tasks/cancel` handlers in the 2026 task-extension
-  wire shape for stateless requests.
-- Added request-scoped stateless logging gating via
-  `io.modelcontextprotocol/logLevel` metadata so 2026 log notifications are
-  emitted only when the current request opts in.
-- Rejected unrecognized 2026 stateless response `resultType` values on the
-  client while keeping absent `resultType` compatible with stable result parsing.
-- Added `X-Accel-Buffering: no` to Streamable HTTP SSE responses and marked
-  JSON-RPC error bodies with `Content-Type: application/json`.
-- Tightened `x-mcp-header` and `Mcp-Param-*` suffix validation to RFC 9110
-  HTTP field-name token syntax.
-- Removed invalid `x-mcp-header` annotations from 2026 stateless `tools/list`
-  responses when the server has already rejected those header mappings.
-- Rejected server-initiated JSON-RPC requests received on 2026 stateless
-  Streamable HTTP client response streams; servers must use MRTR
-  `input_required` results instead.
-- Enforced `subscriptions/listen` stream ordering and filters for 2026
-  subscription notifications.
-- Required nested request `_meta` on `subscriptions/listen` requests, matching
-  the 2026 schema's per-request metadata requirement.
-- Rejected mismatched JSON-RPC `jsonrpc` and `method` wrapper constants when
-  parsing typed `notifications/subscriptions/acknowledged` notifications.
-- Rejected mismatched JSON-RPC wrapper constants when directly parsing the
-  experimental completion list-changed notification.
-- Rejected incoming `tools/call` JSON-RPC requests that omit the MCP-required
-  `params` object.
-- Rejected JSON-RPC envelopes that mix request/notification `method` fields
-  with response `result` or `error` fields, including direct typed
-  request/notification/error parsing.
-- Returned `MissingRequiredClientCapability` (`-32003`) with required task
-  extension capability data when 2026 task notification subscriptions omit the
-  per-request `io.modelcontextprotocol/tasks` client capability.
-- Rejected deprecated sampling `includeContext` values unless the client
-  advertises `sampling.context`, while still allowing omitted context and
-  `includeContext: "none"`.
-- Stopped sending `notifications/cancelled` when an outgoing `initialize`
-  request is aborted or times out, matching the stable lifecycle rule that
-  clients must not cancel initialization.
-- Required `notifications/cancelled` payloads to carry a valid string-or-integer
-  `requestId` instead of accepting ID-less cancellation notifications.
-- Retried `server/discover` with an advertised compatible stateless protocol
-  version after `UnsupportedProtocolVersionError` instead of falling back to
-  legacy initialization.
-- Accepted whole-number JSON numeric values for integer wire fields such as
-  resource link sizes, completion totals, sampling `maxTokens`, task TTLs, and
-  JSON Schema length/item bounds while continuing to reject fractional values.
-- Added client-side `subscriptions/listen` handles that correlate stream
-  notifications by `io.modelcontextprotocol/subscriptionId`, validate the
-  acknowledgment, and cancel long-lived streams with `notifications/cancelled`.
-- Allowed MCP 2026 tool `outputSchema` declarations to use any JSON Schema and
-  `structuredContent` results to carry any JSON value, while omitting non-object
-  structured output from stable 2025 responses.
-- Allowed MCP 2026 `prompts/get` and `resources/read` handlers to return
-  `InputRequiredResult`, and rejected MRTR input-required results on unsupported
-  request methods.
-- Rejected MCP 2026 MRTR `inputRequests` whose embedded client request type is
-  not declared in the caller's per-request client capabilities.
-- Rejected non-object `experimental` and `extensions` capability entries to
-  match the stable and MCP 2026 capability schemas.
-- Returned version-appropriate resource-not-found errors from high-level
-  `resources/read` handlers: stable 2025 uses legacy `-32002`, while MCP 2026
-  stateless requests use `-32602` with the missing `uri` in error data.
-- Enforced MCP 2026 `_meta` key-name grammar on stateless request metadata and
-  the 2026 request metadata builder while preserving legacy metadata parsing.
-- Exposed typed request-envelope accessors on `RequestHandlerExtra` for
-  per-request protocol version, client info, and client capabilities metadata.
-- Rejected negative cacheable-result `ttlMs` values during parsing instead of
-  clamping malformed wire values to zero.
-- Validated MRTR `inputResponses` as `CreateMessageResult`, `ListRootsResult`,
-  or `ElicitResult` instead of accepting arbitrary result objects.
-- Restricted numeric `ElicitResult.content` values to integers, matching the
-  stable and MCP 2026 `string | integer | boolean | string[]` schemas while
-  still accepting whole-number JSON numeric values.
-- Required integer `minimum`, `maximum`, and `default` values in form
-  elicitation number schemas for both stable 2025 and MCP 2026.
-- Rejected MCP 2026 `CallToolResult.extra` attempts to spoof non-complete
-  `resultType` values, and added CLI conformance coverage for that guard.
-- Rejected form elicitation schemas that provide legacy `enumNames` without the
-  required string `enum`.
-- Rejected `ElicitResult.content` when the result action is `decline` or
-  `cancel`.
-- Rejected URL elicitation values that are not absolute URIs to match the stable
-  and MCP 2026 `format: uri` schemas.
-- Rejected non-absolute resource URIs and malformed resource URI templates to
-  match stable and MCP 2026 `format: uri` and `format: uri-template` schemas.
-- Rejected malformed base64 payloads for image, audio, and blob resource
-  content to match stable and MCP 2026 `format: byte` schemas.
-- Rejected malformed shared annotation fields, including non-role audiences,
-  out-of-range priorities, and non-string `lastModified` values.
-- Rejected malformed `Role` values in prompt and sampling messages instead of
-  allowing raw enum lookup failures.
-- Rejected malformed logging level, sampling `includeContext`, and sampling
-  `toolChoice.mode` enum values with protocol parse errors.
-- Rejected malformed sampling string, boolean, and string-list wire fields with
-  protocol parse errors.
-- Rejected malformed content and resource string/list wire fields with protocol
-  parse errors.
-- Rejected malformed initialization and capability wire fields with protocol
-  parse errors.
-- Rejected malformed prompt, completion, logging, and common notification wire
-  fields with protocol parse errors.
-- Rejected malformed prompt JSON-RPC wrapper constants with protocol parse
-  errors.
-- Rejected malformed resource JSON-RPC wrapper constants with protocol parse
-  errors.
-- Rejected malformed tool JSON-RPC wrapper constants with protocol parse
-  errors.
-- Rejected malformed root JSON-RPC wrapper constants with protocol parse
-  errors.
-- Rejected malformed common notification and logging JSON-RPC wrapper
-  constants with protocol parse errors.
-- Rejected malformed initialization and `server/discover` JSON-RPC wrapper
-  constants with protocol parse errors.
-- Rejected malformed task and task-extension JSON-RPC wrapper constants with
-  protocol parse errors.
-- Rejected malformed sampling and elicitation JSON-RPC wrapper constants while
-  preserving embedded MRTR input request parsing.
-- Preserved `Result._meta` while parsing empty results for high-level ping,
-  logging, and subscription acknowledgments.
-- Preserved MCP 2026 `tools/list` cache hints when client-side tool metadata
-  filtering removes invalid tool definitions.
-- Rejected missing and mismatched completion reference type discriminators with
-  protocol parse errors.
-- Rejected malformed completion JSON-RPC wrapper constants with protocol parse
-  errors.
-- Rejected malformed tool definition, tool-list, and tool-call wire fields with
-  protocol parse errors.
-- Rejected malformed root-list wire fields with protocol parse errors.
-- Rejected malformed stable task and task-extension wire fields with protocol
-  parse errors.
-- Rejected malformed elicitation request, result, completion, and URL-required
-  error wire fields with protocol parse errors.
-- Rejected malformed subscription listen and acknowledgment wire fields with
-  protocol parse errors.
-- Rejected malformed sampling tool-list, tool-choice, and tool-result content
-  wire fields with protocol parse errors.
-- Rejected missing, unknown, and mismatched content block type discriminators
-  with protocol parse errors.
-- Rejected missing and mismatched sampling content type discriminators with
-  protocol parse errors.
-- Rejected resource content items that omit both `text` and `blob`, matching
-  the spec-defined `TextResourceContents | BlobResourceContents` union.
-- Rejected non-finite numeric values for progress, annotation priority, model
-  priority, and sampling temperature fields so SDK-built payloads remain valid
-  JSON numbers.
-- Rejected non-JSON values in sampling JSON object fields, including
-  `tool_use.input`, sampling metadata, annotations, and `_meta` maps.
-- Rejected non-JSON values in common content/resource metadata fields and
-  `resource_link.annotations`.
-- Reused shared JSON-object validation for MRTR, task extension, subscription,
-  and tool object fields.
-- Rejected non-JSON values in JSON-RPC envelope and remaining typed result
-  metadata fields.
-- Rejected non-JSON JSON-RPC error `data` values at parse and serialize
-  boundaries.
-- Rejected JSON-RPC response envelopes that include both `result` and `error`
-  instead of silently treating them as successful responses.
-- Rejected JSON-RPC request and notification envelopes whose `method` member is
-  not a string, and validated generic request `params` as JSON objects.
-- Rejected malformed JSON-RPC `error` objects with missing or invalid `code` or
-  `message` fields instead of surfacing Dart cast errors.
-- Rejected JSON-RPC error responses that include an explicit `id: null` member
-  while continuing to allow omitted IDs for malformed-request error cases.
-- Rejected JSON-RPC request and notification envelopes that include an explicit
-  `params: null` member, since `params` must be an object when present.
-- Prevented stateless MCP 2026 clients from sending core request and
-  notification methods removed from that protocol revision.
-- Rejected server-initiated JSON-RPC requests received by stateless MCP 2026
-  clients on generic transports.
-- Omitted the removed `roots.listChanged` client capability from MCP 2026
-  stateless request metadata while preserving it for stable 2025 metadata.
-- Rejected stateless MCP 2026 responses that omit `resultType` or required
-  cacheable-result fields.
-- Stripped caller-supplied `Mcp-Session-Id` headers case-insensitively from
-  MCP 2026 stateless Streamable HTTP requests.
-- Derived MCP 2026 stateless Streamable HTTP headers from nested
-  `params._meta` metadata for direct JSON-RPC transport sends.
-- Allowed Streamable MCP server CORS preflights for 2026 stateless routing and
-  tool parameter headers, including requested `Mcp-Param-*` headers.
-- Serialized MRTR `ElicitResult` and `ListRootsResult` input responses with the
-  MCP 2026 embedded client-result shapes that omit common Result `_meta`.
-- Accepted finite numeric JSON-RPC request IDs and progress tokens, matching
-  the stable and MCP 2026 `string | number` schema while continuing to reject
-  non-finite numbers.
-- Allowed protocol progress handlers and `RequestHandlerExtra.sendProgress` to
-  dispatch finite numeric progress tokens end-to-end.
-- Widened protocol `relatedRequestId` API parameters to preserve string and
-  finite numeric JSON-RPC request IDs through request and notification routing.
-- Accepted numeric `minimum`, `maximum`, `exclusiveMinimum`,
-  `exclusiveMaximum`, `multipleOf`, and `default` values on JSON Schema
-  `integer` schemas, matching the stable and MCP 2026 schema definitions.
-- Preserved object-level JSON Schema 2020-12 keywords on `JsonObject`
-  round-trips and added official MCP conformance gates for stable 2025 and
-  2026 RC client/server coverage in core CI.
+### MCP 2026-07-28 draft/RC preview
+
+- Added `McpProtocol.preview2026` and `McpProtocol.require2026` profiles for
+  clients and servers, with stable `initialize` behavior preserved by default.
+- Added `server/discover` negotiation, per-request stateless metadata,
+  protocol/client/capability validation, and version-aware fallback behavior.
+- Added stateless Streamable HTTP behavior for POST-only requests, no
+  `Mcp-Session-Id`, `Mcp-Name` task routing, `Mcp-Param-*` argument headers,
+  CORS preflights, SSE cancellation, and request-scoped logging.
+- Added draft-only flows for `subscriptions/listen`, MCP Tasks extension
+  handlers, MRTR `input_required` results, cacheable list/read results, and
+  `input_required` prompt/resource responses.
+- Added explicit typed APIs for non-object draft result data, including
+  `JsonValue`, `structuredContentJson`,
+  `CallToolResult.fromStructuredArray()`, and server `outputJsonSchema`.
+
+### Stable compatibility
+
+- Kept stable public tool-result APIs object-rooted and omitted non-object
+  structured output from stable MCP `2025-11-25` responses.
+- Preserved stable session behavior, registration-order list output, legacy task
+  augmentation, stable-only `Tool.execution` metadata, and legacy resource error
+  codes outside the 2026 stateless profile.
+- Preserved numeric JSON-RPC request IDs and progress tokens end-to-end while
+  continuing to reject non-finite numeric values.
+
+### Spec hardening
+
+- Tightened JSON-RPC envelope parsing, wrapper constant checks, error object
+  validation, `_meta` key validation, and mixed request/response rejection.
+- Tightened typed parsing for content, resources, prompts, tools, roots,
+  sampling, elicitation, tasks, subscriptions, completions, capabilities, and
+  JSON Schema fields so malformed wire values fail with protocol errors instead
+  of Dart cast errors.
+- Validated JSON-only metadata and result data across JSON-RPC, MRTR, task,
+  subscription, sampling, tool, resource, and content boundaries.
+
+### Conformance and release readiness
+
+- Added official MCP `2025-11-25` and MCP `2026-07-28` draft/RC client/server
+  conformance gates to core CI.
+- Added `tool/spec_example_audit.dart` for parsing upstream machine-readable
+  spec examples through checked-in SDK types during RC/final release audits.
+- Prepared the dev release workflow so prerelease tags are GitHub prereleases,
+  publish jobs run `dart pub publish --dry-run`, and the draft/RC transition
+  guide includes a dev release checklist.
+- Pointed prerelease package documentation links at `dev/2026-07-28-rc` so
+  pub.dev users see the draft/RC docs that match the dev package.
 
 ## 2.2.0
 

@@ -113,39 +113,39 @@ final server = McpServer(
 ```
 
 Use the preview profile while the spec is still a draft/RC. See the
-[MCP 2026-07-28 draft/RC transition guide](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-rc.md)
+[MCP 2026-07-28 draft/RC transition guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-rc.md)
 for opt-in behavior, fallback rules, and draft-only APIs.
 
 ## Documentation
 
 ### Getting Started
 
-- 📖 **[Quick Start Guide](https://github.com/leehack/mcp_dart/blob/main/doc/getting-started.md)** - Get up and running in 5 minutes
-- 🔧 **[Server Guide](https://github.com/leehack/mcp_dart/blob/main/doc/server-guide.md)** - Complete guide to building MCP servers
-- 💻 **[Client Guide](https://github.com/leehack/mcp_dart/blob/main/doc/client-guide.md)** - Complete guide to building MCP clients
+- 📖 **[Quick Start Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/getting-started.md)** - Get up and running in 5 minutes
+- 🔧 **[Server Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/server-guide.md)** - Complete guide to building MCP servers
+- 💻 **[Client Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/client-guide.md)** - Complete guide to building MCP clients
 
 ### Core Concepts
 
-- 🛠️ **[Tools Documentation](https://github.com/leehack/mcp_dart/blob/main/doc/tools.md)** - Implementing executable tools
-- 🔌 **[Transport Options](https://github.com/leehack/mcp_dart/blob/main/doc/transports.md)** - Built-in and custom transport implementations
-- 📚 **[Examples](https://github.com/leehack/mcp_dart/blob/main/doc/examples.md)** - Real-world usage examples
-- ⚡ **[Quick Reference](https://github.com/leehack/mcp_dart/blob/main/doc/quick-reference.md)** - Fast lookup guide
-- 🪵 **[Runtime Logging](https://github.com/leehack/mcp_dart/blob/main/doc/getting-started.md#sdk-runtime-logging)** - Configure and route internal SDK logs
-- 🧩 **[MCP Apps Guide](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-apps.md)** - Using `io.modelcontextprotocol/ui` metadata
+- 🛠️ **[Tools Documentation](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/tools.md)** - Implementing executable tools
+- 🔌 **[Transport Options](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md)** - Built-in and custom transport implementations
+- 📚 **[Examples](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/examples.md)** - Real-world usage examples
+- ⚡ **[Quick Reference](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/quick-reference.md)** - Fast lookup guide
+- 🪵 **[Runtime Logging](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/getting-started.md#sdk-runtime-logging)** - Configure and route internal SDK logs
+- 🧩 **[MCP Apps Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-apps.md)** - Using `io.modelcontextprotocol/ui` metadata
 
 ### Recipes and Compatibility
 
-- 🧪 **[SDK Interoperability Matrix](https://github.com/leehack/mcp_dart/blob/main/doc/interoperability.md)** - Verified Dart/TypeScript and documented cross-SDK scenarios
-- ✅ **[MCP 2025-11-25 Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/main/doc/spec-coverage-2025-11-25.md)** - Auditable coverage map with CLI conformance cases and known gaps
-- 🧭 **[MCP 2026-07-28 Draft/RC Transition Guide](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-rc.md)** - Opt-in profile, fallback behavior, and draft-only APIs
-- 🔒 **[Transport Security Recipes](https://github.com/leehack/mcp_dart/blob/main/doc/transports.md#dns-rebinding-protection)** - Host/Origin allowlists, OAuth layering, and compatibility-toggle trade-offs
-- 📱 **[Flutter Recipes](https://github.com/leehack/mcp_dart/blob/main/doc/flutter-recipes.md)** - Flutter Web, mobile, and desktop host/client guidance
-- 🔁 **[Migration Cookbooks](https://github.com/leehack/mcp_dart/blob/main/doc/migration-cookbooks.md)** - TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migration paths
+- 🧪 **[SDK Interoperability Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/interoperability.md)** - Verified Dart/TypeScript and documented cross-SDK scenarios
+- ✅ **[MCP 2025-11-25 Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2025-11-25.md)** - Auditable coverage map with CLI conformance cases and known gaps
+- 🧭 **[MCP 2026-07-28 Draft/RC Transition Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-rc.md)** - Opt-in profile, fallback behavior, and draft-only APIs
+- 🔒 **[Transport Security Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md#dns-rebinding-protection)** - Host/Origin allowlists, OAuth layering, and compatibility-toggle trade-offs
+- 📱 **[Flutter Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/flutter-recipes.md)** - Flutter Web, mobile, and desktop host/client guidance
+- 🔁 **[Migration Cookbooks](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/migration-cookbooks.md)** - TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migration paths
 
 ### Advanced Features
 
-- 🔐 **[OAuth Authentication](https://github.com/leehack/mcp_dart/tree/main/example/authentication)** - OAuth2 guides and examples
-- 🔁 **[2025-11-25 Compatibility Migration](https://github.com/leehack/mcp_dart/blob/main/doc/migration_2025_11_25_compat.md)** - Backward-compatible API/runtime migration notes
+- 🔐 **[OAuth Authentication](https://github.com/leehack/mcp_dart/tree/dev/2026-07-28-rc/example/authentication)** - OAuth2 guides and examples
+- 🔁 **[2025-11-25 Compatibility Migration](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/migration_2025_11_25_compat.md)** - Backward-compatible API/runtime migration notes
 - 📝 For resources, prompts, and other features, see the Server and Client guides
 
 ## Quick Start with CLI
@@ -183,7 +183,7 @@ mcp_dart inspect --tool add --json-args '{"a": 1, "b": 2}'   # Call a tool
 | `inspect-client` | Run a stdio harness that inspects a connecting client |
 | `trace` | Proxy stdio client/server traffic and write a JSON trace |
 
-📖 **[Full CLI Documentation](https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli)**
+📖 **[Full CLI Documentation](https://github.com/leehack/mcp_dart/tree/dev/2026-07-28-rc/packages/mcp_dart_cli)**
 
 ### Connecting to AI Hosts
 
@@ -202,11 +202,11 @@ Configure your server with AI hosts like Claude Desktop:
 ```
 
 > [!TIP]
-> For manual server implementation or advanced use cases, see the [Server Guide](https://github.com/leehack/mcp_dart/blob/main/doc/server-guide.md).
+> For manual server implementation or advanced use cases, see the [Server Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/server-guide.md).
 
 ## Authentication
 
-This library provides OAuth-aware client and server authentication hooks, including `OAuthClientProvider` for StreamableHTTP clients, optional `OAuthAuthorizationCodeProvider` discovery support, and server-side `authenticator` / `authenticationHandler` callbacks. For OAuth2/PKCE guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/tree/main/example/authentication) and [transport authentication docs](https://github.com/leehack/mcp_dart/blob/main/doc/transports.md#streamable-http-authentication).
+This library provides OAuth-aware client and server authentication hooks, including `OAuthClientProvider` for StreamableHTTP clients, optional `OAuthAuthorizationCodeProvider` discovery support, and server-side `authenticator` / `authenticationHandler` callbacks. For OAuth2/PKCE guides and examples, see the [OAuth Authentication documentation](https://github.com/leehack/mcp_dart/tree/dev/2026-07-28-rc/example/authentication) and [transport authentication docs](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md#streamable-http-authentication).
 
 ## Platform Support
 
@@ -222,15 +222,15 @@ This library provides OAuth-aware client and server authentication hooks, includ
 
 For additional examples including authentication, HTTP clients, and advanced features:
 
-- [All Examples](https://github.com/leehack/mcp_dart/tree/main/example)
-- [Authentication Examples](https://github.com/leehack/mcp_dart/tree/main/example/authentication)
+- [All Examples](https://github.com/leehack/mcp_dart/tree/dev/2026-07-28-rc/example)
+- [Authentication Examples](https://github.com/leehack/mcp_dart/tree/dev/2026-07-28-rc/example/authentication)
 
 ## Community & Support
 
 - **Issues & Bug Reports**: [GitHub Issues](https://github.com/leehack/mcp_dart/issues)
 - **Package**: [pub.dev/packages/mcp_dart](https://pub.dev/packages/mcp_dart)
 - **API Docs**: [pub.dev documentation](https://pub.dev/documentation/mcp_dart/latest/)
-- **Changelog**: [CHANGELOG.md](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)
+- **Changelog**: [CHANGELOG.md](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/CHANGELOG.md)
 - **Protocol Spec**: [MCP Specification](https://modelcontextprotocol.io/specification/2025-11-25)
 
 ## Credits
