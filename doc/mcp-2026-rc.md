@@ -79,9 +79,8 @@ Prefer the `protocol` profile unless you need to target a specific protocol
 version for tests or interoperability debugging.
 
 Use `draftProtocolVersion2026_07_28` for MCP `2026-07-28` draft/RC testing.
-The older `draftProtocolVersion2026V1` alias is deprecated and kept only as an
-inbound compatibility marker for early conformance alpha fixtures; 2026
-profiles do not advertise it.
+The earlier `DRAFT-2026-v1` conformance alias is no longer exposed or accepted
+by the SDK.
 
 ## 2026-07-28 Draft-Only API Areas
 

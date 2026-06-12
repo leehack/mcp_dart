@@ -6,9 +6,8 @@
   `@modelcontextprotocol/conformance@0.2.0-alpha.3`, with 2026 RC runs pinned
   to `2026-07-28` and the current upstream draft fixture gap tracked as an
   expected failure.
-- Stopped advertising the legacy `DRAFT-2026-v1` draft alias from 2026
-  protocol profiles. The alias remains recognized as a deprecated inbound
-  compatibility marker for early conformance alpha runs.
+- Removed the legacy `DRAFT-2026-v1` draft alias now that official conformance
+  targets the `2026-07-28` wire version.
 
 ## 2.3.0-dev.0
 

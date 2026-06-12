@@ -311,8 +311,7 @@ class StreamableHTTPServerTransport
     }
 
     final requestedVersion = versionHeader.trim();
-    if (supportedProtocolVersionsWithDraft.contains(requestedVersion) ||
-        isStatelessProtocolVersion(requestedVersion)) {
+    if (supportedProtocolVersionsWithDraft.contains(requestedVersion)) {
       return true;
     }
 
