@@ -239,6 +239,31 @@ void main() {
       expect(schema, isA<JsonBoolean>());
     });
 
+    test('round trips boolean schema values', () {
+      expect(JsonSchema.fromJsonValue(true).toJsonValue(), true);
+      expect(JsonSchema.fromJsonValue(false).toJsonValue(), false);
+    });
+
+    test('parses object properties with boolean subschemas', () {
+      final json = {
+        'type': 'object',
+        'properties': {
+          'allowed': true,
+          'denied': false,
+          'named': {'type': 'string'},
+        },
+      };
+
+      final schema = JsonSchema.fromJson(json);
+
+      expect(schema, isA<JsonObject>());
+      final object = schema as JsonObject;
+      expect(object.properties!['allowed'], isA<JsonAny>());
+      expect(object.properties!['denied'], isA<JsonNot>());
+      expect(object.properties!['named'], isA<JsonString>());
+      expect(object.toJson(), json);
+    });
+
     test('parses null schema', () {
       final json = {'type': 'null'};
       final schema = JsonSchema.fromJson(json);
@@ -286,6 +311,18 @@ void main() {
         }),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('parses array items with boolean subschemas', () {
+      for (final json in [
+        {'type': 'array', 'items': true},
+        {'type': 'array', 'items': false},
+      ]) {
+        final schema = JsonSchema.fromJson(json);
+
+        expect(schema, isA<JsonArray>());
+        expect(schema.toJson(), json);
+      }
     });
 
     test('parses object schema', () {
@@ -421,6 +458,32 @@ void main() {
       expect(s.schemas[1].toJson(), {'minLength': 5});
     });
 
+    test('parses composition keywords with boolean subschemas', () {
+      final schemas = [
+        {
+          'allOf': [
+            true,
+            {'type': 'string'},
+          ],
+        },
+        {
+          'anyOf': [
+            false,
+            {'type': 'integer'},
+          ],
+        },
+        {
+          'oneOf': [true, false],
+        },
+        {'not': false},
+        {'not': true},
+      ];
+
+      for (final json in schemas) {
+        expect(JsonSchema.fromJson(json).toJson(), json);
+      }
+    });
+
     test('parses anyOf schema', () {
       final json = {
         'anyOf': [
@@ -502,6 +565,30 @@ void main() {
       expect(parsed.toJson(), json);
     });
 
+    test('nested boolean subschemas round trip', () {
+      final schemas = [
+        {
+          'type': 'object',
+          'properties': {
+            'allowed': true,
+            'denied': false,
+          },
+        },
+        {'type': 'array', 'items': false},
+        {
+          'allOf': [
+            true,
+            {'type': 'string'},
+          ],
+        },
+        {'not': true},
+      ];
+
+      for (final json in schemas) {
+        expect(JsonSchema.fromJson(json).toJson(), json);
+      }
+    });
+
     test('const round trip', () {
       final original = JsonSchema.constValue('DELETE');
       final json = original.toJson();
@@ -516,6 +603,20 @@ void main() {
       ]);
       final json = original.toJson();
       final parsed = JsonSchema.fromJson(json);
+      expect(parsed.toJson(), json);
+    });
+
+    test('union with boolean subschema branches round trip', () {
+      final original = JsonSchema.union([
+        JsonSchema.fromJsonValue(true),
+        JsonSchema.fromJsonValue(false),
+      ]);
+      final json = original.toJson();
+      final parsed = JsonSchema.fromJson(json);
+
+      expect(json, {
+        'anyOf': [true, false],
+      });
       expect(parsed.toJson(), json);
     });
 

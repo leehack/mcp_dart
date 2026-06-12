@@ -43,6 +43,9 @@ explicitly and may still change before the official spec release.
 
 - Tightened JSON-RPC envelope parsing, wrapper constant checks, error object
   validation, `_meta` key validation, and mixed request/response rejection.
+- Accepted and preserved JSON Schema 2020-12 boolean subschemas in nested
+  schema positions such as object properties, array items, composition
+  keywords, and `not`.
 - Tightened typed parsing for content, resources, prompts, tools, roots,
   sampling, elicitation, tasks, subscriptions, completions, capabilities, and
   JSON Schema fields so malformed wire values fail with protocol errors instead
