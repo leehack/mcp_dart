@@ -15,9 +15,6 @@ import 'validation.dart';
 /// The draft/RC MCP protocol version being prepared for the next major release.
 const draftProtocolVersion2026_07_28 = "2026-07-28";
 
-/// Upstream conformance-suite alias for the in-progress 2026 draft.
-const draftProtocolVersion2026V1 = "DRAFT-2026-v1";
-
 /// The latest stable version of the Model Context Protocol supported.
 const stableProtocolVersion2025_11_25 = "2025-11-25";
 
@@ -105,14 +102,12 @@ const supportedProtocolVersions = [
 /// Protocol versions supported by the `2026-07-28` draft/RC development branch.
 const supportedProtocolVersionsWithDraft = [
   latestDraftProtocolVersion,
-  draftProtocolVersion2026V1,
   ...supportedProtocolVersions,
 ];
 
 /// Protocol versions that use per-request metadata instead of initialization.
 const statelessProtocolVersions = [
   draftProtocolVersion2026_07_28,
-  draftProtocolVersion2026V1,
 ];
 
 /// Returns true when [version] uses the `2026-07-28` draft/RC stateless request

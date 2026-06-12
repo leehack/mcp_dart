@@ -4,12 +4,14 @@ import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 
 import '../interop/test_dart_server.dart' as interop;
+import 'mcp_2025_server.dart' as stable_conformance;
 
 /// Dedicated HTTP server fixture for the MCP 2026 RC conformance package.
 ///
 /// This deliberately starts from the existing cross-SDK interop server and
-/// enables JSON stateless responses. Conformance-specific diagnostic tools can
-/// be added here without changing the stable interop fixture.
+/// uses the default Streamable HTTP SSE response mode so request-scoped
+/// progress notifications remain observable. Conformance-specific diagnostic
+/// tools can be added here without changing the stable interop fixture.
 Future<void> main(List<String> args) async {
   var host = 'localhost';
   var port = 0;
@@ -37,7 +39,7 @@ Future<void> main(List<String> args) async {
     serverFactory: (_) => _createConformanceServer(),
     host: host,
     port: port,
-    enableJsonResponse: true,
+    enableJsonResponse: false,
   );
 
   await server.start();
@@ -58,6 +60,11 @@ McpServer _createConformanceServer() {
     options: const McpServerOptions(
       protocol: McpProtocol.preview2026,
     ),
+  );
+
+  stable_conformance.registerStableConformanceFeatures(
+    server,
+    includeResourceSubscriptions: false,
   );
 
   server.registerTool(

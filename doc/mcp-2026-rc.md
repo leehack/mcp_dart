@@ -78,6 +78,10 @@ final client = McpClient(
 Prefer the `protocol` profile unless you need to target a specific protocol
 version for tests or interoperability debugging.
 
+Use `draftProtocolVersion2026_07_28` for MCP `2026-07-28` draft/RC testing.
+The earlier `DRAFT-2026-v1` conformance alias is no longer exposed or accepted
+by the SDK.
+
 ## 2026-07-28 Draft-Only API Areas
 
 The following features are MCP `2026-07-28` draft/RC behavior and should be
@@ -126,7 +130,7 @@ Before creating follow-up dev tags from `dev/2026-07-28-rc`, run:
 ```sh
 dart analyze
 dart run test/conformance/run_2025_server_conformance.dart
-npx -y @modelcontextprotocol/conformance@0.2.0-alpha.2 client \
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.3 client \
   --command "dart run test/conformance/mcp_2026_rc_client.dart" \
   --suite all \
   --spec-version 2025-11-25
@@ -136,6 +140,11 @@ dart pub publish --dry-run
 dart pub global run pana --no-warning
 dart run tool/validate_cli_publish.dart
 ```
+
+The `run_2026_rc_server_conformance.dart` gate runs the full
+`@modelcontextprotocol/conformance@0.2.0-alpha.3` server scenario list for
+`--spec-version 2026-07-28`, including the stable-style tool, resource, prompt,
+completion, and JSON Schema scenarios that the alpha package tags for the RC.
 
 For dev packages, keep package documentation links pointed at
 `dev/2026-07-28-rc` until the draft work is ready to merge back to `main`.

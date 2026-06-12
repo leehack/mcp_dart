@@ -526,7 +526,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': draftProtocolVersion2026V1,
+            'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
             'Mcp-Method': Method.serverDiscover,
           },
         );
@@ -600,7 +600,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': draftProtocolVersion2026V1,
+            'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
             'Mcp-Method': method,
           },
         );

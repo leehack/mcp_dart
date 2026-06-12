@@ -3,27 +3,48 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.2';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.3';
 const _defaultTimeout = Duration(seconds: 25);
 
-const _draftServerScenarios = [
+const _serverScenarios = [
   'server-stateless',
-  'caching',
+  'completion-complete',
+  'tools-list',
+  'tools-call-simple-text',
+  'tools-call-image',
+  'tools-call-audio',
+  'tools-call-embedded-resource',
+  'tools-call-mixed-content',
+  'tools-call-error',
+  'tools-call-with-progress',
+  'json-schema-2020-12',
+  'server-sse-multiple-streams',
+  'resources-list',
+  'resources-read-text',
+  'resources-read-binary',
+  'resources-templates-read',
   'sep-2164-resource-not-found',
+  'prompts-list',
+  'prompts-get-simple',
+  'prompts-get-with-args',
+  'prompts-get-embedded-resource',
+  'prompts-get-with-image',
+  'dns-rebinding-protection',
+  'caching',
   'http-header-validation',
   'http-custom-header-server-validation',
-  'input-required-result-missing-input-response',
   'input-required-result-basic-elicitation',
   'input-required-result-basic-sampling',
   'input-required-result-basic-list-roots',
   'input-required-result-request-state',
   'input-required-result-multiple-input-requests',
   'input-required-result-multi-round',
+  'input-required-result-missing-input-response',
   'input-required-result-non-tool-request',
   'input-required-result-result-type',
+  'input-required-result-unsupported-methods',
   'input-required-result-tampered-state',
   'input-required-result-capability-check',
-  'input-required-result-unsupported-methods',
   'input-required-result-ignore-extra-params',
   'input-required-result-validate-input',
 ];
@@ -40,7 +61,7 @@ Future<void> main(List<String> args) async {
   );
   final outputRoot = await _createOutputRoot(options.outputDir);
   final scenarios =
-      options.scenario == null ? _draftServerScenarios : [options.scenario!];
+      options.scenario == null ? _serverScenarios : [options.scenario!];
 
   Process? serverProcess;
   var serverOutputSubscriptions = <StreamSubscription<String>>[];
@@ -228,9 +249,9 @@ Future<_ScenarioResult> _runScenario({
       '--url',
       serverUrl.toString(),
       '--suite',
-      'draft',
+      'all',
       '--spec-version',
-      'DRAFT-2026-v1',
+      '2026-07-28',
       '--scenario',
       scenario,
       '--verbose',

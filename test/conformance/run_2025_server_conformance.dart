@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.2';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.3';
 const _defaultTimeout = Duration(seconds: 60);
 
 Future<void> main(List<String> args) async {

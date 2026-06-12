@@ -77,12 +77,28 @@ McpServer _createConformanceServer() {
     ),
   );
 
+  registerStableConformanceFeatures(server);
+
+  return server;
+}
+
+/// Registers the stable conformance package's diagnostic tools, resources, and
+/// prompts on [server].
+///
+/// The 2026 fixture reuses these registrations because the alpha conformance
+/// package tags several stable scenarios for `2026-07-28`. Resource
+/// subscription handlers remain 2025-only unless [includeResourceSubscriptions]
+/// is enabled.
+void registerStableConformanceFeatures(
+  McpServer server, {
+  bool includeResourceSubscriptions = true,
+}) {
   _registerTools(server);
   _registerResources(server);
   _registerPrompts(server);
-  _registerResourceSubscriptions(server);
-
-  return server;
+  if (includeResourceSubscriptions) {
+    _registerResourceSubscriptions(server);
+  }
 }
 
 void _registerTools(McpServer server) {
