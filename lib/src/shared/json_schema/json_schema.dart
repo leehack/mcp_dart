@@ -4,6 +4,7 @@ const _jsonSchemaAnnotationKeys = {'title', 'description', 'default'};
 sealed class JsonSchema {
   final String? title;
   final String? description;
+  final bool? _rawBooleanSubschema;
 
   /// The default value for this schema.
   ///
@@ -11,11 +12,36 @@ sealed class JsonSchema {
   /// [int] for [JsonInteger], etc.).
   dynamic get defaultValue;
 
-  const JsonSchema({this.title, this.description});
+  const JsonSchema({
+    this.title,
+    this.description,
+    bool? rawBooleanSubschema,
+  }) : _rawBooleanSubschema = rawBooleanSubschema;
 
   /// Creates a [JsonSchema] from a JSON map.
   factory JsonSchema.fromJson(Map<String, dynamic> json) {
     return _fromJson(json);
+  }
+
+  /// Creates a [JsonSchema] from a JSON Schema value.
+  ///
+  /// JSON Schema 2020-12 subschemas can be either schema objects or boolean
+  /// schemas. This parser accepts both forms for nested schema positions.
+  static JsonSchema fromJsonValue(Object? json) {
+    return _fromJsonValue(json, 'JsonSchema');
+  }
+
+  static JsonSchema _fromJsonValue(Object? json, String field) {
+    if (json is bool) {
+      return json ? const JsonAny._booleanSubschema() : const JsonNot._never();
+    }
+    if (json is Map<String, dynamic>) {
+      return JsonSchema.fromJson(json);
+    }
+    if (json is Map) {
+      return JsonSchema.fromJson(Map<String, dynamic>.from(json));
+    }
+    throw FormatException('$field must be a JSON Schema object or boolean');
   }
 
   static JsonSchema _fromJson(Map<String, dynamic> json) {
@@ -183,6 +209,13 @@ sealed class JsonSchema {
 
   /// Converts the schema to a JSON map.
   Map<String, dynamic> toJson();
+
+  /// Converts the schema to a JSON Schema value.
+  ///
+  /// This preserves JSON Schema boolean schemas parsed with [fromJsonValue].
+  Object toJsonValue() {
+    return _jsonSchemaValue(this);
+  }
 
   /// Creates a string schema.
   static JsonString string({
@@ -412,6 +445,14 @@ sealed class JsonSchema {
       defaultValue: defaultValue,
     );
   }
+}
+
+dynamic _jsonSchemaValue(JsonSchema schema) {
+  final rawBooleanSubschema = schema._rawBooleanSubschema;
+  if (rawBooleanSubschema != null) {
+    return rawBooleanSubschema;
+  }
+  return schema.toJson();
 }
 
 /// A schema for string values.
@@ -733,7 +774,7 @@ class JsonArray extends JsonSchema {
   factory JsonArray.fromJson(Map<String, dynamic> json) {
     return JsonArray._(
       items: json['items'] != null
-          ? JsonSchema.fromJson(json['items'] as Map<String, dynamic>)
+          ? JsonSchema._fromJsonValue(json['items'], 'JsonArray.items')
           : null,
       minItems: json['minItems'] as int?,
       maxItems: json['maxItems'] as int?,
@@ -751,6 +792,8 @@ class JsonArray extends JsonSchema {
     final serializedItems = itemSchema == null
         ? null
         : switch (itemSchema) {
+            final JsonSchema schema when schema._rawBooleanSubschema != null =>
+              schema._rawBooleanSubschema,
             final JsonEnum enumItems => enumItems._toJson(
                 titledStringConstListKeyword: 'anyOf',
               ),
@@ -810,15 +853,18 @@ class JsonObject extends JsonSchema {
     if (additionalProps is bool) {
       parsedAdditionalProps = additionalProps;
     } else if (additionalProps is Map) {
-      parsedAdditionalProps = JsonSchema.fromJson(
-        Map<String, dynamic>.from(additionalProps),
+      parsedAdditionalProps = JsonSchema._fromJsonValue(
+        additionalProps,
+        'JsonObject.additionalProperties',
       );
     }
 
     return JsonObject._(
       properties: (json['properties'] as Map<String, dynamic>?)?.map(
-        (key, value) =>
-            MapEntry(key, JsonSchema.fromJson(value as Map<String, dynamic>)),
+        (key, value) => MapEntry(
+          key,
+          JsonSchema._fromJsonValue(value, 'JsonObject.properties.$key'),
+        ),
       ),
       required: (json['required'] as List?)?.cast<String>(),
       additionalProperties: parsedAdditionalProps,
@@ -839,11 +885,12 @@ class JsonObject extends JsonSchema {
       if (_hasDefault) 'default': defaultValue,
       'type': 'object',
       if (properties != null)
-        'properties': properties!.map((k, v) => MapEntry(k, v.toJson())),
+        'properties':
+            properties!.map((k, v) => MapEntry(k, _jsonSchemaValue(v))),
       if (required != null && required!.isNotEmpty) 'required': required,
       if (additionalProperties != null)
         'additionalProperties': additionalProperties is JsonSchema
-            ? (additionalProperties as JsonSchema).toJson()
+            ? _jsonSchemaValue(additionalProperties as JsonSchema)
             : additionalProperties,
       if (dependentRequired != null) 'dependentRequired': dependentRequired,
     };
@@ -871,6 +918,12 @@ class JsonAny extends JsonSchema {
     required bool hasDefault,
   })  : _hasDefault = hasDefault,
         super(title: title, description: description);
+
+  const JsonAny._booleanSubschema()
+      : properties = const {},
+        _hasDefault = false,
+        defaultValue = null,
+        super(rawBooleanSubschema: true);
 
   @override
   final dynamic defaultValue;
@@ -1012,7 +1065,7 @@ class JsonUnion extends JsonSchema {
       if (typeNames != null)
         'type': typeNames
       else
-        'anyOf': schemas.map((schema) => schema.toJson()).toList(),
+        'anyOf': schemas.map(_jsonSchemaValue).toList(),
     };
   }
 
@@ -1108,7 +1161,7 @@ class JsonAllOf extends JsonSchema {
   factory JsonAllOf.fromJson(Map<String, dynamic> json) {
     return JsonAllOf._(
       (json['allOf'] as List)
-          .map((e) => JsonSchema.fromJson(e as Map<String, dynamic>))
+          .map((e) => JsonSchema._fromJsonValue(e, 'JsonAllOf.allOf'))
           .toList(),
       title: json['title'] as String?,
       description: json['description'] as String?,
@@ -1123,7 +1176,7 @@ class JsonAllOf extends JsonSchema {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (_hasDefault) 'default': defaultValue,
-      'allOf': schemas.map((s) => s.toJson()).toList(),
+      'allOf': schemas.map(_jsonSchemaValue).toList(),
     };
   }
 }
@@ -1154,7 +1207,7 @@ class JsonAnyOf extends JsonSchema {
   factory JsonAnyOf.fromJson(Map<String, dynamic> json) {
     return JsonAnyOf._(
       (json['anyOf'] as List)
-          .map((e) => JsonSchema.fromJson(e as Map<String, dynamic>))
+          .map((e) => JsonSchema._fromJsonValue(e, 'JsonAnyOf.anyOf'))
           .toList(),
       title: json['title'] as String?,
       description: json['description'] as String?,
@@ -1169,7 +1222,7 @@ class JsonAnyOf extends JsonSchema {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (_hasDefault) 'default': defaultValue,
-      'anyOf': schemas.map((s) => s.toJson()).toList(),
+      'anyOf': schemas.map(_jsonSchemaValue).toList(),
     };
   }
 }
@@ -1200,7 +1253,7 @@ class JsonOneOf extends JsonSchema {
   factory JsonOneOf.fromJson(Map<String, dynamic> json) {
     return JsonOneOf._(
       (json['oneOf'] as List)
-          .map((e) => JsonSchema.fromJson(e as Map<String, dynamic>))
+          .map((e) => JsonSchema._fromJsonValue(e, 'JsonOneOf.oneOf'))
           .toList(),
       title: json['title'] as String?,
       description: json['description'] as String?,
@@ -1215,7 +1268,7 @@ class JsonOneOf extends JsonSchema {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (_hasDefault) 'default': defaultValue,
-      'oneOf': schemas.map((s) => s.toJson()).toList(),
+      'oneOf': schemas.map(_jsonSchemaValue).toList(),
     };
   }
 }
@@ -1240,12 +1293,18 @@ class JsonNot extends JsonSchema {
     required bool hasDefault,
   }) : _hasDefault = hasDefault;
 
+  const JsonNot._never()
+      : schema = const JsonAny(),
+        defaultValue = null,
+        _hasDefault = false,
+        super(rawBooleanSubschema: false);
+
   @override
   final dynamic defaultValue;
 
   factory JsonNot.fromJson(Map<String, dynamic> json) {
     return JsonNot._(
-      JsonSchema.fromJson(json['not'] as Map<String, dynamic>),
+      JsonSchema._fromJsonValue(json['not'], 'JsonNot.not'),
       title: json['title'] as String?,
       description: json['description'] as String?,
       defaultValue: json['default'],
@@ -1259,7 +1318,7 @@ class JsonNot extends JsonSchema {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (_hasDefault) 'default': defaultValue,
-      'not': schema.toJson(),
+      'not': _jsonSchemaValue(schema),
     };
   }
 }

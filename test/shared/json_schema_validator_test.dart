@@ -266,6 +266,24 @@ void main() {
         );
       });
 
+      test('validates array items with boolean subschemas', () {
+        final alwaysValid = JsonSchema.fromJson({
+          'type': 'array',
+          'items': true,
+        });
+        alwaysValid.validate([1, 'two', null]);
+
+        final alwaysInvalid = JsonSchema.fromJson({
+          'type': 'array',
+          'items': false,
+        });
+        alwaysInvalid.validate([]);
+        expect(
+          () => alwaysInvalid.validate([1]),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
       test('uniqueItems works with objects', () {
         final schema = JsonSchema.array(uniqueItems: true);
         schema.validate([
@@ -391,6 +409,24 @@ void main() {
           "baz": 123,
           "nested": {"a": true},
         });
+      });
+
+      test('validates object properties with boolean subschemas', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'object',
+          'properties': {
+            'allowed': true,
+            'denied': false,
+          },
+        });
+
+        schema.validate({'allowed': 'anything'});
+        schema.validate({'allowed': null});
+
+        expect(
+          () => schema.validate({'denied': 'anything'}),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
       });
     });
 
@@ -612,6 +648,47 @@ void main() {
         schema.validate(true);
         expect(
           () => schema.validate("string"),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('validates composition keywords with boolean subschemas', () {
+        final allOfTrue = JsonSchema.fromJson({
+          'allOf': [
+            true,
+            {'type': 'string'},
+          ],
+        });
+        allOfTrue.validate('value');
+        expect(
+          () => allOfTrue.validate(1),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+
+        final anyOfFalse = JsonSchema.fromJson({
+          'anyOf': [
+            false,
+            {'type': 'integer'},
+          ],
+        });
+        anyOfFalse.validate(1);
+        expect(
+          () => anyOfFalse.validate('value'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+
+        final oneOfTrueFalse = JsonSchema.fromJson({
+          'oneOf': [true, false],
+        });
+        oneOfTrueFalse.validate('value');
+        oneOfTrueFalse.validate(null);
+
+        final notFalse = JsonSchema.fromJson({'not': false});
+        notFalse.validate('value');
+
+        final notTrue = JsonSchema.fromJson({'not': true});
+        expect(
+          () => notTrue.validate('value'),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
