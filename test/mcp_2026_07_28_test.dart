@@ -9,6 +9,8 @@ import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
+const _removedDraftProtocolVersion2026V1 = 'DRAFT-2026-v1';
+
 class RecordingTransport extends Transport {
   RecordingTransport({this.sessionIdValue});
 
@@ -335,6 +337,10 @@ void main() {
       );
       expect(statelessProtocolVersions, [draftProtocolVersion2026_07_28]);
       expect(isStatelessProtocolVersion(draftProtocolVersion2026_07_28), true);
+      expect(
+        isStatelessProtocolVersion(_removedDraftProtocolVersion2026V1),
+        false,
+      );
       expect(isStatelessProtocolVersion(latestProtocolVersion), false);
     });
 
@@ -4166,8 +4172,7 @@ void main() {
       );
     });
 
-    test('server returns unsupported protocol version for stateless metadata',
-        () async {
+    test('server rejects removed draft protocol alias', () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
@@ -4180,14 +4185,18 @@ void main() {
       transport.receive(
         JsonRpcListToolsRequest(
           id: 1,
-          meta: _clientMeta(protocolVersion: '1900-01-01'),
+          meta:
+              _clientMeta(protocolVersion: _removedDraftProtocolVersion2026V1),
         ),
       );
       await _pump();
 
       final response = transport.sentMessages.single as JsonRpcError;
       expect(response.error.code, ErrorCode.unsupportedProtocolVersion.value);
-      expect(response.error.data['requested'], '1900-01-01');
+      expect(
+        response.error.data['requested'],
+        _removedDraftProtocolVersion2026V1,
+      );
       expect(
         response.error.data['supported'],
         contains(draftProtocolVersion2026_07_28),
