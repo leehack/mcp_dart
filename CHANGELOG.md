@@ -1,3 +1,11 @@
+## 2.2.1
+
+### Spec Alignment
+
+- Accepted and preserved JSON Schema 2020-12 boolean subschemas in nested
+  schema positions such as object properties, array items, composition
+  keywords, and `not`.
+
 ## 2.2.0
 
 ### Documentation
@@ -22,9 +30,6 @@
 
 ### Spec Alignment
 
-- Accepted and preserved JSON Schema 2020-12 boolean subschemas in nested
-  schema positions such as object properties, array items, composition
-  keywords, and `not`.
 - Preserved the MCP `Result._meta` field across typed result serializers,
   including initialization, roots, resources, prompts, completion, elicitation,
   tools, tasks, sampling, and empty results.
