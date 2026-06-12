@@ -26,14 +26,14 @@ dart run test/conformance/run_2025_server_conformance.dart
 ```
 
 The runner starts `mcp_2025_server.dart`, runs
-`@modelcontextprotocol/conformance@0.2.0-alpha.1 server --suite all
+`@modelcontextprotocol/conformance@0.2.0-alpha.2 server --suite all
 --spec-version 2025-11-25`, and writes artifacts under
 `.dart_tool/conformance/2025_server/`.
 
 Run the stable client suite from the repository root:
 
 ```bash
-npx -y @modelcontextprotocol/conformance@0.2.0-alpha.1 client \
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.2 client \
   --command "dart run test/conformance/mcp_2026_rc_client.dart" \
   --suite all \
   --spec-version 2025-11-25 \
@@ -55,8 +55,9 @@ dart run test/conformance/run_2026_rc_server_conformance.dart
 
 The runner starts a local `StreamableMcpServer` with JSON stateless responses
 enabled, runs the draft server scenarios from
-`@modelcontextprotocol/conformance@0.2.0-alpha.1` one by one, and writes per-run
-artifacts under `.dart_tool/conformance/2026_rc/`.
+`@modelcontextprotocol/conformance@0.2.0-alpha.2` one by one with
+`--spec-version DRAFT-2026-v1`, and writes per-run artifacts under
+`.dart_tool/conformance/2026_rc/`.
 
 Expected failures live in `2026_rc_expected_failures.txt`. When a scenario is
 fixed, remove it from that file so the baseline remains useful.

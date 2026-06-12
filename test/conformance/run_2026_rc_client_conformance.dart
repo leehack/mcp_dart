@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.1';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.2';
 const _defaultTimeout = Duration(seconds: 30);
 
 const _draftClientScenarios = [
