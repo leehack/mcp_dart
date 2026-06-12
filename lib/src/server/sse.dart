@@ -13,7 +13,12 @@ final _logger = Logger("mcp_dart.server.sse");
 /// Maximum size for incoming POST message bodies.
 const int _maximumMessageSize = 4 * 1024 * 1024; // 4MB in bytes
 
-/// Server transport for SSE: sends messages over a persistent SSE connection
+/// Legacy server transport for SSE.
+///
+/// Prefer `StreamableHTTPServerTransport` for new servers. This transport is
+/// retained for backward compatibility with existing SSE integrations.
+///
+/// Sends messages over a persistent SSE connection
 /// ([HttpResponse]) and receives messages from separate HTTP POST requests
 /// handled by [handlePostMessage].
 ///
@@ -21,6 +26,7 @@ const int _maximumMessageSize = 4 * 1024 * 1024; // 4MB in bytes
 /// `HttpServer` or frameworks like Shelf/Alfred). The `start` method manages
 /// the SSE response stream, while `handlePostMessage` should be called from
 /// the server's routing logic for the designated message endpoint.
+@Deprecated('Use StreamableHTTPServerTransport instead')
 class SseServerTransport implements Transport {
   StringConversionSink? _sink;
   final HttpResponse _sseResponse;

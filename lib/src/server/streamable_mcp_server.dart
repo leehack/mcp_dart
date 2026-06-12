@@ -7,8 +7,22 @@ import 'package:mcp_dart/src/server/dns_rebinding_protection.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
+import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
+
+const List<String> _defaultCorsAllowedHeaders = [
+  'Origin',
+  'X-Requested-With',
+  'Content-Type',
+  'Accept',
+  'mcp-session-id',
+  'Last-Event-ID',
+  'Authorization',
+  'MCP-Protocol-Version',
+  'Mcp-Method',
+  'Mcp-Name',
+];
 
 String _quoteHeaderValue(String value) {
   const backslash = '\\';
@@ -244,6 +258,12 @@ class StreamableMcpServer {
   /// Port to bind the HTTP server to.
   final int port;
 
+  /// Port currently bound by the HTTP server.
+  ///
+  /// This differs from [port] when the server was configured with `port: 0`
+  /// and the operating system selected an available port during [start].
+  int get boundPort => _httpServer?.port ?? port;
+
   /// Path to listen for MCP requests on.
   final String path;
 
@@ -285,6 +305,10 @@ class StreamableMcpServer {
   /// If true, reject JSON-RPC batch payloads for Streamable HTTP POST requests.
   final bool rejectBatchJsonRpcPayloads;
 
+  /// If true, return JSON responses instead of SSE streams for request/response
+  /// interactions.
+  final bool enableJsonResponse;
+
   final Set<String> _defaultDnsRebindingAllowedHosts;
 
   HttpServer? _httpServer;
@@ -306,6 +330,7 @@ class StreamableMcpServer {
     this.allowedOrigins,
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
+    this.enableJsonResponse = false,
   })  : _serverFactory = serverFactory,
         _defaultDnsRebindingAllowedHosts = {
           normalizeDnsHost(host),
@@ -320,7 +345,7 @@ class StreamableMcpServer {
 
     _httpServer = await HttpServer.bind(host, port);
     _logger.info(
-      'MCP Streamable HTTP Server listening on http://$host:$port$path',
+      'MCP Streamable HTTP Server listening on http://$host:$boundPort$path',
     );
 
     final httpServer = _httpServer;
@@ -344,7 +369,7 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
-    _setCorsHeaders(request.response);
+    _setCorsHeaders(request, request.response);
 
     if (enableDnsRebindingProtection &&
         !isRequestAllowedByDnsRebindingProtection(
@@ -419,6 +444,8 @@ class StreamableMcpServer {
     try {
       if (request.method == 'POST') {
         await _handlePostRequest(request);
+      } else if (_requiresStatelessTransport(request)) {
+        await _createStatelessTransport().handleRequest(request);
       } else if (request.method == 'GET') {
         await _handleGetRequest(request);
       } else if (request.method == 'DELETE') {
@@ -455,15 +482,6 @@ class StreamableMcpServer {
     // To support the routing logic (new vs existing session), we must read it here.
 
     final sessionId = request.headers.value('mcp-session-id');
-    if (sessionId != null && !_transports.containsKey(sessionId)) {
-      await _respondWithJsonRpcError(
-        request.response,
-        httpStatus: HttpStatus.notFound,
-        errorCode: ErrorCode.connectionClosed,
-        message: 'Session not found',
-      );
-      return;
-    }
 
     final bodyBytes = await _collectBytes(request);
     final bodyString = utf8.decode(bodyBytes);
@@ -471,6 +489,17 @@ class StreamableMcpServer {
     try {
       body = jsonDecode(bodyString);
     } catch (e) {
+      if (sessionId != null &&
+          !_transports.containsKey(sessionId) &&
+          !_requiresStatelessTransport(request)) {
+        await _respondWithJsonRpcError(
+          request.response,
+          httpStatus: HttpStatus.notFound,
+          errorCode: ErrorCode.connectionClosed,
+          message: 'Session not found',
+        );
+        return;
+      }
       await _respondWithJsonRpcError(
         request.response,
         httpStatus: HttpStatus.badRequest,
@@ -501,9 +530,28 @@ class StreamableMcpServer {
       return;
     }
 
+    final isStatelessRequest = _isStatelessRequest(request, body);
+    if (sessionId != null &&
+        !_transports.containsKey(sessionId) &&
+        !isStatelessRequest) {
+      await _respondWithJsonRpcError(
+        request.response,
+        httpStatus: HttpStatus.notFound,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Session not found',
+      );
+      return;
+    }
+
     StreamableHTTPServerTransport? transport;
 
-    if (sessionId != null) {
+    if (isStatelessRequest) {
+      transport = _createStatelessTransport();
+      final server = _serverFactory('');
+      await server.connect(transport);
+      await transport.handleRequest(request, body);
+      return;
+    } else if (sessionId != null) {
       transport = _transports[sessionId]!;
     } else if (_isInitializeRequest(body)) {
       // New initialization request
@@ -528,6 +576,11 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleGetRequest(HttpRequest request) async {
+    if (_requiresStatelessTransport(request)) {
+      await _createStatelessTransport().handleRequest(request);
+      return;
+    }
+
     final sessionId = request.headers.value('mcp-session-id');
     if (sessionId == null) {
       request.response
@@ -549,6 +602,11 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleDeleteRequest(HttpRequest request) async {
+    if (_requiresStatelessTransport(request)) {
+      await _createStatelessTransport().handleRequest(request);
+      return;
+    }
+
     final sessionId = request.headers.value('mcp-session-id');
     if (sessionId == null) {
       request.response
@@ -579,6 +637,7 @@ class StreamableMcpServer {
         enableDnsRebindingProtection: enableDnsRebindingProtection,
         allowedHosts: allowedHosts ?? {host},
         allowedOrigins: allowedOrigins,
+        enableJsonResponse: enableJsonResponse,
         strictProtocolVersionHeaderValidation:
             strictProtocolVersionHeaderValidation,
         rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
@@ -619,6 +678,80 @@ class StreamableMcpServer {
     };
 
     return transport;
+  }
+
+  StreamableHTTPServerTransport _createStatelessTransport() {
+    return StreamableHTTPServerTransport(
+      options: StreamableHTTPServerTransportOptions(
+        sessionIdGenerator: () => null,
+        eventStore: eventStore,
+        enableDnsRebindingProtection: enableDnsRebindingProtection,
+        allowedHosts: allowedHosts ?? {host},
+        allowedOrigins: allowedOrigins,
+        enableJsonResponse: enableJsonResponse,
+        strictProtocolVersionHeaderValidation:
+            strictProtocolVersionHeaderValidation,
+        rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
+      ),
+    );
+  }
+
+  bool _requiresStatelessTransport(HttpRequest request) {
+    final versionHeader = request.headers.value('mcp-protocol-version');
+    if (versionHeader == null || versionHeader.trim().isEmpty) {
+      return false;
+    }
+
+    final version = versionHeader.trim();
+    return isStatelessProtocolVersion(version) ||
+        strictProtocolVersionHeaderValidation &&
+            !supportedProtocolVersionsWithDraft.contains(version);
+  }
+
+  bool _isStatelessRequest(HttpRequest request, dynamic body) {
+    if (_requiresStatelessTransport(request)) {
+      return true;
+    }
+    if (body is Map<String, dynamic>) {
+      final version = _bodyProtocolVersion(body);
+      return version != null &&
+          (isStatelessProtocolVersion(version) ||
+              strictProtocolVersionHeaderValidation &&
+                  !supportedProtocolVersionsWithDraft.contains(version));
+    }
+    if (body is List) {
+      return body.whereType<Map<String, dynamic>>().any((item) {
+        final version = _bodyProtocolVersion(item);
+        return version != null &&
+            (isStatelessProtocolVersion(version) ||
+                strictProtocolVersionHeaderValidation &&
+                    !supportedProtocolVersionsWithDraft.contains(version));
+      });
+    }
+    return false;
+  }
+
+  String? _bodyProtocolVersion(Map<String, dynamic> body) {
+    final params = body['params'];
+    if (params is Map) {
+      final meta = params['_meta'];
+      if (meta is Map) {
+        final version = meta[McpMetaKey.protocolVersion];
+        if (version is String) {
+          return version;
+        }
+      }
+    }
+
+    final topLevelMeta = body['_meta'];
+    if (topLevelMeta is Map) {
+      final version = topLevelMeta[McpMetaKey.protocolVersion];
+      if (version is String) {
+        return version;
+      }
+    }
+
+    return null;
   }
 
   bool _isInitializeRequest(dynamic body) {
@@ -805,13 +938,46 @@ class StreamableMcpServer {
     await response.close();
   }
 
-  void _setCorsHeaders(HttpResponse response) {
+  String _corsAllowedHeaders(HttpRequest request) {
+    final allowedHeaders = <String>[];
+    final seenHeaders = <String>{};
+
+    void addAllowedHeader(String headerName) {
+      final normalized = headerName.toLowerCase();
+      if (seenHeaders.add(normalized)) {
+        allowedHeaders.add(headerName);
+      }
+    }
+
+    for (final headerName in _defaultCorsAllowedHeaders) {
+      addAllowedHeader(headerName);
+    }
+
+    final requestedHeaders =
+        request.headers.value('access-control-request-headers');
+    if (requestedHeaders == null) {
+      return allowedHeaders.join(', ');
+    }
+
+    for (final rawHeaderName in requestedHeaders.split(',')) {
+      final headerName = rawHeaderName.trim();
+      if (headerName.isEmpty ||
+          !headerName.codeUnits.every(isHttpFieldNameTokenChar)) {
+        continue;
+      }
+      addAllowedHeader(headerName);
+    }
+
+    return allowedHeaders.join(', ');
+  }
+
+  void _setCorsHeaders(HttpRequest request, HttpResponse response) {
     response.headers.set('Access-Control-Allow-Origin', '*');
     response.headers
         .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     response.headers.set(
       'Access-Control-Allow-Headers',
-      'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization, MCP-Protocol-Version',
+      _corsAllowedHeaders(request),
     );
     response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Max-Age', defaultCorsMaxAgeSeconds);

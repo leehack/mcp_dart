@@ -1,0 +1,184 @@
+# MCP 2026-07-28 Draft/RC Transition Guide
+
+`mcp_dart` defaults to the latest stable MCP specification, currently
+`2025-11-25`. MCP `2026-07-28` draft/RC support is available through explicit
+protocol profiles so applications can adopt the draft without changing stable
+deployments.
+
+## Client opt-in
+
+Use the preview profile when you want the client to prefer MCP `2026-07-28`
+draft/RC and fall back to stable MCP servers when discovery is unavailable:
+
+```dart
+final client = McpClient(
+  const Implementation(name: 'my-client', version: '1.0.0'),
+  options: const McpClientOptions(
+    protocol: McpProtocol.preview2026,
+  ),
+);
+```
+
+`McpClientOptions(protocol: McpProtocol.preview2026)` enables
+`server/discover`, sends the `2026-07-28` draft/RC stateless request metadata,
+and falls back to the legacy `initialize` flow when the peer looks like a
+stable-only MCP server.
+
+Use the strict profile for conformance tests or deployments where fallback is
+not acceptable:
+
+```dart
+final client = McpClient(
+  const Implementation(name: 'my-client', version: '1.0.0'),
+  options: const McpClientOptions(
+    protocol: McpProtocol.require2026,
+  ),
+);
+```
+
+## Server opt-in
+
+Use the server preview profile to advertise and accept MCP `2026-07-28` draft/RC
+stateless requests:
+
+```dart
+final server = McpServer(
+  const Implementation(name: 'my-server', version: '1.0.0'),
+  options: const McpServerOptions(
+    protocol: McpProtocol.preview2026,
+  ),
+);
+```
+
+`McpServerOptions()` remains stable by default and does not advertise draft
+stateless protocol versions.
+
+## Profile summary
+
+| Profile | Default? | Client behavior | Server behavior |
+| ------- | -------- | --------------- | --------------- |
+| `McpProtocol.stable` | Yes | Uses stable `initialize` | Advertises stable protocol versions |
+| `McpProtocol.preview2026` | No | Tries `server/discover`, then falls back to `initialize` | Advertises stable and `2026-07-28` draft/RC protocol versions |
+| `McpProtocol.require2026` | No | Requires `2026-07-28` draft/RC discovery | Advertises only stateless `2026-07-28` draft/RC protocol versions |
+
+## Low-level overrides
+
+The existing low-level options remain available for advanced callers:
+
+```dart
+final client = McpClient(
+  const Implementation(name: 'my-client', version: '1.0.0'),
+  options: const McpClientOptions(
+    protocolVersion: draftProtocolVersion2026_07_28,
+    useServerDiscover: true,
+  ),
+);
+```
+
+Prefer the `protocol` profile unless you need to target a specific protocol
+version for tests or interoperability debugging.
+
+Use `draftProtocolVersion2026_07_28` for MCP `2026-07-28` draft/RC testing.
+The earlier `DRAFT-2026-v1` conformance alias is no longer exposed or accepted
+by the SDK.
+
+## 2026-07-28 Draft-Only API Areas
+
+The following features are MCP `2026-07-28` draft/RC behavior and should be
+used only after opting into a `2026-07-28` profile:
+
+- `server/discover` negotiation and stateless per-request metadata.
+- `subscriptions/listen` stateless notification streams.
+- Multi-result tool/resource/prompt flows such as `input_required`.
+- MCP Tasks extension flows using `io.modelcontextprotocol/tasks`.
+- Non-object `structuredContent` values via `JsonValue` and broader server
+  `outputJsonSchema` shapes.
+- Stateless result metadata such as `resultType`, `ttlMs`, and `cacheScope`.
+
+For non-object tool results, keep the stable object-root APIs for stable MCP
+callers and use the explicitly named draft APIs:
+
+```dart
+server.registerTool(
+  'array-result',
+  outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
+  callback: (args, extra) {
+    return CallToolResult.fromStructuredArray(['alpha', 'beta']);
+  },
+);
+
+final result = await client.callTool(
+  const CallToolRequest(name: 'array-result'),
+);
+final items = result.structuredContentJson?.asArray;
+```
+
+The draft/RC API surface may still change before the official spec release.
+Keep applications on the stable profile unless they specifically need draft
+behavior.
+
+## Dev Release Checklist
+
+Use dev releases for MCP `2026-07-28` draft/RC testing until the official spec
+is released. The initial SDK dev release, `mcp_dart 2.3.0-dev.0`, is already
+published on pub.dev. Follow-up dev versions must increment the prerelease
+suffix, such as `2.3.0-dev.1`, so pub.dev and GitHub treat them as preview
+builds.
+
+Before creating follow-up dev tags from `dev/2026-07-28-rc`, run:
+
+```sh
+dart analyze
+dart run test/conformance/run_2025_server_conformance.dart
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.3 client \
+  --command "dart run test/conformance/mcp_2026_rc_client.dart" \
+  --suite all \
+  --spec-version 2025-11-25
+dart run test/conformance/run_2026_rc_server_conformance.dart
+dart run test/conformance/run_2026_rc_client_conformance.dart
+dart pub publish --dry-run
+dart pub global run pana --no-warning
+dart run tool/validate_cli_publish.dart
+```
+
+The `run_2026_rc_server_conformance.dart` gate runs the full
+`@modelcontextprotocol/conformance@0.2.0-alpha.3` server scenario list for
+`--spec-version 2026-07-28`, including the stable-style tool, resource, prompt,
+completion, and JSON Schema scenarios that the alpha package tags for the RC.
+
+For dev packages, keep package documentation links pointed at
+`dev/2026-07-28-rc` until the draft work is ready to merge back to `main`.
+Restore those links to `main` as part of the final spec release prep.
+
+For follow-up dev releases, publish the SDK package first by running the
+`Create Release` workflow for `mcp_dart` from `dev/2026-07-28-rc`. The publish
+workflow runs a dry-run check before `dart pub publish --force`, and prerelease
+versions are marked as GitHub prereleases rather than repository latest
+releases.
+
+After `mcp_dart` is available on pub.dev, validate the CLI against the published
+SDK package:
+
+```sh
+dart run tool/validate_cli_publish.dart --published-sdk
+```
+
+Then run the `Create Release` workflow for `mcp_dart_cli` from
+`dev/2026-07-28-rc` when a matching CLI dev release is needed. The initial CLI
+dev release, `mcp_dart_cli 0.2.0-dev.0`, is already published. The CLI publish
+workflow removes the local SDK override before publishing so users receive the
+published SDK dependency.
+
+Install the dev CLI explicitly by version:
+
+```sh
+dart pub global activate mcp_dart_cli 0.2.0-dev.0
+```
+
+The standalone install and update scripts intentionally track stable GitHub
+releases; use Dart SDK activation when testing prerelease CLI builds.
+
+`mcp_dart create` continues to generate projects that resolve the stable SDK by
+default. For draft/RC testing, update generated projects to depend on
+`mcp_dart: ^2.3.0-dev.0` and opt into `McpProtocol.preview2026` or
+`McpProtocol.require2026`.

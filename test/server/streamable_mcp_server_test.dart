@@ -65,6 +65,21 @@ Future<_SseEvent> _readSseJsonEvent(StreamIterator<String> lines) async {
   }
 }
 
+List<Map<String, dynamic>> _decodeSseJsonMessages(String body) {
+  final messages = <Map<String, dynamic>>[];
+  for (final event in body.trim().split('\n\n')) {
+    final data = event
+        .split('\n')
+        .where((line) => line.startsWith('data: '))
+        .map((line) => line.substring('data: '.length))
+        .join('\n');
+    if (data.isNotEmpty) {
+      messages.add(jsonDecode(data) as Map<String, dynamic>);
+    }
+  }
+  return messages;
+}
+
 void main() {
   test('OAuthBearerChallenge builds insufficient-scope challenge', () {
     final challenge = OAuthBearerChallenge.insufficientScope(
@@ -100,6 +115,12 @@ void main() {
       contains(r'error_description="Need \"read\" scope \\ admin"'),
     );
   });
+
+  Map<String, dynamic> statelessMeta() => buildProtocolRequestMeta(
+        protocolVersion: draftProtocolVersion2026_07_28,
+        clientInfo: const Implementation(name: 'Client', version: '1.0'),
+        clientCapabilities: const ClientCapabilities(),
+      );
 
   group('StreamableMcpServer', () {
     late StreamableMcpServer server;
@@ -206,6 +227,28 @@ void main() {
       }
     });
 
+    test('CORS preflight allows stateless routing and parameter headers',
+        () async {
+      final client = http.Client();
+      try {
+        final req = http.Request('OPTIONS', Uri.parse(baseUrl))
+          ..headers['Access-Control-Request-Method'] = 'POST'
+          ..headers['Access-Control-Request-Headers'] =
+              'Mcp-Method, Mcp-Name, Mcp-Param-Region';
+        final streamedRes = await client.send(req);
+        final res = await http.Response.fromStream(streamedRes);
+        final allowedHeaders =
+            res.headers['access-control-allow-headers']!.toLowerCase();
+
+        expect(res.statusCode, HttpStatus.ok);
+        expect(allowedHeaders, contains('mcp-method'));
+        expect(allowedHeaders, contains('mcp-name'));
+        expect(allowedHeaders, contains('mcp-param-region'));
+      } finally {
+        client.close();
+      }
+    });
+
     test('initialize session flow', () async {
       final initRequest = JsonRpcRequest(
         id: 1,
@@ -281,6 +324,594 @@ void main() {
       expect(res.statusCode, HttpStatus.badRequest);
     });
 
+    test('handles 2026 stateless request without session ID', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcListToolsRequest(id: 1, meta: statelessMeta()).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['mcp-session-id'], isNull);
+      final messages = _decodeSseJsonMessages(response.body);
+      expect(messages.single['result']['tools'][0]['name'], 'echo');
+    });
+
+    test('can return JSON responses for stateless requests', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcListToolsRequest(id: 3, meta: statelessMeta()).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['content-type'], startsWith('application/json'));
+      final message = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(message['id'], 3);
+      expect(message['result']['tools'][0]['name'], 'echo');
+    });
+
+    test('can return JSON errors for stateless request handlers', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcCallToolRequest(
+            id: 4,
+            params: const {
+              'name': 'missing_tool',
+              'arguments': <String, dynamic>{},
+            },
+            meta: statelessMeta(),
+          ).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'missing_tool',
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      expect(response.headers['content-type'], startsWith('application/json'));
+      final message = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(message['id'], 4);
+      expect(message['error']['code'], ErrorCode.invalidParams.value);
+      expect(message['error']['message'], contains('missing_tool'));
+    });
+
+    test('rejects unsupported stateless version before session routing',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          return McpServer(
+            const Implementation(name: 'VersionServer', version: '1.0.0'),
+          );
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final meta = statelessMeta()..[McpMetaKey.protocolVersion] = 'v999.0.0';
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode({
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-unsupported',
+          'method': Method.serverDiscover,
+          'params': {'_meta': meta},
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': 'v999.0.0',
+          'Mcp-Method': Method.serverDiscover,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final message = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(
+        message['error']['code'],
+        ErrorCode.unsupportedProtocolVersion.value,
+      );
+      expect(message['id'], 'discover-unsupported');
+      expect(message['error']['data']['requested'], 'v999.0.0');
+    });
+
+    test('preserves id for malformed stateless server discover metadata',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          return McpServer(
+            const Implementation(name: 'DiscoverServer', version: '1.0.0'),
+          );
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      Future<Map<String, dynamic>> postDiscover(
+        Map<String, dynamic> body,
+      ) async {
+        final response = await http.post(
+          Uri.parse(baseUrl),
+          body: jsonEncode(body),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+            'Mcp-Method': Method.serverDiscover,
+          },
+        );
+
+        expect(response.statusCode, HttpStatus.badRequest);
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+
+      var message = await postDiscover({
+        'jsonrpc': jsonRpcVersion,
+        'id': 101,
+        'method': Method.serverDiscover,
+        'params': <String, dynamic>{},
+      });
+      expect(message['id'], 101);
+      expect(message['error']['code'], ErrorCode.invalidParams.value);
+
+      message = await postDiscover({
+        'jsonrpc': jsonRpcVersion,
+        'id': 102,
+        'method': Method.serverDiscover,
+        'params': {'_meta': <String, dynamic>{}},
+      });
+      expect(message['id'], 102);
+      expect(message['error']['code'], ErrorCode.invalidParams.value);
+      expect(
+        message['error']['message'],
+        contains(McpMetaKey.protocolVersion),
+      );
+    });
+
+    test('rejects removed stateless request methods before legacy parsing',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          return McpServer(
+            const Implementation(name: 'RemovedMethodsServer', version: '1.0'),
+          );
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final methods = [
+        Method.initialize,
+        Method.ping,
+        Method.loggingSetLevel,
+        Method.resourcesSubscribe,
+        Method.resourcesUnsubscribe,
+      ];
+      for (var i = 0; i < methods.length; i++) {
+        final method = methods[i];
+        final id = 200 + i;
+        final response = await http.post(
+          Uri.parse(baseUrl),
+          body: jsonEncode({
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': method,
+            'params': {
+              '_meta': statelessMeta(),
+              if (method == Method.loggingSetLevel) 'level': 'info',
+              if (method == Method.resourcesSubscribe ||
+                  method == Method.resourcesUnsubscribe)
+                'uri': 'file:///tmp/example.txt',
+            },
+          }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+            'Mcp-Method': method,
+          },
+        );
+
+        expect(response.statusCode, HttpStatus.notFound);
+        final message = jsonDecode(response.body) as Map<String, dynamic>;
+        expect(message['id'], id);
+        expect(message['error']['code'], ErrorCode.methodNotFound.value);
+        expect(message['error']['message'], contains(method));
+      }
+    });
+
+    test('handles 2026 stateless request with unknown session ID', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcListToolsRequest(id: 2, meta: statelessMeta()).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+          'mcp-session-id': 'unknown-legacy-session',
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['mcp-session-id'], isNull);
+      final messages = _decodeSseJsonMessages(response.body);
+      expect(messages.single['id'], 2);
+      expect(messages.single['result']['tools'][0]['name'], 'echo');
+    });
+
+    test('handles stateless task lookup across independent requests', () async {
+      const taskId = 'task-http-1';
+      final tasks = <String, TaskExtensionTask>{};
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+              capabilities: ServerCapabilities(
+                tools: ServerCapabilitiesTools(),
+                extensions: {mcpTasksExtensionId: <String, dynamic>{}},
+              ),
+            ),
+          );
+          mcpServer.server.setRequestHandler<JsonRpcCallToolRequest>(
+            Method.toolsCall,
+            (request, extra) async {
+              final task = TaskExtensionTask(
+                taskId: taskId,
+                status: TaskStatus.working,
+                createdAt: DateTime.utc(2026, 7, 28).toIso8601String(),
+                lastUpdatedAt: DateTime.utc(2026, 7, 28).toIso8601String(),
+                ttlMs: 60000,
+              );
+              tasks[task.taskId] = task;
+              return CreateTaskExtensionResult(task: task);
+            },
+            (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': id,
+              'method': Method.toolsCall,
+              'params': params,
+              if (meta != null) '_meta': meta,
+            }),
+          );
+          mcpServer.server.setRequestHandler<JsonRpcGetTaskRequest>(
+            Method.tasksGet,
+            (request, extra) async {
+              final task = tasks[request.getParams.taskId];
+              if (task == null) {
+                throw McpError(
+                  ErrorCode.invalidParams.value,
+                  'Task not found',
+                );
+              }
+              return GetTaskExtensionResult(task: task);
+            },
+            (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': id,
+              'method': Method.tasksGet,
+              'params': params,
+              if (meta != null) '_meta': meta,
+            }),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final meta = buildProtocolRequestMeta(
+        protocolVersion: draftProtocolVersion2026_07_28,
+        clientInfo: const Implementation(name: 'Client', version: '1.0'),
+        clientCapabilities: const ClientCapabilities(
+          extensions: {mcpTasksExtensionId: <String, dynamic>{}},
+        ),
+      );
+      final createResponse = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcCallToolRequest(
+            id: 'call-task',
+            params: const CallToolRequest(name: 'long').toJson(),
+            meta: meta,
+          ).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'long',
+        },
+      );
+
+      expect(createResponse.statusCode, HttpStatus.ok);
+      expect(createResponse.headers['mcp-session-id'], isNull);
+      final createMessages = _decodeSseJsonMessages(createResponse.body);
+      expect(createMessages.single['result']['resultType'], resultTypeTask);
+      expect(createMessages.single['result']['taskId'], taskId);
+
+      final lookupResponse = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcGetTaskRequest(
+            id: 'get-task',
+            getParams: const GetTaskRequest(taskId: taskId),
+            meta: meta,
+          ).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.tasksGet,
+          'Mcp-Name': taskId,
+          'mcp-session-id': 'unknown-legacy-session',
+        },
+      );
+
+      expect(lookupResponse.statusCode, HttpStatus.ok);
+      expect(lookupResponse.headers['mcp-session-id'], isNull);
+      final lookupMessages = _decodeSseJsonMessages(lookupResponse.body);
+      expect(lookupMessages.single['id'], 'get-task');
+      expect(lookupMessages.single['result']['resultType'], resultTypeComplete);
+      expect(lookupMessages.single['result']['taskId'], taskId);
+      expect(
+        lookupMessages.single['result']['status'],
+        TaskStatus.working.name,
+      );
+      expect(lookupMessages.single['result']['ttlMs'], 60000);
+    });
+
+    test('detects stateless requests from nested metadata before top-level',
+        () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'StatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
+          );
+          mcpServer.registerTool(
+            'echo',
+            inputSchema: const ToolInputSchema(),
+            callback: (args, extra) async => const CallToolResult(content: []),
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+      );
+      await server.start();
+
+      final request = JsonRpcListToolsRequest(
+        id: 11,
+        meta: statelessMeta(),
+      ).toJson()
+        ..['_meta'] = const {
+          McpMetaKey.protocolVersion: latestProtocolVersion,
+        };
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(request),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['mcp-session-id'], isNull);
+      final messages = _decodeSseJsonMessages(response.body);
+      expect(messages.single['result']['tools'][0]['name'], 'echo');
+    });
+
+    test('detects 2026 stateless requests from body metadata', () async {
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcListToolsRequest(id: 10, meta: statelessMeta()).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(
+        body['error']['message'],
+        contains('MCP-Protocol-Version header is required'),
+      );
+    });
+
+    test('keeps top-level metadata as stateless detection fallback', () async {
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          const JsonRpcListToolsRequest(id: 12).toJson()
+            ..['_meta'] = const {
+              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+            },
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(
+        body['error']['message'],
+        contains('MCP-Protocol-Version header is required'),
+      );
+    });
+
+    test('routes 2026 stateless non-POST methods without a session ID',
+        () async {
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      final getRequest = await client.getUrl(Uri.parse(baseUrl));
+      getRequest.headers.set(
+        'MCP-Protocol-Version',
+        draftProtocolVersion2026_07_28,
+      );
+      final getResponse = await getRequest.close();
+      expect(getResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(getResponse.headers.value(HttpHeaders.allowHeader), 'POST');
+      await getResponse.drain<void>();
+
+      final deleteRequest = await client.deleteUrl(Uri.parse(baseUrl));
+      deleteRequest.headers.set(
+        'MCP-Protocol-Version',
+        draftProtocolVersion2026_07_28,
+      );
+      final deleteResponse = await deleteRequest.close();
+      expect(deleteResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(deleteResponse.headers.value(HttpHeaders.allowHeader), 'POST');
+      await deleteResponse.drain<void>();
+
+      final patchRequest = await client.openUrl('PATCH', Uri.parse(baseUrl));
+      patchRequest.headers.set(
+        'MCP-Protocol-Version',
+        draftProtocolVersion2026_07_28,
+      );
+      final patchResponse = await patchRequest.close();
+      expect(patchResponse.statusCode, HttpStatus.methodNotAllowed);
+      expect(patchResponse.headers.value(HttpHeaders.allowHeader), 'POST');
+      await patchResponse.drain<void>();
+    });
+
     test('rejects unsupported MCP-Protocol-Version header by default',
         () async {
       final initRequest = JsonRpcRequest(
@@ -305,7 +936,7 @@ void main() {
 
       expect(res.statusCode, HttpStatus.badRequest);
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-      expect(body['error']['code'], ErrorCode.invalidRequest.value);
+      expect(body['error']['code'], ErrorCode.unsupportedProtocolVersion.value);
     });
 
     test(
@@ -1165,6 +1796,21 @@ void main() {
 
     test('server port is exposed correctly', () async {
       expect(server.port, equals(port));
+      expect(server.boundPort, equals(port));
+    });
+
+    test('bound port exposes OS-assigned port', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'PortServer', version: '1.0')),
+        host: host,
+        port: 0,
+      );
+      await server.start();
+
+      expect(server.port, equals(0));
+      expect(server.boundPort, isNot(0));
     });
   });
 }

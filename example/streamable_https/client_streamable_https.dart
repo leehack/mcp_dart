@@ -250,6 +250,8 @@ Future<void> connect([String? url]) async {
         return Future.value();
       },
       (params, meta) => JsonRpcResourceListChangedNotification.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsResourcesListChanged,
         'params': params,
         if (meta != null) '_meta': meta,
       }),

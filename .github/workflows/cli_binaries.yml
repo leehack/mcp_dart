@@ -28,7 +28,7 @@ jobs:
             asset: mcp_dart-macos-x64
           - os: macos-14
             asset: mcp_dart-macos-arm64
-          - os: windows-latest
+          - os: windows-2025
             asset: mcp_dart-windows-x64.exe
 
     defaults:
@@ -57,7 +57,7 @@ jobs:
           "./dist/${{ matrix.asset }}" --version
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset }}
           path: packages/mcp_dart_cli/dist/${{ matrix.asset }}

@@ -1,3 +1,73 @@
+## Unreleased
+
+### Conformance and release readiness
+
+- Updated official conformance gates to
+  `@modelcontextprotocol/conformance@0.2.0-alpha.3`, with 2026 RC runs pinned
+  to `2026-07-28`, the full 2026 server scenario list covered in CI, and the
+  current upstream client fixture gap tracked as an
+  expected failure.
+- Removed the legacy `DRAFT-2026-v1` draft alias now that official conformance
+  targets the `2026-07-28` wire version.
+
+## 2.3.0-dev.0
+
+This is a dev preview for MCP `2026-07-28` draft/RC support. MCP
+`2025-11-25` remains the default protocol profile; draft/RC behavior is enabled
+explicitly and may still change before the official spec release.
+
+### MCP 2026-07-28 draft/RC preview
+
+- Added `McpProtocol.preview2026` and `McpProtocol.require2026` profiles for
+  clients and servers, with stable `initialize` behavior preserved by default.
+- Added `server/discover` negotiation, per-request stateless metadata,
+  protocol/client/capability validation, and version-aware fallback behavior.
+- Added stateless Streamable HTTP behavior for POST-only requests, no
+  `Mcp-Session-Id`, `Mcp-Name` task routing, `Mcp-Param-*` argument headers,
+  CORS preflights, SSE cancellation, and request-scoped logging.
+- Added draft-only flows for `subscriptions/listen`, MCP Tasks extension
+  handlers, MRTR `input_required` results, cacheable list/read results, and
+  `input_required` prompt/resource responses.
+- Added explicit typed APIs for non-object draft result data, including
+  `JsonValue`, `structuredContentJson`,
+  `CallToolResult.fromStructuredArray()`, and server `outputJsonSchema`.
+
+### Stable compatibility
+
+- Kept stable public tool-result APIs object-rooted and omitted non-object
+  structured output from stable MCP `2025-11-25` responses.
+- Preserved stable session behavior, registration-order list output, legacy task
+  augmentation, stable-only `Tool.execution` metadata, and legacy resource error
+  codes outside the 2026 stateless profile.
+- Preserved numeric JSON-RPC request IDs and progress tokens end-to-end while
+  continuing to reject non-finite numeric values.
+
+### Spec hardening
+
+- Tightened JSON-RPC envelope parsing, wrapper constant checks, error object
+  validation, `_meta` key validation, and mixed request/response rejection.
+- Accepted and preserved JSON Schema 2020-12 boolean subschemas in nested
+  schema positions such as object properties, array items, composition
+  keywords, and `not`.
+- Tightened typed parsing for content, resources, prompts, tools, roots,
+  sampling, elicitation, tasks, subscriptions, completions, capabilities, and
+  JSON Schema fields so malformed wire values fail with protocol errors instead
+  of Dart cast errors.
+- Validated JSON-only metadata and result data across JSON-RPC, MRTR, task,
+  subscription, sampling, tool, resource, and content boundaries.
+
+### Conformance and release readiness
+
+- Added official MCP `2025-11-25` and MCP `2026-07-28` draft/RC client/server
+  conformance gates to core CI.
+- Added `tool/spec_example_audit.dart` for parsing upstream machine-readable
+  spec examples through checked-in SDK types during RC/final release audits.
+- Prepared the dev release workflow so prerelease tags are GitHub prereleases,
+  publish jobs run `dart pub publish --dry-run`, and the draft/RC transition
+  guide includes a dev release checklist.
+- Pointed prerelease package documentation links at `dev/2026-07-28-rc` so
+  pub.dev users see the draft/RC docs that match the dev package.
+
 ## 2.2.1
 
 ### Spec Alignment

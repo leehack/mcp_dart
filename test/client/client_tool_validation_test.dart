@@ -3,15 +3,19 @@ import 'dart:async';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
-class MockTransport extends Transport {
+class MockTransport extends Transport
+    implements ToolParameterHeaderAwareTransport {
   final List<JsonRpcMessage> sentMessages = [];
   ServerCapabilities serverCapabilities;
+  List<Tool> advertisedTools;
+  ToolParameterHeaderMappings toolParameterHeaderMappings = const {};
 
   MockTransport({
     this.serverCapabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
-  });
+    List<Tool>? advertisedTools,
+  }) : advertisedTools = advertisedTools ?? _defaultAdvertisedTools();
 
   @override
   String? get sessionId => null;
@@ -24,7 +28,18 @@ class MockTransport extends Transport {
   @override
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
-    if (message is JsonRpcRequest && message.method == Method.initialize) {
+    if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      _respond(
+        JsonRpcError(
+          id: message.id,
+          error: const JsonRpcErrorData(
+            code: -32601,
+            message: 'Method not found',
+          ),
+        ),
+      );
+    } else if (message is JsonRpcRequest &&
+        message.method == Method.initialize) {
       _respond(
         JsonRpcResponse(
           id: message.id,
@@ -41,35 +56,7 @@ class MockTransport extends Transport {
       _respond(
         JsonRpcResponse(
           id: message.id,
-          result: ListToolsResult(
-            tools: [
-              Tool(
-                name: 'validated_tool',
-                inputSchema: JsonSchema.object(properties: {}),
-                outputSchema: ToolOutputSchema(
-                  properties: {
-                    'result': JsonSchema.string(),
-                  },
-                  required: ['result'],
-                ),
-              ),
-              Tool(
-                name: 'broken_tool', // Tool that returns invalid data
-                inputSchema: const ToolInputSchema(),
-                outputSchema: ToolOutputSchema(
-                  properties: {
-                    'result': JsonSchema.string(),
-                  },
-                  required: ['result'],
-                ),
-              ),
-              const Tool(
-                name: 'task_required_tool',
-                inputSchema: ToolInputSchema(),
-                execution: ToolExecution(taskSupport: 'required'),
-              ),
-            ],
-          ).toJson(),
+          result: ListToolsResult(tools: advertisedTools).toJson(),
         ),
       );
     } else if (message is JsonRpcRequest &&
@@ -81,6 +68,21 @@ class MockTransport extends Transport {
             id: message.id,
             result: CallToolResult.fromStructuredContent({'result': 'success'})
                 .toJson(),
+          ),
+        );
+      } else if (name == 'array_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result:
+                CallToolResult.fromStructuredArray(['alpha', 'beta']).toJson(),
+          ),
+        );
+      } else if (name == 'broken_array_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: CallToolResult.fromStructuredArray(['alpha', 1]).toJson(),
           ),
         );
       } else if (name == 'broken_tool') {
@@ -104,6 +106,56 @@ class MockTransport extends Transport {
 
   @override
   Future<void> start() async {}
+
+  @override
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  ) {
+    toolParameterHeaderMappings = {
+      for (final entry in mappings.entries)
+        entry.key: Map.unmodifiable(Map<String, String>.from(entry.value)),
+    };
+  }
+
+  static List<Tool> _defaultAdvertisedTools() {
+    return [
+      Tool(
+        name: 'validated_tool',
+        inputSchema: JsonSchema.object(properties: {}),
+        outputSchema: ToolOutputSchema(
+          properties: {
+            'result': JsonSchema.string(),
+          },
+          required: ['result'],
+        ),
+      ),
+      Tool(
+        name: 'broken_tool', // Tool that returns invalid data
+        inputSchema: const ToolInputSchema(),
+        outputSchema: ToolOutputSchema(
+          properties: {
+            'result': JsonSchema.string(),
+          },
+          required: ['result'],
+        ),
+      ),
+      Tool(
+        name: 'array_tool',
+        inputSchema: const ToolInputSchema(),
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+      ),
+      Tool(
+        name: 'broken_array_tool',
+        inputSchema: const ToolInputSchema(),
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+      ),
+      const Tool(
+        name: 'task_required_tool',
+        inputSchema: ToolInputSchema(),
+        execution: ToolExecution(taskSupport: 'required'),
+      ),
+    ];
+  }
 }
 
 void main() {
@@ -118,6 +170,116 @@ void main() {
       );
     });
 
+    test('listTools filters invalid x-mcp-header definitions', () async {
+      final warnings = <String>[];
+      setMcpLogHandler((loggerName, level, message) {
+        if (level == LogLevel.warn) {
+          warnings.add(message);
+        }
+      });
+      addTearDown(resetMcpLogHandler);
+
+      transport = MockTransport(
+        advertisedTools: [
+          Tool(
+            name: 'valid_headers',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'region': JsonSchema.string(mcpHeader: 'Region'),
+                'limit': JsonSchema.integer(mcpHeader: 'Limit'),
+                'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
+                'count': JsonSchema.integer(mcpHeader: 'Count'),
+                'auth': JsonSchema.object(
+                  properties: {
+                    'tenant': JsonSchema.string(mcpHeader: 'Tenant'),
+                  },
+                ),
+              },
+            ),
+          ),
+          Tool(
+            name: 'number_header',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'ratio': JsonSchema.number(mcpHeader: 'Ratio'),
+              },
+            ),
+          ),
+          Tool(
+            name: 'duplicate_headers',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'primary': JsonSchema.string(mcpHeader: 'Region'),
+                'secondary': JsonSchema.string(mcpHeader: 'region'),
+              },
+            ),
+          ),
+          Tool(
+            name: 'empty_header',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'region': JsonSchema.string(mcpHeader: ''),
+              },
+            ),
+          ),
+          Tool(
+            name: 'separator_header',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'region': JsonSchema.string(mcpHeader: 'Bad/Header'),
+              },
+            ),
+          ),
+          Tool.fromJson({
+            'name': 'non_string_header',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'region': {
+                  'type': 'string',
+                  'x-mcp-header': 1,
+                },
+              },
+            },
+          }),
+          Tool.fromJson({
+            'name': 'object_header',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'payload': {
+                  'type': 'object',
+                  'x-mcp-header': 'Payload',
+                },
+              },
+            },
+          }),
+        ],
+      );
+
+      await client.connect(transport);
+      final result = await client.listTools();
+
+      expect(result.tools.map((tool) => tool.name), [
+        'valid_headers',
+        'number_header',
+      ]);
+      expect(transport.toolParameterHeaderMappings, {
+        'valid_headers': {
+          'region': 'Region',
+          'limit': 'Limit',
+          'dryRun': 'Dry-Run',
+          'count': 'Count',
+          '/auth/tenant': 'Tenant',
+        },
+        'number_header': {'ratio': 'Ratio'},
+      });
+      expect(
+        warnings.where((message) => message.contains('Rejecting tool')),
+        hasLength(5),
+      );
+    });
+
     test('validates tool output schema successfully', () async {
       await client.connect(transport);
       await client.listTools();
@@ -126,7 +288,37 @@ void main() {
         const CallToolRequest(name: 'validated_tool'),
       );
 
-      expect(result.structuredContent?['result'], equals('success'));
+      final structured = result.structuredContent as Map<String, dynamic>;
+      expect(structured['result'], equals('success'));
+    });
+
+    test('validates non-object tool output schemas successfully', () async {
+      await client.connect(transport);
+      await client.listTools();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'array_tool'),
+      );
+
+      expect(result.structuredContentJson?.toJson(), equals(['alpha', 'beta']));
+    });
+
+    test('throws when non-object tool output validation fails', () async {
+      await client.connect(transport);
+      await client.listTools();
+
+      expect(
+        () => client.callTool(
+          const CallToolRequest(name: 'broken_array_tool'),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.message,
+            'message',
+            contains('Structured content does not match'),
+          ),
+        ),
+      );
     });
 
     test('throws when tool output validation fails', () async {
@@ -177,11 +369,17 @@ void main() {
       expect(
         () => client.assertTaskCapability(Method.toolsCall),
         throwsA(
-          isA<McpError>().having(
-            (e) => e.message,
-            'message',
-            contains('tasks.requests.tools.call'),
-          ),
+          isA<McpError>()
+              .having(
+                (e) => e.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('tasks.requests.tools.call'),
+              ),
         ),
       );
     });
@@ -198,11 +396,17 @@ void main() {
       expect(
         () => client.assertTaskCapability(Method.completionComplete),
         throwsA(
-          isA<McpError>().having(
-            (e) => e.message,
-            'message',
-            contains('tasks.requests.completion/complete'),
-          ),
+          isA<McpError>()
+              .having(
+                (e) => e.code,
+                'code',
+                ErrorCode.methodNotFound.value,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('tasks.requests.completion/complete'),
+              ),
         ),
       );
     });

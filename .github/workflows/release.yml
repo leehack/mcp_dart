@@ -41,6 +41,20 @@ jobs:
           echo "📦 Package: ${{ inputs.package }}"
           echo "📦 Detected version: $VERSION"
 
+      - name: Determine release type
+        id: release-type
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "make_latest=false" >> "$GITHUB_OUTPUT"
+            echo "📦 Release type: prerelease"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "make_latest=true" >> "$GITHUB_OUTPUT"
+            echo "📦 Release type: stable"
+          fi
+
       - name: Check if tag already exists
         run: |
           TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
@@ -69,4 +83,6 @@ jobs:
           tag_name: ${{ steps.create-tag.outputs.tag }}
           name: ${{ inputs.package }} ${{ steps.get-version.outputs.version }}
           generate_release_notes: true
+          prerelease: ${{ steps.release-type.outputs.prerelease }}
+          make_latest: ${{ steps.release-type.outputs.make_latest }}
           draft: false

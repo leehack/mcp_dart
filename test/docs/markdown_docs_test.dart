@@ -79,7 +79,7 @@ final _markdownLinkPattern = RegExp(
 );
 
 final _dartRunFilePattern = RegExp(
-  r'dart run (?<target>(?:example|packages|test|bin)/[^\s`]+\.dart)',
+  r'dart run (?<target>(?:example|packages|test|bin|tool)/[^\s`]+\.dart)',
 );
 
 Iterable<String> _markdownFiles(String repoRoot) sync* {

@@ -588,7 +588,7 @@ class McpServerInspector {
     }
 
     try {
-      tool.outputSchema!.validate(result.structuredContent);
+      tool.outputSchema!.validate(result.structuredContentJson?.toJson());
       checks.pass(
         'tools.output-schema.${tool.name}',
         'Structured output for ${tool.name} matched its outputSchema.',
