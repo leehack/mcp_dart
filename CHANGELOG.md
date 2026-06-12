@@ -65,6 +65,14 @@ explicitly and may still change before the official spec release.
 - Pointed prerelease package documentation links at `dev/2026-07-28-rc` so
   pub.dev users see the draft/RC docs that match the dev package.
 
+## 2.2.1
+
+### Spec Alignment
+
+- Accepted and preserved JSON Schema 2020-12 boolean subschemas in nested
+  schema positions such as object properties, array items, composition
+  keywords, and `not`.
+
 ## 2.2.0
 
 ### Documentation
