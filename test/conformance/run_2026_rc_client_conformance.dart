@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.2';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.3';
 const _defaultTimeout = Duration(seconds: 30);
 
 const _draftClientScenarios = [
@@ -158,7 +158,7 @@ Future<_ScenarioResult> _runScenario({
       '--scenario',
       scenario,
       '--spec-version',
-      'DRAFT-2026-v1',
+      '2026-07-28',
       '--verbose',
       '-o',
       outputDir.path,

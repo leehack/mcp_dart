@@ -181,6 +181,14 @@ class Server extends Protocol {
     );
   }
 
+  bool _acceptsProtocolVersion(String version) {
+    if (_supportedVersions.contains(version)) {
+      return true;
+    }
+    return isStatelessProtocolVersion(version) &&
+        _supportedVersions.any(isStatelessProtocolVersion);
+  }
+
   McpError? _validateStatelessRequestMetadata(JsonRpcRequest request) {
     final meta = request.meta;
     try {
@@ -200,7 +208,7 @@ class Server extends Protocol {
         'Missing required request metadata: ${McpMetaKey.protocolVersion}',
       );
     }
-    if (!_supportedVersions.contains(requestedVersion)) {
+    if (!_acceptsProtocolVersion(requestedVersion)) {
       return _unsupportedProtocolVersionError(requestedVersion);
     }
     if (!isStatelessProtocolVersion(requestedVersion)) {
@@ -747,7 +755,7 @@ class Server extends Protocol {
 
     final requestedProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
     if (requestedProtocolVersion is String &&
-        !_supportedVersions.contains(requestedProtocolVersion)) {
+        !_acceptsProtocolVersion(requestedProtocolVersion)) {
       return _unsupportedProtocolVersionError(requestedProtocolVersion);
     }
     if (requestedProtocolVersion is String &&

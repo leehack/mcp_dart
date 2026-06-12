@@ -19,7 +19,7 @@ Future<void> main(List<String> args) async {
   final scenario = Platform.environment['MCP_CONFORMANCE_SCENARIO'];
   final protocolVersion =
       Platform.environment['MCP_CONFORMANCE_PROTOCOL_VERSION'] ??
-          draftProtocolVersion2026V1;
+          draftProtocolVersion2026_07_28;
   final context = _readContext();
 
   switch (scenario) {

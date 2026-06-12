@@ -78,6 +78,11 @@ final client = McpClient(
 Prefer the `protocol` profile unless you need to target a specific protocol
 version for tests or interoperability debugging.
 
+Use `draftProtocolVersion2026_07_28` for MCP `2026-07-28` draft/RC testing.
+The older `draftProtocolVersion2026V1` alias is deprecated and kept only as an
+inbound compatibility marker for early conformance alpha fixtures; 2026
+profiles do not advertise it.
+
 ## 2026-07-28 Draft-Only API Areas
 
 The following features are MCP `2026-07-28` draft/RC behavior and should be
@@ -126,7 +131,7 @@ Before creating follow-up dev tags from `dev/2026-07-28-rc`, run:
 ```sh
 dart analyze
 dart run test/conformance/run_2025_server_conformance.dart
-npx -y @modelcontextprotocol/conformance@0.2.0-alpha.2 client \
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.3 client \
   --command "dart run test/conformance/mcp_2026_rc_client.dart" \
   --suite all \
   --spec-version 2025-11-25

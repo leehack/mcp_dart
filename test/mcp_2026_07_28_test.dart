@@ -9,6 +9,8 @@ import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
+const _legacyDraftProtocolVersion2026V1 = 'DRAFT-2026-v1';
+
 class RecordingTransport extends Transport {
   RecordingTransport({this.sessionIdValue});
 
@@ -335,10 +337,17 @@ void main() {
       );
       expect(
         supportedProtocolVersionsWithDraft,
-        contains(draftProtocolVersion2026V1),
+        isNot(contains(_legacyDraftProtocolVersion2026V1)),
+      );
+      expect(
+        statelessProtocolVersions,
+        isNot(contains(_legacyDraftProtocolVersion2026V1)),
       );
       expect(isStatelessProtocolVersion(draftProtocolVersion2026_07_28), true);
-      expect(isStatelessProtocolVersion(draftProtocolVersion2026V1), true);
+      expect(
+        isStatelessProtocolVersion(_legacyDraftProtocolVersion2026V1),
+        true,
+      );
       expect(isStatelessProtocolVersion(latestProtocolVersion), false);
     });
 

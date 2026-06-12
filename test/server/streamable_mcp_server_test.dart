@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
+const _legacyDraftProtocolVersion2026V1 = 'DRAFT-2026-v1';
+
 class _SseEvent {
   final String? id;
   final String data;
@@ -526,7 +528,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': draftProtocolVersion2026V1,
+            'MCP-Protocol-Version': _legacyDraftProtocolVersion2026V1,
             'Mcp-Method': Method.serverDiscover,
           },
         );
@@ -600,7 +602,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': draftProtocolVersion2026V1,
+            'MCP-Protocol-Version': _legacyDraftProtocolVersion2026V1,
             'Mcp-Method': method,
           },
         );
