@@ -132,6 +132,43 @@ void main() {
       expect(tools.first['name'], equals('test-tool'));
     });
 
+    test('legacy tool schema shims preserve boolean subschemas', () async {
+      server.tool(
+        'legacy-boolean-schema-tool',
+        inputSchemaProperties: {
+          'allowed': true,
+          'denied': false,
+          'named': {'type': 'string'},
+        },
+        outputSchemaProperties: {
+          'allowed': true,
+          'denied': false,
+        },
+        callback: ({args, extra}) async => const CallToolResult(content: []),
+      );
+
+      await server.connect(transport);
+
+      transport.receiveMessage(const JsonRpcListToolsRequest(id: 1));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      final tool = tools.single as Map;
+      final inputSchema = tool['inputSchema'] as Map;
+      final outputSchema = tool['outputSchema'] as Map;
+
+      expect(inputSchema['properties'], {
+        'allowed': true,
+        'denied': false,
+        'named': {'type': 'string'},
+      });
+      expect(outputSchema['properties'], {
+        'allowed': true,
+        'denied': false,
+      });
+    });
+
     test('connect syncs tool parameter header mappings to transports',
         () async {
       server = McpServer(

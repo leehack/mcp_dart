@@ -550,24 +550,17 @@ extension JsonSchemaValidation on JsonSchema {
   ) {
     final allOf = keywords['allOf'];
     if (keywords.containsKey('allOf')) {
-      for (final entry in _compositionSchemaList('allOf', allOf, path)) {
-        _validate(
-          JsonSchema.fromJson(entry),
-          data,
-          path,
-        );
+      for (final schema in _compositionSchemaList('allOf', allOf, path)) {
+        _validate(schema, data, path);
       }
     }
 
     final anyOf = keywords['anyOf'];
     if (keywords.containsKey('anyOf')) {
-      final matches = _compositionSchemaList('anyOf', anyOf, path).any((entry) {
+      final matches =
+          _compositionSchemaList('anyOf', anyOf, path).any((schema) {
         try {
-          _validate(
-            JsonSchema.fromJson(entry),
-            data,
-            path,
-          );
+          _validate(schema, data, path);
           return true;
         } on JsonSchemaValidationException {
           return false;
@@ -584,13 +577,9 @@ extension JsonSchemaValidation on JsonSchema {
     final oneOf = keywords['oneOf'];
     if (keywords.containsKey('oneOf')) {
       final matches =
-          _compositionSchemaList('oneOf', oneOf, path).where((entry) {
+          _compositionSchemaList('oneOf', oneOf, path).where((schema) {
         try {
-          _validate(
-            JsonSchema.fromJson(entry),
-            data,
-            path,
-          );
+          _validate(schema, data, path);
           return true;
         } on JsonSchemaValidationException {
           return false;
@@ -606,18 +595,17 @@ extension JsonSchemaValidation on JsonSchema {
 
     final not = keywords['not'];
     if (keywords.containsKey('not')) {
-      if (not is! Map) {
+      final JsonSchema notSchema;
+      try {
+        notSchema = JsonSchema.fromJsonValue(not);
+      } on FormatException {
         throw JsonSchemaValidationException(
-          'not must be a schema object',
+          'not must be a schema object or boolean',
           path,
         );
       }
       try {
-        _validate(
-          JsonSchema.fromJson(Map<String, dynamic>.from(not)),
-          data,
-          path,
-        );
+        _validate(notSchema, data, path);
       } on JsonSchemaValidationException {
         return;
       }
@@ -625,7 +613,7 @@ extension JsonSchemaValidation on JsonSchema {
     }
   }
 
-  List<Map<String, dynamic>> _compositionSchemaList(
+  List<JsonSchema> _compositionSchemaList(
     String keyword,
     dynamic value,
     List<String> path,
@@ -634,13 +622,14 @@ extension JsonSchemaValidation on JsonSchema {
       throw JsonSchemaValidationException('$keyword must be a list', path);
     }
     return value.map((entry) {
-      if (entry is! Map) {
+      try {
+        return JsonSchema.fromJsonValue(entry);
+      } on FormatException {
         throw JsonSchemaValidationException(
-          '$keyword entries must be schema objects',
+          '$keyword entries must be schema objects or booleans',
           path,
         );
       }
-      return Map<String, dynamic>.from(entry);
     }).toList();
   }
 

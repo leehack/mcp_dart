@@ -2281,7 +2281,8 @@ class McpServer {
           (inputSchemaProperties != null
               ? ToolInputSchema(
                   properties: inputSchemaProperties.map(
-                    (key, value) => MapEntry(key, JsonSchema.fromJson(value)),
+                    (key, value) =>
+                        MapEntry(key, JsonSchema.fromJsonValue(value)),
                   ),
                 )
               : null),
@@ -2289,7 +2290,8 @@ class McpServer {
           (outputSchemaProperties != null
               ? ToolOutputSchema(
                   properties: outputSchemaProperties.map(
-                    (key, value) => MapEntry(key, JsonSchema.fromJson(value)),
+                    (key, value) =>
+                        MapEntry(key, JsonSchema.fromJsonValue(value)),
                   ),
                 )
               : null),
