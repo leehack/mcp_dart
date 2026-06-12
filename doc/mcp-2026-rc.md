@@ -141,6 +141,11 @@ dart pub global run pana --no-warning
 dart run tool/validate_cli_publish.dart
 ```
 
+The `run_2026_rc_server_conformance.dart` gate runs the full
+`@modelcontextprotocol/conformance@0.2.0-alpha.3` server scenario list for
+`--spec-version 2026-07-28`, including the stable-style tool, resource, prompt,
+completion, and JSON Schema scenarios that the alpha package tags for the RC.
+
 For dev packages, keep package documentation links pointed at
 `dev/2026-07-28-rc` until the draft work is ready to merge back to `main`.
 Restore those links to `main` as part of the final spec release prep.

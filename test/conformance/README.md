@@ -53,10 +53,10 @@ Run the current server baseline from the repository root:
 dart run test/conformance/run_2026_rc_server_conformance.dart
 ```
 
-The runner starts a local `StreamableMcpServer` with JSON stateless responses
-enabled, runs the draft server scenarios from
-`@modelcontextprotocol/conformance@0.2.0-alpha.3` one by one with
-`--spec-version 2026-07-28`, and writes per-run artifacts under
+The runner starts a local `StreamableMcpServer` in default Streamable HTTP SSE
+response mode, runs the full `2026-07-28` server scenario list from
+`@modelcontextprotocol/conformance@0.2.0-alpha.3` one by one with `--suite all`
+and `--spec-version 2026-07-28`, and writes per-run artifacts under
 `.dart_tool/conformance/2026_rc/`.
 
 Expected failures live in `2026_rc_expected_failures.txt`. When a scenario is
