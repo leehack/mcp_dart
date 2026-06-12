@@ -221,6 +221,31 @@ void main() {
       );
     });
 
+    test('Tool preserves boolean subschema properties end-to-end', () {
+      final json = {
+        'name': 'boolean-subschemas',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'allowed': true,
+            'denied': false,
+          },
+        },
+      };
+
+      final tool = Tool.fromJson(json);
+
+      expect(tool.toJson(), json);
+      expect(
+        ListToolsResult.fromJson({
+          'tools': [json],
+        }).toJson(),
+        {
+          'tools': [json],
+        },
+      );
+    });
+
     test('Real-world MCP server tool schema example', () {
       // Example from a real MCP server like Hugging Face
       final serverResponse = {
