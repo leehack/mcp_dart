@@ -1,4 +1,4 @@
-# Expected failures for @modelcontextprotocol/conformance@0.2.0-alpha.3
+# Expected failures for @modelcontextprotocol/conformance@0.2.0-alpha.4
 # against the full 2026-07-28 RC/DRAFT server suite.
 #
 # Keep this list scenario-based so the baseline is easy to review. When a

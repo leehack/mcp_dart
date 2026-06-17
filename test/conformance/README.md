@@ -26,14 +26,14 @@ dart run test/conformance/run_2025_server_conformance.dart
 ```
 
 The runner starts `mcp_2025_server.dart`, runs
-`@modelcontextprotocol/conformance@0.2.0-alpha.3 server --suite all
+`@modelcontextprotocol/conformance@0.2.0-alpha.4 server --suite all
 --spec-version 2025-11-25`, and writes artifacts under
 `.dart_tool/conformance/2025_server/`.
 
 Run the stable client suite from the repository root:
 
 ```bash
-npx -y @modelcontextprotocol/conformance@0.2.0-alpha.3 client \
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.4 client \
   --command "dart run test/conformance/mcp_2026_rc_client.dart" \
   --suite all \
   --spec-version 2025-11-25 \
@@ -55,7 +55,7 @@ dart run test/conformance/run_2026_rc_server_conformance.dart
 
 The runner starts a local `StreamableMcpServer` in default Streamable HTTP SSE
 response mode, runs the full `2026-07-28` server scenario list from
-`@modelcontextprotocol/conformance@0.2.0-alpha.3` one by one with `--suite all`
+`@modelcontextprotocol/conformance@0.2.0-alpha.4` one by one with `--suite all`
 and `--spec-version 2026-07-28`, and writes per-run artifacts under
 `.dart_tool/conformance/2026_rc/`.
 
@@ -73,3 +73,6 @@ package's scenario servers and writes per-run artifacts under
 `.dart_tool/conformance/2026_rc_client/`.
 
 Client expected failures live in `2026_rc_client_expected_failures.txt`.
+The 2026 client wrapper is aligned with the scenarios returned by
+`conformance list --client --spec-version 2026-07-28`; stable-only client
+scenarios remain covered by the stable `2025-11-25` client suite above.

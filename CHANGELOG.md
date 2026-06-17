@@ -3,10 +3,10 @@
 ### Conformance and release readiness
 
 - Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.3`, with 2026 RC runs pinned
-  to `2026-07-28`, the full 2026 server scenario list covered in CI, and the
-  current upstream client fixture gap tracked as an
-  expected failure.
+  `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with 2026 RC runs pinned
+  to `2026-07-28`, the full 2026 server scenario list covered in CI, the 2026
+  client wrapper aligned with alpha.4's spec-filtered scenario list, and the
+  current upstream client fixture gap tracked as an expected failure.
 - Removed the legacy `DRAFT-2026-v1` draft alias now that official conformance
   targets the `2026-07-28` wire version.
 

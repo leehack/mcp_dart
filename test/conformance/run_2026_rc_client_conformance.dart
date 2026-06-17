@@ -3,14 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.3';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.4';
 const _defaultTimeout = Duration(seconds: 30);
 
 const _draftClientScenarios = [
-  'initialize',
   'tools_call',
-  'elicitation-sep1034-client-defaults',
-  'sse-retry',
   'request-metadata',
   'auth/metadata-default',
   'auth/metadata-var1',
