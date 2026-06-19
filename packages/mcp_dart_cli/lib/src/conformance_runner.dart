@@ -922,6 +922,8 @@ class _DiscoveringConformanceTransport extends Transport
               'name': 'conformance-server',
               'version': '1.0.0',
             },
+            'ttlMs': 0,
+            'cacheScope': _cacheScopePrivate,
           },
         ),
       );
@@ -1480,18 +1482,21 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
               jsonEncode(
                 JsonRpcResponse(
                   id: id,
-                  result: const DiscoverResult(
-                    supportedVersions: <String>[
+                  result: const <String, dynamic>{
+                    'resultType': _resultTypeComplete,
+                    'supportedVersions': <String>[
                       _draftProtocolVersion2026_07_28,
                     ],
-                    capabilities: ServerCapabilities(
-                      tools: ServerCapabilitiesTools(),
-                    ),
-                    serverInfo: Implementation(
-                      name: 'modern-http-server',
-                      version: '1.0.0',
-                    ),
-                  ).toJson(),
+                    'capabilities': <String, dynamic>{
+                      'tools': <String, dynamic>{},
+                    },
+                    'serverInfo': <String, dynamic>{
+                      'name': 'modern-http-server',
+                      'version': '1.0.0',
+                    },
+                    'ttlMs': 0,
+                    'cacheScope': _cacheScopePrivate,
+                  },
                 ).toJson(),
               ),
             );

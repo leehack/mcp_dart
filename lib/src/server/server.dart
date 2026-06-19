@@ -873,6 +873,7 @@ class Server extends Protocol {
 
   bool _requiresCacheableResult(String method) {
     return switch (method) {
+      Method.serverDiscover ||
       Method.toolsList ||
       Method.promptsList ||
       Method.resourcesList ||

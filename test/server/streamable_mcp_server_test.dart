@@ -558,6 +558,47 @@ void main() {
       );
     });
 
+    test('adds cache hints to stateless server discover responses', () async {
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          return McpServer(
+            const Implementation(name: 'DiscoverServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.preview2026,
+            ),
+          );
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode({
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-cache',
+          'method': Method.serverDiscover,
+          'params': {'_meta': statelessMeta()},
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'Mcp-Method': Method.serverDiscover,
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      final message = jsonDecode(response.body) as Map<String, dynamic>;
+      final result = message['result'] as Map<String, dynamic>;
+      expect(result['resultType'], resultTypeComplete);
+      expect(result['ttlMs'], 0);
+      expect(result['cacheScope'], CacheScope.private);
+    });
+
     test('rejects removed stateless request methods before legacy parsing',
         () async {
       await server.stop();

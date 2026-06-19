@@ -130,7 +130,7 @@ Before creating follow-up dev tags from `dev/2026-07-28-rc`, run:
 ```sh
 dart analyze
 dart run test/conformance/run_2025_server_conformance.dart
-npx -y @modelcontextprotocol/conformance@0.2.0-alpha.3 client \
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.4 client \
   --command "dart run test/conformance/mcp_2026_rc_client.dart" \
   --suite all \
   --spec-version 2025-11-25
@@ -142,9 +142,15 @@ dart run tool/validate_cli_publish.dart
 ```
 
 The `run_2026_rc_server_conformance.dart` gate runs the full
-`@modelcontextprotocol/conformance@0.2.0-alpha.3` server scenario list for
+`@modelcontextprotocol/conformance@0.2.0-alpha.4` server scenario list for
 `--spec-version 2026-07-28`, including the stable-style tool, resource, prompt,
 completion, and JSON Schema scenarios that the alpha package tags for the RC.
+
+For cross-SDK smoke coverage against the TypeScript SDK 2026 preview client,
+run the manual fixture documented in
+[`doc/interoperability.md`](interoperability.md#running-interop-checks-locally).
+Keep that fixture out of CI until upstream publishes a 2026-compatible alpha
+package instead of requiring a `pkg.pr.new` PR preview.
 
 For dev packages, keep package documentation links pointed at
 `dev/2026-07-28-rc` until the draft work is ready to merge back to `main`.

@@ -16,6 +16,7 @@ bool _isProgressToken(Object? token) =>
     (token is double && token.isFinite && token == token.truncateToDouble());
 
 const Set<String> _statelessCacheableResultMethods = {
+  Method.serverDiscover,
   Method.toolsList,
   Method.promptsList,
   Method.resourcesList,

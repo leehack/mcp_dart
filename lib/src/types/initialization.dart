@@ -1345,7 +1345,7 @@ class InitializeResult implements BaseResultData {
 }
 
 /// Result data for a successful `server/discover` request.
-class DiscoverResult implements BaseResultData {
+class DiscoverResult implements CacheableResultData {
   /// Result discriminator used by the 2026 result model.
   final String resultType;
 
@@ -1361,6 +1361,14 @@ class DiscoverResult implements BaseResultData {
   /// Instructions describing how to use the server and its features.
   final String? instructions;
 
+  /// How long, in milliseconds, the client may consider this result fresh.
+  @override
+  final int? ttlMs;
+
+  /// Intended cache visibility: `public` or `private`.
+  @override
+  final String? cacheScope;
+
   /// Optional metadata.
   @override
   final Map<String, dynamic>? meta;
@@ -1371,6 +1379,8 @@ class DiscoverResult implements BaseResultData {
     required this.capabilities,
     required this.serverInfo,
     this.instructions,
+    this.ttlMs,
+    this.cacheScope,
     this.meta,
   });
 
@@ -1407,12 +1417,19 @@ class DiscoverResult implements BaseResultData {
         json['instructions'],
         'DiscoverResult.instructions',
       ),
+      ttlMs: readOptionalTtlMs(json['ttlMs'], 'DiscoverResult.ttlMs'),
+      cacheScope: readOptionalCacheScope(
+        json['cacheScope'],
+        'DiscoverResult.cacheScope',
+      ),
       meta: readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta'),
     );
   }
 
   @override
   Map<String, dynamic> toJson() {
+    validateTtlMs(ttlMs, 'DiscoverResult.ttlMs');
+    validateCacheScope(cacheScope, 'DiscoverResult.cacheScope');
     if (resultType != resultTypeComplete) {
       throw ArgumentError.value(
         resultType,
@@ -1427,6 +1444,8 @@ class DiscoverResult implements BaseResultData {
       'capabilities': capabilities.toJson(omitLegacyTasks: true),
       'serverInfo': serverInfo.toJson(),
       if (instructions != null) 'instructions': instructions,
+      if (ttlMs != null) 'ttlMs': ttlMs,
+      if (cacheScope != null) 'cacheScope': cacheScope,
       if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
     };
   }

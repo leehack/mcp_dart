@@ -143,6 +143,8 @@ class DiscoveringClientTransport extends Transport
             supportedVersions: discoverVersions,
             capabilities: capabilities,
             serverInfo: const Implementation(name: 'server', version: '1.0.0'),
+            ttlMs: 0,
+            cacheScope: CacheScope.private,
           ).toJson(),
         ),
       );
@@ -1029,15 +1031,22 @@ void main() {
         capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
         serverInfo: Implementation(name: 'server', version: '1.0.0'),
         instructions: 'Use the tools.',
+        ttlMs: 1000,
+        cacheScope: CacheScope.public,
       );
       final resultJson = result.toJson();
       expect(resultJson['resultType'], 'complete');
       expect(resultJson['supportedVersions'], [draftProtocolVersion2026_07_28]);
       expect(resultJson['capabilities'], {'tools': <String, dynamic>{}});
+      expect(resultJson['ttlMs'], 1000);
+      expect(resultJson['cacheScope'], CacheScope.public);
+      final parsedResult = DiscoverResult.fromJson(resultJson);
       expect(
-        DiscoverResult.fromJson(resultJson).instructions,
+        parsedResult.instructions,
         'Use the tools.',
       );
+      expect(parsedResult.ttlMs, 1000);
+      expect(parsedResult.cacheScope, CacheScope.public);
     });
 
     test('stateless metadata omits legacy task capabilities', () {
@@ -1134,6 +1143,14 @@ void main() {
         () => DiscoverResult.fromJson({
               ...result,
               'instructions': 1,
+            }),
+        () => DiscoverResult.fromJson({
+              ...result,
+              'ttlMs': -1,
+            }),
+        () => DiscoverResult.fromJson({
+              ...result,
+              'cacheScope': 'global',
             }),
         () => ClientCapabilitiesSampling.fromJson({
               'tools': {'bad': Object()},
