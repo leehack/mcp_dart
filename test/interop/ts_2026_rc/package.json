@@ -8,10 +8,11 @@
     "client": "node src/client.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "https://pkg.pr.new/modelcontextprotocol/typescript-sdk/@modelcontextprotocol/client@87ce6c5"
+    "@cfworker/json-schema": "4.1.1",
+    "@modelcontextprotocol/client": "https://pkg.pr.new/modelcontextprotocol/typescript-sdk/@modelcontextprotocol/client@87ce6c5",
+    "@modelcontextprotocol/server": "2.0.0-alpha.2"
   },
   "engines": {
     "node": ">=20"
   }
 }
-

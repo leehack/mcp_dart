@@ -2,12 +2,18 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:mcp_dart/mcp_dart.dart';
+
 Future<void> main(List<String> args) async {
   final repoRoot = Directory.current;
   final fixtureDir = Directory('test/interop/ts_2026_rc');
   final clientPackage = File(
     'test/interop/ts_2026_rc/node_modules/'
     '@modelcontextprotocol/client/package.json',
+  );
+  final serverPackage = File(
+    'test/interop/ts_2026_rc/node_modules/'
+    '@modelcontextprotocol/server/package.json',
   );
 
   if (!File('pubspec.yaml').existsSync() || !fixtureDir.existsSync()) {
@@ -27,7 +33,29 @@ Future<void> main(List<String> args) async {
     exitCode = 64;
     return;
   }
+  if (!serverPackage.existsSync()) {
+    stderr.writeln(
+      'Missing TypeScript server fixture dependencies. Run:\n'
+      '  cd test/interop/ts_2026_rc\n'
+      '  npm install',
+    );
+    exitCode = 64;
+    return;
+  }
 
+  try {
+    await _runTsClientAgainstDartServer(repoRoot, fixtureDir);
+    await _runDartClientAgainstTsServer(repoRoot, fixtureDir);
+  } on Object catch (error) {
+    stderr.writeln('TS 2026 RC interop failed: $error');
+    exitCode = 1;
+  }
+}
+
+Future<void> _runTsClientAgainstDartServer(
+  Directory repoRoot,
+  Directory fixtureDir,
+) async {
   final server = await Process.start(
     Platform.resolvedExecutable,
     [
@@ -42,22 +70,15 @@ Future<void> main(List<String> args) async {
   );
 
   final serverUrl = Completer<String>();
-  final urlPattern = RegExp(r'(http://[^\s]+)');
-
   final serverStdout = _pipeLines(
     server.stdout,
     stdout,
     '[dart-server]',
-    onLine: (line) {
-      if (serverUrl.isCompleted ||
-          !line.contains('MCP 2026 RC conformance server listening on')) {
-        return;
-      }
-      final match = urlPattern.firstMatch(line);
-      if (match != null) {
-        serverUrl.complete(match.group(1)!);
-      }
-    },
+    onLine: (line) => _completeUrlFromLine(
+      serverUrl,
+      line,
+      'MCP 2026 RC conformance server listening on',
+    ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[dart-server]');
 
@@ -82,16 +103,128 @@ Future<void> main(List<String> args) async {
     await Future.wait([clientStdout, clientStderr]);
 
     if (clientExit != 0) {
-      exitCode = clientExit;
-      return;
+      throw StateError('TypeScript 2026 RC client exited with $clientExit');
     }
-  } on Object catch (error) {
-    stderr.writeln('TS 2026 RC interop failed: $error');
-    exitCode = 1;
   } finally {
     await _terminate(server);
     await Future.wait([serverStdout, serverStderr]);
   }
+}
+
+Future<void> _runDartClientAgainstTsServer(
+  Directory repoRoot,
+  Directory fixtureDir,
+) async {
+  final server = await Process.start(
+    'node',
+    ['src/server.mjs', '--host', '127.0.0.1', '--port', '0'],
+    workingDirectory: fixtureDir.path,
+  );
+
+  final serverUrl = Completer<String>();
+  final serverStdout = _pipeLines(
+    server.stdout,
+    stdout,
+    '[ts-server]',
+    onLine: (line) => _completeUrlFromLine(
+      serverUrl,
+      line,
+      'TS 2026 RC interop server listening on',
+    ),
+  );
+  final serverStderr = _pipeLines(server.stderr, stderr, '[ts-server]');
+
+  try {
+    final url = await serverUrl.future.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () {
+        throw TimeoutException('Timed out waiting for TypeScript server URL');
+      },
+    );
+    try {
+      await _exerciseDartClient(url);
+    } on McpError catch (error) {
+      if (!_isKnownTypeScriptServerAlphaGap(error)) {
+        rethrow;
+      }
+      stdout.writeln(
+        '[dart-client] reverse TS server diagnostic skipped: ${error.message}',
+      );
+    }
+  } finally {
+    await _terminate(server);
+    await Future.wait([serverStdout, serverStderr]);
+  }
+}
+
+bool _isKnownTypeScriptServerAlphaGap(McpError error) {
+  final text = error.toString();
+  return text.contains('MCP stateless responses must include resultType') ||
+      text.contains('server/discover not available');
+}
+
+Future<void> _exerciseDartClient(String url) async {
+  final transport = StreamableHttpClientTransport(Uri.parse(url));
+  final client = McpClient(
+    const Implementation(name: 'mcp-dart-2026-rc-client', version: '0.0.0'),
+    options: const McpClientOptions(
+      protocol: McpProtocol.preview2026,
+      capabilities: ClientCapabilities(),
+    ),
+  );
+
+  try {
+    await client.connect(transport).timeout(const Duration(seconds: 20));
+    final version = client.getProtocolVersion();
+    if (version != draftProtocolVersion2026_07_28) {
+      throw StateError('Expected 2026-07-28, got $version');
+    }
+    final serverInfo = client.getServerVersion();
+    if (serverInfo?.name != 'ts-2026-rc-interop-server') {
+      throw StateError('Unexpected TS server info: ${serverInfo?.toJson()}');
+    }
+
+    final tools = await client.listTools().timeout(const Duration(seconds: 10));
+    if (!tools.tools.any((tool) => tool.name == 'ts_echo')) {
+      throw StateError(
+        'TS server tools/list did not include ts_echo: '
+        '${tools.tools.map((tool) => tool.name).toList()}',
+      );
+    }
+
+    const message = 'from Dart 2026 RC preview';
+    final echo = await client
+        .callTool(
+          const CallToolRequest(
+            name: 'ts_echo',
+            arguments: {'message': message},
+          ),
+        )
+        .timeout(const Duration(seconds: 10));
+    final text = _firstText(echo, 'ts_echo');
+    if (text != message) {
+      throw StateError('Unexpected ts_echo result: $text');
+    }
+
+    stdout.writeln(
+      '[dart-client] ${jsonEncode({
+            'protocolVersion': version,
+            'serverInfo': serverInfo?.toJson(),
+            'toolCount': tools.tools.length,
+            'echo': text,
+          })}',
+    );
+  } finally {
+    await client.close();
+  }
+}
+
+String _firstText(CallToolResult result, String label) {
+  final content = result.content;
+  if (content.isEmpty || content.first is! TextContent) {
+    throw StateError('$label expected text content: ${result.toJson()}');
+  }
+  return (content.first as TextContent).text;
 }
 
 Future<void> _pipeLines(
@@ -104,6 +237,21 @@ Future<void> _pipeLines(
       in stream.transform(utf8.decoder).transform(const LineSplitter())) {
     onLine?.call(line);
     sink.writeln('$prefix $line');
+  }
+}
+
+void _completeUrlFromLine(
+  Completer<String> completer,
+  String line,
+  String marker,
+) {
+  if (completer.isCompleted || !line.contains(marker)) {
+    return;
+  }
+  final urlPattern = RegExp(r'(http://[^\s]+)');
+  final match = urlPattern.firstMatch(line);
+  if (match != null) {
+    completer.complete(match.group(1)!);
   }
 }
 

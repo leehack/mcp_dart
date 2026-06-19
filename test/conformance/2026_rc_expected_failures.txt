@@ -3,3 +3,8 @@
 #
 # Keep this list scenario-based so the baseline is easy to review. When a
 # scenario turns green, remove it from this file in the same PR as the fix.
+
+# alpha.4 still expects the pre-renumber HeaderMismatch error code -32001.
+# The live 2026-07-28 draft now assigns HeaderMismatch to -32020.
+server-stateless
+http-custom-header-server-validation

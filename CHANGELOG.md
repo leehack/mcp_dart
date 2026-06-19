@@ -2,9 +2,22 @@
 
 ### Conformance and release readiness
 
-- Added a manual TypeScript SDK 2026 RC interop fixture pinned to the upstream
-  PR #2327 preview package, covering modern negotiation, `tools/list`, and
-  `tools/call` against the Dart 2026 RC conformance server.
+- Expanded the manual TypeScript SDK 2026 RC interop fixture pinned to the
+  upstream PR #2327 preview package, covering modern negotiation,
+  `server/discover` cache metadata, `tools/list`, `tools/call`,
+  `x-mcp-header` mirroring, progress notifications, raw HTTP header,
+  unsupported-version, and removed core RPC rejection, `subscriptions/listen`,
+  and Streamable HTTP SSE cancellation against the Dart 2026 RC conformance
+  server.
+- Added a diagnostic Dart preview client -> TypeScript server alpha path and
+  documented the current TS alpha gaps around mandatory `server/discover` and
+  stateless `resultType` responses.
+- Aligned 2026 draft protocol-defined error codes with the live draft:
+  `HeaderMismatch` is now `-32020`,
+  `MissingRequiredClientCapability` is now `-32021`, and
+  `UnsupportedProtocolVersion` is now `-32022`. The conformance alpha.4 server
+  scenarios that still expect the old `HeaderMismatch` code are tracked as
+  expected failures.
 - Marked `server/discover` as a 2026 cacheable result so stateless responses
   include default `ttlMs` and `cacheScope` hints.
 - Updated official conformance gates to
