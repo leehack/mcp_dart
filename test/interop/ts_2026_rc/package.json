@@ -1,0 +1,17 @@
+{
+  "name": "mcp-dart-ts-2026-rc-interop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Manual TypeScript SDK 2026 RC interop fixture for mcp_dart.",
+  "scripts": {
+    "client": "node src/client.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "https://pkg.pr.new/modelcontextprotocol/typescript-sdk/@modelcontextprotocol/client@87ce6c5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+

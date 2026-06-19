@@ -21,6 +21,7 @@ For requirement-level MCP 2025-11-25 coverage, see the
 | Dart client -> TypeScript SDK server | Streamable HTTP | `2025-11-25` | [`test/interop/dart_client_with_ts_server_test.dart`](../test/interop/dart_client_with_ts_server_test.dart), [`test/interop/ts/`](../test/interop/ts/) | Verified | Covers tool calls and stale preconfigured session-id recovery. |
 | TypeScript SDK client -> Dart server | stdio | `2025-11-25` | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Runs the compiled TypeScript client fixture against a Dart server process and checks that an official TS client can list tools immediately after the lifecycle handshake. |
 | TypeScript SDK client -> Dart server | Streamable HTTP | `2025-11-25` | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Includes official TS Streamable HTTP client lifecycle coverage, pre-`initialized` operation rejection, GET SSE streams, and `Last-Event-ID` replay behavior. |
+| TypeScript SDK preview client -> Dart server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_rc/`](../test/interop/ts_2026_rc/), [`tool/testing/run_ts_2026_rc_interop.dart`](../tool/testing/run_ts_2026_rc_interop.dart) | Experimental manual check | Uses a pinned `pkg.pr.new` preview from TypeScript SDK PR #2327 because published TS packages do not yet advertise `2026-07-28`. Covers modern negotiation, `tools/list`, and `tools/call` against the Dart 2026 RC conformance server. Not a CI gate yet. |
 | Dart client -> Python MCP server | stdio | Server-dependent | [`doc/transports.md`](transports.md#connect-to-python-server) | Documented recipe | The transport can spawn Python servers over stdio, but this repo does not yet include an automated Python SDK fixture. |
 | Flutter/Web client -> Dart server | Streamable HTTP | `2025-11-25` | [`example/flutter_http_client/`](../example/flutter_http_client/), [`doc/flutter-recipes.md`](flutter-recipes.md) | Documented recipe | Flutter Web cannot spawn stdio servers; use Streamable HTTP or another browser-safe transport. |
 | MCP Apps host/client metadata | stdio or Streamable HTTP | `2025-11-25` plus `io.modelcontextprotocol/ui` extension | [`doc/mcp-apps.md`](mcp-apps.md), [`example/mcp_apps_helpers_server.dart`](../example/mcp_apps_helpers_server.dart), [`test/types/mcp_ui_test.dart`](../test/types/mcp_ui_test.dart), [`test/server/mcp_ui_test.dart`](../test/server/mcp_ui_test.dart) | Verified | Verified coverage is limited to SDK metadata helpers, serialization, and checked-in examples; host rendering behavior varies by host, so verify UI metadata against your target host. |
@@ -41,6 +42,20 @@ dart test --tags interop
 ```
 
 If the compiled fixtures are missing, local test runs skip the interop groups; CI should fail when required fixtures are unavailable.
+
+The TypeScript 2026 RC fixture is manual while the upstream SDK support remains
+unreleased and split across preview PRs:
+
+```bash
+# From repository root
+cd test/interop/ts_2026_rc
+npm install
+cd ../../..
+dart run tool/testing/run_ts_2026_rc_interop.dart
+```
+
+This starts the Dart 2026 RC conformance server and runs the pinned TypeScript
+SDK preview client against it.
 
 The CLI spec conformance gate covers raw-wire negative cases that do not need a
 cross-SDK fixture, including stable MCP 2025-11-25 checks and MCP 2026-07-28 RC
@@ -65,6 +80,8 @@ When adding a new interoperability claim:
 ## Known gaps worth tracking
 
 - Automated Python SDK fixture coverage.
+- CI promotion for the TypeScript 2026 RC interop fixture after the TypeScript
+  SDK publishes a 2026-compatible alpha package.
 - Host-specific MCP Apps rendering compatibility notes.
 - More OAuth-protected remote server scenarios beyond the checked-in examples.
 - A broader compatibility table once additional SDKs expose stable 2025-11-25 fixtures.

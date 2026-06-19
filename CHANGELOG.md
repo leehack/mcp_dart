@@ -2,6 +2,11 @@
 
 ### Conformance and release readiness
 
+- Added a manual TypeScript SDK 2026 RC interop fixture pinned to the upstream
+  PR #2327 preview package, covering modern negotiation, `tools/list`, and
+  `tools/call` against the Dart 2026 RC conformance server.
+- Marked `server/discover` as a 2026 cacheable result so stateless responses
+  include default `ttlMs` and `cacheScope` hints.
 - Updated official conformance gates to
   `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with 2026 RC runs pinned
   to `2026-07-28`, the full 2026 server scenario list covered in CI, the 2026
