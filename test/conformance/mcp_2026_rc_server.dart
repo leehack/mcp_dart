@@ -73,6 +73,30 @@ McpServer _createConformanceServer() {
     callback: (args, extra) async => const CallToolResult(content: []),
   );
 
+  server.registerTool(
+    'test_custom_headers_valid',
+    description: 'Exercises valid 2026 x-mcp-header parameter mirroring',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'region': JsonSchema.string(mcpHeader: 'Region'),
+        'count': JsonSchema.integer(mcpHeader: 'Count'),
+        'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
+        'auth': JsonSchema.object(
+          properties: {
+            'tenant': JsonSchema.string(mcpHeader: 'Tenant'),
+          },
+          required: ['tenant'],
+        ),
+      },
+      required: ['region', 'count', 'dryRun', 'auth'],
+    ),
+    callback: (args, extra) async {
+      return const CallToolResult(
+        content: [TextContent(text: 'custom-header-ok')],
+      );
+    },
+  );
+
   _registerInputRequiredDiagnostics(server);
 
   return server;
