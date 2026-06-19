@@ -6,6 +6,8 @@ import 'package:mcp_dart/mcp_dart.dart';
 import '../interop/test_dart_server.dart' as interop;
 import 'mcp_2025_server.dart' as stable_conformance;
 
+int _streamCancellationCount = 0;
+
 /// Dedicated HTTP server fixture for the MCP 2026 RC conformance package.
 ///
 /// This deliberately starts from the existing cross-SDK interop server and
@@ -66,6 +68,11 @@ McpServer _createConformanceServer() {
     server,
     includeResourceSubscriptions: false,
   );
+  server.server.registerCapabilities(
+    const ServerCapabilities(
+      tools: ServerCapabilitiesTools(listChanged: true),
+    ),
+  );
 
   server.registerTool(
     'a_header_probe',
@@ -73,9 +80,99 @@ McpServer _createConformanceServer() {
     callback: (args, extra) async => const CallToolResult(content: []),
   );
 
+  server.registerTool(
+    'test_custom_headers_valid',
+    description: 'Exercises valid 2026 x-mcp-header parameter mirroring',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'region': JsonSchema.string(mcpHeader: 'Region'),
+        'count': JsonSchema.integer(mcpHeader: 'Count'),
+        'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
+        'auth': JsonSchema.object(
+          properties: {
+            'tenant': JsonSchema.string(mcpHeader: 'Tenant'),
+          },
+          required: ['tenant'],
+        ),
+      },
+      required: ['region', 'count', 'dryRun', 'auth'],
+    ),
+    callback: (args, extra) async {
+      return const CallToolResult(
+        content: [TextContent(text: 'custom-header-ok')],
+      );
+    },
+  );
+
+  _registerStreamDiagnostics(server);
   _registerInputRequiredDiagnostics(server);
 
   return server;
+}
+
+void _registerStreamDiagnostics(McpServer server) {
+  server.registerTool(
+    'test_stream_cancellation',
+    description: 'Keeps an SSE response open until the HTTP client aborts it',
+    callback: (args, extra) async {
+      final observed = Completer<void>();
+      final abortSub = extra.signal.onAbort.listen((_) {
+        _streamCancellationCount++;
+        if (!observed.isCompleted) {
+          observed.complete();
+        }
+      });
+
+      try {
+        await extra.sendProgress(
+          1,
+          total: 1,
+          message: 'cancellation probe started',
+        );
+        await observed.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            if (!observed.isCompleted) {
+              observed.complete();
+            }
+          },
+        );
+      } finally {
+        await abortSub.cancel();
+      }
+
+      return _textResult(
+        extra.signal.aborted ? 'cancelled' : 'not-cancelled',
+      );
+    },
+  );
+
+  server.registerTool(
+    'test_stream_cancellation_status',
+    description: 'Reports observed HTTP stream cancellation count',
+    callback: (args, extra) async {
+      return _textResult(_streamCancellationCount.toString());
+    },
+  );
+
+  server.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
+    Method.subscriptionsListen,
+    (request, extra) async {
+      final acknowledged = request.listenParams.notifications.acknowledgedBy(
+        server.server.getCapabilities(),
+      );
+      await extra.sendSubscriptionAcknowledged(acknowledged);
+      await extra.sendSubscriptionNotification(
+        const JsonRpcToolListChangedNotification(),
+      );
+      return const EmptyResult();
+    },
+    (id, params, meta) => JsonRpcSubscriptionsListenRequest(
+      id: id,
+      listenParams: SubscriptionsListenRequest.fromJson(params!),
+      meta: meta,
+    ),
+  );
 }
 
 void _registerInputRequiredDiagnostics(McpServer server) {

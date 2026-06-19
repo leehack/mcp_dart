@@ -695,19 +695,16 @@ enum ErrorCode {
   requestTimeout(-32001),
 
   /// HTTP request metadata headers do not match the JSON-RPC body.
-  ///
-  /// This is the MCP 2026-07-28 meaning of the shared -32001 server-error
-  /// code. [requestTimeout] is retained for older SDK behavior.
-  headerMismatch(-32001),
+  headerMismatch(-32020),
 
   /// Resource not found in stable MCP 2025-11-25.
   resourceNotFound(-32002),
 
   /// Required per-request client capabilities were not declared.
-  missingRequiredClientCapability(-32003),
+  missingRequiredClientCapability(-32021),
 
   /// The requested protocol version is unsupported by the receiver.
-  unsupportedProtocolVersion(-32004),
+  unsupportedProtocolVersion(-32022),
 
   /// URL mode elicitation is required before the request can be processed.
   /// The error data contains elicitations that must be completed.

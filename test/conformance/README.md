@@ -62,6 +62,12 @@ and `--spec-version 2026-07-28`, and writes per-run artifacts under
 Expected failures live in `2026_rc_expected_failures.txt`. When a scenario is
 fixed, remove it from that file so the baseline remains useful.
 
+As of `@modelcontextprotocol/conformance@0.2.0-alpha.4`, the server expected
+failure file includes scenarios where the conformance package still expects the
+pre-renumber `HeaderMismatch` code `-32001`. The live `2026-07-28` draft assigns
+`HeaderMismatch` to `-32020`, so the SDK follows the draft and keeps those
+alpha.4 scenarios expected until the conformance package catches up.
+
 Run the current client baseline from the repository root:
 
 ```bash

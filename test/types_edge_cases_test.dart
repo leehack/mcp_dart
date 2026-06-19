@@ -14,6 +14,15 @@ void main() {
       expect(ErrorCode.fromValue(-32000), equals(ErrorCode.connectionClosed));
       expect(ErrorCode.fromValue(-32001), equals(ErrorCode.requestTimeout));
       expect(ErrorCode.fromValue(-32002), equals(ErrorCode.resourceNotFound));
+      expect(ErrorCode.fromValue(-32020), equals(ErrorCode.headerMismatch));
+      expect(
+        ErrorCode.fromValue(-32021),
+        equals(ErrorCode.missingRequiredClientCapability),
+      );
+      expect(
+        ErrorCode.fromValue(-32022),
+        equals(ErrorCode.unsupportedProtocolVersion),
+      );
       expect(ErrorCode.fromValue(-32700), equals(ErrorCode.parseError));
       expect(ErrorCode.fromValue(-32600), equals(ErrorCode.invalidRequest));
       expect(ErrorCode.fromValue(-32601), equals(ErrorCode.methodNotFound));

@@ -24,8 +24,9 @@ const String _methodTasksGet = 'tasks/get';
 const String _methodTasksUpdate = 'tasks/update';
 const String _methodSubscriptionsListen = 'subscriptions/listen';
 const String _methodNotificationsTasksStatus = 'notifications/tasks/status';
-const int _headerMismatchCode = -32001;
-const int _unsupportedProtocolVersionCode = -32004;
+final int _headerMismatchCode = ErrorCode.headerMismatch.value;
+final int _unsupportedProtocolVersionCode =
+    ErrorCode.unsupportedProtocolVersion.value;
 
 const List<String> conformanceSuiteNames = <String>[
   _fixtureSuite,
