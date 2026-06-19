@@ -425,8 +425,8 @@ async function assertProgressNotifications(client) {
   );
   for (let index = 1; index < progressValues.length; index++) {
     assert(
-      progressValues[index] >= progressValues[index - 1],
-      `progress demo values were not monotonic: ${JSON.stringify(progressValues)}`,
+      progressValues[index] > progressValues[index - 1],
+      `progress demo values did not strictly increase: ${JSON.stringify(progressValues)}`,
     );
   }
 }
