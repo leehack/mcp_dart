@@ -1,32 +1,37 @@
 ## Unreleased
 
-### Conformance and release readiness
+## 2.3.0-dev.1
 
+This dev preview refreshes MCP `2026-07-28` draft/RC support while keeping MCP
+`2025-11-25` as the default protocol profile.
+
+### MCP 2026-07-28 draft/RC refresh
+
+- Aligned draft protocol-defined error codes with the live draft:
+  `HeaderMismatch` is now `-32020`,
+  `MissingRequiredClientCapability` is now `-32021`, and
+  `UnsupportedProtocolVersion` is now `-32022`.
+- Marked `server/discover` as a 2026 cacheable result so stateless responses
+  include default `ttlMs` and `cacheScope` hints.
+- Removed the legacy `DRAFT-2026-v1` draft alias now that official conformance
+  targets the `2026-07-28` wire version.
+- Ported the JSON Schema boolean-subschema preservation fix onto the RC dev
+  line, including legacy tool-schema shims.
+
+### Conformance and interoperability
+
+- Updated official conformance gates to
+  `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with full 2026 RC server
+  scenario coverage and alpha.4's spec-filtered 2026 client scenario list in CI.
 - Expanded the manual TypeScript SDK 2026 RC interop fixture pinned to the
   upstream PR #2327 preview package, covering modern negotiation,
   `server/discover` cache metadata, `tools/list`, `tools/call`,
-  `x-mcp-header` mirroring, progress notifications, raw HTTP header,
-  unsupported-version, and removed core RPC rejection, `subscriptions/listen`,
-  and Streamable HTTP SSE cancellation against the Dart 2026 RC conformance
-  server.
+  `x-mcp-header` mirroring, progress notifications, raw HTTP header validation,
+  unsupported-version and removed core RPC rejection, `subscriptions/listen`,
+  and Streamable HTTP SSE cancellation.
 - Added a diagnostic Dart preview client -> TypeScript server alpha path and
   documented the current TS alpha gaps around mandatory `server/discover` and
   stateless `resultType` responses.
-- Aligned 2026 draft protocol-defined error codes with the live draft:
-  `HeaderMismatch` is now `-32020`,
-  `MissingRequiredClientCapability` is now `-32021`, and
-  `UnsupportedProtocolVersion` is now `-32022`. The conformance alpha.4 server
-  scenarios that still expect the old `HeaderMismatch` code are tracked as
-  expected failures.
-- Marked `server/discover` as a 2026 cacheable result so stateless responses
-  include default `ttlMs` and `cacheScope` hints.
-- Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with 2026 RC runs pinned
-  to `2026-07-28`, the full 2026 server scenario list covered in CI, the 2026
-  client wrapper aligned with alpha.4's spec-filtered scenario list, and the
-  current upstream client fixture gap tracked as an expected failure.
-- Removed the legacy `DRAFT-2026-v1` draft alias now that official conformance
-  targets the `2026-07-28` wire version.
 
 ## 2.3.0-dev.0
 
