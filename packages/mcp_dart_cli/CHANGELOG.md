@@ -1,3 +1,13 @@
+## 0.2.0-dev.1
+
+- Update the dev CLI package to depend on `mcp_dart ^2.3.0-dev.1`.
+- Refresh built-in 2026 RC conformance checks for the current draft error
+  codes and cacheable `server/discover` behavior.
+- Keep CLI standalone binary release automation current with GitHub runner and
+  artifact action updates.
+- Add installer fallback behavior for resolving the latest stable CLI GitHub
+  release when the GitHub Releases API is unavailable.
+
 ## 0.2.0-dev.0
 
 - Prepare the CLI for the MCP `2026-07-28` draft/RC SDK dev line with a

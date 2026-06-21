@@ -175,10 +175,10 @@ dev release, `mcp_dart_cli 0.2.0-dev.0`, is already published. The CLI publish
 workflow removes the local SDK override before publishing so users receive the
 published SDK dependency.
 
-Install the dev CLI explicitly by version:
+Install the current dev CLI explicitly by version:
 
 ```sh
-dart pub global activate mcp_dart_cli 0.2.0-dev.0
+dart pub global activate mcp_dart_cli 0.2.0-dev.1
 ```
 
 The standalone install and update scripts intentionally track stable GitHub
@@ -186,5 +186,5 @@ releases; use Dart SDK activation when testing prerelease CLI builds.
 
 `mcp_dart create` continues to generate projects that resolve the stable SDK by
 default. For draft/RC testing, update generated projects to depend on
-`mcp_dart: ^2.3.0-dev.0` and opt into `McpProtocol.preview2026` or
+`mcp_dart: ^2.3.0-dev.1` and opt into `McpProtocol.preview2026` or
 `McpProtocol.require2026`.
