@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.4';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.5';
 const _defaultTimeout = Duration(seconds: 30);
 
 const _draftClientScenarios = [
@@ -71,7 +71,12 @@ Future<void> main(List<String> args) async {
     _printScenarioResult(result, expectedFailures);
   }
 
-  await _writeSummary(outputRoot, results, expectedFailures);
+  await _writeSummary(
+    outputRoot,
+    results,
+    expectedFailures,
+    options.conformancePackage,
+  );
   final unexpectedFailures = results
       .where(
         (result) =>
@@ -127,7 +132,7 @@ Future<Set<String>> _readExpectedFailures(String path) async {
 Future<Directory> _createOutputRoot(String? outputDir) async {
   final root = outputDir == null
       ? Directory(
-          '.dart_tool/conformance/2026_rc_client/'
+          '.dart_tool/conformance/2026_07_28_rc_client/'
           '${DateTime.now().toUtc().toIso8601String().replaceAll(':', '-')}',
         )
       : Directory(outputDir);
@@ -151,7 +156,7 @@ Future<_ScenarioResult> _runScenario({
       conformancePackage,
       'client',
       '--command',
-      'dart run test/conformance/mcp_2026_rc_client.dart',
+      'dart run test/conformance/mcp_2026_07_28_rc_client.dart',
       '--scenario',
       scenario,
       '--spec-version',
@@ -223,9 +228,10 @@ Future<void> _writeSummary(
   Directory outputRoot,
   List<_ScenarioResult> results,
   Set<String> expectedFailures,
+  String conformancePackage,
 ) async {
   final summary = {
-    'package': _defaultConformancePackage,
+    'package': conformancePackage,
     'expectedFailures': expectedFailures.toList()..sort(),
     'results': [
       for (final result in results)
@@ -244,7 +250,7 @@ Future<void> _writeSummary(
 
 void _printUsage() {
   stdout.writeln('''
-Usage: dart run test/conformance/run_2026_rc_client_conformance.dart [options]
+Usage: dart run test/conformance/run_2026_07_28_rc_client_conformance.dart [options]
 
 Options:
   --scenario <name>              Run one scenario instead of the full draft list.
@@ -295,7 +301,7 @@ class _Options {
   static _Options parse(List<String> args) {
     String? scenario;
     var expectedFailuresPath =
-        'test/conformance/2026_rc_client_expected_failures.txt';
+        'test/conformance/2026_07_28_rc_client_expected_failures.txt';
     String? outputDir;
     var conformancePackage = _defaultConformancePackage;
     var timeout = _defaultTimeout;

@@ -113,7 +113,7 @@ final server = McpServer(
 ```
 
 Use the preview profile while the spec is still a draft/RC. See the
-[MCP 2026-07-28 draft/RC transition guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-rc.md)
+[MCP 2026-07-28 draft/RC transition guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md)
 for opt-in behavior, fallback rules, and draft-only APIs.
 
 ## Documentation
@@ -137,7 +137,7 @@ for opt-in behavior, fallback rules, and draft-only APIs.
 
 - 🧪 **[SDK Interoperability Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/interoperability.md)** - Verified Dart/TypeScript and documented cross-SDK scenarios
 - ✅ **[MCP 2025-11-25 Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2025-11-25.md)** - Auditable coverage map with CLI conformance cases and known gaps
-- 🧭 **[MCP 2026-07-28 Draft/RC Transition Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-rc.md)** - Opt-in profile, fallback behavior, and draft-only APIs
+- 🧭 **[MCP 2026-07-28 Draft/RC Transition Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md)** - Opt-in profile, fallback behavior, and draft-only APIs
 - 🔒 **[Transport Security Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md#dns-rebinding-protection)** - Host/Origin allowlists, OAuth layering, and compatibility-toggle trade-offs
 - 📱 **[Flutter Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/flutter-recipes.md)** - Flutter Web, mobile, and desktop host/client guidance
 - 🔁 **[Migration Cookbooks](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/migration-cookbooks.md)** - TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migration paths

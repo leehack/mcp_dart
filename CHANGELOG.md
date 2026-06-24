@@ -1,5 +1,21 @@
 ## Unreleased
 
+### Conformance and interoperability
+
+- Updated official conformance gates to
+  `@modelcontextprotocol/conformance@0.2.0-alpha.5`. The 2026-07-28 RC server suite
+  now has no expected failures; the 2026 client suite keeps only the upstream
+  `json-schema-ref-no-deref` fixture gap expected.
+- Re-pinned the manual TypeScript SDK 2026-07-28 RC interop fixture to
+  `pkg.pr.new` previews from the merged `v2-2026-07-28` branch head for both
+  client and server packages.
+- Switched the reverse Dart preview client -> TypeScript preview server fixture
+  to the TypeScript SDK's 2026 HTTP handler entry, making `server/discover`,
+  `tools/list`, and `tools/call` strict interop checks instead of diagnostic
+  skips.
+- Recorded overridden conformance package names in 2026-07-28 RC summary artifacts so
+  ad hoc package-bump checks are auditable.
+
 ## 2.3.0-dev.1
 
 This dev preview refreshes MCP `2026-07-28` draft/RC support while keeping MCP
@@ -21,9 +37,9 @@ This dev preview refreshes MCP `2026-07-28` draft/RC support while keeping MCP
 ### Conformance and interoperability
 
 - Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with full 2026 RC server
+  `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with full 2026-07-28 RC server
   scenario coverage and alpha.4's spec-filtered 2026 client scenario list in CI.
-- Expanded the manual TypeScript SDK 2026 RC interop fixture pinned to the
+- Expanded the manual TypeScript SDK 2026-07-28 RC interop fixture pinned to the
   upstream PR #2327 preview package, covering modern negotiation,
   `server/discover` cache metadata, `tools/list`, `tools/call`,
   `x-mcp-header` mirroring, progress notifications, raw HTTP header validation,

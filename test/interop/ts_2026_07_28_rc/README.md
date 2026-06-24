@@ -1,29 +1,29 @@
-# TypeScript SDK 2026 RC Interop
+# TypeScript SDK 2026-07-28 RC Interop
 
 This fixture is an experimental smoke test for the unreleased MCP
 `2026-07-28` draft/RC path against the official TypeScript SDK work in
 progress.
 
 It is intentionally separate from `test/interop/ts`, which tracks the published
-stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins a
-`pkg.pr.new` client preview from TypeScript SDK PR #2327 for the modern
-Streamable HTTP `Mcp-Name` header support needed to interoperate with the Dart
-2026 RC server. It also installs `@modelcontextprotocol/server@2.0.0-alpha.2`
-for a reverse-path diagnostic, but the server alpha is not yet a strict 2026
-interoperability gate.
+stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins
+`pkg.pr.new` client and server previews from the TypeScript SDK
+`v2-2026-07-28` branch after PR #2327 landed. The TypeScript client path is a
+draft-aligned smoke check against the Dart 2026-07-28 RC server. The reverse Dart
+client path is a draft-aligned smoke check against the TypeScript preview
+server.
 
 ## Run
 
 From the repository root:
 
 ```bash
-cd test/interop/ts_2026_rc
+cd test/interop/ts_2026_07_28_rc
 npm install
 cd ../../..
-dart run tool/testing/run_ts_2026_rc_interop.dart
+dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
 ```
 
-The runner starts `test/conformance/mcp_2026_rc_server.dart`, waits for its
+The runner starts `test/conformance/mcp_2026_07_28_rc_server.dart`, waits for its
 bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
 
 - TypeScript client negotiation selects the modern `2026-07-28` era.
@@ -53,11 +53,10 @@ bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
 - Closing a 2026 HTTP SSE response stream cancels the in-flight Dart server
   request without sending `notifications/cancelled`.
 
-The runner also starts `src/server.mjs` and attempts a Dart preview client
-against the TypeScript server alpha. That reverse path is currently diagnostic:
-the fixture shims `server/discover` because the TS server alpha does not answer
-that mandatory 2026 method yet, and the Dart client then reports the current TS
-alpha `tools/list` gap where stateless results omit `resultType`.
+The runner also starts `src/server.mjs` with the TypeScript preview
+`createMcpHandler` entry and runs a Dart preview client against it. That reverse
+path asserts `server/discover` negotiation, `tools/list`, and `tools/call`
+against the TypeScript preview server; failures are treated as interop failures.
 
 Keep this fixture anchored to the official draft/RC behavior rather than the
 preview TypeScript implementation alone. In particular, `x-mcp-header` tests use
@@ -66,5 +65,5 @@ When TypeScript preview behavior conflicts with the draft, keep the draft as the
 assertion source and document the preview gap near the test.
 
 Keep this as a manual, non-blocking check until the TypeScript SDK publishes a
-stable 2026-compatible alpha package or the upstream PR stack lands on the
-`v2-2026-07-28` branch.
+stable 2026-07-28-compatible alpha package instead of requiring `pkg.pr.new` preview
+artifacts.

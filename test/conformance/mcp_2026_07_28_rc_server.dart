@@ -8,7 +8,7 @@ import 'mcp_2025_server.dart' as stable_conformance;
 
 int _streamCancellationCount = 0;
 
-/// Dedicated HTTP server fixture for the MCP 2026 RC conformance package.
+/// Dedicated HTTP server fixture for the MCP 2026-07-28 RC conformance package.
 ///
 /// This deliberately starts from the existing cross-SDK interop server and
 /// uses the default Streamable HTTP SSE response mode so request-scoped
@@ -46,7 +46,7 @@ Future<void> main(List<String> args) async {
 
   await server.start();
   stdout.writeln(
-    'MCP 2026 RC conformance server listening on '
+    'MCP 2026-07-28 RC conformance server listening on '
     'http://$host:${server.boundPort}${server.path}',
   );
 
@@ -512,7 +512,7 @@ void _requireRequestState(String? actual, String expected) {
 
 void _printUsage() {
   stdout.writeln(
-    'Usage: dart run test/conformance/mcp_2026_rc_server.dart '
+    'Usage: dart run test/conformance/mcp_2026_07_28_rc_server.dart '
     '[--host localhost] [--port 33125]',
   );
 }
