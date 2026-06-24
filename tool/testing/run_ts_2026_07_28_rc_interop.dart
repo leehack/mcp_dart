@@ -103,7 +103,9 @@ Future<void> _runTsClientAgainstDartServer(
     await Future.wait([clientStdout, clientStderr]);
 
     if (clientExit != 0) {
-      throw StateError('TypeScript 2026-07-28 RC client exited with $clientExit');
+      throw StateError(
+        'TypeScript 2026-07-28 RC client exited with $clientExit',
+      );
     }
   } finally {
     await _terminate(server);
@@ -151,7 +153,10 @@ Future<void> _runDartClientAgainstTsServer(
 Future<void> _exerciseDartClient(String url) async {
   final transport = StreamableHttpClientTransport(Uri.parse(url));
   final client = McpClient(
-    const Implementation(name: 'mcp-dart-2026-07-28-rc-client', version: '0.0.0'),
+    const Implementation(
+      name: 'mcp-dart-2026-07-28-rc-client',
+      version: '0.0.0',
+    ),
     options: const McpClientOptions(
       protocol: McpProtocol.preview2026,
       capabilities: ClientCapabilities(),

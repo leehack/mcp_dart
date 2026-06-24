@@ -64,6 +64,8 @@ only the draft-permitted primitive types: `string`, `integer`, and `boolean`.
 When TypeScript preview behavior conflicts with the draft, keep the draft as the
 assertion source and document the preview gap near the test.
 
-Keep this as a manual, non-blocking check until the TypeScript SDK publishes a
-stable 2026-07-28-compatible alpha package instead of requiring `pkg.pr.new` preview
-artifacts.
+CI runs this fixture in the dedicated
+`Run MCP 2026-07-28 TypeScript Interop` workflow for relevant PRs,
+`dev/2026-07-28-rc` pushes, daily scheduled drift checks, and manual dispatch.
+Keep the fixture pinned to a published TypeScript SDK alpha once upstream no
+longer requires `pkg.pr.new` preview artifacts.

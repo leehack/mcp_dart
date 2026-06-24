@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.5';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.6';
 const _defaultTimeout = Duration(seconds: 25);
 
 const _serverScenarios = [
@@ -406,7 +406,8 @@ class _Options {
     int? port;
     String? scenario;
     String? outputDir;
-    var expectedFailuresPath = 'test/conformance/2026_07_28_rc_expected_failures.txt';
+    var expectedFailuresPath =
+        'test/conformance/2026_07_28_rc_expected_failures.txt';
     var conformancePackage = _defaultConformancePackage;
     var timeout = _defaultTimeout;
 

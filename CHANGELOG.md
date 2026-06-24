@@ -3,10 +3,15 @@
 ### Conformance and interoperability
 
 - Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.5`. The 2026-07-28 RC server suite
+  `@modelcontextprotocol/conformance@0.2.0-alpha.6`. The 2026-07-28 RC server suite
   now has no expected failures; the 2026 client suite keeps only the upstream
   `json-schema-ref-no-deref` fixture gap expected.
-- Re-pinned the manual TypeScript SDK 2026-07-28 RC interop fixture to
+- Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC preview
+  interop fixture on relevant PRs, `dev/2026-07-28-rc` pushes, daily schedule,
+  and manual dispatch.
+- Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the opt-in
+  profile to official conformance, local tests, and TypeScript preview interop.
+- Re-pinned the TypeScript SDK 2026-07-28 RC interop fixture to
   `pkg.pr.new` previews from the merged `v2-2026-07-28` branch head for both
   client and server packages.
 - Switched the reverse Dart preview client -> TypeScript preview server fixture
