@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "@cfworker/json-schema": "4.1.1",
-    "@modelcontextprotocol/client": "https://pkg.pr.new/modelcontextprotocol/typescript-sdk/@modelcontextprotocol/client@87ce6c5",
-    "@modelcontextprotocol/server": "2.0.0-alpha.2"
+    "@modelcontextprotocol/client": "https://pkg.pr.new/modelcontextprotocol/typescript-sdk/@modelcontextprotocol/client@9fdb62e",
+    "@modelcontextprotocol/server": "https://pkg.pr.new/modelcontextprotocol/typescript-sdk/@modelcontextprotocol/server@9fdb62e"
   },
   "engines": {
     "node": ">=20"

@@ -63,8 +63,8 @@ function requestHeaders(req) {
 }
 
 function discoveryResponse(id) {
-  // The current TS server alpha does not answer server/discover yet, but the
-  // 2026 draft requires it. Keep this shim local to the diagnostic fixture.
+  // Keep discovery local to the diagnostic fixture while the TypeScript preview
+  // server path remains behind the draft-shaped stateless result behavior.
   return new Response(
     JSON.stringify({
       jsonrpc: '2.0',

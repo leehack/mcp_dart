@@ -21,8 +21,8 @@ For requirement-level MCP 2025-11-25 coverage, see the
 | Dart client -> TypeScript SDK server | Streamable HTTP | `2025-11-25` | [`test/interop/dart_client_with_ts_server_test.dart`](../test/interop/dart_client_with_ts_server_test.dart), [`test/interop/ts/`](../test/interop/ts/) | Verified | Covers tool calls and stale preconfigured session-id recovery. |
 | TypeScript SDK client -> Dart server | stdio | `2025-11-25` | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Runs the compiled TypeScript client fixture against a Dart server process and checks that an official TS client can list tools immediately after the lifecycle handshake. |
 | TypeScript SDK client -> Dart server | Streamable HTTP | `2025-11-25` | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Includes official TS Streamable HTTP client lifecycle coverage, pre-`initialized` operation rejection, GET SSE streams, and `Last-Event-ID` replay behavior. |
-| TypeScript SDK preview client -> Dart server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_rc/`](../test/interop/ts_2026_rc/), [`tool/testing/run_ts_2026_rc_interop.dart`](../tool/testing/run_ts_2026_rc_interop.dart) | Experimental manual check | Uses a pinned `pkg.pr.new` preview from TypeScript SDK PR #2327. Covers modern negotiation, cache metadata, `tools/list`, `tools/call`, `x-mcp-header` mirroring, raw header and unsupported-version rejection, removed core RPC rejection, progress notifications, `subscriptions/listen`, and HTTP SSE cancellation against the Dart 2026 RC conformance server. Not a CI gate yet. |
-| Dart preview client -> TypeScript SDK alpha server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_rc/src/server.mjs`](../test/interop/ts_2026_rc/src/server.mjs), [`tool/testing/run_ts_2026_rc_interop.dart`](../tool/testing/run_ts_2026_rc_interop.dart) | Diagnostic only | The fixture attempts the reverse path, but the current TS server alpha does not yet answer mandatory `server/discover` and omits `resultType` on stateless `tools/list`; the runner reports this as a TS-alpha gap instead of a Dart failure. |
+| TypeScript SDK preview client -> Dart server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_rc/`](../test/interop/ts_2026_rc/), [`tool/testing/run_ts_2026_rc_interop.dart`](../tool/testing/run_ts_2026_rc_interop.dart) | Experimental manual check | Uses pinned `pkg.pr.new` previews from the TypeScript SDK `v2-2026-07-28` branch head. Covers modern negotiation, cache metadata, `tools/list`, `tools/call`, `x-mcp-header` mirroring, raw header and unsupported-version rejection, removed core RPC rejection, progress notifications, `subscriptions/listen`, and HTTP SSE cancellation against the Dart 2026 RC conformance server. Not a CI gate yet. |
+| Dart preview client -> TypeScript SDK preview server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_rc/src/server.mjs`](../test/interop/ts_2026_rc/src/server.mjs), [`tool/testing/run_ts_2026_rc_interop.dart`](../tool/testing/run_ts_2026_rc_interop.dart) | Diagnostic only | The fixture attempts the reverse path, but the current TS branch-head server preview still omits `resultType` on stateless `tools/list`; the runner reports this as a TS-preview gap instead of a Dart failure. |
 | Dart client -> Python MCP server | stdio | Server-dependent | [`doc/transports.md`](transports.md#connect-to-python-server) | Documented recipe | The transport can spawn Python servers over stdio, but this repo does not yet include an automated Python SDK fixture. |
 | Flutter/Web client -> Dart server | Streamable HTTP | `2025-11-25` | [`example/flutter_http_client/`](../example/flutter_http_client/), [`doc/flutter-recipes.md`](flutter-recipes.md) | Documented recipe | Flutter Web cannot spawn stdio servers; use Streamable HTTP or another browser-safe transport. |
 | MCP Apps host/client metadata | stdio or Streamable HTTP | `2025-11-25` plus `io.modelcontextprotocol/ui` extension | [`doc/mcp-apps.md`](mcp-apps.md), [`example/mcp_apps_helpers_server.dart`](../example/mcp_apps_helpers_server.dart), [`test/types/mcp_ui_test.dart`](../test/types/mcp_ui_test.dart), [`test/server/mcp_ui_test.dart`](../test/server/mcp_ui_test.dart) | Verified | Verified coverage is limited to SDK metadata helpers, serialization, and checked-in examples; host rendering behavior varies by host, so verify UI metadata against your target host. |
@@ -45,7 +45,8 @@ dart test --tags interop
 If the compiled fixtures are missing, local test runs skip the interop groups; CI should fail when required fixtures are unavailable.
 
 The TypeScript 2026 RC fixture is manual while the upstream SDK support remains
-unreleased and split across preview PRs:
+unreleased and pinned to `pkg.pr.new` previews from the TypeScript SDK
+`v2-2026-07-28` branch:
 
 ```bash
 # From repository root
@@ -57,7 +58,7 @@ dart run tool/testing/run_ts_2026_rc_interop.dart
 
 This starts the Dart 2026 RC conformance server, runs the pinned TypeScript SDK
 preview client against it, then attempts the reverse Dart-client diagnostic
-against the TypeScript server alpha and reports known TS-alpha spec gaps.
+against the TypeScript preview server and reports known TS-preview spec gaps.
 
 The CLI spec conformance gate covers raw-wire negative cases that do not need a
 cross-SDK fixture, including stable MCP 2025-11-25 checks and MCP 2026-07-28 RC
@@ -84,7 +85,7 @@ When adding a new interoperability claim:
 - Automated Python SDK fixture coverage.
 - CI promotion for the TypeScript 2026 RC interop fixture after the TypeScript
   SDK publishes a 2026-compatible alpha package whose server answers
-  `server/discover` and includes `resultType` on stateless results.
+  draft-shaped stateless results including `resultType`.
 - Host-specific MCP Apps rendering compatibility notes.
 - More OAuth-protected remote server scenarios beyond the checked-in examples.
 - A broader compatibility table once additional SDKs expose stable 2025-11-25 fixtures.

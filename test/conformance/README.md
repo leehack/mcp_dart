@@ -26,14 +26,14 @@ dart run test/conformance/run_2025_server_conformance.dart
 ```
 
 The runner starts `mcp_2025_server.dart`, runs
-`@modelcontextprotocol/conformance@0.2.0-alpha.4 server --suite all
+`@modelcontextprotocol/conformance@0.2.0-alpha.5 server --suite all
 --spec-version 2025-11-25`, and writes artifacts under
 `.dart_tool/conformance/2025_server/`.
 
 Run the stable client suite from the repository root:
 
 ```bash
-npx -y @modelcontextprotocol/conformance@0.2.0-alpha.4 client \
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.5 client \
   --command "dart run test/conformance/mcp_2026_rc_client.dart" \
   --suite all \
   --spec-version 2025-11-25 \
@@ -55,18 +55,15 @@ dart run test/conformance/run_2026_rc_server_conformance.dart
 
 The runner starts a local `StreamableMcpServer` in default Streamable HTTP SSE
 response mode, runs the full `2026-07-28` server scenario list from
-`@modelcontextprotocol/conformance@0.2.0-alpha.4` one by one with `--suite all`
+`@modelcontextprotocol/conformance@0.2.0-alpha.5` one by one with `--suite all`
 and `--spec-version 2026-07-28`, and writes per-run artifacts under
 `.dart_tool/conformance/2026_rc/`.
 
 Expected failures live in `2026_rc_expected_failures.txt`. When a scenario is
 fixed, remove it from that file so the baseline remains useful.
 
-As of `@modelcontextprotocol/conformance@0.2.0-alpha.4`, the server expected
-failure file includes scenarios where the conformance package still expects the
-pre-renumber `HeaderMismatch` code `-32001`. The live `2026-07-28` draft assigns
-`HeaderMismatch` to `-32020`, so the SDK follows the draft and keeps those
-alpha.4 scenarios expected until the conformance package catches up.
+As of `@modelcontextprotocol/conformance@0.2.0-alpha.5`, the full 2026 RC server
+suite has no expected failures against the Dart fixture.
 
 Run the current client baseline from the repository root:
 

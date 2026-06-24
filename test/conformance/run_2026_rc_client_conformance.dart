@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.4';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.5';
 const _defaultTimeout = Duration(seconds: 30);
 
 const _draftClientScenarios = [
@@ -71,7 +71,12 @@ Future<void> main(List<String> args) async {
     _printScenarioResult(result, expectedFailures);
   }
 
-  await _writeSummary(outputRoot, results, expectedFailures);
+  await _writeSummary(
+    outputRoot,
+    results,
+    expectedFailures,
+    options.conformancePackage,
+  );
   final unexpectedFailures = results
       .where(
         (result) =>
@@ -223,9 +228,10 @@ Future<void> _writeSummary(
   Directory outputRoot,
   List<_ScenarioResult> results,
   Set<String> expectedFailures,
+  String conformancePackage,
 ) async {
   final summary = {
-    'package': _defaultConformancePackage,
+    'package': conformancePackage,
     'expectedFailures': expectedFailures.toList()..sort(),
     'results': [
       for (final result in results)

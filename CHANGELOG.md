@@ -1,5 +1,17 @@
 ## Unreleased
 
+### Conformance and interoperability
+
+- Updated official conformance gates to
+  `@modelcontextprotocol/conformance@0.2.0-alpha.5`. The 2026 RC server suite
+  now has no expected failures; the 2026 client suite keeps only the upstream
+  `json-schema-ref-no-deref` fixture gap expected.
+- Re-pinned the manual TypeScript SDK 2026 RC interop fixture to
+  `pkg.pr.new` previews from the merged `v2-2026-07-28` branch head for both
+  client and server packages.
+- Recorded overridden conformance package names in 2026 RC summary artifacts so
+  ad hoc package-bump checks are auditable.
+
 ## 2.3.0-dev.1
 
 This dev preview refreshes MCP `2026-07-28` draft/RC support while keeping MCP
