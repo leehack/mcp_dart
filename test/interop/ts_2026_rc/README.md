@@ -8,9 +8,9 @@ It is intentionally separate from `test/interop/ts`, which tracks the published
 stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins
 `pkg.pr.new` client and server previews from the TypeScript SDK
 `v2-2026-07-28` branch after PR #2327 landed. The TypeScript client path is a
-draft-aligned smoke check against the Dart 2026 RC server. The reverse
-TypeScript server path is still diagnostic rather than a strict 2026
-interoperability gate.
+draft-aligned smoke check against the Dart 2026 RC server. The reverse Dart
+client path is a draft-aligned smoke check against the TypeScript preview
+server.
 
 ## Run
 
@@ -53,10 +53,10 @@ bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
 - Closing a 2026 HTTP SSE response stream cancels the in-flight Dart server
   request without sending `notifications/cancelled`.
 
-The runner also starts `src/server.mjs` and attempts a Dart preview client
-against the TypeScript preview server. That reverse path is currently diagnostic:
-the fixture shims `server/discover` locally and the Dart client reports the
-current TS preview `tools/list` gap where stateless results omit `resultType`.
+The runner also starts `src/server.mjs` with the TypeScript preview
+`createMcpHandler` entry and runs a Dart preview client against it. That reverse
+path asserts `server/discover` negotiation, `tools/list`, and `tools/call`
+against the TypeScript preview server; failures are treated as interop failures.
 
 Keep this fixture anchored to the official draft/RC behavior rather than the
 preview TypeScript implementation alone. In particular, `x-mcp-header` tests use
@@ -65,5 +65,5 @@ When TypeScript preview behavior conflicts with the draft, keep the draft as the
 assertion source and document the preview gap near the test.
 
 Keep this as a manual, non-blocking check until the TypeScript SDK publishes a
-stable 2026-compatible alpha package with draft-shaped client and server
-behavior.
+stable 2026-compatible alpha package instead of requiring `pkg.pr.new` preview
+artifacts.

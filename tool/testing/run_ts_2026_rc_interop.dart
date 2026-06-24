@@ -141,26 +141,11 @@ Future<void> _runDartClientAgainstTsServer(
         throw TimeoutException('Timed out waiting for TypeScript server URL');
       },
     );
-    try {
-      await _exerciseDartClient(url);
-    } on McpError catch (error) {
-      if (!_isKnownTypeScriptServerAlphaGap(error)) {
-        rethrow;
-      }
-      stdout.writeln(
-        '[dart-client] reverse TS server diagnostic skipped: ${error.message}',
-      );
-    }
+    await _exerciseDartClient(url);
   } finally {
     await _terminate(server);
     await Future.wait([serverStdout, serverStderr]);
   }
-}
-
-bool _isKnownTypeScriptServerAlphaGap(McpError error) {
-  final text = error.toString();
-  return text.contains('MCP stateless responses must include resultType') ||
-      text.contains('server/discover not available');
 }
 
 Future<void> _exerciseDartClient(String url) async {

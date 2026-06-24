@@ -9,6 +9,10 @@
 - Re-pinned the manual TypeScript SDK 2026 RC interop fixture to
   `pkg.pr.new` previews from the merged `v2-2026-07-28` branch head for both
   client and server packages.
+- Switched the reverse Dart preview client -> TypeScript preview server fixture
+  to the TypeScript SDK's 2026 HTTP handler entry, making `server/discover`,
+  `tools/list`, and `tools/call` strict interop checks instead of diagnostic
+  skips.
 - Recorded overridden conformance package names in 2026 RC summary artifacts so
   ad hoc package-bump checks are auditable.
 

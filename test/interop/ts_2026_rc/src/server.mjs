@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
 
 import {
+  createMcpHandler,
   McpServer,
-  WebStandardStreamableHTTPServerTransport,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
@@ -62,32 +62,6 @@ function requestHeaders(req) {
   return headers;
 }
 
-function discoveryResponse(id) {
-  // Keep discovery local to the diagnostic fixture while the TypeScript preview
-  // server path remains behind the draft-shaped stateless result behavior.
-  return new Response(
-    JSON.stringify({
-      jsonrpc: '2.0',
-      id,
-      result: {
-        resultType: 'complete',
-        supportedVersions: [PROTOCOL_VERSION],
-        capabilities: { tools: {} },
-        serverInfo: {
-          name: 'ts-2026-rc-interop-server',
-          version: '0.0.0',
-        },
-        ttlMs: 1000,
-        cacheScope: 'public',
-      },
-    }),
-    {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    },
-  );
-}
-
 async function writeWebResponse(webResponse, res) {
   res.writeHead(
     webResponse.status,
@@ -116,13 +90,9 @@ async function main() {
   const args = process.argv.slice(2);
   const host = readArg(args, '--host') ?? '127.0.0.1';
   const port = Number.parseInt(readArg(args, '--port') ?? '0', 10);
-  const mcpServer = createInteropServer();
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: false,
-    supportedProtocolVersions: [PROTOCOL_VERSION],
+  const handler = createMcpHandler(() => createInteropServer(), {
+    legacy: 'reject',
   });
-  await mcpServer.connect(transport);
 
   const httpServer = createServer(async (req, res) => {
     try {
@@ -143,15 +113,7 @@ async function main() {
       }
 
       const webRequest = new Request(url, init);
-      if (body && body.length > 0) {
-        const message = JSON.parse(body.toString('utf8'));
-        if (message.method === 'server/discover') {
-          await writeWebResponse(discoveryResponse(message.id), res);
-          return;
-        }
-      }
-
-      const webResponse = await transport.handleRequest(webRequest);
+      const webResponse = await handler.fetch(webRequest);
       await writeWebResponse(webResponse, res);
     } catch (error) {
       console.error(error);
@@ -170,7 +132,7 @@ async function main() {
   );
 
   const stop = async () => {
-    await mcpServer.close().catch(() => {});
+    await handler.close().catch(() => {});
     await new Promise((resolve) => httpServer.close(resolve));
   };
   process.once('SIGTERM', () => {
