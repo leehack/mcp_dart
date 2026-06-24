@@ -1,4 +1,4 @@
-# TypeScript SDK 2026 RC Interop
+# TypeScript SDK 2026-07-28 RC Interop
 
 This fixture is an experimental smoke test for the unreleased MCP
 `2026-07-28` draft/RC path against the official TypeScript SDK work in
@@ -8,7 +8,7 @@ It is intentionally separate from `test/interop/ts`, which tracks the published
 stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins
 `pkg.pr.new` client and server previews from the TypeScript SDK
 `v2-2026-07-28` branch after PR #2327 landed. The TypeScript client path is a
-draft-aligned smoke check against the Dart 2026 RC server. The reverse Dart
+draft-aligned smoke check against the Dart 2026-07-28 RC server. The reverse Dart
 client path is a draft-aligned smoke check against the TypeScript preview
 server.
 
@@ -17,13 +17,13 @@ server.
 From the repository root:
 
 ```bash
-cd test/interop/ts_2026_rc
+cd test/interop/ts_2026_07_28_rc
 npm install
 cd ../../..
-dart run tool/testing/run_ts_2026_rc_interop.dart
+dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
 ```
 
-The runner starts `test/conformance/mcp_2026_rc_server.dart`, waits for its
+The runner starts `test/conformance/mcp_2026_07_28_rc_server.dart`, waits for its
 bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
 
 - TypeScript client negotiation selects the modern `2026-07-28` era.
@@ -65,5 +65,5 @@ When TypeScript preview behavior conflicts with the draft, keep the draft as the
 assertion source and document the preview gap near the test.
 
 Keep this as a manual, non-blocking check until the TypeScript SDK publishes a
-stable 2026-compatible alpha package instead of requiring `pkg.pr.new` preview
+stable 2026-07-28-compatible alpha package instead of requiring `pkg.pr.new` preview
 artifacts.

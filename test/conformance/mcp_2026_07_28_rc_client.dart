@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 
 const _clientInfo = Implementation(
-  name: 'mcp-dart-2026-rc-conformance-client',
+  name: 'mcp-dart-2026-07-28-rc-conformance-client',
   version: '0.0.0',
 );
 
@@ -568,7 +568,7 @@ class _RawStatelessClient {
 
 void _printUsage() {
   stdout.writeln(
-    'Usage: dart run test/conformance/mcp_2026_rc_client.dart <server-url>',
+    'Usage: dart run test/conformance/mcp_2026_07_28_rc_client.dart <server-url>',
   );
 }
 

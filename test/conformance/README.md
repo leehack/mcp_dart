@@ -14,7 +14,7 @@ calls hard-coded diagnostic tools, prompts, and resources.
 
 The 2026 suite still targets a draft/RC alpha spec package. If the official
 suite changes before the spec is final, record intentional temporary gaps in
-`2026_rc_expected_failures.txt` or `2026_rc_client_expected_failures.txt` so CI
+`2026_07_28_rc_expected_failures.txt` or `2026_07_28_rc_client_expected_failures.txt` so CI
 distinguishes known draft/RC churn from regressions.
 
 ## Stable MCP 2025-11-25
@@ -34,7 +34,7 @@ Run the stable client suite from the repository root:
 
 ```bash
 npx -y @modelcontextprotocol/conformance@0.2.0-alpha.5 client \
-  --command "dart run test/conformance/mcp_2026_rc_client.dart" \
+  --command "dart run test/conformance/mcp_2026_07_28_rc_client.dart" \
   --suite all \
   --spec-version 2025-11-25 \
   --verbose \
@@ -50,32 +50,32 @@ server offers.
 Run the current server baseline from the repository root:
 
 ```bash
-dart run test/conformance/run_2026_rc_server_conformance.dart
+dart run test/conformance/run_2026_07_28_rc_server_conformance.dart
 ```
 
 The runner starts a local `StreamableMcpServer` in default Streamable HTTP SSE
 response mode, runs the full `2026-07-28` server scenario list from
 `@modelcontextprotocol/conformance@0.2.0-alpha.5` one by one with `--suite all`
 and `--spec-version 2026-07-28`, and writes per-run artifacts under
-`.dart_tool/conformance/2026_rc/`.
+`.dart_tool/conformance/2026_07_28_rc/`.
 
-Expected failures live in `2026_rc_expected_failures.txt`. When a scenario is
+Expected failures live in `2026_07_28_rc_expected_failures.txt`. When a scenario is
 fixed, remove it from that file so the baseline remains useful.
 
-As of `@modelcontextprotocol/conformance@0.2.0-alpha.5`, the full 2026 RC server
+As of `@modelcontextprotocol/conformance@0.2.0-alpha.5`, the full 2026-07-28 RC server
 suite has no expected failures against the Dart fixture.
 
 Run the current client baseline from the repository root:
 
 ```bash
-dart run test/conformance/run_2026_rc_client_conformance.dart
+dart run test/conformance/run_2026_07_28_rc_client_conformance.dart
 ```
 
-The client runner invokes `mcp_2026_rc_client.dart` against the conformance
+The client runner invokes `mcp_2026_07_28_rc_client.dart` against the conformance
 package's scenario servers and writes per-run artifacts under
-`.dart_tool/conformance/2026_rc_client/`.
+`.dart_tool/conformance/2026_07_28_rc_client/`.
 
-Client expected failures live in `2026_rc_client_expected_failures.txt`.
+Client expected failures live in `2026_07_28_rc_client_expected_failures.txt`.
 The 2026 client wrapper is aligned with the scenarios returned by
 `conformance list --client --spec-version 2026-07-28`; stable-only client
 scenarios remain covered by the stable `2025-11-25` client suite above.

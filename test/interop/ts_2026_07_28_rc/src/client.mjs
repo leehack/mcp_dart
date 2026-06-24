@@ -1,7 +1,7 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
 const PROTOCOL_VERSION = '2026-07-28';
-const CLIENT_INFO = { name: 'mcp-dart-ts-2026-rc-client', version: '0.0.0' };
+const CLIENT_INFO = { name: 'mcp-dart-ts-2026-07-28-rc-client', version: '0.0.0' };
 
 function readArg(args, name) {
   const index = args.indexOf(name);
@@ -508,7 +508,7 @@ async function main() {
     requireTool(tools.tools, 'test_input_required_result_elicitation');
     requireTool(tools.tools, 'progress_demo');
 
-    const message = 'from TypeScript 2026 RC preview';
+    const message = 'from TypeScript 2026-07-28 RC preview';
     const result = await client.callTool({
       name: 'echo',
       arguments: { message },

@@ -73,7 +73,7 @@ Future<void> main(List<String> args) async {
       serverProcess = await Process.start(
         Platform.resolvedExecutable,
         [
-          'test/conformance/mcp_2026_rc_server.dart',
+          'test/conformance/mcp_2026_07_28_rc_server.dart',
           '--port',
           '$port',
         ],
@@ -85,7 +85,7 @@ Future<void> main(List<String> args) async {
       serverUrl = Uri.parse(options.url!);
     }
 
-    stdout.writeln('2026 RC conformance URL: $serverUrl');
+    stdout.writeln('2026-07-28 RC conformance URL: $serverUrl');
     stdout.writeln('Conformance package: ${options.conformancePackage}');
     stdout.writeln('Output: ${outputRoot.path}');
     stdout.writeln('');
@@ -174,7 +174,7 @@ Future<Set<String>> _readExpectedFailures(String path) async {
 Future<Directory> _createOutputRoot(String? outputDir) async {
   final root = outputDir == null
       ? Directory(
-          '.dart_tool/conformance/2026_rc/'
+          '.dart_tool/conformance/2026_07_28_rc/'
           '${DateTime.now().toUtc().toIso8601String().replaceAll(':', '-')}',
         )
       : Directory(outputDir);
@@ -345,7 +345,7 @@ String _sanitize(String value) {
 
 void _printUsage() {
   stdout.writeln(
-    'Usage: dart run test/conformance/run_2026_rc_server_conformance.dart '
+    'Usage: dart run test/conformance/run_2026_07_28_rc_server_conformance.dart '
     '[--url http://localhost:33125/mcp] [--scenario scenario-name] '
     '[--timeout-seconds 25]',
   );
@@ -406,7 +406,7 @@ class _Options {
     int? port;
     String? scenario;
     String? outputDir;
-    var expectedFailuresPath = 'test/conformance/2026_rc_expected_failures.txt';
+    var expectedFailuresPath = 'test/conformance/2026_07_28_rc_expected_failures.txt';
     var conformancePackage = _defaultConformancePackage;
     var timeout = _defaultTimeout;
 
