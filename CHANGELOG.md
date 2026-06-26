@@ -9,7 +9,7 @@
 ### Conformance and interoperability
 
 - Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.6`. The 2026-07-28 RC server suite
+  `@modelcontextprotocol/conformance@0.2.0-alpha.7`. The 2026-07-28 RC server suite
   now has no expected failures; the 2026 client suite keeps only the upstream
   `json-schema-ref-no-deref` fixture gap expected.
 - Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC preview
