@@ -1,3 +1,11 @@
+## 2.2.2
+
+### Platform support
+
+- Made the package barrel's default export path web/WASM-safe while preserving
+  Dart IO native exports, working around pub.dev/pana 0.23.13 WASM platform
+  scoring for conditional exports.
+
 ## 2.2.1
 
 ### Spec Alignment

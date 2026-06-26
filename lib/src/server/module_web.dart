@@ -5,5 +5,8 @@
 /// These exports provide stubs or limited functionality for web compatibility.
 library;
 
-// No server exports for web platform
-// Server functionality is primarily designed for non-web environments
+export 'io_stubs.dart'; // API-compatible stubs for IO-only transports.
+export 'mcp_server.dart'; // Web-safe MCP server facade and helpers.
+export 'mcp_ui.dart'; // MCP Apps helper registrations.
+export 'server.dart'; // Core server implementation.
+export 'tasks.dart'; // Task management utilities.
