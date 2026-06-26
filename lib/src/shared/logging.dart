@@ -1,4 +1,4 @@
-import 'logging_io.dart' if (dart.library.js_interop) 'logging_web.dart';
+import 'logging_web.dart' if (dart.library.io) 'logging_io.dart';
 
 enum LogLevel { debug, info, warn, error }
 

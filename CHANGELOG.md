@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Platform support
+
+- Inherited the stable 2.2.2 web/WASM-safe default export path, preserving
+  Dart IO native exports while working around pub.dev/pana 0.23.13 WASM
+  platform scoring for conditional exports.
+
 ### Conformance and interoperability
 
 - Updated official conformance gates to
@@ -111,6 +117,14 @@ explicitly and may still change before the official spec release.
   guide includes a dev release checklist.
 - Pointed prerelease package documentation links at `dev/2026-07-28-rc` so
   pub.dev users see the draft/RC docs that match the dev package.
+
+## 2.2.2
+
+### Platform support
+
+- Made the package barrel's default export path web/WASM-safe while preserving
+  Dart IO native exports, working around pub.dev/pana 0.23.13 WASM platform
+  scoring for conditional exports.
 
 ## 2.2.1
 
