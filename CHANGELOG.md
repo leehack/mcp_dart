@@ -29,6 +29,12 @@
 - Added `SubscriptionsListenResult` for graceful `subscriptions/listen` closure
   and now include the required `io.modelcontextprotocol/subscriptionId` metadata
   in Dart server responses and client `McpSubscription.done` results.
+- Cleaned up root analyzer coverage for standalone example packages and opted
+  Streamable HTTP, Flutter/Jaspr web client, and MCP Apps examples into the
+  `2026-07-28` preview protocol profile with stable fallback where applicable.
+- Broadened preview client discovery fallback so servers that implement
+  `server/discover` but advertise only stable protocol versions can still
+  connect through the stable `initialize` flow.
 
 ## 2.3.0-dev.1
 

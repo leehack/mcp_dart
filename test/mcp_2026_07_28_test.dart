@@ -6379,6 +6379,80 @@ void main() {
       );
     });
 
+    test('preview client falls back when discovery advertises stable versions',
+        () async {
+      final transport = LegacyFallbackTransport(
+        discoveryError: McpError(
+          ErrorCode.unsupportedProtocolVersion.value,
+          'Unsupported protocol version',
+          const {
+            'supported': supportedProtocolVersions,
+            'requested': draftProtocolVersion2026_07_28,
+          },
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+
+      await client.connect(transport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        containsAllInOrder([Method.serverDiscover, Method.initialize]),
+      );
+      final initializeRequest = transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((message) => message.method == Method.initialize);
+      expect(
+        initializeRequest.params?['protocolVersion'],
+        stableProtocolVersion2025_11_25,
+      );
+    });
+
+    test('require2026 client does not fall back to stable versions', () async {
+      final transport = LegacyFallbackTransport(
+        discoveryError: McpError(
+          ErrorCode.unsupportedProtocolVersion.value,
+          'Unsupported protocol version',
+          const {
+            'supported': supportedProtocolVersions,
+            'requested': draftProtocolVersion2026_07_28,
+          },
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.require2026,
+        ),
+      );
+
+      await expectLater(
+        client.connect(transport),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.unsupportedProtocolVersion.value,
+          ),
+        ),
+      );
+      expect(
+        transport.sentMessages.whereType<JsonRpcRequest>().map(
+              (message) => message.method,
+            ),
+        isNot(contains(Method.initialize)),
+      );
+    });
+
     for (final scenario in [
       (
         name: 'malformed error data',

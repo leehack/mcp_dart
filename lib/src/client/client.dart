@@ -408,10 +408,7 @@ class McpClient extends Protocol {
     );
   }
 
-  String? _retryableDiscoveryProtocolVersion(
-    McpError error,
-    String attemptedVersion,
-  ) {
+  List<String>? _supportedVersionsFromUnsupportedProtocolError(McpError error) {
     if (error.code != ErrorCode.unsupportedProtocolVersion.value) {
       return null;
     }
@@ -432,6 +429,16 @@ class McpClient extends Protocol {
         advertisedVersions.add(version);
       }
     }
+    return advertisedVersions;
+  }
+
+  String? _retryableDiscoveryProtocolVersion(
+    McpError error,
+    String attemptedVersion,
+  ) {
+    final advertisedVersions =
+        _supportedVersionsFromUnsupportedProtocolError(error);
+    if (advertisedVersions == null) return null;
 
     final retryVersion = negotiateProtocolVersion(
       advertisedVersions,
@@ -441,6 +448,18 @@ class McpClient extends Protocol {
       return null;
     }
     return retryVersion;
+  }
+
+  bool _discoveryUnsupportedButStableCompatible(McpError error) {
+    final advertisedVersions =
+        _supportedVersionsFromUnsupportedProtocolError(error);
+    if (advertisedVersions == null) return false;
+
+    return negotiateProtocolVersion(
+          advertisedVersions,
+          localSupportedVersions: supportedProtocolVersions,
+        ) !=
+        null;
   }
 
   Future<DiscoverResult> _discoverServerWithVersion(
@@ -560,6 +579,9 @@ class McpClient extends Protocol {
       return false;
     }
     if (error.code == ErrorCode.methodNotFound.value) {
+      return true;
+    }
+    if (_discoveryUnsupportedButStableCompatible(error)) {
       return true;
     }
     if (error.code == ErrorCode.invalidParams.value &&
