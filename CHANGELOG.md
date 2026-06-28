@@ -26,6 +26,9 @@
   skips.
 - Recorded overridden conformance package names in 2026-07-28 RC summary artifacts so
   ad hoc package-bump checks are auditable.
+- Added `SubscriptionsListenResult` for graceful `subscriptions/listen` closure
+  and now include the required `io.modelcontextprotocol/subscriptionId` metadata
+  in Dart server responses and client `McpSubscription.done` results.
 
 ## 2.3.0-dev.1
 

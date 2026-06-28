@@ -2236,6 +2236,32 @@ void main() {
       );
     });
 
+    test('serializes subscriptions/listen graceful-close result metadata', () {
+      final result = SubscriptionsListenResult(subscriptionId: 'sub-1');
+
+      expect(result.subscriptionId, 'sub-1');
+      expect(result.toJson(), {
+        '_meta': {McpMetaKey.subscriptionId: 'sub-1'},
+      });
+
+      final parsed = SubscriptionsListenResult.fromJson({
+        '_meta': {McpMetaKey.subscriptionId: 7},
+      });
+      expect(parsed.subscriptionId, 7);
+
+      for (final parse in <Object Function()>[
+        () => SubscriptionsListenResult.fromJson(<String, dynamic>{}),
+        () => SubscriptionsListenResult.fromJson({
+              '_meta': <String, dynamic>{},
+            }),
+        () => SubscriptionsListenResult.fromJson({
+              '_meta': {McpMetaKey.subscriptionId: true},
+            }),
+      ]) {
+        expect(parse, throwsFormatException);
+      }
+    });
+
     test('resource subscriptions require resources.subscribe capability', () {
       const requested = SubscriptionFilter(
         resourceSubscriptions: ['file:///project/config.json'],
@@ -2329,7 +2355,10 @@ void main() {
           'resourceSubscriptions': ['file:///project/config.json'],
         },
       );
-      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      expect(response.result['_meta'], {
+        McpMetaKey.subscriptionId: 'sub-1',
+      });
     });
 
     test('server rejects subscription notifications before acknowledgment',
@@ -5577,6 +5606,61 @@ void main() {
       );
     });
 
+    test('client listenSubscriptions preserves graceful-close subscription id',
+        () async {
+      late JsonRpcRequest listenRequest;
+      final transport = DiscoveringClientTransport(
+        capabilities: const ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+        ),
+        onRequest: (request) {
+          if (request.method == Method.subscriptionsListen) {
+            listenRequest = request;
+          }
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
+          useServerDiscover: true,
+        ),
+      );
+      await client.connect(transport);
+
+      final subscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      await _pump();
+      expect(listenRequest.id, subscription.id);
+
+      transport.onmessage?.call(
+        JsonRpcSubscriptionsAcknowledgedNotification(
+          acknowledgedParams: const SubscriptionsAcknowledgedNotification(
+            notifications: SubscriptionFilter(toolsListChanged: true),
+          ),
+          meta: {McpMetaKey.subscriptionId: subscription.id},
+        ),
+      );
+      await subscription.acknowledged;
+
+      transport.onmessage?.call(
+        JsonRpcResponse(
+          id: subscription.id,
+          result: {
+            'resultType': resultTypeComplete,
+            '_meta': {McpMetaKey.subscriptionId: subscription.id},
+          },
+        ),
+      );
+
+      final done = await subscription.done;
+      expect(done, isA<SubscriptionsListenResult>());
+      expect(done.subscriptionId, subscription.id);
+    });
+
     test('client subscription rejects notifications before acknowledgment',
         () async {
       final transport = DiscoveringClientTransport(
@@ -5890,7 +5974,10 @@ void main() {
       transport.onmessage?.call(
         JsonRpcResponse(
           id: subscription.id,
-          result: const {'resultType': resultTypeComplete},
+          result: {
+            'resultType': resultTypeComplete,
+            '_meta': {McpMetaKey.subscriptionId: subscription.id},
+          },
         ),
       );
 

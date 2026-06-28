@@ -1,5 +1,6 @@
 import 'initialization.dart';
 import 'json_rpc.dart';
+import 'misc.dart';
 import 'validation.dart';
 
 /// Notification filter requested by `subscriptions/listen`.
@@ -189,6 +190,59 @@ class SubscriptionsListenRequest {
   Map<String, dynamic> toJson() => {
         'notifications': notifications.toJson(),
       };
+}
+
+/// The response sent when a `subscriptions/listen` stream ends gracefully.
+class SubscriptionsListenResult extends EmptyResult {
+  SubscriptionsListenResult({
+    required RequestId subscriptionId,
+    Map<String, dynamic>? meta,
+  }) : super(meta: _subscriptionResultMeta(subscriptionId, meta));
+
+  factory SubscriptionsListenResult.fromJson(Map<String, dynamic> json) {
+    final meta = _readRequiredJsonObject(
+      json['_meta'],
+      'SubscriptionsListenResult._meta',
+    );
+    final subscriptionId = _readSubscriptionId(
+      meta,
+      'SubscriptionsListenResult._meta.${McpMetaKey.subscriptionId}',
+    );
+
+    return SubscriptionsListenResult(
+      subscriptionId: subscriptionId,
+      meta: meta,
+    );
+  }
+
+  /// JSON-RPC request ID for the subscription stream this response closes.
+  RequestId get subscriptionId => _readSubscriptionId(
+        meta,
+        'SubscriptionsListenResult._meta.${McpMetaKey.subscriptionId}',
+      );
+}
+
+Map<String, dynamic> _subscriptionResultMeta(
+  RequestId subscriptionId,
+  Map<String, dynamic>? meta,
+) {
+  final parsedSubscriptionId = parseRequestId(
+    subscriptionId,
+    fieldName: 'SubscriptionsListenResult.subscriptionId',
+  );
+  return <String, dynamic>{
+    ...?meta,
+    McpMetaKey.subscriptionId: parsedSubscriptionId,
+  };
+}
+
+RequestId _readSubscriptionId(Object? meta, String fieldName) {
+  final metaMap =
+      _readRequiredJsonObject(meta, 'SubscriptionsListenResult._meta');
+  return parseRequestId(
+    metaMap[McpMetaKey.subscriptionId],
+    fieldName: fieldName,
+  );
 }
 
 /// Request sent by a client to open a long-lived notification stream.

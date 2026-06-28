@@ -90,8 +90,8 @@ class McpSubscription {
   /// Notifications delivered on this subscription stream after acknowledgment.
   final Stream<JsonRpcNotification> notifications;
 
-  /// Completes when the `subscriptions/listen` request ends.
-  final Future<EmptyResult> done;
+  /// Completes when the `subscriptions/listen` request ends gracefully.
+  final Future<SubscriptionsListenResult> done;
 
   McpSubscription._({
     required this.id,
@@ -1432,10 +1432,10 @@ class McpClient extends Protocol {
       listenParams: params,
       meta: _usesStatelessProtocol ? _statelessRequestMeta(null) : null,
     );
-    final requestDone = super.requestWithReservedId<EmptyResult>(
+    final requestDone = super.requestWithReservedId<SubscriptionsListenResult>(
       requestId,
       requestData,
-      EmptyResult.fromJson,
+      SubscriptionsListenResult.fromJson,
       RequestOptions(
         signal: abortController.signal,
         timeoutEnabled: false,
@@ -1695,7 +1695,8 @@ class _ClientSubscriptionState {
       StreamController<JsonRpcNotification>.broadcast();
   final Completer<SubscriptionsAcknowledgedNotification> _acknowledged =
       Completer<SubscriptionsAcknowledgedNotification>();
-  final Completer<EmptyResult> _done = Completer<EmptyResult>();
+  final Completer<SubscriptionsListenResult> _done =
+      Completer<SubscriptionsListenResult>();
 
   SubscriptionFilter? _acknowledgedNotifications;
   bool _closed = false;
@@ -1713,7 +1714,7 @@ class _ClientSubscriptionState {
 
   Stream<JsonRpcNotification> get notifications => _notifications.stream;
 
-  Future<EmptyResult> get done => _done.future;
+  Future<SubscriptionsListenResult> get done => _done.future;
 
   void handleNotification(JsonRpcNotification notification) {
     if (_closed) {
@@ -1773,12 +1774,12 @@ class _ClientSubscriptionState {
     _notifications.add(notification);
   }
 
-  void trackRequest(Future<EmptyResult> requestDone) {
+  void trackRequest(Future<SubscriptionsListenResult> requestDone) {
     requestDone.then(
       complete,
       onError: (Object error, StackTrace stackTrace) {
         if (_localCancellation) {
-          complete(const EmptyResult());
+          complete(SubscriptionsListenResult(subscriptionId: id));
         } else {
           fail(error, stackTrace, abort: false);
         }
@@ -1796,10 +1797,10 @@ class _ClientSubscriptionState {
       _acknowledged.completeError(AbortError(reason), StackTrace.current);
     }
     abortController.abort(reason);
-    complete(const EmptyResult());
+    complete(SubscriptionsListenResult(subscriptionId: id));
   }
 
-  void complete(EmptyResult result) {
+  void complete(SubscriptionsListenResult result) {
     if (_closed) {
       return;
     }
@@ -1813,6 +1814,19 @@ class _ClientSubscriptionState {
           ErrorCode.invalidRequest.value,
           'Subscription $id completed before '
           '${Method.notificationsSubscriptionsAcknowledged}.',
+        ),
+        StackTrace.current,
+        abort: false,
+      );
+      return;
+    }
+
+    if (!_localCancellation && result.subscriptionId != id) {
+      fail(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'Subscription $id completed with mismatched '
+          '${McpMetaKey.subscriptionId} ${result.subscriptionId}.',
         ),
         StackTrace.current,
         abort: false,
