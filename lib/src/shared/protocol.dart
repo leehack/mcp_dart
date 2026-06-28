@@ -1255,8 +1255,25 @@ abstract class Protocol {
   Map<String, dynamic> serializeIncomingResult(
     JsonRpcRequest request,
     BaseResultData result,
-  ) =>
-      result.toJson();
+  ) {
+    final resultJson = result.toJson();
+    if (request is! JsonRpcSubscriptionsListenRequest) {
+      return resultJson;
+    }
+
+    final meta = <String, dynamic>{
+      ...readOptionalJsonObject(
+            resultJson['_meta'],
+            'SubscriptionsListenResult._meta',
+          ) ??
+          const <String, dynamic>{},
+      McpMetaKey.subscriptionId: request.id,
+    };
+    return <String, dynamic>{
+      ...resultJson,
+      '_meta': meta,
+    };
+  }
 
   /// Handles an MRTR input request embedded in an `InputRequiredResult`.
   ///
