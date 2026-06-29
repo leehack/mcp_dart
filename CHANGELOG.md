@@ -8,6 +8,9 @@
 
 ### Conformance and interoperability
 
+- Documented that published TypeScript SDK `2.0.0-alpha.3` packages are not yet
+  valid replacements for the `pkg.pr.new` 2026-07-28 RC interop fixture because
+  the alpha.3 client is missing the preview negotiation API used by the fixture.
 - Updated official conformance gates to
   `@modelcontextprotocol/conformance@0.2.0-alpha.7`. The 2026-07-28 RC server suite
   now has no expected failures; the 2026 client suite keeps only the upstream

@@ -68,4 +68,10 @@ CI runs this fixture in the dedicated
 `Run MCP 2026-07-28 TypeScript Interop` workflow for relevant PRs,
 `dev/2026-07-28-rc` pushes, daily scheduled drift checks, and manual dispatch.
 Keep the fixture pinned to a published TypeScript SDK alpha once upstream no
-longer requires `pkg.pr.new` preview artifacts.
+longer requires `pkg.pr.new` preview artifacts. Do not treat publication alone
+as enough to re-pin: `@modelcontextprotocol/client@2.0.0-alpha.3` and
+`@modelcontextprotocol/server@2.0.0-alpha.3` are published, but the published
+client does not expose the preview `versionNegotiation` / `getProtocolEra` APIs
+used here, and a direct `supportedProtocolVersions: ["2026-07-28"]` repin fails
+the handshake. Keep this fixture on the `pkg.pr.new` preview until a published
+package exposes the 2026 draft path and this runner passes against it.

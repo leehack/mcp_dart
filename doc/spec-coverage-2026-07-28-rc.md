@@ -59,7 +59,10 @@ and manual dispatch.
   that scenario still behaves like a stable-only server.
 - The TypeScript 2026-07-28 fixture depends on `pkg.pr.new` preview artifacts
   from the TypeScript SDK branch. Keep the CI workflow, but re-pin it to a
-  published alpha package once upstream provides one.
+  published alpha package once upstream provides one that advertises the 2026
+  draft path. The published `@modelcontextprotocol/client/server@2.0.0-alpha.3`
+  packages are missing the preview negotiation API used by this fixture, so
+  they are not a valid replacement for the current preview pin.
 - The reverse Dart preview client -> TypeScript preview server path currently
   covers discovery, `tools/list`, and `tools/call`. Broader reverse-path
   coverage should follow as the TypeScript preview server surface stabilizes.
