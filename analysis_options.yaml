@@ -3,6 +3,15 @@ include: package:lints/recommended.yaml
 analyzer:
   exclude:
     - packages/templates/simple/**
+    # Standalone packages resolve their own dependencies from their nested
+    # pubspecs. Analyze them from their package roots instead of the root
+    # package analyzer context.
+    - example/anthropic-client/**
+    - example/fetch-server/**
+    - example/flutter_http_client/**
+    - example/gemini-client/**
+    - example/jaspr-client/**
+    - packages/mcp_dart_cli/**
   language:
     # strict-casts: true
     # strict-inference: true

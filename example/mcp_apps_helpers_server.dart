@@ -7,6 +7,7 @@ Future<void> main() async {
       version: '1.0.0',
     ),
     options: McpServerOptions(
+      protocol: McpProtocol.preview2026,
       capabilities: ServerCapabilities(
         resources: const ServerCapabilitiesResources(),
         tools: const ServerCapabilitiesTools(),
