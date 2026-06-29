@@ -61,6 +61,14 @@ This starts the Dart 2026-07-28 RC conformance server, runs the pinned TypeScrip
 preview client against it, then runs the reverse Dart preview client smoke check
 against the TypeScript preview server.
 
+Published `@modelcontextprotocol/client@2.0.0-alpha.3` and
+`@modelcontextprotocol/server@2.0.0-alpha.3` packages are not yet suitable
+replacements for this fixture: the published alpha.3 client does not expose the
+preview `versionNegotiation` / `getProtocolEra` APIs used here, and a direct
+`supportedProtocolVersions: ["2026-07-28"]` repin fails the handshake. Keep the
+`pkg.pr.new` pin until a published TypeScript SDK package exposes the 2026 draft
+path and this interop runner passes against it.
+
 CI also runs this fixture in the dedicated
 `Run MCP 2026-07-28 TypeScript Interop` workflow for relevant PRs,
 `dev/2026-07-28-rc` pushes, daily scheduled drift checks, and manual dispatch.
@@ -89,8 +97,10 @@ When adding a new interoperability claim:
 
 - Automated Python SDK fixture coverage.
 - Re-pin the TypeScript 2026-07-28 RC interop fixture to a published upstream
-  alpha package once the TypeScript SDK no longer requires `pkg.pr.new`
-  previews.
+  alpha package once that package exposes the 2026 draft path. The published
+  `@modelcontextprotocol/client/server@2.0.0-alpha.3` packages are not enough
+  because the client is missing the preview negotiation API used by this
+  fixture.
 - Broader reverse-path TypeScript preview server coverage beyond discovery,
   `tools/list`, and `tools/call`.
 - Host-specific MCP Apps rendering compatibility notes.
