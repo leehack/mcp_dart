@@ -6,6 +6,45 @@ const _defaultConformancePackage =
     '@modelcontextprotocol/conformance@0.2.0-alpha.7';
 const _defaultTimeout = Duration(seconds: 60);
 
+// The alpha.7 conformance CLI occasionally leaks or stalls server-initiated
+// elicitation state when the complete 2025 server suite is run in one process
+// on GitHub's Linux runners. Running each pinned scenario in a fresh
+// conformance process preserves coverage while isolating CLI-side state.
+const _serverScenarios = [
+  'server-initialize',
+  'logging-set-level',
+  'ping',
+  'completion-complete',
+  'tools-list',
+  'tools-call-simple-text',
+  'tools-call-image',
+  'tools-call-audio',
+  'tools-call-embedded-resource',
+  'tools-call-mixed-content',
+  'tools-call-with-logging',
+  'tools-call-error',
+  'tools-call-with-progress',
+  'tools-call-sampling',
+  'tools-call-elicitation',
+  'json-schema-2020-12',
+  'elicitation-sep1034-defaults',
+  'server-sse-polling',
+  'server-sse-multiple-streams',
+  'elicitation-sep1330-enums',
+  'resources-list',
+  'resources-read-text',
+  'resources-read-binary',
+  'resources-templates-read',
+  'resources-subscribe',
+  'resources-unsubscribe',
+  'prompts-list',
+  'prompts-get-simple',
+  'prompts-get-with-args',
+  'prompts-get-embedded-resource',
+  'prompts-get-with-image',
+  'dns-rebinding-protection',
+];
+
 Future<void> main(List<String> args) async {
   final options = _Options.parse(args);
   if (options.help) {
@@ -42,13 +81,20 @@ Future<void> main(List<String> args) async {
     stdout.writeln('Output: ${outputRoot.path}');
     stdout.writeln('');
 
-    final result = await _runConformance(
-      serverUrl: serverUrl,
-      outputRoot: outputRoot,
-      conformancePackage: options.conformancePackage,
-      scenario: options.scenario,
-      timeout: options.timeout,
-    );
+    final result = options.isolateScenarios && options.scenario == null
+        ? await _runIsolatedConformance(
+            serverUrl: serverUrl,
+            outputRoot: outputRoot,
+            conformancePackage: options.conformancePackage,
+            timeout: options.timeout,
+          )
+        : await _runConformance(
+            serverUrl: serverUrl,
+            outputRoot: outputRoot,
+            conformancePackage: options.conformancePackage,
+            scenario: options.scenario,
+            timeout: options.timeout,
+          );
 
     exitCode = result.exitCode ?? 1;
     if (result.timedOut) {
@@ -178,6 +224,39 @@ Future<_RunResult> _runConformance({
   }
 }
 
+Future<_RunResult> _runIsolatedConformance({
+  required Uri serverUrl,
+  required Directory outputRoot,
+  required String conformancePackage,
+  required Duration timeout,
+}) async {
+  var failed = false;
+  var timedOut = false;
+
+  for (final scenario in _serverScenarios) {
+    stdout.writeln('');
+    stdout.writeln('=== Running isolated scenario: $scenario ===');
+    final result = await _runConformance(
+      serverUrl: serverUrl,
+      outputRoot: Directory('${outputRoot.path}/$scenario'),
+      conformancePackage: conformancePackage,
+      scenario: scenario,
+      timeout: timeout,
+    );
+    if (result.timedOut) {
+      timedOut = true;
+    }
+    if (result.exitCode != 0) {
+      failed = true;
+    }
+  }
+
+  if (timedOut) {
+    return const _RunResult(exitCode: 1, timedOut: true);
+  }
+  return _RunResult(exitCode: failed ? 1 : 0, timedOut: false);
+}
+
 void _printUsage() {
   stdout.writeln('''
 Usage: dart run test/conformance/run_2025_server_conformance.dart [options]
@@ -188,7 +267,9 @@ Options:
   --port <port>                  Port for the local fixture server.
   --output-dir <path>            Directory for conformance artifacts.
   --conformance-package <pkg>    Conformance npm package.
-  --timeout-seconds <seconds>    Overall conformance command timeout.
+  --timeout-seconds <seconds>    Conformance command timeout.
+  --isolate-scenarios            Run each pinned 2025 scenario in a fresh
+                                 conformance process.
   --help                         Show this help.
 ''');
 }
@@ -200,6 +281,7 @@ class _Options {
   final String? outputDir;
   final String conformancePackage;
   final Duration timeout;
+  final bool isolateScenarios;
   final bool help;
 
   const _Options({
@@ -209,6 +291,7 @@ class _Options {
     required this.outputDir,
     required this.conformancePackage,
     required this.timeout,
+    required this.isolateScenarios,
     required this.help,
   });
 
@@ -219,6 +302,7 @@ class _Options {
     String? outputDir;
     var conformancePackage = _defaultConformancePackage;
     var timeout = _defaultTimeout;
+    var isolateScenarios = false;
     var help = false;
 
     for (var i = 0; i < args.length; i++) {
@@ -235,6 +319,8 @@ class _Options {
           conformancePackage = args[++i];
         case '--timeout-seconds':
           timeout = Duration(seconds: int.parse(args[++i]));
+        case '--isolate-scenarios':
+          isolateScenarios = true;
         case '--help':
           help = true;
         default:
@@ -249,6 +335,7 @@ class _Options {
       outputDir: outputDir,
       conformancePackage: conformancePackage,
       timeout: timeout,
+      isolateScenarios: isolateScenarios,
       help: help,
     );
   }
