@@ -45,6 +45,24 @@ class RecordingTransport extends Transport {
   }
 }
 
+class ValidationRecordingTransport extends RecordingTransport
+    implements IncomingRequestValidationAwareTransport {
+  McpError? Function(JsonRpcRequest request)? incomingRequestValidator;
+  bool Function(String method)? requestMethodSupported;
+
+  @override
+  void setIncomingRequestValidator(
+    McpError? Function(JsonRpcRequest request) validator,
+  ) {
+    incomingRequestValidator = validator;
+  }
+
+  @override
+  void setRequestMethodSupported(bool Function(String method) isSupported) {
+    requestMethodSupported = isSupported;
+  }
+}
+
 class SessionRecordingTaskStore extends InMemoryTaskStore {
   final List<String?> createTaskSessionIds = [];
   final List<String?> updateTaskStatusSessionIds = [];
@@ -2989,6 +3007,59 @@ void main() {
         (capabilities['extensions'] as Map)[mcpTasksExtensionId],
         isEmpty,
       );
+    });
+
+    test('stateless tools/call rejects missing tool-required client capability',
+        () async {
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+      server.registerTool(
+        'needs_sampling',
+        meta: const {
+          'io.modelcontextprotocol/requiredClientCapabilities': ['sampling'],
+        },
+        callback: (args, extra) => const CallToolResult(
+          content: [TextContent(text: 'ok')],
+        ),
+      );
+      final transport = ValidationRecordingTransport();
+      await server.connect(transport);
+      final validator = transport.incomingRequestValidator;
+      expect(validator, isNotNull);
+
+      final missingError = validator!(
+        JsonRpcCallToolRequest(
+          id: 'call-1',
+          params: const CallToolRequest(name: 'needs_sampling').toJson(),
+          meta: _clientMeta(),
+        ),
+      );
+
+      expect(missingError, isNotNull);
+      expect(
+        missingError!.code,
+        ErrorCode.missingRequiredClientCapability.value,
+      );
+      expect(missingError.data, {
+        'requiredCapabilities': ['sampling'],
+      });
+
+      final allowedError = validator(
+        JsonRpcCallToolRequest(
+          id: 'call-2',
+          params: const CallToolRequest(name: 'needs_sampling').toJson(),
+          meta: _clientMeta(
+            clientCapabilities: const ClientCapabilities(
+              sampling: ClientCapabilitiesSampling(tools: true),
+            ),
+          ),
+        ),
+      );
+      expect(allowedError, isNull);
     });
 
     test('stateless tools/call ignores legacy task parameter', () async {
