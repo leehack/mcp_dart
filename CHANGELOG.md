@@ -11,19 +11,19 @@
 - Re-pinned the TypeScript SDK 2026-07-28 RC interop fixture from `pkg.pr.new`
   previews to published `@modelcontextprotocol/client@2.0.0-beta.1` and
   `@modelcontextprotocol/server@2.0.0-beta.1` packages after verifying both
-  Dart -> TypeScript and TypeScript -> Dart preview paths.
+  Dart -> TypeScript and TypeScript -> Dart 2026 draft/RC paths.
 - Updated official conformance gates to
   `@modelcontextprotocol/conformance@0.2.0-alpha.8`, adding the new stateless
   diagnostic probes for missing client capabilities, response-stream shape, and
   request-scoped logging. The 2026-07-28 RC server suite now has no expected
   failures; the 2026 client suite keeps only the upstream
   `json-schema-ref-no-deref` fixture gap expected.
-- Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC preview
+- Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC beta
   interop fixture on relevant PRs, `dev/2026-07-28-rc` pushes, daily schedule,
   and manual dispatch.
 - Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the opt-in
-  profile to official conformance, local tests, and TypeScript preview interop.
-- Switched the reverse Dart preview client -> TypeScript preview server fixture
+  profile to official conformance, local tests, and TypeScript SDK beta interop.
+- Switched the reverse Dart 2026 client -> TypeScript SDK beta server fixture
   to the TypeScript SDK's 2026 HTTP handler entry, making `server/discover`,
   `tools/list`, and `tools/call` strict interop checks instead of diagnostic
   skips.

@@ -137,7 +137,7 @@ for opt-in behavior, fallback rules, and draft-only APIs.
 
 - 🧪 **[SDK Interoperability Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/interoperability.md)** - Verified Dart/TypeScript and documented cross-SDK scenarios
 - ✅ **[MCP 2025-11-25 Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2025-11-25.md)** - Auditable coverage map with CLI conformance cases and known gaps
-- 🧪 **[MCP 2026-07-28 Draft/RC Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2026-07-28-rc.md)** - Opt-in draft/RC coverage map across official conformance and TypeScript preview interop
+- 🧪 **[MCP 2026-07-28 Draft/RC Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2026-07-28-rc.md)** - Opt-in draft/RC coverage map across official conformance and TypeScript SDK beta interop
 - 🧭 **[MCP 2026-07-28 Draft/RC Transition Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md)** - Opt-in profile, fallback behavior, and draft-only APIs
 - 🔒 **[Transport Security Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md#dns-rebinding-protection)** - Host/Origin allowlists, OAuth layering, and compatibility-toggle trade-offs
 - 📱 **[Flutter Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/flutter-recipes.md)** - Flutter Web, mobile, and desktop host/client guidance
