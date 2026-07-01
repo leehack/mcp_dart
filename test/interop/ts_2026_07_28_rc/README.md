@@ -5,12 +5,12 @@ This fixture is an experimental smoke test for the unreleased MCP
 progress.
 
 It is intentionally separate from `test/interop/ts`, which tracks the published
-stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins
-`pkg.pr.new` client and server previews from the TypeScript SDK
-`v2-2026-07-28` branch after PR #2327 landed. The TypeScript client path is a
-draft-aligned smoke check against the Dart 2026-07-28 RC server. The reverse Dart
-client path is a draft-aligned smoke check against the TypeScript preview
-server.
+stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins published
+`@modelcontextprotocol/client@2.0.0-beta.1` and
+`@modelcontextprotocol/server@2.0.0-beta.1` packages. The TypeScript client path
+is a draft-aligned smoke check against the Dart 2026-07-28 RC server. The
+reverse Dart client path is a draft-aligned smoke check against the TypeScript
+beta server.
 
 ## Run
 
@@ -53,10 +53,10 @@ bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
 - Closing a 2026 HTTP SSE response stream cancels the in-flight Dart server
   request without sending `notifications/cancelled`.
 
-The runner also starts `src/server.mjs` with the TypeScript preview
+The runner also starts `src/server.mjs` with the TypeScript beta
 `createMcpHandler` entry and runs a Dart preview client against it. That reverse
 path asserts `server/discover` negotiation, `tools/list`, and `tools/call`
-against the TypeScript preview server; failures are treated as interop failures.
+against the TypeScript beta server; failures are treated as interop failures.
 
 Keep this fixture anchored to the official draft/RC behavior rather than the
 preview TypeScript implementation alone. In particular, `x-mcp-header` tests use
@@ -67,11 +67,6 @@ assertion source and document the preview gap near the test.
 CI runs this fixture in the dedicated
 `Run MCP 2026-07-28 TypeScript Interop` workflow for relevant PRs,
 `dev/2026-07-28-rc` pushes, daily scheduled drift checks, and manual dispatch.
-Keep the fixture pinned to a published TypeScript SDK alpha once upstream no
-longer requires `pkg.pr.new` preview artifacts. Do not treat publication alone
-as enough to re-pin: `@modelcontextprotocol/client@2.0.0-alpha.3` and
-`@modelcontextprotocol/server@2.0.0-alpha.3` are published, but the published
-client does not expose the preview `versionNegotiation` / `getProtocolEra` APIs
-used here, and a direct `supportedProtocolVersions: ["2026-07-28"]` repin fails
-the handshake. Keep this fixture on the `pkg.pr.new` preview until a published
-package exposes the 2026 draft path and this runner passes against it.
+Keep the fixture pinned to a published TypeScript SDK beta that exposes the
+2026 draft path and passes this runner; do not treat package publication alone
+as enough to re-pin without rerunning the interop check.

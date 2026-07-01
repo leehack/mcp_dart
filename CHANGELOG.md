@@ -8,9 +8,10 @@
 
 ### Conformance and interoperability
 
-- Documented that published TypeScript SDK `2.0.0-alpha.3` packages are not yet
-  valid replacements for the `pkg.pr.new` 2026-07-28 RC interop fixture because
-  the alpha.3 client is missing the preview negotiation API used by the fixture.
+- Re-pinned the TypeScript SDK 2026-07-28 RC interop fixture from `pkg.pr.new`
+  previews to published `@modelcontextprotocol/client@2.0.0-beta.1` and
+  `@modelcontextprotocol/server@2.0.0-beta.1` packages after verifying both
+  Dart -> TypeScript and TypeScript -> Dart preview paths.
 - Updated official conformance gates to
   `@modelcontextprotocol/conformance@0.2.0-alpha.7`. The 2026-07-28 RC server suite
   now has no expected failures; the 2026 client suite keeps only the upstream
@@ -20,9 +21,6 @@
   and manual dispatch.
 - Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the opt-in
   profile to official conformance, local tests, and TypeScript preview interop.
-- Re-pinned the TypeScript SDK 2026-07-28 RC interop fixture to
-  `pkg.pr.new` previews from the merged `v2-2026-07-28` branch head for both
-  client and server packages.
 - Switched the reverse Dart preview client -> TypeScript preview server fixture
   to the TypeScript SDK's 2026 HTTP handler entry, making `server/discover`,
   `tools/list`, and `tools/call` strict interop checks instead of diagnostic

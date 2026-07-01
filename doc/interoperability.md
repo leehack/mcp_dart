@@ -23,8 +23,8 @@ For MCP 2026-07-28 draft/RC coverage, see the
 | Dart client -> TypeScript SDK server | Streamable HTTP | `2025-11-25` | [`test/interop/dart_client_with_ts_server_test.dart`](../test/interop/dart_client_with_ts_server_test.dart), [`test/interop/ts/`](../test/interop/ts/) | Verified | Covers tool calls and stale preconfigured session-id recovery. |
 | TypeScript SDK client -> Dart server | stdio | `2025-11-25` | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Runs the compiled TypeScript client fixture against a Dart server process and checks that an official TS client can list tools immediately after the lifecycle handshake. |
 | TypeScript SDK client -> Dart server | Streamable HTTP | `2025-11-25` | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Includes official TS Streamable HTTP client lifecycle coverage, pre-`initialized` operation rejection, GET SSE streams, and `Last-Event-ID` replay behavior. |
-| TypeScript SDK preview client -> Dart server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_07_28_rc/`](../test/interop/ts_2026_07_28_rc/), [`tool/testing/run_ts_2026_07_28_rc_interop.dart`](../tool/testing/run_ts_2026_07_28_rc_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Automated preview check | Uses pinned `pkg.pr.new` previews from the TypeScript SDK `v2-2026-07-28` branch head. Covers modern negotiation, cache metadata, `tools/list`, `tools/call`, `x-mcp-header` mirroring, raw header and unsupported-version rejection, removed core RPC rejection, progress notifications, `subscriptions/listen`, and HTTP SSE cancellation against the Dart 2026-07-28 RC conformance server. |
-| Dart preview client -> TypeScript SDK preview server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_07_28_rc/src/server.mjs`](../test/interop/ts_2026_07_28_rc/src/server.mjs), [`tool/testing/run_ts_2026_07_28_rc_interop.dart`](../tool/testing/run_ts_2026_07_28_rc_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Automated preview check | Uses the pinned TypeScript SDK server preview through its `createMcpHandler` entry and covers `server/discover` negotiation, `tools/list`, and `tools/call`. |
+| TypeScript SDK preview client -> Dart server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_07_28_rc/`](../test/interop/ts_2026_07_28_rc/), [`tool/testing/run_ts_2026_07_28_rc_interop.dart`](../tool/testing/run_ts_2026_07_28_rc_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Automated preview check | Uses published `@modelcontextprotocol/client@2.0.0-beta.1` and `@modelcontextprotocol/server@2.0.0-beta.1` packages. Covers modern negotiation, cache metadata, `tools/list`, `tools/call`, `x-mcp-header` mirroring, raw header and unsupported-version rejection, removed core RPC rejection, progress notifications, `subscriptions/listen`, and HTTP SSE cancellation against the Dart 2026-07-28 RC conformance server. |
+| Dart preview client -> TypeScript SDK preview server | Streamable HTTP | `2026-07-28` draft/RC | [`test/interop/ts_2026_07_28_rc/src/server.mjs`](../test/interop/ts_2026_07_28_rc/src/server.mjs), [`tool/testing/run_ts_2026_07_28_rc_interop.dart`](../tool/testing/run_ts_2026_07_28_rc_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Automated preview check | Uses the published TypeScript SDK beta server through its `createMcpHandler` entry and covers `server/discover` negotiation, `tools/list`, and `tools/call`. |
 | Dart client -> Python MCP server | stdio | Server-dependent | [`doc/transports.md`](transports.md#connect-to-python-server) | Documented recipe | The transport can spawn Python servers over stdio, but this repo does not yet include an automated Python SDK fixture. |
 | Flutter/Web client -> Dart server | Streamable HTTP | `2026-07-28` draft/RC preview with stable fallback | [`example/flutter_http_client/`](../example/flutter_http_client/), [`doc/flutter-recipes.md`](flutter-recipes.md) | Documented recipe | Flutter Web cannot spawn stdio servers; use Streamable HTTP or another browser-safe transport. The example opts into preview negotiation while retaining stable fallback. |
 | MCP Apps host/client metadata | stdio or Streamable HTTP | `2026-07-28` draft/RC preview plus `io.modelcontextprotocol/ui` extension | [`doc/mcp-apps.md`](mcp-apps.md), [`example/mcp_apps_helpers_server.dart`](../example/mcp_apps_helpers_server.dart), [`test/types/mcp_ui_test.dart`](../test/types/mcp_ui_test.dart), [`test/server/mcp_ui_test.dart`](../test/server/mcp_ui_test.dart) | Verified | Verified coverage is limited to SDK metadata helpers, serialization, and checked-in examples; host rendering behavior varies by host, so verify UI metadata against your target host. |
@@ -46,8 +46,8 @@ dart test --tags interop
 
 If the compiled fixtures are missing, local test runs skip the interop groups; CI should fail when required fixtures are unavailable.
 
-The TypeScript 2026-07-28 RC fixture uses unreleased `pkg.pr.new` previews from
-the TypeScript SDK `v2-2026-07-28` branch:
+The TypeScript 2026-07-28 RC fixture uses the published TypeScript SDK beta
+packages:
 
 ```bash
 # From repository root
@@ -57,17 +57,15 @@ cd ../../..
 dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
 ```
 
-This starts the Dart 2026-07-28 RC conformance server, runs the pinned TypeScript SDK
-preview client against it, then runs the reverse Dart preview client smoke check
-against the TypeScript preview server.
+This starts the Dart 2026-07-28 RC conformance server, runs the pinned TypeScript
+SDK beta client against it, then runs the reverse Dart preview client smoke check
+against the TypeScript beta server.
 
-Published `@modelcontextprotocol/client@2.0.0-alpha.3` and
-`@modelcontextprotocol/server@2.0.0-alpha.3` packages are not yet suitable
-replacements for this fixture: the published alpha.3 client does not expose the
-preview `versionNegotiation` / `getProtocolEra` APIs used here, and a direct
-`supportedProtocolVersions: ["2026-07-28"]` repin fails the handshake. Keep the
-`pkg.pr.new` pin until a published TypeScript SDK package exposes the 2026 draft
-path and this interop runner passes against it.
+The fixture previously depended on `pkg.pr.new` artifacts because published
+`2.0.0-alpha.3` packages did not expose the preview negotiation API used here.
+`@modelcontextprotocol/client@2.0.0-beta.1` and
+`@modelcontextprotocol/server@2.0.0-beta.1` expose the required modern path and
+the interop runner passes against them.
 
 CI also runs this fixture in the dedicated
 `Run MCP 2026-07-28 TypeScript Interop` workflow for relevant PRs,
@@ -96,11 +94,6 @@ When adding a new interoperability claim:
 ## Known gaps worth tracking
 
 - Automated Python SDK fixture coverage.
-- Re-pin the TypeScript 2026-07-28 RC interop fixture to a published upstream
-  alpha package once that package exposes the 2026 draft path. The published
-  `@modelcontextprotocol/client/server@2.0.0-alpha.3` packages are not enough
-  because the client is missing the preview negotiation API used by this
-  fixture.
 - Broader reverse-path TypeScript preview server coverage beyond discovery,
   `tools/list`, and `tools/call`.
 - Host-specific MCP Apps rendering compatibility notes.
