@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.7';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.8';
 const _defaultTimeout = Duration(seconds: 60);
 
-// The alpha.7 conformance CLI occasionally leaks or stalls server-initiated
+// The alpha conformance CLI can occasionally leak or stall server-initiated
 // elicitation state when the complete 2025 server suite is run in one process
 // on GitHub's Linux runners. Running each pinned scenario in a fresh
 // conformance process preserves coverage while isolating CLI-side state.

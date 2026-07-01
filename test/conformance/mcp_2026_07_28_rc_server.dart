@@ -104,10 +104,50 @@ McpServer _createConformanceServer() {
     },
   );
 
+  _registerAlpha8StatelessDiagnostics(server);
   _registerStreamDiagnostics(server);
   _registerInputRequiredDiagnostics(server);
 
   return server;
+}
+
+void _registerAlpha8StatelessDiagnostics(McpServer server) {
+  server.registerTool(
+    'test_missing_capability',
+    description:
+        'Requires sampling so missing client capability handling can be validated',
+    meta: const {
+      'io.modelcontextprotocol/requiredClientCapabilities': ['sampling'],
+    },
+    callback: (args, extra) async {
+      return _textResult('sampling capability present');
+    },
+  );
+
+  server.registerTool(
+    'test_streaming_elicitation',
+    description:
+        'Returns a normal result so response-stream frame shape can be validated',
+    callback: (args, extra) async {
+      return _textResult('stream-shape-ok');
+    },
+  );
+
+  server.registerTool(
+    'test_logging_tool',
+    description:
+        'Attempts request-scoped logging for the stateless log-level diagnostic',
+    callback: (args, extra) async {
+      await server.sendLoggingMessage(
+        const LoggingMessageNotification(
+          level: LoggingLevel.info,
+          data: 'log-level diagnostic',
+        ),
+        requestMeta: extra.meta,
+      );
+      return _textResult('logging-ok');
+    },
+  );
 }
 
 void _registerStreamDiagnostics(McpServer server) {

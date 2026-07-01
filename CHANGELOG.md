@@ -13,8 +13,10 @@
   `@modelcontextprotocol/server@2.0.0-beta.1` packages after verifying both
   Dart -> TypeScript and TypeScript -> Dart preview paths.
 - Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.7`. The 2026-07-28 RC server suite
-  now has no expected failures; the 2026 client suite keeps only the upstream
+  `@modelcontextprotocol/conformance@0.2.0-alpha.8`, adding the new stateless
+  diagnostic probes for missing client capabilities, response-stream shape, and
+  request-scoped logging. The 2026-07-28 RC server suite now has no expected
+  failures; the 2026 client suite keeps only the upstream
   `json-schema-ref-no-deref` fixture gap expected.
 - Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC preview
   interop fixture on relevant PRs, `dev/2026-07-28-rc` pushes, daily schedule,
