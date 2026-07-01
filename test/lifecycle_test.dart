@@ -376,6 +376,7 @@ void main() {
       final client = Client(
         const Implementation(name: 'client', version: '1.0.0'),
         options: const ClientOptions(
+          useServerDiscover: false,
           capabilities: ClientCapabilities(
             sampling: ClientCapabilitiesSampling(),
           ),
@@ -414,6 +415,7 @@ void main() {
       final transport = LifecycleTransport();
       final client = Client(
         const Implementation(name: 'client', version: '1.0.0'),
+        options: const ClientOptions(useServerDiscover: false),
       );
       final errors = <Error>[];
       client.onerror = errors.add;
@@ -436,6 +438,7 @@ void main() {
       final client = Client(
         const Implementation(name: 'client', version: '1.0.0'),
         options: const ClientOptions(
+          useServerDiscover: false,
           capabilities: ClientCapabilities(
             sampling: ClientCapabilitiesSampling(),
           ),
@@ -484,6 +487,7 @@ void main() {
       final transport = FailingInitializedSendTransport();
       final client = Client(
         const Implementation(name: 'client', version: '1.0.0'),
+        options: const ClientOptions(useServerDiscover: false),
       );
 
       final connectFuture = client.connect(transport);

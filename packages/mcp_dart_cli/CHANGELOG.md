@@ -1,3 +1,24 @@
+## 0.2.0-dev.1
+
+- Update the dev CLI package to depend on `mcp_dart ^2.3.0-dev.1`.
+- Refresh built-in 2026-07-28 RC conformance checks for the current draft error
+  codes and cacheable `server/discover` behavior.
+- Keep CLI standalone binary release automation current with GitHub runner and
+  artifact action updates.
+- Add installer fallback behavior for resolving the latest stable CLI GitHub
+  release when the GitHub Releases API is unavailable.
+
+## 0.2.0-dev.0
+
+- Prepare the CLI for the MCP `2026-07-28` draft/RC SDK dev line with a
+  dependency on `mcp_dart ^2.3.0-dev.0`.
+- Keep the local monorepo SDK override in `pubspec_overrides.yaml` so published
+  CLI pubspec metadata does not expose path overrides.
+- Point dev CLI package documentation metadata at the `dev/2026-07-28-rc`
+  branch and document explicit prerelease activation.
+- Document that generated projects still resolve the stable SDK by default and
+  need an explicit `mcp_dart ^2.3.0-dev.0` dependency for draft/RC testing.
+
 ## 0.1.9
 
 - Add `mcp_dart inspect-server` for structured MCP server inspection reports
@@ -35,6 +56,21 @@
 - Add `mcp_dart conformance` with built-in JSON-RPC and protocol-version fixture checks, deterministic JSON-RPC fuzz cases, exact-case filtering, and JSON output for CI/scripts.
 - Add `mcp_dart conformance --suite spec` for MCP 2025-11-25 lifecycle,
   capability, elicitation, task-metadata, and progress-token raw-wire checks.
+- Extend `mcp_dart conformance --suite spec` with MCP 2026-07-28 RC checks for
+  draft protocol advertisement, `server/discover`, stateless result/cache
+  defaults, removed core RPCs, stateless HTTP parameter header encoding, and
+  task subscription missing-capability errors.
+- Add conformance coverage for `sampling.context` negotiation before deprecated
+  sampling `includeContext` values are sent.
+- Add conformance coverage that aborted `initialize` requests do not emit
+  `notifications/cancelled`.
+- Add conformance coverage that `notifications/cancelled` payloads require a
+  valid `requestId`.
+- Add conformance coverage that `notifications/subscriptions/acknowledged`
+  typed parsers reject mismatched JSON-RPC wrapper constants.
+- Add JSON-RPC fixture conformance coverage for rejecting envelopes that mix
+  request/notification `method` fields with response `result` or `error`
+  fields, including direct typed parser coverage.
 - Document `mcp_dart conformance --suite all` as the stable non-fuzz coverage
   gate used by CI.
 

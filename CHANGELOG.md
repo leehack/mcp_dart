@@ -1,3 +1,135 @@
+## Unreleased
+
+### Platform support
+
+- Inherited the stable 2.2.2 web/WASM-safe default export path, preserving
+  Dart IO native exports while working around pub.dev/pana 0.23.13 WASM
+  platform scoring for conditional exports.
+
+### Conformance and interoperability
+
+- Re-pinned the TypeScript SDK 2026-07-28 RC interop fixture from `pkg.pr.new`
+  previews to published `@modelcontextprotocol/client@2.0.0-beta.1` and
+  `@modelcontextprotocol/server@2.0.0-beta.1` packages after verifying both
+  Dart -> TypeScript and TypeScript -> Dart 2026 draft/RC paths.
+- Updated official conformance gates to
+  `@modelcontextprotocol/conformance@0.2.0-alpha.8`, adding the new stateless
+  diagnostic probes for missing client capabilities, response-stream shape, and
+  request-scoped logging. The 2026-07-28 RC server suite now has no expected
+  failures; the 2026 client suite keeps only the upstream
+  `json-schema-ref-no-deref` fixture gap expected.
+- Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC beta
+  interop fixture on relevant PRs, `dev/2026-07-28-rc` pushes, daily schedule,
+  and manual dispatch.
+- Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the opt-in
+  profile to official conformance, local tests, and TypeScript SDK beta interop.
+- Switched the reverse Dart 2026 client -> TypeScript SDK beta server fixture
+  to the TypeScript SDK's 2026 HTTP handler entry, making `server/discover`,
+  `tools/list`, and `tools/call` strict interop checks instead of diagnostic
+  skips.
+- Recorded overridden conformance package names in 2026-07-28 RC summary artifacts so
+  ad hoc package-bump checks are auditable.
+- Added `SubscriptionsListenResult` for graceful `subscriptions/listen` closure
+  and now include the required `io.modelcontextprotocol/subscriptionId` metadata
+  in Dart server responses and client `McpSubscription.done` results.
+- Cleaned up root analyzer coverage for standalone example packages and opted
+  Streamable HTTP, Flutter/Jaspr web client, and MCP Apps examples into the
+  `2026-07-28` preview protocol profile with stable fallback where applicable.
+- Broadened preview client discovery fallback so servers that implement
+  `server/discover` but advertise only stable protocol versions can still
+  connect through the stable `initialize` flow.
+
+## 2.3.0-dev.1
+
+This dev preview refreshes MCP `2026-07-28` draft/RC support while keeping MCP
+`2025-11-25` as the default protocol profile.
+
+### MCP 2026-07-28 draft/RC refresh
+
+- Aligned draft protocol-defined error codes with the live draft:
+  `HeaderMismatch` is now `-32020`,
+  `MissingRequiredClientCapability` is now `-32021`, and
+  `UnsupportedProtocolVersion` is now `-32022`.
+- Marked `server/discover` as a 2026 cacheable result so stateless responses
+  include default `ttlMs` and `cacheScope` hints.
+- Removed the legacy `DRAFT-2026-v1` draft alias now that official conformance
+  targets the `2026-07-28` wire version.
+- Ported the JSON Schema boolean-subschema preservation fix onto the RC dev
+  line, including legacy tool-schema shims.
+
+### Conformance and interoperability
+
+- Updated official conformance gates to
+  `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with full 2026-07-28 RC server
+  scenario coverage and alpha.4's spec-filtered 2026 client scenario list in CI.
+- Expanded the manual TypeScript SDK 2026-07-28 RC interop fixture pinned to the
+  upstream PR #2327 preview package, covering modern negotiation,
+  `server/discover` cache metadata, `tools/list`, `tools/call`,
+  `x-mcp-header` mirroring, progress notifications, raw HTTP header validation,
+  unsupported-version and removed core RPC rejection, `subscriptions/listen`,
+  and Streamable HTTP SSE cancellation.
+- Added a diagnostic Dart preview client -> TypeScript server alpha path and
+  documented the current TS alpha gaps around mandatory `server/discover` and
+  stateless `resultType` responses.
+
+## 2.3.0-dev.0
+
+This is a dev preview for MCP `2026-07-28` draft/RC support. MCP
+`2025-11-25` remains the default protocol profile; draft/RC behavior is enabled
+explicitly and may still change before the official spec release.
+
+### MCP 2026-07-28 draft/RC preview
+
+- Added `McpProtocol.preview2026` and `McpProtocol.require2026` profiles for
+  clients and servers, with stable `initialize` behavior preserved by default.
+- Added `server/discover` negotiation, per-request stateless metadata,
+  protocol/client/capability validation, and version-aware fallback behavior.
+- Added stateless Streamable HTTP behavior for POST-only requests, no
+  `Mcp-Session-Id`, `Mcp-Name` task routing, `Mcp-Param-*` argument headers,
+  CORS preflights, SSE cancellation, and request-scoped logging.
+- Added draft-only flows for `subscriptions/listen`, MCP Tasks extension
+  handlers, MRTR `input_required` results, cacheable list/read results, and
+  `input_required` prompt/resource responses.
+- Added explicit typed APIs for non-object draft result data, including
+  `JsonValue`, `structuredContentJson`,
+  `CallToolResult.fromStructuredArray()`, and server `outputJsonSchema`.
+
+### Stable compatibility
+
+- Kept stable public tool-result APIs object-rooted and omitted non-object
+  structured output from stable MCP `2025-11-25` responses.
+- Preserved stable session behavior, registration-order list output, legacy task
+  augmentation, stable-only `Tool.execution` metadata, and legacy resource error
+  codes outside the 2026 stateless profile.
+- Preserved numeric JSON-RPC request IDs and progress tokens end-to-end while
+  continuing to reject non-finite numeric values.
+
+### Spec hardening
+
+- Tightened JSON-RPC envelope parsing, wrapper constant checks, error object
+  validation, `_meta` key validation, and mixed request/response rejection.
+- Accepted and preserved JSON Schema 2020-12 boolean subschemas in nested
+  schema positions such as object properties, array items, composition
+  keywords, and `not`.
+- Tightened typed parsing for content, resources, prompts, tools, roots,
+  sampling, elicitation, tasks, subscriptions, completions, capabilities, and
+  JSON Schema fields so malformed wire values fail with protocol errors instead
+  of Dart cast errors.
+- Validated JSON-only metadata and result data across JSON-RPC, MRTR, task,
+  subscription, sampling, tool, resource, and content boundaries.
+
+### Conformance and release readiness
+
+- Added official MCP `2025-11-25` and MCP `2026-07-28` draft/RC client/server
+  conformance gates to core CI.
+- Added `tool/spec_example_audit.dart` for parsing upstream machine-readable
+  spec examples through checked-in SDK types during RC/final release audits.
+- Prepared the dev release workflow so prerelease tags are GitHub prereleases,
+  publish jobs run `dart pub publish --dry-run`, and the draft/RC transition
+  guide includes a dev release checklist.
+- Pointed prerelease package documentation links at `dev/2026-07-28-rc` so
+  pub.dev users see the draft/RC docs that match the dev package.
+
 ## 2.2.2
 
 ### Platform support

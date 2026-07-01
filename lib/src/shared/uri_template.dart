@@ -129,6 +129,10 @@ class UriTemplateExpander {
 
         parts.add(_ExpressionPart(operator, varSpecs));
         i = end + 1;
+      } else if (template[i] == '}') {
+        throw ArgumentError(
+          "Unmatched closing template expression at index $i",
+        );
       } else {
         currentText.write(template[i]);
         i++;
@@ -153,8 +157,9 @@ class UriTemplateExpander {
   }
 
   static List<_VarSpec> _parseVarSpecs(String specsString) {
-    return specsString.split(',').map((spec) {
-      spec = spec.trim();
+    return specsString.split(',').map((rawSpec) {
+      var spec = rawSpec.trim();
+      final originalSpec = spec;
       bool explode = false;
       int? prefix;
 
@@ -164,22 +169,32 @@ class UriTemplateExpander {
       } else {
         final prefixMatch = RegExp(r':(\d+)$').firstMatch(spec);
         if (prefixMatch != null) {
-          prefix = int.tryParse(prefixMatch.group(1)!);
+          final prefixText = prefixMatch.group(1)!;
+          if (!RegExp(r'^[1-9][0-9]{0,4}$').hasMatch(prefixText)) {
+            throw ArgumentError(
+              "Invalid prefix modifier '$prefixText' in variable spec "
+              "'$originalSpec'",
+            );
+          }
+          prefix = int.parse(prefixText);
           spec = spec.substring(0, prefixMatch.start);
         }
       }
 
-      if (spec.isEmpty ||
-          !RegExp(r'^[a-zA-Z0-9_]|(%[0-9A-Fa-f]{2})').hasMatch(spec[0])) {
-        if (spec.isNotEmpty) {
-          // Allow empty string from splitting trailing comma
-        }
+      if (!_isValidVariableName(spec)) {
+        throw ArgumentError("Invalid variable name '$spec'");
       }
 
       _validateLength(spec, maxVariableLength, "Variable name '$spec'");
 
       return _VarSpec(spec, explode, prefix);
     }).toList();
+  }
+
+  static bool _isValidVariableName(String spec) {
+    return RegExp(
+      r'^(?:[a-zA-Z0-9_]|%[0-9A-Fa-f]{2})(?:\.?(?:[a-zA-Z0-9_]|%[0-9A-Fa-f]{2}))*$',
+    ).hasMatch(spec);
   }
 
   String _encodeValue(String value, String operator) {

@@ -238,15 +238,10 @@ async function assertRawDartServerWireShapes(client: Client): Promise<void> {
       );
     }
     if (tool.outputSchema !== undefined) {
-      const outputSchema = requireRecord(
+      requireRecord(
         tool.outputSchema,
         'raw tool outputSchema'
       );
-      if (outputSchema.type !== 'object') {
-        throw new Error(
-          `tool outputSchema was not object-root: ${JSON.stringify(tool)}`
-        );
-      }
     }
   }
 

@@ -19,6 +19,21 @@ class MockTransport extends Transport {
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
 
+    // Handle discovery probe from default 2026 clients against this legacy
+    // mock transport.
+    if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      onmessage?.call(
+        JsonRpcError(
+          id: message.id,
+          error: JsonRpcErrorData(
+            code: ErrorCode.methodNotFound.value,
+            message: 'Method not found',
+          ),
+        ),
+      );
+      return;
+    }
+
     // Handle initialize request
     if (message is JsonRpcRequest &&
         message.method == 'initialize' &&
@@ -746,6 +761,23 @@ void main() {
         () => ElicitRequestParams.fromJson({
           'mode': 'url',
           'message': 'Please authenticate',
+          'url': 'relative/callback',
+          'elicitationId': 'oauth-123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'Please authenticate',
+          url: 'relative/callback',
+          elicitationId: 'oauth-123',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'Please authenticate',
           'url': 'https://oauth.example.com/authorize',
           'elicitationId': 'oauth-123',
           'requestedSchema': {
@@ -791,6 +823,7 @@ void main() {
         'mode': 'form',
         'message': 'Configure deployment',
         'requestedSchema': {
+          r'$schema': 'https://json-schema.org/draft/2020-12/schema',
           'type': 'object',
           'properties': {
             'email': {
@@ -799,6 +832,8 @@ void main() {
               'title': 'Email',
               'description': 'Contact address',
               'default': 'ops@example.com',
+              'minLength': 3,
+              'maxLength': 320,
             },
             'size': {
               'type': 'string',
@@ -829,6 +864,9 @@ void main() {
             },
             'features': {
               'type': 'array',
+              'minItems': 1,
+              'maxItems': 2,
+              'default': ['logs'],
               'items': {
                 'type': 'string',
                 'enum': ['logs', 'metrics'],
@@ -850,6 +888,179 @@ void main() {
 
       expect(request.isFormMode, isTrue);
       expect(request.toJson()['requestedSchema'], isA<Map<String, dynamic>>());
+    });
+
+    test('Form elicitation accepts numeric number schema keywords', () {
+      Map<String, dynamic> requestWithProperty(
+        String name,
+        Map<String, dynamic> property,
+      ) =>
+          {
+            'message': 'Configure deployment',
+            'requestedSchema': {
+              'type': 'object',
+              'properties': {name: property},
+            },
+          };
+
+      for (final property in <String, Map<String, dynamic>>{
+        'fractionalNumberDefault': {
+          'type': 'number',
+          'default': 0.5,
+        },
+        'fractionalNumberMinimum': {
+          'type': 'number',
+          'minimum': 0.1,
+        },
+        'fractionalNumberMaximum': {
+          'type': 'number',
+          'maximum': 0.9,
+        },
+        'fractionalIntegerDefault': {
+          'type': 'integer',
+          'default': 1.5,
+        },
+        'fractionalIntegerMinimum': {
+          'type': 'integer',
+          'minimum': 1.5,
+        },
+        'fractionalIntegerMaximum': {
+          'type': 'integer',
+          'maximum': 10.5,
+        },
+      }.entries) {
+        final params = ElicitRequestParams.fromJson(
+          requestWithProperty(property.key, property.value),
+        );
+        expect(
+          params.requestedSchema!.toJson()['properties'][property.key],
+          containsPair(property.value.keys.last, property.value.values.last),
+        );
+      }
+
+      final serialized = ElicitRequestParams.form(
+        message: 'Configure deployment',
+        requestedSchema: JsonSchema.object(
+          properties: {
+            'ratio': JsonSchema.number(
+              minimum: 0.1,
+              maximum: 0.9,
+              defaultValue: 0.5,
+            ),
+          },
+        ),
+      ).toJson();
+      final ratioSchema = serialized['requestedSchema']['properties']['ratio'];
+      expect(ratioSchema['minimum'], 0.1);
+      expect(ratioSchema['maximum'], 0.9);
+      expect(ratioSchema['default'], 0.5);
+
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('notFinite', {
+            'type': 'number',
+            'default': double.nan,
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Draft form elicitation accepts numeric number schema keywords', () {
+      final params = {
+        'mode': 'form',
+        'message': 'Configure deployment',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': {
+            'ratio': {
+              'type': 'number',
+              'minimum': 0.1,
+              'maximum': 0.9,
+              'default': 0.5,
+            },
+            'count': {
+              'type': 'integer',
+              'minimum': 0.5,
+              'maximum': 10.5,
+              'default': 1.5,
+            },
+          },
+        },
+      };
+
+      final parsed = ElicitRequestParams.fromJson(
+        params,
+        protocolVersion: draftProtocolVersion2026_07_28,
+      );
+      final parsedJson = parsed.toJson(
+        protocolVersion: draftProtocolVersion2026_07_28,
+      );
+      expect(
+        parsedJson['requestedSchema']['properties']['ratio']['minimum'],
+        0.1,
+      );
+      expect(
+        parsedJson['requestedSchema']['properties']['count']['maximum'],
+        10.5,
+      );
+
+      final serialized = ElicitRequestParams.form(
+        message: 'Configure deployment',
+        requestedSchema: JsonSchema.object(
+          properties: {
+            'ratio': JsonSchema.number(
+              minimum: 0.1,
+              maximum: 0.9,
+              defaultValue: 0.5,
+            ),
+          },
+        ),
+      ).toJson(protocolVersion: draftProtocolVersion2026_07_28);
+      expect(
+        serialized['requestedSchema']['properties']['ratio']['default'],
+        0.5,
+      );
+
+      final request = JsonRpcElicitRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 1,
+        'method': Method.elicitationCreate,
+        'params': {
+          ...params,
+          '_meta': {McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28},
+        },
+      });
+      expect(
+        request.toJson()['params']['requestedSchema']['properties']['count']
+            ['minimum'],
+        0.5,
+      );
+
+      expect(
+        () => JsonRpcElicitRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': {
+            'mode': 'form',
+            'message': 'Configure deployment',
+            'requestedSchema': {
+              'type': 'object',
+              'properties': {
+                'ratio': {
+                  'type': 'number',
+                  'maximum': double.infinity,
+                },
+              },
+            },
+            '_meta': {
+              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+            },
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('Form elicitation rejects non-spec schema shapes', () {
@@ -901,6 +1112,68 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        () => ElicitRequestParams.fromJson({
+          'message': 'Bad schema URI',
+          'requestedSchema': {
+            r'$schema': 2020,
+            'type': 'object',
+            'properties': {
+              'value': {'type': 'string'},
+            },
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      for (final property in <String, Map<String, dynamic>>{
+        'badStringTitle': {
+          'type': 'string',
+          'title': 1,
+        },
+        'badStringDefault': {
+          'type': 'string',
+          'default': false,
+        },
+        'badStringMinLength': {
+          'type': 'string',
+          'minLength': 1.5,
+        },
+        'badNumberDefault': {
+          'type': 'number',
+          'default': '0',
+        },
+        'badIntegerDefault': {
+          'type': 'integer',
+          'default': double.nan,
+        },
+        'badBooleanDefault': {
+          'type': 'boolean',
+          'default': 'false',
+        },
+        'badArrayDefault': {
+          'type': 'array',
+          'default': ['ok', 1],
+          'items': {
+            'type': 'string',
+            'enum': ['ok'],
+          },
+        },
+        'badArrayMinItems': {
+          'type': 'array',
+          'minItems': '1',
+          'items': {
+            'type': 'string',
+            'enum': ['ok'],
+          },
+        },
+      }.entries) {
+        expect(
+          () => ElicitRequestParams.fromJson(
+            requestWithProperty(property.key, property.value),
+          ),
+          throwsA(isA<FormatException>()),
+        );
+      }
+      expect(
         () => ElicitRequestParams.fromJson(
           requestWithProperty('value', {
             'type': 'object',
@@ -943,6 +1216,26 @@ void main() {
             'enumNames': ['Ok', 1],
           }),
         ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ElicitRequestParams.fromJson(
+          requestWithProperty('value', {
+            'type': 'string',
+            'enumNames': ['Ok'],
+          }),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.form(
+          message: 'Bad enum names',
+          requestedSchema: JsonObject(
+            properties: {
+              'value': JsonString(enumNames: ['Ok']),
+            },
+          ),
+        ).toJson(),
         throwsA(isA<FormatException>()),
       );
       expect(
@@ -996,7 +1289,8 @@ void main() {
         'action': 'accept',
         'content': {
           'text': 'value',
-          'count': 3,
+          'count': 3.0,
+          'ratio': 0.5,
           'confirmed': true,
           'selections': ['a', 'b'],
         },
@@ -1004,6 +1298,7 @@ void main() {
       });
 
       expect(parsed.toJson()['content'], containsPair('count', 3));
+      expect(parsed.toJson()['content'], containsPair('ratio', 0.5));
       expect(parsed.toJson()['_meta'], containsPair('trace', 'abc'));
 
       expect(
@@ -1023,10 +1318,46 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        () => ElicitResult.fromJson({
+          'action': 'decline',
+          'content': {
+            'name': 'Alice',
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
         () => const ElicitResult(
           action: 'accept',
           content: {
             'values': [1, 2],
+          },
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        const ElicitResult(
+          action: 'accept',
+          content: {
+            'ratio': 0.5,
+          },
+        ).toJson()['content'],
+        containsPair('ratio', 0.5),
+      );
+      expect(
+        const ElicitResult(
+          action: 'accept',
+          content: {
+            'count': 3.0,
+          },
+        ).toJson()['content'],
+        containsPair('count', 3),
+      );
+      expect(
+        () => const ElicitResult(
+          action: 'cancel',
+          content: {
+            'name': 'Alice',
           },
         ).toJson(),
         throwsA(isA<ArgumentError>()),

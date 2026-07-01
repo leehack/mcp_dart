@@ -200,6 +200,7 @@ class McpService {
       _client = McpClient(
         const Implementation(name: 'jaspr-mcp-client', version: '1.0.0'),
         options: const McpClientOptions(
+          protocol: McpProtocol.preview2026,
           capabilities: ClientCapabilities(
             elicitation: ClientElicitation.formOnly(),
             sampling: ClientCapabilitiesSampling(),

@@ -1,0 +1,57 @@
+name: Run MCP 2026-07-28 TypeScript Interop
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * *'
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'test/conformance/**'
+      - 'test/interop/ts_2026_07_28_rc/**'
+      - 'tool/testing/run_ts_2026_07_28_rc_interop.dart'
+      - '.github/workflows/interop_2026_07_28.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+  push:
+    branches:
+      - dev/2026-07-28-rc
+    paths:
+      - 'lib/**'
+      - 'test/conformance/**'
+      - 'test/interop/ts_2026_07_28_rc/**'
+      - 'tool/testing/run_ts_2026_07_28_rc_interop.dart'
+      - '.github/workflows/interop_2026_07_28.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+
+jobs:
+  ts-2026-07-28-interop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      - name: Install TypeScript 2026-07-28 fixture dependencies
+        working-directory: test/interop/ts_2026_07_28_rc
+        run: npm ci
+
+      - name: Run TypeScript 2026-07-28 interop fixture
+        run: dart run tool/testing/run_ts_2026_07_28_rc_interop.dart

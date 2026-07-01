@@ -8,7 +8,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 /// It demonstrates how to use the MCP client library with standard I/O.
 /// It runs the server example from `example/server_stdio.dart`
 /// and communicates with it using the StdioClientTransport.
-/// The client sends various requests to the server, including ping, tool calls,
+/// The client sends various requests to the server, including tool calls,
 /// resource reads, and prompt calls.
 Future<void> main() async {
   // Define the server executable and arguments
@@ -47,11 +47,6 @@ Future<void> main() async {
     print('Connecting to server...');
     await client.connect(transport);
     print('Connected to server.');
-
-    // Example: Send a ping request
-    print('Sending ping...');
-    final pingResult = await client.ping();
-    print('Ping successful: ${pingResult.toJson()}');
 
     print('Listing tools...');
     final tools = await client.listTools();

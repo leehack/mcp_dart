@@ -20,7 +20,7 @@ class CalculatorTool extends BaseTool {
       );
 
   @override
-  ToolOutputSchema? get outputSchema => ToolOutputSchema(
+  JsonSchema? get outputSchema => ToolOutputSchema(
         properties: {
           'result': JsonSchema.number(description: 'The sum of a and b'),
         },

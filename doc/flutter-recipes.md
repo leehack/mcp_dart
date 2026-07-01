@@ -25,6 +25,7 @@ class McpClientController extends ChangeNotifier {
   Future<void> connect(Uri serverUri) async {
     final client = McpClient(
       const Implementation(name: 'flutter-host', version: '1.0.0'),
+      options: const McpClientOptions(protocol: McpProtocol.preview2026),
     );
     final transport = StreamableHttpClientTransport(serverUri);
 

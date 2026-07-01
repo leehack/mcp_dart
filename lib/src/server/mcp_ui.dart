@@ -10,7 +10,13 @@ class McpUiAppToolConfig {
   final String? title;
   final String? description;
   final ToolInputSchema? inputSchema;
+
+  /// Stable MCP `2025-11-25` object-root output schema.
   final ToolOutputSchema? outputSchema;
+
+  /// MCP `2026-07-28` draft/RC output schema with any JSON Schema root.
+  final JsonSchema? outputJsonSchema;
+
   final ToolAnnotations? annotations;
   final Map<String, dynamic> meta;
 
@@ -19,6 +25,7 @@ class McpUiAppToolConfig {
     this.description,
     this.inputSchema,
     this.outputSchema,
+    this.outputJsonSchema,
     this.annotations,
     required this.meta,
   });
@@ -90,6 +97,7 @@ RegisteredTool registerAppTool(
     description: config.description,
     inputSchema: config.inputSchema,
     outputSchema: config.outputSchema,
+    outputJsonSchema: config.outputJsonSchema,
     annotations: config.annotations,
     meta: normalizedMeta,
     callback: callback,

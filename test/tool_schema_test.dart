@@ -2,6 +2,47 @@ import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('Tool parameter header annotations', () {
+    test('schema objects preserve x-mcp-header round-trip', () {
+      final schema = JsonSchema.object(
+        properties: {
+          'region': JsonSchema.string(mcpHeader: 'Region'),
+          'limit': JsonSchema.number(mcpHeader: 'Limit'),
+          'count': JsonSchema.integer(mcpHeader: 'Count'),
+          'dryRun': JsonSchema.boolean(mcpHeader: 'Dry-Run'),
+        },
+      );
+
+      final json = schema.toJson();
+      final properties = json['properties'] as Map<String, dynamic>;
+      expect(properties['region']['x-mcp-header'], 'Region');
+      expect(properties['limit']['x-mcp-header'], 'Limit');
+      expect(properties['count']['x-mcp-header'], 'Count');
+      expect(properties['dryRun']['x-mcp-header'], 'Dry-Run');
+
+      final parsed = JsonSchema.fromJson(json) as JsonObject;
+      final parsedProperties = parsed.properties!;
+      expect((parsedProperties['region'] as JsonString).mcpHeader, 'Region');
+      expect((parsedProperties['limit'] as JsonNumber).mcpHeader, 'Limit');
+      expect((parsedProperties['count'] as JsonInteger).mcpHeader, 'Count');
+      expect(
+        (parsedProperties['dryRun'] as JsonBoolean).mcpHeader,
+        'Dry-Run',
+      );
+      expect(parsed.toJson(), json);
+    });
+
+    test('non-primitive x-mcp-header annotations remain visible', () {
+      final schema = JsonSchema.fromJson({
+        'type': 'object',
+        'x-mcp-header': 'Payload',
+      });
+
+      expect(schema, isA<JsonAny>());
+      expect(schema.toJson()['x-mcp-header'], 'Payload');
+    });
+  });
+
   group('Tool Schema Required Fields Tests', () {
     test('ToolInputSchema preserves required fields during serialization', () {
       final schema = JsonObject(
@@ -140,6 +181,110 @@ void main() {
       expect(
         (deserialized.outputSchema as JsonObject?)?.required,
         equals(['result']),
+      );
+    });
+
+    test('Tool preserves non-object output schemas for MCP 2026', () {
+      final tool = Tool(
+        name: 'list_results',
+        inputSchema: const JsonObject(),
+        outputSchema: JsonSchema.array(items: JsonSchema.string()),
+      );
+
+      final json = tool.toJson();
+      expect(json['outputSchema']['type'], equals('array'));
+      expect(json['outputSchema']['items']['type'], equals('string'));
+
+      final deserialized = Tool.fromJson(json);
+      expect(
+        deserialized.outputSchema?.toJson(),
+        equals(json['outputSchema']),
+      );
+    });
+
+    test('CallToolResult preserves arbitrary JSON structured content', () {
+      final values = <Object?>[
+        {'status': 'ok'},
+        ['alpha', 'beta'],
+        'complete',
+        42,
+        true,
+      ];
+
+      for (final value in values) {
+        final result = CallToolResult.fromStructuredValue(
+          JsonValue.fromJson(value),
+        );
+        final json = result.toJson();
+
+        expect(json['structuredContent'], equals(value));
+
+        final parsed = CallToolResult.fromJson(json);
+        expect(parsed.hasStructuredContent, isTrue);
+        expect(parsed.structuredContentJson?.toJson(), equals(value));
+      }
+
+      final nullResult = CallToolResult.fromStructuredNull();
+      final nullJson = nullResult.toJson();
+      expect(nullJson.containsKey('structuredContent'), isTrue);
+      expect(nullJson['structuredContent'], isNull);
+
+      final parsedNull = CallToolResult.fromJson(nullJson);
+      expect(parsedNull.hasStructuredContent, isTrue);
+      expect(parsedNull.structuredContentJson?.toJson(), isNull);
+    });
+
+    test('Tool JSON object fields reject non-JSON Dart map values', () {
+      expect(
+        () => Tool.fromJson({
+          'name': 'search',
+          'inputSchema': {'type': 'object'},
+          '_meta': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const Tool(
+          name: 'search',
+          inputSchema: JsonObject(),
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolRequest.fromJson({
+          'name': 'search',
+          'arguments': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const CallToolRequest(
+          name: 'search',
+          arguments: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolResult.fromJson({
+          'content': <Map<String, dynamic>>[],
+          '_meta': {'bad': Object()},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => const CallToolResult(
+          content: [],
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsFormatException,
+      );
+      expect(
+        () => CallToolResult.fromJson({
+          'content': <Map<String, dynamic>>[],
+          'x-extra': Object(),
+        }),
+        throwsFormatException,
       );
     });
 

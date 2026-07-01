@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
 /// Mock transport for McpServer tests
-class McpServerTestTransport implements Transport {
+class McpServerTestTransport
+    implements Transport, ToolParameterHeaderAwareTransport {
   final List<JsonRpcMessage> sentMessages = [];
+  final List<ToolParameterHeaderMappings> toolParameterHeaderMappings = [];
   bool _closed = false;
 
   @override
@@ -39,6 +42,13 @@ class McpServerTestTransport implements Transport {
   }
 
   @override
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  ) {
+    toolParameterHeaderMappings.add(mappings);
+  }
+
+  @override
   Future<void> start() async {
     if (_closed) throw StateError('Cannot start closed transport');
     onmessage?.call(
@@ -55,6 +65,23 @@ class McpServerTestTransport implements Transport {
     onmessage?.call(const JsonRpcInitializedNotification());
     await Future<void>.delayed(Duration.zero);
   }
+}
+
+Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
+      protocolVersion: draftProtocolVersion2026_07_28,
+      clientInfo: const Implementation(name: 'test-client', version: '1.0.0'),
+      clientCapabilities: const ClientCapabilities(),
+    );
+
+bool _containsMcpHeader(Object? value) {
+  if (value is Map) {
+    return value.containsKey('x-mcp-header') ||
+        value.values.any(_containsMcpHeader);
+  }
+  if (value is Iterable) {
+    return value.any(_containsMcpHeader);
+  }
+  return false;
 }
 
 void main() {
@@ -103,6 +130,319 @@ void main() {
       final tools = response.result['tools'] as List;
       expect(tools.length, equals(1));
       expect(tools.first['name'], equals('test-tool'));
+    });
+
+    test('legacy tool schema shims preserve boolean subschemas', () async {
+      server.tool(
+        'legacy-boolean-schema-tool',
+        inputSchemaProperties: {
+          'allowed': true,
+          'denied': false,
+          'named': {'type': 'string'},
+        },
+        outputSchemaProperties: {
+          'allowed': true,
+          'denied': false,
+        },
+        callback: ({args, extra}) async => const CallToolResult(content: []),
+      );
+
+      await server.connect(transport);
+
+      transport.receiveMessage(const JsonRpcListToolsRequest(id: 1));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      final tool = tools.single as Map;
+      final inputSchema = tool['inputSchema'] as Map;
+      final outputSchema = tool['outputSchema'] as Map;
+
+      expect(inputSchema['properties'], {
+        'allowed': true,
+        'denied': false,
+        'named': {'type': 'string'},
+      });
+      expect(outputSchema['properties'], {
+        'allowed': true,
+        'denied': false,
+      });
+    });
+
+    test('connect syncs tool parameter header mappings to transports',
+        () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+      server.registerTool(
+        'header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'dryRun': JsonBoolean(mcpHeader: 'Dry-Run'),
+            'region': JsonString(mcpHeader: 'Region'),
+            'ratio': JsonNumber(mcpHeader: 'Ratio'),
+            'auth': JsonObject(
+              properties: {
+                'tenant': JsonString(mcpHeader: 'Tenant'),
+              },
+            ),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      await server.connect(transport);
+
+      expect(transport.toolParameterHeaderMappings, isNotEmpty);
+      expect(
+        transport.toolParameterHeaderMappings.last,
+        equals(
+          const {
+            'header-tool': {
+              'dryRun': 'Dry-Run',
+              'region': 'Region',
+              'ratio': 'Ratio',
+              '/auth/tenant': 'Tenant',
+            },
+          },
+        ),
+      );
+
+      transport.receiveMessage(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      final tool = tools.single as Map;
+      final inputSchema = tool['inputSchema'] as Map;
+      final properties = inputSchema['properties'] as Map;
+      final authProperties = (properties['auth'] as Map)['properties'] as Map;
+      expect((properties['region'] as Map)['x-mcp-header'], 'Region');
+      expect((properties['ratio'] as Map)['x-mcp-header'], 'Ratio');
+      expect((authProperties['tenant'] as Map)['x-mcp-header'], 'Tenant');
+    });
+
+    test('tool updates refresh parameter header mappings on transports',
+        () async {
+      final registeredTool = server.registerTool(
+        'header-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      await server.connect(transport);
+      transport.toolParameterHeaderMappings.clear();
+
+      registeredTool.update(
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'dryRun': JsonBoolean(mcpHeader: 'Dry-Run'),
+          },
+        ),
+      );
+
+      expect(transport.toolParameterHeaderMappings, isNotEmpty);
+      expect(
+        transport.toolParameterHeaderMappings.last,
+        equals(
+          const {
+            'header-tool': {'dryRun': 'Dry-Run'},
+          },
+        ),
+      );
+
+      registeredTool.disable();
+
+      expect(transport.toolParameterHeaderMappings.last, isEmpty);
+    });
+
+    test('invalid tool parameter header metadata is not synced', () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+      server.registerTool(
+        'non-string-header-tool',
+        inputSchema: ToolInputSchema(
+          properties: {
+            'value': JsonSchema.fromJson(
+              {'type': 'string', 'x-mcp-header': 1},
+            ),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
+        'invalid-header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'value': JsonString(mcpHeader: 'Bad:Header'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
+        'separator-header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'value': JsonString(mcpHeader: 'Bad/Header'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
+        'duplicate-header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'primary': JsonString(mcpHeader: 'Region'),
+            'secondary': JsonString(mcpHeader: 'region'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
+        'non-primitive-header-tool',
+        inputSchema: ToolInputSchema(
+          properties: {
+            'value': JsonSchema.fromJson(
+              {'type': 'object', 'x-mcp-header': 'Value'},
+            ),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      await server.connect(transport);
+
+      expect(transport.toolParameterHeaderMappings, isNotEmpty);
+      expect(transport.toolParameterHeaderMappings.last, isEmpty);
+
+      transport.receiveMessage(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      expect(tools, hasLength(5));
+      for (final tool in tools.cast<Map>()) {
+        expect(_containsMcpHeader(tool['inputSchema']), isFalse);
+      }
+    });
+
+    test('invalid stateless header metadata is stripped from nested schemas',
+        () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+      server.registerTool(
+        'nested-header-tool',
+        inputSchema: ToolInputSchema.fromJson({
+          'type': 'object',
+          'properties': {
+            'invalidArray': {
+              'type': 'array',
+              'x-mcp-header': 'Invalid',
+              'items': {
+                'type': 'string',
+                'x-mcp-header': 'Item',
+              },
+            },
+            'objectMap': {
+              'type': 'object',
+              'additionalProperties': {
+                'type': 'string',
+                'x-mcp-header': 'Additional',
+              },
+            },
+            'combined': {
+              'allOf': [
+                true,
+                {
+                  'type': 'string',
+                  'x-mcp-header': 'All',
+                },
+              ],
+              'anyOf': [
+                false,
+                {
+                  'type': 'integer',
+                  'x-mcp-header': 'Any',
+                },
+              ],
+              'oneOf': [
+                {
+                  'type': 'boolean',
+                  'x-mcp-header': 'One',
+                },
+              ],
+              'not': {
+                'type': 'string',
+                'x-mcp-header': 'Not',
+              },
+            },
+            'literalData': {
+              'default': {
+                'x-mcp-header': 'not schema metadata',
+              },
+            },
+            'preservedAny': {
+              'properties': {
+                'flag': true,
+              },
+            },
+          },
+        }),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      final tool = tools.single as Map;
+      final inputSchema = tool['inputSchema'] as Map;
+      final properties = inputSchema['properties'] as Map;
+      final invalidArray = properties['invalidArray'] as Map;
+      final objectMap = properties['objectMap'] as Map;
+      final combined = properties['combined'] as Map;
+      final allOf = combined['allOf'] as List;
+      final anyOf = combined['anyOf'] as List;
+      final oneOf = combined['oneOf'] as List;
+      final literalData = properties['literalData'] as Map;
+      final preservedAny = properties['preservedAny'] as Map;
+
+      expect(invalidArray.containsKey('x-mcp-header'), isFalse);
+      expect(
+        (invalidArray['items'] as Map).containsKey('x-mcp-header'),
+        isFalse,
+      );
+      expect(
+        (objectMap['additionalProperties'] as Map).containsKey('x-mcp-header'),
+        isFalse,
+      );
+      expect((allOf[1] as Map).containsKey('x-mcp-header'), isFalse);
+      expect((anyOf[1] as Map).containsKey('x-mcp-header'), isFalse);
+      expect((oneOf.single as Map).containsKey('x-mcp-header'), isFalse);
+      expect((combined['not'] as Map).containsKey('x-mcp-header'), isFalse);
+      expect(
+        (literalData['default'] as Map)['x-mcp-header'],
+        'not schema metadata',
+      );
+      expect(((preservedAny['properties'] as Map)['flag'] as bool), isTrue);
     });
 
     test('registerTool can be updated', () async {
@@ -404,6 +744,69 @@ void main() {
       final response = transport.sentMessages.last as JsonRpcResponse;
       final contents = response.result['contents'] as List;
       expect(contents.first['text'], equals('Hello from resource'));
+    });
+
+    test('legacy resource miss uses stable resource-not-found error', () async {
+      server.registerResource(
+        'Known Resource',
+        'test://known',
+        null,
+        (uri, extra) async => ReadResourceResult(
+          contents: [
+            TextResourceContents(uri: uri.toString(), text: 'known'),
+          ],
+        ),
+      );
+
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcReadResourceRequest(
+          id: 'missing-resource',
+          readParams: const ReadResourceRequestParams(uri: 'test://missing'),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.resourceNotFound.value);
+      expect(response.error.message, 'Resource not found');
+      expect(response.error.data, {'uri': 'test://missing'});
+    });
+
+    test('stateless resource miss uses 2026 invalid params error', () async {
+      server = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+        ),
+      );
+      server.registerResource(
+        'Known Resource',
+        'test://known',
+        null,
+        (uri, extra) async => ReadResourceResult(
+          contents: [
+            TextResourceContents(uri: uri.toString(), text: 'known'),
+          ],
+        ),
+      );
+
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcReadResourceRequest(
+          id: 'missing-resource',
+          readParams: const ReadResourceRequestParams(uri: 'test://missing'),
+          meta: _statelessMeta(),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, 'Resource not found');
+      expect(response.error.data, {'uri': 'test://missing'});
     });
   });
 

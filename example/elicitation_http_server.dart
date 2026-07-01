@@ -66,6 +66,7 @@ class InMemoryEventStore implements EventStore {
 McpServer getServer() {
   final server = McpServer(
     const Implementation(name: 'elicitation-example-server', version: '1.0.0'),
+    options: const McpServerOptions(protocol: McpProtocol.preview2026),
   );
 
   // Example 1: Simple user registration tool
@@ -602,11 +603,18 @@ void main() async {
   }
 }
 
-// Check if a request is an initialization request
 bool _isInitializeRequest(dynamic body) {
-  return body is Map<String, dynamic> &&
-      body.containsKey('method') &&
-      body['method'] == 'initialize';
+  return body is Map<String, dynamic> && body['method'] == Method.initialize;
+}
+
+bool _isStatelessRequest(HttpRequest request) {
+  final protocolVersion = request.headers.value('mcp-protocol-version');
+  return protocolVersion != null &&
+      isStatelessProtocolVersion(protocolVersion.trim());
+}
+
+bool _canHandleSessionlessPost(HttpRequest request, dynamic body) {
+  return _isInitializeRequest(body) || _isStatelessRequest(request);
 }
 
 // Handle POST requests
@@ -627,8 +635,8 @@ Future<void> _handlePostRequest(
     if (sessionId != null && transports.containsKey(sessionId)) {
       // Reuse existing transport
       transport = transports[sessionId]!;
-    } else if (sessionId == null && _isInitializeRequest(body)) {
-      // New initialization request
+    } else if (sessionId == null && _canHandleSessionlessPost(request, body)) {
+      // New legacy session request or stateless 2026 request
       final eventStore = InMemoryEventStore();
       transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
@@ -657,9 +665,10 @@ Future<void> _handlePostRequest(
       await transport.handleRequest(request, body);
       return;
     } else {
-      // Invalid request
+      // Invalid request - unknown session ID or non-initialize legacy request
       request.response
-        ..statusCode = HttpStatus.badRequest
+        ..statusCode =
+            sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       request.response.write(
         jsonEncode(
@@ -667,8 +676,9 @@ Future<void> _handlePostRequest(
             id: null,
             error: JsonRpcErrorData(
               code: ErrorCode.connectionClosed.value,
-              message:
-                  'Bad Request: No valid session ID provided or not an initialization request',
+              message: sessionId == null
+                  ? 'Bad Request: sessionless requests must be initialize or include a stateless MCP-Protocol-Version'
+                  : 'Session not found',
             ),
           ).toJson(),
         ),
@@ -710,10 +720,11 @@ Future<void> _handleGetRequest(
 ) async {
   final sessionId = request.headers.value('mcp-session-id');
   if (sessionId == null || !transports.containsKey(sessionId)) {
-    request.response.statusCode = HttpStatus.badRequest;
+    request.response.statusCode =
+        sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound;
     setCorsHeaders(request.response);
     request.response
-      ..write('Invalid or missing session ID')
+      ..write(sessionId == null ? 'Missing session ID' : 'Session not found')
       ..close();
     return;
   }
@@ -736,10 +747,11 @@ Future<void> _handleDeleteRequest(
 ) async {
   final sessionId = request.headers.value('mcp-session-id');
   if (sessionId == null || !transports.containsKey(sessionId)) {
-    request.response.statusCode = HttpStatus.badRequest;
+    request.response.statusCode =
+        sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound;
     setCorsHeaders(request.response);
     request.response
-      ..write('Invalid or missing session ID')
+      ..write(sessionId == null ? 'Missing session ID' : 'Session not found')
       ..close();
     return;
   }

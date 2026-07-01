@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install TS Interop dependencies
         working-directory: test/interop/ts
@@ -42,6 +42,34 @@ jobs:
       - name: Run MCP spec conformance gate
         working-directory: packages/mcp_dart_cli
         run: dart run bin/mcp_dart.dart conformance --suite all --json
+
+      - name: Run official MCP 2025 server conformance
+        run: >
+          dart run test/conformance/run_2025_server_conformance.dart
+          --timeout-seconds 90
+          --isolate-scenarios
+          --output-dir .dart_tool/conformance/ci_2025_server
+
+      - name: Run official MCP 2025 client conformance
+        run: >
+          npx -y @modelcontextprotocol/conformance@0.2.0-alpha.8 client
+          --command "dart run test/conformance/mcp_2026_07_28_rc_client.dart"
+          --suite all
+          --spec-version 2025-11-25
+          --verbose
+          -o .dart_tool/conformance/ci_2025_client
+
+      - name: Run official MCP 2026-07-28 RC server conformance
+        run: >
+          dart run test/conformance/run_2026_07_28_rc_server_conformance.dart
+          --timeout-seconds 90
+          --output-dir .dart_tool/conformance/ci_2026_server
+
+      - name: Run official MCP 2026-07-28 RC client conformance
+        run: >
+          dart run test/conformance/run_2026_07_28_rc_client_conformance.dart
+          --timeout-seconds 90
+          --output-dir .dart_tool/conformance/ci_2026_client
 
       - name: Run interop test suite
         run: dart test -t interop

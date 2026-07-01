@@ -50,6 +50,38 @@ void main() {
       expect(json.containsKey('priority'), isFalse);
       expect(json.containsKey('lastModified'), isFalse);
     });
+
+    test('validates shared annotation fields', () {
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'audience': ['model'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'audience': 'user',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceAnnotations.fromJson({
+          'lastModified': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceAnnotations(audience: ['model']).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('rejects malformed string wire fields', () {
+      expect(
+        () => ResourceAnnotations.fromJson({'title': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('Resource', () {
@@ -76,7 +108,7 @@ void main() {
         'mimeType': 'text/plain',
         'icon': {
           'type': 'image',
-          'data': 'base64data',
+          'data': 'YmFzZTY0ZGF0YQ==',
           'mimeType': 'image/png',
         },
         'annotations': {
@@ -98,7 +130,7 @@ void main() {
       expect(resource.description, equals('A test file resource'));
       expect(resource.mimeType, equals('text/plain'));
       expect(resource.icon, isNotNull);
-      expect(resource.icon!.data, equals('base64data'));
+      expect(resource.icon!.data, equals('YmFzZTY0ZGF0YQ=='));
       expect(resource.icons, isNotNull);
       expect(
         resource.icons!.single.src,
@@ -147,6 +179,48 @@ void main() {
           'uri': 'file:///test.txt',
           'name': 'Test File',
           'size': '123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects malformed string and icon wire fields', () {
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'title': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'icon': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'icons': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Resource.fromJson({
+          'uri': 'file:///test.txt',
+          'name': 'Test File',
+          'icons': ['bad'],
         }),
         throwsA(isA<FormatException>()),
       );
@@ -225,7 +299,7 @@ void main() {
         'mimeType': 'application/json',
         'icon': {
           'type': 'image',
-          'data': 'icondata',
+          'data': 'aWNvbmRhdGE=',
           'mimeType': 'image/svg+xml',
         },
         'annotations': {
@@ -315,6 +389,40 @@ void main() {
       expect(json['_meta'], isNotNull);
       expect(json['_meta']['ui']['prefersBorder'], isFalse);
     });
+
+    test('fromJson rejects malformed string and icon wire fields', () {
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 'File Template',
+          'description': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 'File Template',
+          'icon': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path}',
+          'name': 'File Template',
+          'icons': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('ListResourcesRequest', () {
@@ -341,6 +449,13 @@ void main() {
       final json = request.toJson();
       expect(json.containsKey('cursor'), isFalse);
     });
+
+    test('fromJson rejects malformed cursor', () {
+      expect(
+        () => ListResourcesRequest.fromJson({'cursor': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcListResourcesRequest', () {
@@ -361,6 +476,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 3,
         'method': 'resources/list',
         'params': {'cursor': 'xyz'},
@@ -373,6 +489,7 @@ void main() {
 
     test('fromJson without params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 4,
         'method': 'resources/list',
       };
@@ -380,6 +497,37 @@ void main() {
       final request = JsonRpcListResourcesRequest.fromJson(json);
       expect(request.id, equals(4));
       expect(request.listParams.cursor, isNull);
+    });
+
+    test('fromJson rejects non-object params', () {
+      expect(
+        () => JsonRpcListResourcesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 5,
+          'method': 'resources/list',
+          'params': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcListResourcesRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 5,
+          'method': 'resources/list',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcListResourcesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 5,
+          'method': 'resources/read',
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -418,6 +566,22 @@ void main() {
       expect(result.meta!['customKey'], equals('customValue'));
     });
 
+    test('fromJson rejects malformed resource items and cursor', () {
+      expect(
+        () => ListResourcesResult.fromJson({
+          'resources': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ListResourcesResult.fromJson({
+          'resources': [],
+          'nextCursor': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('toJson serializes correctly', () {
       const result = ListResourcesResult(
         resources: [
@@ -445,6 +609,13 @@ void main() {
       final json = request.toJson();
       expect(json['cursor'], equals('next_tmpl'));
     });
+
+    test('fromJson rejects malformed cursor', () {
+      expect(
+        () => ListResourceTemplatesRequest.fromJson({'cursor': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcListResourceTemplatesRequest', () {
@@ -455,6 +626,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 11,
         'method': 'resources/templates/list',
         'params': {'cursor': 'tmpl_page'},
@@ -463,6 +635,37 @@ void main() {
       final request = JsonRpcListResourceTemplatesRequest.fromJson(json);
       expect(request.id, equals(11));
       expect(request.listParams.cursor, equals('tmpl_page'));
+    });
+
+    test('fromJson rejects non-object params', () {
+      expect(
+        () => JsonRpcListResourceTemplatesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 12,
+          'method': 'resources/templates/list',
+          'params': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcListResourceTemplatesRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 12,
+          'method': 'resources/templates/list',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcListResourceTemplatesRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 12,
+          'method': 'resources/list',
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -485,6 +688,22 @@ void main() {
       final json = {'resourceTemplates': <dynamic>[]};
       final result = ListResourceTemplatesResult.fromJson(json);
       expect(result.resourceTemplates, isEmpty);
+    });
+
+    test('fromJson rejects malformed template items and cursor', () {
+      expect(
+        () => ListResourceTemplatesResult.fromJson({
+          'resourceTemplates': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ListResourceTemplatesResult.fromJson({
+          'resourceTemplates': [],
+          'nextCursor': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('toJson serializes correctly', () {
@@ -526,6 +745,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 21,
         'method': 'resources/read',
         'params': {'uri': 'file:///parsed.txt'},
@@ -538,12 +758,34 @@ void main() {
 
     test('fromJson throws on missing params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 22,
         'method': 'resources/read',
       };
 
       expect(
         () => JsonRpcReadResourceRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcReadResourceRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 22,
+          'method': 'resources/read',
+          'params': {'uri': 'file:///parsed.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcReadResourceRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 22,
+          'method': 'resources/list',
+          'params': {'uri': 'file:///parsed.txt'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });
@@ -614,33 +856,55 @@ void main() {
       expect(roundTripped['customField']['enabled'], isTrue);
     });
 
-    test('unknown resource content preserves passthrough fields', () {
-      final result = ReadResourceResult.fromJson({
-        'contents': [
-          {
-            'uri': 'ui://weather/raw',
-            'mimeType': 'application/vnd.custom+json',
-            '_meta': {
-              'ui': {
-                'prefersBorder': true,
+    test('resource contents require text or blob', () {
+      expect(
+        () => ReadResourceResult.fromJson({
+          'contents': [
+            {
+              'uri': 'ui://weather/raw',
+              'mimeType': 'application/vnd.custom+json',
+              '_meta': {
+                'ui': {
+                  'prefersBorder': true,
+                },
+              },
+              'payload': {
+                'kind': 'custom',
               },
             },
-            'payload': {
-              'kind': 'custom',
-            },
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const UnknownResourceContents(
+          uri: 'ui://weather/raw',
+          extra: {
+            'payload': {'kind': 'custom'},
           },
-        ],
-      });
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
 
-      final content = result.contents.single;
-      expect(content, isA<UnknownResourceContents>());
-      expect(content.meta!['ui']['prefersBorder'], isTrue);
-      expect(content.extra!['payload']['kind'], equals('custom'));
-
-      final json = result.toJson();
-      final roundTripped = (json['contents'] as List).single;
-      expect(roundTripped['payload']['kind'], equals('custom'));
-      expect(roundTripped['_meta']['ui']['prefersBorder'], isTrue);
+    test('fromJson rejects malformed content items', () {
+      expect(
+        () => ReadResourceResult.fromJson({
+          'contents': ['bad'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ReadResourceResult.fromJson({
+          'contents': [
+            {
+              'uri': 'file:///content.txt',
+              'text': 1,
+            },
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -655,6 +919,7 @@ void main() {
 
     test('fromJson creates notification', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'method': 'notifications/resources/list_changed',
       };
 
@@ -663,6 +928,23 @@ void main() {
       expect(
         notification.method,
         equals('notifications/resources/list_changed'),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcResourceListChangedNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/resources/list_changed',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcResourceListChangedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'notifications/resources/updated',
+        }),
+        throwsA(isA<FormatException>()),
       );
     });
   });
@@ -692,6 +974,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 31,
         'method': 'resources/subscribe',
         'params': {'uri': 'file:///subscribed.txt'},
@@ -704,12 +987,34 @@ void main() {
 
     test('fromJson throws on missing params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 32,
         'method': 'resources/subscribe',
       };
 
       expect(
         () => JsonRpcSubscribeRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcSubscribeRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 32,
+          'method': 'resources/subscribe',
+          'params': {'uri': 'file:///subscribed.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcSubscribeRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 32,
+          'method': 'resources/unsubscribe',
+          'params': {'uri': 'file:///subscribed.txt'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });
@@ -740,6 +1045,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 41,
         'method': 'resources/unsubscribe',
         'params': {'uri': 'file:///unsubscribed.txt'},
@@ -752,12 +1058,34 @@ void main() {
 
     test('fromJson throws on missing params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'id': 42,
         'method': 'resources/unsubscribe',
       };
 
       expect(
         () => JsonRpcUnsubscribeRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcUnsubscribeRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 42,
+          'method': 'resources/unsubscribe',
+          'params': {'uri': 'file:///unsubscribed.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcUnsubscribeRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 42,
+          'method': 'resources/subscribe',
+          'params': {'uri': 'file:///unsubscribed.txt'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });
@@ -793,6 +1121,7 @@ void main() {
 
     test('fromJson parses correctly', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'method': 'notifications/resources/updated',
         'params': {'uri': 'file:///parsed_notify.txt'},
       };
@@ -806,6 +1135,7 @@ void main() {
 
     test('fromJson throws on missing params', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'method': 'notifications/resources/updated',
       };
 
@@ -817,6 +1147,7 @@ void main() {
 
     test('fromJson with meta', () {
       final json = {
+        'jsonrpc': jsonRpcVersion,
         'method': 'notifications/resources/updated',
         'params': {
           'uri': 'file:///with_meta.txt',
@@ -827,6 +1158,127 @@ void main() {
       final notification = JsonRpcResourceUpdatedNotification.fromJson(json);
       expect(notification.meta, isNotNull);
       expect(notification.meta!['key'], equals('value'));
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcResourceUpdatedNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/resources/updated',
+          'params': {'uri': 'file:///parsed_notify.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcResourceUpdatedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'notifications/resources/list_changed',
+          'params': {'uri': 'file:///parsed_notify.txt'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+  });
+
+  group('Resource URI format validation', () {
+    test('rejects non-absolute resource URIs from wire JSON', () {
+      expect(
+        () => Resource.fromJson({'uri': 'relative/path', 'name': 'Relative'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'relative/path',
+          'name': 'Relative',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ReadResourceRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SubscribeRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => UnsubscribeRequest.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceUpdatedNotification.fromJson({'uri': 'relative/path'}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-absolute resource URIs during serialization', () {
+      expect(
+        () => const Resource(uri: 'relative/path', name: 'Relative').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const TextResourceContents(
+          uri: 'relative/path',
+          text: 'Relative',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ResourceLink(
+          uri: 'relative/path',
+          name: 'Relative',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ReadResourceRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const SubscribeRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const UnsubscribeRequest(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => const ResourceUpdatedNotification(uri: 'relative/path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('rejects malformed resource URI templates', () {
+      expect(
+        () => ResourceTemplate.fromJson({
+          'uriTemplate': 'file:///{path',
+          'name': 'Bad Template',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceTemplate(
+          uriTemplate: 'file:///{path',
+          name: 'Bad Template',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => ResourceReference.fromJson({
+          'type': 'ref/resource',
+          'uri': 'file:///{path',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ResourceReference(uri: 'file:///{path').toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
   });
 }

@@ -56,7 +56,8 @@ void main() {
     });
 
     test('Icon Field Support', () {
-      final icon = const ImageContent(data: 'base64', mimeType: 'image/png');
+      const iconData = 'YmFzZTY0';
+      final icon = const ImageContent(data: iconData, mimeType: 'image/png');
       final icons = [
         const McpIcon(
           src: 'https://example.com/icon.png',
@@ -71,12 +72,12 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(tool.icon?.data, 'base64');
+      expect(tool.icon?.data, iconData);
       expect(tool.toJson().containsKey('icon'), isFalse);
       expect((tool.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Tool.fromJson({...tool.toJson(), 'icon': icon.toJson()}).icon?.data,
-        'base64',
+        iconData,
       );
 
       final resource = Resource(
@@ -85,14 +86,14 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(resource.icon?.data, 'base64');
+      expect(resource.icon?.data, iconData);
       expect(resource.toJson().containsKey('icon'), isFalse);
       expect((resource.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Resource.fromJson(
           {...resource.toJson(), 'icon': icon.toJson()},
         ).icon?.data,
-        'base64',
+        iconData,
       );
 
       final prompt = Prompt(
@@ -100,12 +101,12 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(prompt.icon?.data, 'base64');
+      expect(prompt.icon?.data, iconData);
       expect(prompt.toJson().containsKey('icon'), isFalse);
       expect((prompt.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         Prompt.fromJson({...prompt.toJson(), 'icon': icon.toJson()}).icon?.data,
-        'base64',
+        iconData,
       );
 
       final template = ResourceTemplate(
@@ -114,14 +115,14 @@ void main() {
         icon: icon,
         icons: icons,
       );
-      expect(template.icon?.data, 'base64');
+      expect(template.icon?.data, iconData);
       expect(template.toJson().containsKey('icon'), isFalse);
       expect((template.toJson()['icons'] as List).first['theme'], 'dark');
       expect(
         ResourceTemplate.fromJson(
           {...template.toJson(), 'icon': icon.toJson()},
         ).icon?.data,
-        'base64',
+        iconData,
       );
     });
 
@@ -238,19 +239,43 @@ void main() {
         message: 'test',
         url: 'https://example.com/ui',
         elicitationId: 'ui-123',
+        task: TaskCreationParams(ttl: 7200),
       );
 
       expect(params.url, 'https://example.com/ui');
       expect(params.elicitationId, 'ui-123');
+      expect(params.task?.ttl, 7200);
 
       final json = params.toJson();
       expect(json['mode'], 'url');
       expect(json['url'], 'https://example.com/ui');
       expect(json['elicitationId'], 'ui-123');
+      expect(json['task'], {'ttl': 7200});
 
       final deserialized = ElicitRequestParams.fromJson(json);
       expect(deserialized.url, 'https://example.com/ui');
       expect(deserialized.elicitationId, 'ui-123');
+      expect(deserialized.task?.ttl, 7200);
+    });
+
+    test('Elicitation URL must be absolute URI', () {
+      expect(
+        () => ElicitRequestParams.fromJson({
+          'mode': 'url',
+          'message': 'test',
+          'url': '/relative/ui',
+          'elicitationId': 'ui-123',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'test',
+          url: '/relative/ui',
+          elicitationId: 'ui-123',
+        ).toJson(),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('JsonEnum SEP-1330', () {
@@ -306,21 +331,24 @@ void main() {
         action: 'accept',
         content: {
           'text': 'answer',
+          'confidence': 75,
           'selection': ['a', 'b'], // List<String>
         },
       );
+      expect(result.content?['confidence'], 75);
       expect(result.content?['selection'], isA<List>());
       expect((result.content?['selection'] as List).first, 'a');
 
       final json = result.toJson();
       final deserialized = ElicitResult.fromJson(json);
+      expect(deserialized.content?['confidence'], 75);
       expect((deserialized.content?['selection'] as List).last, 'b');
     });
 
     test('McpServer Metadata Logic', () {
       final server =
           McpServer(const Implementation(name: 'test', version: '1.0'));
-      final icon = const ImageContent(data: 'data', mimeType: 'image/png');
+      final icon = const ImageContent(data: 'ZGF0YQ==', mimeType: 'image/png');
       // We can rely on the fact that we updated the code to pass it through.
 
       // Let's rely on the previous unit tests for `Tool` serialization, and here just ensure `McpServer` methods don't crash.
@@ -498,6 +526,283 @@ void main() {
       expect((json['content'] as List).single['type'], 'tool_use');
     });
 
+    test('Sampling JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => SamplingToolUseContent.fromJson({
+          'type': 'tool_use',
+          'id': 'call-1',
+          'name': 'calculator',
+          'input': {'expr': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Hello'},
+          'model': 'model-x',
+          '_meta': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Hello'},
+            },
+          ],
+          'maxTokens': 100,
+          'metadata': {'provider': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      final createMessageParams = {
+        'messages': [
+          {
+            'role': 'user',
+            'content': {'type': 'text', 'text': 'Hello'},
+          },
+        ],
+        'maxTokens': 100,
+      };
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.samplingCreateMessage,
+          'params': createMessageParams,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': createMessageParams,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Content JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => TextContent.fromJson({
+          'type': 'text',
+          'text': 'Hello',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceContents.fromJson({
+          'uri': 'file:///docs/readme.md',
+          'text': 'README body',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ResourceLink.fromJson({
+          'type': 'resource_link',
+          'uri': 'file:///docs/readme.md',
+          'name': 'readme',
+          'annotations': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Tool JSON object fields reject non-JSON Dart maps', () {
+      expect(
+        () => Tool.fromJson({
+          'name': 'search',
+          'inputSchema': {'type': 'object'},
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CallToolRequest.fromJson({
+          'name': 'search',
+          'arguments': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CallToolResult.fromJson({
+          'content': <Map<String, dynamic>>[],
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Tool wire fields reject malformed values', () {
+      for (final parse in <Object Function()>[
+        () => ToolAnnotations.fromJson({'title': 1}),
+        () => ToolAnnotations.fromJson({'readOnlyHint': 'true'}),
+        () => ToolExecution.fromJson({'taskSupport': 1}),
+        () => Tool.fromJson({
+              'name': 1,
+              'inputSchema': {'type': 'object'},
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'annotations': 'bad',
+            }),
+        () => Tool.fromJson({
+              'name': 'search',
+              'inputSchema': {'type': 'object'},
+              'icons': [1],
+            }),
+        () => ListToolsRequest.fromJson({'cursor': 1}),
+        () => ListToolsResult.fromJson({
+              'tools': <Map<String, dynamic>>[],
+              'nextCursor': 1,
+            }),
+        () => CallToolRequest.fromJson({'name': 1}),
+        () => CallToolResult.fromJson({
+              'content': <Map<String, dynamic>>[],
+              'isError': 'true',
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+              'params': 'bad',
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.toolsList,
+            }),
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsList,
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': 'bad',
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.toolsCall,
+              'params': {'name': 'tool'},
+            }),
+        () => JsonRpcCallToolRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.promptsGet,
+              'params': {'name': 'tool'},
+            }),
+        () => JsonRpcToolListChangedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsToolsListChanged,
+            }),
+        () => JsonRpcToolListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsPromptsListChanged,
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+
+    test('Root wire fields reject malformed values', () {
+      for (final parse in <Object Function()>[
+        () => Root.fromJson({'uri': 'file:///repo', 'name': 1}),
+        () => ListRootsResult.fromJson({
+              'roots': [1],
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.rootsList,
+              'params': 'bad',
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.rootsList,
+              'params': null,
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': '1.0',
+              'id': 1,
+              'method': Method.rootsList,
+            }),
+        () => JsonRpcListRootsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 1,
+              'method': Method.toolsList,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsRootsListChanged,
+              'params': 'bad',
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsRootsListChanged,
+              'params': null,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': '1.0',
+              'method': Method.notificationsRootsListChanged,
+            }),
+        () => JsonRpcRootsListChangedNotification.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsToolsListChanged,
+            }),
+      ]) {
+        expect(parse, throwsA(isA<FormatException>()));
+      }
+    });
+
+    test('Result metadata fields reject non-JSON Dart maps', () {
+      expect(
+        () => Root.fromJson({
+          'uri': 'file:///repo',
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ListResourcesResult.fromJson({
+          'resources': [],
+          '_meta': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'result': {
+            'ok': true,
+            '_meta': {'bad': Object()},
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     group('Tasks API Types', () {
       test('GetTaskRequestParams serialization', () {
         final params = const GetTaskRequestParams(taskId: 'task-123');
@@ -593,6 +898,17 @@ void main() {
         expect(deserialized.ttl, 3600);
       });
 
+      test('TaskCreationParams accepts whole-number JSON ttl values', () {
+        final deserialized = TaskCreationParams.fromJson({'ttl': 3600.0});
+        expect(deserialized.ttl, 3600);
+        expect(deserialized.toJson()['ttl'], 3600);
+
+        expect(
+          () => TaskCreationParams.fromJson({'ttl': 3600.5}),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
       test('TaskCreationParams without ttl', () {
         final params = const TaskCreationParams();
         expect(params.ttl, isNull);
@@ -628,6 +944,130 @@ void main() {
         expect(deserialized.task.taskId, 'new-task-123');
         expect(deserialized.task.status, TaskStatus.working);
         expect(deserialized.task.ttl, 7200);
+      });
+
+      test('task request and result wire fields reject malformed values', () {
+        final taskParams = {'taskId': 'task-1'};
+        final taskStatusParams = {
+          'taskId': 'task-1',
+          'status': 'working',
+          'ttl': null,
+          'createdAt': '2025-11-25T00:00:00Z',
+          'lastUpdatedAt': '2025-11-25T00:00:01Z',
+        };
+
+        for (final parse in <Object Function()>[
+          () => ListTasksRequest.fromJson({'cursor': 1}),
+          () => JsonRpcListTasksRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksList,
+                'params': 'bad',
+              }),
+          () => JsonRpcListTasksRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksList,
+                'params': null,
+              }),
+          () => JsonRpcListTasksRequest.fromJson({
+                'jsonrpc': '1.0',
+                'id': 1,
+                'method': Method.tasksList,
+              }),
+          () => JsonRpcListTasksRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksGet,
+              }),
+          () => ListTasksResult.fromJson({
+                'tasks': [1],
+              }),
+          () => ListTasksResult.fromJson({
+                'tasks': <Map<String, dynamic>>[],
+                'nextCursor': 1,
+              }),
+          () => CancelTaskRequest.fromJson({'taskId': 1}),
+          () => JsonRpcCancelTaskRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksCancel,
+                'params': 'bad',
+              }),
+          () => JsonRpcCancelTaskRequest.fromJson({
+                'jsonrpc': '1.0',
+                'id': 1,
+                'method': Method.tasksCancel,
+                'params': taskParams,
+              }),
+          () => JsonRpcCancelTaskRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksGet,
+                'params': taskParams,
+              }),
+          () => GetTaskRequest.fromJson({'taskId': 1}),
+          () => JsonRpcGetTaskRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksGet,
+                'params': 'bad',
+              }),
+          () => JsonRpcGetTaskRequest.fromJson({
+                'jsonrpc': '1.0',
+                'id': 1,
+                'method': Method.tasksGet,
+                'params': taskParams,
+              }),
+          () => JsonRpcGetTaskRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksCancel,
+                'params': taskParams,
+              }),
+          () => TaskResultRequest.fromJson({'taskId': 1}),
+          () => JsonRpcTaskResultRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksResult,
+                'params': null,
+              }),
+          () => JsonRpcTaskResultRequest.fromJson({
+                'jsonrpc': '1.0',
+                'id': 1,
+                'method': Method.tasksResult,
+                'params': taskParams,
+              }),
+          () => JsonRpcTaskResultRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.tasksGet,
+                'params': taskParams,
+              }),
+          () => CreateTaskResult.fromJson({'task': 'bad'}),
+          () => JsonRpcTaskStatusNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsTasksStatus,
+                'params': 'bad',
+              }),
+          () => JsonRpcTaskStatusNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsTasksStatus,
+                'params': null,
+              }),
+          () => JsonRpcTaskStatusNotification.fromJson({
+                'jsonrpc': '1.0',
+                'method': Method.notificationsTasksStatus,
+                'params': taskStatusParams,
+              }),
+          () => JsonRpcTaskStatusNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsTasks,
+                'params': taskStatusParams,
+              }),
+        ]) {
+          expect(parse, throwsA(isA<FormatException>()));
+        }
       });
 
       test('TaskStatusNotificationParams serialization', () {
@@ -893,6 +1333,22 @@ void main() {
         expect(json, isNot(contains('pollInterval')));
       });
 
+      test('Task accepts whole-number JSON ttl and poll interval values', () {
+        final task = Task.fromJson({
+          'taskId': 'numeric-task',
+          'status': 'working',
+          'ttl': 3600.0,
+          'pollInterval': 500.0,
+          'createdAt': '2025-01-15T10:00:00Z',
+          'lastUpdatedAt': '2025-01-15T10:01:00Z',
+        });
+
+        expect(task.ttl, 3600);
+        expect(task.pollInterval, 500);
+        expect(task.toJson(), containsPair('ttl', 3600));
+        expect(task.toJson(), containsPair('pollInterval', 500));
+      });
+
       test('Task rejects missing MCP-required fields', () {
         expect(
           () => Task.fromJson({
@@ -1080,6 +1536,26 @@ void main() {
         );
       });
 
+      test('request parsing prefers params metadata over top-level metadata',
+          () {
+        final parsed = JsonRpcMessage.fromJson(
+          const {
+            'jsonrpc': jsonRpcVersion,
+            'id': 'tools',
+            'method': Method.toolsList,
+            '_meta': {'progressToken': 'top-level'},
+            'params': {
+              '_meta': {'progressToken': 'params-nested'},
+            },
+          },
+        );
+
+        expect(parsed, isA<JsonRpcListToolsRequest>());
+        final request = parsed as JsonRpcListToolsRequest;
+        expect(request.meta, {'progressToken': 'params-nested'});
+        expect(request.progressToken, 'params-nested');
+      });
+
       test('server capabilities omit non-stable fields while parsing legacy',
           () {
         final capabilities = const ServerCapabilities(
@@ -1165,7 +1641,7 @@ void main() {
             isA<FormatException>().having(
               (error) => error.message,
               'message',
-              contains('Tool.inputSchema must be an object'),
+              contains('Tool.inputSchema must be a JSON object'),
             ),
           ),
         );
@@ -1179,7 +1655,7 @@ void main() {
             isA<FormatException>().having(
               (error) => error.message,
               'message',
-              contains('Tool.outputSchema must be an object'),
+              contains('Tool.outputSchema must be a JSON object'),
             ),
           ),
         );
@@ -1197,6 +1673,35 @@ void main() {
         );
         expect(request.toJson()['requestedSchema']['type'], 'object');
 
+        final fractionalBounds = ElicitRequest.form(
+          message: 'Fractional bounds',
+          requestedSchema: JsonSchema.object(
+            properties: {
+              'ratio': JsonSchema.number(
+                minimum: 0.1,
+                maximum: 0.9,
+                defaultValue: 0.5,
+              ),
+            },
+          ),
+        ).toJson();
+        final ratioSchema =
+            fractionalBounds['requestedSchema']['properties']['ratio'];
+        expect(ratioSchema['minimum'], 0.1);
+        expect(ratioSchema['maximum'], 0.9);
+        expect(ratioSchema['default'], 0.5);
+
+        expect(
+          () => ElicitRequest.form(
+            message: 'Non-finite bound',
+            requestedSchema: JsonSchema.object(
+              properties: {
+                'ratio': JsonSchema.number(maximum: double.infinity),
+              },
+            ),
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
         expect(
           () => const ElicitRequest.form(
             message: 'Nested',
@@ -1225,6 +1730,24 @@ void main() {
           throwsA(isA<ArgumentError>()),
         );
         expect(
+          ElicitResult.fromJson({
+            'action': 'accept',
+            'content': {
+              'fractional': 1.5,
+            },
+          }).content,
+          containsPair('fractional', 1.5),
+        );
+        expect(
+          const ElicitResult(
+            action: 'accept',
+            content: {
+              'fractional': 1.5,
+            },
+          ).toJson()['content'],
+          containsPair('fractional', 1.5),
+        );
+        expect(
           () => URLElicitationRequiredErrorData.fromJson({
             'elicitations': [
               request.toJson(),
@@ -1232,6 +1755,132 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        final elicitParams = {
+          'message': 'Choose option',
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'option': {'type': 'string'},
+            },
+          },
+        };
+        final completeParams = {'elicitationId': 'elicitation-1'};
+        for (final parse in <Object Function()>[
+          () => JsonRpcElicitRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.elicitationCreate,
+                'params': 'bad',
+              }),
+          () => JsonRpcElicitRequest.fromJson({
+                'jsonrpc': '1.0',
+                'id': 1,
+                'method': Method.elicitationCreate,
+                'params': elicitParams,
+              }),
+          () => JsonRpcElicitRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.samplingCreateMessage,
+                'params': elicitParams,
+              }),
+          () => ElicitRequest.fromJson({
+                'message': 'Bad schema',
+                'requestedSchema': 'bad',
+              }),
+          () => ElicitResult.fromJson({
+                'action': 'accept',
+                'elicitationId': 1,
+              }),
+          () => ElicitationCompleteNotification.fromJson({
+                'elicitationId': 1,
+              }),
+          () => JsonRpcElicitationCompleteNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsElicitationComplete,
+                'params': null,
+              }),
+          () => JsonRpcElicitationCompleteNotification.fromJson({
+                'jsonrpc': '1.0',
+                'method': Method.notificationsElicitationComplete,
+                'params': completeParams,
+              }),
+          () => JsonRpcElicitationCompleteNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsInitialized,
+                'params': completeParams,
+              }),
+          () => URLElicitationRequiredErrorData.fromJson({
+                'elicitations': [1],
+              }),
+        ]) {
+          expect(parse, throwsA(isA<FormatException>()));
+        }
+      });
+
+      test('initialization and capability wire fields reject bad shapes', () {
+        final initializeRequest = {
+          'protocolVersion': latestProtocolVersion,
+          'capabilities': <String, dynamic>{},
+          'clientInfo': {'name': 'client', 'version': '1.0.0'},
+        };
+        final initializeResult = {
+          'protocolVersion': latestProtocolVersion,
+          'capabilities': <String, dynamic>{},
+          'serverInfo': {'name': 'server', 'version': '1.0.0'},
+        };
+
+        for (final parse in <Object Function()>[
+          () => InitializeRequest.fromJson({
+                ...initializeRequest,
+                'protocolVersion': 1,
+              }),
+          () => InitializeRequest.fromJson({
+                ...initializeRequest,
+                'capabilities': 'bad',
+              }),
+          () => InitializeRequest.fromJson({
+                ...initializeRequest,
+                'clientInfo': 'bad',
+              }),
+          () => JsonRpcInitializeRequest.fromJson({
+                'jsonrpc': '1.0',
+                'id': 1,
+                'method': Method.initialize,
+                'params': initializeRequest,
+              }),
+          () => JsonRpcInitializeRequest.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.ping,
+                'params': initializeRequest,
+              }),
+          () => JsonRpcInitializedNotification.fromJson({
+                'jsonrpc': '1.0',
+                'method': Method.notificationsInitialized,
+              }),
+          () => JsonRpcInitializedNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsCancelled,
+              }),
+          () => JsonRpcInitializedNotification.fromJson({
+                'jsonrpc': jsonRpcVersion,
+                'method': Method.notificationsInitialized,
+                'params': null,
+              }),
+          () => InitializeResult.fromJson({
+                ...initializeResult,
+                'capabilities': 'bad',
+              }),
+          () => InitializeResult.fromJson({
+                ...initializeResult,
+                'instructions': 1,
+              }),
+          () => ClientCapabilitiesRoots.fromJson({'listChanged': 'true'}),
+          () => ServerCapabilitiesResources.fromJson({'subscribe': 'true'}),
+        ]) {
+          expect(parse, throwsA(isA<FormatException>()));
+        }
       });
 
       test('runtime value constraints are enforced without asserts', () {
@@ -1241,6 +1890,24 @@ void main() {
         );
         expect(
           () => Annotations.fromJson({'priority': -0.1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Annotations(priority: double.nan).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+        expect(
+          () => Annotations.fromJson({'priority': double.infinity}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Annotations.fromJson({
+            'audience': ['model'],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Annotations.fromJson({'lastModified': 1}),
           throwsA(isA<FormatException>()),
         );
         expect(
@@ -1255,9 +1922,26 @@ void main() {
           }),
           throwsA(isA<FormatException>()),
         );
+        final completion = CompletionResultData.fromJson({
+          'values': ['a'],
+          'total': 10.0,
+        });
+        expect(completion.total, 10);
+        expect(completion.toJson()['total'], 10);
+        expect(
+          () => CompletionResultData.fromJson({
+            'values': ['a'],
+            'total': 10.5,
+          }),
+          throwsA(isA<FormatException>()),
+        );
         expect(
           () => Root(uri: 'https://example.com'),
           throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          () => Root.fromJson({'uri': 'relative/path'}),
+          throwsA(isA<FormatException>()),
         );
         expect(
           () => ModelPreferences(costPriority: 2).toJson(),
@@ -1265,6 +1949,486 @@ void main() {
         );
         expect(
           () => ModelPreferences.fromJson({'costPriority': -1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingMessage.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageResult.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+            'model': 'model',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptMessage.fromJson({
+            'role': 'system',
+            'content': {'type': 'text', 'text': 'Hello'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SetLevelRequestParams.fromJson({'level': 'verbose'}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => LoggingMessageNotificationParams.fromJson({
+            'level': 'verbose',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => LoggingMessageNotificationParams.fromJson({
+            'level': 'info',
+            'data': Object(),
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcPingRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'ping',
+            'method': Method.ping,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcPingRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'ping',
+            'method': Method.toolsList,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcSetLevelRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'log-level',
+            'method': Method.toolsCall,
+            'params': {'level': 'info'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcLoggingMessageNotification.fromJson({
+            'jsonrpc': '1.0',
+            'method': Method.notificationsMessage,
+            'params': {'level': 'info', 'data': 'message'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcCancelledNotification.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsProgress,
+            'params': {'requestId': 'request-1'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcProgressNotification.fromJson({
+            'jsonrpc': '1.0',
+            'method': Method.notificationsProgress,
+            'params': {'progressToken': 'progress-1', 'progress': 1},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptArgument.fromJson({'name': 1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Prompt.fromJson({
+            'name': 'prompt',
+            'arguments': [1],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => GetPromptRequest.fromJson({
+            'name': 'prompt',
+            'arguments': {'arg': 1},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcListPromptsRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'prompts',
+            'method': Method.resourcesList,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcGetPromptRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'prompt',
+            'method': Method.promptsGet,
+            'params': {'name': 'prompt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcPromptListChangedNotification.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsResourcesListChanged,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcListResourcesRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'resources',
+            'method': Method.resourcesList,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcListResourceTemplatesRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'templates',
+            'method': Method.resourcesList,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcReadResourceRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'read',
+            'method': Method.resourcesList,
+            'params': {'uri': 'file:///a.txt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcSubscribeRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'subscribe',
+            'method': Method.resourcesSubscribe,
+            'params': {'uri': 'file:///a.txt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcUnsubscribeRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'unsubscribe',
+            'method': Method.resourcesSubscribe,
+            'params': {'uri': 'file:///a.txt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcResourceListChangedNotification.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsResourcesUpdated,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcResourceUpdatedNotification.fromJson({
+            'jsonrpc': '1.0',
+            'method': Method.notificationsResourcesUpdated,
+            'params': {'uri': 'file:///a.txt'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CompleteRequest.fromJson({
+            'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+            'argument': {'name': 'arg', 'value': 1},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcCompleteRequest.fromJson({
+            'jsonrpc': '1.0',
+            'id': 'complete',
+            'method': Method.completionComplete,
+            'params': {
+              'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+              'argument': {'name': 'arg', 'value': 'prefix'},
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => JsonRpcCompleteRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': 'complete',
+            'method': Method.promptsGet,
+            'params': {
+              'ref': {'type': 'ref/prompt', 'name': 'prompt'},
+              'argument': {'name': 'arg', 'value': 'prefix'},
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceReference.fromJson({
+            'uri': 'file:///{path}',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceReference.fromJson({
+            'type': 'ref/prompt',
+            'uri': 'file:///{path}',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptReference.fromJson({
+            'name': 'prompt',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => PromptReference.fromJson({
+            'type': 'ref/resource',
+            'name': 'prompt',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CompletionResultData.fromJson({
+            'values': ['a'],
+            'hasMore': 'true',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ProgressNotification.fromJson({
+            'progressToken': 'progress-1',
+            'progress': 1,
+            'message': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'includeContext': 'nearbyServers',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'toolChoice': {'mode': 'sometimes'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'tools': 'bad',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'tools': [1],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ModelHint.fromJson({'name': 1}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'text',
+            'text': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingTextContent.fromJson({
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingTextContent.fromJson({
+            'type': 'image',
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingImageContent.fromJson({
+            'type': 'text',
+            'data': 'aW1nZGF0YQ==',
+            'mimeType': 'image/png',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingAudioContent.fromJson({
+            'type': 'image',
+            'data': 'YXVkaW8tZGF0YQ==',
+            'mimeType': 'audio/wav',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolUseContent.fromJson({
+            'type': 'tool_result',
+            'id': 'call-1',
+            'name': 'search',
+            'input': <String, dynamic>{},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'type': 'tool_use',
+            'toolUseId': 'call-1',
+            'content': [
+              {'type': 'text', 'text': 'Hello'},
+            ],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'type': 'tool_result',
+            'toolUseId': 'call-1',
+            'content': [
+              {'type': 'text', 'text': 'Hello'},
+            ],
+            'isError': 'false',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': [
+              {
+                'role': 'user',
+                'content': {'type': 'text', 'text': 'Hello'},
+              },
+            ],
+            'maxTokens': 100,
+            'stopSequences': ['STOP', 1],
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageResult.fromJson({
+            'role': 'assistant',
+            'content': {'type': 'text', 'text': 'Hello'},
+            'model': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Content.fromJson({
+            'type': 1,
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Content.fromJson({
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Content.fromJson({
+            'type': 'unknown',
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => TextContent.fromJson({
+            'type': 'image',
+            'text': 'Hello',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => TextContent.fromJson({
+            'type': 'text',
+            'text': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceContents.fromJson({
+            'uri': 'file:///docs/readme.md',
+            'text': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceContents.fromJson({
+            'uri': 'file:///docs/readme.md',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceLink.fromJson({
+            'type': 'resource_link',
+            'uri': 'file:///docs/readme.md',
+            'name': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceLink.fromJson({
+            'type': 'resource',
+            'uri': 'file:///docs/readme.md',
+            'name': 'readme',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Resource.fromJson({
+            'uri': 'file:///docs/readme.md',
+            'name': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ResourceTemplate.fromJson({
+            'uriTemplate': 'file:///{path}',
+            'name': 1,
+          }),
           throwsA(isA<FormatException>()),
         );
       });
@@ -1321,6 +2485,35 @@ void main() {
             'content': {'type': 'text', 'text': 'legacy'},
           }),
           throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('strict incoming tools/call requests require params', () {
+        final json = {
+          'jsonrpc': '2.0',
+          'id': 'call-1',
+          'method': Method.toolsCall,
+        };
+
+        expect(
+          () => JsonRpcCallToolRequest.fromJson(json),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('params'),
+            ),
+          ),
+        );
+        expect(
+          () => JsonRpcMessage.fromJson(json),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('params'),
+            ),
+          ),
         );
       });
     });

@@ -497,6 +497,7 @@ class StreamableMcpServer {
     this.allowedOrigins,
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
+    this.enableJsonResponse = false,
   }) : _serverFactory = serverFactory;
 
   final McpServer Function(String sessionId) _serverFactory;
@@ -538,6 +539,15 @@ class StreamableMcpServer {
   /// If true, reject JSON-RPC batch payloads.
   final bool rejectBatchJsonRpcPayloads;
 
+  /// If true, return JSON responses instead of SSE streams for request/response
+  /// interactions.
+  final bool enableJsonResponse;
+
+  /// Port currently bound by the HTTP server.
+  ///
+  /// Web/default stubs never bind a server, so this mirrors the configured port.
+  int get boundPort => port;
+
   /// Starts the HTTP server on IO platforms.
   Future<void> start() async {
     // Touch constructor fields so analyzer does not flag them as unused without
@@ -556,6 +566,7 @@ class StreamableMcpServer {
       allowedOrigins,
       strictProtocolVersionHeaderValidation,
       rejectBatchJsonRpcPayloads,
+      enableJsonResponse,
     );
     _unsupported('StreamableMcpServer.start');
   }
