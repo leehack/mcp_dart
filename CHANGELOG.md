@@ -8,13 +8,13 @@
 
 ### Conformance and interoperability
 
+- Updated official conformance gates to
+  `@modelcontextprotocol/conformance@0.2.0-alpha.8`, adding the new stateless
+  diagnostic probes for missing client capabilities, response-stream shape, and
+  request-scoped logging.
 - Documented that published TypeScript SDK `2.0.0-alpha.3` packages are not yet
   valid replacements for the `pkg.pr.new` 2026-07-28 RC interop fixture because
   the alpha.3 client is missing the preview negotiation API used by the fixture.
-- Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.7`. The 2026-07-28 RC server suite
-  now has no expected failures; the 2026 client suite keeps only the upstream
-  `json-schema-ref-no-deref` fixture gap expected.
 - Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC preview
   interop fixture on relevant PRs, `dev/2026-07-28-rc` pushes, daily schedule,
   and manual dispatch.

@@ -251,7 +251,6 @@ Future<void> _runCustomHeaders(
       'debug': 'Debug',
       'empty_val': 'EmptyVal',
       'method_val': 'Method',
-      'float_val': 'FloatVal',
       'non_ascii_val': 'NonAscii',
       'whitespace_val': 'Whitespace',
       'leading_space_val': 'LeadingSpace',

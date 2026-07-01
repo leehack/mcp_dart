@@ -15,6 +15,9 @@ import 'tasks.dart';
 
 final _logger = Logger("mcp_dart.server.mcp");
 
+const _requiredClientCapabilitiesMetaKey =
+    'io.modelcontextprotocol/requiredClientCapabilities';
+
 /// Callback capable of providing completions for a partial value.
 typedef CompleteCallback = FutureOr<List<String>> Function(String value);
 
@@ -1083,7 +1086,18 @@ class McpServer {
   /// Connects the server to a communication [transport].
   Future<void> connect(Transport transport) async {
     _syncToolParameterHeaderMappings(transport);
-    return await server.connect(transport);
+    await server.connect(transport);
+    if (transport is IncomingRequestValidationAwareTransport) {
+      final validationAwareTransport =
+          transport as IncomingRequestValidationAwareTransport;
+      validationAwareTransport.setIncomingRequestValidator((request) {
+        final protocolError = server.validateIncomingRequest(request);
+        if (protocolError != null) {
+          return protocolError;
+        }
+        return _validateToolClientCapabilities(request);
+      });
+    }
   }
 
   /// Closes the server connection.
@@ -1093,6 +1107,77 @@ class McpServer {
 
   /// Checks if the server is connected to a transport.
   bool get isConnected => server.transport != null;
+
+  McpError? _validateToolClientCapabilities(JsonRpcRequest request) {
+    if (request is! JsonRpcCallToolRequest ||
+        !_isDraft2026Request(request.meta?[McpMetaKey.protocolVersion])) {
+      return null;
+    }
+
+    final tool = _registeredTools[request.callParams.name];
+    if (tool == null) {
+      return null;
+    }
+
+    final requiredCapabilities = _requiredClientCapabilities(tool);
+    if (requiredCapabilities.isEmpty) {
+      return null;
+    }
+
+    final clientCapabilitiesValue =
+        request.meta?[McpMetaKey.clientCapabilities];
+    if (clientCapabilitiesValue is! Map) {
+      return McpError(
+        ErrorCode.invalidParams.value,
+        'Missing required request metadata: ${McpMetaKey.clientCapabilities}',
+      );
+    }
+
+    final clientCapabilities = ClientCapabilities.fromJson(
+      clientCapabilitiesValue.cast<String, dynamic>(),
+    );
+    final missingCapabilities = requiredCapabilities
+        .where(
+          (capability) => !_hasClientCapability(clientCapabilities, capability),
+        )
+        .toList(growable: false);
+    if (missingCapabilities.isEmpty) {
+      return null;
+    }
+
+    return McpError(
+      ErrorCode.missingRequiredClientCapability.value,
+      'Missing required client capability',
+      {'requiredCapabilities': missingCapabilities},
+    );
+  }
+
+  List<String> _requiredClientCapabilities(_RegisteredToolImpl tool) {
+    final value = tool.meta?[_requiredClientCapabilitiesMetaKey];
+    if (value is String) {
+      return [value];
+    }
+    if (value is Iterable) {
+      return value.whereType<String>().toList(growable: false);
+    }
+    return const [];
+  }
+
+  bool _hasClientCapability(
+    ClientCapabilities capabilities,
+    String capability,
+  ) {
+    return switch (capability) {
+      'sampling' => capabilities.sampling != null,
+      'roots' => capabilities.roots != null,
+      'elicitation' => capabilities.elicitation != null,
+      'tasks' => capabilities.tasks != null,
+      _ => capabilities.additionalCapabilities?.containsKey(capability) ??
+          capabilities.experimental?.containsKey(capability) ??
+          capabilities.extensions?.containsKey(capability) ??
+          false,
+    };
+  }
 
   /// Sends a logging message to the client, if connected.
   ///
