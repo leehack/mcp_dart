@@ -3045,7 +3045,9 @@ void main() {
         ErrorCode.missingRequiredClientCapability.value,
       );
       expect(missingError.data, {
-        'requiredCapabilities': ['sampling'],
+        'requiredCapabilities': {
+          'sampling': <String, dynamic>{},
+        },
       });
 
       final allowedError = validator(

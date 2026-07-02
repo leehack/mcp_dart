@@ -1148,8 +1148,14 @@ class McpServer {
     return McpError(
       ErrorCode.missingRequiredClientCapability.value,
       'Missing required client capability',
-      {'requiredCapabilities': missingCapabilities},
+      {'requiredCapabilities': _clientCapabilitiesShape(missingCapabilities)},
     );
+  }
+
+  Map<String, dynamic> _clientCapabilitiesShape(List<String> capabilities) {
+    return {
+      for (final capability in capabilities) capability: <String, dynamic>{},
+    };
   }
 
   List<String> _requiredClientCapabilities(_RegisteredToolImpl tool) {
