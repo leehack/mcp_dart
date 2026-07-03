@@ -63,8 +63,8 @@ against the TypeScript SDK beta server.
 
 The fixture previously depended on `pkg.pr.new` artifacts because published
 `2.0.0-alpha.3` packages did not expose the preview negotiation API used here.
-`@modelcontextprotocol/client@2.0.0-beta.1` and
-`@modelcontextprotocol/server@2.0.0-beta.1` expose the required modern path and
+`@modelcontextprotocol/client@2.0.0-beta.2` and
+`@modelcontextprotocol/server@2.0.0-beta.2` expose the required modern path and
 the interop runner passes against them.
 
 CI also runs this fixture in the dedicated

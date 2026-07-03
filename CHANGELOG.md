@@ -12,6 +12,10 @@
   `@modelcontextprotocol/conformance@0.2.0-alpha.9`, including the stricter
   `MissingRequiredClientCapability` `requiredCapabilities` object assertion in
   the 2026 stateless server suite.
+- Updated the TypeScript SDK 2026-07-28 RC interop fixture to published
+  `@modelcontextprotocol/client@2.0.0-beta.2` and
+  `@modelcontextprotocol/server@2.0.0-beta.2` packages after verifying both
+  Dart -> TypeScript and TypeScript -> Dart 2026 draft/RC paths.
 - Re-pinned the TypeScript SDK 2026-07-28 RC interop fixture from `pkg.pr.new`
   previews to published `@modelcontextprotocol/client@2.0.0-beta.1` and
   `@modelcontextprotocol/server@2.0.0-beta.1` packages after verifying both
