@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.8';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.9';
 const _defaultTimeout = Duration(seconds: 60);
 
 // The alpha conformance CLI can occasionally leak or stall server-initiated
