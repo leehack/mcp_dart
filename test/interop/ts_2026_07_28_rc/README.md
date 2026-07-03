@@ -6,8 +6,8 @@ progress.
 
 It is intentionally separate from `test/interop/ts`, which tracks the published
 stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins published
-`@modelcontextprotocol/client@2.0.0-beta.1` and
-`@modelcontextprotocol/server@2.0.0-beta.1` packages. The TypeScript client path
+`@modelcontextprotocol/client@2.0.0-beta.2` and
+`@modelcontextprotocol/server@2.0.0-beta.2` packages. The TypeScript client path
 is a draft-aligned smoke check against the Dart 2026-07-28 RC server. The
 reverse Dart client path is a draft-aligned smoke check against the TypeScript
 beta server.
