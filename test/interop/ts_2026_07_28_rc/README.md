@@ -55,8 +55,9 @@ bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
 
 The runner also starts `src/server.mjs` with the TypeScript beta
 `createMcpHandler` entry and runs a Dart preview client against it. That reverse
-path asserts `server/discover` negotiation, `tools/list`, and `tools/call`
-against the TypeScript beta server; failures are treated as interop failures.
+path asserts `server/discover` negotiation, `tools/list`, `tools/call`, and a
+2026 `input_required` elicitation retry against the TypeScript beta server;
+failures are treated as interop failures.
 
 Keep this fixture anchored to the official draft/RC behavior rather than the
 preview TypeScript implementation alone. In particular, `x-mcp-header` tests use

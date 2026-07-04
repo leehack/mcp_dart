@@ -159,9 +159,22 @@ Future<void> _exerciseDartClient(String url) async {
     ),
     options: const McpClientOptions(
       protocol: McpProtocol.preview2026,
-      capabilities: ClientCapabilities(),
+      capabilities: ClientCapabilities(
+        elicitation: ClientElicitation(
+          form: ClientElicitationForm(applyDefaults: true),
+        ),
+      ),
     ),
   );
+  client.onElicitRequest = (request) async {
+    if (request.message != 'What should the TypeScript fixture call you?') {
+      throw StateError('Unexpected elicitation message: ${request.message}');
+    }
+    return const ElicitResult(
+      action: 'accept',
+      content: {'name': 'Dart Tester'},
+    );
+  };
 
   try {
     await client.connect(transport).timeout(const Duration(seconds: 20));
@@ -181,6 +194,14 @@ Future<void> _exerciseDartClient(String url) async {
         '${tools.tools.map((tool) => tool.name).toList()}',
       );
     }
+    if (!tools.tools.any(
+      (tool) => tool.name == 'ts_input_required_elicitation',
+    )) {
+      throw StateError(
+        'TS server tools/list did not include ts_input_required_elicitation: '
+        '${tools.tools.map((tool) => tool.name).toList()}',
+      );
+    }
 
     const message = 'from Dart 2026-07-28 RC preview';
     final echo = await client
@@ -196,12 +217,28 @@ Future<void> _exerciseDartClient(String url) async {
       throw StateError('Unexpected ts_echo result: $text');
     }
 
+    final elicitation = await client
+        .callTool(
+          const CallToolRequest(name: 'ts_input_required_elicitation'),
+        )
+        .timeout(const Duration(seconds: 10));
+    final elicitationText = _firstText(
+      elicitation,
+      'ts_input_required_elicitation',
+    );
+    if (elicitationText != 'Hello, Dart Tester!') {
+      throw StateError(
+        'Unexpected ts_input_required_elicitation result: $elicitationText',
+      );
+    }
+
     stdout.writeln(
       '[dart-client] ${jsonEncode({
             'protocolVersion': version,
             'serverInfo': serverInfo?.toJson(),
             'toolCount': tools.tools.length,
             'echo': text,
+            'inputRequired': elicitationText,
           })}',
     );
   } finally {
