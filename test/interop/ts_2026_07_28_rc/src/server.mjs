@@ -1,7 +1,9 @@
 import { createServer } from 'node:http';
 
 import {
+  acceptedContent,
   createMcpHandler,
+  inputRequired,
   McpServer,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -35,6 +37,36 @@ function createInteropServer() {
     async ({ message }) => ({
       content: [{ type: 'text', text: message }],
     }),
+  );
+
+  server.registerTool(
+    'ts_input_required_elicitation',
+    {
+      description: 'Exercises a TypeScript server input_required elicitation retry.',
+      inputSchema: z.object({}),
+    },
+    async (_args, ctx) => {
+      const content = acceptedContent(ctx.mcpReq.inputResponses, 'user_name');
+      const name = content?.name;
+      if (typeof name === 'string') {
+        return {
+          content: [{ type: 'text', text: `Hello, ${name}!` }],
+        };
+      }
+
+      return inputRequired({
+        inputRequests: {
+          user_name: inputRequired.elicit({
+            message: 'What should the TypeScript fixture call you?',
+            requestedSchema: {
+              type: 'object',
+              properties: { name: { type: 'string' } },
+              required: ['name'],
+            },
+          }),
+        },
+      });
+    },
   );
 
   return server;

@@ -16,6 +16,8 @@
   `@modelcontextprotocol/client@2.0.0-beta.2` and
   `@modelcontextprotocol/server@2.0.0-beta.2` packages after verifying both
   Dart -> TypeScript and TypeScript -> Dart 2026 draft/RC paths.
+- Expanded the reverse Dart 2026 client -> TypeScript SDK beta server fixture
+  with a 2026 `input_required` elicitation retry flow.
 - Re-pinned the TypeScript SDK 2026-07-28 RC interop fixture from `pkg.pr.new`
   previews to published `@modelcontextprotocol/client@2.0.0-beta.1` and
   `@modelcontextprotocol/server@2.0.0-beta.1` packages after verifying both
