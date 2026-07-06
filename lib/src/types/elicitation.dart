@@ -45,8 +45,13 @@ class ElicitRequest {
   /// Required for URL mode, not used for form mode.
   final String? url;
 
-  /// A unique identifier for the elicitation.
-  /// Required for URL mode to correlate with completion notifications.
+  /// Legacy URL elicitation identifier.
+  ///
+  /// Current MCP `2026-07-28` draft URL elicitation requests no longer include
+  /// this field. It is retained for older wire shapes only.
+  @Deprecated(
+    'MCP 2026-07-28 URL elicitation requests do not include elicitationId.',
+  )
   final String? elicitationId;
 
   /// Task metadata for task-augmented execution.
@@ -66,10 +71,6 @@ class ElicitRequest {
         assert(
           mode != ElicitationMode.url || url != null,
           'URL elicitation requires url.',
-        ),
-        assert(
-          mode != ElicitationMode.url || elicitationId != null,
-          'URL elicitation requires elicitationId.',
         ),
         assert(
           mode == ElicitationMode.url || requestedSchema != null,
@@ -97,7 +98,7 @@ class ElicitRequest {
   const ElicitRequest.url({
     required this.message,
     required String this.url,
-    required String this.elicitationId,
+    this.elicitationId,
     this.task,
   })  : mode = ElicitationMode.url,
         requestedSchema = null;
@@ -132,14 +133,23 @@ class ElicitRequest {
     final url = json['url'];
     final elicitationId = json['elicitationId'];
     final task = readOptionalJsonObject(json['task'], 'ElicitRequest.task');
+    final isDraftProtocol = _isDraftProtocol(protocolVersion);
 
     if (mode == ElicitationMode.url) {
       if (url is! String) {
         throw const FormatException('URL elicitation requires url.');
       }
       _validateUrlElicitationUri(url, formatException: true);
-      if (elicitationId is! String) {
-        throw const FormatException('URL elicitation requires elicitationId.');
+      if (isDraftProtocol) {
+        if (elicitationId != null) {
+          throw const FormatException(
+            'MCP 2026-07-28 URL elicitation must not include elicitationId.',
+          );
+        }
+      } else if (elicitationId is! String) {
+        throw const FormatException(
+          'Legacy URL elicitation requires elicitationId.',
+        );
       }
       if (requestedSchemaJson != null) {
         throw const FormatException(
@@ -149,7 +159,7 @@ class ElicitRequest {
       return ElicitRequest.url(
         message: message,
         url: url,
-        elicitationId: elicitationId,
+        elicitationId: elicitationId as String?,
         task: task == null ? null : TaskCreation.fromJson(task),
       );
     }
@@ -189,8 +199,14 @@ class ElicitRequest {
         throw ArgumentError('URL elicitation requires url.');
       }
       _validateUrlElicitationUri(url!);
-      if (elicitationId == null) {
-        throw ArgumentError('URL elicitation requires elicitationId.');
+      if (_isDraftProtocol(protocolVersion)) {
+        if (elicitationId != null) {
+          throw ArgumentError(
+            'MCP 2026-07-28 URL elicitation must not include elicitationId.',
+          );
+        }
+      } else if (elicitationId == null) {
+        throw ArgumentError('Legacy URL elicitation requires elicitationId.');
       }
       return;
     }
@@ -212,12 +228,14 @@ class ElicitRequest {
 
   Map<String, dynamic> toJson({String? protocolVersion}) {
     _validateShape(protocolVersion: protocolVersion);
+    final isDraftProtocol = _isDraftProtocol(protocolVersion);
     return {
       if (mode != null) 'mode': mode!.name,
       'message': message,
       if (requestedSchema != null) 'requestedSchema': requestedSchema!.toJson(),
       if (url != null) 'url': url,
-      if (elicitationId != null) 'elicitationId': elicitationId,
+      if (!isDraftProtocol && elicitationId != null)
+        'elicitationId': elicitationId,
       if (task != null) 'task': task!.toJson(),
     };
   }
@@ -369,14 +387,14 @@ void _validateElicitAction(String action) {
   }
 }
 
-/// Parameters for the `notifications/elicitation/complete` notification.
+/// Legacy parameters for the removed `notifications/elicitation/complete`
+/// notification.
 ///
-/// Sent by servers when an out-of-band interaction started by URL mode
-/// elicitation is completed.
-/// Parameters for the `notifications/elicitation/complete` notification.
-///
-/// Sent by servers when an out-of-band interaction started by URL mode
-/// elicitation is completed.
+/// Current MCP `2026-07-28` draft schema no longer includes this notification
+/// in the client/server notification unions.
+@Deprecated(
+  'notifications/elicitation/complete is not part of MCP 2026-07-28 draft.',
+)
 class ElicitationCompleteNotification {
   /// The unique identifier for the elicitation, matching the original request.
   final String elicitationId;
@@ -395,10 +413,13 @@ class ElicitationCompleteNotification {
   Map<String, dynamic> toJson() => {'elicitationId': elicitationId};
 }
 
-/// Notification sent from server to client when URL mode elicitation completes.
+/// Legacy notification sent from server to client when URL mode elicitation completes.
 ///
-/// This allows clients to react programmatically when an out-of-band
-/// interaction (started via URL mode elicitation) is completed.
+/// Current MCP `2026-07-28` draft schema no longer includes this notification
+/// in the client/server notification unions.
+@Deprecated(
+  'notifications/elicitation/complete is not part of MCP 2026-07-28 draft.',
+)
 class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
   /// The notification parameters containing the elicitation ID.
   final ElicitationCompleteNotification completeParams;
@@ -440,7 +461,8 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
 /// before the original request can be retried.
 class URLElicitationRequiredErrorData {
   /// List of elicitations that are required to complete.
-  /// All elicitations MUST be URL mode and have an elicitationId.
+  /// All elicitations MUST be URL mode. MCP `2026-07-28` draft URL
+  /// elicitations do not include `elicitationId`.
   final List<ElicitRequest> elicitations;
 
   const URLElicitationRequiredErrorData({required this.elicitations});
@@ -479,7 +501,9 @@ class URLElicitationRequiredErrorData {
 typedef ElicitRequestParams = ElicitRequest;
 
 /// Deprecated alias for [ElicitationCompleteNotification].
-@Deprecated('Use ElicitationCompleteNotification instead')
+@Deprecated(
+  'notifications/elicitation/complete is not part of MCP 2026-07-28 draft.',
+)
 typedef ElicitationCompleteParams = ElicitationCompleteNotification;
 
 void _validateFormRequestedSchema(
@@ -776,6 +800,9 @@ void _ensureAllowedKeys(
     );
   }
 }
+
+bool _isDraftProtocol(String? protocolVersion) =>
+    protocolVersion != null && isStatelessProtocolVersion(protocolVersion);
 
 String? _protocolVersionFromMeta(Map<String, dynamic>? meta) {
   final protocolVersion = meta?[McpMetaKey.protocolVersion];
