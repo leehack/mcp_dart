@@ -528,6 +528,14 @@ void main() {
         }),
         throwsA(isA<FormatException>()),
       );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'Open browser',
+          url: 'https://example.com/authorize',
+          elicitationId: 'legacy-id',
+        ).toJson(protocolVersion: draftProtocolVersion2026_07_28),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('does not classify removed elicitation completion notification', () {
