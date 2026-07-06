@@ -141,7 +141,7 @@ class ElicitRequest {
       }
       _validateUrlElicitationUri(url, formatException: true);
       if (isDraftProtocol) {
-        if (elicitationId != null) {
+        if (json.containsKey('elicitationId')) {
           throw const FormatException(
             'MCP 2026-07-28 URL elicitation must not include elicitationId.',
           );

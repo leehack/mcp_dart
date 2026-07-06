@@ -529,6 +529,23 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       expect(
+        () => JsonRpcElicitRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': {
+            'mode': 'url',
+            'message': 'Open browser',
+            'url': 'https://example.com/authorize',
+            'elicitationId': null,
+            '_meta': {
+              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+            },
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
         () => const ElicitRequestParams.url(
           message: 'Open browser',
           url: 'https://example.com/authorize',
