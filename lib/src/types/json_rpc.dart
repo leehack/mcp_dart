@@ -557,8 +557,6 @@ sealed class JsonRpcMessage {
           Method.notificationsTasksStatus =>
             JsonRpcTaskStatusNotification.fromJson(json),
           Method.notificationsTasks => JsonRpcTaskNotification.fromJson(json),
-          Method.notificationsElicitationComplete =>
-            JsonRpcElicitationCompleteNotification.fromJson(json),
           _ => JsonRpcNotification(
               method: method,
               params: params,

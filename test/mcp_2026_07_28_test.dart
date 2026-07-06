@@ -467,21 +467,106 @@ void main() {
 
     test('rejects URL elicitation relative URI values', () {
       expect(
-        () => ElicitRequestParams.fromJson({
-          'mode': 'url',
-          'message': 'Open browser',
-          'url': 'authorize/callback',
-          'elicitationId': 'auth-1',
-        }),
+        () => ElicitRequestParams.fromJson(
+          {
+            'mode': 'url',
+            'message': 'Open browser',
+            'url': 'authorize/callback',
+          },
+          protocolVersion: draftProtocolVersion2026_07_28,
+        ),
         throwsA(isA<FormatException>()),
       );
       expect(
         () => const ElicitRequestParams.url(
           message: 'Open browser',
           url: 'authorize/callback',
-          elicitationId: 'auth-1',
-        ).toJson(),
+        ).toJson(protocolVersion: draftProtocolVersion2026_07_28),
         throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('uses draft URL elicitation shape without elicitationId', () {
+      final parsed = JsonRpcElicitRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 1,
+        'method': Method.elicitationCreate,
+        'params': {
+          'mode': 'url',
+          'message': 'Open browser',
+          'url': 'https://example.com/authorize',
+          '_meta': {
+            McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+          },
+        },
+      });
+      expect(parsed.elicitParams.isUrlMode, isTrue);
+      expect(parsed.elicitParams.elicitationId, isNull);
+
+      final serialized = const ElicitRequestParams.url(
+        message: 'Open browser',
+        url: 'https://example.com/authorize',
+      ).toJson(protocolVersion: draftProtocolVersion2026_07_28);
+      expect(serialized, isNot(contains('elicitationId')));
+      expect(serialized['mode'], 'url');
+      expect(serialized['url'], 'https://example.com/authorize');
+
+      expect(
+        () => JsonRpcElicitRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': {
+            'mode': 'url',
+            'message': 'Open browser',
+            'url': 'https://example.com/authorize',
+            'elicitationId': 'legacy-id',
+            '_meta': {
+              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+            },
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcElicitRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': {
+            'mode': 'url',
+            'message': 'Open browser',
+            'url': 'https://example.com/authorize',
+            'elicitationId': null,
+            '_meta': {
+              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+            },
+          },
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const ElicitRequestParams.url(
+          message: 'Open browser',
+          url: 'https://example.com/authorize',
+          elicitationId: 'legacy-id',
+        ).toJson(protocolVersion: draftProtocolVersion2026_07_28),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('does not classify removed elicitation completion notification', () {
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsElicitationComplete,
+        'params': {'elicitationId': 'legacy-id'},
+      });
+
+      expect(parsed, isA<JsonRpcNotification>());
+      expect(parsed, isNot(isA<JsonRpcElicitationCompleteNotification>()));
+      expect(
+        (parsed as JsonRpcNotification).method,
+        Method.notificationsElicitationComplete,
       );
     });
 
@@ -3664,7 +3749,6 @@ void main() {
                 const ElicitRequest.url(
                   message: 'Open browser',
                   url: 'https://example.com/authorize',
-                  elicitationId: 'auth-1',
                 ),
               ),
             'needs-roots' => InputRequest.listRoots(),

@@ -3748,7 +3748,6 @@ Future<void> _mrtrInputRequestsRequireClientCapabilities() async {
             const ElicitRequest.url(
               message: 'Open browser',
               url: 'https://example.com/authorize',
-              elicitationId: 'auth-1',
             ),
           ),
         'needs-roots' => InputRequest.listRoots(),
