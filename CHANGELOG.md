@@ -13,8 +13,8 @@
   `MissingRequiredClientCapability` `requiredCapabilities` object assertion in
   the 2026 stateless server suite.
 - Updated the TypeScript SDK 2026-07-28 RC interop fixture to published
-  `@modelcontextprotocol/client@2.0.0-beta.2` and
-  `@modelcontextprotocol/server@2.0.0-beta.2` packages after verifying both
+  `@modelcontextprotocol/client@2.0.0-beta.3` and
+  `@modelcontextprotocol/server@2.0.0-beta.3` packages after verifying both
   Dart -> TypeScript and TypeScript -> Dart 2026 draft/RC paths.
 - Expanded the reverse Dart 2026 client -> TypeScript SDK beta server fixture
   with a 2026 `input_required` elicitation retry flow.
