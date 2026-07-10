@@ -11,6 +11,7 @@ on:
     paths:
       - 'lib/**'
       - 'test/conformance/**'
+      - 'test/interop/test_dart_server.dart'
       - 'test/interop/ts_2026_07_28_rc/**'
       - 'tool/testing/run_ts_2026_07_28_rc_interop.dart'
       - '.github/workflows/interop_2026_07_28.yml'
@@ -22,6 +23,7 @@ on:
     paths:
       - 'lib/**'
       - 'test/conformance/**'
+      - 'test/interop/test_dart_server.dart'
       - 'test/interop/ts_2026_07_28_rc/**'
       - 'tool/testing/run_ts_2026_07_28_rc_interop.dart'
       - '.github/workflows/interop_2026_07_28.yml'

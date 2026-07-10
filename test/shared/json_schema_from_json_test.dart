@@ -441,6 +441,18 @@ void main() {
       expect(config.additionalProperties, isA<JsonAny>());
     });
 
+    test('rejects invalid additionalProperties values', () {
+      for (final value in [null, 42, 'false', <dynamic>[]]) {
+        expect(
+          () => JsonSchema.fromJson({
+            'type': 'object',
+            'additionalProperties': value,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
+
     test('parses allOf schema', () {
       final json = {
         'allOf': [

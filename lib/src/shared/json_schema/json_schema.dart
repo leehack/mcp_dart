@@ -1126,13 +1126,19 @@ class JsonObject extends JsonSchema {
   factory JsonObject.fromJson(Map<String, dynamic> json) {
     final additionalProps = json['additionalProperties'];
     Object? parsedAdditionalProps;
-    if (additionalProps is bool) {
-      parsedAdditionalProps = additionalProps;
-    } else if (additionalProps is Map) {
-      parsedAdditionalProps = JsonSchema._fromJsonValue(
-        additionalProps,
-        'JsonObject.additionalProperties',
-      );
+    if (json.containsKey('additionalProperties')) {
+      if (additionalProps is bool) {
+        parsedAdditionalProps = additionalProps;
+      } else if (additionalProps is Map) {
+        parsedAdditionalProps = JsonSchema._fromJsonValue(
+          additionalProps,
+          'JsonObject.additionalProperties',
+        );
+      } else {
+        throw const FormatException(
+          'JsonObject.additionalProperties must be a boolean or schema object.',
+        );
+      }
     }
 
     return JsonObject._(

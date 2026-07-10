@@ -1177,8 +1177,9 @@ class StreamableHTTPServerTransport
     } catch (error) {
       onerror?.call(error is Error ? error : StateError(error.toString()));
       final errorStr = error.toString().toLowerCase();
-      final isNotFound =
-          errorStr.contains('not found') || errorStr.contains('unknown');
+      final isNotFound = errorStr.contains('not found') ||
+          errorStr.contains('unknown') ||
+          errorStr.contains('invalid sse event id');
       final isLimitExceeded = errorStr.contains('replay limit exceeded');
       await _writeJsonRpcErrorResponse(
         res,

@@ -1238,8 +1238,9 @@ void main() {
       final response = await request.close();
       final body = await utf8.decodeStream(response);
 
-      expect(response.statusCode, HttpStatus.internalServerError);
-      expect(body, contains('Invalid SSE event ID'));
+      expect(response.statusCode, HttpStatus.notFound);
+      expect(body, contains('Event ID not found'));
+      expect(body, isNot(contains('Invalid SSE event ID')));
     });
 
     test('GET SSE priming failure closes the response', () async {
