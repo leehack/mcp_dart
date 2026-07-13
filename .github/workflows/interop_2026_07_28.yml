@@ -1,4 +1,4 @@
-name: Run MCP 2026-07-28 TypeScript Interop
+name: Run MCP 2026-07-28 Interop
 
 permissions:
   contents: read
@@ -13,19 +13,27 @@ on:
       - 'test/conformance/**'
       - 'test/interop/test_dart_server.dart'
       - 'test/interop/ts_2026_07_28_rc/**'
+      - 'test/interop/python_2026_07_28_rc/**'
+      - 'test/browser/mcp_2026_07_28_streamable_http_test.dart'
       - 'tool/testing/run_ts_2026_07_28_rc_interop.dart'
+      - 'tool/testing/run_python_2026_07_28_rc_interop.dart'
+      - 'tool/testing/run_browser_2026_07_28_rc_interop.dart'
       - '.github/workflows/interop_2026_07_28.yml'
       - 'pubspec.yaml'
       - 'pubspec.lock'
   push:
     branches:
-      - dev/2026-07-28-rc
+      - dev/2026-07-28
     paths:
       - 'lib/**'
       - 'test/conformance/**'
       - 'test/interop/test_dart_server.dart'
       - 'test/interop/ts_2026_07_28_rc/**'
+      - 'test/interop/python_2026_07_28_rc/**'
+      - 'test/browser/mcp_2026_07_28_streamable_http_test.dart'
       - 'tool/testing/run_ts_2026_07_28_rc_interop.dart'
+      - 'tool/testing/run_python_2026_07_28_rc_interop.dart'
+      - 'tool/testing/run_browser_2026_07_28_rc_interop.dart'
       - '.github/workflows/interop_2026_07_28.yml'
       - 'pubspec.yaml'
       - 'pubspec.lock'
@@ -57,3 +65,51 @@ jobs:
 
       - name: Run TypeScript 2026-07-28 interop fixture
         run: dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
+
+  python-2026-07-28-interop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      - name: Install Python 2026-07-28 fixture dependencies
+        run: >-
+          python -m pip install
+          -r test/interop/python_2026_07_28_rc/requirements.txt
+
+      - name: Run Python 2026-07-28 interop fixture
+        env:
+          MCP_PYTHON: python
+        run: dart run tool/testing/run_python_2026_07_28_rc_interop.dart
+
+  browser-2026-07-28-interop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      - name: Run browser 2026-07-28 interop fixture
+        run: dart run tool/testing/run_browser_2026_07_28_rc_interop.dart

@@ -128,6 +128,7 @@ final Map<String, Parser> _parsers = {
   'GetPromptResultResponse': (json) {
     GetPromptResult.fromJson(_response(json).result);
   },
+  'HeaderMismatchError': _parseErrorDataOrWrapper,
   'ImageContent': (json) => ImageContent.fromJson(json),
   'InputRequiredResult': (json) => InputRequiredResult.fromJson(json),
   'InputRequests': (json) {
@@ -194,6 +195,9 @@ final Map<String, Parser> _parsers = {
   'StringSchema': _parseSchema,
   'SubscriptionsAcknowledgedNotification': _parseJsonRpc,
   'SubscriptionsListenRequest': _parseJsonRpc,
+  'SubscriptionsListenResult': (json) {
+    SubscriptionsListenResult.fromJson(json);
+  },
   'TextContent': (json) => TextContent.fromJson(json),
   'TextResourceContents': (json) => ResourceContents.fromJson(json),
   'TitledMultiSelectEnumSchema': _parseSchema,

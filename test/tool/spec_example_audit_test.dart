@@ -61,7 +61,7 @@ void main() {
           'jsonrpc': '2.0',
           'id': 1,
           'error': {
-            'code': -32003,
+            'code': -32021,
             'message':
                 'Server requires the elicitation capability for this request',
             'data': {
@@ -69,6 +69,20 @@ void main() {
                 'elicitation': <String, dynamic>{},
               },
             },
+          },
+        },
+      );
+      _writeExample(
+        examplesDir,
+        'HeaderMismatchError',
+        'header-mismatch.json',
+        {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'error': {
+            'code': -32020,
+            'message':
+                "Header mismatch: Mcp-Name header value 'foo' does not match body value 'bar'",
           },
         },
       );
@@ -117,11 +131,22 @@ void main() {
           },
         },
       );
+      _writeExample(
+        examplesDir,
+        'SubscriptionsListenResult',
+        'listen-closed.json',
+        {
+          'resultType': 'complete',
+          '_meta': {
+            'io.modelcontextprotocol/subscriptionId': 'listen-1',
+          },
+        },
+      );
 
       final result = await _runAudit(examplesDir);
 
       expect(result.exitCode, 0, reason: _processOutput(result));
-      expect(result.stdout, contains('examples=5 parsed=5 missing=0'));
+      expect(result.stdout, contains('examples=7 parsed=7 missing=0'));
     });
 
     test('fails when an upstream example group has no parser mapping',

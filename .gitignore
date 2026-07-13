@@ -6,5 +6,7 @@
 # https://dart.dev/guides/libraries/private-files#pubspeclock.
 pubspec.lock
 coverage/
+__pycache__/
+*.pyc
 .serena
 firebase-debug.log

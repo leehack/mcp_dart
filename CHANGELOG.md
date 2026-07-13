@@ -28,6 +28,14 @@
 
 ### Conformance and interoperability
 
+- Updated the TypeScript SDK 2026-07-28 RC interop fixture to published
+  `@modelcontextprotocol/client@2.0.0-beta.4` and
+  `@modelcontextprotocol/server@2.0.0-beta.4` packages after verifying both
+  Dart -> TypeScript and TypeScript -> Dart paths.
+- Added bidirectional MCP 2026-07-28 Streamable HTTP interop against the
+  official Python SDK `mcp==2.0.0b1` package.
+- Added a real Chrome MCP 2026-07-28 Streamable HTTP smoke test and preserved
+  CORS headers when stateless SSE responses detach their HTTP socket.
 - Updated official conformance gates to
   `@modelcontextprotocol/conformance@0.2.0-alpha.9`, including the stricter
   `MissingRequiredClientCapability` `requiredCapabilities` object assertion in
@@ -53,11 +61,12 @@
 - Updated official conformance gates to
   `@modelcontextprotocol/conformance@0.2.0-alpha.8`, adding the new stateless
   diagnostic probes for missing client capabilities, response-stream shape, and
-  request-scoped logging. The 2026-07-28 RC server suite now has no expected
-  failures; the 2026 client suite keeps only the upstream
-  `json-schema-ref-no-deref` fixture gap expected.
+  request-scoped logging. The 2026-07-28 RC server suite reached no expected
+  failures; the later alpha.9 client gate also removed the upstream
+  `json-schema-ref-no-deref` fixture exception while retaining a local
+  network-`$ref` security canary.
 - Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC beta
-  interop fixture on relevant PRs, `dev/2026-07-28-rc` pushes, daily schedule,
+  interop fixture on relevant PRs, `dev/2026-07-28` pushes, daily schedule,
   and manual dispatch.
 - Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the current
   profile to official conformance, local tests, and TypeScript SDK beta interop.

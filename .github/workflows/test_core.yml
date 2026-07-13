@@ -39,6 +39,18 @@ jobs:
         working-directory: packages/mcp_dart_cli
         run: dart pub get
 
+      - name: Check out pinned MCP 2026 release schema
+        run: |
+          SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_release_spec_ref.txt)"
+          git clone --filter=blob:none --no-checkout https://github.com/modelcontextprotocol/modelcontextprotocol.git .dart_tool/mcp-spec
+          git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
+          git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
+
+      - name: Audit pinned MCP 2026 specification examples
+        run: >
+          dart run tool/spec_example_audit.dart
+          .dart_tool/mcp-spec/schema/draft/examples
+
       - name: Run MCP spec conformance gate
         working-directory: packages/mcp_dart_cli
         run: dart run bin/mcp_dart.dart conformance --suite all --json
