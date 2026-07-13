@@ -5,15 +5,13 @@ Do not publish the stable Dart packages from a moving draft commit.
 
 ## Branch policy
 
-- Retarget the full release PR from `dev/2026-07-28-rc` to `main` when its
-  readiness changes are integrated and the final spec delta is understood.
+- [PR #306](https://github.com/leehack/mcp_dart/pull/306) targets `main` and
+  remains open until the final spec delta is understood.
 - Keep `dev/2026-07-28-rc` as a read-only archive. Published
   `mcp_dart 2.3.0-dev.0`, `2.3.0-dev.1`, and matching CLI prereleases contain
   documentation URLs for that branch; deleting it would break their metadata.
-- Land the small default-branch readiness monitor before release. It checks out
-  `dev/2026-07-28` and runs daily until the release PR reaches `main`.
-- Remove the temporary monitor after the release code and normal interop
-  workflow are on `main`.
+- The default-branch monitor checks `dev/2026-07-28` daily. PR #306 deletes it
+  as the normal interop schedule reaches `main`, avoiding duplicate schedules.
 
 ## 1. Freeze the official inputs
 
@@ -123,8 +121,8 @@ release assets for every supported platform.
   separate CLI process.
 - Recheck GitHub release links, pub.dev documentation links, installer asset
   resolution, and both stable package versions.
-- Confirm the normal `main` interop schedule is active, then remove the
-  temporary pre-release monitor.
+- Confirm the release merge removed the temporary monitor and the normal
+  `main` interop schedule is active.
 
 If any public verification fails, stop promotion, document the exact affected
 surface, and prepare a patch release. Never move or recreate an already

@@ -111,36 +111,10 @@ for default negotiation, fallback rules, and draft-only APIs.
 
 ## Documentation
 
-### Getting Started
-
-- 📖 **[Quick Start Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/getting-started.md)** - Get up and running in 5 minutes
-- 🔧 **[Server Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/server-guide.md)** - Complete guide to building MCP servers
-- 💻 **[Client Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/client-guide.md)** - Complete guide to building MCP clients
-
-### Core Concepts
-
-- 🛠️ **[Tools Documentation](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/tools.md)** - Implementing executable tools
-- 🔌 **[Transport Options](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md)** - Built-in and custom transport implementations
-- 📚 **[Examples](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/examples.md)** - Real-world usage examples
-- ⚡ **[Quick Reference](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/quick-reference.md)** - Fast lookup guide
-- 🪵 **[Runtime Logging](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/getting-started.md#sdk-runtime-logging)** - Configure and route internal SDK logs
-- 🧩 **[MCP Apps Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-apps.md)** - Using `io.modelcontextprotocol/ui` metadata
-
-### Recipes and Compatibility
-
-- 🧪 **[SDK Interoperability Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/interoperability.md)** - Verified Dart/TypeScript and documented cross-SDK scenarios
-- ✅ **[MCP 2025-11-25 Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2025-11-25.md)** - Auditable coverage map with CLI conformance cases and known gaps
-- 🧪 **[MCP 2026-07-28 Draft/RC Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2026-07-28-rc.md)** - Default-profile coverage across official conformance and TypeScript SDK beta interop
-- 🧭 **[MCP 2026-07-28 Draft/RC Transition Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md)** - Stable, legacy, and strict profile behavior plus draft-only APIs
-- 🔒 **[Transport Security Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md#dns-rebinding-protection)** - Host/Origin allowlists, OAuth layering, and compatibility-toggle trade-offs
-- 📱 **[Flutter Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/flutter-recipes.md)** - Flutter Web, mobile, and desktop host/client guidance
-- 🔁 **[Migration Cookbooks](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/migration-cookbooks.md)** - TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migration paths
-
-### Advanced Features
-
-- 🔐 **[OAuth Authentication](https://github.com/leehack/mcp_dart/tree/dev/2026-07-28-rc/example/authentication)** - OAuth2 guides and examples
-- 🔁 **[2025-11-25 Compatibility Migration](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/migration_2025_11_25_compat.md)** - Backward-compatible API/runtime migration notes
-- 📝 For resources, prompts, and other features, see the Server and Client guides
+- **Start:** [getting started](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/getting-started.md), [server guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/server-guide.md), [client guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/client-guide.md), and [quick reference](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/quick-reference.md)
+- **Build:** [tools](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/tools.md), [transports](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md), [examples](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/examples.md), and [MCP Apps](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-apps.md)
+- **Deploy:** [transport security](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md#dns-rebinding-protection), [OAuth examples](https://github.com/leehack/mcp_dart/tree/dev/2026-07-28-rc/example/authentication), and [Flutter recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/flutter-recipes.md)
+- **Compatibility:** [interop matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/interoperability.md), [2025 coverage](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2025-11-25.md), [2026 coverage](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2026-07-28-rc.md), [2026 transition](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md), and [migration cookbooks](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/migration-cookbooks.md)
 
 ## Quick Start with CLI
 

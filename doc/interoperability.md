@@ -1,6 +1,8 @@
 # MCP SDK Interoperability
 
-This page tracks the interoperability evidence that `mcp_dart` currently carries against other MCP SDKs and hosts. It is intentionally conservative: a row is marked as verified only when it links to a test, example, or reproducible command in this repository.
+This page lists reproducible `mcp_dart` interoperability evidence. A row is
+verified only when it links to an automated test, runnable example, or command
+in this repository.
 
 For requirement-level MCP 2025-11-25 coverage, see the
 [`spec-coverage-2025-11-25.md`](spec-coverage-2025-11-25.md) matrix.
@@ -54,7 +56,7 @@ packages:
 ```bash
 # From repository root
 cd test/interop/ts_2026_07_28_rc
-npm install
+npm ci
 cd ../../..
 dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
 ```
@@ -63,17 +65,15 @@ This starts the Dart 2026-07-28 RC conformance server, runs the pinned TypeScrip
 SDK beta client against it, then runs the reverse Dart 2026 client smoke check
 against the TypeScript SDK beta server.
 
-The fixture previously depended on `pkg.pr.new` artifacts because published
-`2.0.0-alpha.3` packages did not expose the preview negotiation API used here.
 `@modelcontextprotocol/client@2.0.0-beta.4` and
 `@modelcontextprotocol/server@2.0.0-beta.4` expose the required modern path and
-the interop runner passes against them. The reverse Dart-client path now covers
-a TypeScript beta server `input_required` elicitation retry in addition to
-basic discovery and tool calls.
+pass in both directions. The reverse path includes an `input_required`
+elicitation retry in addition to discovery and tool calls.
 
-CI also runs this fixture in the dedicated
-`Run MCP 2026-07-28 Interop` workflow for relevant PRs,
-`dev/2026-07-28` pushes, daily scheduled drift checks, and manual dispatch.
+The `Run MCP 2026-07-28 Interop` workflow covers relevant PRs,
+`dev/2026-07-28` pushes, and manual dispatch. A temporary default-branch
+monitor runs the same release-branch fixtures daily until PR #306 reaches
+`main`, where the normal schedule takes over.
 
 The official Python SDK beta fixture runs independently in both directions:
 
