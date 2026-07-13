@@ -1,0 +1,127 @@
+name: Monitor MCP 2026-07-28 Release Readiness
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * *'
+
+concurrency:
+  group: mcp-2026-07-28-release-readiness
+  cancel-in-progress: true
+
+env:
+  RELEASE_BRANCH: dev/2026-07-28
+
+jobs:
+  spec-example-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      - name: Check out pinned MCP release schema
+        run: |
+          SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_release_spec_ref.txt)"
+          git clone --filter=blob:none --no-checkout https://github.com/modelcontextprotocol/modelcontextprotocol.git .dart_tool/mcp-spec
+          git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
+          git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
+
+      - name: Audit pinned MCP specification examples
+        run: >-
+          dart run tool/spec_example_audit.dart
+          .dart_tool/mcp-spec/schema/draft/examples
+
+  typescript-interop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      - name: Install TypeScript fixture dependencies
+        working-directory: test/interop/ts_2026_07_28_rc
+        run: npm ci
+
+      - name: Run bidirectional TypeScript interop
+        run: dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
+
+  python-interop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      - name: Install Python fixture dependencies
+        run: >-
+          python -m pip install
+          -r test/interop/python_2026_07_28_rc/requirements.txt
+
+      - name: Run bidirectional Python interop
+        env:
+          MCP_PYTHON: python
+        run: dart run tool/testing/run_python_2026_07_28_rc_interop.dart
+
+  browser-interop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      - name: Run browser interop
+        run: dart run tool/testing/run_browser_2026_07_28_rc_interop.dart
