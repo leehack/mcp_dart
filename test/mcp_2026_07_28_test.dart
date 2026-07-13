@@ -4216,11 +4216,11 @@ void main() {
       );
       final handlersStarted = Completer<void>();
       final releaseHandlers = Completer<void>();
-      final extras = <String, RequestHandlerExtra>{};
+      final extras = <RequestId, RequestHandlerExtra>{};
       server.setRequestHandler<JsonRpcCallToolRequest>(
         Method.toolsCall,
         (request, extra) async {
-          extras[request.id as String] = extra;
+          extras[request.id] = extra;
           if (extras.length == 2 && !handlersStarted.isCompleted) {
             handlersStarted.complete();
           }
@@ -4273,7 +4273,7 @@ void main() {
             ),
           ),
         );
-      await handlersStarted.future;
+      await handlersStarted.future.timeout(const Duration(seconds: 5));
 
       final firstExtra = extras['request-a']!;
       final secondExtra = extras['request-b']!;
