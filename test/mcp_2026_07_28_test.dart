@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:mcp_dart/src/client/client.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
@@ -2070,6 +2071,42 @@ void main() {
       ]) {
         expect(parse, throwsFormatException);
       }
+    });
+
+    test('preserves network schema refs without dereferencing them', () async {
+      var canaryRequests = 0;
+      final canary = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => canary.close(force: true));
+      canary.listen((request) async {
+        canaryRequests++;
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..write('{"type":"string"}');
+        await request.response.close();
+      });
+      final networkRef = 'http://127.0.0.1:${canary.port}/schema.json';
+
+      final tool = Tool.fromJson({
+        'name': 'opaque-schema-ref',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'value': {'\$ref': networkRef},
+          },
+        },
+      });
+
+      expect(
+        tool.toJson()['inputSchema'],
+        containsPair(
+          'properties',
+          {
+            'value': {'\$ref': networkRef},
+          },
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(canaryRequests, 0);
     });
 
     test('rejects malformed root wire shapes', () {

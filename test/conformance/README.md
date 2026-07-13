@@ -75,7 +75,13 @@ The client runner invokes `mcp_2026_07_28_rc_client.dart` against the conformanc
 package's scenario servers and writes per-run artifacts under
 `.dart_tool/conformance/2026_07_28_rc_client/`.
 
+The alpha.9 `json-schema-ref-no-deref` canary server rejects the draft protocol,
+so the runner executes that exact version-independent security scenario with
+`--spec-version 2025-11-25 --force`. The local 2026 protocol tests separately
+verify that network `$ref` values remain opaque and are preserved on the wire.
+
 Client expected failures live in `2026_07_28_rc_client_expected_failures.txt`.
 The 2026 client wrapper is aligned with the scenarios returned by
 `conformance list --client --spec-version 2026-07-28`; stable-only client
 scenarios remain covered by the stable `2025-11-25` client suite above.
+As of alpha.9, the client baseline has no expected failures.

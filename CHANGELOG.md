@@ -32,6 +32,10 @@
   `@modelcontextprotocol/conformance@0.2.0-alpha.9`, including the stricter
   `MissingRequiredClientCapability` `requiredCapabilities` object assertion in
   the 2026 stateless server suite.
+- Added resumable SSE priming IDs and retry guidance, wired request-scoped
+  stream closure through `RequestHandlerExtra`, and removed the remaining
+  expected 2026 client conformance failure while retaining the official
+  network-`$ref` security canary.
 - Updated the TypeScript SDK 2026-07-28 RC interop fixture to published
   `@modelcontextprotocol/client@2.0.0-beta.3` and
   `@modelcontextprotocol/server@2.0.0-beta.3` packages after verifying both

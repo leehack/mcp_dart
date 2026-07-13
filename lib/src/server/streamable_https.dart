@@ -102,6 +102,13 @@ class StreamableHTTPServerTransportOptions {
   /// Default is 1000.
   final int maxReplayedEvents;
 
+  /// Reconnection delay advertised in resumable SSE priming events.
+  ///
+  /// Clients use this value after a server-initiated disconnect. The field is
+  /// emitted only when [eventStore] enables resumability. Defaults to one
+  /// second.
+  final Duration sseRetryDelay;
+
   /// Creates configuration options for StreamableHTTPServerTransport
   StreamableHTTPServerTransportOptions({
     this.sessionIdGenerator,
@@ -114,7 +121,16 @@ class StreamableHTTPServerTransportOptions {
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
     this.maxReplayedEvents = 1000,
-  });
+    this.sseRetryDelay = const Duration(seconds: 1),
+  }) {
+    if (sseRetryDelay.isNegative) {
+      throw ArgumentError.value(
+        sseRetryDelay,
+        'sseRetryDelay',
+        'Must not be negative',
+      );
+    }
+  }
 }
 
 /// Server transport for Streamable HTTP: this implements the MCP Streamable HTTP transport specification.
@@ -160,6 +176,7 @@ class StreamableHTTPServerTransport
     implements
         Transport,
         RequestIdAwareTransport,
+        RequestSseStreamControlAwareTransport,
         IncomingRequestValidationAwareTransport,
         ToolParameterHeaderAwareTransport {
   static const Set<String> _statelessRemovedRequestMethods = {
@@ -181,6 +198,7 @@ class StreamableHTTPServerTransport
   final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
   final Set<dynamic> _statelessRequestIds = {};
   final Map<StreamId, Socket> _responseStreamSockets = {};
+  final Set<StreamId> _detachedResumableStreamIds = {};
   bool _initialized = false;
   bool _terminated = false;
   final bool _enableJsonResponse;
@@ -194,6 +212,7 @@ class StreamableHTTPServerTransport
   final bool _strictProtocolVersionHeaderValidation;
   final bool _rejectBatchJsonRpcPayloads;
   final int _maxReplayedEvents;
+  final Duration _sseRetryDelay;
   ToolParameterHeaderMappings _toolParameterHeaderMappings = const {};
   McpError? Function(JsonRpcRequest request)? _incomingRequestValidator;
   bool Function(String method)? _isRequestMethodSupported;
@@ -225,7 +244,8 @@ class StreamableHTTPServerTransport
         _strictProtocolVersionHeaderValidation =
             options.strictProtocolVersionHeaderValidation,
         _rejectBatchJsonRpcPayloads = options.rejectBatchJsonRpcPayloads,
-        _maxReplayedEvents = options.maxReplayedEvents;
+        _maxReplayedEvents = options.maxReplayedEvents,
+        _sseRetryDelay = options.sseRetryDelay;
 
   /// Starts the transport. This is required by the Transport interface but is a no-op
   /// for the Streamable HTTP transport as connections are managed per-request.
@@ -257,6 +277,30 @@ class StreamableHTTPServerTransport
   @override
   void setRequestMethodSupported(bool Function(String method) isSupported) {
     _isRequestMethodSupported = isSupported;
+  }
+
+  @override
+  bool canCloseRequestSseStream(RequestId requestId) {
+    final streamId = _requestToStreamMapping[requestId];
+    return _eventStore != null &&
+        !_enableJsonResponse &&
+        streamId != null &&
+        !_statelessRequestIds.contains(requestId) &&
+        _streamMapping.containsKey(streamId);
+  }
+
+  @override
+  void closeRequestSseStream(RequestId requestId) {
+    if (!canCloseRequestSseStream(requestId)) {
+      throw StateError(
+        'No resumable SSE stream established for request ID: $requestId',
+      );
+    }
+
+    final streamId = _requestToStreamMapping[requestId]!;
+    final response = _streamMapping.remove(streamId)!;
+    _detachedResumableStreamIds.add(streamId);
+    unawaited(_safeClose(response));
   }
 
   /// Handles an incoming HTTP request, whether GET or POST
@@ -1166,6 +1210,7 @@ class StreamableHTTPServerTransport
         _addStandaloneSseResponse(streamId, res);
       } else {
         _streamMapping[streamId] = res;
+        _detachedResumableStreamIds.remove(streamId);
       }
       res.done.then((_) {
         if (_isStandaloneSseStreamId(streamId)) {
@@ -1279,7 +1324,13 @@ class StreamableHTTPServerTransport
   ) async {
     try {
       _validateSseEventId(eventId);
-      res.add(utf8.encode('id: $eventId\ndata:\n\n'));
+      res.add(
+        utf8.encode(
+          'id: $eventId\n'
+          'retry: ${_sseRetryDelay.inMilliseconds}\n'
+          'data:\n\n',
+        ),
+      );
       await res.flush();
       return true;
     } catch (e) {
@@ -1813,6 +1864,7 @@ class StreamableHTTPServerTransport
     }
     _responseStreamSockets.clear();
     _streamMapping.clear();
+    _detachedResumableStreamIds.clear();
     _standaloneSseStreamIds.clear();
     _standaloneSseResponses.clear();
     _ownedStreamIds.clear();
@@ -1892,7 +1944,7 @@ class StreamableHTTPServerTransport
       throw StateError("No connection established for request ID: $requestId");
     }
 
-    final response = _streamMapping[streamId];
+    var response = _streamMapping[streamId];
     final responseSocket = _responseStreamSockets[streamId];
     final isStatelessRequestStream =
         requestId != null && _statelessRequestIds.contains(requestId);
@@ -1910,6 +1962,7 @@ class StreamableHTTPServerTransport
 
       if (_eventStore != null && !isStatelessRequestStream) {
         eventId = await _eventStore!.storeEvent(streamId, message);
+        response = _streamMapping[streamId];
       }
 
       if (responseSocket != null) {
@@ -1949,9 +2002,19 @@ class StreamableHTTPServerTransport
 
       if (allResponsesReady) {
         if (response == null && responseSocket == null) {
-          throw StateError(
-            "No connection established for request ID: $requestId",
-          );
+          if (!_detachedResumableStreamIds.contains(streamId)) {
+            throw StateError(
+              "No connection established for request ID: $requestId",
+            );
+          }
+
+          for (final id in relatedIds) {
+            _requestResponseMap.remove(id);
+            _requestToStreamMapping.remove(id);
+            _statelessRequestIds.remove(id);
+          }
+          _detachedResumableStreamIds.remove(streamId);
+          return;
         }
 
         if (_enableJsonResponse) {
@@ -1999,6 +2062,7 @@ class StreamableHTTPServerTransport
 
         // Clean up
         _responseStreamSockets.remove(streamId);
+        _detachedResumableStreamIds.remove(streamId);
         for (final id in relatedIds) {
           _requestResponseMap.remove(id);
           _requestToStreamMapping.remove(id);
@@ -2021,6 +2085,9 @@ class StreamableHTTPServerTransport
         .where((requestId) => _statelessRequestIds.contains(requestId))
         .toList();
     if (statelessIds.isEmpty) {
+      if (_eventStore != null && relatedIds.isNotEmpty) {
+        _detachedResumableStreamIds.add(streamId);
+      }
       return;
     }
 

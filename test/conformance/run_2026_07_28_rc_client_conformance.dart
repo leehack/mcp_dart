@@ -5,6 +5,16 @@ import 'dart:io';
 const _defaultConformancePackage =
     '@modelcontextprotocol/conformance@0.2.0-alpha.9';
 const _defaultTimeout = Duration(seconds: 30);
+const _draftSpecVersion = '2026-07-28';
+const _stableFixtureSpecVersion = '2025-11-25';
+
+// alpha.9's network-ref canary server has not adopted the draft protocol yet.
+// The security requirement is protocol-version independent, so run that exact
+// official canary against its newest supported fixture version. A local 2026
+// regression separately verifies that the draft Tool wire shape is preserved.
+const _scenarioSpecVersionOverrides = {
+  'json-schema-ref-no-deref': _stableFixtureSpecVersion,
+};
 
 const _draftClientScenarios = [
   'tools_call',
@@ -148,6 +158,8 @@ Future<_ScenarioResult> _runScenario({
 }) async {
   final outputDir = Directory('${outputRoot.path}/${_sanitize(scenario)}');
   await outputDir.create(recursive: true);
+  final specVersion =
+      _scenarioSpecVersionOverrides[scenario] ?? _draftSpecVersion;
 
   final process = await Process.start(
     'npx',
@@ -160,7 +172,8 @@ Future<_ScenarioResult> _runScenario({
       '--scenario',
       scenario,
       '--spec-version',
-      '2026-07-28',
+      specVersion,
+      if (specVersion != _draftSpecVersion) '--force',
       '--verbose',
       '-o',
       outputDir.path,
@@ -184,6 +197,7 @@ Future<_ScenarioResult> _runScenario({
     await Future.wait([stdoutDone, stderrDone]);
     return _ScenarioResult(
       scenario: scenario,
+      specVersion: specVersion,
       exitCode: code,
       timedOut: false,
       stdout: stdoutBuffer.toString(),
@@ -197,6 +211,7 @@ Future<_ScenarioResult> _runScenario({
     ]);
     return _ScenarioResult(
       scenario: scenario,
+      specVersion: specVersion,
       exitCode: null,
       timedOut: true,
       stdout: stdoutBuffer.toString(),
@@ -221,7 +236,10 @@ void _printScenarioResult(
       : expected
           ? 'EXPECTED FAIL'
           : 'FAIL';
-  stdout.writeln('${label.padRight(18)} ${result.scenario}');
+  final versionSuffix = result.specVersion == _draftSpecVersion
+      ? ''
+      : ' (fixture protocol ${result.specVersion})';
+  stdout.writeln('${label.padRight(18)} ${result.scenario}$versionSuffix');
 }
 
 Future<void> _writeSummary(
@@ -237,6 +255,7 @@ Future<void> _writeSummary(
       for (final result in results)
         {
           'scenario': result.scenario,
+          'specVersion': result.specVersion,
           'status': result.status,
           'exitCode': result.exitCode,
           'timedOut': result.timedOut,
@@ -264,6 +283,7 @@ Options:
 
 class _ScenarioResult {
   final String scenario;
+  final String specVersion;
   final int? exitCode;
   final bool timedOut;
   final String stdout;
@@ -271,6 +291,7 @@ class _ScenarioResult {
 
   const _ScenarioResult({
     required this.scenario,
+    required this.specVersion,
     required this.exitCode,
     required this.timedOut,
     required this.stdout,

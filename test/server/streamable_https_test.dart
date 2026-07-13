@@ -159,11 +159,13 @@ Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
 class _SseEvent {
   final String? id;
   final String? event;
+  final int? retry;
   final String data;
 
   const _SseEvent({
     this.id,
     this.event,
+    this.retry,
     required this.data,
   });
 
@@ -173,6 +175,7 @@ class _SseEvent {
 Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
   String? id;
   String? event;
+  int? retry;
   final dataLines = <String>[];
 
   while (await lines.moveNext()) {
@@ -182,6 +185,7 @@ Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
         return _SseEvent(
           id: id,
           event: event,
+          retry: retry,
           data: dataLines.join('\n'),
         );
       }
@@ -209,6 +213,9 @@ Future<_SseEvent> _readSseEvent(StreamIterator<String> lines) async {
         break;
       case 'event':
         event = value;
+        break;
+      case 'retry':
+        retry = int.tryParse(value);
         break;
       case 'data':
         dataLines.add(value);
@@ -1681,6 +1688,117 @@ void main() {
       expect(await _readOptionalSseEvent(firstLines), isNull);
     });
 
+    test(
+      'handler can close and resume a request-scoped SSE stream',
+      () async {
+        final eventStore = TestEventStore();
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => 'polling-session-id',
+            eventStore: eventStore,
+            sseRetryDelay: const Duration(milliseconds: 250),
+          ),
+        );
+        addTearDown(transport.close);
+
+        final server = Server(
+          const Implementation(name: 'PollingServer', version: '1.0.0'),
+        );
+        addTearDown(server.close);
+        server.setRequestHandler<JsonRpcRequest>(
+          'test/reconnection',
+          (request, extra) async {
+            expect(extra.closeSSEStream, isNotNull);
+            extra.closeSSEStream!();
+            return const EmptyResult();
+          },
+          (id, params, meta) => JsonRpcRequest(
+            id: id,
+            method: 'test/reconnection',
+            params: params,
+            meta: meta,
+          ),
+        );
+        await server.connect(transport);
+        transports['/mcp'] = transport;
+
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+
+        Future<HttpClientResponse> post(
+          JsonRpcMessage message, {
+          String? sessionId,
+        }) async {
+          final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            );
+          if (sessionId != null) {
+            request.headers.set('mcp-session-id', sessionId);
+          }
+          request.write(jsonEncode(message.toJson()));
+          return request.close();
+        }
+
+        final initialize = await post(
+          JsonRpcInitializeRequest(
+            id: 1,
+            initParams: const InitializeRequestParams(
+              protocolVersion: stableProtocolVersion2025_11_25,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'Client', version: '1.0'),
+            ),
+          ),
+        );
+        final sessionId = initialize.headers.value('mcp-session-id');
+        await initialize.drain<void>();
+        expect(sessionId, 'polling-session-id');
+
+        final initialized = await post(
+          const JsonRpcInitializedNotification(),
+          sessionId: sessionId,
+        );
+        expect(initialized.statusCode, HttpStatus.accepted);
+        await initialized.drain<void>();
+
+        final response = await post(
+          const JsonRpcRequest(id: 2, method: 'test/reconnection'),
+          sessionId: sessionId,
+        );
+        final responseLines = StreamIterator(
+          response.transform(utf8.decoder).transform(const LineSplitter()),
+        );
+        addTearDown(responseLines.cancel);
+        final initial = await _readSseEvent(responseLines);
+        expect(initial.id, isNotNull);
+        expect(initial.retry, 250);
+        expect(initial.data, isEmpty);
+        expect(await _readOptionalSseEvent(responseLines), isNull);
+
+        final reconnectRequest =
+            await client.getUrl(Uri.parse('$serverUrlBase/mcp'));
+        reconnectRequest.headers
+          ..set(HttpHeaders.acceptHeader, 'text/event-stream')
+          ..set('mcp-session-id', sessionId!)
+          ..set('Last-Event-ID', initial.id!);
+        final reconnect = await reconnectRequest.close();
+        expect(reconnect.statusCode, HttpStatus.ok);
+        final reconnectLines = StreamIterator(
+          reconnect.transform(utf8.decoder).transform(const LineSplitter()),
+        );
+        addTearDown(reconnectLines.cancel);
+
+        final resumed = await _readSseJsonEvent(reconnectLines);
+        expect(resumed.id, isNotNull);
+        expect(resumed.json['id'], 2);
+        expect(resumed.json['result'], isA<Map<String, dynamic>>());
+      },
+      timeout: const Timeout(Duration(seconds: 5)),
+    );
+
     test('GET Last-Event-ID replay is scoped to the owning SSE stream',
         () async {
       final eventStore = TestEventStore();
@@ -1788,6 +1906,7 @@ void main() {
 
       final initial = await _readSseEvent(lines);
       expect(initial.id, isNotNull);
+      expect(initial.retry, 1000);
       expect(initial.data, isEmpty);
 
       final first = await _readSseJsonEvent(lines);
@@ -1815,6 +1934,7 @@ void main() {
       addTearDown(otherLines.cancel);
       final otherInitial = await _readSseEvent(otherLines);
       expect(otherInitial.id, isNotNull);
+      expect(otherInitial.retry, 1000);
       expect(otherInitial.data, isEmpty);
       final other = await _readSseJsonEvent(otherLines);
       expect(other.id, isNotNull);
@@ -1832,6 +1952,7 @@ void main() {
       expect(replayed.json['params'], containsPair('seq', 2));
       final replayInitial = await _readSseEvent(replayLines);
       expect(replayInitial.id, isNotNull);
+      expect(replayInitial.retry, 1000);
       expect(replayInitial.data, isEmpty);
       expect(await _readOptionalSseEvent(replayLines), isNull);
 

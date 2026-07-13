@@ -42,6 +42,7 @@ Future<void> main(List<String> args) async {
     serverFactory: (_) => _createConformanceServer(),
     host: host,
     port: port,
+    eventStore: InMemoryEventStore(),
   );
 
   await server.start();
@@ -102,6 +103,20 @@ void registerStableConformanceFeatures(
 }
 
 void _registerTools(McpServer server) {
+  server.registerTool(
+    'test_reconnection',
+    description: 'Closes and resumes the SSE response during execution',
+    callback: (args, extra) async {
+      final closeSSEStream = extra.closeSSEStream;
+      if (closeSSEStream == null) {
+        throw StateError('Resumable SSE stream control is unavailable');
+      }
+
+      closeSSEStream();
+      return _textResult('Reconnection test completed successfully');
+    },
+  );
+
   server.registerTool(
     'test_simple_text',
     description: 'Returns a simple text content block',

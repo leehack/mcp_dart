@@ -189,7 +189,10 @@ class RequestHandlerExtra {
     RequestOptions options,
   ) sendRequest;
 
-  /// Closes the SSE stream for this request (if supported).
+  /// Closes the SSE stream for this request, if resumability is supported.
+  ///
+  /// The handler may still return a result. A client can retrieve it by
+  /// reconnecting with the last SSE event ID.
   final void Function()? closeSSEStream;
 
   /// Closes the standalone SSE stream (if supported).
@@ -1530,6 +1533,13 @@ abstract class Protocol {
     final usesStatelessResultTypes = _usesStatelessResultTypes(request);
     final requestSessionId =
         usesStatelessResultTypes ? null : _transport?.sessionId;
+    final requestSseTransport = _transport;
+    final RequestSseStreamControlAwareTransport? requestSseController =
+        requestSseTransport is RequestSseStreamControlAwareTransport
+            ? requestSseTransport as RequestSseStreamControlAwareTransport
+            : null;
+    final canCloseRequestSseStream =
+        requestSseController?.canCloseRequestSseStream(request.id) ?? false;
 
     final extra = RequestHandlerExtra(
       signal: abortController.signal,
@@ -1594,6 +1604,9 @@ abstract class Protocol {
           request.id,
         );
       },
+      closeSSEStream: canCloseRequestSseStream
+          ? () => requestSseController!.closeRequestSseStream(request.id)
+          : null,
     );
     if (subscriptionState != null) {
       _subscriptionStateByExtra[extra] = subscriptionState;

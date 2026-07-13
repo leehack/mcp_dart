@@ -59,6 +59,20 @@ abstract class RequestIdAwareTransport {
   });
 }
 
+/// Optional capability for request-scoped SSE streams that can be closed and
+/// later resumed from an event store.
+abstract class RequestSseStreamControlAwareTransport {
+  /// Whether the SSE stream for [requestId] can be closed without losing its
+  /// eventual response.
+  bool canCloseRequestSseStream(RequestId requestId);
+
+  /// Closes the current SSE response stream for [requestId].
+  ///
+  /// The request remains active and its eventual response must be available to
+  /// a client that reconnects with the last SSE event ID.
+  void closeRequestSseStream(RequestId requestId);
+}
+
 extension RequestIdAwareTransportSend on Transport {
   /// Sends [message] while preserving non-integer request IDs when the transport
   /// supports [RequestIdAwareTransport].

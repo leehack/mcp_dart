@@ -309,6 +309,9 @@ class StreamableMcpServer {
   /// interactions.
   final bool enableJsonResponse;
 
+  /// Reconnection delay advertised in resumable SSE priming events.
+  final Duration sseRetryDelay;
+
   final Set<String> _defaultDnsRebindingAllowedHosts;
 
   HttpServer? _httpServer;
@@ -331,11 +334,20 @@ class StreamableMcpServer {
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
     this.enableJsonResponse = false,
+    this.sseRetryDelay = const Duration(seconds: 1),
   })  : _serverFactory = serverFactory,
         _defaultDnsRebindingAllowedHosts = {
           normalizeDnsHost(host),
           ...defaultDnsRebindingAllowedHosts,
-        };
+        } {
+    if (sseRetryDelay.isNegative) {
+      throw ArgumentError.value(
+        sseRetryDelay,
+        'sseRetryDelay',
+        'Must not be negative',
+      );
+    }
+  }
 
   /// Starts the HTTP server.
   Future<void> start() async {
@@ -641,6 +653,7 @@ class StreamableMcpServer {
         strictProtocolVersionHeaderValidation:
             strictProtocolVersionHeaderValidation,
         rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
+        sseRetryDelay: sseRetryDelay,
         onsessioninitialized: (sid) {
           _logger.info('Session initialized: $sid');
           _transports[sid] = transport;
@@ -692,6 +705,7 @@ class StreamableMcpServer {
         strictProtocolVersionHeaderValidation:
             strictProtocolVersionHeaderValidation,
         rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
+        sseRetryDelay: sseRetryDelay,
       ),
     );
   }
