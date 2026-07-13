@@ -21,20 +21,20 @@ const stableProtocolVersion2025_11_25 = "2025-11-25";
 /// The latest stable version of the Model Context Protocol supported.
 const latestProtocolVersion = stableProtocolVersion2025_11_25;
 
-/// The latest draft/RC protocol version implemented behind opt-in paths.
+/// The latest draft/RC protocol version implemented by the development default
+/// profile.
 const latestDraftProtocolVersion = draftProtocolVersion2026_07_28;
 
 /// High-level MCP protocol compatibility profiles.
 ///
-/// The SDK defaults to [stable], which keeps the 2025 initialization flow and
-/// avoids draft-only behavior. Use [preview2026] to prefer MCP `2026-07-28`
-/// draft/RC while falling back to stable MCP servers where possible. Use
-/// [require2026] when a peer must support the `2026-07-28` draft/RC stateless
-/// protocol.
+/// On the `dev/2026-07-28` branch, [McpClientOptions] and [McpServerOptions]
+/// default to [preview2026]. Use [stable] to explicitly keep the 2025
+/// initialization flow, or [require2026] when a peer must support the
+/// `2026-07-28` draft/RC stateless protocol.
 enum McpProtocol {
   /// Stable MCP behavior using the latest released specification.
   ///
-  /// This is the default SDK profile and currently targets MCP 2025-11-25.
+  /// This explicit opt-out profile targets MCP 2025-11-25.
   stable,
 
   /// Prefer MCP `2026-07-28` draft/RC when a peer supports it.

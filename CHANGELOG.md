@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Changed
+
+- Started the `dev/2026-07-28` development line from the RC branch and made
+  `McpProtocol.preview2026` the default profile for `McpClientOptions` and
+  `McpServerOptions`. Default clients now probe with `server/discover` and
+  retain stable initialization fallback; callers can explicitly select
+  `McpProtocol.stable` for stable-only MCP behavior.
+
 ### Platform support
 
 - Inherited the stable 2.2.2 web/WASM-safe default export path, preserving

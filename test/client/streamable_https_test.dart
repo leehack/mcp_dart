@@ -242,10 +242,11 @@ void main() {
       expect(transport, isNotNull);
     });
 
-    test('client connect initializes when session ID is preconfigured',
+    test('client discovery omits preconfigured session before fallback init',
         () async {
       final preconfiguredSessionId = 'preconfigured-session-id';
       final capturedSessionHeaders = <String?>[];
+      final capturedRequests = <Map<String, dynamic>>[];
       var initializeCount = 0;
       var initializedNotificationCount = 0;
 
@@ -275,6 +276,7 @@ void main() {
         capturedSessionHeaders.add(request.headers.value('mcp-session-id'));
         final body = await utf8.decoder.bind(request).join();
         final json = jsonDecode(body) as Map<String, dynamic>;
+        capturedRequests.add(json);
 
         if (json['method'] == 'initialize') {
           initializeCount += 1;
@@ -332,9 +334,18 @@ void main() {
       expect(initializeCount, 1);
       expect(initializedNotificationCount, 1);
       expect(capturedSessionHeaders, [
+        null,
         preconfiguredSessionId,
         preconfiguredSessionId,
       ]);
+      final discoverRequest = capturedRequests.first;
+      expect(discoverRequest['method'], Method.serverDiscover);
+      final discoverParams = discoverRequest['params'] as Map<String, dynamic>;
+      final discoverMeta = discoverParams['_meta'] as Map<String, dynamic>;
+      expect(
+        discoverMeta[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
+      );
       expect(client.getServerCapabilities()?.logging, isNotNull);
       expect(client.getServerVersion()?.name, 'PreconfiguredSessionServer');
       expect(

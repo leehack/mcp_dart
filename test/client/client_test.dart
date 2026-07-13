@@ -73,7 +73,8 @@ void main() {
       // We'll test this indirectly in other tests
     });
 
-    test('connect initializes the client with the server', () async {
+    test('connect probes default discovery before initializing a legacy server',
+        () async {
       // Setup the mock transport to respond to initialization
       transport.mockInitializeResponse = InitializeResult(
         protocolVersion: latestProtocolVersion,
@@ -112,7 +113,7 @@ void main() {
         transport.sentMessages
             .whereType<JsonRpcRequest>()
             .map((message) => message.method),
-        [Method.initialize],
+        [Method.serverDiscover, Method.initialize],
       );
 
       // Verify that an initialized notification was sent

@@ -352,9 +352,16 @@ void _registerTaskGetExtensionHandler(Server server) {
 
 void main() {
   group('MCP 2026-07-28 RC protocol foundation', () {
-    test('defines draft protocol version separately from stable default', () {
+    test('makes the 2026 preview profile the development default', () {
       expect(latestProtocolVersion, stableProtocolVersion2025_11_25);
       expect(latestDraftProtocolVersion, draftProtocolVersion2026_07_28);
+      expect(const McpClientOptions().protocol, McpProtocol.preview2026);
+      expect(const McpClientOptions().useServerDiscover, isTrue);
+      expect(const McpServerOptions().protocol, McpProtocol.preview2026);
+      expect(
+        const McpServerOptions().supportedVersions,
+        contains(draftProtocolVersion2026_07_28),
+      );
       expect(
         supportedProtocolVersionsWithDraft,
         contains(draftProtocolVersion2026_07_28),
@@ -366,6 +373,29 @@ void main() {
         false,
       );
       expect(isStatelessProtocolVersion(latestProtocolVersion), false);
+    });
+
+    test('stable profile remains an explicit development opt-out', () async {
+      final transport = LegacyFallbackTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(protocol: McpProtocol.stable),
+      );
+
+      await client.connect(transport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.initialize],
+      );
+      expect(
+        const McpServerOptions(protocol: McpProtocol.stable).supportedVersions,
+        isNot(contains(draftProtocolVersion2026_07_28)),
+      );
     });
 
     test('builds stateless request metadata without dropping caller metadata',
@@ -4915,34 +4945,26 @@ void main() {
       expect(transport.sentMessages, hasLength(sentBeforeCall));
     });
 
-    test('client uses legacy initialization by default', () async {
-      final transport = LegacyFallbackTransport();
+    test('client negotiates the stateless protocol by default', () async {
+      final transport = DiscoveringClientTransport();
       final client = McpClient(
         const Implementation(name: 'client', version: '1.0.0'),
       );
 
       await client.connect(transport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
-      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      expect(client.getProtocolVersion(), draftProtocolVersion2026_07_28);
+      expect(transport.protocolVersion, draftProtocolVersion2026_07_28);
       expect(
         transport.sentMessages
             .whereType<JsonRpcRequest>()
             .map((message) => message.method),
-        isNot(contains(Method.serverDiscover)),
+        [Method.serverDiscover],
       );
+      final discoverRequest = transport.sentMessages.single as JsonRpcRequest;
       expect(
-        transport.sentMessages
-            .whereType<JsonRpcRequest>()
-            .map((message) => message.method),
-        contains(Method.initialize),
-      );
-      final initializeRequest = transport.sentMessages
-          .whereType<JsonRpcRequest>()
-          .singleWhere((message) => message.method == Method.initialize);
-      expect(
-        initializeRequest.params?['protocolVersion'],
-        stableProtocolVersion2025_11_25,
+        discoverRequest.meta?[McpMetaKey.protocolVersion],
+        draftProtocolVersion2026_07_28,
       );
     });
 

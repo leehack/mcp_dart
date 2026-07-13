@@ -87,34 +87,26 @@ Use this comparison as a starting point, not a permanent verdict: both packages 
 
 ## Model Context Protocol Version
 
-The default protocol profile is MCP `2025-11-25`. This library is designed to
-be compatible with this version, and any future updates will preserve an
-explicit stable profile.
-
-It's also backward compatible with previous versions including `2025-06-18`, `2025-03-26`, `2024-11-05`, and `2024-10-07`.
-
-MCP `2026-07-28` draft/RC support is available behind an explicit preview
-profile:
+This development branch defaults to MCP `2026-07-28` draft/RC preview
+negotiation. Clients use `server/discover` and stateless request metadata when
+the peer supports 2026, then fall back to stable `2025-11-25` initialization
+for older peers. The explicit stable profile remains available for deployments
+that must use only stable MCP behavior:
 
 ```dart
 final client = McpClient(
   const Implementation(name: 'my-client', version: '1.0.0'),
-  options: const McpClientOptions(
-    protocol: McpProtocol.preview2026,
-  ),
+  options: const McpClientOptions(protocol: McpProtocol.stable),
 );
 
 final server = McpServer(
   const Implementation(name: 'my-server', version: '1.0.0'),
-  options: const McpServerOptions(
-    protocol: McpProtocol.preview2026,
-  ),
+  options: const McpServerOptions(protocol: McpProtocol.stable),
 );
 ```
 
-Use the preview profile while the spec is still a draft/RC. See the
-[MCP 2026-07-28 draft/RC transition guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md)
-for opt-in behavior, fallback rules, and draft-only APIs.
+See the [MCP 2026-07-28 draft/RC transition guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28/doc/mcp-2026-07-28-rc.md)
+for default negotiation, fallback rules, and draft-only APIs.
 
 ## Documentation
 

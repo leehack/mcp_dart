@@ -17,8 +17,7 @@ class McpClientOptions extends ProtocolOptions {
 
   /// High-level protocol compatibility profile.
   ///
-  /// Defaults to [McpProtocol.stable], which uses MCP 2025-11-25 behavior.
-  /// Set this to [McpProtocol.preview2026] to opt into MCP `2026-07-28`
+  /// Defaults to [McpProtocol.preview2026], which prefers MCP `2026-07-28`
   /// draft/RC negotiation with stable fallback.
   final McpProtocol protocol;
 
@@ -64,7 +63,7 @@ class McpClientOptions extends ProtocolOptions {
   const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
-    this.protocol = McpProtocol.stable,
+    this.protocol = McpProtocol.preview2026,
     String? protocolVersion,
     bool? useServerDiscover,
     bool? allowLegacyInitializationFallback,
@@ -229,11 +228,13 @@ class McpClient extends Protocol {
   /// - [options]: Optional configuration settings including client capabilities.
   McpClient(this._clientInfo, {McpClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
-        _preferredProtocolVersion =
-            options?.protocolVersion ?? latestProtocolVersion,
-        _useServerDiscover = options?.useServerDiscover ?? false,
-        _allowLegacyInitializationFallback =
-            options?.allowLegacyInitializationFallback ?? true,
+        _preferredProtocolVersion = options?.protocolVersion ??
+            McpProtocol.preview2026.preferredProtocolVersion,
+        _useServerDiscover = options?.useServerDiscover ??
+            McpProtocol.preview2026.useServerDiscoverByDefault,
+        _allowLegacyInitializationFallback = options
+                ?.allowLegacyInitializationFallback ??
+            McpProtocol.preview2026.allowLegacyInitializationFallbackByDefault,
         super(options) {
     // Register elicit handler if any elicitation mode is advertised.
     if (_capabilities.elicitation != null) {

@@ -25,10 +25,9 @@ class McpServerOptions extends ProtocolOptions {
 
   /// High-level protocol compatibility profile.
   ///
-  /// Defaults to [McpProtocol.stable], which advertises stable MCP versions and
-  /// keeps MCP `2026-07-28` draft/RC stateless behavior disabled unless
-  /// explicitly requested. Set this to [McpProtocol.preview2026] to enable
-  /// draft-only stateless methods such as `server/discover`.
+  /// Defaults to [McpProtocol.preview2026], which advertises MCP `2026-07-28`
+  /// draft/RC stateless behavior alongside stable protocol versions. Set this
+  /// to [McpProtocol.stable] to advertise only stable MCP versions.
   final McpProtocol protocol;
 
   /// Protocol versions this server advertises and accepts for this profile.
@@ -42,7 +41,7 @@ class McpServerOptions extends ProtocolOptions {
     super.maxTaskQueueSize,
     this.capabilities,
     this.instructions,
-    this.protocol = McpProtocol.stable,
+    this.protocol = McpProtocol.preview2026,
   });
 }
 
@@ -110,8 +109,8 @@ class Server extends Protocol {
   Server(this._serverInfo, {McpServerOptions? options})
       : _capabilities = options?.capabilities ?? const ServerCapabilities(),
         _instructions = options?.instructions,
-        _supportedVersions =
-            options?.supportedVersions ?? McpProtocol.stable.supportedVersions,
+        _supportedVersions = options?.supportedVersions ??
+            McpProtocol.preview2026.supportedVersions,
         super(options) {
     setRequestHandler<JsonRpcServerDiscoverRequest>(
       Method.serverDiscover,
