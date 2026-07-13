@@ -737,6 +737,15 @@ class Server extends Protocol {
   @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
     if (request.method == Method.serverDiscover) {
+      if (!_supportsStatelessProtocol) {
+        // A recognized modern protocol error would identify this as a modern
+        // server. Legacy-only profiles must instead let dual-era clients use
+        // the initialize fallback defined by the compatibility rules.
+        return McpError(
+          ErrorCode.methodNotFound.value,
+          '${Method.serverDiscover} is not available for legacy MCP profiles.',
+        );
+      }
       final metadataError = _validateStatelessRequestMetadata(request);
       if (metadataError != null) {
         return metadataError;
@@ -1092,6 +1101,9 @@ class Server extends Protocol {
       (version) => !isStatelessProtocolVersion(version),
     );
   }
+
+  bool get _supportsStatelessProtocol =>
+      _supportedVersions.any(isStatelessProtocolVersion);
 
   ServerCapabilities _discoveryCapabilities() {
     final json = getCapabilities().toJson();

@@ -13,6 +13,12 @@
   pre-release protocol revisions can use draft-specific names.
 - Legacy initialization and stable-profile fallback now honor an explicit
   supported legacy `McpClientOptions.protocolVersion` override.
+- Legacy-only servers now reject `server/discover` with `MethodNotFound`, while
+  modern discovery results and protocol errors remain on stateless negotiation
+  instead of silently downgrading to legacy initialization.
+- The CLI `inspect-client` harness now inspects both stateless
+  `server/discover` clients and legacy `initialize` clients, including required
+  per-request metadata and 2026 result envelopes.
 
 ### Platform support
 
@@ -63,9 +69,6 @@
 - Cleaned up root analyzer coverage for standalone example packages and moved
   Streamable HTTP, Flutter/Jaspr web client, and MCP Apps examples to the
   default stable profile with legacy fallback where applicable.
-- Broadened stable-client discovery fallback so servers that implement
-  `server/discover` but advertise only legacy protocol versions can still
-  connect through the legacy `initialize` flow.
 
 ## 2.3.0-dev.1
 

@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/client/client.dart';
+import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -127,11 +129,75 @@ void main() {
       expect(notifications.length, equals(1));
     });
 
-    test('legacy fallback honors an explicit protocol version override',
+    test('explicit legacy protocol version connects directly to stable server',
         () async {
-      client = Client(
+      final clientTransport = LinkedTransport();
+      final serverTransport = LinkedTransport();
+      clientTransport.peer = serverTransport;
+      serverTransport.peer = clientTransport;
+
+      final server = McpServer(
+        const Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      client = McpClient(
         clientInfo,
         options: const McpClientOptions(protocolVersion: '2025-06-18'),
+      );
+      addTearDown(() async {
+        await client.close();
+        await server.close();
+      });
+
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getProtocolVersion(), '2025-06-18');
+      expect(
+        clientTransport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.initialize],
+      );
+    });
+
+    test('stable client recognizes a legacy-only server profile', () async {
+      final clientTransport = LinkedTransport();
+      final serverTransport = LinkedTransport();
+      clientTransport.peer = serverTransport;
+      serverTransport.peer = clientTransport;
+
+      final server = McpServer(
+        const Implementation(name: 'TestServer', version: '2.0.0'),
+        options: const McpServerOptions(protocol: McpProtocol.legacy),
+      );
+      client = McpClient(clientInfo);
+      addTearDown(() async {
+        await client.close();
+        await server.close();
+      });
+
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(
+        clientTransport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.serverDiscover, Method.initialize],
+      );
+      final discoveryError =
+          serverTransport.sentMessages.whereType<JsonRpcError>().single;
+      expect(discoveryError.error.code, ErrorCode.methodNotFound.value);
+    });
+
+    test('forced discovery retains explicit legacy fallback version', () async {
+      client = Client(
+        clientInfo,
+        options: const McpClientOptions(
+          protocolVersion: '2025-06-18',
+          useServerDiscover: true,
+        ),
       );
       transport.mockInitializeResponse = InitializeResult(
         protocolVersion: '2025-06-18',
@@ -141,10 +207,43 @@ void main() {
 
       await client.connect(transport);
 
+      final requests = transport.sentMessages.whereType<JsonRpcRequest>();
+      expect(
+        requests.map((message) => message.method),
+        [Method.serverDiscover, Method.initialize],
+      );
+      final discoverRequest = requests.first;
+      expect(
+        discoverRequest.meta?[McpMetaKey.protocolVersion],
+        stableProtocolVersion2026_07_28,
+      );
       final initializeRequest = transport.sentMessages
           .whereType<JsonRpcRequest>()
           .singleWhere((message) => message.method == Method.initialize);
       expect(initializeRequest.params?['protocolVersion'], '2025-06-18');
+    });
+
+    test('stream client falls back when a legacy discovery probe times out',
+        () async {
+      transport.discoveryError = McpError(
+        ErrorCode.requestTimeout.value,
+        'Discovery probe timed out',
+      );
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: stableProtocolVersion2025_11_25,
+        capabilities: mockServerCapabilities,
+        serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+
+      await client.connect(transport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.serverDiscover, Method.initialize],
+      );
     });
 
     test('connect throws if server returns unsupported protocol version',
@@ -605,6 +704,7 @@ void main() {
 class MockTransport extends Transport {
   final List<JsonRpcMessage> sentMessages = [];
   InitializeResult? mockInitializeResponse;
+  McpError? discoveryError;
   Map<String, dynamic>? emptyResponseMeta;
   bool shouldThrowOnStart = false;
 
@@ -625,6 +725,10 @@ class MockTransport extends Transport {
 
     // Simulate a legacy peer by rejecting discovery, then respond to initialize.
     if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      final error = discoveryError;
+      if (error != null) {
+        throw error;
+      }
       if (onmessage != null) {
         onmessage!(
           JsonRpcError(
@@ -825,6 +929,57 @@ class MockTransport extends Transport {
       _onmessage!(message);
     }
   }
+}
+
+class LinkedTransport extends Transport {
+  final List<JsonRpcMessage> sentMessages = [];
+  LinkedTransport? peer;
+
+  void Function()? _onclose;
+  void Function(Error error)? _onerror;
+  void Function(JsonRpcMessage message)? _onmessage;
+
+  @override
+  void Function()? get onclose => _onclose;
+
+  @override
+  set onclose(void Function()? value) {
+    _onclose = value;
+  }
+
+  @override
+  void Function(Error error)? get onerror => _onerror;
+
+  @override
+  set onerror(void Function(Error error)? value) {
+    _onerror = value;
+  }
+
+  @override
+  void Function(JsonRpcMessage message)? get onmessage => _onmessage;
+
+  @override
+  set onmessage(void Function(JsonRpcMessage message)? value) {
+    _onmessage = value;
+  }
+
+  @override
+  String? get sessionId => null;
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> send(
+    JsonRpcMessage message, {
+    int? relatedRequestId,
+  }) async {
+    sentMessages.add(message);
+    scheduleMicrotask(() => peer?.onmessage?.call(message));
+  }
+
+  @override
+  Future<void> close() async {}
 }
 
 // Additional tests for uncovered critical paths

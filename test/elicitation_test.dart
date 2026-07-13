@@ -1028,7 +1028,9 @@ void main() {
         'method': Method.elicitationCreate,
         'params': {
           ...params,
-          '_meta': {McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28},
+          '_meta': {
+            McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+          },
         },
       });
       expect(

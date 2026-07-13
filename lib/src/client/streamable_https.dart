@@ -1561,11 +1561,18 @@ class StreamableHttpClientTransport
           }
           return;
         }
-        if (_dispatchHttpJsonRpcErrorBody(
-          text,
-          message,
-          rejectServerRequests: isStatelessRequest,
-        )) {
+        // HTTP compatibility permits legacy fallback only after a 400
+        // discovery response. Keep the HTTP status observable for all other
+        // statuses instead of reducing them to the JSON-RPC body error.
+        final canDispatchJsonRpcError = message is! JsonRpcRequest ||
+            message.method != Method.serverDiscover ||
+            response.statusCode == 400;
+        if (canDispatchJsonRpcError &&
+            _dispatchHttpJsonRpcErrorBody(
+              text,
+              message,
+              rejectServerRequests: isStatelessRequest,
+            )) {
           return;
         }
         throw McpError(

@@ -11,6 +11,60 @@ import 'package:test/test.dart';
 
 class MockLogger extends Mock implements Logger {}
 
+class _HarnessClientTransport extends Transport {
+  final StreamController<String> clientLines = StreamController<String>();
+  bool _closed = false;
+  void Function()? _onclose;
+  void Function(Error error)? _onerror;
+  void Function(JsonRpcMessage message)? _onmessage;
+
+  @override
+  void Function()? get onclose => _onclose;
+
+  @override
+  set onclose(void Function()? value) => _onclose = value;
+
+  @override
+  void Function(Error error)? get onerror => _onerror;
+
+  @override
+  set onerror(void Function(Error error)? value) => _onerror = value;
+
+  @override
+  void Function(JsonRpcMessage message)? get onmessage => _onmessage;
+
+  @override
+  set onmessage(void Function(JsonRpcMessage message)? value) {
+    _onmessage = value;
+  }
+
+  @override
+  String? get sessionId => null;
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> send(
+    JsonRpcMessage message, {
+    int? relatedRequestId,
+  }) async {
+    clientLines.add(jsonEncode(message.toJson()));
+  }
+
+  Future<void> receiveLine(String line) async {
+    final json = jsonDecode(line) as Map<String, dynamic>;
+    onmessage?.call(JsonRpcMessage.fromJson(json));
+  }
+
+  @override
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    await clientLines.close();
+  }
+}
+
 void main() {
   group('InspectClientCommand', () {
     late Logger logger;
@@ -104,6 +158,84 @@ void main() {
   });
 
   group('ClientInspectorHarness', () {
+    test(
+      'inspects the default stateless McpClient without legacy fallback',
+      () async {
+        final tempDir = await Directory.systemTemp.createTemp(
+          'client_harness_',
+        );
+        addTearDown(() => tempDir.delete(recursive: true));
+        final report = File('${tempDir.path}/report.json');
+        final transport = _HarnessClientTransport();
+        final harness = ClientInspectorHarness(
+          reportFile: report,
+          idleTimeout: const Duration(milliseconds: 50),
+          maxRuntime: const Duration(seconds: 1),
+          clientLines: transport.clientLines.stream,
+          writeLine: transport.receiveLine,
+        );
+        final client = McpClient(
+          const Implementation(name: 'default-client', version: '1.0.0'),
+        );
+
+        final runFuture = harness.run();
+        try {
+          await client.connect(transport);
+          expect(
+            client.getProtocolVersion(),
+            stableProtocolVersion2026_07_28,
+          );
+          final tools = await client.listTools();
+          expect(tools.tools.map((tool) => tool.name), contains('echo'));
+          final result = await client.callTool(
+            const CallToolRequest(
+              name: 'echo',
+              arguments: <String, dynamic>{'message': 'hello'},
+            ),
+          );
+          expect(result.structuredContent, containsPair('message', 'hello'));
+        } finally {
+          await client.close();
+        }
+        await runFuture;
+
+        final json =
+            jsonDecode(await report.readAsString()) as Map<String, dynamic>;
+        expect(json['passed'], isTrue);
+        final metadata = json['metadata'] as Map<String, dynamic>;
+        expect(
+          metadata['protocolVersion'],
+          stableProtocolVersion2026_07_28,
+        );
+        expect(
+          (metadata['observedMethods'] as List<dynamic>).cast<String>(),
+          containsAll(<String>[
+            Method.serverDiscover,
+            Method.toolsList,
+            Method.toolsCall,
+          ]),
+        );
+        final checks =
+            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        for (final id in <String>[
+          'lifecycle.discover-first',
+          'lifecycle.discover',
+          'lifecycle.stateless-no-initialize',
+          'lifecycle.stateless-no-initialized-notification',
+          'lifecycle.stateless-request-metadata',
+          'lifecycle.stateless-removed-methods',
+        ]) {
+          expect(
+            checks,
+            contains(
+              allOf(containsPair('id', id), containsPair('status', 'pass')),
+            ),
+            reason: id,
+          );
+        }
+      },
+    );
+
     test(
       'inspects a client handshake and observed operations in-process',
       () async {
@@ -203,6 +335,88 @@ void main() {
         );
       },
     );
+
+    test('rejects stateless operations without per-request metadata', () async {
+      final tempDir = await Directory.systemTemp.createTemp('client_harness_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final report = File('${tempDir.path}/report.json');
+      final clientLines = StreamController<String>();
+      final outputLines = <String>[];
+      final harness = ClientInspectorHarness(
+        reportFile: report,
+        idleTimeout: const Duration(milliseconds: 50),
+        maxRuntime: const Duration(seconds: 1),
+        clientLines: clientLines.stream,
+        writeLine: outputLines.add,
+      );
+      final meta = buildProtocolRequestMeta(
+        protocolVersion: stableProtocolVersion2026_07_28,
+        clientInfo: const Implementation(
+          name: 'stateless-client',
+          version: '1.0.0',
+        ),
+        clientCapabilities: const ClientCapabilities(),
+      );
+
+      final runFuture = harness.run();
+      clientLines
+        ..add(
+          jsonEncode(
+            JsonRpcServerDiscoverRequest(id: 1, meta: meta).toJson(),
+          ),
+        )
+        ..add(
+          jsonEncode(
+            const JsonRpcListToolsRequest(id: 2).toJson(),
+          ),
+        )
+        ..add(
+          jsonEncode(<String, dynamic>{
+            'jsonrpc': jsonRpcVersion,
+            'id': 3,
+            'method': Method.tasksList,
+            'params': <String, dynamic>{'_meta': meta},
+          }),
+        );
+      await clientLines.close();
+      await runFuture;
+
+      final responses = outputLines.map(jsonDecode).cast<Map>().toList();
+      final error = responses.singleWhere((response) => response['id'] == 2);
+      expect(
+        (error['error'] as Map)['code'],
+        ErrorCode.invalidParams.value,
+      );
+      final removedMethodError =
+          responses.singleWhere((response) => response['id'] == 3);
+      expect(
+        (removedMethodError['error'] as Map)['code'],
+        ErrorCode.methodNotFound.value,
+      );
+      final json =
+          jsonDecode(await report.readAsString()) as Map<String, dynamic>;
+      expect(json['passed'], isFalse);
+      final checks =
+          (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+      expect(
+        checks.singleWhere(
+          (check) => check['id'] == 'lifecycle.stateless-request-metadata',
+        ),
+        containsPair('status', 'fail'),
+      );
+      expect(
+        checks.singleWhere(
+          (check) => check['id'] == 'lifecycle.stateless-removed-methods',
+        ),
+        allOf(
+          containsPair('status', 'fail'),
+          containsPair(
+            'details',
+            containsPair('methods', contains(Method.tasksList)),
+          ),
+        ),
+      );
+    });
 
     test(
       'records resources, prompts, and active client capability probes',

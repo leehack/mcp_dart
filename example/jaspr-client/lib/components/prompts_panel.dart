@@ -62,9 +62,7 @@ class _PromptsPanelState extends State<PromptsPanel> {
         div(classes: 'prompts-list', [
           for (final prompt in component.prompts) _buildPromptItem(prompt),
         ]),
-
       if (_selectedPrompt != null) _buildDialog(),
-
       if (component.promptResult != null)
         div(
           classes: 'prompt-result',

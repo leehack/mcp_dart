@@ -354,6 +354,58 @@ void main() {
       );
     });
 
+    test('client does not fall back after a non-400 discovery response',
+        () async {
+      var initializeCount = 0;
+      final errorServer = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      addTearDown(() => errorServer.close(force: true));
+      final errorUrl = Uri.parse('http://localhost:${errorServer.port}/mcp');
+
+      errorServer.listen((request) async {
+        final body = await utf8.decoder.bind(request).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        if (json['method'] == Method.initialize) {
+          initializeCount += 1;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.serviceUnavailable
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              JsonRpcError(
+                id: json['id'],
+                error: const JsonRpcErrorData(
+                  code: -32099,
+                  message: 'Temporary outage',
+                ),
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      final client = McpClient(
+        const Implementation(name: 'TestClient', version: '1.0.0'),
+      );
+      transport = StreamableHttpClientTransport(errorUrl);
+
+      await expectLater(
+        client.connect(transport),
+        throwsA(
+          isA<McpError>().having((error) => error.code, 'code', 0).having(
+                (error) => error.message,
+                'message',
+                contains('HTTP 503'),
+              ),
+        ),
+      );
+      expect(initializeCount, 0);
+    });
+
     test(
         'client connect retries initialization without stale session ID after 404',
         () async {

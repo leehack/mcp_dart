@@ -231,8 +231,7 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
-            name:
-                'protocol-version.stable-profile-advertises-2026-07-28',
+            name: 'protocol-version.stable-profile-advertises-2026-07-28',
             description:
                 'Advertises MCP 2026-07-28 from the default stable SDK profile.',
             check: _stableProfileAdvertises2026ProtocolVersion,

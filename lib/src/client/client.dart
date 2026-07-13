@@ -26,7 +26,9 @@ class McpClientOptions extends ProtocolOptions {
   /// Preferred protocol version for negotiation.
   ///
   /// When omitted, this is derived from [protocol]. Passing this explicitly is
-  /// a low-level override; most callers should prefer [protocol].
+  /// a low-level override; most callers should prefer [protocol]. A supported
+  /// legacy version selects the legacy `initialize` flow unless
+  /// [useServerDiscover] is explicitly enabled.
   String get protocolVersion {
     final protocolVersion = _protocolVersion;
     if (protocolVersion != null) {
@@ -42,11 +44,31 @@ class McpClientOptions extends ProtocolOptions {
 
   /// Whether [McpClient.connect] should probe with `server/discover` first.
   ///
-  /// When omitted, this is derived from [protocol]. Legacy clients use the
-  /// `initialize` flow by default; stable clients probe with
-  /// `server/discover`.
-  bool get useServerDiscover =>
-      _useServerDiscover ?? protocol.useServerDiscoverByDefault;
+  /// When omitted, an explicit stateless [protocolVersion] enables discovery,
+  /// while an explicit supported legacy version selects `initialize` unless
+  /// [protocol] is [McpProtocol.require2026]. Otherwise this is derived from
+  /// [protocol]. Explicitly enabling discovery with a legacy version probes
+  /// the latest stateless version and preserves the legacy version for
+  /// initialization fallback.
+  bool get useServerDiscover {
+    final useServerDiscover = _useServerDiscover;
+    if (useServerDiscover != null) {
+      return useServerDiscover;
+    }
+
+    final protocolVersion = _protocolVersion;
+    if (protocolVersion != null) {
+      if (isStatelessProtocolVersion(protocolVersion)) {
+        return true;
+      }
+      if (protocol != McpProtocol.require2026 &&
+          legacyProtocolVersions.contains(protocolVersion)) {
+        return false;
+      }
+    }
+
+    return protocol.useServerDiscoverByDefault;
+  }
 
   /// Whether a failed `server/discover` probe should fall back to the legacy
   /// `initialize` handshake when the peer looks like a pre-discovery server.
@@ -199,6 +221,11 @@ class McpClient extends Protocol {
   String? _negotiatedProtocolVersion;
   bool _usesStatelessProtocol = false;
   bool _sentInitialized = false;
+
+  String get _preferredDiscoveryProtocolVersion =>
+      legacyProtocolVersions.contains(_preferredProtocolVersion)
+          ? latestProtocolVersion
+          : _preferredProtocolVersion;
 
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
   final Set<String> _cachedRequiredTaskTools = {};
@@ -455,18 +482,6 @@ class McpClient extends Protocol {
     return retryVersion;
   }
 
-  bool _discoveryUnsupportedButLegacyCompatible(McpError error) {
-    final advertisedVersions =
-        _supportedVersionsFromUnsupportedProtocolError(error);
-    if (advertisedVersions == null) return false;
-
-    return negotiateProtocolVersion(
-          advertisedVersions,
-          localSupportedVersions: legacyProtocolVersions,
-        ) !=
-        null;
-  }
-
   Future<DiscoverResult> _discoverServerWithVersion(
     String protocolVersion,
   ) async {
@@ -491,7 +506,9 @@ class McpClient extends Protocol {
 
     final negotiatedProtocolVersion = negotiateProtocolVersion(
       result.supportedVersions,
-      localSupportedVersions: supportedProtocolVersions,
+      // A DiscoverResult identifies a modern peer. Legacy protocol versions
+      // require the initialize handshake and cannot be selected here.
+      localSupportedVersions: statelessProtocolVersions,
     );
     if (negotiatedProtocolVersion == null) {
       throw McpError(
@@ -523,8 +540,9 @@ class McpClient extends Protocol {
   }
 
   Future<DiscoverResult> discoverServer() async {
+    final discoveryProtocolVersion = _preferredDiscoveryProtocolVersion;
     try {
-      return await _discoverServerWithVersion(_preferredProtocolVersion);
+      return await _discoverServerWithVersion(discoveryProtocolVersion);
     } catch (error) {
       if (error is! McpError) {
         rethrow;
@@ -532,14 +550,14 @@ class McpClient extends Protocol {
 
       final retryVersion = _retryableDiscoveryProtocolVersion(
         error,
-        _preferredProtocolVersion,
+        discoveryProtocolVersion,
       );
       if (retryVersion == null) {
         rethrow;
       }
 
       _logger.debug(
-        "server/discover rejected protocol $_preferredProtocolVersion; "
+        "server/discover rejected protocol $discoveryProtocolVersion; "
         "retrying with $retryVersion.",
       );
       return await _discoverServerWithVersion(retryVersion);
@@ -559,7 +577,7 @@ class McpClient extends Protocol {
           await discoverServer();
           return;
         } catch (error) {
-          if (!_isLegacyDiscoveryFallbackError(error)) {
+          if (!_isLegacyDiscoveryFallbackError(error, transport)) {
             rethrow;
           }
           _logger.debug(
@@ -579,31 +597,41 @@ class McpClient extends Protocol {
     }
   }
 
-  bool _isLegacyDiscoveryFallbackError(Object error) {
+  bool _isLegacyDiscoveryFallbackError(
+    Object error,
+    Transport transport,
+  ) {
     if (!_allowLegacyInitializationFallback || error is! McpError) {
       return false;
     }
-    if (error.code == ErrorCode.methodNotFound.value) {
-      return true;
+    if (error.code == ErrorCode.headerMismatch.value ||
+        error.code == ErrorCode.missingRequiredClientCapability.value ||
+        error.code == ErrorCode.unsupportedProtocolVersion.value) {
+      // Recognized modern protocol errors identify a modern server. They may
+      // trigger stateless retries, but never legacy initialization fallback.
+      return false;
     }
-    if (_discoveryUnsupportedButLegacyCompatible(error)) {
-      return true;
-    }
-    if (error.code == ErrorCode.invalidParams.value &&
-        error.message.contains('Invalid request parameters')) {
-      return true;
+
+    if (error.code == ErrorCode.requestTimeout.value) {
+      // Body-only stream transports use discovery timeouts to identify silent
+      // legacy peers. HTTP-capable transports surface timeouts as outages.
+      return transport is! ProtocolVersionAwareTransport;
     }
 
     final message = error.message;
-    if (error.code == 0 &&
-        message.contains('Error POSTing to endpoint (HTTP 400)')) {
-      return true;
+    if (error.code == 0) {
+      return message.contains('Error POSTing to endpoint (HTTP 400)') ||
+          message.contains('Server not initialized');
     }
 
-    return (error.code == 0 ||
-            error.code == ErrorCode.connectionClosed.value ||
-            error.code == ErrorCode.invalidRequest.value) &&
-        message.contains('Server not initialized');
+    if (error.code == ErrorCode.connectionClosed.value) {
+      return message.contains('Server not initialized');
+    }
+
+    // Legacy servers use implementation-defined JSON-RPC errors for unknown
+    // requests before initialize. The compatibility rules intentionally do not
+    // key fallback to one particular generic error code.
+    return true;
   }
 
   @override

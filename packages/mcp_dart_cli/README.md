@@ -124,32 +124,33 @@ Current scope:
   config files let developers provide real tool arguments, resource URIs,
   prompt arguments, completion values, and task behavior.
 - `inspect-client` runs a stdio test server that agent hosts and MCP clients can
-  launch. It records initialize/initialized behavior, client capabilities, and
-  whether the client discovers or calls the inspector's test primitives. It also
-  actively probes advertised roots, sampling, and elicitation support.
+  launch. It records stateless `server/discover` or legacy
+  initialize/initialized behavior, client capabilities, and whether the client
+  discovers or calls the inspector's test primitives. For legacy clients it
+  also actively probes advertised roots, sampling, and elicitation support.
 - `trace` launches a stdio server command, forwards traffic between the real
   client and server, and writes a chronological report with raw frames, parsed
   JSON-RPC messages, methods, ids, stderr, and malformed-frame errors.
 - `inspect`, `list-tools`, and `call-tool` remain lightweight live server
   inspection and smoke test commands.
-- `conformance` is a built-in SDK/fixture regression gate for MCP
-  2025-11-25-sensitive wire cases in this package.
+- `conformance` is a built-in SDK/fixture regression gate for MCP 2025-11-25
+  and 2026-07-28 wire cases in this package.
 
 This is a practical inspector and regression gate, not a formal certification
 suite. It can catch common lifecycle, capability, primitive-shape, and client
 handshake problems, but it does not prove full MCP spec compliance for a target.
 
-Current MCP 2025-11-25 coverage:
+Current MCP 2025-11-25 and 2026-07-28 coverage:
 
 | Area | Current CLI coverage |
 | --- | --- |
-| Base lifecycle and JSON-RPC | `inspect-server` verifies initialize, server info, capabilities, and ping on live targets. `inspect-client` verifies initialize-first, initialized notification, client info, capabilities, and well-formed observed JSON-RPC. `conformance` adds built-in malformed JSON-RPC, string id/token, pre-initialize, and protocol-version regression cases. |
+| Base lifecycle and JSON-RPC | `inspect-server` verifies the negotiated handshake, server info, capabilities, and applicable lifecycle operations on live targets. `inspect-client` verifies either stateless `server/discover` with per-request metadata and no legacy initialization messages, or legacy initialize-first plus initialized notification behavior. Both paths check client info, capabilities, and well-formed observed JSON-RPC. `conformance` adds built-in malformed JSON-RPC, string id/token, lifecycle, and protocol-version regression cases. |
 | Transports | Live inspection supports stdio and Streamable HTTP targets. Streamable HTTP reports session/protocol metadata, probes GET without/bogus sessions, records Origin-header behavior, and attempts DELETE session termination. `trace` proxies stdio sessions. It does not yet run resumability or redelivery probes. |
 | Server tools | `inspect-server` verifies advertised tools, `tools/list`, unique/spec-shaped names, object input schemas, object output schemas when present, and descriptions as warnings. Probe configs can call selected tools with developer-provided arguments and validate structured output against output schemas through the SDK client. `call-tool` can exercise one tool and returns non-zero on `isError`. It does not automatically invoke every ordinary tool. |
 | Server resources | `inspect-server` verifies the resources capability, `resources/list`, `resources/templates/list`, unique resource URIs/templates, parseable URIs, non-empty names, first or configured `resources/read`, and subscribe/unsubscribe when advertised or requested. It does not yet auto-read every resource or trigger resource update notifications. |
 | Server prompts | `inspect-server` verifies the prompts capability, `prompts/list`, unique prompt names, unique/non-empty argument names, and first or configured `prompts/get`. Interactive `inspect` can get a specified prompt. Live inspection does not yet auto-run `prompts/get` for every prompt or validate every prompt message content variant. |
 | Server completion | `inspect-server` probes `completion/complete` when the server advertises completions and exposes a prompt argument that can be completed safely. |
-| Client roots, sampling, and elicitation | `inspect-server` advertises roots, sampling, and form elicitation so live servers can request them. `inspect-client` actively sends `roots/list`, `sampling/createMessage`, and `elicitation/create` probes to clients that advertise those capabilities. |
+| Client roots, sampling, and elicitation | `inspect-server` advertises roots, sampling, and form elicitation so live servers can request them. For legacy clients, `inspect-client` actively sends `roots/list`, `sampling/createMessage`, and `elicitation/create` probes when advertised. For stateless clients it records those capabilities without sending removed server-initiated requests; 2026 input requests travel through MRTR results. |
 | Logging, progress, and list-changed notifications | `inspect-server` calls `logging/setLevel` when logging is advertised, records server notifications, and checks observed progress notifications for numeric progress, valid tokens, and non-decreasing progress per token. `conformance` has a malformed progress-token case. The CLI does not yet trigger list-changed notifications itself. |
 | Cancellation | Not actively inspected yet. |
 | Authorization | Streamable HTTP inspection probes OAuth protected-resource metadata discovery at the endpoint-specific and root `.well-known` locations, records 401 `WWW-Authenticate` challenges, fetches authorization-server/OIDC metadata when advertised, and warns when PKCE S256 is missing. It does not complete token exchange without user-provided credentials. |
@@ -312,10 +313,13 @@ node client.js \
 ```
 
 The harness exposes an `echo` tool plus one resource and one prompt, then
-records whether the client initialized correctly and exercised those primitives.
-When the connecting client advertises roots, sampling, or elicitation, the
-harness actively sends the matching server-initiated request and records whether
-the client responds.
+records whether the client negotiated correctly and exercised those primitives.
+It supports the stateless `server/discover` handshake as well as legacy
+initialize/initialized. When a legacy client advertises roots, sampling, or
+elicitation, the harness actively sends the matching server-initiated request
+and records whether the client responds. For stateless clients, it records the
+request-local capabilities without sending methods removed from the 2026 wire
+protocol.
 
 ### Trace
 

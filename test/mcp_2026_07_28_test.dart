@@ -361,6 +361,26 @@ void main() {
       ]);
       expect(const McpClientOptions().protocol, McpProtocol.stable);
       expect(const McpClientOptions().useServerDiscover, isTrue);
+      expect(
+        const McpClientOptions(
+          protocolVersion: stableProtocolVersion2025_11_25,
+        ).useServerDiscover,
+        isFalse,
+      );
+      expect(
+        const McpClientOptions(
+          protocolVersion: stableProtocolVersion2025_11_25,
+          useServerDiscover: true,
+        ).useServerDiscover,
+        isTrue,
+      );
+      expect(
+        const McpClientOptions(
+          protocol: McpProtocol.require2026,
+          protocolVersion: stableProtocolVersion2025_11_25,
+        ).useServerDiscover,
+        isTrue,
+      );
       expect(const McpServerOptions().protocol, McpProtocol.stable);
       expect(
         const McpServerOptions().supportedVersions,
@@ -1180,7 +1200,10 @@ void main() {
       );
       final resultJson = result.toJson();
       expect(resultJson['resultType'], 'complete');
-      expect(resultJson['supportedVersions'], [stableProtocolVersion2026_07_28]);
+      expect(
+        resultJson['supportedVersions'],
+        [stableProtocolVersion2026_07_28],
+      );
       expect(resultJson['capabilities'], {'tools': <String, dynamic>{}});
       expect(resultJson['ttlMs'], 1000);
       expect(resultJson['cacheScope'], CacheScope.public);
@@ -4987,7 +5010,11 @@ void main() {
         McpError(0, 'Error POSTing to endpoint (HTTP 400): '),
         McpError(
           ErrorCode.invalidParams.value,
-          'Invalid request parameters',
+          'Legacy parser rejected discovery',
+        ),
+        McpError(
+          ErrorCode.internalError.value,
+          'Legacy server failed before initialize',
         ),
       ];
 
@@ -6622,6 +6649,33 @@ void main() {
       );
     });
 
+    test('client rejects discovery results that offer only legacy versions',
+        () async {
+      final transport = DiscoveringClientTransport(
+        discoverVersions: legacyProtocolVersions,
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+      );
+
+      await expectLater(
+        client.connect(transport),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.unsupportedProtocolVersion.value,
+          ),
+        ),
+      );
+      expect(
+        transport.sentMessages.whereType<JsonRpcRequest>().map(
+              (message) => message.method,
+            ),
+        isNot(contains(Method.initialize)),
+      );
+    });
+
     test(
         'client retries discovery with advertised compatible stateless version',
         () async {
@@ -6660,14 +6714,14 @@ void main() {
       );
     });
 
-    test('stable client falls back when discovery advertises legacy versions',
+    test('stable client does not downgrade after a modern discovery error',
         () async {
       final transport = LegacyFallbackTransport(
         discoveryError: McpError(
           ErrorCode.unsupportedProtocolVersion.value,
           'Unsupported protocol version',
           const {
-            'supported': supportedProtocolVersions,
+            'supported': legacyProtocolVersions,
             'requested': stableProtocolVersion2026_07_28,
           },
         ),
@@ -6679,22 +6733,51 @@ void main() {
         ),
       );
 
-      await client.connect(transport);
-
-      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
-      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      await expectLater(
+        client.connect(transport),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.unsupportedProtocolVersion.value,
+          ),
+        ),
+      );
       expect(
         transport.sentMessages
             .whereType<JsonRpcRequest>()
             .map((message) => message.method),
-        containsAllInOrder([Method.serverDiscover, Method.initialize]),
+        isNot(contains(Method.initialize)),
       );
-      final initializeRequest = transport.sentMessages
-          .whereType<JsonRpcRequest>()
-          .singleWhere((message) => message.method == Method.initialize);
+    });
+
+    test('HTTP-capable client does not downgrade after a discovery timeout',
+        () async {
+      final transport = LegacyFallbackTransport(
+        discoveryError: McpError(
+          ErrorCode.requestTimeout.value,
+          'Discovery probe timed out',
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+      );
+
+      await expectLater(
+        client.connect(transport),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.requestTimeout.value,
+          ),
+        ),
+      );
       expect(
-        initializeRequest.params?['protocolVersion'],
-        stableProtocolVersion2025_11_25,
+        transport.sentMessages.whereType<JsonRpcRequest>().map(
+              (message) => message.method,
+            ),
+        isNot(contains(Method.initialize)),
       );
     });
 
