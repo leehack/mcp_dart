@@ -17,7 +17,6 @@ int _streamCancellationCount = 0;
 Future<void> main(List<String> args) async {
   var host = 'localhost';
   var port = 0;
-  var enableDnsRebindingProtection = true;
 
   for (var i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -32,8 +31,6 @@ Future<void> main(List<String> args) async {
             port = parsed;
           }
         }
-      case '--disable-dns-rebinding-protection':
-        enableDnsRebindingProtection = false;
       case '--help':
         _printUsage();
         return;
@@ -45,7 +42,6 @@ Future<void> main(List<String> args) async {
     host: host,
     port: port,
     enableJsonResponse: false,
-    enableDnsRebindingProtection: enableDnsRebindingProtection,
   );
 
   await server.start();
@@ -557,7 +553,6 @@ void _requireRequestState(String? actual, String expected) {
 void _printUsage() {
   stdout.writeln(
     'Usage: dart run test/conformance/mcp_2026_07_28_rc_server.dart '
-    '[--host localhost] [--port 33125] '
-    '[--disable-dns-rebinding-protection]',
+    '[--host localhost] [--port 33125]',
   );
 }

@@ -18,10 +18,9 @@ Future<void> main(List<String> args) async {
       'run',
       'test/conformance/mcp_2026_07_28_rc_server.dart',
       '--host',
-      '127.0.0.1',
+      'localhost',
       '--port',
       '$_browserTestPort',
-      '--disable-dns-rebinding-protection',
     ],
     workingDirectory: repoRoot.path,
   );
