@@ -354,6 +354,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
+          'Origin': 'http://localhost:8080',
           'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsList,
         },
@@ -361,6 +362,7 @@ void main() {
 
       expect(response.statusCode, HttpStatus.ok);
       expect(response.headers['mcp-session-id'], isNull);
+      expect(response.headers['access-control-allow-origin'], '*');
       final messages = _decodeSseJsonMessages(response.body);
       expect(messages.single['result']['tools'][0]['name'], 'echo');
     });

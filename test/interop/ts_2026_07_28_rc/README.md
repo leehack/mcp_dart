@@ -6,8 +6,8 @@ progress.
 
 It is intentionally separate from `test/interop/ts`, which tracks the published
 stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins published
-`@modelcontextprotocol/client@2.0.0-beta.3` and
-`@modelcontextprotocol/server@2.0.0-beta.3` packages. The TypeScript client path
+`@modelcontextprotocol/client@2.0.0-beta.4` and
+`@modelcontextprotocol/server@2.0.0-beta.4` packages. The TypeScript client path
 is a draft-aligned smoke check against the Dart 2026-07-28 RC server. The
 reverse Dart client path is a draft-aligned smoke check against the TypeScript
 beta server.
@@ -66,8 +66,8 @@ When TypeScript beta behavior conflicts with the draft, keep the draft as the
 assertion source and document the beta gap near the test.
 
 CI runs this fixture in the dedicated
-`Run MCP 2026-07-28 TypeScript Interop` workflow for relevant PRs,
-`dev/2026-07-28-rc` pushes, daily scheduled drift checks, and manual dispatch.
+`Run MCP 2026-07-28 Interop` workflow for relevant PRs,
+`dev/2026-07-28` pushes, daily scheduled drift checks, and manual dispatch.
 Keep the fixture pinned to a published TypeScript SDK beta that exposes the
 2026 draft path and passes this runner; do not treat package publication alone
 as enough to re-pin without rerunning the interop check.

@@ -1287,11 +1287,21 @@ class StreamableHTTPServerTransport
     HttpRequest req,
     Map<String, String> headers,
   ) async {
+    final responseHeaders = <String, String>{};
+    req.response.headers.forEach((name, values) {
+      final normalizedName = name.toLowerCase();
+      if (normalizedName == HttpHeaders.contentLengthHeader ||
+          normalizedName == HttpHeaders.transferEncodingHeader ||
+          normalizedName == HttpHeaders.connectionHeader) {
+        return;
+      }
+      responseHeaders[name] = values.join(', ');
+    });
+    responseHeaders
+      ..addAll(headers)
+      ..[HttpHeaders.connectionHeader] = 'close';
+
     final socket = await req.response.detachSocket(writeHeaders: false);
-    final responseHeaders = {
-      ...headers,
-      HttpHeaders.connectionHeader: 'close',
-    };
     final responseHead = StringBuffer('HTTP/1.1 200 OK\r\n');
     responseHeaders.forEach((key, value) {
       responseHead.write('$key: $value\r\n');
