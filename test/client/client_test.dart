@@ -127,6 +127,26 @@ void main() {
       expect(notifications.length, equals(1));
     });
 
+    test('legacy fallback honors an explicit protocol version override',
+        () async {
+      client = Client(
+        clientInfo,
+        options: const McpClientOptions(protocolVersion: '2025-06-18'),
+      );
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: '2025-06-18',
+        capabilities: mockServerCapabilities,
+        serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+
+      await client.connect(transport);
+
+      final initializeRequest = transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((message) => message.method == Method.initialize);
+      expect(initializeRequest.params?['protocolVersion'], '2025-06-18');
+    });
+
     test('connect throws if server returns unsupported protocol version',
         () async {
       transport.mockInitializeResponse = InitializeResult(

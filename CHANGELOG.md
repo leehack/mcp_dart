@@ -8,6 +8,11 @@
   retain legacy initialization fallback. `McpProtocol.legacy` keeps
   `2025-11-25` and earlier behavior, while `McpProtocol.require2026` remains
   strict; the former `McpProtocol.preview2026` profile was removed.
+- Renamed `draftProtocolVersion2026_07_28` to
+  `stableProtocolVersion2026_07_28` for the default SDK profile. Future
+  pre-release protocol revisions can use draft-specific names.
+- Legacy initialization and stable-profile fallback now honor an explicit
+  supported legacy `McpClientOptions.protocolVersion` override.
 
 ### Platform support
 

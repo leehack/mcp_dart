@@ -133,14 +133,14 @@ class ElicitRequest {
     final url = json['url'];
     final elicitationId = json['elicitationId'];
     final task = readOptionalJsonObject(json['task'], 'ElicitRequest.task');
-    final isDraftProtocol = _isDraftProtocol(protocolVersion);
+    final isStatelessProtocol = _isStatelessProtocol(protocolVersion);
 
     if (mode == ElicitationMode.url) {
       if (url is! String) {
         throw const FormatException('URL elicitation requires url.');
       }
       _validateUrlElicitationUri(url, formatException: true);
-      if (isDraftProtocol) {
+      if (isStatelessProtocol) {
         if (json.containsKey('elicitationId')) {
           throw const FormatException(
             'MCP 2026-07-28 URL elicitation must not include elicitationId.',
@@ -199,7 +199,7 @@ class ElicitRequest {
         throw ArgumentError('URL elicitation requires url.');
       }
       _validateUrlElicitationUri(url!);
-      if (_isDraftProtocol(protocolVersion)) {
+      if (_isStatelessProtocol(protocolVersion)) {
         if (elicitationId != null) {
           throw ArgumentError(
             'MCP 2026-07-28 URL elicitation must not include elicitationId.',
@@ -228,13 +228,13 @@ class ElicitRequest {
 
   Map<String, dynamic> toJson({String? protocolVersion}) {
     _validateShape(protocolVersion: protocolVersion);
-    final isDraftProtocol = _isDraftProtocol(protocolVersion);
+    final isStatelessProtocol = _isStatelessProtocol(protocolVersion);
     return {
       if (mode != null) 'mode': mode!.name,
       'message': message,
       if (requestedSchema != null) 'requestedSchema': requestedSchema!.toJson(),
       if (url != null) 'url': url,
-      if (!isDraftProtocol && elicitationId != null)
+      if (!isStatelessProtocol && elicitationId != null)
         'elicitationId': elicitationId,
       if (task != null) 'task': task!.toJson(),
     };
@@ -801,7 +801,7 @@ void _ensureAllowedKeys(
   }
 }
 
-bool _isDraftProtocol(String? protocolVersion) =>
+bool _isStatelessProtocol(String? protocolVersion) =>
     protocolVersion != null && isStatelessProtocolVersion(protocolVersion);
 
 String? _protocolVersionFromMeta(Map<String, dynamic>? meta) {

@@ -92,12 +92,12 @@ without relying on output text:
 - `progress.rejects-malformed-progress-token`
 - `progress.dispatches-integer-progress-token`
 
-The same CLI gate also includes draft MCP 2026-07-28 RC cases while that spec
-is being prepared:
+The same CLI gate also includes MCP 2026-07-28 RC cases for the SDK's stable
+profile while that upstream specification is being prepared:
 
-- `protocol-version.advertises-draft-2026-07-28`
+- `protocol-version.stable-profile-advertises-2026-07-28`
 - `server-discover.requires-request-meta`
-- `server-discover.returns-draft-capabilities`
+- `server-discover.returns-supported-capabilities`
 - `protocol-version.rejects-unsupported-stateless-version`
 - `stateless.requires-complete-request-meta`
 - `protocol-version.http-modern-400-retries-discovery`

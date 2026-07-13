@@ -106,7 +106,7 @@ final server = McpServer(
 );
 ```
 
-See the [MCP 2026-07-28 draft/RC transition guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28/doc/mcp-2026-07-28-rc.md)
+See the [MCP 2026-07-28 draft/RC transition guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md)
 for default negotiation, fallback rules, and draft-only APIs.
 
 ## Documentation

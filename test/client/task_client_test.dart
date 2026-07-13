@@ -149,7 +149,7 @@ void main() {
 
     test('callToolStream delegates 2026 task extension tools to callTool',
         () async {
-      mockClient.protocolVersion = draftProtocolVersion2026_07_28;
+      mockClient.protocolVersion = stableProtocolVersion2026_07_28;
       mockClient.serverCapabilities = ServerCapabilities(
         tools: const ServerCapabilitiesTools(),
         extensions: withMcpTasksExtension(null),
@@ -181,7 +181,7 @@ void main() {
 
     test('callToolStream rejects legacy task parameter for 2026 task extension',
         () async {
-      mockClient.protocolVersion = draftProtocolVersion2026_07_28;
+      mockClient.protocolVersion = stableProtocolVersion2026_07_28;
       mockClient.serverCapabilities = ServerCapabilities(
         tools: const ServerCapabilitiesTools(),
         extensions: withMcpTasksExtension(null),

@@ -266,7 +266,7 @@ void main() {
               meta: invalidMeta,
             ).toJson(),
         () => DiscoverResult(
-              supportedVersions: const [draftProtocolVersion2026_07_28],
+              supportedVersions: const [stableProtocolVersion2026_07_28],
               capabilities: const ServerCapabilities(),
               serverInfo: const Implementation(name: 'server', version: '1.0'),
               meta: invalidMeta,
@@ -371,7 +371,7 @@ void main() {
       };
       final discoverResult = {
         'resultType': resultTypeComplete,
-        'supportedVersions': [draftProtocolVersion2026_07_28],
+        'supportedVersions': [stableProtocolVersion2026_07_28],
         'capabilities': <String, dynamic>{},
         'serverInfo': {'name': 'server', 'version': '1.0.0'},
       };
@@ -395,7 +395,7 @@ void main() {
             }),
         () => DiscoverResult.fromJson({
               ...discoverResult,
-              'supportedVersions': [draftProtocolVersion2026_07_28, 1],
+              'supportedVersions': [stableProtocolVersion2026_07_28, 1],
             }),
         () => DiscoverResult.fromJson({
               ...discoverResult,

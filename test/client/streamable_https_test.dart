@@ -82,7 +82,7 @@ class DiscoveryOAuthClientProvider implements OAuthAuthorizationCodeProvider {
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
-      protocolVersion: draftProtocolVersion2026_07_28,
+      protocolVersion: stableProtocolVersion2026_07_28,
       clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
       clientCapabilities: const ClientCapabilities(),
     );
@@ -344,7 +344,7 @@ void main() {
       final discoverMeta = discoverParams['_meta'] as Map<String, dynamic>;
       expect(
         discoverMeta[McpMetaKey.protocolVersion],
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
       expect(client.getServerCapabilities()?.logging, isNotNull);
       expect(client.getServerVersion()?.name, 'PreconfiguredSessionServer');
@@ -1109,7 +1109,7 @@ void main() {
           },
           sessionId: 'legacy-session',
         ),
-      )..protocolVersion = draftProtocolVersion2026_07_28;
+      )..protocolVersion = stableProtocolVersion2026_07_28;
       await transport.start();
 
       final completer = Completer<JsonRpcMessage>();
@@ -1129,7 +1129,7 @@ void main() {
 
       expect(
         capturedHeaders['protocolVersion'],
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
       expect(capturedHeaders['method'], Method.toolsCall);
       expect(capturedHeaders['name'], 'echo');
@@ -1183,7 +1183,7 @@ void main() {
             'name': 'echo',
             'arguments': {'message': 'hello'},
             '_meta': {
-              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
             },
           },
         ),
@@ -1192,7 +1192,7 @@ void main() {
 
       expect(
         capturedHeaders['protocolVersion'],
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
       expect(capturedHeaders['method'], Method.toolsCall);
       expect(capturedHeaders['name'], 'echo');
@@ -1229,7 +1229,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = draftProtocolVersion2026_07_28;
+      )..protocolVersion = stableProtocolVersion2026_07_28;
       await transport.start();
 
       final responses = <JsonRpcMessage>[];
@@ -1301,7 +1301,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = draftProtocolVersion2026_07_28;
+      )..protocolVersion = stableProtocolVersion2026_07_28;
       await transport.start();
 
       final completer = Completer<JsonRpcMessage>();
@@ -1321,7 +1321,7 @@ void main() {
 
       expect(
         capturedHeaders['protocolVersion'],
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
       expect(capturedHeaders['method'], Method.tasksUpdate);
       expect(capturedHeaders['name'], 'task-1');
@@ -1345,7 +1345,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = draftProtocolVersion2026_07_28;
+      )..protocolVersion = stableProtocolVersion2026_07_28;
       await transport.start();
 
       final errorCompleter = Completer<Error>();
@@ -1389,7 +1389,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = draftProtocolVersion2026_07_28;
+      )..protocolVersion = stableProtocolVersion2026_07_28;
       await transport.start();
 
       final errorCompleter = Completer<Error>();
@@ -1452,7 +1452,7 @@ void main() {
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
       )
-        ..protocolVersion = draftProtocolVersion2026_07_28
+        ..protocolVersion = stableProtocolVersion2026_07_28
         ..setToolParameterHeaderMappings(
           {
             'execute_sql': {
@@ -2208,7 +2208,7 @@ void main() {
             sessionId: 'legacy-session',
           ),
         );
-        transport.protocolVersion = draftProtocolVersion2026_07_28;
+        transport.protocolVersion = stableProtocolVersion2026_07_28;
         await transport.start();
 
         await transport.terminateSession();
@@ -2245,7 +2245,7 @@ void main() {
         transport = StreamableHttpClientTransport(
           Uri.parse('http://localhost:${server.port}/mcp'),
         );
-        transport.protocolVersion = draftProtocolVersion2026_07_28;
+        transport.protocolVersion = stableProtocolVersion2026_07_28;
         await transport.start();
 
         await transport.send(const JsonRpcInitializedNotification());

@@ -117,7 +117,7 @@ void main() {
   });
 
   Map<String, dynamic> statelessMeta() => buildProtocolRequestMeta(
-        protocolVersion: draftProtocolVersion2026_07_28,
+        protocolVersion: stableProtocolVersion2026_07_28,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
         clientCapabilities: const ClientCapabilities(),
       );
@@ -354,7 +354,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -396,7 +396,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -446,7 +446,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'missing_tool',
         },
@@ -526,7 +526,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+            'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
             'Mcp-Method': Method.serverDiscover,
           },
         );
@@ -586,7 +586,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.serverDiscover,
         },
       );
@@ -641,7 +641,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+            'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
             'Mcp-Method': method,
           },
         );
@@ -684,7 +684,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsList,
           'mcp-session-id': 'unknown-legacy-session',
         },
@@ -762,7 +762,7 @@ void main() {
       await server.start();
 
       final meta = buildProtocolRequestMeta(
-        protocolVersion: draftProtocolVersion2026_07_28,
+        protocolVersion: stableProtocolVersion2026_07_28,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
         clientCapabilities: const ClientCapabilities(
           extensions: {mcpTasksExtensionId: <String, dynamic>{}},
@@ -780,7 +780,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'long',
         },
@@ -804,7 +804,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.tasksGet,
           'Mcp-Name': taskId,
           'mcp-session-id': 'unknown-legacy-session',
@@ -861,7 +861,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -899,7 +899,7 @@ void main() {
         body: jsonEncode(
           const JsonRpcListToolsRequest(id: 12).toJson()
             ..['_meta'] = const {
-              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
             },
         ),
         headers: {
@@ -925,7 +925,7 @@ void main() {
       final getRequest = await client.getUrl(Uri.parse(baseUrl));
       getRequest.headers.set(
         'MCP-Protocol-Version',
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
       final getResponse = await getRequest.close();
       expect(getResponse.statusCode, HttpStatus.methodNotAllowed);
@@ -935,7 +935,7 @@ void main() {
       final deleteRequest = await client.deleteUrl(Uri.parse(baseUrl));
       deleteRequest.headers.set(
         'MCP-Protocol-Version',
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
       final deleteResponse = await deleteRequest.close();
       expect(deleteResponse.statusCode, HttpStatus.methodNotAllowed);
@@ -945,7 +945,7 @@ void main() {
       final patchRequest = await client.openUrl('PATCH', Uri.parse(baseUrl));
       patchRequest.headers.set(
         'MCP-Protocol-Version',
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
       final patchResponse = await patchRequest.close();
       expect(patchResponse.statusCode, HttpStatus.methodNotAllowed);

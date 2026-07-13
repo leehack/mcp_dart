@@ -353,8 +353,12 @@ class McpClient extends Protocol {
     _sentInitialized = false;
     _usesStatelessProtocol = false;
 
+    final initializationProtocolVersion =
+        legacyProtocolVersions.contains(_preferredProtocolVersion)
+            ? _preferredProtocolVersion
+            : stableProtocolVersion2025_11_25;
     final initParams = InitializeRequest(
-      protocolVersion: stableProtocolVersion2025_11_25,
+      protocolVersion: initializationProtocolVersion,
       capabilities: _capabilities,
       clientInfo: _clientInfo,
     );

@@ -991,10 +991,10 @@ void main() {
 
       final parsed = ElicitRequestParams.fromJson(
         params,
-        protocolVersion: draftProtocolVersion2026_07_28,
+        protocolVersion: stableProtocolVersion2026_07_28,
       );
       final parsedJson = parsed.toJson(
-        protocolVersion: draftProtocolVersion2026_07_28,
+        protocolVersion: stableProtocolVersion2026_07_28,
       );
       expect(
         parsedJson['requestedSchema']['properties']['ratio']['minimum'],
@@ -1016,7 +1016,7 @@ void main() {
             ),
           },
         ),
-      ).toJson(protocolVersion: draftProtocolVersion2026_07_28);
+      ).toJson(protocolVersion: stableProtocolVersion2026_07_28);
       expect(
         serialized['requestedSchema']['properties']['ratio']['default'],
         0.5,
@@ -1028,7 +1028,7 @@ void main() {
         'method': Method.elicitationCreate,
         'params': {
           ...params,
-          '_meta': {McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28},
+          '_meta': {McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28},
         },
       });
       expect(
@@ -1055,7 +1055,7 @@ void main() {
               },
             },
             '_meta': {
-              McpMetaKey.protocolVersion: draftProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
             },
           },
         }),

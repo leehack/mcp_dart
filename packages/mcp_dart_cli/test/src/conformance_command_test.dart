@@ -34,7 +34,7 @@ void main() {
           'jsonrpc.preserves-integer-progress-token',
           'jsonrpc.rejects-fractional-ids-and-progress-tokens',
           'protocol-version.advertises-latest-2026-07-28',
-          'protocol-version.advertises-draft-2026-07-28',
+          'protocol-version.stable-profile-advertises-2026-07-28',
         ]),
       );
     });
@@ -53,7 +53,7 @@ void main() {
           'lifecycle.does-not-cancel-initialize',
           'cancellation.requires-request-id',
           'server-discover.requires-request-meta',
-          'server-discover.returns-draft-capabilities',
+          'server-discover.returns-supported-capabilities',
           'protocol-version.rejects-unsupported-stateless-version',
           'stateless.requires-complete-request-meta',
           'protocol-version.http-modern-400-retries-discovery',

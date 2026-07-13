@@ -49,7 +49,7 @@ List<McpIcon>? _iconsFromLegacyImage(ImageContent? image) {
   ];
 }
 
-bool _isDraft2026Request(String? protocolVersion) =>
+bool _isStateless2026Request(String? protocolVersion) =>
     protocolVersion != null && isStatelessProtocolVersion(protocolVersion);
 
 bool _isStableStructuredContentValue(Object? value) {
@@ -66,7 +66,7 @@ JsonSchema? _outputSchemaForProtocol(
   JsonSchema? schema,
   String? protocolVersion,
 ) {
-  if (schema == null || _isDraft2026Request(protocolVersion)) {
+  if (schema == null || _isStateless2026Request(protocolVersion)) {
     return schema;
   }
 
@@ -95,7 +95,7 @@ CallToolResult _toolResultForProtocol(
   CallToolResult result,
   String? protocolVersion,
 ) {
-  if (_isDraft2026Request(protocolVersion) ||
+  if (_isStateless2026Request(protocolVersion) ||
       !result.hasStructuredContent ||
       _isStableStructuredContentValue(result.structuredContentJson?.toJson())) {
     return result;
@@ -114,7 +114,7 @@ McpError _resourceNotFoundErrorForProtocol(
   String? protocolVersion,
 ) {
   return McpError(
-    _isDraft2026Request(protocolVersion)
+    _isStateless2026Request(protocolVersion)
         ? ErrorCode.invalidParams.value
         : ErrorCode.resourceNotFound.value,
     'Resource not found',
@@ -1110,7 +1110,7 @@ class McpServer {
 
   McpError? _validateToolClientCapabilities(JsonRpcRequest request) {
     if (request is! JsonRpcCallToolRequest ||
-        !_isDraft2026Request(request.meta?[McpMetaKey.protocolVersion])) {
+        !_isStateless2026Request(request.meta?[McpMetaKey.protocolVersion])) {
       return null;
     }
 

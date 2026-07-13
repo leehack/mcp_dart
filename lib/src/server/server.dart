@@ -382,7 +382,7 @@ class Server extends Protocol {
     );
   }
 
-  McpError? _validateDraftTaskMethods(JsonRpcRequest request) {
+  McpError? _validateStatelessTaskMethods(JsonRpcRequest request) {
     if (!_isStatelessRequest(request)) {
       return null;
     }
@@ -526,7 +526,7 @@ class Server extends Protocol {
   }
 
   McpError? _validateRequestTaskSemantics(JsonRpcRequest request) {
-    final removedMethodError = _validateDraftTaskMethods(request);
+    final removedMethodError = _validateStatelessTaskMethods(request);
     if (removedMethodError != null) {
       return removedMethodError;
     }

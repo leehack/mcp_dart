@@ -151,7 +151,7 @@ List<Map<String, dynamic>> _decodeSseJsonMessages(String body) {
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
-      protocolVersion: draftProtocolVersion2026_07_28,
+      protocolVersion: stableProtocolVersion2026_07_28,
       clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
       clientCapabilities: const ClientCapabilities(),
     );
@@ -2243,7 +2243,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.toolsCall)
         ..set('Mcp-Name', 'wrong-tool');
       request.write(
@@ -2300,7 +2300,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.tasksUpdate)
         ..set('Mcp-Name', 'task-1');
       request.write(
@@ -2343,7 +2343,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.tasksUpdate);
       request.write(
         jsonEncode(
@@ -2389,7 +2389,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28);
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28);
       request.write(
         jsonEncode(
           const JsonRpcResponse(
@@ -2441,7 +2441,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.toolsList)
         ..set('Mcp-Session-Id', 'legacy-session');
       request.write(
@@ -2529,7 +2529,7 @@ void main() {
       statelessRequest.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.toolsList)
         ..set('Mcp-Session-Id', sessionId!);
       statelessRequest.write(
@@ -2577,7 +2577,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.toolsCall)
         ..set('Mcp-Name', 'execute')
         ..set('Mcp-Param-region', 'us-east1')
@@ -2655,7 +2655,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
         ..set('Mcp-Method', Method.toolsList);
       request.write(
         jsonEncode(
@@ -2733,7 +2733,7 @@ void main() {
           'Host: localhost:$serverPort\r\n'
           'Content-Type: application/json\r\n'
           'Accept: application/json, text/event-stream\r\n'
-          'MCP-Protocol-Version: $draftProtocolVersion2026_07_28\r\n'
+          'MCP-Protocol-Version: $stableProtocolVersion2026_07_28\r\n'
           'Mcp-Method: ${Method.toolsList}\r\n'
           'Content-Length: ${bodyBytes.length}\r\n'
           '\r\n',
@@ -2815,7 +2815,7 @@ void main() {
         request.headers
           ..contentType = ContentType.json
           ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-          ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+          ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
           ..set('Mcp-Method', Method.toolsCall)
           ..set('Mcp-Name', 'execute');
         headers.forEach(request.headers.set);
@@ -3023,7 +3023,7 @@ void main() {
       var body = await postJson(
         const JsonRpcListToolsRequest(id: 4).toJson(),
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -3037,7 +3037,7 @@ void main() {
       body = await postJson(
         topLevelMetaOnly,
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -3047,7 +3047,7 @@ void main() {
       body = await postJson(
         JsonRpcListToolsRequest(id: 5, meta: _statelessMeta()).toJson(),
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
         },
       );
       expect(body['error']['message'], contains('Mcp-Method header'));
@@ -3062,7 +3062,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-count': '2',
@@ -3082,7 +3082,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-': 'us-east1',
@@ -3101,7 +3101,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-region': '=?base64?%%%?=',
@@ -3117,7 +3117,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-region': 'us-east1',
@@ -3139,7 +3139,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-zone': 'us-east1-b',
@@ -3161,7 +3161,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
           'Mcp-Method': Method.toolsCall,
         },
       );
@@ -3174,7 +3174,7 @@ void main() {
           JsonRpcListToolsRequest(id: 9, meta: _statelessMeta()).toJson(),
         ],
         headers: {
-          'MCP-Protocol-Version': draftProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
         },
       );
       expect(body['error']['message'], contains('must contain one'));
@@ -3208,7 +3208,7 @@ void main() {
             HttpHeaders.acceptHeader,
             'application/json, text/event-stream',
           )
-          ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+          ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
           ..set('Mcp-Method', message.method);
         request.write(jsonEncode(message.toJson()));
 
@@ -3319,7 +3319,7 @@ void main() {
       final request = await client.getUrl(Uri.parse('$serverUrlBase/mcp'));
       request.headers.set(
         'MCP-Protocol-Version',
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
 
       final response = await request.close();
@@ -3341,7 +3341,7 @@ void main() {
       );
       patchRequest.headers.set(
         'MCP-Protocol-Version',
-        draftProtocolVersion2026_07_28,
+        stableProtocolVersion2026_07_28,
       );
 
       final patchResponse = await patchRequest.close();
@@ -3362,7 +3362,7 @@ void main() {
         Uri.parse('$serverUrlBase/mcp'),
       );
       deleteRequest.headers
-        ..set('MCP-Protocol-Version', draftProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
         ..set('Mcp-Session-Id', 'ignored-stateless-session');
 
       final deleteResponse = await deleteRequest.close();

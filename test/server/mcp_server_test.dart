@@ -68,7 +68,7 @@ class McpServerTestTransport
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
-      protocolVersion: draftProtocolVersion2026_07_28,
+      protocolVersion: stableProtocolVersion2026_07_28,
       clientInfo: const Implementation(name: 'test-client', version: '1.0.0'),
       clientCapabilities: const ClientCapabilities(),
     );

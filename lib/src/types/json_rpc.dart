@@ -12,18 +12,18 @@ import 'subscriptions.dart';
 import 'tasks.dart';
 import 'validation.dart';
 
-/// The draft/RC MCP protocol version being prepared for the next major release.
-const draftProtocolVersion2026_07_28 = "2026-07-28";
+/// The MCP `2026-07-28` version used by the SDK's stable profile.
+const stableProtocolVersion2026_07_28 = "2026-07-28";
 
-/// The latest stable version of the Model Context Protocol supported.
+/// The latest stable initialization-era MCP protocol version supported.
 const stableProtocolVersion2025_11_25 = "2025-11-25";
 
 /// The latest protocol version implemented by this development branch.
 ///
-/// The upstream `2026-07-28` specification is still pre-release, but this
-/// branch treats it as its stable SDK profile so applications can prepare for
-/// the transition before a package release is cut.
-const latestProtocolVersion = draftProtocolVersion2026_07_28;
+/// The upstream `2026-07-28` specification is still a release candidate, but
+/// this branch uses it for the default stable SDK profile while retaining
+/// legacy initialization fallback.
+const latestProtocolVersion = stableProtocolVersion2026_07_28;
 
 /// High-level MCP protocol compatibility profiles.
 ///
@@ -32,7 +32,7 @@ const latestProtocolVersion = draftProtocolVersion2026_07_28;
 /// initialization flow, or [require2026] when a peer must support the
 /// `2026-07-28` stateless protocol.
 enum McpProtocol {
-  /// Stable MCP behavior for this development branch.
+  /// Stable SDK behavior for this development branch.
   ///
   /// This profile prefers MCP `2026-07-28` stateless negotiation, including
   /// `server/discover`, and falls back to legacy initialization for older
