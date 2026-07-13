@@ -62,16 +62,17 @@ final client = McpClient(
 
 ### Protocol Profile
 
-Clients on this development branch use the MCP `2026-07-28` draft/RC preview
-profile by default. The default client probes with `server/discover`, sends
-stateless request metadata for a compatible peer, and falls back to stable
-`initialize` when discovery is unavailable. Select the stable profile
-explicitly when a deployment must use only MCP `2025-11-25` behavior:
+Clients on this development branch use `McpProtocol.stable` by default, which
+prefers MCP `2026-07-28` draft/RC negotiation. The default client probes with
+`server/discover`, sends stateless request metadata for a compatible peer, and
+falls back to legacy `initialize` when discovery is unavailable. Select the
+legacy profile explicitly when a deployment must use only MCP `2025-11-25`
+and earlier behavior:
 
 ```dart
 final client = McpClient(
   const Implementation(name: 'my-client', version: '1.0.0'),
-  options: const McpClientOptions(protocol: McpProtocol.stable),
+  options: const McpClientOptions(protocol: McpProtocol.legacy),
 );
 ```
 

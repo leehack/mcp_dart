@@ -187,7 +187,7 @@ Future<void> _runMrtrRequestState(Uri serverUrl, String protocolVersion) async {
 Future<void> _runRequestMetadata(Uri serverUrl, String protocolVersion) async {
   await _RawStatelessClient(
     serverUrl,
-    latestDraftProtocolVersion,
+    latestProtocolVersion,
   ).request(Method.serverDiscover, const {});
   await _RawStatelessClient(
     serverUrl,

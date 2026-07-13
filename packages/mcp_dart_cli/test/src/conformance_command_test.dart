@@ -33,7 +33,7 @@ void main() {
           'jsonrpc.preserves-string-progress-token',
           'jsonrpc.preserves-integer-progress-token',
           'jsonrpc.rejects-fractional-ids-and-progress-tokens',
-          'protocol-version.advertises-latest-2025-11-25',
+          'protocol-version.advertises-latest-2026-07-28',
           'protocol-version.advertises-draft-2026-07-28',
         ]),
       );

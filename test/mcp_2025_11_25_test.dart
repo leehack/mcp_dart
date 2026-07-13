@@ -4,8 +4,9 @@ import 'package:test/test.dart';
 
 void main() {
   group('MCP 2025-11-25 Protocol Updates', () {
-    test('Protocol Version', () {
-      expect(latestProtocolVersion, '2025-11-25');
+    test('Stable Protocol Version', () {
+      expect(stableProtocolVersion2025_11_25, '2025-11-25');
+      expect(legacyProtocolVersions.first, stableProtocolVersion2025_11_25);
     });
 
     test('Implementation Description', () {
@@ -1820,12 +1821,12 @@ void main() {
 
       test('initialization and capability wire fields reject bad shapes', () {
         final initializeRequest = {
-          'protocolVersion': latestProtocolVersion,
+          'protocolVersion': stableProtocolVersion2025_11_25,
           'capabilities': <String, dynamic>{},
           'clientInfo': {'name': 'client', 'version': '1.0.0'},
         };
         final initializeResult = {
-          'protocolVersion': latestProtocolVersion,
+          'protocolVersion': stableProtocolVersion2025_11_25,
           'capabilities': <String, dynamic>{},
           'serverInfo': {'name': 'server', 'version': '1.0.0'},
         };

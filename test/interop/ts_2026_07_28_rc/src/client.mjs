@@ -508,7 +508,7 @@ async function main() {
     requireTool(tools.tools, 'test_input_required_result_elicitation');
     requireTool(tools.tools, 'progress_demo');
 
-    const message = 'from TypeScript 2026-07-28 RC preview';
+    const message = 'from TypeScript 2026-07-28 RC';
     const result = await client.callTool({
       name: 'echo',
       arguments: { message },

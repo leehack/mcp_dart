@@ -155,7 +155,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: latestProtocolVersion,
+              protocolVersion: stableProtocolVersion2025_11_25,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -254,7 +254,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -283,7 +283,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -331,7 +331,7 @@ void main() {
           final mcpServer = McpServer(
             const Implementation(name: 'StatelessServer', version: '1.0.0'),
             options: const McpServerOptions(
-              protocol: McpProtocol.preview2026,
+              protocol: McpProtocol.stable,
             ),
           );
           mcpServer.registerTool(
@@ -372,7 +372,7 @@ void main() {
           final mcpServer = McpServer(
             const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
             options: const McpServerOptions(
-              protocol: McpProtocol.preview2026,
+              protocol: McpProtocol.stable,
             ),
           );
           mcpServer.registerTool(
@@ -415,7 +415,7 @@ void main() {
           final mcpServer = McpServer(
             const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
             options: const McpServerOptions(
-              protocol: McpProtocol.preview2026,
+              protocol: McpProtocol.stable,
             ),
           );
           mcpServer.registerTool(
@@ -565,7 +565,7 @@ void main() {
           return McpServer(
             const Implementation(name: 'DiscoverServer', version: '1.0.0'),
             options: const McpServerOptions(
-              protocol: McpProtocol.preview2026,
+              protocol: McpProtocol.stable,
             ),
           );
         },
@@ -661,7 +661,7 @@ void main() {
           final mcpServer = McpServer(
             const Implementation(name: 'StatelessServer', version: '1.0.0'),
             options: const McpServerOptions(
-              protocol: McpProtocol.preview2026,
+              protocol: McpProtocol.stable,
             ),
           );
           mcpServer.registerTool(
@@ -706,7 +706,7 @@ void main() {
           final mcpServer = McpServer(
             const Implementation(name: 'StatelessServer', version: '1.0.0'),
             options: const McpServerOptions(
-              protocol: McpProtocol.preview2026,
+              protocol: McpProtocol.stable,
               capabilities: ServerCapabilities(
                 tools: ServerCapabilitiesTools(),
                 extensions: {mcpTasksExtensionId: <String, dynamic>{}},
@@ -832,7 +832,7 @@ void main() {
           final mcpServer = McpServer(
             const Implementation(name: 'StatelessServer', version: '1.0.0'),
             options: const McpServerOptions(
-              protocol: McpProtocol.preview2026,
+              protocol: McpProtocol.stable,
             ),
           );
           mcpServer.registerTool(
@@ -959,7 +959,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1002,7 +1002,7 @@ void main() {
           id: 1,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1028,7 +1028,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1087,7 +1087,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1143,7 +1143,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1388,7 +1388,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: latestProtocolVersion,
+              protocolVersion: stableProtocolVersion2025_11_25,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'test', version: '1.0'),
             ).toJson(),
@@ -1639,7 +1639,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1666,7 +1666,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1706,7 +1706,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1778,7 +1778,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),

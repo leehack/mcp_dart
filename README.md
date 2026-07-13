@@ -81,27 +81,28 @@ The Dart ecosystem now has more than one MCP package. The Dart team-maintained [
 | Package | Best fit | Notes |
 |---------|----------|-------|
 | `dart_mcp` | Projects that prefer the Dart team-maintained package or want to follow the Dart team's evolving MCP APIs closely. | Check the package docs and changelog for its current feature set and stability guarantees. |
-| `mcp_dart` | Production-focused Dart/Flutter MCP servers, clients, and hosts that need broad transport, auth, security, and tooling support today. | Includes StreamableHTTP, `OAuthClientProvider` and server `authenticator` hooks with OAuth2/PKCE examples, MCP Apps helpers, strict transport security controls, CLI tooling, and compatibility with MCP protocol version `2025-11-25`. |
+| `mcp_dart` | Production-focused Dart/Flutter MCP servers, clients, and hosts that need broad transport, auth, security, and tooling support today. | Includes StreamableHTTP, `OAuthClientProvider` and server `authenticator` hooks with OAuth2/PKCE examples, MCP Apps helpers, strict transport security controls, CLI tooling, MCP `2026-07-28` development support, and compatibility with earlier protocol versions. |
 
 Use this comparison as a starting point, not a permanent verdict: both packages can evolve quickly. If you compare them for a production decision, re-check the current pub.dev releases and docs first.
 
 ## Model Context Protocol Version
 
-This development branch defaults to MCP `2026-07-28` draft/RC preview
-negotiation. Clients use `server/discover` and stateless request metadata when
-the peer supports 2026, then fall back to stable `2025-11-25` initialization
-for older peers. The explicit stable profile remains available for deployments
-that must use only stable MCP behavior:
+This development branch defaults to `McpProtocol.stable`, which prefers MCP
+`2026-07-28` draft/RC negotiation. Clients use `server/discover` and stateless
+request metadata when the peer supports 2026, then fall back to legacy
+`2025-11-25` initialization for older peers. The explicit legacy profile
+remains available for deployments that must use only MCP `2025-11-25` and
+earlier behavior:
 
 ```dart
 final client = McpClient(
   const Implementation(name: 'my-client', version: '1.0.0'),
-  options: const McpClientOptions(protocol: McpProtocol.stable),
+  options: const McpClientOptions(protocol: McpProtocol.legacy),
 );
 
 final server = McpServer(
   const Implementation(name: 'my-server', version: '1.0.0'),
-  options: const McpServerOptions(protocol: McpProtocol.stable),
+  options: const McpServerOptions(protocol: McpProtocol.legacy),
 );
 ```
 
@@ -129,8 +130,8 @@ for default negotiation, fallback rules, and draft-only APIs.
 
 - 🧪 **[SDK Interoperability Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/interoperability.md)** - Verified Dart/TypeScript and documented cross-SDK scenarios
 - ✅ **[MCP 2025-11-25 Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2025-11-25.md)** - Auditable coverage map with CLI conformance cases and known gaps
-- 🧪 **[MCP 2026-07-28 Draft/RC Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2026-07-28-rc.md)** - Opt-in draft/RC coverage map across official conformance and TypeScript SDK beta interop
-- 🧭 **[MCP 2026-07-28 Draft/RC Transition Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md)** - Opt-in profile, fallback behavior, and draft-only APIs
+- 🧪 **[MCP 2026-07-28 Draft/RC Spec Coverage Matrix](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/spec-coverage-2026-07-28-rc.md)** - Default-profile coverage across official conformance and TypeScript SDK beta interop
+- 🧭 **[MCP 2026-07-28 Draft/RC Transition Guide](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/mcp-2026-07-28-rc.md)** - Stable, legacy, and strict profile behavior plus draft-only APIs
 - 🔒 **[Transport Security Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/transports.md#dns-rebinding-protection)** - Host/Origin allowlists, OAuth layering, and compatibility-toggle trade-offs
 - 📱 **[Flutter Recipes](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/flutter-recipes.md)** - Flutter Web, mobile, and desktop host/client guidance
 - 🔁 **[Migration Cookbooks](https://github.com/leehack/mcp_dart/blob/dev/2026-07-28-rc/doc/migration-cookbooks.md)** - TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migration paths

@@ -158,7 +158,7 @@ Future<void> _exerciseDartClient(String url) async {
       version: '0.0.0',
     ),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ClientCapabilities(
         elicitation: ClientElicitation(
           form: ClientElicitationForm(applyDefaults: true),
@@ -203,7 +203,7 @@ Future<void> _exerciseDartClient(String url) async {
       );
     }
 
-    const message = 'from Dart 2026-07-28 RC preview';
+    const message = 'from Dart 2026-07-28 RC';
     final echo = await client
         .callTool(
           const CallToolRequest(

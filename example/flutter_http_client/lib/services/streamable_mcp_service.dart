@@ -77,7 +77,7 @@ class StreamableMcpService extends ChangeNotifier {
       // Create a new client
       _client = McpClient(
         const Implementation(name: 'flutter-mcp-client', version: '1.0.0'),
-        options: const McpClientOptions(protocol: McpProtocol.preview2026),
+        options: const McpClientOptions(protocol: McpProtocol.stable),
       );
 
       _client!.onerror = (error) {

@@ -224,9 +224,9 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _fixtureSuite,
-            name: 'protocol-version.advertises-latest-2025-11-25',
+            name: 'protocol-version.advertises-latest-2026-07-28',
             description:
-                'Advertises MCP 2025-11-25 as the latest supported protocol version.',
+                'Advertises MCP 2026-07-28 as the latest supported protocol version.',
             check: _advertisesLatestProtocolVersion,
           ),
           _ConformanceCase(
@@ -975,7 +975,7 @@ JsonRpcInitializeRequest _initializeRequest({
   return JsonRpcInitializeRequest(
     id: id,
     initParams: InitializeRequest(
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: stableProtocolVersion2025_11_25,
       capabilities: capabilities,
       clientInfo: const Implementation(
         name: 'conformance-client',
@@ -992,7 +992,7 @@ JsonRpcResponse _initializeResponse({
   return JsonRpcResponse(
     id: id,
     result: InitializeResult(
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: stableProtocolVersion2025_11_25,
       capabilities: capabilities,
       serverInfo: const Implementation(
         name: 'conformance-server',
@@ -1306,7 +1306,7 @@ Future<void> _serverDiscoverReturnsDraftCapabilities() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -1359,7 +1359,7 @@ Future<void> _rejectsUnsupportedStatelessProtocolVersion() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
 
@@ -1411,7 +1411,7 @@ Future<void> _statelessRequestsRequireCompleteRequestMeta() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
 
@@ -1522,7 +1522,7 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       protocolVersion: '1900-01-01',
       useServerDiscover: true,
     ),
@@ -1613,7 +1613,7 @@ Future<void> _httpModernMissingCapabilityErrorsDoNotFallback() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       protocolVersion: _draftProtocolVersion2026_07_28,
       useServerDiscover: true,
     ),
@@ -1684,9 +1684,11 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
     serverTransport.sentMessages,
     id: 'draft-initialize',
   );
-  if (serverResponse.result['protocolVersion'] != latestProtocolVersion) {
+  if (serverResponse.result['protocolVersion'] !=
+      stableProtocolVersion2025_11_25) {
     throw StateError(
-      'Expected initialize response protocolVersion $latestProtocolVersion, '
+      'Expected initialize response protocolVersion '
+      '$stableProtocolVersion2025_11_25, '
       'got ${serverResponse.result['protocolVersion']}.',
     );
   }
@@ -1700,7 +1702,7 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
   final connectFuture = client.connect(clientTransport);
@@ -1723,10 +1725,11 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
   final initializeRequest = clientTransport.sentMessages
       .whereType<JsonRpcRequest>()
       .singleWhere((request) => request.method == Method.initialize);
-  if (initializeRequest.params?['protocolVersion'] != latestProtocolVersion) {
+  if (initializeRequest.params?['protocolVersion'] !=
+      stableProtocolVersion2025_11_25) {
     throw StateError(
       'Expected fallback initialize request protocolVersion '
-      '$latestProtocolVersion, got '
+      '$stableProtocolVersion2025_11_25, got '
       '${initializeRequest.params?['protocolVersion']}.',
     );
   }
@@ -1748,7 +1751,7 @@ Future<void> _statelessDoesNotInferInitializeExtensions() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -2119,7 +2122,7 @@ Future<void> _taskRequestsRequireStatelessHttpNameHeader() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -2739,7 +2742,7 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
           JsonRpcResponse(
             id: message.id,
             result: const InitializeResult(
-              protocolVersion: latestProtocolVersion,
+              protocolVersion: stableProtocolVersion2025_11_25,
               capabilities: ServerCapabilities(),
               serverInfo: Implementation(
                 name: 'conformance-server',
@@ -2778,7 +2781,7 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
         JsonRpcInitializeRequest(
           id: 'initialize-session',
           initParams: const InitializeRequest(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'client', version: '1.0.0'),
           ),
@@ -2853,7 +2856,7 @@ Future<void> _taskSubscriptionRequiresClientCapability() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -2937,7 +2940,7 @@ Future<void> _relatedTaskUsesExplicitIdAcrossTransports() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -3044,7 +3047,7 @@ Future<void> _statelessIgnoresLegacyTaskParameter() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         tasks: ServerCapabilitiesTasks(
@@ -3121,7 +3124,7 @@ Future<void> _statelessClientRejectsLegacyTaskOptions() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
 
@@ -3166,7 +3169,7 @@ Future<void> _statelessAddsResultTypeAndCacheDefaults() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         prompts: ServerCapabilitiesPrompts(),
         resources: ServerCapabilitiesResources(),
@@ -3324,7 +3327,7 @@ Future<void> _statelessToolsListReturnsDeterministicOrder() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -3383,7 +3386,7 @@ Future<void> _statelessToolsListOmitsLegacyExecution() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       ),
@@ -3478,7 +3481,7 @@ Future<void> _missingResourceErrorCodeByVersion() async {
   final statelessServer = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
   statelessServer.registerResource(
@@ -3531,7 +3534,7 @@ Future<void> _statelessRejectsUnrecognizedResultType() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
 
@@ -3573,7 +3576,7 @@ Future<void> _mrtrInputRequiredSupportedRequests() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         prompts: ServerCapabilitiesPrompts(),
         resources: ServerCapabilitiesResources(),
@@ -3683,7 +3686,7 @@ Future<void> _mrtrRejectsUnsupportedInputRequiredResults() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
     ),
   );
@@ -3725,7 +3728,7 @@ Future<void> _mrtrInputRequestsRequireClientCapabilities() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
     ),
   );
@@ -3900,7 +3903,7 @@ Future<void> _callToolResultCannotSpoofTaskResult() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         extensions: <String, Map<String, dynamic>>{
@@ -3984,7 +3987,7 @@ Future<void> _taskResultRequiresClientExtension() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
 
@@ -4024,7 +4027,7 @@ Future<void> _rejectsRemovedStatelessCoreRpcs() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
   await server.connect(transport);
@@ -4161,7 +4164,7 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
   server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         logging: <String, dynamic>{},
         tools: ServerCapabilitiesTools(),
@@ -4254,7 +4257,7 @@ Future<void> _taskLifecycleMethodsAllowResumedClientCapability() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -4433,7 +4436,7 @@ McpServerOptions _mcpServerOptionsWithTaskStore({
     <Symbol, Object?>{
       #capabilities: capabilities,
       #taskStore: taskStore,
-      #protocol: McpProtocol.preview2026,
+      #protocol: McpProtocol.stable,
     },
   ) as McpServerOptions;
 }
@@ -4446,7 +4449,7 @@ Future<void> _subscriptionTaskIdsRequireClientCapability() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
@@ -4817,7 +4820,7 @@ Future<void> _unadvertisedPeerMethodsUseMethodNotFound() async {
   final statelessClient = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
     ),
   );
   await statelessClient.connect(statelessClientTransport);
@@ -4951,23 +4954,23 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
     );
   }
 
-  final stableMeta = _statelessRequestMeta(
-    protocolVersion: latestProtocolVersion,
+  final legacyMeta = _statelessRequestMeta(
+    protocolVersion: stableProtocolVersion2025_11_25,
     capabilities: clientCapabilities,
   );
-  final stableCapabilities =
-      stableMeta[_clientCapabilitiesMetaKey] as Map<String, dynamic>;
-  if (!stableCapabilities.containsKey('tasks')) {
+  final legacyCapabilities =
+      legacyMeta[_clientCapabilitiesMetaKey] as Map<String, dynamic>;
+  if (!legacyCapabilities.containsKey('tasks')) {
     throw StateError(
-      'Expected stable request metadata to keep legacy tasks capability, got '
-      '$stableCapabilities.',
+      'Expected legacy request metadata to keep legacy tasks capability, got '
+      '$legacyCapabilities.',
     );
   }
-  final stableRoots = stableCapabilities['roots'];
-  if (stableRoots is! Map || stableRoots['listChanged'] != true) {
+  final legacyRoots = legacyCapabilities['roots'];
+  if (legacyRoots is! Map || legacyRoots['listChanged'] != true) {
     throw StateError(
-      'Expected stable request metadata to keep roots.listChanged capability, '
-      'got $stableCapabilities.',
+      'Expected legacy request metadata to keep roots.listChanged capability, '
+      'got $legacyCapabilities.',
     );
   }
 
@@ -4988,7 +4991,7 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
   final client = McpClient(
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: clientCapabilities,
       useServerDiscover: true,
     ),
@@ -5031,7 +5034,7 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: serverCapabilities,
     ),
   );
@@ -5692,16 +5695,20 @@ Future<void> _preservesIntegerProgressToken() async {
 }
 
 Future<void> _advertisesLatestProtocolVersion() async {
-  if (latestProtocolVersion != '2025-11-25') {
+  if (latestProtocolVersion != draftProtocolVersion2026_07_28) {
     throw StateError(
-      'Expected latestProtocolVersion 2025-11-25, got $latestProtocolVersion.',
+      'Expected latestProtocolVersion $draftProtocolVersion2026_07_28, '
+      'got $latestProtocolVersion.',
     );
   }
   if (supportedProtocolVersions.first != latestProtocolVersion) {
     throw StateError('Expected latestProtocolVersion to be advertised first.');
   }
-  if (!supportedProtocolVersions.contains('2025-11-25')) {
-    throw StateError('Expected supported versions to include 2025-11-25.');
+  if (!supportedProtocolVersions.contains(stableProtocolVersion2025_11_25)) {
+    throw StateError(
+      'Expected supported versions to include '
+      '$stableProtocolVersion2025_11_25.',
+    );
   }
 }
 
@@ -5710,7 +5717,7 @@ Future<void> _advertisesDraftProtocolVersion() async {
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
     options: const McpServerOptions(
-      protocol: McpProtocol.preview2026,
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(),
     ),
   );

@@ -66,7 +66,7 @@ class InMemoryEventStore implements EventStore {
 McpServer getServer() {
   final server = McpServer(
     const Implementation(name: 'elicitation-example-server', version: '1.0.0'),
-    options: const McpServerOptions(protocol: McpProtocol.preview2026),
+    options: const McpServerOptions(protocol: McpProtocol.stable),
   );
 
   // Example 1: Simple user registration tool

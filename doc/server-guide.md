@@ -65,16 +65,16 @@ final server = McpServer(
 
 ### Protocol Profile
 
-Servers on this development branch use the MCP `2026-07-28` draft/RC preview
-profile by default. They advertise and accept the stateless 2026 protocol
-alongside stable versions, including `server/discover`. Select the stable
-profile explicitly to advertise only MCP `2025-11-25` and earlier versions:
+Servers on this development branch use `McpProtocol.stable` by default. They
+advertise and accept the stateless MCP `2026-07-28` draft/RC protocol alongside
+legacy versions, including `server/discover`. Select the legacy profile
+explicitly to advertise only MCP `2025-11-25` and earlier versions:
 
 ```dart
 final server = McpServer(
   const Implementation(name: 'my-server', version: '1.0.0'),
   options: const McpServerOptions(
-    protocol: McpProtocol.stable,
+    protocol: McpProtocol.legacy,
     capabilities: ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
@@ -83,7 +83,7 @@ final server = McpServer(
 ```
 
 Use `McpServerOptions(protocol: McpProtocol.require2026)` when the server
-should reject stable initialization.
+should reject legacy initialization.
 
 ## Server Capabilities
 

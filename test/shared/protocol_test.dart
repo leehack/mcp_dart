@@ -2749,7 +2749,7 @@ void main() {
             JsonRpcInitializeRequest(
               id: 0,
               initParams: const InitializeRequest(
-                protocolVersion: latestProtocolVersion,
+                protocolVersion: stableProtocolVersion2025_11_25,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(
                   name: 'test-client',

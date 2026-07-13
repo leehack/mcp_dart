@@ -42,7 +42,7 @@ void _parseRequestLike(Map<String, dynamic> json) {
       }
       ElicitRequest.fromJson(
         paramsJson,
-        protocolVersion: latestDraftProtocolVersion,
+        protocolVersion: latestProtocolVersion,
       );
       return;
     case Method.samplingCreateMessage:
@@ -110,13 +110,13 @@ final Map<String, Parser> _parsers = {
   'ElicitRequestFormParams': (json) {
     ElicitRequest.fromJson(
       json,
-      protocolVersion: latestDraftProtocolVersion,
+      protocolVersion: latestProtocolVersion,
     );
   },
   'ElicitRequestURLParams': (json) {
     ElicitRequest.fromJson(
       json,
-      protocolVersion: latestDraftProtocolVersion,
+      protocolVersion: latestProtocolVersion,
     );
   },
   'ElicitResult': (json) => ElicitResult.fromJson(json),

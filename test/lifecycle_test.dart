@@ -74,7 +74,7 @@ JsonRpcInitializeRequest _initializeRequest({RequestId id = 1}) {
   return JsonRpcInitializeRequest(
     id: id,
     initParams: const InitializeRequest(
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: stableProtocolVersion2025_11_25,
       capabilities: ClientCapabilities(),
       clientInfo: Implementation(name: 'client', version: '1.0.0'),
     ),
@@ -85,7 +85,7 @@ JsonRpcResponse _initializeResponse({RequestId id = -1}) {
   return JsonRpcResponse(
     id: id,
     result: const InitializeResult(
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: stableProtocolVersion2025_11_25,
       capabilities: ServerCapabilities(),
       serverInfo: Implementation(name: 'server', version: '1.0.0'),
     ).toJson(),

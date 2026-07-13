@@ -17,8 +17,8 @@ class McpClientOptions extends ProtocolOptions {
 
   /// High-level protocol compatibility profile.
   ///
-  /// Defaults to [McpProtocol.preview2026], which prefers MCP `2026-07-28`
-  /// draft/RC negotiation with stable fallback.
+  /// Defaults to [McpProtocol.stable], which prefers MCP `2026-07-28`
+  /// negotiation with legacy fallback.
   final McpProtocol protocol;
 
   final String? _protocolVersion;
@@ -32,8 +32,8 @@ class McpClientOptions extends ProtocolOptions {
     if (protocolVersion != null) {
       return protocolVersion;
     }
-    if (protocol == McpProtocol.stable && _useServerDiscover == true) {
-      return latestDraftProtocolVersion;
+    if (protocol == McpProtocol.legacy && _useServerDiscover == true) {
+      return latestProtocolVersion;
     }
     return protocol.preferredProtocolVersion;
   }
@@ -42,9 +42,9 @@ class McpClientOptions extends ProtocolOptions {
 
   /// Whether [McpClient.connect] should probe with `server/discover` first.
   ///
-  /// When omitted, this is derived from [protocol]. Stable clients use the
-  /// legacy `initialize` flow by default; `2026-07-28` draft/RC preview
-  /// clients probe with `server/discover`.
+  /// When omitted, this is derived from [protocol]. Legacy clients use the
+  /// `initialize` flow by default; stable clients probe with
+  /// `server/discover`.
   bool get useServerDiscover =>
       _useServerDiscover ?? protocol.useServerDiscoverByDefault;
 
@@ -63,7 +63,7 @@ class McpClientOptions extends ProtocolOptions {
   const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
-    this.protocol = McpProtocol.preview2026,
+    this.protocol = McpProtocol.stable,
     String? protocolVersion,
     bool? useServerDiscover,
     bool? allowLegacyInitializationFallback,
@@ -229,12 +229,12 @@ class McpClient extends Protocol {
   McpClient(this._clientInfo, {McpClientOptions? options})
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         _preferredProtocolVersion = options?.protocolVersion ??
-            McpProtocol.preview2026.preferredProtocolVersion,
+            McpProtocol.stable.preferredProtocolVersion,
         _useServerDiscover = options?.useServerDiscover ??
-            McpProtocol.preview2026.useServerDiscoverByDefault,
-        _allowLegacyInitializationFallback = options
-                ?.allowLegacyInitializationFallback ??
-            McpProtocol.preview2026.allowLegacyInitializationFallbackByDefault,
+            McpProtocol.stable.useServerDiscoverByDefault,
+        _allowLegacyInitializationFallback =
+            options?.allowLegacyInitializationFallback ??
+                McpProtocol.stable.allowLegacyInitializationFallbackByDefault,
         super(options) {
     // Register elicit handler if any elicitation mode is advertised.
     if (_capabilities.elicitation != null) {
@@ -354,7 +354,7 @@ class McpClient extends Protocol {
     _usesStatelessProtocol = false;
 
     final initParams = InitializeRequest(
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: stableProtocolVersion2025_11_25,
       capabilities: _capabilities,
       clientInfo: _clientInfo,
     );
@@ -369,10 +369,10 @@ class McpClient extends Protocol {
       (json) => InitializeResult.fromJson(json),
     );
 
-    if (!supportedProtocolVersions.contains(result.protocolVersion)) {
+    if (!legacyProtocolVersions.contains(result.protocolVersion)) {
       throw McpError(
         ErrorCode.internalError.value,
-        "Server's chosen protocol version is not supported by client: ${result.protocolVersion}. Supported: $supportedProtocolVersions",
+        "Server's chosen initialization protocol version is not supported by client: ${result.protocolVersion}. Supported: $legacyProtocolVersions",
       );
     }
 
@@ -451,14 +451,14 @@ class McpClient extends Protocol {
     return retryVersion;
   }
 
-  bool _discoveryUnsupportedButStableCompatible(McpError error) {
+  bool _discoveryUnsupportedButLegacyCompatible(McpError error) {
     final advertisedVersions =
         _supportedVersionsFromUnsupportedProtocolError(error);
     if (advertisedVersions == null) return false;
 
     return negotiateProtocolVersion(
           advertisedVersions,
-          localSupportedVersions: supportedProtocolVersions,
+          localSupportedVersions: legacyProtocolVersions,
         ) !=
         null;
   }
@@ -487,7 +487,7 @@ class McpClient extends Protocol {
 
     final negotiatedProtocolVersion = negotiateProtocolVersion(
       result.supportedVersions,
-      localSupportedVersions: supportedProtocolVersionsWithDraft,
+      localSupportedVersions: supportedProtocolVersions,
     );
     if (negotiatedProtocolVersion == null) {
       throw McpError(
@@ -582,7 +582,7 @@ class McpClient extends Protocol {
     if (error.code == ErrorCode.methodNotFound.value) {
       return true;
     }
-    if (_discoveryUnsupportedButStableCompatible(error)) {
+    if (_discoveryUnsupportedButLegacyCompatible(error)) {
       return true;
     }
     if (error.code == ErrorCode.invalidParams.value &&

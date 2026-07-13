@@ -3,10 +3,11 @@
 ### Changed
 
 - Started the `dev/2026-07-28` development line from the RC branch and made
-  `McpProtocol.preview2026` the default profile for `McpClientOptions` and
+  `McpProtocol.stable` the default profile for `McpClientOptions` and
   `McpServerOptions`. Default clients now probe with `server/discover` and
-  retain stable initialization fallback; callers can explicitly select
-  `McpProtocol.stable` for stable-only MCP behavior.
+  retain legacy initialization fallback. `McpProtocol.legacy` keeps
+  `2025-11-25` and earlier behavior, while `McpProtocol.require2026` remains
+  strict; the former `McpProtocol.preview2026` profile was removed.
 
 ### Platform support
 
@@ -43,7 +44,7 @@
 - Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC beta
   interop fixture on relevant PRs, `dev/2026-07-28-rc` pushes, daily schedule,
   and manual dispatch.
-- Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the opt-in
+- Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the current
   profile to official conformance, local tests, and TypeScript SDK beta interop.
 - Switched the reverse Dart 2026 client -> TypeScript SDK beta server fixture
   to the TypeScript SDK's 2026 HTTP handler entry, making `server/discover`,
@@ -54,12 +55,12 @@
 - Added `SubscriptionsListenResult` for graceful `subscriptions/listen` closure
   and now include the required `io.modelcontextprotocol/subscriptionId` metadata
   in Dart server responses and client `McpSubscription.done` results.
-- Cleaned up root analyzer coverage for standalone example packages and opted
-  Streamable HTTP, Flutter/Jaspr web client, and MCP Apps examples into the
-  `2026-07-28` preview protocol profile with stable fallback where applicable.
-- Broadened preview client discovery fallback so servers that implement
-  `server/discover` but advertise only stable protocol versions can still
-  connect through the stable `initialize` flow.
+- Cleaned up root analyzer coverage for standalone example packages and moved
+  Streamable HTTP, Flutter/Jaspr web client, and MCP Apps examples to the
+  default stable profile with legacy fallback where applicable.
+- Broadened stable-client discovery fallback so servers that implement
+  `server/discover` but advertise only legacy protocol versions can still
+  connect through the legacy `initialize` flow.
 
 ## 2.3.0-dev.1
 

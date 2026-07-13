@@ -187,7 +187,7 @@ void main() {
       );
 
       final initParams = InitializeRequest(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: clientCapabilities,
         clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
       );
@@ -216,7 +216,10 @@ void main() {
       expect(response.id, 1);
 
       final result = response.result;
-      expect(result['protocolVersion'], equals(latestProtocolVersion));
+      expect(
+        result['protocolVersion'],
+        equals(stableProtocolVersion2025_11_25),
+      );
       expect(result['serverInfo']['name'], equals('TestServer'));
       expect(result['serverInfo']['version'], equals('1.0.0'));
 
@@ -278,7 +281,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequest(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: ClientCapabilities(
               sampling: ClientCapabilitiesSampling(),
               tasks: ClientCapabilitiesTasks(),
@@ -315,7 +318,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequest(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: ClientCapabilities(
               sampling: ClientCapabilitiesSampling(),
               tasks: ClientCapabilitiesTasks(
@@ -347,7 +350,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequest(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: ClientCapabilities(
               tasks: ClientCapabilitiesTasks(),
             ),
@@ -794,7 +797,7 @@ Future<void> _initializeClient(
   );
 
   final initParams = InitializeRequest(
-    protocolVersion: latestProtocolVersion,
+    protocolVersion: stableProtocolVersion2025_11_25,
     capabilities: clientCapabilities,
     clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
   );

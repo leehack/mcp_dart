@@ -33,7 +33,7 @@ class MockTransport extends Transport {
         JsonRpcResponse(
           id: message.id,
           result: const InitializeResult(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: ServerCapabilities(
               elicitation: ServerCapabilitiesElicitation(
                 form: ServerElicitationForm(),

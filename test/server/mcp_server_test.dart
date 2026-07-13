@@ -55,7 +55,7 @@ class McpServerTestTransport
       JsonRpcInitializeRequest(
         id: 0,
         initParams: const InitializeRequest(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
         ),
@@ -174,7 +174,7 @@ void main() {
       server = McpServer(
         const Implementation(name: 'test-server', version: '1.0.0'),
         options: const McpServerOptions(
-          protocol: McpProtocol.preview2026,
+          protocol: McpProtocol.stable,
         ),
       );
       server.registerTool(
@@ -263,7 +263,7 @@ void main() {
       server = McpServer(
         const Implementation(name: 'test-server', version: '1.0.0'),
         options: const McpServerOptions(
-          protocol: McpProtocol.preview2026,
+          protocol: McpProtocol.stable,
         ),
       );
       server.registerTool(
@@ -340,7 +340,7 @@ void main() {
       server = McpServer(
         const Implementation(name: 'test-server', version: '1.0.0'),
         options: const McpServerOptions(
-          protocol: McpProtocol.preview2026,
+          protocol: McpProtocol.stable,
         ),
       );
       server.registerTool(
@@ -778,7 +778,7 @@ void main() {
       server = McpServer(
         const Implementation(name: 'test-server', version: '1.0.0'),
         options: const McpServerOptions(
-          protocol: McpProtocol.preview2026,
+          protocol: McpProtocol.stable,
         ),
       );
       server.registerResource(

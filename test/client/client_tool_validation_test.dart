@@ -44,7 +44,7 @@ class MockTransport extends Transport
         JsonRpcResponse(
           id: message.id,
           result: InitializeResult(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: serverCapabilities,
             serverInfo:
                 const Implementation(name: 'MockServer', version: '1.0.0'),

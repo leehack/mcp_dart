@@ -130,7 +130,7 @@ void main() {
               'id': 1,
               'method': Method.initialize,
               'params': <String, dynamic>{
-                'protocolVersion': latestProtocolVersion,
+                'protocolVersion': stableProtocolVersion2025_11_25,
                 'capabilities': <String, dynamic>{},
                 'clientInfo': <String, dynamic>{
                   'name': 'fixture-client',
@@ -170,6 +170,13 @@ void main() {
         expect(
           responses.map((response) => response['id']),
           containsAll([1, 2, 3]),
+        );
+        final initializeResponse = responses.singleWhere(
+          (response) => response['id'] == 1,
+        );
+        expect(
+          (initializeResponse['result'] as Map)['protocolVersion'],
+          stableProtocolVersion2025_11_25,
         );
         final toolCallResponse = responses.singleWhere(
           (response) => response['id'] == 3,
@@ -223,7 +230,7 @@ void main() {
               'id': 1,
               'method': Method.initialize,
               'params': <String, dynamic>{
-                'protocolVersion': latestProtocolVersion,
+                'protocolVersion': stableProtocolVersion2025_11_25,
                 'capabilities': <String, dynamic>{
                   'roots': <String, dynamic>{},
                   'sampling': <String, dynamic>{},

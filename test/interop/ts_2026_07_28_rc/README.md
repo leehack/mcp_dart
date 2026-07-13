@@ -54,16 +54,16 @@ bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
   request without sending `notifications/cancelled`.
 
 The runner also starts `src/server.mjs` with the TypeScript beta
-`createMcpHandler` entry and runs a Dart preview client against it. That reverse
+`createMcpHandler` entry and runs a Dart stable-profile client against it. That reverse
 path asserts `server/discover` negotiation, `tools/list`, `tools/call`, and a
 2026 `input_required` elicitation retry against the TypeScript beta server;
 failures are treated as interop failures.
 
 Keep this fixture anchored to the official draft/RC behavior rather than the
-preview TypeScript implementation alone. In particular, `x-mcp-header` tests use
+TypeScript beta implementation alone. In particular, `x-mcp-header` tests use
 only the draft-permitted primitive types: `string`, `integer`, and `boolean`.
-When TypeScript preview behavior conflicts with the draft, keep the draft as the
-assertion source and document the preview gap near the test.
+When TypeScript beta behavior conflicts with the draft, keep the draft as the
+assertion source and document the beta gap near the test.
 
 CI runs this fixture in the dedicated
 `Run MCP 2026-07-28 TypeScript Interop` workflow for relevant PRs,

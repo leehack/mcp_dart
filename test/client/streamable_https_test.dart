@@ -289,7 +289,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: const InitializeResult(
-                  protocolVersion: latestProtocolVersion,
+                  protocolVersion: stableProtocolVersion2025_11_25,
                   capabilities: ServerCapabilities(
                     logging: {'supported': true},
                   ),
@@ -404,7 +404,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: const InitializeResult(
-                  protocolVersion: latestProtocolVersion,
+                  protocolVersion: stableProtocolVersion2025_11_25,
                   capabilities: ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer',
@@ -496,7 +496,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: latestProtocolVersion,
+                  protocolVersion: stableProtocolVersion2025_11_25,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -616,7 +616,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: latestProtocolVersion,
+                  protocolVersion: stableProtocolVersion2025_11_25,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -723,7 +723,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: latestProtocolVersion,
+                  protocolVersion: stableProtocolVersion2025_11_25,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -897,7 +897,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: latestProtocolVersion,
+                  protocolVersion: stableProtocolVersion2025_11_25,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -1024,7 +1024,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: latestProtocolVersion,
+              protocolVersion: stableProtocolVersion2025_11_25,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
             ).toJson(),

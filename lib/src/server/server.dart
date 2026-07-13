@@ -25,9 +25,9 @@ class McpServerOptions extends ProtocolOptions {
 
   /// High-level protocol compatibility profile.
   ///
-  /// Defaults to [McpProtocol.preview2026], which advertises MCP `2026-07-28`
-  /// draft/RC stateless behavior alongside stable protocol versions. Set this
-  /// to [McpProtocol.stable] to advertise only stable MCP versions.
+  /// Defaults to [McpProtocol.stable], which advertises MCP `2026-07-28`
+  /// stateless behavior alongside legacy protocol versions. Set this to
+  /// [McpProtocol.legacy] to advertise only legacy MCP versions.
   final McpProtocol protocol;
 
   /// Protocol versions this server advertises and accepts for this profile.
@@ -41,7 +41,7 @@ class McpServerOptions extends ProtocolOptions {
     super.maxTaskQueueSize,
     this.capabilities,
     this.instructions,
-    this.protocol = McpProtocol.preview2026,
+    this.protocol = McpProtocol.stable,
   });
 }
 
@@ -109,8 +109,8 @@ class Server extends Protocol {
   Server(this._serverInfo, {McpServerOptions? options})
       : _capabilities = options?.capabilities ?? const ServerCapabilities(),
         _instructions = options?.instructions,
-        _supportedVersions = options?.supportedVersions ??
-            McpProtocol.preview2026.supportedVersions,
+        _supportedVersions =
+            options?.supportedVersions ?? McpProtocol.stable.supportedVersions,
         super(options) {
     setRequestHandler<JsonRpcServerDiscoverRequest>(
       Method.serverDiscover,
@@ -1070,13 +1070,13 @@ class Server extends Protocol {
     _clientCapabilities = params.capabilities;
     _clientVersion = params.clientInfo;
 
-    final stableSupportedVersions = _supportedVersions
+    final legacySupportedVersions = _supportedVersions
         .where((version) => !isStatelessProtocolVersion(version))
         .toList();
-    final protocolVersion = stableSupportedVersions.contains(requestedVersion)
+    final protocolVersion = legacySupportedVersions.contains(requestedVersion)
         ? requestedVersion
-        : stableSupportedVersions.isNotEmpty
-            ? stableSupportedVersions.first
+        : legacySupportedVersions.isNotEmpty
+            ? legacySupportedVersions.first
             : latestProtocolVersion;
 
     return InitializeResult(

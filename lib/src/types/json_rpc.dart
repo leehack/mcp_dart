@@ -18,33 +18,34 @@ const draftProtocolVersion2026_07_28 = "2026-07-28";
 /// The latest stable version of the Model Context Protocol supported.
 const stableProtocolVersion2025_11_25 = "2025-11-25";
 
-/// The latest stable version of the Model Context Protocol supported.
-const latestProtocolVersion = stableProtocolVersion2025_11_25;
-
-/// The latest draft/RC protocol version implemented by the development default
-/// profile.
-const latestDraftProtocolVersion = draftProtocolVersion2026_07_28;
+/// The latest protocol version implemented by this development branch.
+///
+/// The upstream `2026-07-28` specification is still pre-release, but this
+/// branch treats it as its stable SDK profile so applications can prepare for
+/// the transition before a package release is cut.
+const latestProtocolVersion = draftProtocolVersion2026_07_28;
 
 /// High-level MCP protocol compatibility profiles.
 ///
 /// On the `dev/2026-07-28` branch, [McpClientOptions] and [McpServerOptions]
-/// default to [preview2026]. Use [stable] to explicitly keep the 2025
+/// default to [stable]. Use [legacy] to explicitly keep the 2025
 /// initialization flow, or [require2026] when a peer must support the
-/// `2026-07-28` draft/RC stateless protocol.
+/// `2026-07-28` stateless protocol.
 enum McpProtocol {
-  /// Stable MCP behavior using the latest released specification.
+  /// Stable MCP behavior for this development branch.
   ///
-  /// This explicit opt-out profile targets MCP 2025-11-25.
+  /// This profile prefers MCP `2026-07-28` stateless negotiation, including
+  /// `server/discover`, and falls back to legacy initialization for older
+  /// peers.
   stable,
 
-  /// Prefer MCP `2026-07-28` draft/RC when a peer supports it.
+  /// Legacy MCP behavior using the 2025 initialization flow.
   ///
-  /// This profile enables draft-only behavior such as `server/discover`,
-  /// stateless request metadata, and stateless result types, while allowing
-  /// fallback to the stable `initialize` flow for older peers.
-  preview2026,
+  /// This explicit compatibility profile targets MCP 2025-11-25 and earlier
+  /// supported versions. It does not probe with `server/discover` by default.
+  legacy,
 
-  /// Require the MCP `2026-07-28` draft/RC stateless protocol.
+  /// Require the MCP `2026-07-28` stateless protocol.
   ///
   /// This profile is intended for conformance tests and deployments where
   /// connecting to older MCP servers would be a configuration error.
@@ -53,10 +54,8 @@ enum McpProtocol {
   /// Preferred protocol version for outgoing negotiation.
   String get preferredProtocolVersion {
     return switch (this) {
-      McpProtocol.stable => latestProtocolVersion,
-      McpProtocol.preview2026 ||
-      McpProtocol.require2026 =>
-        latestDraftProtocolVersion,
+      McpProtocol.stable || McpProtocol.require2026 => latestProtocolVersion,
+      McpProtocol.legacy => stableProtocolVersion2025_11_25,
     };
   }
 
@@ -64,7 +63,7 @@ enum McpProtocol {
   List<String> get supportedVersions {
     return switch (this) {
       McpProtocol.stable => supportedProtocolVersions,
-      McpProtocol.preview2026 => supportedProtocolVersionsWithDraft,
+      McpProtocol.legacy => legacyProtocolVersions,
       McpProtocol.require2026 => statelessProtocolVersions,
     };
   }
@@ -72,42 +71,42 @@ enum McpProtocol {
   /// Whether clients should probe with `server/discover` by default.
   bool get useServerDiscoverByDefault {
     return switch (this) {
-      McpProtocol.stable => false,
-      McpProtocol.preview2026 || McpProtocol.require2026 => true,
+      McpProtocol.stable || McpProtocol.require2026 => true,
+      McpProtocol.legacy => false,
     };
   }
 
   /// Whether failed discovery should fall back to legacy initialization.
   bool get allowLegacyInitializationFallbackByDefault {
     return switch (this) {
-      McpProtocol.stable || McpProtocol.preview2026 => true,
+      McpProtocol.stable || McpProtocol.legacy => true,
       McpProtocol.require2026 => false,
     };
   }
 
   /// Whether this profile advertises support for stateless MCP versions.
   bool get supportsStatelessProtocol =>
-      supportedProtocolVersions.any(isStatelessProtocolVersion);
+      supportedVersions.any(isStatelessProtocolVersion);
 }
 
-/// List of supported Model Context Protocol versions.
-const supportedProtocolVersions = [
-  latestProtocolVersion,
+/// Model Context Protocol versions retained for compatibility with older peers.
+const legacyProtocolVersions = [
+  stableProtocolVersion2025_11_25,
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
   "2024-10-07",
 ];
 
-/// Protocol versions supported by the `2026-07-28` draft/RC development branch.
-const supportedProtocolVersionsWithDraft = [
-  latestDraftProtocolVersion,
-  ...supportedProtocolVersions,
+/// Protocol versions supported by the `2026-07-28` development branch.
+const supportedProtocolVersions = [
+  latestProtocolVersion,
+  ...legacyProtocolVersions,
 ];
 
 /// Protocol versions that use per-request metadata instead of initialization.
 const statelessProtocolVersions = [
-  draftProtocolVersion2026_07_28,
+  latestProtocolVersion,
 ];
 
 /// Returns true when [version] uses the `2026-07-28` draft/RC stateless request
@@ -118,7 +117,7 @@ bool isStatelessProtocolVersion(String version) =>
 /// Selects the first locally preferred version supported by a peer.
 String? negotiateProtocolVersion(
   Iterable<String> peerSupportedVersions, {
-  Iterable<String> localSupportedVersions = supportedProtocolVersionsWithDraft,
+  Iterable<String> localSupportedVersions = supportedProtocolVersions,
 }) {
   final peerVersions = peerSupportedVersions.toSet();
   for (final version in localSupportedVersions) {
@@ -844,7 +843,7 @@ class InputRequest {
   /// Creates an embedded `elicitation/create` input request.
   factory InputRequest.elicit(ElicitRequest params) {
     final inputParams = params.toJson(
-      protocolVersion: latestDraftProtocolVersion,
+      protocolVersion: latestProtocolVersion,
     )..remove('task');
     return InputRequest._(
       method: Method.elicitationCreate,
@@ -889,7 +888,7 @@ class InputRequest {
         }
         ElicitRequest.fromJson(
           params,
-          protocolVersion: latestDraftProtocolVersion,
+          protocolVersion: latestProtocolVersion,
         );
         return InputRequest._(method: method, params: params);
       case Method.samplingCreateMessage:
@@ -950,7 +949,7 @@ class InputRequest {
     }
     return ElicitRequest.fromJson(
       params!,
-      protocolVersion: latestDraftProtocolVersion,
+      protocolVersion: latestProtocolVersion,
     );
   }
 

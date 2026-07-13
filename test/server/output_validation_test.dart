@@ -90,7 +90,7 @@ void main() {
       mcpServer = McpServer(
         const Implementation(name: 'TestServer', version: '1.0.0'),
         options: const McpServerOptions(
-          protocol: McpProtocol.preview2026,
+          protocol: McpProtocol.stable,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -125,7 +125,7 @@ void main() {
       mcpServer = McpServer(
         const Implementation(name: 'TestServer', version: '1.0.0'),
         options: const McpServerOptions(
-          protocol: McpProtocol.preview2026,
+          protocol: McpProtocol.stable,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -183,7 +183,7 @@ void main() {
       mcpServer = McpServer(
         const Implementation(name: 'TestServer', version: '1.0.0'),
         options: const McpServerOptions(
-          protocol: McpProtocol.preview2026,
+          protocol: McpProtocol.stable,
           capabilities: ServerCapabilities(
             tools: ServerCapabilitiesTools(),
           ),
@@ -394,7 +394,7 @@ Future<void> _sendInit(MockTransport transport) async {
   final initRequest = JsonRpcInitializeRequest(
     id: 1,
     initParams: const InitializeRequestParams(
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: stableProtocolVersion2025_11_25,
       capabilities: ClientCapabilities(),
       clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
     ),

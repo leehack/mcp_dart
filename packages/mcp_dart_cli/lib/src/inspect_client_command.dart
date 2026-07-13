@@ -488,10 +488,10 @@ class ClientInspectorHarness {
   }
 
   String _chooseProtocolVersion(String? requested) {
-    if (requested != null && supportedProtocolVersions.contains(requested)) {
+    if (requested != null && legacyProtocolVersions.contains(requested)) {
       return requested;
     }
-    return latestProtocolVersion;
+    return stableProtocolVersion2025_11_25;
   }
 
   void _sendResult(Object? id, Map<String, dynamic> result) {
@@ -646,7 +646,7 @@ class ClientInspectorHarness {
         'lifecycle.protocol-version',
         'initialize.params.protocolVersion is missing.',
       );
-    } else if (supportedProtocolVersions.contains(_clientProtocolVersion)) {
+    } else if (legacyProtocolVersions.contains(_clientProtocolVersion)) {
       _checks.pass(
         'lifecycle.protocol-version',
         'Client requested supported protocol version $_clientProtocolVersion.',
@@ -654,7 +654,9 @@ class ClientInspectorHarness {
     } else {
       _checks.warning(
         'lifecycle.protocol-version',
-        'Client requested unsupported protocol version $_clientProtocolVersion; inspector negotiated $latestProtocolVersion.',
+        'Client requested unsupported initialization protocol version '
+            '$_clientProtocolVersion; inspector negotiated '
+            '$stableProtocolVersion2025_11_25.',
       );
     }
 
