@@ -309,13 +309,17 @@ class CompletedTaskHandler extends CancelTaskResultHandler {
 
 Map<String, dynamic> _clientMeta({
   String? protocolVersion,
+  Implementation clientInfo = const Implementation(
+    name: 'client',
+    version: '1.0.0',
+  ),
   ClientCapabilities clientCapabilities = const ClientCapabilities(),
   Map<String, dynamic>? meta,
   Object? logLevel,
 }) {
   return buildProtocolRequestMeta(
     protocolVersion: protocolVersion ?? draftProtocolVersion2026_07_28,
-    clientInfo: const Implementation(name: 'client', version: '1.0.0'),
+    clientInfo: clientInfo,
     clientCapabilities: clientCapabilities,
     meta: meta,
     logLevel: logLevel,
@@ -4198,6 +4202,97 @@ void main() {
       expect(receivedClientInfo?.name, 'client');
       expect(receivedClientInfo?.version, '1.0.0');
       expect(receivedClientCapabilities?.toJson(), isEmpty);
+    });
+
+    test('stateless handlers receive request-local client metadata', () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.preview2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      final handlersStarted = Completer<void>();
+      final releaseHandlers = Completer<void>();
+      final extras = <RequestId, RequestHandlerExtra>{};
+      server.setRequestHandler<JsonRpcCallToolRequest>(
+        Method.toolsCall,
+        (request, extra) async {
+          extras[request.id] = extra;
+          if (extras.length == 2 && !handlersStarted.isCompleted) {
+            handlersStarted.complete();
+          }
+          await releaseHandlers.future;
+          return const CallToolResult(
+            content: [TextContent(text: 'ok')],
+          );
+        },
+        (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.toolsCall,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport
+        ..receive(
+          JsonRpcCallToolRequest(
+            id: 'request-a',
+            params: const CallToolRequest(name: 'tool-a').toJson(),
+            meta: _clientMeta(
+              clientInfo: const Implementation(
+                name: 'client-a',
+                version: '1.0.0',
+              ),
+              clientCapabilities: const ClientCapabilities(
+                sampling: ClientCapabilitiesSampling(tools: true),
+              ),
+            ),
+          ),
+        )
+        ..receive(
+          JsonRpcCallToolRequest(
+            id: 'request-b',
+            params: const CallToolRequest(name: 'tool-b').toJson(),
+            meta: _clientMeta(
+              clientInfo: const Implementation(
+                name: 'client-b',
+                version: '2.0.0',
+              ),
+              clientCapabilities: const ClientCapabilities(
+                extensions: {
+                  'com.example/client-b': <String, dynamic>{},
+                },
+              ),
+            ),
+          ),
+        );
+      await handlersStarted.future.timeout(const Duration(seconds: 5));
+
+      final firstExtra = extras['request-a']!;
+      final secondExtra = extras['request-b']!;
+      expect(firstExtra.clientInfo?.name, 'client-a');
+      expect(firstExtra.clientInfo?.version, '1.0.0');
+      expect(firstExtra.clientCapabilities?.sampling?.tools, isTrue);
+      expect(firstExtra.clientCapabilities?.extensions, isNull);
+      expect(secondExtra.clientInfo?.name, 'client-b');
+      expect(secondExtra.clientInfo?.version, '2.0.0');
+      expect(secondExtra.clientCapabilities?.sampling, isNull);
+      expect(
+        secondExtra.clientCapabilities?.extensions?['com.example/client-b'],
+        isEmpty,
+      );
+
+      releaseHandlers.complete();
+      await _pump();
+      await _pump();
+      expect(transport.sentMessages, hasLength(2));
     });
 
     test('stateless handlers do not inherit transport session identity',
