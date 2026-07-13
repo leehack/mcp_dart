@@ -31,7 +31,7 @@
 - Updated the TypeScript SDK 2026-07-28 RC interop fixture to published
   `@modelcontextprotocol/client@2.0.0-beta.4` and
   `@modelcontextprotocol/server@2.0.0-beta.4` packages after verifying both
-  Dart -> TypeScript and TypeScript -> Dart paths.
+  directions, including a TypeScript-server `input_required` retry.
 - Added bidirectional MCP 2026-07-28 Streamable HTTP interop against the
   official Python SDK `mcp==2.0.0b1` package.
 - Added a real Chrome MCP 2026-07-28 Streamable HTTP smoke test and preserved
@@ -39,43 +39,25 @@
 - Updated official conformance gates to
   `@modelcontextprotocol/conformance@0.2.0-alpha.9`, including the stricter
   `MissingRequiredClientCapability` `requiredCapabilities` object assertion in
-  the 2026 stateless server suite.
+  the 2026 stateless server suite. Both 2026 suites pass without expected
+  failures, with a local network-`$ref` security canary retained.
 - Added resumable SSE priming IDs and retry guidance, wired request-scoped
   stream closure through `RequestHandlerExtra`, and removed the remaining
-  expected 2026 client conformance failure while retaining the official
-  network-`$ref` security canary.
-- Updated the TypeScript SDK 2026-07-28 RC interop fixture to published
-  `@modelcontextprotocol/client@2.0.0-beta.3` and
-  `@modelcontextprotocol/server@2.0.0-beta.3` packages after verifying both
-  Dart -> TypeScript and TypeScript -> Dart 2026 draft/RC paths.
-- Expanded the reverse Dart 2026 client -> TypeScript SDK beta server fixture
-  with a 2026 `input_required` elicitation retry flow.
+  expected 2026 client conformance failure.
 - Aligned MCP `2026-07-28` draft URL elicitation with the current draft
   schema: URL-mode `elicitation/create` no longer emits or accepts
   `elicitationId`, and `notifications/elicitation/complete` is treated as a
   legacy/non-draft notification rather than a typed draft notification.
-- Re-pinned the TypeScript SDK 2026-07-28 RC interop fixture from `pkg.pr.new`
-  previews to published `@modelcontextprotocol/client@2.0.0-beta.1` and
-  `@modelcontextprotocol/server@2.0.0-beta.1` packages after verifying both
-  Dart -> TypeScript and TypeScript -> Dart 2026 draft/RC paths.
-- Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.8`, adding the new stateless
-  diagnostic probes for missing client capabilities, response-stream shape, and
-  request-scoped logging. The 2026-07-28 RC server suite reached no expected
-  failures; the later alpha.9 client gate also removed the upstream
-  `json-schema-ref-no-deref` fixture exception while retaining a local
-  network-`$ref` security canary.
-- Added a dedicated CI workflow for the TypeScript SDK 2026-07-28 RC beta
-  interop fixture on relevant PRs, `dev/2026-07-28` pushes, daily schedule,
-  and manual dispatch.
+- Added dedicated TypeScript, Python, and Chrome interop jobs for relevant PRs
+  and `dev/2026-07-28` pushes, plus a temporary default-branch drift monitor
+  until the release reaches `main`.
 - Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the current
-  profile to official conformance, local tests, and TypeScript SDK beta interop.
+  profile to official conformance, local tests, cross-SDK interop, and browser
+  coverage.
 - Switched the reverse Dart 2026 client -> TypeScript SDK beta server fixture
   to the TypeScript SDK's 2026 HTTP handler entry, making `server/discover`,
   `tools/list`, and `tools/call` strict interop checks instead of diagnostic
   skips.
-- Recorded overridden conformance package names in 2026-07-28 RC summary artifacts so
-  ad hoc package-bump checks are auditable.
 - Added `SubscriptionsListenResult` for graceful `subscriptions/listen` closure
   and now include the required `io.modelcontextprotocol/subscriptionId` metadata
   in Dart server responses and client `McpSubscription.done` results.

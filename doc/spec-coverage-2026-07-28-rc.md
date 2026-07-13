@@ -33,8 +33,8 @@ dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
 
 CI runs the official conformance gates in the core workflow. The
 `Run MCP 2026-07-28 Interop` workflow runs the TypeScript and Python SDK beta
-interop fixtures on relevant PRs, `dev/2026-07-28` pushes, a daily schedule,
-and manual dispatch.
+interop fixtures on relevant PRs, `dev/2026-07-28` pushes, and manual dispatch;
+a temporary default-branch monitor runs the release-branch fixtures daily.
 
 ## Matrix
 
