@@ -541,6 +541,70 @@ void main() {
       });
     });
 
+    test('close clears negotiated and tool metadata before reconnect',
+        () async {
+      transport = MockTransport(
+        useStatelessDiscovery: true,
+        advertisedTools: [
+          ...MockTransport._defaultAdvertisedTools(),
+          Tool(
+            name: 'header_tool',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'tenant': JsonSchema.string(mcpHeader: 'Tenant'),
+              },
+            ),
+          ),
+        ],
+      );
+      await client.connect(transport);
+      await client.listTools();
+
+      expect(client.getServerCapabilities(), isNotNull);
+      expect(client.getServerVersion(), isNotNull);
+      expect(client.getProtocolVersion(), stableProtocolVersion2026_07_28);
+      expect(transport.toolParameterHeaderMappings, {
+        'header_tool': {'tenant': 'Tenant'},
+      });
+      await expectLater(
+        client.callTool(const CallToolRequest(name: 'task_required_tool')),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('requires task-based execution'),
+          ),
+        ),
+      );
+
+      await client.close();
+
+      expect(client.getServerCapabilities(), isNull);
+      expect(client.getServerVersion(), isNull);
+      expect(client.getInstructions(), isNull);
+      expect(client.getProtocolVersion(), isNull);
+
+      final secondTransport = MockTransport(advertisedTools: const []);
+      await client.connect(secondTransport);
+
+      final taskResult = await client.callTool(
+        const CallToolRequest(name: 'task_required_tool'),
+      );
+      final schemaResult = await client.callTool(
+        const CallToolRequest(name: 'broken_tool'),
+      );
+
+      expect(taskResult.content, isEmpty);
+      expect(
+        schemaResult.structuredContentJson?.toJson(),
+        {'wrong': 'field'},
+      );
+      expect(secondTransport.toolCallRequestCount, 2);
+      expect(secondTransport.toolParameterHeaderMappings, isEmpty);
+
+      await client.close();
+    });
+
     test('HeaderMismatch refresh stops on a repeated pagination cursor',
         () async {
       transport = MockTransport(

@@ -1,3 +1,13 @@
+## 0.2.0-dev.2
+
+- Update the CLI to depend on `mcp_dart ^2.3.0-dev.2` and align inspection and
+  conformance behavior with the SDK's default MCP 2026 profile and legacy
+  fallback.
+- Expand release validation so standalone binaries must report the same version
+  as both their package metadata and release tag.
+- Point prerelease package metadata and documentation at the immutable
+  `mcp_dart_cli-v0.2.0-dev.2` tag.
+
 ## 0.2.0-dev.1
 
 - Update the dev CLI package to depend on `mcp_dart ^2.3.0-dev.1`.

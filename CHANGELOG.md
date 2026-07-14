@@ -1,4 +1,4 @@
-## Unreleased
+## 2.3.0-dev.2
 
 ### Changed
 
@@ -22,6 +22,9 @@
 - Streamable HTTP clients now reject invalid or unreachable `x-mcp-header`
   annotations, retain tool validation metadata across paginated lists, and
   follow pagination when refreshing metadata after `HeaderMismatch`.
+- Clients now clear negotiated server state, lifecycle flags, and tool
+  validation metadata when a connection closes, preventing stale state from
+  leaking into a later connection.
 
 ### Platform support
 
@@ -67,6 +70,14 @@
 - Cleaned up root analyzer coverage for standalone example packages and moved
   Streamable HTTP, Flutter/Jaspr web client, and MCP Apps examples to the
   default stable profile with legacy fallback where applicable.
+
+### Release tooling
+
+- Stable release retries now reuse an existing tag only at its original commit,
+  while CLI binary builds verify that the tag, package version, and compiled
+  binary version all match.
+- Prerelease package documentation now links to immutable release tags instead
+  of development branches.
 
 ## 2.3.0-dev.1
 

@@ -17,7 +17,7 @@ For the MCP `2026-07-28` draft/RC dev release, pass the prerelease version
 explicitly:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.0-dev.1
+dart pub global activate mcp_dart_cli 0.2.0-dev.2
 ```
 
 Without the Dart SDK, install the latest standalone binary from GitHub Releases:
@@ -60,7 +60,7 @@ If `directory` is omitted, the project will be created in the current directory 
 
 Generated projects resolve the stable `mcp_dart` SDK by default. For MCP
 `2026-07-28` draft/RC testing, update the generated `pubspec.yaml` to depend on
-`mcp_dart: ^2.3.0-dev.1`.
+`mcp_dart: ^2.3.0-dev.2`.
 
 ### Create from a specific template
 

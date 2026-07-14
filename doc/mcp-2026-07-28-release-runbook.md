@@ -13,6 +13,24 @@ Do not publish the stable Dart packages from a moving draft commit.
 - The default-branch monitor checks `dev/2026-07-28` daily. PR #306 deletes it
   as the normal interop schedule reaches `main`, avoiding duplicate schedules.
 
+## Prerelease rehearsal
+
+Before the final specification is tagged, publish coordinated prereleases from
+the exact validated `dev/2026-07-28` commit:
+
+1. Publish `mcp_dart 2.3.0-dev.2` and wait until it resolves from pub.dev in a
+   clean consumer project.
+2. Run `dart run tool/validate_cli_publish.dart --published-sdk` so the CLI is
+   tested without its monorepo path override.
+3. Publish `mcp_dart_cli 0.2.0-dev.2`, then verify its pub.dev package and every
+   standalone binary asset.
+
+Package metadata and README links use the immutable SDK and CLI prerelease tags
+so they remain valid if the development branch is later removed.
+
+The prerelease is a public workflow rehearsal and interoperability preview. It
+does not replace the final-spec delta review or authorize a stable release.
+
 ## 1. Freeze the official inputs
 
 1. Record the final specification tag and commit SHA.
@@ -93,6 +111,9 @@ Merge the release PR to `main` only after this commit passes the complete gate.
    existing tag only when that tag resolves to the exact original release
    commit; the workflow never moves it.
 2. Verify tag `v2.3.0`, the GitHub release, and the `Publish to pub.dev` workflow.
+   If GitHub release creation fails, rerun `Create Release`. If publication
+   fails after the tag was pushed, rerun the failed tag-triggered `Publish to
+   pub.dev` workflow; reusing a tag does not emit another push event.
 3. Confirm pub.dev shows version `2.3.0`, correct `main` documentation links,
    and a successful package analysis.
 4. Create a clean temporary Dart project, resolve `mcp_dart: ^2.3.0`, and run a

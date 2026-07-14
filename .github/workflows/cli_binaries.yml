@@ -63,6 +63,13 @@ jobs:
             echo "❌ Checkout does not match $RELEASE_TAG."
             exit 1
           fi
+          PACKAGE_VERSION=$(sed -n 's/^version: //p' pubspec.yaml)
+          EXPECTED_TAG="mcp_dart_cli-v$PACKAGE_VERSION"
+          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "❌ Tag $RELEASE_TAG does not match CLI version $PACKAGE_VERSION."
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> "$GITHUB_ENV"
           echo "✅ Building exact tag $RELEASE_TAG at $TAG_COMMIT."
 
       - uses: dart-lang/setup-dart@v1
@@ -81,7 +88,12 @@ jobs:
       - name: Smoke test executable
         shell: bash
         run: |
-          "./dist/${{ matrix.asset }}" --version
+          BINARY_VERSION=$("./dist/${{ matrix.asset }}" --version | tr -d '\r\n')
+          if [ "$BINARY_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "❌ Binary reports $BINARY_VERSION, expected $PACKAGE_VERSION."
+            exit 1
+          fi
+          echo "✅ Binary reports version $BINARY_VERSION."
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v6
@@ -117,6 +129,12 @@ jobs:
           TAG_COMMIT=$(git rev-list -n 1 "$RELEASE_TAG")
           if [ -z "$TAG_COMMIT" ] || [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
             echo "❌ Checkout does not match $RELEASE_TAG."
+            exit 1
+          fi
+          PACKAGE_VERSION=$(sed -n 's/^version: //p' packages/mcp_dart_cli/pubspec.yaml)
+          EXPECTED_TAG="mcp_dart_cli-v$PACKAGE_VERSION"
+          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "❌ Tag $RELEASE_TAG does not match CLI version $PACKAGE_VERSION."
             exit 1
           fi
           echo "✅ Attaching assets built from $RELEASE_TAG at $TAG_COMMIT."

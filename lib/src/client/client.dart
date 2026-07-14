@@ -1241,6 +1241,18 @@ class McpClient extends Protocol {
         StackTrace.current,
       );
     }
+
+    _serverCapabilities = null;
+    _serverVersion = null;
+    _instructions = null;
+    _sessionRefresh = null;
+    _negotiatedProtocolVersion = null;
+    _usesStatelessProtocol = false;
+    _sentInitialized = false;
+    _cachedToolOutputSchemas.clear();
+    _cachedRequiredTaskTools.clear();
+    _cachedToolParameterHeaders.clear();
+    _expectedToolListCursor = null;
   }
 
   @override
