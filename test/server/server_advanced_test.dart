@@ -77,7 +77,7 @@ void main() {
         elicitation: ClientElicitation.formOnly(),
       );
       final initParams = InitializeRequestParams(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: clientCaps,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
       );
@@ -119,7 +119,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: stableProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ),
@@ -202,7 +202,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: stableProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ),
@@ -240,7 +240,7 @@ void main() {
         elicitation: ClientElicitation.all(),
       );
       final initParams = InitializeRequestParams(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: clientCaps,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
       );

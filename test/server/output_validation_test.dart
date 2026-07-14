@@ -153,7 +153,12 @@ void main() {
       expect(response, isA<JsonRpcError>());
       final errorResponse = response as JsonRpcError;
       expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
-      expect(errorResponse.error.message, contains('Output validation error'));
+      expect(
+        errorResponse.error.message,
+        equals(
+          "Tool 'invalid_array_tool' returned structured content that does not match its output schema.",
+        ),
+      );
     });
 
     test('stable tools/list omits non-object output schemas', () async {
@@ -271,7 +276,12 @@ void main() {
       expect(response, isA<JsonRpcError>());
       final errorResponse = response as JsonRpcError;
       expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
-      expect(errorResponse.error.message, contains('Output validation error'));
+      expect(
+        errorResponse.error.message,
+        equals(
+          "Tool 'invalid_tool' returned structured content that does not match its output schema.",
+        ),
+      );
     });
 
     test('invalid type in output fails validation', () async {
@@ -304,7 +314,12 @@ void main() {
       expect(response, isA<JsonRpcError>());
       final errorResponse = response as JsonRpcError;
       expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
-      expect(errorResponse.error.message, contains('Output validation error'));
+      expect(
+        errorResponse.error.message,
+        equals(
+          "Tool 'invalid_type_tool' returned structured content that does not match its output schema.",
+        ),
+      );
     });
 
     test('execution error skips output validation', () async {
@@ -378,13 +393,18 @@ void main() {
       expect(response, isA<JsonRpcError>());
       final errorResponse = response as JsonRpcError;
       expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
-      expect(errorResponse.error.message, contains('Output validation error'));
+      expect(
+        errorResponse.error.message,
+        equals(
+          "Tool 'unstructured_tool' returned structured content that does not match its output schema.",
+        ),
+      );
     });
   });
 }
 
 Map<String, dynamic> _statelessMeta() => {
-      McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+      McpMetaKey.protocolVersion: previewProtocolVersion,
       McpMetaKey.clientInfo:
           const Implementation(name: 'TestClient', version: '1.0.0').toJson(),
       McpMetaKey.clientCapabilities: const ClientCapabilities().toJson(),
@@ -394,7 +414,7 @@ Future<void> _sendInit(MockTransport transport) async {
   final initRequest = JsonRpcInitializeRequest(
     id: 1,
     initParams: const InitializeRequestParams(
-      protocolVersion: stableProtocolVersion2025_11_25,
+      protocolVersion: stableProtocolVersion,
       capabilities: ClientCapabilities(),
       clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
     ),

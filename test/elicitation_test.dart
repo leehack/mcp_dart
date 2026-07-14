@@ -140,7 +140,7 @@ void main() {
     test('Client handler validation works correctly', () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -175,7 +175,7 @@ void main() {
         () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -237,7 +237,7 @@ void main() {
     test('Client handles elicit request with boolean input', () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -292,7 +292,7 @@ void main() {
     test('Client handles elicit request with number input', () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -350,7 +350,7 @@ void main() {
     test('Client handles elicit request with enum input', () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -409,7 +409,7 @@ void main() {
     test('Client handles rejected elicit request', () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -479,7 +479,7 @@ void main() {
     test('Client with URL-only capability handles URL elicitation', () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -527,7 +527,7 @@ void main() {
     test('Client rejects unsupported elicitation mode', () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -572,7 +572,7 @@ void main() {
         () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test-server', version: '1.0.0'),
       );
@@ -991,10 +991,10 @@ void main() {
 
       final parsed = ElicitRequestParams.fromJson(
         params,
-        protocolVersion: stableProtocolVersion2026_07_28,
+        protocolVersion: previewProtocolVersion,
       );
       final parsedJson = parsed.toJson(
-        protocolVersion: stableProtocolVersion2026_07_28,
+        protocolVersion: previewProtocolVersion,
       );
       expect(
         parsedJson['requestedSchema']['properties']['ratio']['minimum'],
@@ -1016,7 +1016,7 @@ void main() {
             ),
           },
         ),
-      ).toJson(protocolVersion: stableProtocolVersion2026_07_28);
+      ).toJson(protocolVersion: previewProtocolVersion);
       expect(
         serialized['requestedSchema']['properties']['ratio']['default'],
         0.5,
@@ -1029,7 +1029,7 @@ void main() {
         'params': {
           ...params,
           '_meta': {
-            McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+            McpMetaKey.protocolVersion: previewProtocolVersion,
           },
         },
       });
@@ -1057,7 +1057,7 @@ void main() {
               },
             },
             '_meta': {
-              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: previewProtocolVersion,
             },
           },
         }),

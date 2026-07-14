@@ -31,7 +31,7 @@ dart run example/client_stdio.dart
 - Tool invocation with the `calculate` arithmetic tool
 - Static resource reading from `file:///logs`
 - Prompt retrieval with the `analyze-code` prompt
-- Ping, capability discovery, and clean stdio shutdown
+- Capability discovery and clean stdio shutdown
 
 ### Weather API Integration
 
@@ -57,11 +57,12 @@ dart run packages/mcp_dart_cli/bin/mcp_dart.dart inspect \
 
 ## Transport Examples
 
-### HTTP/SSE Server
+### Legacy SSE Server (Deprecated)
 
 **Location**: [`example/server_sse.dart`](../example/server_sse.dart)
 
-Server-Sent Events based server:
+Older Server-Sent Events transport retained for compatibility. Use the
+Streamable HTTP example below for new projects.
 
 ```bash
 dart run example/server_sse.dart
@@ -131,29 +132,29 @@ dart run example/iostream-client-server/simple.dart
 
 ## Authentication Examples
 
-### OAuth2 Server with PKCE
+### OAuth protected resource
 
 **Location**: [`example/authentication/oauth_server_example.dart`](../example/authentication/oauth_server_example.dart)
 
-Complete OAuth2 implementation:
+Local protected-resource metadata and bearer-challenge pattern:
 
 ```bash
-dart run example/authentication/oauth_server_example.dart
+MCP_BEARER_TOKEN=local-secret \
+  dart run example/authentication/oauth_server_example.dart
 ```
 
 **Features**:
 
-- OAuth2 authorization flow
-- PKCE support (RFC 7636)
-- Token generation and validation
-- Secure token storage
-- Refresh token support
+- Protected-resource metadata
+- `401` bearer challenges
+- Fail-closed static token check for local testing
+- Explicit application boundary for production token verification
 
 ### OAuth2 Client
 
 **Location**: [`example/authentication/oauth_client_example.dart`](../example/authentication/oauth_client_example.dart)
 
-Client-side OAuth2 integration:
+Generic OAuth client building blocks:
 
 ```bash
 dart run example/authentication/oauth_client_example.dart
@@ -164,7 +165,10 @@ dart run example/authentication/oauth_client_example.dart
 - Authorization code flow
 - PKCE challenge generation
 - Token exchange
-- Authenticated requests
+- Callback-state validation
+- Token refresh and plaintext local storage
+
+The generic example does not host a callback or target a real provider.
 
 ### GitHub OAuth Integration
 
@@ -184,8 +188,9 @@ dart run example/authentication/github_oauth_example.dart
 
 - GitHub OAuth provider
 - User authentication
-- API access with tokens
-- Profile information retrieval
+- PKCE S256 and callback-state validation
+- Plaintext token reuse for local testing
+- Connection and tool discovery against the configured MCP endpoint
 
 ### GitHub Personal Access Token
 
@@ -481,31 +486,14 @@ server.registerResourceTemplate(
 );
 ```
 
-### OAuth Flow Pattern
+### OAuth boundary pattern
 
-```dart
-// From oauth_server_example.dart
-
-// 1. Client requests authorization
-final authUrl = buildAuthorizationUrl(
-  clientId: clientId,
-  redirectUri: redirectUri,
-  codeChallenge: challenge,
-);
-
-// 2. User approves
-
-// 3. Exchange code for token
-final token = await exchangeCodeForToken(
-  code: authCode,
-  codeVerifier: verifier,
-);
-
-// 4. Use token for requests
-final response = await makeAuthenticatedRequest(
-  accessToken: token.accessToken,
-);
-```
+Use `OAuthAuthorizationCodeProvider` when the client transport should discover
+metadata, create the PKCE request, and exchange the returned code. On servers,
+use `OAuthProtectedResourceOptions` plus `authenticationHandler`; the
+application must still verify token signature or introspection, issuer,
+resource audience, expiry, and scopes. See the
+[authentication examples](../example/authentication/README.md).
 
 ### Completion Handler Pattern
 
@@ -587,7 +575,10 @@ test('tool execution', () async {
     arguments: {'a': 5, 'b': 3},
   ));
 
-  expect(result.content.first.text, '8');
+  expect(
+    result.content.first,
+    isA<TextContent>().having((content) => content.text, 'text', '8'),
+  );
 
   // Cleanup
   await client.close();
@@ -618,6 +609,10 @@ export GITHUB_CLIENT_ID=your_id
 export GITHUB_CLIENT_SECRET=your_secret
 export GITHUB_TOKEN=your_pat
 
+# Local protected-resource example
+export MCP_BEARER_TOKEN=local-secret
+export MCP_AUTHORIZATION_SERVER=https://auth.example.com
+
 # LLM examples
 export ANTHROPIC_API_KEY=your_key
 export GEMINI_API_KEY=your_key
@@ -634,8 +629,8 @@ dart run example/client_stdio.dart
 dart run example/server_sse.dart
 dart run example/streamable_https/server_streamable_https.dart
 
-# Auth examples
-dart run example/authentication/oauth_server_example.dart
+# Auth examples (server also needs MCP_BEARER_TOKEN)
+MCP_BEARER_TOKEN=local-secret dart run example/authentication/oauth_server_example.dart
 dart run example/authentication/github_oauth_example.dart
 
 # Feature examples
@@ -661,7 +656,7 @@ dart test test/example/non_credentialed_examples_smoke_test.dart
 
 ### For Advanced Users
 
-1. Study [oauth_server_example.dart](../example/authentication/oauth_server_example.dart)
+1. Study the [authentication boundary guide](../example/authentication/OAUTH_SERVER_GUIDE.md)
 2. Explore [completions_capability_demo.dart](../example/completions_capability_demo.dart)
 3. Review [elicitation_http_server.dart](../example/elicitation_http_server.dart)
 

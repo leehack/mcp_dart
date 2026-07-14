@@ -28,7 +28,7 @@ class ServeCommand extends Command<int> {
     );
     argParser.addOption(
       'host',
-      defaultsTo: '0.0.0.0',
+      defaultsTo: '127.0.0.1',
       help: 'Host for HTTP transport.',
     );
     argParser.addOption(
@@ -48,6 +48,13 @@ class ServeCommand extends Command<int> {
 
   @override
   Future<int> run() async {
+    final watch = argResults!['watch'] as bool;
+    final transport = argResults!['transport'] as String;
+    if (watch && transport != 'http') {
+      _logger.err('Error: --watch requires --transport http.');
+      return ExitCode.usage.code;
+    }
+
     final pubspecFile = File('pubspec.yaml');
     if (!pubspecFile.existsSync()) {
       _logger.err('Error: pubspec.yaml not found in current directory.');
@@ -80,8 +87,6 @@ class ServeCommand extends Command<int> {
     await generateRunnerScript(dotDartToolDir, packageName);
     final runnerFile = File(p.join(dotDartToolDir.path, 'runner.dart'));
 
-    final watch = argResults!['watch'] as bool;
-    final transport = argResults!['transport'] as String;
     final args =
         argResults!.arguments.where((arg) => arg != '--watch').toList();
 
@@ -90,17 +95,13 @@ class ServeCommand extends Command<int> {
 
     Future<void> startServer() async {
       if (process != null) {
-        if (transport == 'stdio') {
-          _logger.detail('Restarting MCP server...');
-        } else {
+        if (transport == 'http') {
           _logger.info('Restarting server...');
         }
         process!.kill();
         await process!.exitCode;
       } else {
-        if (transport == 'stdio') {
-          _logger.detail('Starting MCP server ($packageName)...');
-        } else {
+        if (transport == 'http') {
           _logger.info('Starting MCP server ($packageName)...');
         }
       }
@@ -134,13 +135,17 @@ class ServeCommand extends Command<int> {
       final watcher = DirectoryWatcher(p.join(Directory.current.path, 'lib'));
       _logger.info('Watching for changes in lib/...');
 
-      watcher.events.debounce(Duration(milliseconds: 500)).listen((
-        event,
-      ) async {
-        isRestarting = true;
-        await startServer();
-        isRestarting = false;
-      });
+      watcher.events
+          .debounce(const Duration(milliseconds: 500))
+          .asyncMap((_) async {
+            isRestarting = true;
+            try {
+              await startServer();
+            } finally {
+              isRestarting = false;
+            }
+          })
+          .listen(null);
 
       // Keep the command running
       final complexCompleter = Completer<int>();

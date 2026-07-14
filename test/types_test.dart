@@ -7,7 +7,7 @@ void main() {
       final request = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(
             experimental: {
               'featureX': <String, dynamic>{},
@@ -23,20 +23,20 @@ void main() {
       expect(json['method'], equals('initialize'));
       expect(
         json['params']['protocolVersion'],
-        equals(stableProtocolVersion2025_11_25),
+        equals(stableProtocolVersion),
       );
 
       final deserialized = JsonRpcInitializeRequest.fromJson(json);
       expect(deserialized.id, equals(request.id));
       expect(
         deserialized.initParams.protocolVersion,
-        equals(stableProtocolVersion2025_11_25),
+        equals(stableProtocolVersion),
       );
     });
 
     test('initialize request rejects malformed wire fields', () {
       final params = {
-        'protocolVersion': stableProtocolVersion2025_11_25,
+        'protocolVersion': stableProtocolVersion,
         'capabilities': <String, dynamic>{},
         'clientInfo': {'name': 'test-client', 'version': '1.0.0'},
       };
@@ -201,7 +201,7 @@ void main() {
       for (final result in <BaseResultData>[
         const EmptyResult(meta: meta),
         const InitializeResult(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'server', version: '1.0'),
           meta: meta,
@@ -260,13 +260,13 @@ void main() {
         () => Prompt(name: 'summary', meta: invalidMeta).toJson(),
         () => EmptyResult(meta: invalidMeta).toJson(),
         () => InitializeResult(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: stableProtocolVersion,
               capabilities: const ServerCapabilities(),
               serverInfo: const Implementation(name: 'server', version: '1.0'),
               meta: invalidMeta,
             ).toJson(),
         () => DiscoverResult(
-              supportedVersions: const [stableProtocolVersion2026_07_28],
+              supportedVersions: const [previewProtocolVersion],
               capabilities: const ServerCapabilities(),
               serverInfo: const Implementation(name: 'server', version: '1.0'),
               meta: invalidMeta,
@@ -365,13 +365,13 @@ void main() {
 
     test('initialize and discover results reject malformed wire fields', () {
       final initializeResult = {
-        'protocolVersion': stableProtocolVersion2025_11_25,
+        'protocolVersion': stableProtocolVersion,
         'capabilities': <String, dynamic>{},
         'serverInfo': {'name': 'server', 'version': '1.0.0'},
       };
       final discoverResult = {
         'resultType': resultTypeComplete,
-        'supportedVersions': [stableProtocolVersion2026_07_28],
+        'supportedVersions': [previewProtocolVersion],
         'capabilities': <String, dynamic>{},
         'serverInfo': {'name': 'server', 'version': '1.0.0'},
       };
@@ -395,7 +395,7 @@ void main() {
             }),
         () => DiscoverResult.fromJson({
               ...discoverResult,
-              'supportedVersions': [stableProtocolVersion2026_07_28, 1],
+              'supportedVersions': [previewProtocolVersion, 1],
             }),
         () => DiscoverResult.fromJson({
               ...discoverResult,
@@ -2528,7 +2528,7 @@ void main() {
       final request = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequest(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(
             extensions: {
               'io.modelcontextprotocol/ui': {

@@ -9,7 +9,7 @@ const String _fixtureSuite = 'fixture';
 const String _specSuite = 'spec';
 const String _allSuites = 'all';
 const String _serverDiscoverMethod = 'server/discover';
-const String _stableProtocolVersion2026_07_28 = '2026-07-28';
+const String _previewProtocolVersion = '2026-07-28';
 const String _protocolVersionMetaKey =
     'io.modelcontextprotocol/protocolVersion';
 const String _clientInfoMetaKey = 'io.modelcontextprotocol/clientInfo';
@@ -918,7 +918,7 @@ class _DiscoveringConformanceTransport extends Transport
           result: <String, dynamic>{
             'resultType': _resultTypeComplete,
             'supportedVersions': const <String>[
-              _stableProtocolVersion2026_07_28,
+              _previewProtocolVersion,
             ],
             'capabilities': capabilities,
             'serverInfo': const <String, dynamic>{
@@ -977,7 +977,7 @@ JsonRpcInitializeRequest _initializeRequest({
   return JsonRpcInitializeRequest(
     id: id,
     initParams: InitializeRequest(
-      protocolVersion: stableProtocolVersion2025_11_25,
+      protocolVersion: stableProtocolVersion,
       capabilities: capabilities,
       clientInfo: const Implementation(
         name: 'conformance-client',
@@ -995,7 +995,7 @@ JsonRpcResponse _initializeResponse({
     id: id,
     result:
         InitializeResult(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: capabilities,
           serverInfo: const Implementation(
             name: 'conformance-server',
@@ -1006,7 +1006,7 @@ JsonRpcResponse _initializeResponse({
 }
 
 Map<String, dynamic> _statelessRequestMeta({
-  String protocolVersion = _stableProtocolVersion2026_07_28,
+  String protocolVersion = _previewProtocolVersion,
   ClientCapabilities capabilities = const ClientCapabilities(),
 }) {
   return <String, dynamic>{
@@ -1272,7 +1272,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
       'id': 'discover-1',
       'method': _serverDiscoverMethod,
       '_meta': <String, dynamic>{
-        _protocolVersionMetaKey: _stableProtocolVersion2026_07_28,
+        _protocolVersionMetaKey: _previewProtocolVersion,
       },
     },
     <String, dynamic>{
@@ -1291,7 +1291,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
     'method': _serverDiscoverMethod,
     'params': <String, dynamic>{
       '_meta': <String, dynamic>{
-        _protocolVersionMetaKey: _stableProtocolVersion2026_07_28,
+        _protocolVersionMetaKey: _previewProtocolVersion,
         _clientInfoMetaKey: <String, dynamic>{
           'name': 'client',
           'version': '1.0.0',
@@ -1305,8 +1305,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
       'Expected JsonRpcRequest, got ${parsed.runtimeType}.',
     );
   }
-  if (parsed.meta?[_protocolVersionMetaKey] !=
-      _stableProtocolVersion2026_07_28) {
+  if (parsed.meta?[_protocolVersionMetaKey] != _previewProtocolVersion) {
     throw StateError('Expected server/discover metadata to be preserved.');
   }
 }
@@ -1344,9 +1343,9 @@ Future<void> _serverDiscoverReturnsSupportedCapabilities() async {
   }
   final supportedVersions = result['supportedVersions'];
   if (supportedVersions is! List ||
-      !supportedVersions.contains(_stableProtocolVersion2026_07_28)) {
+      !supportedVersions.contains(_previewProtocolVersion)) {
     throw StateError(
-      'Expected server/discover to include $_stableProtocolVersion2026_07_28.',
+      'Expected server/discover to include $_previewProtocolVersion.',
     );
   }
   final serverInfo = result['serverInfo'];
@@ -1399,7 +1398,7 @@ Future<void> _statelessRequestsRequireCompleteRequestMeta() async {
     (
       id: 'missing-client-info',
       meta: <String, dynamic>{
-        _protocolVersionMetaKey: _stableProtocolVersion2026_07_28,
+        _protocolVersionMetaKey: _previewProtocolVersion,
         _clientCapabilitiesMetaKey: <String, dynamic>{},
       },
       missing: _clientInfoMetaKey,
@@ -1407,7 +1406,7 @@ Future<void> _statelessRequestsRequireCompleteRequestMeta() async {
     (
       id: 'missing-client-capabilities',
       meta: <String, dynamic>{
-        _protocolVersionMetaKey: _stableProtocolVersion2026_07_28,
+        _protocolVersionMetaKey: _previewProtocolVersion,
         _clientInfoMetaKey: <String, dynamic>{
           'name': 'client',
           'version': '1.0.0',
@@ -1480,7 +1479,7 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
                     code: ErrorCode.unsupportedProtocolVersion.value,
                     message: 'Unsupported protocol version',
                     data: const <String, dynamic>{
-                      'supported': <String>[_stableProtocolVersion2026_07_28],
+                      'supported': <String>[_previewProtocolVersion],
                       'requested': '1900-01-01',
                     },
                   ),
@@ -1496,7 +1495,7 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
                   result: const <String, dynamic>{
                     'resultType': _resultTypeComplete,
                     'supportedVersions': <String>[
-                      _stableProtocolVersion2026_07_28,
+                      _previewProtocolVersion,
                     ],
                     'capabilities': <String, dynamic>{
                       'tools': <String, dynamic>{},
@@ -1545,9 +1544,9 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
         'Modern HTTP 400 JSON-RPC errors must not trigger initialize fallback.',
       );
     }
-    if (client.getProtocolVersion() != _stableProtocolVersion2026_07_28) {
+    if (client.getProtocolVersion() != _previewProtocolVersion) {
       throw StateError(
-        'Expected retry to negotiate $_stableProtocolVersion2026_07_28, '
+        'Expected retry to negotiate $_previewProtocolVersion, '
         'got ${client.getProtocolVersion()}.',
       );
     }
@@ -1624,7 +1623,7 @@ Future<void> _httpModernMissingCapabilityErrorsDoNotFallback() async {
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
       protocol: McpProtocol.stable,
-      protocolVersion: _stableProtocolVersion2026_07_28,
+      protocolVersion: _previewProtocolVersion,
       useServerDiscover: true,
     ),
   );
@@ -1682,7 +1681,7 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
     JsonRpcInitializeRequest(
       id: 'draft-initialize',
       initParams: const InitializeRequest(
-        protocolVersion: _stableProtocolVersion2026_07_28,
+        protocolVersion: _previewProtocolVersion,
         capabilities: ClientCapabilities(),
         clientInfo: Implementation(name: 'client', version: '1.0.0'),
       ),
@@ -1694,16 +1693,14 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
     serverTransport.sentMessages,
     id: 'draft-initialize',
   );
-  if (serverResponse.result['protocolVersion'] !=
-      stableProtocolVersion2025_11_25) {
+  if (serverResponse.result['protocolVersion'] != stableProtocolVersion) {
     throw StateError(
       'Expected initialize response protocolVersion '
-      '$stableProtocolVersion2025_11_25, '
+      '$stableProtocolVersion, '
       'got ${serverResponse.result['protocolVersion']}.',
     );
   }
-  if (serverResponse.result['protocolVersion'] ==
-      _stableProtocolVersion2026_07_28) {
+  if (serverResponse.result['protocolVersion'] == _previewProtocolVersion) {
     throw StateError(
       'initialize must not negotiate a stateless protocol version.',
     );
@@ -1737,16 +1734,14 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
   final initializeRequest = clientTransport.sentMessages
       .whereType<JsonRpcRequest>()
       .singleWhere((request) => request.method == Method.initialize);
-  if (initializeRequest.params?['protocolVersion'] !=
-      stableProtocolVersion2025_11_25) {
+  if (initializeRequest.params?['protocolVersion'] != stableProtocolVersion) {
     throw StateError(
       'Expected fallback initialize request protocolVersion '
-      '$stableProtocolVersion2025_11_25, got '
+      '$stableProtocolVersion, got '
       '${initializeRequest.params?['protocolVersion']}.',
     );
   }
-  if (initializeRequest.params?['protocolVersion'] ==
-      _stableProtocolVersion2026_07_28) {
+  if (initializeRequest.params?['protocolVersion'] == _previewProtocolVersion) {
     throw StateError(
       'client fallback initialize must not send a stateless protocol version.',
     );
@@ -1845,7 +1840,7 @@ Future<void> _rejectsMismatchedStatelessHttpRoutingHeaders() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28)
+      ..set('MCP-Protocol-Version', _previewProtocolVersion)
       ..set('Mcp-Method', Method.toolsCall)
       ..set('Mcp-Name', 'wrong-tool');
     request.write(
@@ -1972,7 +1967,7 @@ Future<void> _requiresStatelessHttpRoutingHeaders() async {
     await expectHeaderMismatch(
       'http-missing-method-header',
       addRoutingHeaders: (headers) {
-        headers.set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28);
+        headers.set('MCP-Protocol-Version', _previewProtocolVersion);
       },
       messageFragment: 'Mcp-Method header is required',
     );
@@ -2006,7 +2001,7 @@ Future<void> _rejectsStatelessHttpNonPostMethods() async {
     );
     request.headers.set(
       'MCP-Protocol-Version',
-      _stableProtocolVersion2026_07_28,
+      _previewProtocolVersion,
     );
 
     final response = await request.close();
@@ -2074,7 +2069,7 @@ Future<void> _rejectsStatelessHttpBatchPayloads() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28);
+      ..set('MCP-Protocol-Version', _previewProtocolVersion);
     request.write(
       jsonEncode(
         <Map<String, dynamic>>[
@@ -2170,7 +2165,7 @@ Future<void> _taskRequestsRequireStatelessHttpNameHeader() async {
     missingNameRequest.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28)
+      ..set('MCP-Protocol-Version', _previewProtocolVersion)
       ..set('Mcp-Method', _methodTasksUpdate);
     missingNameRequest.write(
       jsonEncode(
@@ -2228,7 +2223,7 @@ Future<void> _taskRequestsRequireStatelessHttpNameHeader() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28)
+      ..set('MCP-Protocol-Version', _previewProtocolVersion)
       ..set('Mcp-Method', _methodTasksUpdate)
       ..set('Mcp-Name', 'task-1');
     request.write(
@@ -2334,7 +2329,7 @@ Future<void> _validatesStatelessHttpParameterHeaders() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28)
+      ..set('MCP-Protocol-Version', _previewProtocolVersion)
       ..set('Mcp-Method', Method.toolsCall)
       ..set('Mcp-Name', 'execute');
     headers.forEach(request.headers.set);
@@ -2456,7 +2451,7 @@ Future<void> _omitsNonIntegerParameterHeaders() async {
   final responseMessage = Completer<JsonRpcMessage>();
   final transport = StreamableHttpClientTransport(
     Uri.parse('http://127.0.0.1:${httpServer.port}/mcp'),
-  )..protocolVersion = _stableProtocolVersion2026_07_28;
+  )..protocolVersion = _previewProtocolVersion;
   // Keep this dynamic so mcp_dart_cli remains analyzable against the published
   // mcp_dart lower bound until this SDK branch is released.
   (transport as dynamic).setToolParameterHeaderMappings(
@@ -2556,7 +2551,7 @@ Future<void> _encodesStatelessHttpParameterHeaderValues() async {
   final responseMessage = Completer<JsonRpcMessage>();
   final transport = StreamableHttpClientTransport(
     Uri.parse('http://127.0.0.1:${httpServer.port}/mcp'),
-  )..protocolVersion = _stableProtocolVersion2026_07_28;
+  )..protocolVersion = _previewProtocolVersion;
   // Keep this dynamic so mcp_dart_cli remains analyzable against the published
   // mcp_dart lower bound until this SDK branch is released.
   (transport as dynamic).setToolParameterHeaderMappings(
@@ -2696,7 +2691,7 @@ Future<void> _acceptsStatelessHttpResponsePosts() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28);
+      ..set('MCP-Protocol-Version', _previewProtocolVersion);
     request.write(
       jsonEncode(
         const JsonRpcResponse(
@@ -2760,7 +2755,7 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
             id: message.id,
             result:
                 const InitializeResult(
-                  protocolVersion: stableProtocolVersion2025_11_25,
+                  protocolVersion: stableProtocolVersion,
                   capabilities: ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'conformance-server',
@@ -2799,7 +2794,7 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
         JsonRpcInitializeRequest(
           id: 'initialize-session',
           initParams: const InitializeRequest(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: stableProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'client', version: '1.0.0'),
           ),
@@ -2825,7 +2820,7 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
     statelessRequest.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28)
+      ..set('MCP-Protocol-Version', _previewProtocolVersion)
       ..set('Mcp-Method', Method.toolsList)
       ..set('Mcp-Session-Id', confirmedSessionId);
     statelessRequest.write(
@@ -2898,7 +2893,7 @@ Future<void> _taskSubscriptionRequiresClientCapability() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _stableProtocolVersion2026_07_28)
+      ..set('MCP-Protocol-Version', _previewProtocolVersion)
       ..set('Mcp-Method', _methodSubscriptionsListen);
     request.write(
       jsonEncode(
@@ -4059,7 +4054,7 @@ Future<void> _rejectsRemovedStatelessCoreRpcs() async {
       id: 1,
       method: Method.initialize,
       params: const <String, dynamic>{
-        'protocolVersion': _stableProtocolVersion2026_07_28,
+        'protocolVersion': _previewProtocolVersion,
         'capabilities': <String, dynamic>{},
         'clientInfo': <String, dynamic>{
           'name': 'client',
@@ -4547,8 +4542,7 @@ Future<void> _subscriptionsListenRequiresRequestMeta() async {
     },
   );
   if (parsed is! JsonRpcRequest ||
-      parsed.meta?[_protocolVersionMetaKey] !=
-          _stableProtocolVersion2026_07_28) {
+      parsed.meta?[_protocolVersionMetaKey] != _previewProtocolVersion) {
     throw StateError(
       'Expected subscriptions/listen request to preserve params._meta, got '
       '$parsed.',
@@ -4979,7 +4973,7 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
   }
 
   final legacyMeta = _statelessRequestMeta(
-    protocolVersion: stableProtocolVersion2025_11_25,
+    protocolVersion: stableProtocolVersion,
     capabilities: clientCapabilities,
   );
   final legacyCapabilities =
@@ -5129,7 +5123,7 @@ Future<void> _acceptsNumericElicitationNumberSchemaKeywords() async {
         },
       },
       '_meta': <String, dynamic>{
-        _protocolVersionMetaKey: _stableProtocolVersion2026_07_28,
+        _protocolVersionMetaKey: _previewProtocolVersion,
       },
     },
   });
@@ -5157,7 +5151,7 @@ Future<void> _acceptsNumericElicitationNumberSchemaKeywords() async {
           },
         },
         '_meta': <String, dynamic>{
-          _protocolVersionMetaKey: _stableProtocolVersion2026_07_28,
+          _protocolVersionMetaKey: _previewProtocolVersion,
         },
       },
     }),
@@ -5649,7 +5643,7 @@ void _expectUnsupportedProtocolVersionData(
   }
   final supported = data['supported'];
   if (supported is! List ||
-      !supported.contains(_stableProtocolVersion2026_07_28) ||
+      !supported.contains(_previewProtocolVersion) ||
       !supported.contains('2025-11-25')) {
     throw StateError(
       'Expected supported protocol versions in error data, got $supported.',
@@ -5722,19 +5716,19 @@ Future<void> _preservesIntegerProgressToken() async {
 }
 
 Future<void> _advertisesLatestProtocolVersion() async {
-  if (latestProtocolVersion != stableProtocolVersion2026_07_28) {
+  if (defaultProtocolVersion != previewProtocolVersion) {
     throw StateError(
-      'Expected latestProtocolVersion $stableProtocolVersion2026_07_28, '
-      'got $latestProtocolVersion.',
+      'Expected defaultProtocolVersion $previewProtocolVersion, '
+      'got $defaultProtocolVersion.',
     );
   }
-  if (supportedProtocolVersions.first != latestProtocolVersion) {
-    throw StateError('Expected latestProtocolVersion to be advertised first.');
+  if (supportedProtocolVersions.first != defaultProtocolVersion) {
+    throw StateError('Expected defaultProtocolVersion to be advertised first.');
   }
-  if (!supportedProtocolVersions.contains(stableProtocolVersion2025_11_25)) {
+  if (!supportedProtocolVersions.contains(stableProtocolVersion)) {
     throw StateError(
       'Expected supported versions to include '
-      '$stableProtocolVersion2025_11_25.',
+      '$stableProtocolVersion.',
     );
   }
 }
@@ -5767,14 +5761,14 @@ Future<void> _stableProfileAdvertises2026ProtocolVersion() async {
   if (supportedVersions is! List) {
     throw StateError('Expected server/discover supportedVersions list.');
   }
-  if (supportedVersions.firstOrNull != _stableProtocolVersion2026_07_28) {
+  if (supportedVersions.firstOrNull != _previewProtocolVersion) {
     throw StateError(
-      'Expected $_stableProtocolVersion2026_07_28 to be advertised first.',
+      'Expected $_previewProtocolVersion to be advertised first.',
     );
   }
-  if (!supportedVersions.contains(_stableProtocolVersion2026_07_28)) {
+  if (!supportedVersions.contains(_previewProtocolVersion)) {
     throw StateError(
-      'Expected server/discover to advertise $_stableProtocolVersion2026_07_28.',
+      'Expected server/discover to advertise $_previewProtocolVersion.',
     );
   }
 

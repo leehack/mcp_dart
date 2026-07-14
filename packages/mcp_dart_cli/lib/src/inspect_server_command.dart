@@ -265,6 +265,11 @@ class McpServerInspector {
       final serverInfo = client.getServerVersion();
       final capabilities = client.getServerCapabilities();
       final instructions = client.getInstructions();
+      final protocolVersion = client.getProtocolVersion();
+
+      if (protocolVersion != null) {
+        metadata['protocolVersion'] = protocolVersion;
+      }
 
       if (serverInfo != null) {
         metadata['serverInfo'] = serverInfo.toJson();
@@ -328,6 +333,9 @@ class McpServerInspector {
         roots: ClientCapabilitiesRoots(listChanged: true),
         sampling: ClientCapabilitiesSampling(),
         elicitation: ClientElicitation.formOnly(),
+        extensions: <String, Map<String, dynamic>>{
+          mcpTasksExtensionId: <String, dynamic>{},
+        },
       ),
     );
 
@@ -382,6 +390,14 @@ class McpServerInspector {
     McpClient client,
     InspectionCheckBuilder checks,
   ) async {
+    if (_usesStatelessProtocol(client)) {
+      checks.info(
+        'base.ping',
+        'MCP ${client.getProtocolVersion()} removes ping; no probe was sent.',
+      );
+      return;
+    }
+
     try {
       await client.ping(
         const RequestOptions(timeout: Duration(seconds: 5)),
@@ -722,6 +738,13 @@ class McpServerInspector {
     Map<String, dynamic> inventory,
     List<Resource> resources,
   ) async {
+    if (probeConfig.resource == null) {
+      checks.info(
+        'resources.read',
+        'No configured resource read probe was provided.',
+      );
+      return;
+    }
     if (resources.isEmpty) {
       checks.info(
         'resources.read',
@@ -794,10 +817,10 @@ class McpServerInspector {
       }
       return;
     }
-    if (configuredResource?.subscribe == false) {
+    if (configuredResource?.subscribe != true) {
       checks.info(
         'resources.subscribe',
-        'Probe config disabled resource subscription probing.',
+        'No configured resource subscription probe was provided.',
       );
       return;
     }
@@ -974,6 +997,13 @@ class McpServerInspector {
     Map<String, dynamic> inventory,
     List<Prompt> prompts,
   ) async {
+    if (probeConfig.prompt == null) {
+      checks.info(
+        'prompts.get',
+        'No configured prompt retrieval probe was provided.',
+      );
+      return;
+    }
     if (prompts.isEmpty) {
       checks.info(
         'prompts.get',
@@ -1058,21 +1088,22 @@ class McpServerInspector {
       details: capabilities!.completions!.toJson(),
     );
 
+    if (probeConfig.completion == null) {
+      checks.info(
+        'completion.complete',
+        'No configured completion probe was provided.',
+      );
+      return;
+    }
+
     final prompts = _inventoryPrompts(inventory);
     final completionProbe = probeConfig.completion;
     final prompt =
-        completionProbe == null
-            ? prompts.firstWhere(
-              (candidate) =>
-                  (candidate.arguments ?? const <PromptArgument>[]).isNotEmpty,
-              orElse: () => const Prompt(name: ''),
-            )
-            : _findPrompt(prompts, completionProbe.prompt) ??
-                const Prompt(name: '');
+        _findPrompt(prompts, completionProbe!.prompt) ?? const Prompt(name: '');
     if (prompt.name.isEmpty) {
       checks.info(
         'completion.complete',
-        'Server advertises completions but no prompt argument was available for a safe completion probe.',
+        'The configured completion prompt was not advertised by the server.',
       );
       return;
     }
@@ -1086,14 +1117,11 @@ class McpServerInspector {
       return;
     }
 
-    final argumentName = completionProbe?.argument;
-    final argument =
-        argumentName == null
-            ? promptArguments.first
-            : promptArguments.firstWhere(
-              (candidate) => candidate.name == argumentName,
-              orElse: () => const PromptArgument(name: ''),
-            );
+    final argumentName = completionProbe.argument;
+    final argument = promptArguments.firstWhere(
+      (candidate) => candidate.name == argumentName,
+      orElse: () => const PromptArgument(name: ''),
+    );
     if (argument.name.isEmpty) {
       checks.fail(
         'completion.complete',
@@ -1107,7 +1135,7 @@ class McpServerInspector {
           ref: PromptReference(name: prompt.name, title: prompt.title),
           argument: ArgumentCompletionInfo(
             name: argument.name,
-            value: completionProbe?.value ?? '',
+            value: completionProbe.value,
           ),
         ),
         const RequestOptions(timeout: Duration(seconds: 5)),
@@ -1149,6 +1177,14 @@ class McpServerInspector {
       'Server advertises logging.',
       details: capabilities!.logging,
     );
+    if (_usesStatelessProtocol(client)) {
+      checks.info(
+        'logging.request-scoped',
+        'MCP ${client.getProtocolVersion()} uses request-scoped log levels; '
+            'logging/setLevel was not sent.',
+      );
+      return;
+    }
     try {
       await client.setLoggingLevel(
         LoggingLevel.info,
@@ -1170,18 +1206,42 @@ class McpServerInspector {
     Map<String, dynamic> inventory,
   ) async {
     final taskCapabilities = capabilities?.tasks;
-    if (taskCapabilities == null) {
+    final usesTasksExtension =
+        _usesStatelessProtocol(client) &&
+        (capabilities?.supportsTasksExtension ?? false);
+    if (taskCapabilities == null && !usesTasksExtension) {
       checks.info('tasks.capability', 'Server does not advertise tasks.');
       return;
     }
 
     checks.pass(
       'tasks.capability',
-      'Server advertises tasks.',
-      details: taskCapabilities.toJson(),
+      usesTasksExtension
+          ? 'Server advertises the $mcpTasksExtensionId extension.'
+          : 'Server advertises legacy tasks.',
+      details:
+          usesTasksExtension
+              ? capabilities!.extensions![mcpTasksExtensionId]
+              : taskCapabilities!.toJson(),
     );
 
-    if (taskCapabilities.list == true) {
+    final taskConfig = probeConfig.task;
+    if (taskConfig == null) {
+      checks.info(
+        'tasks.probe.configured',
+        'No configured task probe was provided.',
+      );
+      return;
+    }
+    if (taskConfig.tool == null || taskConfig.tool!.trim().isEmpty) {
+      checks.fail(
+        'tasks.probe.configured',
+        'A task probe must name the tool to invoke.',
+      );
+      return;
+    }
+
+    if (!usesTasksExtension && taskCapabilities!.list == true) {
       try {
         final tasks = await TaskClient(client).listTasks();
         inventory['tasks'] = tasks.map((task) => task.toJson()).toList();
@@ -1192,12 +1252,12 @@ class McpServerInspector {
           'Server advertises tasks.list but tasks/list failed: $error',
         );
       }
-    } else {
+    } else if (!usesTasksExtension) {
       checks.info('tasks.list', 'Server does not advertise tasks.list.');
     }
 
     final supportsTaskToolCalls =
-        taskCapabilities.requests?.tools?.call != null;
+        usesTasksExtension || taskCapabilities?.requests?.tools?.call != null;
     if (!supportsTaskToolCalls) {
       checks.info(
         'tasks.tools.call',
@@ -1207,24 +1267,31 @@ class McpServerInspector {
     }
 
     final tools = _inventoryTools(inventory);
-    final taskTool = _selectTaskTool(tools);
-    if (taskTool.name.isEmpty) {
-      checks.info(
+    final taskTool = _findTool(tools, taskConfig.tool!);
+    if (taskTool == null) {
+      checks.fail(
         'tasks.tools.call',
-        'Server advertises task-augmented tool calls but no task-capable tool with safe empty arguments was found.',
+        'Configured task tool ${taskConfig.tool} was not advertised.',
       );
       return;
     }
 
-    final taskConfig = probeConfig.task;
-    final taskArguments = taskConfig?.arguments ?? const <String, dynamic>{};
+    final taskArguments = taskConfig.arguments;
     final taskParams = <String, dynamic>{
-      'ttl': taskConfig?.ttl ?? 60000,
-      if (taskConfig?.pollInterval != null)
-        'pollInterval': taskConfig!.pollInterval,
+      'ttl': taskConfig.ttl ?? 60000,
+      if (taskConfig.pollInterval != null)
+        'pollInterval': taskConfig.pollInterval,
     };
 
-    if (taskConfig?.cancel == true) {
+    if (taskConfig.cancel && usesTasksExtension) {
+      checks.fail(
+        'tasks.cancel',
+        'The inspector cannot cancel a server-directed Tasks extension call '
+            'before McpClient resolves it; use an explicit raw probe instead.',
+      );
+      return;
+    }
+    if (taskConfig.cancel) {
       await _probeTaskCancellation(
         client,
         checks,
@@ -1242,7 +1309,7 @@ class McpServerInspector {
           .callToolStream(
             taskTool.name,
             taskArguments,
-            task: taskParams,
+            task: usesTasksExtension ? null : taskParams,
           )
           .timeout(const Duration(seconds: 10))) {
         messages.add(_taskStreamMessageToJson(message));
@@ -1343,25 +1410,6 @@ class McpServerInspector {
         'Configured task cancellation probe failed for ${taskTool.name}: $error',
       );
     }
-  }
-
-  bool _canProbeTaskToolWithEmptyArguments(Tool tool) {
-    final taskSupport = tool.execution?.taskSupport ?? 'forbidden';
-    if (taskSupport == 'forbidden') return false;
-    final required = tool.inputSchema.toJson()['required'];
-    return required is! List || required.isEmpty;
-  }
-
-  Tool _selectTaskTool(List<Tool> tools) {
-    final taskConfig = probeConfig.task;
-    if (taskConfig?.tool != null) {
-      return _findTool(tools, taskConfig!.tool!) ??
-          Tool(name: '', inputSchema: JsonObject());
-    }
-    return tools.firstWhere(
-      _canProbeTaskToolWithEmptyArguments,
-      orElse: () => Tool(name: '', inputSchema: JsonObject()),
-    );
   }
 
   void _checkTaskLifecycle(
@@ -1488,6 +1536,12 @@ class McpServerInspector {
       if (prompt.name == name) return prompt;
     }
     return null;
+  }
+
+  bool _usesStatelessProtocol(McpClient client) {
+    final protocolVersion = client.getProtocolVersion();
+    return protocolVersion != null &&
+        isStatelessProtocolVersion(protocolVersion);
   }
 
   Map<String, dynamic> _taskStreamMessageToJson(TaskStreamMessage message) {
@@ -1743,7 +1797,12 @@ class McpServerInspector {
           details: <String, dynamic>{'url': candidate.toString()},
         );
         _checkProtectedResourceMetadata(body, checks);
-        await _probeAuthorizationServerMetadata(body, checks, metadata);
+        await _probeAuthorizationServerMetadata(
+          endpoint,
+          body,
+          checks,
+          metadata,
+        );
         return;
       }
     }
@@ -1779,6 +1838,7 @@ class McpServerInspector {
   }
 
   Future<void> _probeAuthorizationServerMetadata(
+    Uri endpoint,
     Map<String, dynamic> protectedResourceMetadata,
     InspectionCheckBuilder checks,
     Map<String, dynamic> reportMetadata,
@@ -1795,6 +1855,22 @@ class McpServerInspector {
           'issuer': server,
           'error': 'authorization server is not an absolute URI',
         });
+        continue;
+      }
+      if (!_isTrustedOAuthInspectionUri(endpoint, issuer)) {
+        discoveries.add(<String, dynamic>{
+          'issuer': server,
+          'skipped':
+              'cross-origin authorization metadata requires an explicit trust policy',
+        });
+        checks.info(
+          'authorization.server-metadata',
+          'Skipped cross-origin authorization-server metadata for $server.',
+          details: <String, dynamic>{
+            'reason':
+                'The inspector does not follow server-advertised cross-origin OAuth URLs.',
+          },
+        );
         continue;
       }
 
@@ -1864,6 +1940,44 @@ class McpServerInspector {
     ];
   }
 
+  bool _isTrustedOAuthInspectionUri(Uri endpoint, Uri candidate) {
+    final scheme = candidate.scheme.toLowerCase();
+    if ((scheme != 'http' && scheme != 'https') ||
+        candidate.host.isEmpty ||
+        candidate.userInfo.isNotEmpty ||
+        candidate.fragment.isNotEmpty) {
+      return false;
+    }
+
+    final endpointIsLoopback = _isLoopbackHost(endpoint.host);
+    final candidateIsLoopback = _isLoopbackHost(candidate.host);
+    if (scheme == 'http') {
+      return endpointIsLoopback && candidateIsLoopback;
+    }
+    return _hasSameOrigin(endpoint, candidate) ||
+        (endpointIsLoopback && candidateIsLoopback);
+  }
+
+  bool _hasSameOrigin(Uri first, Uri second) =>
+      first.scheme.toLowerCase() == second.scheme.toLowerCase() &&
+      first.host.toLowerCase() == second.host.toLowerCase() &&
+      first.port == second.port;
+
+  bool _isLoopbackHost(String host) {
+    final normalized = host.toLowerCase();
+    if (normalized == 'localhost' || normalized.endsWith('.localhost')) {
+      return true;
+    }
+    if (normalized == '::1') return true;
+    final octets = normalized.split('.');
+    if (octets.length != 4) return false;
+    final values = octets.map(int.tryParse).toList();
+    return values.every(
+          (value) => value != null && value >= 0 && value <= 255,
+        ) &&
+        values.first == 127;
+  }
+
   Future<Map<String, dynamic>> _httpGetJson(
     Uri uri, {
     Map<String, String> headers = const <String, String>{},
@@ -1875,6 +1989,7 @@ class McpServerInspector {
           .timeout(
             const Duration(seconds: 2),
           );
+      request.followRedirects = false;
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       for (final entry in headers.entries) {
         request.headers.set(entry.key, entry.value);

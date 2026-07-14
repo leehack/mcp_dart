@@ -7,7 +7,6 @@ import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
 import 'utils/mcp_connection.dart';
-import 'utils/schema_utils.dart';
 
 class DoctorCommand extends Command<int> {
   @override
@@ -79,93 +78,17 @@ class DoctorCommand extends Command<int> {
 
   Future<bool> _runDynamicChecks() async {
     McpConnection? connection;
-    bool allPassed = true;
 
     try {
       connection = await McpConnection.connectToLocalProject(_logger);
       _logger.success('[✓] Server started and connected');
-
-      // Test Tools
-      try {
-        final tools = await connection.client.listTools();
-        _logger.success('[✓] Listed ${tools.tools.length} tools');
-
-        for (final tool in tools.tools) {
-          try {
-            final dummyArgs = generateDummyArguments(tool.inputSchema);
-            await connection.client.callTool(
-              CallToolRequest(name: tool.name, arguments: dummyArgs),
-            );
-            _logger.detail(
-              '    [✓] Tool "${tool.name}" executed successfully (dummy args)',
-            );
-          } catch (e) {
-            if (e is McpError && e.code == -32602) {
-              // Invalid params is "success" in terms of reaching the tool
-              _logger.detail(
-                '    [✓] Tool "${tool.name}" reachable (rejected dummy args)',
-              );
-            } else {
-              _logger.warn('    [!] Tool "${tool.name}" execution error: $e');
-              // We don't fail the doctor for runtime errors in tools, just warn.
-              // Unless we want to be strict. Let's be lenient for "doctor".
-            }
-          }
-        }
-      } catch (e) {
-        _logger.err('[x] Failed to list tools: $e');
-        allPassed = false;
-      }
-
-      // Test Resources
-      try {
-        final resources = await connection.client.listResources();
-        _logger.success('[✓] Listed ${resources.resources.length} resources');
-        for (final resource in resources.resources) {
-          try {
-            await connection.client.readResource(
-              ReadResourceRequest(uri: resource.uri),
-            );
-            _logger.detail(
-              '    [✓] Resource "${resource.uri}" read successfully',
-            );
-          } catch (e) {
-            _logger.warn('    [!] Resource "${resource.uri}" read error: $e');
-          }
-        }
-      } catch (e) {
-        _logger.err('[x] Failed to list resources: $e');
-        allPassed = false;
-      }
-
-      // Test Prompts
-      try {
-        final prompts = await connection.client.listPrompts();
-        _logger.success('[✓] Listed ${prompts.prompts.length} prompts');
-        for (final prompt in prompts.prompts) {
-          try {
-            await connection.client.getPrompt(
-              GetPromptRequest(name: prompt.name),
-            );
-            _logger.detail(
-              '    [✓] Prompt "${prompt.name}" retrieved successfully',
-            );
-          } catch (e) {
-            _logger.warn('    [!] Prompt "${prompt.name}" error: $e');
-          }
-        }
-      } catch (e) {
-        _logger.err('[x] Failed to list prompts: $e');
-        allPassed = false;
-      }
+      return await verifyAdvertisedInventory(connection.client, _logger);
     } catch (e) {
       _logger.err('[x] Connection failed: $e');
       return false;
     } finally {
       await connection?.close();
     }
-
-    return allPassed;
   }
 
   _Check _checkPubspec() {
@@ -215,6 +138,52 @@ class DoctorCommand extends Command<int> {
       return _Check(false, '[x] analysis_options.yaml not found');
     }
   }
+}
+
+/// Lists advertised MCP primitives without invoking tools or reading content.
+///
+/// Use `inspect-server --probe-config` when intentional, argument-bearing
+/// operations are needed. `doctor` stays side-effect free after connecting.
+Future<bool> verifyAdvertisedInventory(McpClient client, Logger logger) async {
+  var allPassed = true;
+  final capabilities = client.getServerCapabilities();
+
+  if (capabilities?.tools != null) {
+    try {
+      final tools = await client.listTools();
+      logger.success('[✓] Listed ${tools.tools.length} tools');
+    } catch (e) {
+      logger.err('[x] Failed to list tools: $e');
+      allPassed = false;
+    }
+  }
+
+  if (capabilities?.resources != null) {
+    try {
+      final resources = await client.listResources();
+      logger.success('[✓] Listed ${resources.resources.length} resources');
+
+      final templates = await client.listResourceTemplates();
+      logger.success(
+        '[✓] Listed ${templates.resourceTemplates.length} resource templates',
+      );
+    } catch (e) {
+      logger.err('[x] Failed to list resources: $e');
+      allPassed = false;
+    }
+  }
+
+  if (capabilities?.prompts != null) {
+    try {
+      final prompts = await client.listPrompts();
+      logger.success('[✓] Listed ${prompts.prompts.length} prompts');
+    } catch (e) {
+      logger.err('[x] Failed to list prompts: $e');
+      allPassed = false;
+    }
+  }
+
+  return allPassed;
 }
 
 class _Check {

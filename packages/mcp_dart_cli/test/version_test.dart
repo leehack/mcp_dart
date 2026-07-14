@@ -18,7 +18,34 @@ void main() {
       pubspecVersion,
       reason:
           'lib/src/version.dart does not match pubspec.yaml. '
-          'Run "dart tool/update_version.dart" to update.',
+          'Update both values before publishing.',
     );
   });
+
+  test(
+    'CLI dependency and generated SDK constraint match the root package',
+    () {
+      final cliPubspec =
+          loadYaml(File('pubspec.yaml').readAsStringSync()) as YamlMap;
+      final rootPubspec =
+          loadYaml(File('../../pubspec.yaml').readAsStringSync()) as YamlMap;
+      final rootVersion = rootPubspec['version'] as String;
+      final dependencies = cliPubspec['dependencies'] as YamlMap;
+      final templatePubspec =
+          loadYaml(
+                File(
+                  '../templates/simple/__brick__/pubspec.yaml',
+                ).readAsStringSync(),
+              )
+              as YamlMap;
+      final templateDependencies = templatePubspec['dependencies'] as YamlMap;
+
+      expect(dependencies['mcp_dart'], '^$rootVersion');
+      expect(templateDependencies['mcp_dart'], '^$rootVersion');
+      expect(generatedSdkConstraint, '^$rootVersion');
+      expect(isPrereleaseVersion(packageVersion), isTrue);
+      expect(defaultTemplateUrl, contains('mcp_dart_cli-v$packageVersion'));
+      expect(defaultTemplateUrl, isNot(contains('/main/')));
+    },
+  );
 }

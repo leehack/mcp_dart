@@ -89,6 +89,38 @@ class StreamableHttpReconnectionOptions {
   });
 }
 
+/// The role of a URI discovered while preparing an MCP OAuth flow.
+enum OAuthEndpointKind {
+  /// OAuth Protected Resource Metadata document.
+  protectedResourceMetadata,
+
+  /// Authorization-server issuer advertised by protected-resource metadata.
+  authorizationServer,
+
+  /// OAuth Authorization Server Metadata or OpenID Connect Discovery document.
+  authorizationServerMetadata,
+
+  /// Browser-facing authorization endpoint.
+  authorizationEndpoint,
+
+  /// Authorization-code token endpoint.
+  tokenEndpoint,
+
+  /// Dynamic client registration endpoint.
+  registrationEndpoint,
+}
+
+/// Approves a discovered cross-origin OAuth URI.
+///
+/// The transport always requires HTTP(S), rejects user information and
+/// fragments, and permits plaintext HTTP only between loopback endpoints. This
+/// validator is consulted only when a discovered URI is outside the MCP
+/// endpoint's origin and is not another loopback endpoint in a loopback flow.
+typedef OAuthUriValidator = bool Function(
+  Uri uri,
+  OAuthEndpointKind endpointKind,
+);
+
 /// Configuration options for the `StreamableHttpClientTransport`.
 class StreamableHttpClientTransportOptions {
   /// An OAuth client provider to use for authentication.
@@ -111,6 +143,14 @@ class StreamableHttpClientTransportOptions {
   /// indicating that the session has expired, and needs to be re-authed and reconnected.
   final OAuthClientProvider? authProvider;
 
+  /// Approves trusted cross-origin HTTPS endpoints discovered during OAuth.
+  ///
+  /// Same-origin endpoints are accepted by default. When the MCP endpoint is
+  /// loopback, other loopback endpoints are also accepted for local development.
+  /// All other discovered origins are rejected unless this callback returns
+  /// `true`. Keep the policy narrow, normally by matching exact expected hosts.
+  final OAuthUriValidator? oauthUriValidator;
+
   /// Customizes HTTP requests to the server.
   final Map<String, dynamic>? requestInit;
 
@@ -124,6 +164,7 @@ class StreamableHttpClientTransportOptions {
 
   const StreamableHttpClientTransportOptions({
     this.authProvider,
+    this.oauthUriValidator,
     this.requestInit,
     this.reconnectionOptions,
     this.sessionId,
@@ -142,6 +183,7 @@ class StreamableHttpClientTransport
   final Uri _url;
   final Map<String, dynamic>? _requestInit;
   final OAuthClientProvider? _authProvider;
+  final OAuthUriValidator? _oauthUriValidator;
   String? _sessionId;
   String? _protocolVersion;
   ToolParameterHeaderMappings _toolParameterHeaderMappings = const {};
@@ -170,6 +212,7 @@ class StreamableHttpClientTransport
   })  : _url = url,
         _requestInit = opts?.requestInit,
         _authProvider = opts?.authProvider,
+        _oauthUriValidator = opts?.oauthUriValidator,
         _sessionId = opts?.sessionId,
         _reconnectionOptions = opts?.reconnectionOptions ??
             _defaultStreamableHttpReconnectionOptions,
@@ -234,6 +277,10 @@ class StreamableHttpClientTransport
         'Protected resource metadata did not include authorization_servers',
       );
     }
+    _validateOAuthUri(
+      authorizationServerUri,
+      OAuthEndpointKind.authorizationServer,
+    );
 
     final authorizationServerMetadata =
         await _discoverAuthorizationServerMetadata(authorizationServerUri);
@@ -245,6 +292,11 @@ class StreamableHttpClientTransport
         'Authorization server metadata is missing authorization_endpoint or token_endpoint',
       );
     }
+    _validateOAuthUri(
+      authorizationEndpoint,
+      OAuthEndpointKind.authorizationEndpoint,
+    );
+    _validateOAuthUri(tokenEndpoint, OAuthEndpointKind.tokenEndpoint);
 
     final methods = authorizationServerMetadata.codeChallengeMethodsSupported;
     if (methods == null || !methods.contains('S256')) {
@@ -399,11 +451,16 @@ class StreamableHttpClientTransport
     OAuthAuthorizationServerMetadataDocument authorizationServerMetadata,
     Uri registrationEndpoint,
   ) async {
+    _validateOAuthUri(
+      registrationEndpoint,
+      OAuthEndpointKind.registrationEndpoint,
+    );
     final tokenEndpointAuthMethod = _selectTokenEndpointAuthMethod(
       authorizationServerMetadata,
       provider.clientSecret,
     );
-    final response = await _httpClient.post(
+    final response = await _sendOAuthRequest(
+      'POST',
       registrationEndpoint,
       headers: const {
         'Content-Type': 'application/json',
@@ -521,7 +578,9 @@ class StreamableHttpClientTransport
 
   Future<OAuthProtectedResourceMetadataDocument>
       _fetchProtectedResourceMetadata(Uri uri) async {
-    final response = await _httpClient.get(
+    _validateOAuthUri(uri, OAuthEndpointKind.protectedResourceMetadata);
+    final response = await _sendOAuthRequest(
+      'GET',
       uri,
       headers: const {'Accept': 'application/json'},
     );
@@ -562,6 +621,7 @@ class StreamableHttpClientTransport
 
   Future<OAuthAuthorizationServerMetadataDocument>
       _discoverAuthorizationServerMetadata(Uri issuer) async {
+    _validateOAuthUri(issuer, OAuthEndpointKind.authorizationServer);
     final errors = <Object>[];
     for (final uri in _authorizationServerMetadataCandidates(issuer)) {
       try {
@@ -618,7 +678,9 @@ class StreamableHttpClientTransport
 
   Future<OAuthAuthorizationServerMetadataDocument>
       _fetchAuthorizationServerMetadata(Uri uri) async {
-    final response = await _httpClient.get(
+    _validateOAuthUri(uri, OAuthEndpointKind.authorizationServerMetadata);
+    final response = await _sendOAuthRequest(
+      'GET',
       uri,
       headers: const {'Accept': 'application/json'},
     );
@@ -633,7 +695,30 @@ class StreamableHttpClientTransport
         'Authorization-server metadata must be a JSON object',
       );
     }
-    return OAuthAuthorizationServerMetadataDocument.fromJson(json);
+    final metadata = OAuthAuthorizationServerMetadataDocument.fromJson(json);
+    _validateOAuthUri(
+      metadata.issuer,
+      OAuthEndpointKind.authorizationServer,
+    );
+    final authorizationEndpoint = metadata.authorizationEndpoint;
+    if (authorizationEndpoint != null) {
+      _validateOAuthUri(
+        authorizationEndpoint,
+        OAuthEndpointKind.authorizationEndpoint,
+      );
+    }
+    final tokenEndpoint = metadata.tokenEndpoint;
+    if (tokenEndpoint != null) {
+      _validateOAuthUri(tokenEndpoint, OAuthEndpointKind.tokenEndpoint);
+    }
+    final registrationEndpoint = metadata.registrationEndpoint;
+    if (registrationEndpoint != null) {
+      _validateOAuthUri(
+        registrationEndpoint,
+        OAuthEndpointKind.registrationEndpoint,
+      );
+    }
+    return metadata;
   }
 
   Future<OAuthTokens> _exchangeAuthorizationCode(
@@ -641,11 +726,15 @@ class StreamableHttpClientTransport
     String authorizationCode,
     _PendingOAuthAuthorization pendingAuthorization,
   ) async {
+    _validateOAuthUri(
+      pendingAuthorization.tokenEndpoint,
+      OAuthEndpointKind.tokenEndpoint,
+    );
     final headers = {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Accept': 'application/json',
     };
-    final body = {
+    final body = <String, String>{
       'grant_type': 'authorization_code',
       'code': authorizationCode,
       'redirect_uri': pendingAuthorization.redirectUri.toString(),
@@ -683,7 +772,8 @@ class StreamableHttpClientTransport
         }
     }
 
-    final response = await _httpClient.post(
+    final response = await _sendOAuthRequest(
+      'POST',
       pendingAuthorization.tokenEndpoint,
       headers: headers,
       body: body,
@@ -714,6 +804,86 @@ class StreamableHttpClientTransport
     _oauthRequestedScopes.addAll(_splitOAuthScopes(tokens.scope));
     await provider.saveTokens(tokens);
     return tokens;
+  }
+
+  Future<http.Response> _sendOAuthRequest(
+    String method,
+    Uri uri, {
+    Map<String, String> headers = const {},
+    Object? body,
+  }) async {
+    final request = http.Request(method, uri)
+      ..followRedirects = false
+      ..headers.addAll(headers);
+    if (body is String) {
+      request.body = body;
+    } else if (body is Map<String, String>) {
+      request.bodyFields = body;
+    } else if (body != null) {
+      throw ArgumentError.value(body, 'body', 'Unsupported OAuth body type');
+    }
+
+    final streamedResponse = await _httpClient.send(request);
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.isRedirect) {
+      throw UnauthorizedError(
+        'OAuth endpoint redirects are not followed automatically',
+      );
+    }
+    return response;
+  }
+
+  void _validateOAuthUri(Uri uri, OAuthEndpointKind endpointKind) {
+    final scheme = uri.scheme.toLowerCase();
+    if ((scheme != 'http' && scheme != 'https') ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.fragment.isNotEmpty) {
+      throw UnauthorizedError(
+        'Rejected invalid OAuth ${endpointKind.name} URI',
+      );
+    }
+
+    final targetIsLoopback = _isLoopbackHost(uri.host);
+    final serverIsLoopback = _isLoopbackHost(_url.host);
+    if (scheme == 'http' && !(targetIsLoopback && serverIsLoopback)) {
+      throw UnauthorizedError(
+        'Rejected insecure OAuth ${endpointKind.name} URI',
+      );
+    }
+
+    if (_hasSameOrigin(uri, _url) ||
+        (targetIsLoopback && serverIsLoopback) ||
+        (_oauthUriValidator?.call(uri, endpointKind) ?? false)) {
+      return;
+    }
+
+    throw UnauthorizedError(
+      'Rejected untrusted cross-origin OAuth ${endpointKind.name} URI',
+    );
+  }
+
+  bool _hasSameOrigin(Uri first, Uri second) =>
+      first.scheme.toLowerCase() == second.scheme.toLowerCase() &&
+      first.host.toLowerCase() == second.host.toLowerCase() &&
+      first.port == second.port;
+
+  bool _isLoopbackHost(String host) {
+    final normalized = host.toLowerCase();
+    if (normalized == 'localhost' || normalized.endsWith('.localhost')) {
+      return true;
+    }
+    if (normalized == '::1') {
+      return true;
+    }
+    final octets = normalized.split('.');
+    if (octets.length != 4) {
+      return false;
+    }
+    final values = octets.map(int.tryParse).toList();
+    return values
+            .every((value) => value != null && value >= 0 && value <= 255) &&
+        values.first == 127;
   }
 
   String _basicAuthorizationHeader(String clientId, String clientSecret) {
@@ -1411,7 +1581,13 @@ class StreamableHttpClientTransport
     String? state,
     String? issuer,
   }) {
-    if (state != null && state != pendingAuthorization.state) {
+    if (state == null || state.isEmpty) {
+      throw UnauthorizedError(
+        'Authorization redirect did not include required state parameter',
+      );
+    }
+
+    if (state != pendingAuthorization.state) {
       throw UnauthorizedError('Authorization redirect state mismatch');
     }
 

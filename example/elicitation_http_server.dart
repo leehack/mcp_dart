@@ -16,6 +16,9 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+final allowedBrowserOrigin =
+    Platform.environment['MCP_ALLOWED_ORIGIN'] ?? 'http://localhost:8080';
+
 // Simple in-memory event store for resumability
 class InMemoryEventStore implements EventStore {
   final Map<String, List<({EventId id, JsonRpcMessage message})>> _events = {};
@@ -534,15 +537,19 @@ $city, $state $zipCode${phone.isNotEmpty ? '\nPhone: $phone' : ''}''',
   return server;
 }
 
-void setCorsHeaders(HttpResponse response) {
-  response.headers.set('Access-Control-Allow-Origin', '*');
+void setCorsHeaders(HttpRequest request) {
+  final response = request.response;
+  if (request.headers.value('Origin') == allowedBrowserOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', allowedBrowserOrigin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+  response.headers.set(HttpHeaders.varyHeader, 'Origin');
   response.headers
       .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   response.headers.set(
     'Access-Control-Allow-Headers',
     'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
   );
-  response.headers.set('Access-Control-Allow-Credentials', 'true');
   response.headers.set('Access-Control-Max-Age', '86400');
   response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
 }
@@ -554,7 +561,7 @@ void main() async {
   final transports = <String, StreamableHTTPServerTransport>{};
 
   // Create HTTP server
-  final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, port);
+  final httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
   print('Elicitation example server is running on http://localhost:$port/mcp');
   print('Available tools:');
   print('  - register_user: Collect user registration information');
@@ -562,10 +569,11 @@ void main() async {
   print('  - update_shipping_address: Collect and validate address');
   print('');
   print('Connect your MCP client to this server using the HTTP transport.');
+  print('Allowed browser origin: $allowedBrowserOrigin');
 
   await for (final request in httpServer) {
     // Apply CORS headers to all responses
-    setCorsHeaders(request.response);
+    setCorsHeaders(request);
 
     if (request.method == 'OPTIONS') {
       // Handle CORS preflight request
@@ -642,6 +650,8 @@ Future<void> _handlePostRequest(
         options: StreamableHTTPServerTransportOptions(
           sessionIdGenerator: () => generateUUID(),
           eventStore: eventStore,
+          allowedHosts: const {'localhost', '127.0.0.1'},
+          allowedOrigins: {allowedBrowserOrigin},
           onsessioninitialized: (sessionId) {
             print('Session initialized with ID: $sessionId');
             transports[sessionId] = transport!;
@@ -722,7 +732,7 @@ Future<void> _handleGetRequest(
   if (sessionId == null || !transports.containsKey(sessionId)) {
     request.response.statusCode =
         sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound;
-    setCorsHeaders(request.response);
+    setCorsHeaders(request);
     request.response
       ..write(sessionId == null ? 'Missing session ID' : 'Session not found')
       ..close();
@@ -749,7 +759,7 @@ Future<void> _handleDeleteRequest(
   if (sessionId == null || !transports.containsKey(sessionId)) {
     request.response.statusCode =
         sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound;
-    setCorsHeaders(request.response);
+    setCorsHeaders(request);
     request.response
       ..write(sessionId == null ? 'Missing session ID' : 'Session not found')
       ..close();
@@ -767,7 +777,7 @@ Future<void> _handleDeleteRequest(
         .toString()
         .startsWith('text/event-stream')) {
       request.response.statusCode = HttpStatus.internalServerError;
-      setCorsHeaders(request.response);
+      setCorsHeaders(request);
       request.response
         ..write('Error processing session termination')
         ..close();

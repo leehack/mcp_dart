@@ -21,9 +21,11 @@ class UpdateCommand extends Command<int> {
     required Logger logger,
     PubUpdater? pubUpdater,
     GitHubBinaryUpdater? binaryUpdater,
+    String currentVersion = packageVersion,
   }) : _logger = logger,
        _pubUpdater = pubUpdater ?? PubUpdater(),
-       _binaryUpdater = binaryUpdater ?? GitHubBinaryUpdater(logger: logger) {
+       _binaryUpdater = binaryUpdater ?? GitHubBinaryUpdater(logger: logger),
+       _currentVersion = currentVersion {
     argParser.addOption(
       'install-dir',
       help:
@@ -34,6 +36,7 @@ class UpdateCommand extends Command<int> {
   final Logger _logger;
   final PubUpdater _pubUpdater;
   final GitHubBinaryUpdater _binaryUpdater;
+  final String _currentVersion;
 
   @override
   String get description => 'Update the CLI.';
@@ -43,9 +46,17 @@ class UpdateCommand extends Command<int> {
 
   @override
   Future<int> run() async {
+    if (isPrereleaseVersion(_currentVersion)) {
+      _logger.info(
+        'Automatic updates follow the stable channel and are disabled for '
+        'prerelease builds. Install the desired prerelease explicitly.',
+      );
+      return ExitCode.success.code;
+    }
+
     if (isRunningAsStandaloneExecutable()) {
       return _binaryUpdater.update(
-        currentVersion: packageVersion,
+        currentVersion: _currentVersion,
         installDir: argResults?['install-dir'] as String?,
       );
     }
@@ -61,7 +72,7 @@ class UpdateCommand extends Command<int> {
     }
     updateCheckProgress.complete('Checked for updates');
 
-    final isUpToDate = packageVersion == latestVersion;
+    final isUpToDate = _currentVersion == latestVersion;
     if (isUpToDate) {
       _logger.info('CLI is already at the latest version.');
       return ExitCode.success.code;

@@ -179,7 +179,7 @@ Future<void> _exerciseDartClient(String url) async {
   try {
     await client.connect(transport).timeout(const Duration(seconds: 20));
     final version = client.getProtocolVersion();
-    if (version != stableProtocolVersion2026_07_28) {
+    if (version != previewProtocolVersion) {
       throw StateError('Expected 2026-07-28, got $version');
     }
     final serverInfo = client.getServerVersion();

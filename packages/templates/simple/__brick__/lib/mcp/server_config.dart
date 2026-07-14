@@ -85,7 +85,7 @@ class ServerConfig {
         'host',
         abbr: 'h',
         help: 'Host to bind for HTTP transport.',
-        defaultsTo: '0.0.0.0',
+        defaultsTo: '127.0.0.1',
       )
       ..addOption(
         'port',
@@ -127,7 +127,7 @@ class ServerConfig {
         '  dart run bin/server.dart                          # stdio transport',
       )
       ..writeln(
-        '  dart run bin/server.dart -t http                  # HTTP on 0.0.0.0:3000',
+        '  dart run bin/server.dart -t http                  # HTTP on 127.0.0.1:3000',
       )
       ..writeln(
         '  dart run bin/server.dart -t http -p 8080          # HTTP on port 8080',

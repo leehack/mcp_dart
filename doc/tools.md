@@ -259,11 +259,13 @@ return CallToolResult(
     ImageContent(
       data: base64Encode(imageBytes),
       mimeType: 'image/png',
-      theme: 'dark', // optional: 'light' | 'dark'
     ),
   ],
 );
 ```
+
+Theme hints belong to `McpIcon.theme` on icon-bearing resources and tools; the
+wire shape for `ImageContent` does not include a theme field.
 
 ### Resource Link Content
 
@@ -309,9 +311,10 @@ return CallToolResult(
   content: [
     TextContent(text: 'Generated report:'),
     EmbeddedResource(
-      resource: ResourceReference(
-        uri: 'file:///reports/analysis.pdf',
-        type: 'resource',
+      resource: TextResourceContents(
+        uri: 'file:///reports/analysis.txt',
+        text: extractedReportText,
+        mimeType: 'text/plain',
       ),
     ),
   ],
@@ -355,7 +358,8 @@ server.registerTool(
   'admin-action',
   inputSchema: JsonSchema.object(properties: {...}),
   callback: (args, extra) async {
-    if (!await isAdmin(args['userId'])) {
+    final principal = verifiedPrincipalFor(extra);
+    if (!await isAdmin(principal)) {
       return CallToolResult(
         isError: true,
         content: [TextContent(text: 'Admin privileges required')],
@@ -468,12 +472,48 @@ server.registerTool(
 );
 ```
 
-## Task-Augmented Tools
+## Long-running tool calls
 
-MCP 2025-11-25 requires task-augmented requests to be negotiated explicitly.
-For tools, the server must advertise `tasks.requests.tools.call`; a top-level
-`tasks` capability is not enough. `registerToolTask()` advertises that
-subcapability automatically when it is called before `connect()`.
+### MCP 2026 Tasks extension
+
+The 2026 extension is server-directed. Both peers advertise
+`io.modelcontextprotocol/tasks`, the client makes a normal `tools/call`, and the
+server may return a durable `CreateTaskExtensionResult`. See the
+[server guide](server-guide.md#mcp-2026-tasks-extension) for the low-level
+creation and `tasks/get` handlers.
+
+Opt the client in through its per-request capabilities. `callTool()` then polls
+`tasks/get` and returns the completed tool result; do not pass the legacy
+`task` option:
+
+```dart
+final client = McpClient(
+  const Implementation(name: 'task-client', version: '1.0.0'),
+  options: McpClientOptions(
+    capabilities: ClientCapabilities(
+      extensions: withMcpTasksExtension(),
+    ),
+  ),
+);
+
+await client.connect(transport);
+final result = await client.callTool(
+  const CallToolRequest(
+    name: 'slow-tool',
+    arguments: {'input': 'value'},
+  ),
+);
+```
+
+The extension uses `tasks/get`, `tasks/update`, and `tasks/cancel`. It removes
+`tasks/list`, `tasks/result`, legacy `tasks.requests.*` capability fields, and
+the client-supplied task-creation option.
+
+### MCP 2025-11-25 legacy task augmentation
+
+For legacy peers, the server must advertise `tasks.requests.tools.call`; a
+top-level `tasks` capability is not enough. `registerToolTask()` advertises that
+subcapability automatically when called before `connect()`.
 
 ```dart
 final server = McpServer(
@@ -513,14 +553,9 @@ final server = McpServer(
 );
 ```
 
-Clients that call task-augmented tools can use `TaskClient.callToolStream()`.
-With MCP `2026-07-28` draft/RC stateless servers that advertise
-`io.modelcontextprotocol/tasks`, omit the legacy `task` argument; task creation
-is server-directed and the client follows the extension polling flow
-transparently.
-When the `task` argument is supplied, `TaskClient` first verifies that the server
-advertised `tasks.requests.tools.call`, then lists tools to confirm the target
-tool advertises `execution.taskSupport` as `optional` or `required`.
+Legacy clients can use `TaskClient.callToolStream()`. It verifies
+`tasks.requests.tools.call` and the tool's `execution.taskSupport` metadata
+before sending the client-selected task option.
 
 ```dart
 final taskClient = TaskClient(client);
@@ -640,30 +675,26 @@ server.registerTool(
   inputSchema: JsonSchema.object(
     properties: {
       'path': JsonSchema.string(description: 'File path'),
-      'encoding': JsonSchema.string(
-        enumValues: ['utf8', 'latin1', 'ascii'],
-        defaultValue: 'utf8',
-      ),
     },
     required: ['path'],
   ),
   callback: (args, extra) async {
-    final path = args['path'] as String;
-    final encoding = args['encoding'] as String? ?? 'utf8';
-
-    // Validate path (security!)
-    if (!isPathAllowed(path)) {
-      throw McpError(
-        ErrorCode.invalidParams.value,
-        'Access denied: $path',
+    final safePath = canonicalizeWithinRoot(
+      allowedRoot,
+      args['path'] as String,
+    );
+    if (safePath == null) {
+      return const CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Access denied')],
       );
     }
 
-    final file = File(path);
+    final file = File(safePath);
     if (!await file.exists()) {
-      throw McpError(
-        ErrorCode.invalidParams.value,
-        'File not found: $path',
+      return const CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'File not found')],
       );
     }
 
@@ -674,6 +705,9 @@ server.registerTool(
   },
 );
 ```
+
+`canonicalizeWithinRoot` must normalize the path, resolve symlinks, and reject
+any result outside the configured root before the file is accessed.
 
 ## Best Practices
 
@@ -749,15 +783,17 @@ callback: (args, extra) async {
     return CallToolResult(
       content: [TextContent(text: result)],
     );
-  } on NetworkException catch (e) {
-    return CallToolResult(
+  } on NetworkException catch (error, stackTrace) {
+    logger.warning('Tool network failure', error, stackTrace);
+    return const CallToolResult(
       isError: true,
-      content: [TextContent(text: 'Network error: ${e.message}')],
+      content: [TextContent(text: 'Temporary network failure')],
     );
-  } catch (e) {
-    return CallToolResult(
+  } catch (error, stackTrace) {
+    logger.severe('Unexpected tool failure', error, stackTrace);
+    return const CallToolResult(
       isError: true,
-      content: [TextContent(text: 'Unexpected error: $e')],
+      content: [TextContent(text: 'Operation failed')],
     );
   }
 }
@@ -776,26 +812,25 @@ callback: (args, extra) async {
 ```dart
 // ✅ Good - validate inputs, check permissions
 callback: (args, extra) async {
-  final path = args['path'] as String;
-
-  // Validate path
-  if (!isPathAllowed(path)) {
+  final safePath = canonicalizeWithinRoot(
+    allowedRoot,
+    args['path'] as String,
+  );
+  if (safePath == null) {
     return CallToolResult(
       isError: true,
       content: [TextContent(text: 'Access denied')],
     );
   }
 
-  // Check permissions
-  if (!hasPermission(args['userId'], path)) {
+  // Use identity verified by the server, never a caller-supplied user ID.
+  final principal = verifiedPrincipalFor(extra);
+  if (!hasPermission(principal, safePath)) {
     return CallToolResult(
       isError: true,
       content: [TextContent(text: 'Insufficient permissions')],
     );
   }
-
-  // Sanitize input
-  final safePath = sanitizePath(path);
 
   return CallToolResult(...);
 }
@@ -807,6 +842,11 @@ callback: (args, extra) async {
   return CallToolResult(...);
 }
 ```
+
+Canonicalize and enforce the allowed root before authorization and file access.
+Your application must propagate a server-verified principal into the handler;
+see the [OAuth server guide](../example/authentication/OAUTH_SERVER_GUIDE.md)
+for the token-verification boundary.
 
 ## Testing Tools
 
@@ -845,7 +885,10 @@ void main() {
       arguments: {'a': 5, 'b': 3},
     ));
 
-    expect(result.content.first.text, '8');
+    expect(
+      result.content.first,
+      isA<TextContent>().having((content) => content.text, 'text', '8'),
+    );
   });
 }
 ```

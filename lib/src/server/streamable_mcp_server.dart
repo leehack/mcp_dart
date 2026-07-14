@@ -381,8 +381,6 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
-    _setCorsHeaders(request, request.response);
-
     if (enableDnsRebindingProtection &&
         !isRequestAllowedByDnsRebindingProtection(
           request,
@@ -396,6 +394,8 @@ class StreamableMcpServer {
       await request.response.close();
       return;
     }
+
+    _setCorsHeaders(request, request.response);
 
     if (request.method == 'OPTIONS') {
       request.response.statusCode = HttpStatus.ok;
@@ -986,15 +986,56 @@ class StreamableMcpServer {
   }
 
   void _setCorsHeaders(HttpRequest request, HttpResponse response) {
-    response.headers.set('Access-Control-Allow-Origin', '*');
+    final requestOrigin = request.headers.value('origin')?.trim();
+    final allowedOrigin = _corsAllowedOrigin(requestOrigin);
+    response.headers.set(
+      HttpHeaders.varyHeader,
+      'Origin, Access-Control-Request-Headers',
+    );
+
+    if (allowedOrigin != null) {
+      response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    } else if (requestOrigin == null ||
+        requestOrigin.isEmpty ||
+        allowedOrigins == null ||
+        allowedOrigins!.isEmpty) {
+      response.headers.set('Access-Control-Allow-Origin', '*');
+    }
     response.headers
         .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     response.headers.set(
       'Access-Control-Allow-Headers',
       _corsAllowedHeaders(request),
     );
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Max-Age', defaultCorsMaxAgeSeconds);
     response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
+  }
+
+  String? _corsAllowedOrigin(String? requestOrigin) {
+    if (requestOrigin == null || requestOrigin.isEmpty) {
+      return null;
+    }
+
+    // DNS rebinding validation runs before CORS headers are set, so an origin
+    // reaching this branch has already passed the configured policy.
+    if (enableDnsRebindingProtection) {
+      return requestOrigin;
+    }
+
+    final configuredOrigins = allowedOrigins;
+    if (configuredOrigins == null || configuredOrigins.isEmpty) {
+      return null;
+    }
+
+    final normalizedRequestOrigin = normalizeDnsOrigin(requestOrigin);
+    if (normalizedRequestOrigin == null) {
+      return null;
+    }
+    final normalizedAllowedOrigins =
+        configuredOrigins.map(normalizeDnsOrigin).whereType<String>().toSet();
+    return normalizedAllowedOrigins.contains(normalizedRequestOrigin)
+        ? requestOrigin
+        : null;
   }
 }

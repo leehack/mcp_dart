@@ -82,7 +82,7 @@ class DiscoveryOAuthClientProvider implements OAuthAuthorizationCodeProvider {
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
-      protocolVersion: stableProtocolVersion2026_07_28,
+      protocolVersion: previewProtocolVersion,
       clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
       clientCapabilities: const ClientCapabilities(),
     );
@@ -289,7 +289,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: const InitializeResult(
-                  protocolVersion: stableProtocolVersion2025_11_25,
+                  protocolVersion: stableProtocolVersion,
                   capabilities: ServerCapabilities(
                     logging: {'supported': true},
                   ),
@@ -344,7 +344,7 @@ void main() {
       final discoverMeta = discoverParams['_meta'] as Map<String, dynamic>;
       expect(
         discoverMeta[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(client.getServerCapabilities()?.logging, isNotNull);
       expect(client.getServerVersion()?.name, 'PreconfiguredSessionServer');
@@ -456,7 +456,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: const InitializeResult(
-                  protocolVersion: stableProtocolVersion2025_11_25,
+                  protocolVersion: stableProtocolVersion,
                   capabilities: ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer',
@@ -548,7 +548,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: stableProtocolVersion2025_11_25,
+                  protocolVersion: stableProtocolVersion,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -668,7 +668,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: stableProtocolVersion2025_11_25,
+                  protocolVersion: stableProtocolVersion,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -775,7 +775,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: stableProtocolVersion2025_11_25,
+                  protocolVersion: stableProtocolVersion,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -949,7 +949,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: stableProtocolVersion2025_11_25,
+                  protocolVersion: stableProtocolVersion,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -1076,7 +1076,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: stableProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
             ).toJson(),
@@ -1161,7 +1161,7 @@ void main() {
           },
           sessionId: 'legacy-session',
         ),
-      )..protocolVersion = stableProtocolVersion2026_07_28;
+      )..protocolVersion = previewProtocolVersion;
       await transport.start();
 
       final completer = Completer<JsonRpcMessage>();
@@ -1181,7 +1181,7 @@ void main() {
 
       expect(
         capturedHeaders['protocolVersion'],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(capturedHeaders['method'], Method.toolsCall);
       expect(capturedHeaders['name'], 'echo');
@@ -1235,7 +1235,7 @@ void main() {
             'name': 'echo',
             'arguments': {'message': 'hello'},
             '_meta': {
-              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: previewProtocolVersion,
             },
           },
         ),
@@ -1244,7 +1244,7 @@ void main() {
 
       expect(
         capturedHeaders['protocolVersion'],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(capturedHeaders['method'], Method.toolsCall);
       expect(capturedHeaders['name'], 'echo');
@@ -1281,7 +1281,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion2026_07_28;
+      )..protocolVersion = previewProtocolVersion;
       await transport.start();
 
       final responses = <JsonRpcMessage>[];
@@ -1353,7 +1353,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion2026_07_28;
+      )..protocolVersion = previewProtocolVersion;
       await transport.start();
 
       final completer = Completer<JsonRpcMessage>();
@@ -1373,7 +1373,7 @@ void main() {
 
       expect(
         capturedHeaders['protocolVersion'],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(capturedHeaders['method'], Method.tasksUpdate);
       expect(capturedHeaders['name'], 'task-1');
@@ -1397,7 +1397,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion2026_07_28;
+      )..protocolVersion = previewProtocolVersion;
       await transport.start();
 
       final errorCompleter = Completer<Error>();
@@ -1441,7 +1441,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion2026_07_28;
+      )..protocolVersion = previewProtocolVersion;
       await transport.start();
 
       final errorCompleter = Completer<Error>();
@@ -1504,7 +1504,7 @@ void main() {
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
       )
-        ..protocolVersion = stableProtocolVersion2026_07_28
+        ..protocolVersion = previewProtocolVersion
         ..setToolParameterHeaderMappings(
           {
             'execute_sql': {
@@ -2035,6 +2035,49 @@ void main() {
         expect(challenge?.scope, 'tools:read');
       });
 
+      test('rejects untrusted cross-origin OAuth discovery URLs', () async {
+        final oauthServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        addTearDown(() => oauthServer.close(force: true));
+        oauthServer.listen((request) async {
+          request.response
+            ..statusCode = HttpStatus.unauthorized
+            ..headers.set(
+              HttpHeaders.wwwAuthenticateHeader,
+              'Bearer resource_metadata="https://untrusted.example/metadata"',
+            );
+          await request.response.close();
+        });
+
+        final authProvider = DiscoveryOAuthClientProvider(
+          redirectUri: Uri.parse('http://localhost/callback'),
+        );
+        final oauthTransport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:${oauthServer.port}/mcp'),
+          opts: StreamableHttpClientTransportOptions(
+            authProvider: authProvider,
+          ),
+        );
+        addTearDown(oauthTransport.close);
+        await oauthTransport.start();
+
+        await expectLater(
+          oauthTransport.send(
+            const JsonRpcRequest(id: 76, method: 'test/method'),
+          ),
+          throwsA(
+            isA<UnauthorizedError>().having(
+              (error) => error.message,
+              'message',
+              contains('untrusted cross-origin'),
+            ),
+          ),
+        );
+        expect(authProvider.authorizationUri, isNull);
+      });
+
       test('discovers metadata, redirects with PKCE, and exchanges tokens',
           () async {
         final oauthServer = await HttpServer.bind(
@@ -2172,7 +2215,34 @@ void main() {
         expect(authorizationUri.queryParameters['code_challenge'], isNotEmpty);
         expect(authProvider.legacyRedirects, 0);
 
-        await oauthTransport.finishAuth('auth-code');
+        await expectLater(
+          oauthTransport.finishAuth('auth-code'),
+          throwsA(
+            isA<UnauthorizedError>().having(
+              (error) => error.message,
+              'message',
+              contains('required state'),
+            ),
+          ),
+        );
+        expect(tokenExchangeSeen, isFalse);
+
+        await expectLater(
+          oauthTransport.finishAuth('auth-code', state: 'wrong-state'),
+          throwsA(
+            isA<UnauthorizedError>().having(
+              (error) => error.message,
+              'message',
+              contains('state mismatch'),
+            ),
+          ),
+        );
+        expect(tokenExchangeSeen, isFalse);
+
+        await oauthTransport.finishAuth(
+          'auth-code',
+          state: authorizationUri.queryParameters['state'],
+        );
         expect(tokenExchangeSeen, isTrue);
         expect(authProvider.storedTokens?.accessToken, 'exchanged-token');
         expect(authProvider.storedTokens, isA<OAuthAuthorizationCodeTokens>());
@@ -2260,7 +2330,7 @@ void main() {
             sessionId: 'legacy-session',
           ),
         );
-        transport.protocolVersion = stableProtocolVersion2026_07_28;
+        transport.protocolVersion = previewProtocolVersion;
         await transport.start();
 
         await transport.terminateSession();
@@ -2297,7 +2367,7 @@ void main() {
         transport = StreamableHttpClientTransport(
           Uri.parse('http://localhost:${server.port}/mcp'),
         );
-        transport.protocolVersion = stableProtocolVersion2026_07_28;
+        transport.protocolVersion = previewProtocolVersion;
         await transport.start();
 
         await transport.send(const JsonRpcInitializedNotification());

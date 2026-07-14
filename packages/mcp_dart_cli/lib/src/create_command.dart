@@ -4,7 +4,9 @@ import 'package:args/command_runner.dart';
 import 'package:mason/mason.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
+
 import 'template_resolver.dart';
+import 'version.dart';
 
 typedef MasonGeneratorFromBrick = Future<MasonGenerator> Function(Brick brick);
 
@@ -29,8 +31,7 @@ class CreateCommand extends Command<int> {
       help:
           'The template to use. Can be a local path, a Git URL '
           '(url.git#ref:path), or a GitHub tree URL.',
-      defaultsTo:
-          'https://github.com/leehack/mcp_dart/tree/main/packages/templates/simple',
+      defaultsTo: defaultTemplateUrl,
     );
   }
 
@@ -107,17 +108,11 @@ class CreateCommand extends Command<int> {
     );
     progress.complete();
 
+    // `pub add` also resolves dependencies, so a separate `pub get` would do
+    // the same network and solver work twice.
     await _runCommand(
       'dart',
-      ['pub', 'get'],
-      workingDirectory: directory.path,
-      label: 'Running pub get',
-    );
-
-    // Auto-add mcp_dart to ensure latest version
-    await _runCommand(
-      'dart',
-      ['pub', 'add', 'mcp_dart'],
+      ['pub', 'add', 'mcp_dart:$generatedSdkConstraint'],
       workingDirectory: directory.path,
       label: 'Adding mcp_dart dependency',
     );
@@ -182,7 +177,6 @@ class CreateCommand extends Command<int> {
       executable,
       arguments,
       workingDirectory: workingDirectory,
-      runInShell: true,
     );
   }
 

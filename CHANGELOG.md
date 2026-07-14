@@ -2,15 +2,15 @@
 
 ### Changed
 
-- Started the `dev/2026-07-28` development line from the RC branch and made
-  `McpProtocol.stable` the default profile for `McpClientOptions` and
+- Made `McpProtocol.stable` the default profile for `McpClientOptions` and
   `McpServerOptions`. Default clients now probe with `server/discover` and
   retain legacy initialization fallback. `McpProtocol.legacy` keeps
   `2025-11-25` and earlier behavior, while `McpProtocol.require2026` remains
   strict; the former `McpProtocol.preview2026` profile was removed.
-- Renamed `draftProtocolVersion2026_07_28` to
-  `stableProtocolVersion2026_07_28` for the default SDK profile. Future
-  pre-release protocol revisions can use draft-specific names.
+- Clarified protocol-version constants: `previewProtocolVersion` identifies
+  the `2026-07-28` RC, `stableProtocolVersion` identifies the official
+  `2025-11-25` release, and `defaultProtocolVersion` identifies the version
+  preferred by this SDK preview.
 - Legacy initialization and stable-profile fallback now honor an explicit
   supported legacy `McpClientOptions.protocolVersion` override.
 - Legacy-only servers now reject `server/discover` with `MethodNotFound`, while
@@ -27,6 +27,24 @@
   leaking into a later connection.
 - Raised the minimum Dart SDK to 3.5 to match the package's direct dependency
   requirements.
+- Hardened the GitHub OAuth example with PKCE S256, cryptographically random
+  state, consistent callback configuration, no token echoing, and explicit
+  plaintext storage warnings.
+- Replaced the legacy OAuth server example with a fail-closed protected-resource
+  metadata and bearer-challenge example that makes application token
+  verification responsibilities explicit.
+- Require OAuth callback state before authorization-code exchange, reject
+  untrusted discovery origins and insecure endpoints by default, and stop
+  following OAuth endpoint redirects automatically.
+- Redact unexpected handler and schema-validation details from JSON-RPC, tool,
+  resource, and prompt responses while retaining detailed server-side logs.
+- Expose request-scoped logging through `RequestOptions.logLevel` and a public
+  client connection-state check for host integrations.
+- Made Streamable HTTP CORS responses reflect only validated origins for
+  credentialed requests, with matching loopback-safe examples and regression
+  coverage.
+- Refreshed and shortened public onboarding, transport, compatibility, release,
+  CLI, and LLM-facing documentation for the coordinated dev.2 preview.
 
 ### Platform support
 
@@ -57,8 +75,8 @@
   `elicitationId`, and `notifications/elicitation/complete` is treated as a
   legacy/non-draft notification rather than a typed draft notification.
 - Added dedicated TypeScript, Python, and Chrome interop jobs for relevant PRs,
-  daily schedules, and manual runs, plus a temporary default-branch drift
-  monitor until the release reaches `main`.
+  daily `main` schedules, and manual runs, then retired the temporary
+  default-branch drift monitor after the development line merged.
 - Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the current
   profile to official conformance, local tests, cross-SDK interop, and browser
   coverage.

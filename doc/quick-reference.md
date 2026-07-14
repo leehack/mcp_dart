@@ -1,226 +1,147 @@
 # Quick Reference
 
-Fast lookup guide for common MCP Dart SDK operations.
+Use this page for common `mcp_dart` calls. The [server guide](server-guide.md),
+[client guide](client-guide.md), [tools guide](tools.md), and
+[transport guide](transports.md) explain the full APIs and edge cases.
 
-## Installation
+## Install and import
 
 ```yaml
-# pubspec.yaml
 dependencies:
   mcp_dart: ^2.3.0-dev.2
 ```
-
-```bash
-dart pub get  # or: flutter pub get
-```
-
-## Import
 
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
 ```
 
-## Server Basics
+The SDK requires Dart 3.5 or later. The dev.2 CLI requires Dart 3.7 or later.
 
-### Create Server
+## Protocol profile
+
+The 2.3.0 preview defaults to `McpProtocol.stable`: try MCP `2026-07-28`
+draft/RC, then fall back to legacy initialization when needed.
+
+```dart
+const legacyClientOptions = McpClientOptions(protocol: McpProtocol.legacy);
+const strictServerOptions = McpServerOptions(
+  protocol: McpProtocol.require2026,
+);
+```
+
+See the [2026 transition guide](mcp-2026-07-28-rc.md) before depending on
+draft-only behavior.
+
+## Server
+
+### Create and connect
 
 ```dart
 final server = McpServer(
-  Implementation(
-    name: 'server-name',
-    version: '1.0.0',
-  ),
-  options: McpServerOptions(
+  const Implementation(name: 'example-server', version: '1.0.0'),
+  options: const McpServerOptions(
     capabilities: ServerCapabilities(
-      tools: ServerCapabilitiesTools(),
+      tools: ServerCapabilitiesTools(listChanged: true),
+      resources: ServerCapabilitiesResources(
+        subscribe: true,
+        listChanged: true,
+      ),
+      prompts: ServerCapabilitiesPrompts(listChanged: true),
     ),
   ),
 );
+
+await server.connect(StdioServerTransport());
 ```
 
-### Create Streamable Server
+Use `StreamableMcpServer` for a high-level HTTP server:
 
 ```dart
-final server = StreamableMcpServer(
-  serverFactory: (sessionId) => McpServer(
-    Implementation(name: 'server', version: '1.0.0'),
+final httpServer = StreamableMcpServer(
+  serverFactory: (_) => McpServer(
+    const Implementation(name: 'remote-server', version: '1.0.0'),
   ),
-  host: '0.0.0.0',
+  host: '127.0.0.1',
   port: 3000,
   path: '/mcp',
-  // Optional hardening for browser-accessible deployments
-  enableDnsRebindingProtection: true,
-  allowedHosts: {'localhost', 'api.example.com'},
-  allowedOrigins: {'https://app.example.com'},
-);
-await server.start();
-```
-
-### Streamable HTTP Transport Options
-
-```dart
-final transport = StreamableHTTPServerTransport(
-  options: StreamableHTTPServerTransportOptions(
-    sessionIdGenerator: () =>
-        'session-${DateTime.now().millisecondsSinceEpoch}',
-    eventStore: InMemoryEventStore(),
-    enableDnsRebindingProtection: true,
-    allowedHosts: {'localhost'},
-    allowedOrigins: {'http://localhost:5173'},
-    // Defaults are strict; set to false only for compatibility rollouts.
-    strictProtocolVersionHeaderValidation: true,
-    rejectBatchJsonRpcPayloads: true,
-  ),
+  allowedHosts: {'localhost', '127.0.0.1'},
+  allowedOrigins: {'http://localhost:5173'},
 );
 
-await transport.start();
-await server.connect(transport);
+await httpServer.start();
 ```
 
-### Register Tool
+Keep DNS rebinding protection enabled and use exact host/origin allowlists for
+browser or remote deployments. See [Streamable HTTP](transports.md#streamable-http-transport).
+
+### Register a tool
 
 ```dart
 server.registerTool(
-  'tool-name',
-  description: 'What it does',
+  'add',
+  description: 'Add two numbers',
   inputSchema: JsonSchema.object(
     properties: {
-      'param': JsonSchema.string(),
+      'a': JsonSchema.number(),
+      'b': JsonSchema.number(),
     },
-    required: ['param'],
+    required: ['a', 'b'],
   ),
-  callback: (args, extra) async {
+  callback: (arguments, extra) async {
+    final a = arguments['a'] as num;
+    final b = arguments['b'] as num;
     return CallToolResult(
-      content: [TextContent(text: 'result')],
+      content: [TextContent(text: '${a + b}')],
     );
   },
 );
 ```
 
-### Register Resource
+Return `CallToolResult(isError: true, ...)` for an expected tool failure. Throw
+`McpError` for a protocol-level failure. See [Tools](tools.md).
+
+### Register a resource
 
 ```dart
 server.registerResource(
-  'Resource Name',
-  'resource://example',
-  null,
-  (uri, extra) async {
-    return ReadResourceResult(
-      contents: [
-        TextResourceContents(
-          uri: uri.toString(),
-          text: 'content',
-          mimeType: 'text/plain',
-        ),
-      ],
-    );
-  },
-);
-```
-
-### Register Resource Template
-
-```dart
-server.registerResourceTemplate(
-  'User Profile',
-  ResourceTemplateRegistration(
-    'users://{userId}/profile',
-    listCallback: null,
-    completeCallbacksWithContext: {
-      'userId': (value, context) async => suggestUsers(
-        prefix: value,
-        organization: context?.arguments?['organization'],
-      ),
-    },
-  ),
-  null,
-  (uri, vars, extra) async {
-    final userId = vars['userId'];
-    return ReadResourceResult(
-      contents: [
-        TextResourceContents(
-          uri: uri.toString(),
-          text: jsonEncode(await getUser(userId)),
-          mimeType: 'application/json',
-        ),
-      ],
-    );
-  },
-);
-```
-
-### MCP Apps Metadata
-
-```dart
-const resourceUri = 'ui://dashboard/view.html';
-
-registerAppTool(
-  server,
-  'dashboard_show',
-  McpUiAppToolConfig(
-    meta: const {
-      'ui': {
-        'resourceUri': resourceUri,
-      },
-    },
-  ),
-  (args, extra) async => const CallToolResult(
-    content: [TextContent(text: 'ok')],
-  ),
-);
-
-registerAppResource(
-  server,
-  'Dashboard UI',
-  resourceUri,
-  const McpUiAppResourceConfig(
-    meta: {
-      'ui': {
-        'prefersBorder': true,
-      },
-    },
-  ),
+  'Status',
+  'status://current',
+  (description: 'Current service status', mimeType: 'application/json'),
   (uri, extra) async => ReadResourceResult(
     contents: [
       TextResourceContents(
         uri: uri.toString(),
-        mimeType: mcpUiResourceMimeType,
-        text: '<!doctype html><html></html>',
-        meta: const McpUiResourceMeta(prefersBorder: true).toMeta(),
+        mimeType: 'application/json',
+        text: '{"status":"ok"}',
       ),
     ],
   ),
 );
 ```
 
-### Register Prompt
+Use `registerResourceTemplate` for parameterized URIs and declare
+`resources.subscribe` only when supporting legacy MCP 2025-11-25 resource
+subscriptions. MCP 2026 sends resource updates through `subscriptions/listen`.
+
+### Register a prompt
 
 ```dart
 server.registerPrompt(
-  'prompt-name',
-  description: 'Prompt description',
+  'review',
+  description: 'Review a code change',
   argsSchema: {
-    'arg1': PromptArgumentDefinition(
-      type: String,
-      description: 'Argument description',
+    'diff': PromptArgumentDefinition(
+      description: 'Patch to review',
       required: true,
-      completable: CompletableField(
-        def: CompletableDef(
-          complete: (value) async => suggestValues(value),
-          completeWithContext: (value, context) async => suggestValues(
-            value,
-            previousArgs: context?.arguments,
-          ),
-        ),
-      ),
     ),
   },
-  callback: (args, extra) async {
+  callback: (arguments, extra) async {
+    final diff = arguments?['diff'] as String? ?? '';
     return GetPromptResult(
       messages: [
         PromptMessage(
           role: PromptMessageRole.user,
-          content: TextContent(text: 'Prompt with ${args["arg1"]}'),
+          content: TextContent(text: diff),
         ),
       ],
     );
@@ -228,692 +149,224 @@ server.registerPrompt(
 );
 ```
 
-### Register Tasks
+For tasks, MCP Apps metadata, completions, and advanced resource templates, see
+the [server guide](server-guide.md).
 
-```dart
-server.experimental.onListTasks((extra) async => ListTasksResult(tasks: []));
-server.experimental.onCancelTaskWithResult((taskId, extra) async {
-  // Cancel the task and return its final cancelled state.
-  final cancelled = await store.cancelTask(taskId);
-  if (!cancelled) {
-    throw McpError(
-      ErrorCode.invalidParams.value,
-      'Cannot cancel task: not found or already terminal',
-    );
-  }
-  final task = await store.getTask(taskId);
-  if (task == null) {
-    throw McpError(ErrorCode.invalidParams.value, 'Task not found');
-  }
-  return task;
-});
-server.experimental.onGetTask((taskId, extra) async {
-  final task = await store.getTask(taskId);
-  if (task == null) {
-    throw McpError(ErrorCode.invalidParams.value, 'Task not found');
-  }
-  return task;
-});
-server.experimental.onTaskResult((taskId, extra) async {
-  return await store.getTaskResult(taskId);
-});
-```
+## Client
 
-### Connect Transport
-
-```dart
-// Stdio
-final transport = StdioServerTransport();
-await server.connect(transport);
-
-// HTTP
-final transport = StreamableHTTPServerTransport(
-  request: httpRequest,
-  response: httpResponse,
-);
-await server.connect(transport);
-```
-
-## Client Basics
-
-### Create Client
+### Connect
 
 ```dart
 final client = McpClient(
-  Implementation(
-    name: 'client-name',
-    version: '1.0.0',
-  ),
-);
-```
-
-### Connect to Server
-
-```dart
-// Stdio - Dart server
-final transport = StdioClientTransport(
-  StdioServerParameters(
-    command: 'dart',
-    args: ['run', 'server.dart'],
-  ),
-);
-await client.connect(transport);
-
-// Stdio - Node.js server
-final transport = StdioClientTransport(
-  StdioServerParameters(
-    command: 'node',
-    args: ['server.js'],
-  ),
-);
-await client.connect(transport);
-
-// HTTP
-final transport = StreamableHttpClientTransport(
-  Uri.parse('http://localhost:3000/mcp'),
-);
-await client.connect(transport);
-```
-
-### List Tools
-
-```dart
-final result = await client.listTools();
-for (final tool in result.tools) {
-  print('${tool.name}: ${tool.description}');
-}
-```
-
-### Call Tool
-
-```dart
-final result = await client.callTool(
-  CallToolRequest(
-    name: 'tool-name',
-    arguments: {'param': 'value'},
-  ),
+  const Implementation(name: 'example-client', version: '1.0.0'),
 );
 
-print(result.content.first.text);
-```
-
-### List Resources
-
-```dart
-final result = await client.listResources();
-for (final resource in result.resources) {
-  print('${resource.name}: ${resource.uri}');
-  print('size: ${resource.size ?? "unknown"}');
-  print('lastModified: ${resource.annotations?.lastModified}');
-}
-```
-
-### Read Resource
-
-```dart
-final result = await client.readResource(ReadResourceRequest(
-  uri: 'resource://example',
-));
-
-print(result.contents.first.text);
-```
-
-### List Prompts
-
-```dart
-final result = await client.listPrompts(ListPromptsRequest());
-for (final prompt in result.prompts) {
-  print('${prompt.name}: ${prompt.description}');
-}
-```
-
-### Get Prompt
-
-```dart
-final result = await client.getPrompt(GetPromptRequest(
-  name: 'prompt-name',
-  arguments: {'arg1': 'value'},
-));
-
-for (final message in result.messages) {
-  print('${message.role}: ${message.content.text}');
-}
-```
-
-### Close Connection
-
-```dart
-await client.close();
-```
-
-## Tool Patterns
-
-### Simple Tool
-
-```dart
-server.registerTool(
-  'echo',
-  inputSchema: JsonSchema.object(
-    properties: {
-      'message': JsonSchema.string(),
-    },
-  ),
-  callback: (args, extra) async => CallToolResult(
-    content: [TextContent(text: args['message'] as String)],
-  ),
-);
-```
-
-### Tool with Validation
-
-```dart
-server.registerTool(
-  'divide',
-  inputSchema: JsonSchema.object(
-    properties: {
-      'a': JsonSchema.number(),
-      'b': JsonSchema.number(),
-    },
-  ),
-  callback: (args, extra) async {
-    final a = args['a'] as num;
-    final b = args['b'] as num;
-
-    if (b == 0) {
-      return CallToolResult(
-        isError: true,
-        content: [TextContent(text: 'Division by zero')],
-      );
-    }
-
-    return CallToolResult(
-      content: [TextContent(text: '${a / b}')],
-    );
-  },
-);
-```
-
-
-### Tool Annotations
-
-```dart
-// Read-only
-server.registerTool(
-  'get-data',
-  inputSchema: JsonSchema.object(properties: {}),
-  annotations: ToolAnnotations(readOnlyHint: true),
-  callback: (args, extra) async => CallToolResult(content: []),
-);
-
-// Destructive
-server.registerTool(
-  'delete-all',
-  inputSchema: JsonSchema.object(properties: {}),
-  description: 'Delete all data',
-  annotations: ToolAnnotations(destructiveHint: true),
-  callback: (args, extra) async => CallToolResult(content: []),
-);
-```
-
-## Content Types
-
-### Text
-
-```dart
-TextContent(text: 'Hello, world!')
-```
-
-### Image
-
-```dart
-ImageContent(
-  data: base64Encode(bytes),
-  mimeType: 'image/png',
-  theme: 'dark', // optional: 'light' | 'dark'
-)
-```
-
-### Resource Link
-
-```dart
-ResourceLink(
-  uri: 'file:///docs/architecture.md',
-  name: 'architecture',
-  mimeType: 'text/markdown',
-  icons: [
-    McpIcon(
-      src: 'https://example.com/icon.png',
-      mimeType: 'image/png',
-      theme: IconTheme.dark,
+await client.connect(
+  StdioClientTransport(
+    const StdioServerParameters(
+      command: 'dart',
+      args: ['run', 'bin/server.dart'],
     ),
-  ],
-)
-```
-
-### Embedded Resource
-
-```dart
-EmbeddedResource(
-  resource: ResourceReference(
-    uri: 'file:///path',
-    type: 'resource',
   ),
-)
+);
 ```
 
-### Multiple Content
+Remote or browser client:
 
 ```dart
-CallToolResult(
-  content: [
-    TextContent(text: 'Summary'),
-    ImageContent(data: chart, mimeType: 'image/png'),
-    TextContent(text: 'Details'),
-  ],
-)
+await client.connect(
+  StreamableHttpClientTransport(Uri.parse('https://mcp.example.com/mcp')),
+);
 ```
 
-## Error Handling
+Always close the client:
 
-### Tool Error Result
+```dart
+try {
+  // Use the client.
+} finally {
+  await client.close();
+}
+```
+
+### Discover and use primitives
+
+```dart
+final tools = await client.listTools();
+final toolResult = await client.callTool(
+  const CallToolRequest(
+    name: 'add',
+    arguments: {'a': 2, 'b': 3},
+  ),
+);
+
+final resources = await client.listResources();
+final resource = await client.readResource(
+  const ReadResourceRequest(uri: 'status://current'),
+);
+
+final prompts = await client.listPrompts();
+final prompt = await client.getPrompt(
+  const GetPromptRequest(
+    name: 'review',
+    arguments: {'diff': '...'},
+  ),
+);
+```
+
+Check advertised capabilities before optional operations:
+
+```dart
+final updates = client.listenSubscriptions(
+  const SubscriptionsListenRequest(
+    notifications: SubscriptionFilter(
+      resourceSubscriptions: ['status://current'],
+    ),
+  ),
+);
+await updates.acknowledged;
+```
+
+For MCP 2025-11-25 stateful peers, check `resources.subscribe` before using
+the legacy `subscribeResource`/`unsubscribeResource` methods.
+
+See the [client guide](client-guide.md) for progress, sampling, roots,
+elicitation, completions, tasks, reconnect behavior, and subscriptions.
+
+## Content types
+
+```dart
+TextContent(text: 'hello');
+
+ImageContent(
+  data: base64Data,
+  mimeType: 'image/png',
+);
+
+ResourceLink(
+  uri: 'file:///report.txt',
+  name: 'Report',
+  mimeType: 'text/plain',
+);
+
+EmbeddedResource(
+  resource: TextResourceContents(
+    uri: 'memo://1',
+    text: 'embedded text',
+    mimeType: 'text/plain',
+  ),
+);
+```
+
+Tool results can contain multiple content items. The 2026 preview also supports
+the documented draft-only structured-content helpers.
+
+## JSON Schema
+
+```dart
+final schema = JsonSchema.object(
+  properties: {
+    'query': JsonSchema.string(description: 'Search text'),
+    'limit': JsonSchema.integer(minimum: 1, maximum: 100),
+    'tags': JsonSchema.array(items: JsonSchema.string()),
+    'mode': JsonSchema.string(enumValues: ['fast', 'thorough']),
+  },
+  required: ['query'],
+);
+```
+
+The SDK preserves supported JSON Schema 2020-12 constructs. Validate business
+rules in the callback as well as describing inputs in the schema.
+
+## Errors
 
 ```dart
 return CallToolResult(
   isError: true,
-  content: [TextContent(text: 'Error message')],
+  content: [TextContent(text: 'The requested record was not found.')],
 );
-```
 
-### Throw MCP Error
-
-```dart
 throw McpError(
   ErrorCode.invalidParams.value,
-  'Invalid parameters',
+  'Expected a non-empty query.',
 );
 ```
 
-### Error Codes
+Common JSON-RPC codes are available through `ErrorCode`, including
+`parseError`, `invalidRequest`, `methodNotFound`, `invalidParams`, and
+`internalError`.
+
+## Notifications and logging
+
+For MCP 2026, acknowledge the caller's `subscriptions/listen` filter before
+sending correlated notifications on that request stream:
 
 ```dart
-ErrorCode.parseError       // -32700
-ErrorCode.invalidRequest   // -32600
-ErrorCode.methodNotFound   // -32601
-ErrorCode.invalidParams    // -32602
-ErrorCode.internalError    // -32603
-```
-
-### Try-Catch
-
-```dart
-try {
-  final result = await client.callTool(request);
-} on McpError catch (e) {
-  print('MCP Error: ${e.message} (${e.code})');
-} on TimeoutException {
-  print('Request timed out');
-} catch (e) {
-  print('Unexpected error: $e');
-}
-```
-
-## JSON Schema Patterns
-
-### String
-
-```dart
-'name': JsonSchema.string(
-  minLength: 1,
-  maxLength: 100,
-  pattern: r'^[a-zA-Z]+$',
-)
-```
-
-### Number
-
-```dart
-'age': JsonSchema.number(
-  minimum: 0,
-  maximum: 150,
-)
-```
-
-### Integer
-
-```dart
-'count': JsonSchema.integer(
-  minimum: 1,
-)
-```
-
-### Boolean
-
-```dart
-'enabled': JsonSchema.boolean()
-```
-
-### Enum
-
-```dart
-'status': JsonSchema.string(
-  enumValues: ['active', 'inactive', 'pending'],
-)
-```
-
-`JsonSchema.string(enumValues: ...)` and untitled `JsonEnum` values serialize as standard JSON Schema using `enum`. Titled `JsonEnum` values serialize with `oneOf` or, for array items, `anyOf` const/title entries. Legacy `type: 'enum'` / `values` and `enumNames` input is still accepted when parsing.
-
-### Array
-
-```dart
-'tags': JsonSchema.array(
-  items: JsonSchema.string(),
-  minItems: 1,
-  maxItems: 10,
-)
-```
-
-### Object
-
-```dart
-'config': JsonSchema.object(
-  properties: {
-    'key': JsonSchema.string(),
-    'value': JsonSchema.number(),
+server.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
+  Method.subscriptionsListen,
+  (request, extra) async {
+    final acknowledged = request.listenParams.notifications.acknowledgedBy(
+      server.server.getCapabilities(),
+    );
+    await extra.sendSubscriptionAcknowledged(acknowledged);
+    await extra.sendSubscriptionNotification(
+      const JsonRpcToolListChangedNotification(),
+    );
+    return const EmptyResult();
   },
-  required: ['key'],
-)
-```
+  (id, params, meta) => JsonRpcSubscriptionsListenRequest(
+    id: id,
+    listenParams: SubscriptionsListenRequest.fromJson(params!),
+    meta: meta,
+  ),
+);
 
-## Notifications
-
-### Send Log Message
-
-```dart
 await server.sendLoggingMessage(
-  LoggingMessageNotification(
+  const LoggingMessageNotification(
     level: LoggingLevel.info,
-    data: 'Processing started',
+    logger: 'example',
+    data: {'message': 'ready'},
   ),
+  requestMeta: extra.meta,
 );
 ```
 
-### Resource Updated
+The logging call belongs inside a request handler where `extra` is available;
+MCP 2026 only emits messages allowed by that request's log level. Legacy MCP
+2025-11-25 peers instead use global capability-gated methods such as
+`sendToolListChanged`, `sendResourceUpdated`, and `logging/setLevel`.
 
-```dart
-await server.sendResourceUpdated('resource://uri');
-```
+Stdio servers must reserve stdout for MCP frames; send application logs to
+stderr. Configure internal SDK logs with `setMcpLogHandler`,
+`silenceMcpLogs`, or `resetMcpLogHandler`.
 
-### List Changed
+## Testing and verification
 
-```dart
-await server.sendToolListChanged();
-await server.sendResourceListChanged();
-await server.sendPromptListChanged();
-```
+- Use IO stream/custom transports for in-process unit tests.
+- Use `mcp_dart inspect-server` or `inspect-client` for a live target.
+- Use `mcp_dart conformance` for this repository's built-in regression cases;
+  it is not a certification tool for arbitrary peers.
+- Run the linked [interop fixtures](interoperability.md) for cross-SDK claims.
 
-## Capabilities
+## Platform reminders
 
-### Server Capabilities
+| Target | Recommended transport |
+| --- | --- |
+| Dart VM / desktop helper | Stdio or Streamable HTTP |
+| Browser / Flutter Web | Streamable HTTP client |
+| Flutter mobile | Remote Streamable HTTP; app-managed helper only for local IPC |
+| Unit tests / in-process | IO stream or custom transport |
 
-```dart
-final server = McpServer(
-  Implementation(name: 'server', version: '1.0.0'),
-  // Capabilities auto-detected from registrations
-  options: McpServerOptions(
-    capabilities: ServerCapabilities(
-      tools: ServerCapabilitiesTools(),
-    ),
-  ),
-);
-```
+See [Flutter recipes](flutter-recipes.md) for lifecycle and secure-storage
+guidance.
 
-### Client Capabilities
+## Next steps
 
-```dart
-final client = McpClient(
-  Implementation(name: 'client', version: '1.0.0'),
-  options: McpClientOptions(
-    capabilities: ClientCapabilities(
-      sampling: ClientCapabilitiesSampling(tools: true),
-      roots: ClientCapabilitiesRoots(listChanged: true),
-      elicitation: ClientElicitation(
-        form: ClientElicitationForm(applyDefaults: true),
-      ),
-    ),
-  ),
-);
-```
-
-## Logging
-
-### Set Level
-
-```dart
-await client.setLoggingLevel(SetLevelRequest(
-  level: LoggingLevel.debug,
-));
-```
-
-### Log Levels
-
-```dart
-LoggingLevel.debug
-LoggingLevel.info
-LoggingLevel.notice
-LoggingLevel.warning
-LoggingLevel.error
-LoggingLevel.critical
-LoggingLevel.alert
-LoggingLevel.emergency
-```
-
-### Receive Logs
-
-```dart
-client.setNotificationHandler<JsonRpcLoggingMessageNotification>(
-  Method.notificationsMessage,
-  (notification) async {
-    print('[${notification.logParams.level}] ${notification.logParams.data}');
-  },
-  (params, meta) {
-    if (params == null) {
-      throw const FormatException(
-        'Missing params for logging message notification',
-      );
-    }
-
-    return JsonRpcLoggingMessageNotification(
-      logParams: LoggingMessageNotification.fromJson(params),
-      meta: meta,
-    );
-  },
-);
-```
-
-### SDK Runtime Logs (Internal)
-
-```dart
-import 'package:logging/logging.dart' as app_log;
-import 'package:mcp_dart/mcp_dart.dart' as mcp;
-
-final appLogger = app_log.Logger('app.mcp');
-
-mcp.setMcpLogHandler((name, level, message) {
-  final mapped = switch (level) {
-    mcp.LogLevel.debug => app_log.Level.FINE,
-    mcp.LogLevel.info => app_log.Level.INFO,
-    mcp.LogLevel.warn => app_log.Level.WARNING,
-    mcp.LogLevel.error => app_log.Level.SEVERE,
-  };
-  appLogger.log(mapped, '[$name] $message');
-});
-
-// Silence SDK runtime logs.
-mcp.silenceMcpLogs();
-
-// Restore default SDK log output.
-mcp.resetMcpLogHandler();
-```
-
-## Resource Subscriptions
-
-### Subscribe
-
-```dart
-await client.subscribeResource(SubscribeRequest(
-  uri: 'resource://uri',
-));
-```
-
-### Handle Updates
-
-```dart
-client.setNotificationHandler<JsonRpcResourceUpdatedNotification>(
-  Method.notificationsResourcesUpdated,
-  (notification) async {
-    print('Updated: ${notification.updatedParams.uri}');
-    // Re-read resource
-  },
-  (params, meta) {
-    if (params == null) {
-      throw const FormatException(
-        'Missing params for resource update notification',
-      );
-    }
-
-    return JsonRpcResourceUpdatedNotification(
-      updatedParams: ResourceUpdatedNotification.fromJson(params),
-      meta: meta,
-    );
-  },
-);
-```
-
-### Unsubscribe
-
-```dart
-await client.unsubscribeResource(UnsubscribeRequest(
-  uri: 'resource://uri',
-));
-```
-
-## Completions
-
-### Complete Resource Argument
-
-```dart
-final result = await client.complete(CompleteRequest(
-  ref: const ResourceReference(
-    uri: 'users://{organization}/{userId}/profile',
-  ),
-  argument: const ArgumentCompletionInfo(
-    name: 'userId',
-    value: 'al',  // Partial
-  ),
-  context: const CompletionContext(
-    arguments: {'organization': 'engineering'},
-  ),
-));
-
-for (final value in result.completion.values) {
-  print(value);  // alice, alex, alan, ...
-}
-```
-
-### Complete Prompt Argument
-
-```dart
-final result = await client.complete(CompleteRequest(
-  ref: const PromptReference(
-    name: 'translate',
-    title: 'Translate text',
-  ),
-  argument: const ArgumentCompletionInfo(
-    name: 'language',
-    value: 'Spa',
-  ),
-  context: const CompletionContext(
-    arguments: {'source_language': 'English'},
-  ),
-));
-```
-
-## Common Imports
-
-```dart
-// Core SDK
-import 'package:mcp_dart/mcp_dart.dart';
-
-// For HTTP servers (VM only)
-import 'dart:io';
-
-// For async operations
-import 'dart:async';
-
-// For JSON encoding
-import 'dart:convert';
-
-// For base64 encoding
-import 'dart:convert' show base64Encode, base64Decode;
-```
-
-## Testing
-
-### Stream Transport for Tests
-
-```dart
-test('example', () async {
-  final s2c = StreamController<String>();
-  final c2s = StreamController<String>();
-
-  final server = McpServer(...);
-  await server.connect(IOStreamTransport(
-    stream: c2s.stream,
-    sink: s2c.sink,
-  ));
-
-  final client = McpClient(...);
-  await client.connect(IOStreamTransport(
-    stream: s2c.stream,
-    sink: c2s.sink,
-  ));
-
-  // Test operations
-  final result = await client.callTool(...);
-  expect(result.content.first.text, 'expected');
-
-  // Cleanup
-  await client.close();
-  await server.close();
-});
-```
-
-## Platform Checks
-
-```dart
-import 'dart:io' show Platform;
-
-if (Platform.isWeb) {
-  // Web-specific code
-} else {
-  // VM-specific code
-}
-```
-
-## Best Practices Checklist
-
-- ✅ Always close clients: `await client.close()`
-- ✅ Validate tool inputs with JSON schema
-- ✅ Handle all error cases (McpError, TimeoutException)
-- ✅ Use type-safe argument access: `args['key'] as Type`
-- ✅ Provide clear descriptions for tools/resources/prompts
-- ✅ Use appropriate tool hints (readOnly, destructive, etc.)
-- ✅ Check server capabilities before using features
-- ✅ Sanitize and validate user inputs for security
-- ✅ Use meaningful error messages
-
-## Next Steps
-
-- **Main README**: See [../README.md](../README.md) for overview and platform support
-- **Getting Started**: See [getting-started.md](getting-started.md)
-- **Examples**: See [examples.md](examples.md)
+- [Getting started](getting-started.md)
+- [Server guide](server-guide.md)
+- [Client guide](client-guide.md)
+- [Tools](tools.md)
+- [Transports](transports.md)
+- [Examples](examples.md)
+- [MCP Apps](mcp-apps.md)
+- [Migration cookbooks](migration-cookbooks.md)

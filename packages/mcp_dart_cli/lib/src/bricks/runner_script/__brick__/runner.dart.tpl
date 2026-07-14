@@ -11,7 +11,7 @@ import 'package:args/args.dart';
 void main(List<String> args) async {
   final parser = ArgParser()
     ..addOption('transport', allowed: ['stdio', 'http'], defaultsTo: 'stdio')
-    ..addOption('host', defaultsTo: '0.0.0.0')
+    ..addOption('host', defaultsTo: '127.0.0.1')
     ..addOption('port', defaultsTo: '3000');
 
   final results = parser.parse(args);

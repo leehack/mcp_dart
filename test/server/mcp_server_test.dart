@@ -55,7 +55,7 @@ class McpServerTestTransport
       JsonRpcInitializeRequest(
         id: 0,
         initParams: const InitializeRequest(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
         ),
@@ -68,7 +68,7 @@ class McpServerTestTransport
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
-      protocolVersion: stableProtocolVersion2026_07_28,
+      protocolVersion: previewProtocolVersion,
       clientInfo: const Implementation(name: 'test-client', version: '1.0.0'),
       clientCapabilities: const ClientCapabilities(),
     );

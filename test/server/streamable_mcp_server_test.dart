@@ -117,7 +117,7 @@ void main() {
   });
 
   Map<String, dynamic> statelessMeta() => buildProtocolRequestMeta(
-        protocolVersion: stableProtocolVersion2026_07_28,
+        protocolVersion: previewProtocolVersion,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
         clientCapabilities: const ClientCapabilities(),
       );
@@ -155,7 +155,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: stableProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -221,6 +221,7 @@ void main() {
 
         expect(res.statusCode, HttpStatus.ok);
         expect(res.headers['access-control-allow-origin'], '*');
+        expect(res.headers['access-control-allow-credentials'], isNull);
         expect(res.headers['access-control-allow-methods'], contains('POST'));
       } finally {
         client.close();
@@ -244,6 +245,9 @@ void main() {
         expect(allowedHeaders, contains('mcp-method'));
         expect(allowedHeaders, contains('mcp-name'));
         expect(allowedHeaders, contains('mcp-param-region'));
+        final vary = res.headers[HttpHeaders.varyHeader]!.toLowerCase();
+        expect(vary, contains('origin'));
+        expect(vary, contains('access-control-request-headers'));
       } finally {
         client.close();
       }
@@ -254,7 +258,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -283,7 +287,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -355,14 +359,19 @@ void main() {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
           'Origin': 'http://localhost:8080',
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
 
       expect(response.statusCode, HttpStatus.ok);
       expect(response.headers['mcp-session-id'], isNull);
-      expect(response.headers['access-control-allow-origin'], '*');
+      expect(
+        response.headers['access-control-allow-origin'],
+        'http://localhost:8080',
+      );
+      expect(response.headers['access-control-allow-credentials'], 'true');
+      expect(response.headers['vary'], contains('Origin'));
       final messages = _decodeSseJsonMessages(response.body);
       expect(messages.single['result']['tools'][0]['name'], 'echo');
     });
@@ -398,7 +407,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -448,7 +457,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'missing_tool',
         },
@@ -528,7 +537,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+            'MCP-Protocol-Version': previewProtocolVersion,
             'Mcp-Method': Method.serverDiscover,
           },
         );
@@ -588,7 +597,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.serverDiscover,
         },
       );
@@ -643,7 +652,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+            'MCP-Protocol-Version': previewProtocolVersion,
             'Mcp-Method': method,
           },
         );
@@ -686,7 +695,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsList,
           'mcp-session-id': 'unknown-legacy-session',
         },
@@ -764,7 +773,7 @@ void main() {
       await server.start();
 
       final meta = buildProtocolRequestMeta(
-        protocolVersion: stableProtocolVersion2026_07_28,
+        protocolVersion: previewProtocolVersion,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
         clientCapabilities: const ClientCapabilities(
           extensions: {mcpTasksExtensionId: <String, dynamic>{}},
@@ -782,7 +791,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'long',
         },
@@ -806,7 +815,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.tasksGet,
           'Mcp-Name': taskId,
           'mcp-session-id': 'unknown-legacy-session',
@@ -854,7 +863,7 @@ void main() {
         meta: statelessMeta(),
       ).toJson()
         ..['_meta'] = const {
-          McpMetaKey.protocolVersion: latestProtocolVersion,
+          McpMetaKey.protocolVersion: defaultProtocolVersion,
         };
 
       final response = await http.post(
@@ -863,7 +872,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -901,7 +910,7 @@ void main() {
         body: jsonEncode(
           const JsonRpcListToolsRequest(id: 12).toJson()
             ..['_meta'] = const {
-              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: previewProtocolVersion,
             },
         ),
         headers: {
@@ -927,7 +936,7 @@ void main() {
       final getRequest = await client.getUrl(Uri.parse(baseUrl));
       getRequest.headers.set(
         'MCP-Protocol-Version',
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       final getResponse = await getRequest.close();
       expect(getResponse.statusCode, HttpStatus.methodNotAllowed);
@@ -937,7 +946,7 @@ void main() {
       final deleteRequest = await client.deleteUrl(Uri.parse(baseUrl));
       deleteRequest.headers.set(
         'MCP-Protocol-Version',
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       final deleteResponse = await deleteRequest.close();
       expect(deleteResponse.statusCode, HttpStatus.methodNotAllowed);
@@ -947,7 +956,7 @@ void main() {
       final patchRequest = await client.openUrl('PATCH', Uri.parse(baseUrl));
       patchRequest.headers.set(
         'MCP-Protocol-Version',
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       final patchResponse = await patchRequest.close();
       expect(patchResponse.statusCode, HttpStatus.methodNotAllowed);
@@ -961,7 +970,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1004,7 +1013,7 @@ void main() {
           id: 1,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: stableProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1030,7 +1039,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1089,7 +1098,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1145,7 +1154,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1390,7 +1399,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: stableProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'test', version: '1.0'),
             ).toJson(),
@@ -1641,7 +1650,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1668,7 +1677,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1708,7 +1717,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1724,6 +1733,15 @@ void main() {
 
         final res = await req.close();
         expect(res.statusCode, HttpStatus.ok);
+        expect(
+          res.headers.value('access-control-allow-origin'),
+          'http://localhost:$port',
+        );
+        expect(
+          res.headers.value('access-control-allow-credentials'),
+          'true',
+        );
+        expect(res.headers.value(HttpHeaders.varyHeader), contains('Origin'));
         await res.drain();
       } finally {
         client.close(force: true);
@@ -1780,7 +1798,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),

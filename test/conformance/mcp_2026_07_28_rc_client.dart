@@ -19,7 +19,7 @@ Future<void> main(List<String> args) async {
   final scenario = Platform.environment['MCP_CONFORMANCE_SCENARIO'];
   final protocolVersion =
       Platform.environment['MCP_CONFORMANCE_PROTOCOL_VERSION'] ??
-          stableProtocolVersion2026_07_28;
+          previewProtocolVersion;
   final context = _readContext();
 
   switch (scenario) {
@@ -187,7 +187,7 @@ Future<void> _runMrtrRequestState(Uri serverUrl, String protocolVersion) async {
 Future<void> _runRequestMetadata(Uri serverUrl, String protocolVersion) async {
   await _RawStatelessClient(
     serverUrl,
-    latestProtocolVersion,
+    defaultProtocolVersion,
   ).request(Method.serverDiscover, const {});
   await _RawStatelessClient(
     serverUrl,

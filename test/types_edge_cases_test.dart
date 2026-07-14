@@ -349,7 +349,7 @@ void main() {
 
     test('rejects wrong wrapper constants', () {
       final params = {
-        'protocolVersion': stableProtocolVersion2025_11_25,
+        'protocolVersion': stableProtocolVersion,
         'capabilities': <String, dynamic>{},
         'clientInfo': <String, dynamic>{'name': 'test', 'version': '1.0'},
       };
@@ -380,7 +380,7 @@ void main() {
         'id': 1,
         'method': 'initialize',
         'params': <String, dynamic>{
-          'protocolVersion': stableProtocolVersion2025_11_25,
+          'protocolVersion': stableProtocolVersion,
           'capabilities': <String, dynamic>{},
           'clientInfo': <String, dynamic>{'name': 'test', 'version': '1.0'},
           '_meta': <String, dynamic>{'sessionId': 'abc123'},
@@ -1126,7 +1126,7 @@ void main() {
     test('handles optional instructions field', () {
       // With instructions
       final withInstructions = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test', version: '1.0'),
         instructions: 'How to use this server',
@@ -1136,7 +1136,7 @@ void main() {
 
       // Without instructions
       final withoutInstructions = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test', version: '1.0'),
       );
@@ -1146,7 +1146,7 @@ void main() {
 
     test('extracts _meta from result JSON', () {
       final json = <String, dynamic>{
-        'protocolVersion': stableProtocolVersion2025_11_25,
+        'protocolVersion': stableProtocolVersion,
         'capabilities': <String, dynamic>{},
         'serverInfo': <String, dynamic>{'name': 'test', 'version': '1.0'},
         '_meta': <String, dynamic>{'sessionId': 'xyz'},

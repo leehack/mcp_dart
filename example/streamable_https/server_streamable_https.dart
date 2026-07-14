@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+final allowedBrowserOrigin =
+    Platform.environment['MCP_ALLOWED_ORIGIN'] ?? 'http://localhost:8080';
+
 // Simple in-memory event store for resumability
 class InMemoryEventStore implements EventStore {
   final Map<String, List<({EventId id, JsonRpcMessage message})>> _events = {};
@@ -254,17 +257,19 @@ McpServer getServer() {
 }
 
 void setCorsHeaders(HttpRequest request) {
-  // Echo the Origin header to support Allow-Credentials
-  final origin = request.headers.value('Origin') ?? '*';
-  request.response.headers
-      .set('Access-Control-Allow-Origin', origin); // Allow the specific origin
+  final origin = request.headers.value('Origin');
+  if (origin == allowedBrowserOrigin) {
+    request.response.headers
+        .set('Access-Control-Allow-Origin', allowedBrowserOrigin);
+    request.response.headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+  request.response.headers.set(HttpHeaders.varyHeader, 'Origin');
   request.response.headers
       .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   request.response.headers.set(
     'Access-Control-Allow-Headers',
     'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, mcp-protocol-version, Last-Event-ID, Authorization',
   );
-  request.response.headers.set('Access-Control-Allow-Credentials', 'true');
   request.response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours
   request.response.headers
       .set('Access-Control-Expose-Headers', 'mcp-session-id');
@@ -275,8 +280,9 @@ void main() async {
   final transports = <String, StreamableHTTPServerTransport>{};
 
   // Create HTTP server
-  final server = await HttpServer.bind(InternetAddress.anyIPv4, 3000);
-  print('MCP Streamable HTTP Server listening on port 3000');
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 3000);
+  print('MCP Streamable HTTP Server listening on http://localhost:3000/mcp');
+  print('Allowed browser origin: $allowedBrowserOrigin');
 
   await for (final request in server) {
     // Apply CORS headers to all responses
@@ -366,6 +372,8 @@ Future<void> handlePostRequest(
         options: StreamableHTTPServerTransportOptions(
           sessionIdGenerator: () => generateUUID(),
           eventStore: eventStore, // Enable resumability
+          allowedHosts: const {'localhost', '127.0.0.1'},
+          allowedOrigins: {allowedBrowserOrigin},
           onsessioninitialized: (sessionId) {
             // Store the transport by session ID when session is initialized
             print('Session initialized with ID: $sessionId');

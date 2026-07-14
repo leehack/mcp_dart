@@ -94,7 +94,7 @@ class SessionRecordingTaskStore extends InMemoryTaskStore {
 class DiscoveringClientTransport extends Transport
     implements ProtocolVersionAwareTransport {
   DiscoveringClientTransport({
-    this.discoverVersions = const [stableProtocolVersion2026_07_28],
+    this.discoverVersions = const [previewProtocolVersion],
     this.unsupportedDiscoverProtocolVersions = const [],
     this.unsupportedDiscoverData,
     this.capabilities = const ServerCapabilities(
@@ -237,7 +237,7 @@ class LegacyFallbackTransport extends Transport
         JsonRpcResponse(
           id: message.id,
           result: const InitializeResult(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: stableProtocolVersion,
             capabilities: ServerCapabilities(
               tools: ServerCapabilitiesTools(),
             ),
@@ -319,7 +319,7 @@ Map<String, dynamic> _clientMeta({
   Object? logLevel,
 }) {
   return buildProtocolRequestMeta(
-    protocolVersion: protocolVersion ?? stableProtocolVersion2026_07_28,
+    protocolVersion: protocolVersion ?? previewProtocolVersion,
     clientInfo: clientInfo,
     clientCapabilities: clientCapabilities,
     meta: meta,
@@ -353,8 +353,8 @@ void _registerTaskGetExtensionHandler(Server server) {
 
 void main() {
   group('MCP 2026-07-28 RC protocol foundation', () {
-    test('makes the stable profile the 2026 development default', () {
-      expect(latestProtocolVersion, stableProtocolVersion2026_07_28);
+    test('distinguishes preview, stable, and default versions', () {
+      expect(defaultProtocolVersion, previewProtocolVersion);
       expect(McpProtocol.values, [
         McpProtocol.stable,
         McpProtocol.legacy,
@@ -364,13 +364,13 @@ void main() {
       expect(const McpClientOptions().useServerDiscover, isTrue);
       expect(
         const McpClientOptions(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
         ).useServerDiscover,
         isFalse,
       );
       expect(
         const McpClientOptions(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           useServerDiscover: true,
         ).useServerDiscover,
         isTrue,
@@ -378,26 +378,26 @@ void main() {
       expect(
         const McpClientOptions(
           protocol: McpProtocol.require2026,
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
         ).useServerDiscover,
         isTrue,
       );
       expect(const McpServerOptions().protocol, McpProtocol.stable);
       expect(
         const McpServerOptions().supportedVersions,
-        contains(stableProtocolVersion2026_07_28),
+        contains(previewProtocolVersion),
       );
       expect(
         supportedProtocolVersions,
-        contains(stableProtocolVersion2026_07_28),
+        contains(previewProtocolVersion),
       );
-      expect(statelessProtocolVersions, [stableProtocolVersion2026_07_28]);
-      expect(isStatelessProtocolVersion(stableProtocolVersion2026_07_28), true);
+      expect(statelessProtocolVersions, [previewProtocolVersion]);
+      expect(isStatelessProtocolVersion(previewProtocolVersion), true);
       expect(
         isStatelessProtocolVersion(_removedDraftProtocolVersion2026V1),
         false,
       );
-      expect(isStatelessProtocolVersion(latestProtocolVersion), true);
+      expect(isStatelessProtocolVersion(defaultProtocolVersion), true);
       expect(McpProtocol.stable.supportsStatelessProtocol, true);
       expect(McpProtocol.legacy.supportsStatelessProtocol, false);
       expect(McpProtocol.require2026.supportsStatelessProtocol, true);
@@ -412,8 +412,8 @@ void main() {
 
       await client.connect(transport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
-      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      expect(client.getProtocolVersion(), stableProtocolVersion);
+      expect(transport.protocolVersion, stableProtocolVersion);
       expect(
         transport.sentMessages
             .whereType<JsonRpcRequest>()
@@ -422,14 +422,14 @@ void main() {
       );
       expect(
         const McpServerOptions(protocol: McpProtocol.legacy).supportedVersions,
-        isNot(contains(stableProtocolVersion2026_07_28)),
+        isNot(contains(previewProtocolVersion)),
       );
     });
 
     test('builds stateless request metadata without dropping caller metadata',
         () {
       final meta = buildProtocolRequestMeta(
-        protocolVersion: stableProtocolVersion2026_07_28,
+        protocolVersion: previewProtocolVersion,
         clientInfo: const Implementation(name: 'client', version: '1.0.0'),
         clientCapabilities: const ClientCapabilities(),
         meta: const {
@@ -443,7 +443,7 @@ void main() {
       expect(meta['com.example.trace/id'], 'trace-1');
       expect(
         meta[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(meta[McpMetaKey.clientInfo], {
         'name': 'client',
@@ -463,7 +463,7 @@ void main() {
       ]) {
         expect(
           () => buildProtocolRequestMeta(
-            protocolVersion: stableProtocolVersion2026_07_28,
+            protocolVersion: previewProtocolVersion,
             clientInfo: const Implementation(
               name: 'client',
               version: '1.0.0',
@@ -488,7 +488,7 @@ void main() {
         'id': 'tools',
         'method': Method.toolsList,
         '_meta': {
-          McpMetaKey.protocolVersion: latestProtocolVersion,
+          McpMetaKey.protocolVersion: defaultProtocolVersion,
         },
         'params': {
           '_meta': _clientMeta(),
@@ -499,7 +499,7 @@ void main() {
       final request = parsed as JsonRpcListToolsRequest;
       expect(
         request.meta?[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(request.meta?[McpMetaKey.clientInfo], {
         'name': 'client',
@@ -535,7 +535,7 @@ void main() {
             'message': 'Open browser',
             'url': 'authorize/callback',
           },
-          protocolVersion: stableProtocolVersion2026_07_28,
+          protocolVersion: previewProtocolVersion,
         ),
         throwsA(isA<FormatException>()),
       );
@@ -543,7 +543,7 @@ void main() {
         () => const ElicitRequestParams.url(
           message: 'Open browser',
           url: 'authorize/callback',
-        ).toJson(protocolVersion: stableProtocolVersion2026_07_28),
+        ).toJson(protocolVersion: previewProtocolVersion),
         throwsA(isA<ArgumentError>()),
       );
     });
@@ -558,7 +558,7 @@ void main() {
           'message': 'Open browser',
           'url': 'https://example.com/authorize',
           '_meta': {
-            McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+            McpMetaKey.protocolVersion: previewProtocolVersion,
           },
         },
       });
@@ -568,7 +568,7 @@ void main() {
       final serialized = const ElicitRequestParams.url(
         message: 'Open browser',
         url: 'https://example.com/authorize',
-      ).toJson(protocolVersion: stableProtocolVersion2026_07_28);
+      ).toJson(protocolVersion: previewProtocolVersion);
       expect(serialized, isNot(contains('elicitationId')));
       expect(serialized['mode'], 'url');
       expect(serialized['url'], 'https://example.com/authorize');
@@ -584,7 +584,7 @@ void main() {
             'url': 'https://example.com/authorize',
             'elicitationId': 'legacy-id',
             '_meta': {
-              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: previewProtocolVersion,
             },
           },
         }),
@@ -601,7 +601,7 @@ void main() {
             'url': 'https://example.com/authorize',
             'elicitationId': null,
             '_meta': {
-              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: previewProtocolVersion,
             },
           },
         }),
@@ -612,7 +612,7 @@ void main() {
           message: 'Open browser',
           url: 'https://example.com/authorize',
           elicitationId: 'legacy-id',
-        ).toJson(protocolVersion: stableProtocolVersion2026_07_28),
+        ).toJson(protocolVersion: previewProtocolVersion),
         throwsA(isA<ArgumentError>()),
       );
     });
@@ -647,7 +647,7 @@ void main() {
       );
 
       final requestJson = request.toJson(
-        protocolVersion: stableProtocolVersion2026_07_28,
+        protocolVersion: previewProtocolVersion,
       );
       final ratioSchema = requestJson['requestedSchema']['properties']['ratio'];
       expect(ratioSchema['minimum'], 0.1);
@@ -675,7 +675,7 @@ void main() {
             },
           },
           '_meta': {
-            McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+            McpMetaKey.protocolVersion: previewProtocolVersion,
           },
         },
       });
@@ -700,7 +700,7 @@ void main() {
               },
             },
             '_meta': {
-              McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+              McpMetaKey.protocolVersion: previewProtocolVersion,
             },
           },
         }),
@@ -1145,7 +1145,7 @@ void main() {
       expect(
         () => DiscoverResult.fromJson({
           'resultType': 'complete',
-          'supportedVersions': [stableProtocolVersion2026_07_28],
+          'supportedVersions': [previewProtocolVersion],
           'capabilities': <String, dynamic>{},
           'serverInfo': {'name': 'server', 'version': '1.0.0'},
           '_meta': {'bad': Object()},
@@ -1154,7 +1154,7 @@ void main() {
       );
       expect(
         () => const DiscoverResult(
-          supportedVersions: [stableProtocolVersion2026_07_28],
+          supportedVersions: [previewProtocolVersion],
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'server', version: '1.0.0'),
           meta: {'bad': Object()},
@@ -1184,7 +1184,7 @@ void main() {
       expect(requestJson['method'], Method.serverDiscover);
       expect(
         requestJson['params']['_meta'][McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(
         requestJson['params']['_meta'][McpMetaKey.clientCapabilities],
@@ -1192,7 +1192,7 @@ void main() {
       );
 
       final result = const DiscoverResult(
-        supportedVersions: [stableProtocolVersion2026_07_28],
+        supportedVersions: [previewProtocolVersion],
         capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
         serverInfo: Implementation(name: 'server', version: '1.0.0'),
         instructions: 'Use the tools.',
@@ -1203,7 +1203,7 @@ void main() {
       expect(resultJson['resultType'], 'complete');
       expect(
         resultJson['supportedVersions'],
-        [stableProtocolVersion2026_07_28],
+        [previewProtocolVersion],
       );
       expect(resultJson['capabilities'], {'tools': <String, dynamic>{}});
       expect(resultJson['ttlMs'], 1000);
@@ -1235,7 +1235,7 @@ void main() {
       expect(clientCapabilities.toJson(), contains('tasks'));
 
       final draftMeta = buildProtocolRequestMeta(
-        protocolVersion: stableProtocolVersion2026_07_28,
+        protocolVersion: previewProtocolVersion,
         clientInfo: const Implementation(name: 'client', version: '1.0.0'),
         clientCapabilities: clientCapabilities,
       );
@@ -1249,7 +1249,7 @@ void main() {
       );
 
       final stableMeta = buildProtocolRequestMeta(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: stableProtocolVersion,
         clientInfo: const Implementation(name: 'client', version: '1.0.0'),
         clientCapabilities: clientCapabilities,
       );
@@ -1276,7 +1276,7 @@ void main() {
       expect(serverCapabilities.toJson(), contains('tasks'));
 
       final json = const DiscoverResult(
-        supportedVersions: [stableProtocolVersion2026_07_28],
+        supportedVersions: [previewProtocolVersion],
         capabilities: serverCapabilities,
         serverInfo: Implementation(name: 'server', version: '1.0.0'),
       ).toJson();
@@ -1290,7 +1290,7 @@ void main() {
         () {
       final result = {
         'resultType': resultTypeComplete,
-        'supportedVersions': [stableProtocolVersion2026_07_28],
+        'supportedVersions': [previewProtocolVersion],
         'capabilities': <String, dynamic>{},
         'serverInfo': {'name': 'server', 'version': '1.0.0'},
       };
@@ -1298,7 +1298,7 @@ void main() {
       for (final parse in <Object Function()>[
         () => DiscoverResult.fromJson({
               ...result,
-              'supportedVersions': [stableProtocolVersion2026_07_28, 1],
+              'supportedVersions': [previewProtocolVersion, 1],
             }),
         () => DiscoverResult.fromJson({
               ...result,
@@ -1333,7 +1333,7 @@ void main() {
 
     test('requires complete resultType on server/discover results', () {
       final validResult = const DiscoverResult(
-        supportedVersions: [stableProtocolVersion2026_07_28],
+        supportedVersions: [previewProtocolVersion],
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'server', version: '1.0.0'),
       ).toJson();
@@ -1360,7 +1360,7 @@ void main() {
       expect(
         () => const DiscoverResult(
           resultType: resultTypeInputRequired,
-          supportedVersions: [stableProtocolVersion2026_07_28],
+          supportedVersions: [previewProtocolVersion],
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'server', version: '1.0.0'),
         ).toJson(),
@@ -1438,7 +1438,7 @@ void main() {
       expect(
         (parsed as JsonRpcServerDiscoverRequest)
             .meta?[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
     });
 
@@ -2418,7 +2418,7 @@ void main() {
       expect(json['params']['notifications'], {'toolsListChanged': true});
       expect(
         json['params']['_meta'][McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(
         json['params']['_meta'][McpMetaKey.clientCapabilities],
@@ -3374,7 +3374,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 'init',
           initParams: const InitializeRequest(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: stableProtocolVersion,
             capabilities: ClientCapabilities(
               extensions: {mcpTasksExtensionId: {}},
             ),
@@ -4249,7 +4249,7 @@ void main() {
       expect(response.id, 'discover-1');
       expect(
         response.result['supportedVersions'],
-        contains(stableProtocolVersion2026_07_28),
+        contains(previewProtocolVersion),
       );
       expect(response.result['serverInfo']['name'], 'server');
       expect(response.result['instructions'], 'Discovery instructions.');
@@ -4295,7 +4295,7 @@ void main() {
       final response = transport.sentMessages.single as JsonRpcResponse;
       final tools = response.result['tools'] as List<dynamic>;
       expect(tools.single['name'], 'echo');
-      expect(receivedProtocolVersion, stableProtocolVersion2026_07_28);
+      expect(receivedProtocolVersion, previewProtocolVersion);
       expect(receivedClientInfo?.name, 'client');
       expect(receivedClientInfo?.version, '1.0.0');
       expect(receivedClientCapabilities?.toJson(), isEmpty);
@@ -4492,7 +4492,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: stableProtocolVersion,
             capabilities: ClientCapabilities(
               elicitation: ClientElicitation.formOnly(),
             ),
@@ -4548,7 +4548,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2026_07_28,
+            protocolVersion: previewProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'client', version: '1.0.0'),
           ),
@@ -4559,11 +4559,11 @@ void main() {
       final response = transport.sentMessages.single as JsonRpcResponse;
       expect(
         response.result['protocolVersion'],
-        stableProtocolVersion2025_11_25,
+        stableProtocolVersion,
       );
       expect(
         response.result['protocolVersion'],
-        isNot(latestProtocolVersion),
+        isNot(defaultProtocolVersion),
       );
     });
 
@@ -4594,7 +4594,7 @@ void main() {
       );
       expect(
         response.error.data['supported'],
-        contains(stableProtocolVersion2026_07_28),
+        contains(previewProtocolVersion),
       );
     });
 
@@ -4628,7 +4628,7 @@ void main() {
       );
       expect(
         validateDiscoverRequest(
-          _clientMeta(protocolVersion: stableProtocolVersion2025_11_25),
+          _clientMeta(protocolVersion: stableProtocolVersion),
         ),
         isA<McpError>().having(
           (error) => error.message,
@@ -4638,7 +4638,7 @@ void main() {
       );
       expect(
         validateToolRequest({
-          McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+          McpMetaKey.protocolVersion: previewProtocolVersion,
           McpMetaKey.clientCapabilities: <String, dynamic>{},
         }),
         isA<McpError>().having(
@@ -4649,7 +4649,7 @@ void main() {
       );
       expect(
         validateToolRequest({
-          McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+          McpMetaKey.protocolVersion: previewProtocolVersion,
           McpMetaKey.clientInfo: {
             'name': 'client',
             'version': '1.0.0',
@@ -4663,7 +4663,7 @@ void main() {
       );
       expect(
         validateToolRequest({
-          McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+          McpMetaKey.protocolVersion: previewProtocolVersion,
           McpMetaKey.clientInfo: {'name': 1},
           McpMetaKey.clientCapabilities: <String, dynamic>{},
         }),
@@ -4675,7 +4675,7 @@ void main() {
       );
       expect(
         validateToolRequest({
-          McpMetaKey.protocolVersion: stableProtocolVersion2026_07_28,
+          McpMetaKey.protocolVersion: previewProtocolVersion,
           McpMetaKey.clientInfo: {
             'name': 'client',
             'version': '1.0.0',
@@ -4750,7 +4750,7 @@ void main() {
           id: 1,
           method: Method.initialize,
           params: const {
-            'protocolVersion': stableProtocolVersion2026_07_28,
+            'protocolVersion': previewProtocolVersion,
             'capabilities': <String, dynamic>{},
             'clientInfo': {'name': 'client', 'version': '1.0.0'},
           },
@@ -4819,11 +4819,11 @@ void main() {
 
       expect(
         initialized.meta?[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(
         rootsListChanged.meta?[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
 
       for (final notification in [initialized, rootsListChanged]) {
@@ -4949,8 +4949,8 @@ void main() {
 
       await client.connect(transport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion2026_07_28);
-      expect(transport.protocolVersion, stableProtocolVersion2026_07_28);
+      expect(client.getProtocolVersion(), previewProtocolVersion);
+      expect(transport.protocolVersion, previewProtocolVersion);
       expect(
         (transport.sentMessages.single as JsonRpcRequest).method,
         Method.serverDiscover,
@@ -4962,7 +4962,7 @@ void main() {
       expect(listRequest.method, Method.toolsList);
       expect(
         listRequest.meta?[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(listRequest.meta?[McpMetaKey.clientInfo], {
         'name': 'client',
@@ -5020,8 +5020,8 @@ void main() {
 
       await client.connect(transport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion2026_07_28);
-      expect(transport.protocolVersion, stableProtocolVersion2026_07_28);
+      expect(client.getProtocolVersion(), previewProtocolVersion);
+      expect(transport.protocolVersion, previewProtocolVersion);
       expect(
         transport.sentMessages
             .whereType<JsonRpcRequest>()
@@ -5031,7 +5031,7 @@ void main() {
       final discoverRequest = transport.sentMessages.single as JsonRpcRequest;
       expect(
         discoverRequest.meta?[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
     });
 
@@ -5066,8 +5066,8 @@ void main() {
 
         await client.connect(transport);
 
-        expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
-        expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+        expect(client.getProtocolVersion(), stableProtocolVersion);
+        expect(transport.protocolVersion, stableProtocolVersion);
         expect(
           transport.sentMessages
               .whereType<JsonRpcRequest>()
@@ -5453,6 +5453,26 @@ void main() {
         Method.toolsCall,
         Method.tasksGet,
       ]);
+    });
+
+    test('client sends request-scoped stateless logging metadata', () async {
+      final transport = DiscoveringClientTransport();
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+      );
+      await client.connect(transport);
+      expect(client.isConnected, isTrue);
+      transport.sentMessages.clear();
+
+      await client.listTools(
+        options: const RequestOptions(logLevel: LoggingLevel.debug),
+      );
+
+      final request = transport.sentMessages.single as JsonRpcRequest;
+      expect(request.method, Method.toolsList);
+      expect(request.meta?[McpMetaKey.logLevel], 'debug');
+      await client.close();
+      expect(client.isConnected, isFalse);
     });
 
     test('client handles input_required before task resultType tools/call',
@@ -5878,7 +5898,7 @@ void main() {
       expect(listenRequests[1].id, resourcesSubscription.id);
       expect(
         listenRequests[0].meta?[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       expect(listenRequests[0].params?['notifications'], {
         'toolsListChanged': true,
@@ -6657,7 +6677,7 @@ void main() {
       await client.connect(transport);
 
       final result = await client.listTools();
-      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(client.getProtocolVersion(), stableProtocolVersion);
       expect(result.tools, isEmpty);
     });
 
@@ -6739,10 +6759,10 @@ void main() {
         discoverRequests.map(
           (request) => request.meta?[McpMetaKey.protocolVersion],
         ),
-        ['1900-01-01', stableProtocolVersion2026_07_28],
+        ['1900-01-01', previewProtocolVersion],
       );
-      expect(client.getProtocolVersion(), stableProtocolVersion2026_07_28);
-      expect(transport.protocolVersion, stableProtocolVersion2026_07_28);
+      expect(client.getProtocolVersion(), previewProtocolVersion);
+      expect(transport.protocolVersion, previewProtocolVersion);
       expect(
         transport.sentMessages.whereType<JsonRpcRequest>().map(
               (message) => message.method,
@@ -6759,7 +6779,7 @@ void main() {
           'Unsupported protocol version',
           const {
             'supported': legacyProtocolVersions,
-            'requested': stableProtocolVersion2026_07_28,
+            'requested': previewProtocolVersion,
           },
         ),
       );
@@ -6825,7 +6845,7 @@ void main() {
           'Unsupported protocol version',
           const {
             'supported': supportedProtocolVersions,
-            'requested': stableProtocolVersion2026_07_28,
+            'requested': previewProtocolVersion,
           },
         ),
       );
@@ -6858,13 +6878,13 @@ void main() {
       (
         name: 'malformed error data',
         requested: '1900-01-01',
-        discoverVersions: const [stableProtocolVersion2026_07_28],
+        discoverVersions: const [previewProtocolVersion],
         data: 'not-an-object',
       ),
       (
         name: 'missing supported versions',
         requested: '1900-01-01',
-        discoverVersions: const [stableProtocolVersion2026_07_28],
+        discoverVersions: const [previewProtocolVersion],
         data: const {'requested': '1900-01-01'},
       ),
       (
@@ -6875,11 +6895,11 @@ void main() {
       ),
       (
         name: 'advertised version matches rejected request',
-        requested: stableProtocolVersion2026_07_28,
-        discoverVersions: const [stableProtocolVersion2026_07_28],
+        requested: previewProtocolVersion,
+        discoverVersions: const [previewProtocolVersion],
         data: const {
-          'supported': [stableProtocolVersion2026_07_28],
-          'requested': stableProtocolVersion2026_07_28,
+          'supported': [previewProtocolVersion],
+          'requested': previewProtocolVersion,
         },
       ),
     ]) {
@@ -6933,8 +6953,8 @@ void main() {
 
       await client.connect(transport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
-      expect(transport.protocolVersion, stableProtocolVersion2025_11_25);
+      expect(client.getProtocolVersion(), stableProtocolVersion);
+      expect(transport.protocolVersion, stableProtocolVersion);
       expect(
         transport.sentMessages
             .whereType<JsonRpcRequest>()
@@ -6946,7 +6966,7 @@ void main() {
           .singleWhere((message) => message.method == Method.initialize);
       expect(
         initializeRequest.params?['protocolVersion'],
-        stableProtocolVersion2025_11_25,
+        stableProtocolVersion,
       );
       expect(
         transport.sentMessages.whereType<JsonRpcInitializedNotification>(),

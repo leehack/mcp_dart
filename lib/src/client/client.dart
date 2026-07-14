@@ -36,7 +36,7 @@ class McpClientOptions extends ProtocolOptions {
       return protocolVersion;
     }
     if (protocol == McpProtocol.legacy && _useServerDiscover == true) {
-      return latestProtocolVersion;
+      return defaultProtocolVersion;
     }
     return protocol.preferredProtocolVersion;
   }
@@ -226,7 +226,7 @@ class McpClient extends Protocol {
 
   String get _preferredDiscoveryProtocolVersion =>
       legacyProtocolVersions.contains(_preferredProtocolVersion)
-          ? latestProtocolVersion
+          ? defaultProtocolVersion
           : _preferredProtocolVersion;
 
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
@@ -386,7 +386,7 @@ class McpClient extends Protocol {
     final initializationProtocolVersion =
         legacyProtocolVersions.contains(_preferredProtocolVersion)
             ? _preferredProtocolVersion
-            : stableProtocolVersion2025_11_25;
+            : stableProtocolVersion;
     final initParams = InitializeRequest(
       protocolVersion: initializationProtocolVersion,
       capabilities: _capabilities,
@@ -434,12 +434,16 @@ class McpClient extends Protocol {
     );
   }
 
-  Map<String, dynamic> _statelessRequestMeta(Map<String, dynamic>? meta) {
+  Map<String, dynamic> _statelessRequestMeta(
+    Map<String, dynamic>? meta, {
+    LoggingLevel? logLevel,
+  }) {
     return buildProtocolRequestMeta(
       protocolVersion: _negotiatedProtocolVersion ?? _preferredProtocolVersion,
       clientInfo: _clientInfo,
       clientCapabilities: _capabilities,
       meta: meta,
+      logLevel: logLevel?.name,
     );
   }
 
@@ -652,7 +656,10 @@ class McpClient extends Protocol {
                 id: requestData.id,
                 method: requestData.method,
                 params: requestData.params,
-                meta: _statelessRequestMeta(requestData.meta),
+                meta: _statelessRequestMeta(
+                  requestData.meta,
+                  logLevel: options?.logLevel,
+                ),
               )
             : requestData;
 
@@ -945,6 +952,7 @@ class McpClient extends Protocol {
       resetTimeoutOnProgress: options.resetTimeoutOnProgress,
       maxTotalTimeout: options.maxTotalTimeout,
       timeoutEnabled: options.timeoutEnabled,
+      logLevel: options.logLevel,
     );
   }
 
@@ -1040,6 +1048,7 @@ class McpClient extends Protocol {
       resetTimeoutOnProgress: options.resetTimeoutOnProgress,
       maxTotalTimeout: options.maxTotalTimeout,
       timeoutEnabled: options.timeoutEnabled,
+      logLevel: options.logLevel,
     );
   }
 
@@ -1115,6 +1124,9 @@ class McpClient extends Protocol {
 
   /// Gets the server's reported capabilities after successful initialization.
   ServerCapabilities? getServerCapabilities() => _serverCapabilities;
+
+  /// Whether this client currently has an attached transport.
+  bool get isConnected => transport != null;
 
   /// Gets the server's reported implementation info after successful initialization.
   Implementation? getServerVersion() => _serverVersion;

@@ -86,7 +86,10 @@ void main() async {
       options: StreamableHTTPServerTransportOptions());
   await server.connect(transport);
 
-  final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, 3000);
+  final httpServer = await HttpServer.bind(
+    InternetAddress.loopbackIPv4,
+    3000,
+  );
   print('Server listening on http://localhost:3000/mcp');
 
   await for (final request in httpServer) {
@@ -100,6 +103,6 @@ void main() async {
 }
 ```
 
-For a more complex example handling multiple sessions, tasks, and interactive capabilities, see [`simple_task_interactive_server.dart`](https://github.com/leehack/mcp_dart/tree/main/example/simple_task_interactive_server.dart).
+For a more complex example handling multiple sessions, tasks, and interactive capabilities, see [`simple_task_interactive_server.dart`](simple_task_interactive_server.dart).
 
 ## [More Examples](https://github.com/leehack/mcp_dart/tree/main/example)

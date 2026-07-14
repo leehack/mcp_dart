@@ -9,6 +9,26 @@
   `mcp_dart_cli-v0.2.0-dev.2` tag.
 - Raise the minimum Dart SDK to 3.7 to match the CLI's direct dependency
   requirements.
+- Make `mcp_dart create` use the immutable template paired with the CLI tag,
+  pin the coordinated `mcp_dart ^2.3.0-dev.2` SDK, and avoid a redundant
+  dependency resolution while scaffolding.
+- Disable automatic updates for prerelease builds so the stable update channel
+  cannot replace a selected preview release.
+- Bind generated and CLI-served HTTP servers to loopback by default; remote
+  exposure now requires an explicit `--host` value and deployment hardening.
+- Invoke Dart tooling with direct argument passing so prerelease constraints
+  containing `^` work correctly on Windows.
+- Keep `doctor` and default server inspection inventory-only: tool calls,
+  resource reads, prompt retrieval, completion, and task execution now require
+  explicit probe configuration.
+- Make client inspection passive by default; legacy roots, sampling, and
+  elicitation probes now require `--active-probes`.
+- Restrict server-advertised OAuth inspection to trusted same-origin or local
+  loopback metadata, and stop following HTTP redirects during diagnostics.
+- Reject stdio watch mode and serialize HTTP watch restarts so multiple file
+  events cannot start overlapping servers.
+- Condense CLI onboarding and move the detailed inspection matrix to a focused
+  coverage document.
 
 ## 0.2.0-dev.1
 

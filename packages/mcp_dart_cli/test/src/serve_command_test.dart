@@ -30,6 +30,12 @@ void main() {
       );
     });
 
+    test('binds HTTP to loopback by default', () {
+      final results = command.argParser.parse(const []);
+
+      expect(results['host'], '127.0.0.1');
+    });
+
     group('with temp directory', () {
       late Directory tempDir;
       late Directory originalCwd;
@@ -56,6 +62,22 @@ void main() {
           () =>
               logger.err('Error: pubspec.yaml not found in current directory.'),
         ).called(1);
+      });
+
+      test('rejects watch mode with the default stdio transport', () async {
+        final runner = CommandRunner<int>('mcp_dart', 'CLI')
+          ..addCommand(command);
+        final exitCode = await runner.run(['serve', '--watch']);
+
+        expect(exitCode, equals(ExitCode.usage.code));
+        verify(
+          () => logger.err('Error: --watch requires --transport http.'),
+        ).called(1);
+        verifyNever(
+          () => logger.err(
+            'Error: pubspec.yaml not found in current directory.',
+          ),
+        );
       });
     });
   });

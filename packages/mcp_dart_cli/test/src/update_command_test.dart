@@ -25,12 +25,16 @@ void main() {
       logger = MockLogger();
       pubUpdater = MockPubUpdater();
       progress = MockProgress();
-      command = UpdateCommand(logger: logger, pubUpdater: pubUpdater);
+      command = UpdateCommand(
+        logger: logger,
+        pubUpdater: pubUpdater,
+        currentVersion: '0.1.9',
+      );
 
       when(() => logger.progress(any())).thenReturn(progress);
       when(
         () => pubUpdater.getLatestVersion(any()),
-      ).thenAnswer((_) async => packageVersion);
+      ).thenAnswer((_) async => '0.1.9');
       when(
         () => pubUpdater.update(packageName: any(named: 'packageName')),
       ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
@@ -39,6 +43,31 @@ void main() {
     test('can be instantiated', () {
       expect(command, isA<UpdateCommand>());
     });
+
+    test(
+      'does not move a prerelease installation onto the stable channel',
+      () async {
+        final prereleaseCommand = UpdateCommand(
+          logger: logger,
+          pubUpdater: pubUpdater,
+          currentVersion: packageVersion,
+        );
+
+        final result = await prereleaseCommand.run();
+
+        expect(result, equals(ExitCode.success.code));
+        verify(
+          () => logger.info(
+            'Automatic updates follow the stable channel and are disabled for '
+            'prerelease builds. Install the desired prerelease explicitly.',
+          ),
+        ).called(1);
+        verifyNever(() => pubUpdater.getLatestVersion(any()));
+        verifyNever(
+          () => pubUpdater.update(packageName: any(named: 'packageName')),
+        );
+      },
+    );
 
     test('handles software error when checking for updates fails', () async {
       when(
@@ -70,7 +99,7 @@ void main() {
     test('logs message when already at latest version', () async {
       when(
         () => pubUpdater.getLatestVersion(any()),
-      ).thenAnswer((_) async => packageVersion);
+      ).thenAnswer((_) async => '0.1.9');
 
       final result = await command.run();
 

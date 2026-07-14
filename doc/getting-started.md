@@ -100,16 +100,17 @@ server.registerPrompt(
       required: true,
     ),
   },
-  callback: (args, extra) async => GetPromptResult(
-    messages: [
-      PromptMessage(
-        role: PromptMessageRole.user,
-        content: TextContent(
-          text: 'Review this ${args['language']} code...',
+  callback: (args, extra) async {
+    final language = args?['language'] as String;
+    return GetPromptResult(
+      messages: [
+        PromptMessage(
+          role: PromptMessageRole.user,
+          content: TextContent(text: 'Review this $language code...'),
         ),
-      ),
-    ],
-  ),
+      ],
+    );
+  },
 );
 
 // Client gets the prompt
@@ -126,14 +127,16 @@ await client.getPrompt(
 How clients and servers communicate:
 
 - **Stdio**: Process-based (stdin/stdout)
-- **HTTP/SSE**: Web-based (Server-Sent Events)
+- **Streamable HTTP**: Remote and browser-safe HTTP, with optional SSE responses
 - **Stream**: In-process communication
 
 ## SDK Runtime Logging
 
 The SDK emits internal runtime logs (for example transport/protocol diagnostics).
-These logs are separate from MCP protocol logging messages (`logging/setLevel`
-and `notifications/message`).
+These are separate from MCP protocol log messages. MCP 2026 clients opt in per
+request with `RequestOptions(logLevel: ...)`; MCP 2025-11-25 clients use the
+legacy `logging/setLevel` method. Both profiles deliver accepted messages as
+`notifications/message`.
 
 By default:
 
@@ -243,8 +246,7 @@ void main() async {
     ),
   );
 
-  // Connect via stdio
-  print('Starting MCP server...');
+  // Connect via stdio. Reserve stdout for MCP protocol messages.
   final transport = StdioServerTransport();
   await server.connect(transport);
 }
@@ -297,7 +299,10 @@ void main() async {
       arguments: {'name': 'Alice'},
     ),
   );
-  print('Result: ${result.content.first.text}');
+  final toolContent = result.content.first;
+  print(
+    'Result: ${toolContent is TextContent ? toolContent.text : toolContent.toJson()}',
+  );
 
   // Read a resource
   print('\nReading server info resource...');
@@ -306,7 +311,10 @@ void main() async {
       uri: 'info://server',
     ),
   );
-  print('Content: ${resource.contents.first.text}');
+  final resourceContent = resource.contents.first;
+  print(
+    'Content: ${resourceContent is TextResourceContents ? resourceContent.text : resourceContent.toJson()}',
+  );
 
   // Clean up
   await client.close();
@@ -363,7 +371,7 @@ Done!
 
 - [Transports Guide](transports.md) - Detailed transport options
 - [Stdio](transports.md#stdio-transport) - Best for CLI tools and local services
-- [HTTP/SSE](transports.md#httpsse-transport) - Best for web and remote services
+- [Streamable HTTP](transports.md#streamable-http-transport) - Best for web and remote services
 
 ## Common Patterns
 
@@ -413,7 +421,7 @@ server.registerTool(
       'multiply' => a * b,
       'divide' => a / b,
       _ => throw McpError(
-        ErrorCode.invalidParams,
+        ErrorCode.invalidParams.value,
         'Invalid operation',
       ),
     };
@@ -434,7 +442,7 @@ server.registerResourceTemplate(
     'user://{username}/profile',
     listCallback: null,
   ),
-  ResourceMetadata(description: 'Get user profile by username'),
+  (description: 'Get user profile by username', mimeType: 'application/json'),
   (uri, vars, extra) async {
     final username = vars['username'];
     final profile = await fetchUserProfile(username);
@@ -524,7 +532,7 @@ The SDK includes many examples in the `example/` directory:
 - **[server_stdio.dart](../example/server_stdio.dart)** - Complete stdio server
 - **[client_stdio.dart](../example/client_stdio.dart)** - Stdio client
 - **[weather.dart](../example/weather.dart)** - Real weather API integration
-- **[oauth_server_example.dart](../example/authentication/oauth_server_example.dart)** - OAuth2 server
+- **[oauth_server_example.dart](../example/authentication/oauth_server_example.dart)** - OAuth protected-resource metadata and challenge hooks
 - **[completions_capability_demo.dart](../example/completions_capability_demo.dart)** - Auto-completion
 - **[elicitation_http_server.dart](../example/elicitation_http_server.dart)** - User input collection
 

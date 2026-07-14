@@ -10,8 +10,8 @@ Transports handle the communication layer between MCP clients and servers. The S
 
 | Transport | Use Case | Platforms | Bidirectional | Complexity |
 |-----------|----------|-----------|---------------|------------|
-| **Stdio** | CLI tools, local processes | VM, Flutter | ✅ | Low |
-| **HTTP/SSE** | Web services, remote APIs | All | ✅ | Medium |
+| **Stdio** | CLI tools, local processes | Dart VM, Flutter desktop | ✅ | Low |
+| **Streamable HTTP** | Web services, remote APIs | All | ✅ | Medium |
 | **Stream** | In-process, testing | All | ✅ | Low |
 
 ## Stdio Transport
@@ -121,7 +121,8 @@ final transport = StdioClientTransport(
 |----------|-----------|-------|
 | **Dart VM** | ✅ | Full support |
 | **Web** | ❌ | No process spawning in browser |
-| **Flutter** | ✅ | Mobile and desktop |
+| **Flutter desktop** | ✅ | Can launch app-managed helper processes |
+| **Flutter mobile** | Platform-dependent | Use only with an app-managed native helper; mobile apps cannot assume arbitrary process spawning |
 
 ### Best Practices
 
@@ -129,8 +130,8 @@ final transport = StdioClientTransport(
 
 ```dart
 // ✅ Always close client to terminate server process
+final client = McpClient(...);
 try {
-  final client = McpClient(...);
   final transport = StdioClientTransport(StdioServerParameters(...));
   await client.connect(transport);
 
@@ -181,11 +182,11 @@ void main() async {
 
 `StdioClientTransport` and `StdioServerTransport` serialize concurrent `send()` calls internally, so overlapping requests such as `Future.wait([...client.callTool(...)])` are safe on a single connected transport. Stdio servers should still reserve `stdout` for MCP messages and write logs to `stderr`.
 
-## HTTP/SSE Transport
+## Streamable HTTP Transport
 
 ### Overview
 
-HTTP with Server-Sent Events for web-based communication. Best for:
+MCP over HTTP, with optional Server-Sent Events responses. Best for:
 
 - Web applications
 - Remote services
@@ -207,17 +208,17 @@ void main() async {
         Implementation(name: 'my-server', version: '1.0.0'),
       );
     },
-    host: '0.0.0.0',
+    host: 'localhost',
     port: 3000,
     path: '/mcp',
     // Optional hardening for remote deployments
     enableDnsRebindingProtection: true,
-    allowedHosts: {'localhost', 'api.example.com'},
-    allowedOrigins: {'https://app.example.com'},
+    allowedHosts: {'localhost'},
+    allowedOrigins: {'http://localhost:8080'},
   );
 
   await server.start();
-  print('Server running on http://0.0.0.0:3000/mcp');
+  print('Server running on http://localhost:3000/mcp');
 }
 ```
 
@@ -287,6 +288,14 @@ bearer-token layer. The examples in `example/authentication/` show the MCP OAuth
 flow and PKCE shape; production clients should use PKCE S256 with cryptographic
 randomness and keep redirect URIs/origins explicit.
 
+### Streamable HTTP Authentication
+
+Transport allowlists and OAuth solve different problems: validate `Host` and
+`Origin` first, then authenticate the accepted request. The helpers below cover
+MCP protected-resource discovery and bearer challenges; the examples use
+plaintext token files only for local learning. Production applications must use
+platform secure storage or an encrypted credential service.
+
 `StreamableMcpServer` can advertise OAuth Protected Resource Metadata and return
 the MCP-required bearer challenge when authentication fails:
 
@@ -301,10 +310,9 @@ final server = StreamableMcpServer(
   enableDnsRebindingProtection: true,
   allowedHosts: {'mcp.example.com'},
   allowedOrigins: {'https://app.example.com'},
-  authenticator: (request) {
-    final authorization = request.headers.value('Authorization');
-    return authorization == 'Bearer expected-token';
-  },
+  // Application-defined: verify signature or introspection, issuer, exact
+  // resource audience, expiry, and scopes before returning allow.
+  authenticationHandler: authenticateRequest,
   oauthProtectedResource: OAuthProtectedResourceOptions(
     metadata: OAuthProtectedResourceMetadata(
       resource: Uri.parse('https://mcp.example.com/mcp'),
@@ -318,6 +326,11 @@ final server = StreamableMcpServer(
   ),
 );
 ```
+
+`authenticateRequest` is application-defined. See the
+[resource-server guide](../example/authentication/OAUTH_SERVER_GUIDE.md) for
+the verification boundary. The static-token server in `example/authentication`
+is explicitly a local metadata/challenge smoke test, not deployment guidance.
 
 With this option enabled, failed authentication returns `401 Unauthorized` with
 `WWW-Authenticate: Bearer resource_metadata="..."`. Metadata is served at the
@@ -333,20 +346,23 @@ Use `authenticationHandler` when authorization needs to distinguish invalid
 credentials from insufficient scope:
 
 ```dart
-authenticationHandler: (request) {
-  final authorization = request.headers.value('Authorization');
-  if (authorization == 'Bearer token-with-tools-write') {
-    return const StreamableMcpAuthenticationResult.allow();
+authenticationHandler: (request) async {
+  final principal = await tokenVerifier.verifyBearerRequest(request);
+  if (principal == null) {
+    return const StreamableMcpAuthenticationResult.unauthorized();
   }
-  if (authorization == 'Bearer token-without-tools-write') {
+  if (!principal.scopes.contains('tools:write')) {
     return const StreamableMcpAuthenticationResult.insufficientScope(
       scope: 'tools:write',
       errorDescription: 'Need tools:write',
     );
   }
-  return const StreamableMcpAuthenticationResult.unauthorized();
+  return const StreamableMcpAuthenticationResult.allow();
 },
 ```
+
+Here `tokenVerifier` and its verified `principal` are application-defined; do
+not derive scopes or identity from an unverified token payload.
 
 With `oauthProtectedResource` configured, `insufficientScope` returns
 `403 Forbidden` plus a bearer challenge containing
@@ -362,7 +378,30 @@ back to the endpoint/root well-known protected-resource paths when needed,
 discovers OAuth Authorization Server Metadata or OpenID Connect Discovery
 metadata, builds a PKCE S256 authorization URL with the MCP `resource`
 parameter, and exchanges the authorization code with `code_verifier` and
-`resource` when `finishAuth(code)` is called. The exchanged value passed to
+`resource` when `finishAuth(code, state: callbackState)` is called. Always read
+the returned `state` from the callback URI and pass it back; the transport
+rejects missing or mismatched state before contacting the token endpoint. If
+authorization-server metadata advertises the authorization response `iss`
+parameter, pass the callback's `iss` value through `issuer:` as well.
+
+OAuth discovery is same-origin by default. Loopback MCP endpoints may discover
+other loopback endpoints for local development. For a separate production
+authorization host, approve only the expected HTTPS hosts:
+
+```dart
+final transport = StreamableHttpClientTransport(
+  Uri.parse('https://mcp.example.com/mcp'),
+  opts: StreamableHttpClientTransportOptions(
+    authProvider: authProvider,
+    oauthUriValidator: (uri, endpointKind) =>
+        uri.host == 'auth.example.com',
+  ),
+);
+```
+
+The transport rejects user information, fragments, non-HTTP(S) URLs, and
+non-loopback plaintext HTTP. OAuth metadata, registration, and token requests
+do not follow redirects automatically. The exchanged value passed to
 `saveTokens` is an `OAuthAuthorizationCodeTokens` instance, so providers that
 want `tokenType`, `expiresIn`, or granted `scope` can read them by type-checking
 that subtype while older `OAuthTokens` implementations stay source-compatible.
@@ -470,7 +509,6 @@ void main() async {
     ),
   );
 
-  await transport.start();
   await server.connect(transport);
 
   // Create HTTP server
@@ -568,21 +606,21 @@ final transport = StreamableHTTPServerTransport(
 ### CORS Configuration
 
 ```dart
-final transport = StreamableHTTPServerTransport(
-  options: StreamableHTTPServerTransportOptions(
-    sessionIdGenerator: () => generateUUID(),
-  ),
+final httpServer = StreamableMcpServer(
+  serverFactory: (_) => createServer(),
+  host: '127.0.0.1',
+  port: 3000,
+  allowedHosts: const {'localhost', '127.0.0.1'},
+  allowedOrigins: const {'http://localhost:5173'},
 );
 
-await transport.start();
-await server.connect(transport);
-
-await for (final request in httpServer) {
-  await transport.handleRequest(request); // Adds CORS headers internally
-}
+await httpServer.start();
 ```
 
-If you enable DNS rebinding protection, set explicit `allowedOrigins` for browser clients.
+The high-level server validates Host and Origin, handles preflight requests, and
+returns an exact allowed Origin when credentials are enabled. Low-level
+`StreamableHTTPServerTransport.handleRequest` callers own their HTTP routing and
+CORS headers. Keep explicit `allowedOrigins` for browser clients.
 
 ### Platform Support
 
@@ -590,7 +628,9 @@ If you enable DNS rebinding protection, set explicit `allowedOrigins` for browse
 |----------|-----------|-------|
 | **Dart VM** | ✅ | Full HTTP server support |
 | **Web** | ✅ | Client only (fetch API) |
-| **Flutter** | ✅ | All platforms |
+| **Flutter web** | ✅ | Client only, using the browser fetch API |
+| **Flutter mobile** | ✅ | Client for remote endpoints; secure tokens with platform storage |
+| **Flutter desktop** | ✅ | Client and VM-hosted server support |
 
 ### Best Practices
 
@@ -626,40 +666,51 @@ final transport = StreamableHttpClientTransport(
 #### 3. Error Recovery
 
 ```dart
-Future<void> connectWithRetry() async {
-  var attempts = 0;
+Future<McpClient> connectWithRetry(
+  McpClient Function() createClient,
+  Transport Function() createTransport,
+) async {
   const maxAttempts = 3;
 
-  while (attempts < maxAttempts) {
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    final client = createClient();
     try {
-      await client.connect(transport);
-      return;
-    } catch (e) {
-      attempts++;
-      if (attempts >= maxAttempts) rethrow;
-      await Future.delayed(Duration(seconds: 2));
+      await client.connect(createTransport());
+      return client;
+    } catch (_) {
+      await client.close();
+      if (attempt == maxAttempts) rethrow;
+      await Future.delayed(const Duration(seconds: 2));
     }
   }
+
+  throw StateError('Unreachable');
 }
 ```
 
 #### 4. Health Checks
 
 ```dart
-// Server: Implement health endpoint
-void handleRequest(HttpRequest request) async {
-  if (request.uri.path == '/health') {
+final mcpServer = StreamableMcpServer(
+  serverFactory: (_) => createServer(),
+  host: '127.0.0.1',
+  port: 3000,
+);
+await mcpServer.start();
+
+// Keep health checks separate from the MCP listener, or terminate them at a
+// reverse proxy. Do not create and connect a new MCP transport per request.
+final healthServer = await HttpServer.bind('127.0.0.1', 3001);
+healthServer.listen((request) async {
+  if (request.uri.path == '/health' && request.method == 'GET') {
     request.response
       ..statusCode = 200
       ..write('OK');
-    await request.response.close();
-    return;
+  } else {
+    request.response.statusCode = 404;
   }
-
-  // Handle MCP requests
-  final transport = StreamableHTTPServerTransport(...);
-  await server.connect(transport);
-}
+  await request.response.close();
+});
 ```
 
 ## Stream Transport
@@ -779,7 +830,10 @@ void main() {
       ),
     );
 
-    expect(result.content.first.text, '8');
+    expect(
+      result.content.first,
+      isA<TextContent>().having((content) => content.text, 'text', '8'),
+    );
 
     // Cleanup
     await client.close();
@@ -804,10 +858,10 @@ The SDK includes an older SSE transport implementation that is deprecated but st
 
 ### Why Deprecated?
 
-- Replaced by StreamableHTTP (more flexible)
+- Replaced by Streamable HTTP (more flexible)
 - Limited session management
 - No resumability
-- Use StreamableHTTP for new projects
+- Use Streamable HTTP for new projects
 
 ### Migration Guide
 
@@ -827,7 +881,6 @@ final transport = StreamableHTTPServerTransport(
   ),
 );
 
-await transport.start();
 await mcpServer.connect(transport);
 await transport.handleRequest(request);
 ```
@@ -839,14 +892,14 @@ await transport.handleRequest(request);
 | Requirement | Best Transport |
 |-------------|---------------|
 | Local CLI tool | **Stdio** |
-| Web application | **HTTP/SSE** |
-| Remote API | **HTTP/SSE** |
+| Web application | **Streamable HTTP** |
+| Remote API | **Streamable HTTP** |
 | Unit testing | **Stream** |
 | In-process | **Stream** |
 | Node.js server | **Stdio** |
-| Cloud deployment | **HTTP/SSE** |
-| Mobile app (local) | **Stdio** |
-| Mobile app (remote) | **HTTP/SSE** |
+| Cloud deployment | **Streamable HTTP** |
+| Mobile app (local helper) | **App-managed native helper or custom transport** |
+| Mobile app (remote) | **Streamable HTTP** |
 
 ### Performance Comparison
 
@@ -854,14 +907,14 @@ await transport.handleRequest(request);
 |-----------|---------|------------|----------------|
 | **Stream** | Lowest | Highest | Lowest |
 | **Stdio** | Low | High | Low |
-| **HTTP/SSE** | Medium | Medium | Medium |
+| **Streamable HTTP** | Medium | Medium | Medium |
 
 ### Security Considerations
 
 | Transport | Security Features |
 |-----------|------------------|
 | **Stdio** | Process isolation, local only |
-| **HTTP/SSE** | TLS/HTTPS, CORS, authentication, optional DNS rebinding protection |
+| **Streamable HTTP** | CORS, authentication, DNS rebinding protection by default; TLS through an HTTPS endpoint or reverse proxy |
 | **Stream** | In-process only |
 
 ## Advanced Configuration
@@ -932,9 +985,18 @@ class StreamRoutingTransport extends CustomTransport
 
 ### Transport Middleware
 
-Add logging, metrics, or filtering:
+Add logging, metrics, or filtering. Log only envelope metadata by default: raw
+MCP messages can contain credentials, tool arguments/results, prompt content,
+or resource data.
 
 ```dart
+String describeMessage(JsonRpcMessage message) => switch (message) {
+  JsonRpcRequest(:final method, :final id) => 'request method=$method id=$id',
+  JsonRpcNotification(:final method) => 'notification method=$method',
+  JsonRpcResponse(:final id) => 'response id=$id',
+  JsonRpcError(:final id) => 'error id=$id',
+};
+
 class LoggingTransport extends Transport implements RequestIdAwareTransport {
   final Transport inner;
   final Logger logger;
@@ -944,10 +1006,8 @@ class LoggingTransport extends Transport implements RequestIdAwareTransport {
   @override
   Future<void> start() async {
     logger.info('Starting transport');
-    await inner.start();
-
     inner.onmessage = (message) {
-      logger.debug('Received: $message');
+      logger.debug('Received ${describeMessage(message)}');
       onmessage?.call(message);
     };
 
@@ -960,6 +1020,8 @@ class LoggingTransport extends Transport implements RequestIdAwareTransport {
       logger.info('Closed');
       onclose?.call();
     };
+
+    await inner.start();
   }
 
   @override
@@ -967,7 +1029,7 @@ class LoggingTransport extends Transport implements RequestIdAwareTransport {
     JsonRpcMessage message, {
     int? relatedRequestId,
   }) async {
-    logger.debug('Sending: $message');
+    logger.debug('Sending ${describeMessage(message)}');
     await inner.send(message, relatedRequestId: relatedRequestId);
   }
 
@@ -976,7 +1038,7 @@ class LoggingTransport extends Transport implements RequestIdAwareTransport {
     JsonRpcMessage message, {
     RequestId? relatedRequestId,
   }) async {
-    logger.debug('Sending: $message');
+    logger.debug('Sending ${describeMessage(message)}');
     await inner.sendPreservingRequestId(
       message,
       relatedRequestId: relatedRequestId,
@@ -1039,12 +1101,16 @@ final transport = StdioClientTransport(
 **Problem**: CORS errors
 
 ```dart
-// Server: Enable CORS
-request.response.headers
-  ..set('Access-Control-Allow-Origin', '*')
-  ..set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  ..set('Access-Control-Allow-Headers', 'Content-Type');
+final server = StreamableMcpServer(
+  serverFactory: (sessionId) => createServer(),
+  host: '0.0.0.0',
+  allowedHosts: {'mcp.example.com'},
+  allowedOrigins: {'https://app.example.com'},
+);
 ```
+
+Use exact origins for credentialed MCP traffic. Do not work around CORS with a
+wildcard; align the browser origin, reverse proxy, and server allowlists.
 
 **Problem**: SSE reconnects give up too quickly
 

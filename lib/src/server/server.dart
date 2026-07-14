@@ -775,7 +775,7 @@ class Server extends Protocol {
 
     if (request.method == Method.initialize) {
       if (!_supportsLegacyInitialization) {
-        return _unsupportedProtocolVersionError(latestProtocolVersion);
+        return _unsupportedProtocolVersionError(defaultProtocolVersion);
       }
       if (_lifecycleState != _ServerLifecycleState.uninitialized) {
         return McpError(
@@ -1086,7 +1086,7 @@ class Server extends Protocol {
         ? requestedVersion
         : legacySupportedVersions.isNotEmpty
             ? legacySupportedVersions.first
-            : latestProtocolVersion;
+            : defaultProtocolVersion;
 
     return InitializeResult(
       protocolVersion: protocolVersion,

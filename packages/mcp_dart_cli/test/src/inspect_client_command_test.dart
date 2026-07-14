@@ -90,6 +90,7 @@ void main() {
       expect(command.argParser.options.containsKey('report'), isTrue);
       expect(command.argParser.options.containsKey('idle-timeout-ms'), isTrue);
       expect(command.argParser.options.containsKey('max-runtime-ms'), isTrue);
+      expect(command.argParser.options.containsKey('active-probes'), isTrue);
     });
 
     test('malformed client messages receive JSON-RPC error id null', () async {
@@ -177,7 +178,7 @@ void main() {
           await client.connect(transport);
           expect(
             client.getProtocolVersion(),
-            stableProtocolVersion2026_07_28,
+            previewProtocolVersion,
           );
           final tools = await client.listTools();
           expect(tools.tools.map((tool) => tool.name), contains('echo'));
@@ -199,7 +200,7 @@ void main() {
         final metadata = json['metadata'] as Map<String, dynamic>;
         expect(
           metadata['protocolVersion'],
-          stableProtocolVersion2026_07_28,
+          previewProtocolVersion,
         );
         expect(
           (metadata['observedMethods'] as List<dynamic>).cast<String>(),
@@ -256,7 +257,7 @@ void main() {
               'id': 1,
               'method': Method.initialize,
               'params': <String, dynamic>{
-                'protocolVersion': stableProtocolVersion2025_11_25,
+                'protocolVersion': stableProtocolVersion,
                 'capabilities': <String, dynamic>{},
                 'clientInfo': <String, dynamic>{
                   'name': 'fixture-client',
@@ -302,7 +303,7 @@ void main() {
         );
         expect(
           (initializeResponse['result'] as Map)['protocolVersion'],
-          stableProtocolVersion2025_11_25,
+          stableProtocolVersion,
         );
         final toolCallResponse = responses.singleWhere(
           (response) => response['id'] == 3,
@@ -344,7 +345,7 @@ void main() {
         writeLine: outputLines.add,
       );
       final meta = buildProtocolRequestMeta(
-        protocolVersion: stableProtocolVersion2026_07_28,
+        protocolVersion: previewProtocolVersion,
         clientInfo: const Implementation(
           name: 'stateless-client',
           version: '1.0.0',
@@ -427,6 +428,7 @@ void main() {
           reportFile: report,
           idleTimeout: const Duration(milliseconds: 100),
           maxRuntime: const Duration(seconds: 2),
+          activeProbes: true,
           clientLines: clientLines.stream,
           writeLine: outputLines.add,
         );
@@ -439,7 +441,7 @@ void main() {
               'id': 1,
               'method': Method.initialize,
               'params': <String, dynamic>{
-                'protocolVersion': stableProtocolVersion2025_11_25,
+                'protocolVersion': stableProtocolVersion,
                 'capabilities': <String, dynamic>{
                   'roots': <String, dynamic>{},
                   'sampling': <String, dynamic>{},
@@ -566,6 +568,71 @@ void main() {
         }
       },
     );
+
+    test('does not actively probe client capabilities by default', () async {
+      final tempDir = await Directory.systemTemp.createTemp('client_harness_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final report = File('${tempDir.path}/report.json');
+      final clientLines = StreamController<String>();
+      final outputLines = <String>[];
+      final harness = ClientInspectorHarness(
+        reportFile: report,
+        idleTimeout: const Duration(milliseconds: 50),
+        maxRuntime: const Duration(seconds: 1),
+        clientLines: clientLines.stream,
+        writeLine: outputLines.add,
+      );
+
+      final runFuture = harness.run();
+      clientLines
+        ..add(
+          jsonEncode(<String, dynamic>{
+            'jsonrpc': jsonRpcVersion,
+            'id': 1,
+            'method': Method.initialize,
+            'params': <String, dynamic>{
+              'protocolVersion': stableProtocolVersion,
+              'capabilities': <String, dynamic>{
+                'roots': <String, dynamic>{},
+                'sampling': <String, dynamic>{},
+                'elicitation': <String, dynamic>{},
+              },
+              'clientInfo': <String, dynamic>{
+                'name': 'passive-client',
+                'version': '1.0.0',
+              },
+            },
+          }),
+        )
+        ..add(
+          jsonEncode(<String, dynamic>{
+            'jsonrpc': jsonRpcVersion,
+            'method': Method.notificationsInitialized,
+          }),
+        );
+      await clientLines.close();
+      await runFuture;
+
+      final outgoing = outputLines.map(jsonDecode).cast<Map<String, dynamic>>();
+      expect(
+        outgoing.where((message) => message['method'] != null),
+        isEmpty,
+      );
+      final json =
+          jsonDecode(await report.readAsString()) as Map<String, dynamic>;
+      final metadata = json['metadata'] as Map<String, dynamic>;
+      expect(metadata['activeProbesEnabled'], isFalse);
+      expect(metadata['activeProbes'], isEmpty);
+      final checks =
+          (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+      expect(
+        checks.singleWhere((check) => check['id'] == 'client.roots.list'),
+        allOf(
+          containsPair('status', 'info'),
+          containsPair('message', contains('disabled')),
+        ),
+      );
+    });
 
     test(
       'sends JSON-RPC errors with explicit null id for malformed input',

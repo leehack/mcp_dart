@@ -12,27 +12,27 @@ import 'subscriptions.dart';
 import 'tasks.dart';
 import 'validation.dart';
 
-/// The MCP `2026-07-28` version used by the SDK's stable profile.
-const stableProtocolVersion2026_07_28 = "2026-07-28";
+/// The MCP `2026-07-28` draft/RC version used by the SDK preview.
+const previewProtocolVersion = "2026-07-28";
 
-/// The latest stable initialization-era MCP protocol version supported.
-const stableProtocolVersion2025_11_25 = "2025-11-25";
+/// The latest officially stable MCP protocol version supported.
+const stableProtocolVersion = "2025-11-25";
 
-/// The latest protocol version implemented by this development branch.
+/// The protocol version preferred by default in this SDK preview.
 ///
 /// The upstream `2026-07-28` specification is still a release candidate, but
-/// this branch uses it for the default stable SDK profile while retaining
+/// this preview prefers it by default while retaining
 /// legacy initialization fallback.
-const latestProtocolVersion = stableProtocolVersion2026_07_28;
+const defaultProtocolVersion = previewProtocolVersion;
 
 /// High-level MCP protocol compatibility profiles.
 ///
-/// On the `dev/2026-07-28` branch, [McpClientOptions] and [McpServerOptions]
+/// In the 2.3.0 preview, [McpClientOptions] and [McpServerOptions]
 /// default to [stable]. Use [legacy] to explicitly keep the 2025
 /// initialization flow, or [require2026] when a peer must support the
 /// `2026-07-28` stateless protocol.
 enum McpProtocol {
-  /// Stable SDK behavior for this development branch.
+  /// Default SDK compatibility behavior.
   ///
   /// This profile prefers MCP `2026-07-28` stateless negotiation, including
   /// `server/discover`, and falls back to legacy initialization for older
@@ -54,8 +54,8 @@ enum McpProtocol {
   /// Preferred protocol version for outgoing negotiation.
   String get preferredProtocolVersion {
     return switch (this) {
-      McpProtocol.stable || McpProtocol.require2026 => latestProtocolVersion,
-      McpProtocol.legacy => stableProtocolVersion2025_11_25,
+      McpProtocol.stable || McpProtocol.require2026 => defaultProtocolVersion,
+      McpProtocol.legacy => stableProtocolVersion,
     };
   }
 
@@ -91,22 +91,22 @@ enum McpProtocol {
 
 /// Model Context Protocol versions retained for compatibility with older peers.
 const legacyProtocolVersions = [
-  stableProtocolVersion2025_11_25,
+  stableProtocolVersion,
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
   "2024-10-07",
 ];
 
-/// Protocol versions supported by the `2026-07-28` development branch.
+/// Protocol versions supported by the 2.3.0 preview.
 const supportedProtocolVersions = [
-  latestProtocolVersion,
+  defaultProtocolVersion,
   ...legacyProtocolVersions,
 ];
 
 /// Protocol versions that use per-request metadata instead of initialization.
 const statelessProtocolVersions = [
-  latestProtocolVersion,
+  defaultProtocolVersion,
 ];
 
 /// Returns true when [version] uses the `2026-07-28` draft/RC stateless request
@@ -843,7 +843,7 @@ class InputRequest {
   /// Creates an embedded `elicitation/create` input request.
   factory InputRequest.elicit(ElicitRequest params) {
     final inputParams = params.toJson(
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: defaultProtocolVersion,
     )..remove('task');
     return InputRequest._(
       method: Method.elicitationCreate,
@@ -888,7 +888,7 @@ class InputRequest {
         }
         ElicitRequest.fromJson(
           params,
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: defaultProtocolVersion,
         );
         return InputRequest._(method: method, params: params);
       case Method.samplingCreateMessage:
@@ -949,7 +949,7 @@ class InputRequest {
     }
     return ElicitRequest.fromJson(
       params!,
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: defaultProtocolVersion,
     );
   }
 

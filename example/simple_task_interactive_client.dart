@@ -123,7 +123,6 @@ Future<void> run(String url) async {
   client.onElicitRequest = elicitationCallback;
 
   // Set up task status notification handler
-  // Set up task status notification handler
   client.onTaskStatus = (params) {
     print('[Notification] Task ${params.taskId}: ${params.status.name}'
         '${params.statusMessage != null ? " - ${params.statusMessage}" : ""}');

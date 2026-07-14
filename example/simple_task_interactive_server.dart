@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:mcp_dart/mcp_dart.dart';
 
 // ============================================================================
@@ -146,24 +147,16 @@ class InteractiveServer {
   }
 
   Future<void> start() async {
-    final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, 8000);
+    final httpServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      8000,
+    );
     print('Starting server on http://localhost:8000/mcp');
 
     await for (final httpRequest in httpServer) {
-      // Add CORS headers
-      httpRequest.response.headers.add('Access-Control-Allow-Origin', '*');
-      httpRequest.response.headers
-          .add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      httpRequest.response.headers.add(
-        'Access-Control-Allow-Headers',
-        'Content-Type, mcp-session-id, mcp-protocol-version, Last-Event-ID, Authorization',
-      );
-      httpRequest.response.headers
-          .add('Access-Control-Expose-Headers', 'mcp-session-id');
-
       if (httpRequest.method == 'OPTIONS') {
-        httpRequest.response.statusCode = 200;
-        httpRequest.response.close();
+        httpRequest.response.statusCode = HttpStatus.methodNotAllowed;
+        await httpRequest.response.close();
         continue;
       }
 

@@ -310,6 +310,32 @@ void main() {
       expect(errorResponse.error.message, equals('Test error message'));
     });
 
+    test('redacts unexpected request handler errors', () async {
+      await protocol.connect(transport);
+      protocol.setRequestHandler<JsonRpcPingRequest>(
+        'ping',
+        (request, extra) async {
+          throw StateError('sentinel-handler-secret');
+        },
+        (id, params, meta) => JsonRpcPingRequest(id: id),
+      );
+
+      transport.receiveMessage(const JsonRpcPingRequest(id: 22));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final errorResponse = transport.sentMessages.single as JsonRpcError;
+      expect(errorResponse.error.code, ErrorCode.internalError.value);
+      expect(
+        errorResponse.error.message,
+        equals('Internal server error processing ping'),
+      );
+      expect(errorResponse.error.data, isNull);
+      expect(
+        errorResponse.toJson().toString(),
+        isNot(contains('sentinel-handler-secret')),
+      );
+    });
+
     test('handles request for unregistered method', () async {
       await protocol.connect(transport);
 

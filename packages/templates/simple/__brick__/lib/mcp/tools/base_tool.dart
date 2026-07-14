@@ -25,7 +25,7 @@ abstract class BaseTool {
   ToolInputSchema get inputSchema;
 
   /// Optional JSON schema defining the output format.
-  JsonSchema? get outputSchema => null;
+  ToolOutputSchema? get outputSchema => null;
 
   /// Optional tool annotations with hints about tool behavior.
   /// Includes readOnlyHint, destructiveHint, idempotentHint, etc.
@@ -38,7 +38,9 @@ abstract class BaseTool {
   ///
   /// Returns a [CallToolResult] with either success content or an error.
   Future<CallToolResult> execute(
-      Map<String, dynamic> args, RequestHandlerExtra? extra);
+    Map<String, dynamic> args,
+    RequestHandlerExtra extra,
+  );
 }
 
 /// Extension to register tools with an MCP server.

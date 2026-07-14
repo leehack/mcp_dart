@@ -1706,10 +1706,15 @@ class McpServer {
                 registeredTool.outputJsonSchema!.validate(
                   result.structuredContentJson?.toJson(),
                 );
-              } catch (e) {
+              } catch (error, stackTrace) {
+                _logger.error(
+                  "Output validation failed for tool '$toolName': "
+                  '$error\n$stackTrace',
+                );
                 throw McpError(
                   ErrorCode.invalidParams.value,
-                  "Output validation error: Invalid structured content for tool '$toolName': $e",
+                  "Tool '$toolName' returned structured content that does not "
+                  'match its output schema.',
                 );
               }
             }
@@ -1723,13 +1728,15 @@ class McpServer {
           }
 
           return result;
-        } catch (error) {
-          _logger.warn("Error executing tool '$toolName': $error");
+        } catch (error, stackTrace) {
+          _logger.error(
+            "Error executing tool '$toolName': $error\n$stackTrace",
+          );
           if (error is McpError) {
             rethrow; // Pass through McpErrors (like methodNotFound)
           }
-          return CallToolResult(
-            content: [TextContent(text: error.toString())],
+          return const CallToolResult(
+            content: [TextContent(text: 'Tool execution failed.')],
             isError: true,
           );
         }
@@ -2006,12 +2013,14 @@ class McpServer {
           } else {
             throw StateError("No callback found");
           }
-        } catch (error) {
-          _logger.warn("Error executing prompt '$name': $error");
+        } catch (error, stackTrace) {
+          _logger.error(
+            "Error executing prompt '$name': $error\n$stackTrace",
+          );
           if (error is McpError) rethrow;
           throw McpError(
             ErrorCode.internalError.value,
-            "Failed to generate prompt '$name': $error",
+            "Failed to generate prompt '$name'.",
           );
         }
       },

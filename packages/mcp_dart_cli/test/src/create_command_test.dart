@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:mason/mason.dart';
+import 'package:mason/mason.dart' hide packageVersion;
 import 'package:mcp_dart_cli/src/create_command.dart';
+import 'package:mcp_dart_cli/src/version.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -91,6 +92,14 @@ void main() {
       expect(command.description, equals('Creates a new MCP server project.'));
     });
 
+    test('uses the immutable template paired with this CLI release', () {
+      final template = command.argParser.options['template']!.defaultsTo;
+
+      expect(template, defaultTemplateUrl);
+      expect(template, contains('mcp_dart_cli-v$packageVersion'));
+      expect(template, isNot(contains('/main/')));
+    });
+
     group('Argument Parsing', () {
       test('prompts for project name if not provided (default path)', () async {
         when(
@@ -168,10 +177,15 @@ void main() {
         expect(
           command.processCalls,
           containsAllInOrder([
-            ['dart', 'pub', 'get'],
-            ['dart', 'pub', 'add', 'mcp_dart'],
+            ['dart', 'pub', 'add', 'mcp_dart:$generatedSdkConstraint'],
             ['dart', 'format', '.'],
           ]),
+        );
+        expect(
+          command.processCalls.any(
+            (call) => call.join(' ') == 'dart pub get',
+          ),
+          isFalse,
         );
       });
 

@@ -44,7 +44,7 @@ Future<void> main() async {
   final sseServerManager = SseServerManager(mcpServer);
   try {
     final port = 3000;
-    final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     print('Server listening on http://localhost:$port');
 
     await for (final request in server) {

@@ -19,7 +19,7 @@ void main() {
 
     try {
       await client.connect(transport).timeout(const Duration(seconds: 20));
-      expect(client.getProtocolVersion(), stableProtocolVersion2026_07_28);
+      expect(client.getProtocolVersion(), previewProtocolVersion);
 
       final tools =
           await client.listTools().timeout(const Duration(seconds: 10));

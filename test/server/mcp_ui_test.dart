@@ -45,7 +45,7 @@ class _TestTransport implements Transport {
       JsonRpcInitializeRequest(
         id: 0,
         initParams: const InitializeRequest(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: stableProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
         ),
