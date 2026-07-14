@@ -5,6 +5,7 @@ import 'package:mcp_dart/src/client/client.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/tasks.dart';
+import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
@@ -381,6 +382,16 @@ void main() {
           protocolVersion: stableProtocolVersion,
         ).useServerDiscover,
         isTrue,
+      );
+      const strictOptionsWithLegacyOverrides = McpClientOptions(
+        protocol: McpProtocol.require2026,
+        useServerDiscover: false,
+        allowLegacyInitializationFallback: true,
+      );
+      expect(strictOptionsWithLegacyOverrides.useServerDiscover, isTrue);
+      expect(
+        strictOptionsWithLegacyOverrides.allowLegacyInitializationFallback,
+        isFalse,
       );
       expect(const McpServerOptions().protocol, McpProtocol.stable);
       expect(
@@ -3582,7 +3593,85 @@ void main() {
       expect(getTaskCalled, isTrue);
       expect(response.error.code, ErrorCode.invalidParams.value);
       expect(response.error.message, contains('must be resolvable'));
-      expect(response.error.data, contains('Task not found'));
+      expect(response.error.data, {'taskId': 'task-1'});
+    });
+
+    test('task validation logs but does not expose tasks/get exceptions',
+        () async {
+      const privateFailure = 'database password=do-not-disclose';
+      final logs = <String>[];
+      setMcpLogHandler((loggerName, level, message) {
+        if (loggerName == 'mcp_dart.server') {
+          logs.add(message);
+        }
+      });
+
+      try {
+        final server = Server(
+          const Implementation(name: 'server', version: '1.0.0'),
+          options: const McpServerOptions(
+            protocol: McpProtocol.stable,
+            capabilities: ServerCapabilities(
+              tools: ServerCapabilitiesTools(),
+              extensions: {mcpTasksExtensionId: {}},
+            ),
+          ),
+        );
+        server.setRequestHandler<JsonRpcGetTaskRequest>(
+          Method.tasksGet,
+          (request, extra) async => throw StateError(privateFailure),
+          (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': Method.tasksGet,
+            'params': params,
+            if (meta != null) '_meta': meta,
+          }),
+        );
+        server.setRequestHandler<JsonRpcCallToolRequest>(
+          Method.toolsCall,
+          (request, extra) async => const CreateTaskExtensionResult(
+            task: TaskExtensionTask(
+              taskId: 'task-1',
+              status: TaskStatus.working,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:00:00Z',
+              ttlMs: null,
+            ),
+          ),
+          (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': Method.toolsCall,
+            'params': params,
+            if (meta != null) '_meta': meta,
+          }),
+        );
+        final transport = RecordingTransport();
+        await server.connect(transport);
+
+        transport.receive(
+          JsonRpcCallToolRequest(
+            id: 'call-1',
+            params: const CallToolRequest(name: 'long').toJson(),
+            meta: _clientMeta(
+              clientCapabilities: const ClientCapabilities(
+                extensions: {mcpTasksExtensionId: {}},
+              ),
+            ),
+          ),
+        );
+        await _pump();
+
+        final response = transport.sentMessages.single as JsonRpcError;
+        expect(response.error.code, ErrorCode.invalidParams.value);
+        expect(response.error.message, contains('must be resolvable'));
+        expect(response.error.data, {'taskId': 'task-1'});
+        expect(response.toJson().toString(), isNot(contains(privateFailure)));
+        expect(logs.join('\n'), contains(privateFailure));
+      } finally {
+        resetMcpLogHandler();
+      }
     });
 
     test('stateless tools/call rejects CallToolResult resultType spoof',
@@ -6873,6 +6962,48 @@ void main() {
         isNot(contains(Method.initialize)),
       );
     });
+
+    for (final scenario in [
+      (
+        name: 'disabled discovery',
+        options: const McpClientOptions(
+          protocol: McpProtocol.require2026,
+          useServerDiscover: false,
+        ),
+      ),
+      (
+        name: 'enabled legacy fallback',
+        options: const McpClientOptions(
+          protocol: McpProtocol.require2026,
+          allowLegacyInitializationFallback: true,
+        ),
+      ),
+    ]) {
+      test('require2026 ignores ${scenario.name} override', () async {
+        final transport = LegacyFallbackTransport();
+        final client = McpClient(
+          const Implementation(name: 'client', version: '1.0.0'),
+          options: scenario.options,
+        );
+
+        await expectLater(
+          client.connect(transport),
+          throwsA(
+            isA<McpError>().having(
+              (error) => error.code,
+              'code',
+              ErrorCode.methodNotFound.value,
+            ),
+          ),
+        );
+        expect(
+          transport.sentMessages
+              .whereType<JsonRpcRequest>()
+              .map((message) => message.method),
+          [Method.serverDiscover],
+        );
+      });
+    }
 
     for (final scenario in [
       (

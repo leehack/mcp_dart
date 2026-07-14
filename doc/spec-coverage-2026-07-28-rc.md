@@ -4,8 +4,9 @@
 locked MCP `2026-07-28` release candidate. This matrix indexes the high-risk
 and release-changing requirements against checked-in evidence; it is not an
 exhaustive inventory of every schema type or API. The dev.2 preview defaults to
-`McpProtocol.stable`, while `McpProtocol.legacy` retains MCP `2025-11-25` and
-earlier behavior.
+`McpProtocol.stable`, while `McpProtocol.legacy` retains the full MCP
+`2025-11-25` feature set and negotiates supported earlier initialization
+versions.
 
 Core means the normative wire requirements assigned to client and server roles
 by the pinned RC. It excludes optional MCP extensions, host UI behavior, an

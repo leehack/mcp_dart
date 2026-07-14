@@ -195,17 +195,20 @@ MCP over HTTP, with optional Server-Sent Events responses. Best for:
 
 ### High-Level Streamable HTTP Server
 
-For a simplified setup, use the `StreamableMcpServer` class which handles the server creation, session management, and transport connection for you.
+For a simplified dual-era setup, use `StreamableMcpServer`. It routes MCP 2026
+requests statelessly and manages sessions when a peer negotiates the MCP 2025
+initialization flow.
 
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
   final server = StreamableMcpServer(
-    serverFactory: (sessionId) {
-      // Create a new McpServer instance for each session
+    serverFactory: (connectionId) {
+      // Called per stateless 2026 request or per legacy session.
       return McpServer(
         Implementation(name: 'my-server', version: '1.0.0'),
+        options: const McpServerOptions(protocol: McpProtocol.stable),
       );
     },
     host: 'localhost',
@@ -224,9 +227,9 @@ void main() async {
 
 This helper handles:
 - Creating an HTTP server
-- Managing sessions and event storage
+- Stateless request routing for MCP 2026
+- Sessions, event storage, and resumability for legacy MCP
 - Connecting the `McpServer` to the transport
-- Resumability support
 
 ### DNS Rebinding Protection
 
@@ -543,28 +546,48 @@ final transport = StreamableHttpClientTransport(
 await client.connect(transport);
 ```
 
-### Session Management
+### MCP 2025 and Earlier Session Management
+
+The following session and replay controls apply only when the initialization-era
+flow is selected. Two default `McpProtocol.stable` peers negotiate MCP 2026 and
+therefore do not use protocol sessions, `MCP-Session-Id`, GET/DELETE session
+operations, or replay. Select `McpProtocol.legacy` explicitly when building a
+session-dependent deployment.
 
 #### Stateful Sessions
 
 ```dart
-// Server: Enable session persistence
+final server = McpServer(
+  Implementation(name: 'legacy-server', version: '1.0.0'),
+  options: const McpServerOptions(protocol: McpProtocol.legacy),
+);
+
+// Enable legacy session persistence.
 final transport = StreamableHTTPServerTransport(
   options: StreamableHTTPServerTransportOptions(
     sessionIdGenerator: () => generateUUID(),
     eventStore: InMemoryEventStore(), // Enables resumability
   ),
 );
+
+await server.connect(transport);
 ```
 
 ```dart
-// Client: Resume session
+final client = McpClient(
+  Implementation(name: 'legacy-client', version: '1.0.0'),
+  options: const McpClientOptions(protocol: McpProtocol.legacy),
+);
+
+// Resume a legacy session.
 final transport = StreamableHttpClientTransport(
   Uri.parse('http://localhost:3000/mcp'),
   opts: const StreamableHttpClientTransportOptions(
     sessionId: 'existing-session-id', // Resume this session
   ),
 );
+
+await client.connect(transport);
 ```
 
 Generated session IDs are sent in the `MCP-Session-Id` response header. Keep
@@ -592,7 +615,10 @@ and retries the original request once. Direct `Transport.send` callers and
 custom transports can opt into the same client recovery path by throwing
 `StaleSessionError` when their stateful session is rejected.
 
-#### Stateless Mode
+#### Legacy Transport Without Session Persistence
+
+For a legacy-profile deployment that intentionally disables session
+persistence:
 
 ```dart
 // Server: Disable session persistence
@@ -619,11 +645,13 @@ await httpServer.start();
 
 The high-level server validates Host and Origin and handles preflight requests.
 Matching `allowedOrigins` receive exact, credentialed CORS responses. Without
-an explicit origin allowlist, only loopback-to-loopback development requests
-receive credentialed CORS; other allowed requests receive wildcard CORS without
-credentials. Low-level `StreamableHTTPServerTransport.handleRequest` callers own
-their HTTP routing and CORS headers. Keep explicit `allowedOrigins` for browser
-clients.
+an explicit origin allowlist, servers using the default DNS-rebinding protection
+grant credentialed CORS only to loopback-to-loopback development requests;
+other allowed requests receive wildcard CORS without credentials. If DNS
+protection is disabled, loopback requests also require explicit
+`allowedOrigins` for credentials. Low-level
+`StreamableHTTPServerTransport.handleRequest` callers own their HTTP routing and
+CORS headers. Keep explicit `allowedOrigins` for browser clients.
 
 ### Platform Support
 
@@ -1132,16 +1160,22 @@ final transport = StreamableHttpClientTransport(
 );
 ```
 
-**Problem**: Session not resuming
+**Problem**: MCP 2025/legacy session not resuming
 
 ```dart
-// Client: Provide session ID
+final client = McpClient(
+  Implementation(name: 'legacy-client', version: '1.0.0'),
+  options: const McpClientOptions(protocol: McpProtocol.legacy),
+);
+
 final transport = StreamableHttpClientTransport(
   Uri.parse('http://localhost:3000/mcp'),
   opts: StreamableHttpClientTransportOptions(
     sessionId: previousSessionId,
   ),
 );
+
+await client.connect(transport);
 ```
 
 ## Next Steps

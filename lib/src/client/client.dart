@@ -45,6 +45,9 @@ class McpClientOptions extends ProtocolOptions {
 
   /// Whether [McpClient.connect] should probe with `server/discover` first.
   ///
+  /// [McpProtocol.require2026] always enables discovery, even when
+  /// [useServerDiscover] is explicitly set to `false`.
+  ///
   /// When omitted, an explicit stateless [protocolVersion] enables discovery,
   /// while an explicit supported legacy version selects `initialize` unless
   /// [protocol] is [McpProtocol.require2026]. Otherwise this is derived from
@@ -52,6 +55,10 @@ class McpClientOptions extends ProtocolOptions {
   /// the latest stateless version and preserves the legacy version for
   /// initialization fallback.
   bool get useServerDiscover {
+    if (protocol == McpProtocol.require2026) {
+      return true;
+    }
+
     final useServerDiscover = _useServerDiscover;
     if (useServerDiscover != null) {
       return useServerDiscover;
@@ -78,10 +85,15 @@ class McpClientOptions extends ProtocolOptions {
   /// Whether a failed `server/discover` probe should fall back to `initialize`.
   ///
   /// When omitted, this is derived from [protocol]. [McpProtocol.require2026]
-  /// disables fallback.
-  bool get allowLegacyInitializationFallback =>
-      _allowLegacyInitializationFallback ??
-      protocol.allowLegacyInitializationFallbackByDefault;
+  /// always disables fallback, even when
+  /// [allowLegacyInitializationFallback] is explicitly set to `true`.
+  bool get allowLegacyInitializationFallback {
+    if (protocol == McpProtocol.require2026) {
+      return false;
+    }
+    return _allowLegacyInitializationFallback ??
+        protocol.allowLegacyInitializationFallbackByDefault;
+  }
 
   const McpClientOptions({
     super.enforceStrictCapabilities,
@@ -260,10 +272,14 @@ class McpClient extends Protocol {
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         _preferredProtocolVersion = options?.protocolVersion ??
             McpProtocol.stable.preferredProtocolVersion,
-        _useServerDiscover = options?.useServerDiscover ??
-            McpProtocol.stable.useServerDiscoverByDefault,
-        _allowLegacyInitializationFallback =
-            options?.allowLegacyInitializationFallback ??
+        _useServerDiscover = options?.protocol == McpProtocol.require2026
+            ? true
+            : options?.useServerDiscover ??
+                McpProtocol.stable.useServerDiscoverByDefault,
+        _allowLegacyInitializationFallback = options?.protocol ==
+                McpProtocol.require2026
+            ? false
+            : options?.allowLegacyInitializationFallback ??
                 McpProtocol.stable.allowLegacyInitializationFallbackByDefault,
         super(options) {
     // Register elicit handler if any elicitation mode is advertised.

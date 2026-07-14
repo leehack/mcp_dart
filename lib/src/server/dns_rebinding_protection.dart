@@ -87,8 +87,10 @@ String? normalizeDnsOrigin(String origin) {
   }
 
   final normalizedHost = normalizeDnsHost(parsedUri.host);
+  final serializedHost =
+      normalizedHost.contains(':') ? '[$normalizedHost]' : normalizedHost;
   final portPart = parsedUri.hasPort ? ':${parsedUri.port}' : '';
-  return '${parsedUri.scheme.toLowerCase()}://$normalizedHost$portPart';
+  return '${parsedUri.scheme.toLowerCase()}://$serializedHost$portPart';
 }
 
 Set<String> _normalizedAllowedHosts({

@@ -81,6 +81,67 @@ class DiscoveryOAuthClientProvider implements OAuthAuthorizationCodeProvider {
   }
 }
 
+Future<HttpServer> _startOAuthServerWithOmittedTokenAuthMetadata({
+  Future<void> Function(HttpRequest request)? onTokenRequest,
+}) async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  final port = server.port;
+
+  server.listen((request) async {
+    switch (request.uri.path) {
+      case '/mcp':
+        request.response
+          ..statusCode = HttpStatus.unauthorized
+          ..headers.set(
+            HttpHeaders.wwwAuthenticateHeader,
+            'Bearer resource_metadata="http://localhost:$port/.well-known/oauth-protected-resource/mcp"',
+          );
+        await request.response.close();
+        break;
+      case '/.well-known/oauth-protected-resource/mcp':
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode({
+              'resource': 'http://localhost:$port/mcp',
+              'authorization_servers': ['http://localhost:$port/auth'],
+            }),
+          );
+        await request.response.close();
+        break;
+      case '/.well-known/oauth-authorization-server/auth':
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode({
+              'issuer': 'http://localhost:$port/auth',
+              'authorization_endpoint': 'http://localhost:$port/authorize',
+              'token_endpoint': 'http://localhost:$port/token',
+              'code_challenge_methods_supported': ['S256'],
+            }),
+          );
+        await request.response.close();
+        break;
+      case '/token':
+        final handler = onTokenRequest;
+        if (handler == null) {
+          request.response.statusCode = HttpStatus.internalServerError;
+          await request.response.close();
+        } else {
+          await handler(request);
+        }
+        break;
+      default:
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+    }
+  });
+
+  return server;
+}
+
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
       protocolVersion: previewProtocolVersion,
       clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
@@ -2078,6 +2139,326 @@ void main() {
         expect(authProvider.authorizationUri, isNull);
       });
 
+      test(
+          'rejects unsupported advertised token endpoint authentication methods',
+          () async {
+        final oauthServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        addTearDown(() => oauthServer.close(force: true));
+        final oauthPort = oauthServer.port;
+        var tokenRequests = 0;
+
+        oauthServer.listen((request) async {
+          switch (request.uri.path) {
+            case '/mcp':
+              request.response
+                ..statusCode = HttpStatus.unauthorized
+                ..headers.set(
+                  HttpHeaders.wwwAuthenticateHeader,
+                  'Bearer resource_metadata="http://localhost:$oauthPort/.well-known/oauth-protected-resource/mcp"',
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-protected-resource/mcp':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'resource': 'http://localhost:$oauthPort/mcp',
+                    'authorization_servers': [
+                      'http://localhost:$oauthPort/auth',
+                    ],
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-authorization-server/auth':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'issuer': 'http://localhost:$oauthPort/auth',
+                    'authorization_endpoint':
+                        'http://localhost:$oauthPort/authorize',
+                    'token_endpoint': 'http://localhost:$oauthPort/token',
+                    'code_challenge_methods_supported': ['S256'],
+                    'token_endpoint_auth_methods_supported': [
+                      'private_key_jwt',
+                    ],
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/token':
+              tokenRequests += 1;
+              request.response.statusCode = HttpStatus.internalServerError;
+              await request.response.close();
+              break;
+            default:
+              request.response.statusCode = HttpStatus.notFound;
+              await request.response.close();
+          }
+        });
+
+        final authProvider = DiscoveryOAuthClientProvider(
+          redirectUri: Uri.parse('http://localhost/callback'),
+          clientSecret: 'configured-secret',
+        );
+        final oauthTransport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:$oauthPort/mcp'),
+          opts: StreamableHttpClientTransportOptions(
+            authProvider: authProvider,
+          ),
+        );
+        addTearDown(oauthTransport.close);
+        await oauthTransport.start();
+
+        await expectLater(
+          oauthTransport.send(
+            const JsonRpcRequest(id: 77, method: 'test/method'),
+          ),
+          throwsA(
+            isA<UnauthorizedError>().having(
+              (error) => error.message,
+              'message',
+              contains(
+                'does not advertise a supported token endpoint '
+                'authentication method',
+              ),
+            ),
+          ),
+        );
+        expect(authProvider.authorizationUri, isNull);
+        expect(tokenRequests, 0);
+      });
+
+      test('rejects unsupported dynamic registration auth methods', () async {
+        final oauthServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        addTearDown(() => oauthServer.close(force: true));
+        final oauthPort = oauthServer.port;
+        Map<String, dynamic>? registrationRequest;
+        var tokenRequests = 0;
+
+        oauthServer.listen((request) async {
+          switch (request.uri.path) {
+            case '/mcp':
+              request.response
+                ..statusCode = HttpStatus.unauthorized
+                ..headers.set(
+                  HttpHeaders.wwwAuthenticateHeader,
+                  'Bearer resource_metadata="http://localhost:$oauthPort/.well-known/oauth-protected-resource/mcp"',
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-protected-resource/mcp':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'resource': 'http://localhost:$oauthPort/mcp',
+                    'authorization_servers': [
+                      'http://localhost:$oauthPort/auth',
+                    ],
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-authorization-server/auth':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'issuer': 'http://localhost:$oauthPort/auth',
+                    'authorization_endpoint':
+                        'http://localhost:$oauthPort/authorize',
+                    'token_endpoint': 'http://localhost:$oauthPort/token',
+                    'registration_endpoint':
+                        'http://localhost:$oauthPort/register',
+                    'code_challenge_methods_supported': ['S256'],
+                    'token_endpoint_auth_methods_supported': [
+                      'client_secret_post',
+                    ],
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/register':
+              final body = await utf8.decoder.bind(request).join();
+              registrationRequest = jsonDecode(body) as Map<String, dynamic>;
+              request.response
+                ..statusCode = HttpStatus.created
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'client_id': 'registered-client',
+                    'client_secret': 'registered-secret',
+                    'token_endpoint_auth_method': 'private_key_jwt',
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/token':
+              tokenRequests += 1;
+              request.response.statusCode = HttpStatus.internalServerError;
+              await request.response.close();
+              break;
+            default:
+              request.response.statusCode = HttpStatus.notFound;
+              await request.response.close();
+          }
+        });
+
+        final authProvider = DiscoveryOAuthClientProvider(
+          redirectUri: Uri.parse('http://localhost/callback'),
+          clientSecret: 'configured-secret',
+        );
+        final oauthTransport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:$oauthPort/mcp'),
+          opts: StreamableHttpClientTransportOptions(
+            authProvider: authProvider,
+          ),
+        );
+        addTearDown(oauthTransport.close);
+        await oauthTransport.start();
+
+        await expectLater(
+          oauthTransport.send(
+            const JsonRpcRequest(id: 78, method: 'test/method'),
+          ),
+          throwsA(
+            isA<UnauthorizedError>().having(
+              (error) => error.message,
+              'message',
+              contains(
+                'unsupported token_endpoint_auth_method "private_key_jwt"',
+              ),
+            ),
+          ),
+        );
+        expect(
+          registrationRequest?['token_endpoint_auth_method'],
+          'client_secret_post',
+        );
+        expect(authProvider.authorizationUri, isNull);
+        expect(tokenRequests, 0);
+      });
+
+      test(
+          'defaults omitted token endpoint auth metadata to client_secret_basic',
+          () async {
+        var tokenRequests = 0;
+        String? tokenAuthorization;
+        Map<String, String>? tokenForm;
+        final oauthServer = await _startOAuthServerWithOmittedTokenAuthMetadata(
+          onTokenRequest: (request) async {
+            tokenRequests += 1;
+            tokenAuthorization =
+                request.headers.value(HttpHeaders.authorizationHeader);
+            tokenForm = Uri.splitQueryString(
+              await utf8.decoder.bind(request).join(),
+            );
+            request.response
+              ..statusCode = HttpStatus.ok
+              ..headers.contentType = ContentType.json
+              ..write(
+                jsonEncode({
+                  'access_token': 'exchanged-token',
+                  'token_type': 'Bearer',
+                }),
+              );
+            await request.response.close();
+          },
+        );
+        addTearDown(() => oauthServer.close(force: true));
+
+        final authProvider = DiscoveryOAuthClientProvider(
+          redirectUri: Uri.parse('http://localhost/callback'),
+          clientSecret: 'configured-secret',
+        );
+        final oauthTransport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:${oauthServer.port}/mcp'),
+          opts: StreamableHttpClientTransportOptions(
+            authProvider: authProvider,
+          ),
+        );
+        addTearDown(oauthTransport.close);
+        await oauthTransport.start();
+
+        await expectLater(
+          oauthTransport.send(
+            const JsonRpcRequest(id: 79, method: 'test/method'),
+          ),
+          throwsA(isA<UnauthorizedError>()),
+        );
+
+        final authorizationUri = authProvider.authorizationUri;
+        expect(authorizationUri, isNotNull);
+        await oauthTransport.finishAuth(
+          'auth-code',
+          state: authorizationUri!.queryParameters['state'],
+        );
+
+        expect(tokenRequests, 1);
+        expect(
+          tokenAuthorization,
+          'Basic ${base64Encode(utf8.encode('client-1:configured-secret'))}',
+        );
+        expect(tokenForm?['client_secret'], isNull);
+        expect(authProvider.storedTokens?.accessToken, 'exchanged-token');
+      });
+
+      test('fails before redirect when omitted auth metadata needs a secret',
+          () async {
+        var tokenRequests = 0;
+        final oauthServer = await _startOAuthServerWithOmittedTokenAuthMetadata(
+          onTokenRequest: (request) async {
+            tokenRequests += 1;
+            request.response.statusCode = HttpStatus.internalServerError;
+            await request.response.close();
+          },
+        );
+        addTearDown(() => oauthServer.close(force: true));
+
+        final authProvider = DiscoveryOAuthClientProvider(
+          redirectUri: Uri.parse('http://localhost/callback'),
+        );
+        final oauthTransport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:${oauthServer.port}/mcp'),
+          opts: StreamableHttpClientTransportOptions(
+            authProvider: authProvider,
+          ),
+        );
+        addTearDown(oauthTransport.close);
+        await oauthTransport.start();
+
+        await expectLater(
+          oauthTransport.send(
+            const JsonRpcRequest(id: 80, method: 'test/method'),
+          ),
+          throwsA(
+            isA<UnauthorizedError>().having(
+              (error) => error.message,
+              'message',
+              contains(
+                'requires client_secret_basic but no client secret is '
+                'available',
+              ),
+            ),
+          ),
+        );
+        expect(authProvider.authorizationUri, isNull);
+        expect(tokenRequests, 0);
+      });
+
       test('discovers metadata, redirects with PKCE, and exchanges tokens',
           () async {
         final oauthServer = await HttpServer.bind(
@@ -2142,6 +2523,7 @@ void main() {
                         'http://localhost:$oauthPort/authorize',
                     'token_endpoint': 'http://localhost:$oauthPort/token',
                     'code_challenge_methods_supported': ['S256'],
+                    'token_endpoint_auth_methods_supported': ['none'],
                   }),
                 );
               await request.response.close();

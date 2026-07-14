@@ -640,13 +640,17 @@ class Server extends Protocol {
         ),
         extra,
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
+      _logger.error(
+        'Failed to resolve task ${result.task.taskId} with tasks/get while '
+        'validating ${request.method}: $error\n$stackTrace',
+      );
       throw McpError(
         ErrorCode.invalidParams.value,
         'Invalid ${request.method} result: CreateTaskExtensionResult taskId '
         '${result.task.taskId} must be resolvable by tasks/get before '
         'returning.',
-        error.toString(),
+        {'taskId': result.task.taskId},
       );
     }
   }

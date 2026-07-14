@@ -25,6 +25,13 @@ const stableProtocolVersion = "2025-11-25";
 /// legacy initialization fallback.
 const defaultProtocolVersion = previewProtocolVersion;
 
+/// The latest officially stable MCP protocol version supported.
+///
+/// Use [defaultProtocolVersion] when selecting the SDK preview's preferred
+/// wire version.
+@Deprecated('Use stableProtocolVersion or defaultProtocolVersion instead.')
+const latestProtocolVersion = stableProtocolVersion;
+
 /// High-level MCP protocol compatibility profiles.
 ///
 /// In the 2.3.0 preview, [McpClientOptions] and [McpServerOptions]

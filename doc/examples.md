@@ -142,8 +142,8 @@ dart run example/streamable_https/high_level_server.dart
 **Features**:
 
 - Simplified server creation
-- built-in session management
-- built-in event store
+- Stateless 2026 request routing
+- Sessions, event storage, and resumability for legacy MCP
 - Automatic transport handling
 
 ### In-Process Communication

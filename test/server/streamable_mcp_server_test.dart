@@ -1713,6 +1713,33 @@ void main() {
       );
       await server.start();
 
+      final res = await postInitializeWithHeaders(
+        headers: {'Origin': 'http://localhost:$port'},
+      );
+
+      expect(res.statusCode, HttpStatus.ok);
+      expect(
+        res.headers['access-control-allow-origin'],
+        'http://localhost:$port',
+      );
+      expect(res.headers['access-control-allow-credentials'], 'true');
+      expect(res.headers[HttpHeaders.varyHeader], contains('Origin'));
+    });
+
+    test('default CORS credentials are limited to loopback requests', () async {
+      final res = await postInitializeWithHeaders(
+        headers: const {'Origin': 'http://localhost:5173'},
+      );
+
+      expect(res.statusCode, HttpStatus.ok);
+      expect(
+        res.headers['access-control-allow-origin'],
+        'http://localhost:5173',
+      );
+      expect(res.headers['access-control-allow-credentials'], 'true');
+    });
+
+    test('default CORS credentials support IPv6 loopback origins', () async {
       final initRequest = JsonRpcRequest(
         id: 1,
         method: 'initialize',
@@ -1727,7 +1754,8 @@ void main() {
       try {
         final req = await client.postUrl(Uri.parse(baseUrl));
         req.headers.contentType = ContentType.json;
-        req.headers.set('Origin', 'http://localhost:$port');
+        req.headers.set(HttpHeaders.hostHeader, '[::1]:$port');
+        req.headers.set('Origin', 'http://[::1]:5173');
         req.headers.set('Accept', 'application/json, text/event-stream');
         req.write(jsonEncode(initRequest.toJson()));
 
@@ -1735,52 +1763,64 @@ void main() {
         expect(res.statusCode, HttpStatus.ok);
         expect(
           res.headers.value('access-control-allow-origin'),
-          'http://localhost:$port',
+          'http://[::1]:5173',
         );
         expect(
           res.headers.value('access-control-allow-credentials'),
           'true',
         );
-        expect(res.headers.value(HttpHeaders.varyHeader), contains('Origin'));
         await res.drain();
       } finally {
         client.close(force: true);
       }
     });
 
-    test('default CORS credentials are limited to loopback requests', () async {
-      final initRequest = JsonRpcRequest(
-        id: 1,
-        method: 'initialize',
-        params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
-          capabilities: ClientCapabilities(),
-          clientInfo: Implementation(name: 'Client', version: '1.0'),
-        ).toJson(),
+    test('disabled DNS protection does not imply credentialed loopback CORS',
+        () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'CorsServer', version: '1.0')),
+        host: host,
+        port: port,
+        enableDnsRebindingProtection: false,
+      );
+      await server.start();
+
+      final res = await postInitializeWithHeaders(
+        headers: const {'Origin': 'http://localhost:5173'},
       );
 
-      final client = HttpClient();
-      try {
-        final req = await client.postUrl(Uri.parse(baseUrl));
-        req.headers.contentType = ContentType.json;
-        req.headers.set('Origin', 'http://localhost:5173');
-        req.headers.set('Accept', 'application/json, text/event-stream');
-        req.write(jsonEncode(initRequest.toJson()));
+      expect(res.statusCode, HttpStatus.ok);
+      expect(res.headers['access-control-allow-origin'], '*');
+      expect(res.headers['access-control-allow-credentials'], isNull);
+    });
 
-        final res = await req.close();
-        expect(res.statusCode, HttpStatus.ok);
-        expect(
-          res.headers.value('access-control-allow-origin'),
-          'http://localhost:5173',
-        );
-        expect(
-          res.headers.value('access-control-allow-credentials'),
-          'true',
-        );
-        await res.drain();
-      } finally {
-        client.close(force: true);
-      }
+    test('explicit CORS origins apply when DNS protection is disabled',
+        () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'CorsServer', version: '1.0')),
+        host: host,
+        port: port,
+        enableDnsRebindingProtection: false,
+        allowedOrigins: {'http://localhost:5173'},
+      );
+      await server.start();
+
+      final res = await postInitializeWithHeaders(
+        headers: const {'Origin': 'http://localhost:5173'},
+      );
+
+      expect(res.statusCode, HttpStatus.ok);
+      expect(
+        res.headers['access-control-allow-origin'],
+        'http://localhost:5173',
+      );
+      expect(res.headers['access-control-allow-credentials'], 'true');
     });
 
     test('public host requires an explicit origin for credentialed CORS',

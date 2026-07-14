@@ -296,11 +296,13 @@ class StreamableMcpServer {
   /// Explicit host allowlist used when DNS rebinding protection is enabled.
   final Set<String>? allowedHosts;
 
-  /// Explicit origin allowlist used when DNS rebinding protection is enabled.
+  /// Exact origin allowlist used for high-level CORS responses.
   ///
-  /// Matching origins receive credentialed CORS headers. Without an explicit
-  /// allowlist, credentialed CORS is limited to loopback development requests;
-  /// other allowed requests receive wildcard CORS without credentials.
+  /// Matching origins receive credentialed CORS headers. When
+  /// [enableDnsRebindingProtection] is true, the same set also validates Origin
+  /// headers. With protection enabled and no explicit allowlist, credentialed
+  /// CORS is limited to loopback development requests; other allowed requests
+  /// receive wildcard CORS without credentials.
   final Set<String>? allowedOrigins;
 
   /// If true, reject unsupported `MCP-Protocol-Version` headers with HTTP 400.
@@ -651,7 +653,7 @@ class StreamableMcpServer {
         sessionIdGenerator: () => generateUUID(),
         eventStore: eventStore,
         enableDnsRebindingProtection: enableDnsRebindingProtection,
-        allowedHosts: allowedHosts ?? {host},
+        allowedHosts: allowedHosts ?? _defaultDnsRebindingAllowedHosts,
         allowedOrigins: allowedOrigins,
         enableJsonResponse: enableJsonResponse,
         strictProtocolVersionHeaderValidation:
@@ -703,7 +705,7 @@ class StreamableMcpServer {
         sessionIdGenerator: () => null,
         eventStore: eventStore,
         enableDnsRebindingProtection: enableDnsRebindingProtection,
-        allowedHosts: allowedHosts ?? {host},
+        allowedHosts: allowedHosts ?? _defaultDnsRebindingAllowedHosts,
         allowedOrigins: allowedOrigins,
         enableJsonResponse: enableJsonResponse,
         strictProtocolVersionHeaderValidation:

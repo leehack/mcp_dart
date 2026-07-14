@@ -309,6 +309,7 @@ class StreamableHttpClientTransport
       provider,
       authorizationServerMetadata,
     );
+    _validateOAuthClientRegistration(clientRegistration);
     final scope = _authorizationScope(
       challenge,
       provider,
@@ -491,12 +492,21 @@ class StreamableHttpClientTransport
     }
     final clientSecret = json['client_secret'];
     final registeredAuthMethod = json['token_endpoint_auth_method'];
+    final resolvedAuthMethod = switch (registeredAuthMethod) {
+      null => tokenEndpointAuthMethod,
+      final String method => _requireSupportedTokenEndpointAuthMethod(
+          method,
+          source: 'Dynamic client registration',
+        ),
+      _ => throw UnauthorizedError(
+          'Dynamic client registration returned a non-string '
+          'token_endpoint_auth_method',
+        ),
+    };
     return _OAuthClientRegistration(
       clientId: clientId,
       clientSecret: clientSecret is String ? clientSecret : null,
-      tokenEndpointAuthMethod: registeredAuthMethod is String
-          ? registeredAuthMethod
-          : tokenEndpointAuthMethod,
+      tokenEndpointAuthMethod: resolvedAuthMethod,
     );
   }
 
@@ -504,8 +514,10 @@ class StreamableHttpClientTransport
     OAuthAuthorizationServerMetadataDocument metadata,
     String? clientSecret,
   ) {
-    final supportedMethods =
-        metadata.tokenEndpointAuthMethodsSupported ?? const ['none'];
+    // RFC 8414 Section 2 defines client_secret_basic as the default when the
+    // authorization-server metadata omits this field.
+    final supportedMethods = metadata.tokenEndpointAuthMethodsSupported ??
+        const ['client_secret_basic'];
     if (clientSecret != null) {
       if (supportedMethods.contains('client_secret_basic')) {
         return 'client_secret_basic';
@@ -523,7 +535,51 @@ class StreamableHttpClientTransport
     if (supportedMethods.contains('client_secret_post')) {
       return 'client_secret_post';
     }
-    return supportedMethods.isEmpty ? 'none' : supportedMethods.first;
+    throw UnauthorizedError(
+      'Authorization server does not advertise a supported token endpoint '
+      'authentication method',
+    );
+  }
+
+  void _validateOAuthClientRegistration(
+    _OAuthClientRegistration registration,
+  ) {
+    switch (registration.tokenEndpointAuthMethod) {
+      case 'none':
+        return;
+      case 'client_secret_basic':
+      case 'client_secret_post':
+        final clientSecret = registration.clientSecret;
+        if (clientSecret == null || clientSecret.isEmpty) {
+          throw UnauthorizedError(
+            'Token endpoint requires '
+            '${registration.tokenEndpointAuthMethod} but no client secret is '
+            'available',
+          );
+        }
+        return;
+      default:
+        throw UnauthorizedError(
+          'Unsupported token endpoint authentication method '
+          '"${registration.tokenEndpointAuthMethod}"',
+        );
+    }
+  }
+
+  String _requireSupportedTokenEndpointAuthMethod(
+    String method, {
+    required String source,
+  }) {
+    switch (method) {
+      case 'none':
+      case 'client_secret_basic':
+      case 'client_secret_post':
+        return method;
+      default:
+        throw UnauthorizedError(
+          '$source returned unsupported token_endpoint_auth_method "$method"',
+        );
+    }
   }
 
   Future<OAuthProtectedResourceMetadataDocument>
@@ -767,9 +823,10 @@ class StreamableHttpClientTransport
       case 'none':
         break;
       default:
-        if (pendingAuthorization.clientSecret != null) {
-          body['client_secret'] = pendingAuthorization.clientSecret!;
-        }
+        throw UnauthorizedError(
+          'Unsupported token endpoint authentication method '
+          '"${pendingAuthorization.tokenEndpointAuthMethod}"',
+        );
     }
 
     final response = await _sendOAuthRequest(

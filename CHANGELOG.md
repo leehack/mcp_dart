@@ -8,9 +8,9 @@ MCP `2025-11-25` and earlier initialization compatibility.
 - Made `McpProtocol.stable` the default dual-era profile: prefer stateless
   `server/discover`, then fall back to legacy initialization. Use
   `McpProtocol.require2026` to reject legacy peers.
-- Removed `McpProtocol.preview2026` and renamed the public constants to
-  `previewProtocolVersion`, `stableProtocolVersion`, and
-  `defaultProtocolVersion`.
+- Removed `McpProtocol.preview2026`; added clearer preview, stable, and default
+  version constants while retaining `latestProtocolVersion` as a deprecated
+  stable-version alias.
 - Added and aligned 2026 APIs for `input_required`, deprecated request-scoped
   logging compatibility, subscriptions, cache metadata, arbitrary structured
   tool output, routing headers, and the Tasks extension.
@@ -22,12 +22,12 @@ MCP `2025-11-25` and earlier initialization compatibility.
 ### Security
 
 - OAuth authorization-code flows now require matching state, reject untrusted
-  discovery origins and insecure endpoints by default, and do not follow OAuth
-  endpoint redirects automatically.
+  discovery origins, insecure endpoints, unsupported token authentication
+  methods, and automatic endpoint redirects.
 - Unexpected handler and validation failures no longer expose internal details
   in protocol responses; details remain available in server logs.
-- Credentialed Streamable HTTP CORS now requires an explicit origin allowlist
-  or a loopback development request; OAuth/HTTP examples use loopback defaults.
+- Credentialed Streamable HTTP CORS now requires `allowedOrigins`, except for
+  DNS-protected loopback development; examples use safe loopback defaults.
 
 ### Validation and documentation
 
