@@ -17,7 +17,7 @@ platforms:
   windows:
 
 environment:
-  sdk: ^3.0.0
+  sdk: ^3.7.0
 
 dependencies:
   args: ^2.4.2

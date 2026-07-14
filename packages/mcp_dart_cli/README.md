@@ -7,7 +7,7 @@ server.
 
 ## Installation
 
-With the Dart SDK:
+With Dart SDK 3.7 or later:
 
 ```bash
 dart pub global activate mcp_dart_cli

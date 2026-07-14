@@ -7,6 +7,8 @@
   as both their package metadata and release tag.
 - Point prerelease package metadata and documentation at the immutable
   `mcp_dart_cli-v0.2.0-dev.2` tag.
+- Raise the minimum Dart SDK to 3.7 to match the CLI's direct dependency
+  requirements.
 
 ## 0.2.0-dev.1
 

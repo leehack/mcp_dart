@@ -10,7 +10,7 @@ This guide shows you how to quickly set up both an OAuth-protected MCP server an
 
 ## Prerequisites
 
-- Dart SDK 3.0 or later
+- Dart SDK 3.5 or later
 - OAuth provider credentials (GitHub or Google)
 - Basic understanding of OAuth 2.0
 

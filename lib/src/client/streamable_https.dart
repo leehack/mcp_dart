@@ -753,7 +753,7 @@ class StreamableHttpClientTransport
     final headers = <String, String>{};
 
     if (_authProvider != null) {
-      final tokens = await _authProvider!.tokens();
+      final tokens = await _authProvider.tokens();
       if (tokens != null) {
         headers["Authorization"] = "Bearer ${tokens.accessToken}";
       }
@@ -767,8 +767,8 @@ class StreamableHttpClientTransport
       headers['MCP-Protocol-Version'] = _protocolVersion!;
     }
 
-    if (_requestInit != null && _requestInit!.containsKey('headers')) {
-      final requestHeaders = _requestInit!['headers'] as Map<String, dynamic>;
+    if (_requestInit != null && _requestInit.containsKey('headers')) {
+      final requestHeaders = _requestInit['headers'] as Map<String, dynamic>;
       for (final entry in requestHeaders.entries) {
         headers[entry.key] = entry.value.toString();
       }
@@ -1378,7 +1378,7 @@ class StreamableHttpClientTransport
       throw UnauthorizedError("No auth provider");
     }
 
-    final authProvider = _authProvider!;
+    final authProvider = _authProvider;
     final pendingAuthorization = _pendingOAuthAuthorization;
     if (authProvider is OAuthAuthorizationCodeProvider &&
         pendingAuthorization != null) {
@@ -1490,14 +1490,14 @@ class StreamableHttpClientTransport
       }
 
       if (_authProvider != null) {
-        final tokens = await _authProvider!.tokens();
+        final tokens = await _authProvider.tokens();
         if (tokens == null) {
           if (_authProvider is OAuthAuthorizationCodeProvider) {
             // Let the server return a challenge so discovery can follow MCP
             // protected-resource metadata before redirecting.
           } else {
             // No tokens available - trigger authentication flow
-            await _authProvider!.redirectToAuthorization();
+            await _authProvider.redirectToAuthorization();
             throw UnauthorizedError('Authentication required');
           }
         }

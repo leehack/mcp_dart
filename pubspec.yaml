@@ -20,7 +20,7 @@ platforms:
   windows:
 
 environment:
-  sdk: ^3.0.0
+  sdk: ^3.5.0
 
 dependencies:
   crypto: ^3.0.7

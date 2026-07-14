@@ -25,6 +25,8 @@
 - Clients now clear negotiated server state, lifecycle flags, and tool
   validation metadata when a connection closes, preventing stale state from
   leaking into a later connection.
+- Raised the minimum Dart SDK to 3.5 to match the package's direct dependency
+  requirements.
 
 ### Platform support
 

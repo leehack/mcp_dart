@@ -1158,7 +1158,7 @@ class StreamableHTTPServerTransport
     try {
       final maxEvents = _maxReplayedEvents;
       final replayedEvents = <({EventId eventId, JsonRpcMessage message})>[];
-      final streamId = await _eventStore!.replayEventsAfter(
+      final streamId = await _eventStore.replayEventsAfter(
         lastEventId,
         send: (eventId, message) async {
           _validateSseEventId(eventId);
@@ -1628,7 +1628,7 @@ class StreamableHTTPServerTransport
         // If we have a session ID and an onsessioninitialized handler, call it immediately
         // This is needed in cases where the server needs to keep track of multiple sessions
         if (sessionId != null && _onsessioninitialized != null) {
-          _onsessioninitialized!(sessionId!);
+          _onsessioninitialized(sessionId!);
         }
       }
 
@@ -1936,7 +1936,7 @@ class StreamableHTTPServerTransport
         // Generate and store a stream-specific event ID if event store is provided.
         String? eventId;
         if (_eventStore != null) {
-          eventId = await _eventStore!.storeEvent(target.key, message);
+          eventId = await _eventStore.storeEvent(target.key, message);
         }
 
         final sent = await _writeSSEEvent(target.value, message, eventId);
@@ -1971,7 +1971,7 @@ class StreamableHTTPServerTransport
       String? eventId;
 
       if (_eventStore != null && !isStatelessRequestStream) {
-        eventId = await _eventStore!.storeEvent(streamId, message);
+        eventId = await _eventStore.storeEvent(streamId, message);
         response = _streamMapping[streamId];
       }
 

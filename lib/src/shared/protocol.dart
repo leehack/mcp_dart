@@ -715,7 +715,7 @@ abstract class Protocol {
             );
           }
 
-          await _taskStore!.updateTaskStatus(
+          await _taskStore.updateTaskStatus(
             taskId,
             TaskStatus.cancelled,
             'Client cancelled task execution.',
@@ -725,7 +725,7 @@ abstract class Protocol {
           await _clearTaskQueue(taskId, extra.sessionId);
 
           final cancelledTask =
-              await _taskStore!.getTask(taskId, extra.sessionId);
+              await _taskStore.getTask(taskId, extra.sessionId);
           if (cancelledTask == null) {
             throw McpError(
               ErrorCode.invalidParams.value,
@@ -1551,7 +1551,7 @@ abstract class Protocol {
       taskId: relatedTaskId,
       taskStore: _taskStore != null
           ? _RequestTaskStoreImpl(
-              _taskStore!,
+              _taskStore,
               request,
               requestSessionId,
               this,
@@ -1634,7 +1634,7 @@ abstract class Protocol {
     onIncomingRequestAccepted(request);
 
     if (relatedTaskId != null && _taskStore != null) {
-      _taskStore!.updateTaskStatus(
+      _taskStore.updateTaskStatus(
         relatedTaskId,
         TaskStatus.inputRequired,
         null,
@@ -2375,7 +2375,7 @@ abstract class Protocol {
         'Cannot enqueue task message: taskStore and taskMessageQueue are not configured',
       );
     }
-    await _taskMessageQueue!.enqueue(
+    await _taskMessageQueue.enqueue(
       taskId,
       message,
       sessionId,
@@ -2385,7 +2385,7 @@ abstract class Protocol {
 
   Future<void> _clearTaskQueue(String taskId, String? sessionId) async {
     if (_taskMessageQueue != null) {
-      final messages = await _taskMessageQueue!.dequeueAll(taskId, sessionId);
+      final messages = await _taskMessageQueue.dequeueAll(taskId, sessionId);
       for (final msg in messages) {
         if (msg.type == 'request' && msg.message is JsonRpcRequest) {
           final reqId = (msg.message as JsonRpcRequest).id;

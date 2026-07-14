@@ -35,7 +35,7 @@ MCP follows a **client-server architecture** with three key components:
 
 ## Requirements
 
-- Dart SDK version ^3.0.0 or higher
+- Dart SDK 3.5 or later
 
 Ensure you have the correct Dart SDK version installed. See <https://dart.dev/get-dart> for installation instructions.
 
