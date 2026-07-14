@@ -11,8 +11,8 @@
 ///
 /// Setup:
 /// 1. Create a GitHub PAT at https://github.com/settings/tokens
-/// 2. Select scopes: repo, read:packages, read:org
-/// 3. Set environment variable or pass as argument
+/// 2. Grant only the scopes needed by the operations you will run
+/// 3. Set the GITHUB_TOKEN environment variable
 ///
 /// Run:
 /// export GITHUB_TOKEN=your_pat_here
@@ -20,6 +20,7 @@
 library;
 
 import 'dart:io';
+
 import 'package:mcp_dart/mcp_dart.dart';
 
 /// Simple PAT-based authentication provider
@@ -43,38 +44,23 @@ class GitHubPATAuthProvider implements OAuthClientProvider {
   }
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main() async {
   print('=' * 70);
   print('GitHub MCP Server - Personal Access Token Example');
   print('=' * 70);
   print('');
 
-  // Get PAT from environment or command line argument
-  String? githubToken;
-
-  if (args.isNotEmpty) {
-    githubToken = args[0];
-    print('✓ Using token from command line argument');
-  } else {
-    githubToken = Platform.environment['GITHUB_TOKEN'];
-    if (githubToken != null) {
-      print('✓ Using token from GITHUB_TOKEN environment variable');
-    }
+  final githubToken = Platform.environment['GITHUB_TOKEN'];
+  if (githubToken != null) {
+    print('✓ Using token from GITHUB_TOKEN environment variable');
   }
 
   if (githubToken == null || githubToken.isEmpty) {
     print('❌ Error: GitHub Personal Access Token not found!');
     print('');
-    print('Please provide your token using one of these methods:');
-    print('');
-    print('Method 1 - Environment Variable (Recommended):');
+    print('Provide the token through the environment:');
     print('  export GITHUB_TOKEN=your_token_here');
     print('  dart run example/authentication/github_pat_example.dart');
-    print('');
-    print('Method 2 - Command Line Argument:');
-    print(
-      '  dart run example/authentication/github_pat_example.dart your_token_here',
-    );
     print('');
     print('To create a GitHub PAT:');
     print('  1. Visit: https://github.com/settings/tokens');
@@ -82,7 +68,8 @@ Future<void> main(List<String> args) async {
     print('  3. Select scopes: repo, read:packages, read:org');
     print('  4. Copy the generated token');
     print('');
-    exit(1);
+    exitCode = 1;
+    return;
   }
 
   // Create MCP client
@@ -170,17 +157,13 @@ Future<void> main(List<String> args) async {
     print('Connection Test Complete!');
     print('-' * 70);
     print('');
-    print('✅ GitHub MCP server is working correctly with your PAT');
+    print('GitHub MCP connection completed with PAT authentication.');
     print('');
     print('Next steps:');
     print('  • Use client.callTool() to invoke GitHub operations');
     print('  • Use client.listResources() to see available resources');
     print('  • Use client.listPrompts() to see available prompts');
     print('');
-
-    // Close connection
-    await client.close();
-    print('✓ Connection closed');
   } catch (e) {
     print('');
     print('❌ Connection failed!');
@@ -208,6 +191,8 @@ Future<void> main(List<String> args) async {
     }
 
     print('');
-    exit(1);
+    exitCode = 1;
+  } finally {
+    await client.close();
   }
 }

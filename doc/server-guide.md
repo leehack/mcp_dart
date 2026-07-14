@@ -10,7 +10,7 @@ Complete guide to building MCP servers with the Dart SDK.
 - [Providing Resources](#providing-resources)
 - [Creating Prompts](#creating-prompts)
 - [MCP Apps Metadata](#mcp-apps-metadata)
-- [Task Management](#task-management)
+- [Long-running tasks](#long-running-tasks)
 - [Handling Client Requests](#handling-client-requests)
 - [Server Lifecycle](#server-lifecycle)
 - [Advanced Topics](#advanced-topics)
@@ -65,8 +65,8 @@ final server = McpServer(
 
 ### Protocol Profile
 
-Servers on this development branch use `McpProtocol.stable` by default. They
-advertise and accept the stateless MCP `2026-07-28` draft/RC protocol alongside
+Servers in the 2.3.0 preview use `McpProtocol.stable` by default. They
+advertise and accept the stateless MCP `2026-07-28` protocol alongside
 legacy versions, including `server/discover`. Select the legacy profile
 explicitly to advertise only MCP `2025-11-25` and earlier versions:
 
@@ -87,47 +87,51 @@ should reject legacy initialization.
 
 ## Server Capabilities
 
-The server automatically advertises its capabilities based on what you register:
+Registering a tool, resource, or prompt declares the corresponding base
+capability. Optional behavior such as subscriptions, list-change
+notifications, logging, and tasks must be advertised explicitly so peers do not
+infer support from structure alone:
 
 ```dart
-ServerCapabilities(
-  tools: {...},           // If you register tools
-  resources: {...},       // If you register resources
-  prompts: {...},         // If you register prompts
-  logging: {...},         // Always available
-  experimental: {...},    // Experimental features
-)
+const McpServerOptions(
+  capabilities: ServerCapabilities(
+    tools: ServerCapabilitiesTools(listChanged: true),
+    resources: ServerCapabilitiesResources(
+      subscribe: true,
+      listChanged: true,
+    ),
+    prompts: ServerCapabilitiesPrompts(listChanged: true),
+    logging: <String, dynamic>{},
+  ),
+);
 ```
 
 ### Tool Capabilities
 
 ```dart
-// Advertised automatically when you register tools
-server.registerTool(name: 'my-tool', ...);
+// Base tools support is declared when the first tool is registered.
+server.registerTool('my-tool', callback: ...);
 
-// Capabilities include:
-// - listChanged: true (server can notify of tool list changes)
+// Set ServerCapabilitiesTools(listChanged: true) before sending list changes.
 ```
 
 ### Resource Capabilities
 
 ```dart
-// Advertised automatically when you register resources
-server.registerResource(uri: 'file:///data', ...);
+// Base resources support is declared when a resource is registered.
+server.registerResource('Data', 'file:///data', null, readCallback);
 
-// Capabilities include:
-// - subscribe: true (clients can subscribe to resource changes)
-// - listChanged: true (server can notify of resource list changes)
+// Advertise subscribe/listChanged explicitly before implementing either.
 ```
 
 ### Prompt Capabilities
 
 ```dart
-// Advertised automatically when you register prompts
-server.registerPrompt(name: 'my-prompt', ...);
+// Base prompt support is declared when the first prompt is registered.
+server.registerPrompt('my-prompt', ...);
 
-// Capabilities include:
-// - listChanged: true (server can notify of prompt list changes)
+// Advertise ServerCapabilitiesPrompts(listChanged: true) before sending
+// prompt-list change notifications.
 ```
 
 ## MCP Apps Metadata
@@ -283,6 +287,10 @@ Provide hints about tool behavior:
 server.registerTool(
   'delete-user',
   description: 'Permanently delete a user account',
+  annotations: const ToolAnnotations(
+    destructiveHint: true,
+    idempotentHint: true,
+  ),
   inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     // Delete logic
@@ -295,35 +303,12 @@ server.registerTool(
 server.registerTool(
   'get-user-info',
   description: 'Get user information',
+  annotations: const ToolAnnotations(readOnlyHint: true),
   inputSchema: JsonSchema.object(properties: {}),
   callback: (args, extra) async {
     // Get logic
     return CallToolResult(
       content: [TextContent(text: 'User info')],
-    );
-  },
-);
-
-server.registerTool(
-  'update-cache',
-  description: 'Update cache entry',
-  inputSchema: JsonSchema.object(properties: {}),
-  callback: (args, extra) async {
-    // Update logic
-    return CallToolResult(
-      content: [TextContent(text: 'Cache updated')],
-    );
-  },
-);
-
-server.registerTool(
-  'search-web',
-  description: 'Search the web',
-  inputSchema: JsonSchema.object(properties: {}),
-  callback: (args, extra) async {
-    // Search logic
-    return CallToolResult(
-      content: [TextContent(text: 'Results')],
     );
   },
 );
@@ -610,11 +595,13 @@ server.registerResource(
   },
 );
 
-// Later, notify clients of changes
-await server.sendResourceUpdated('file:///data/metrics.json');
+// Later, notify clients of changes through the low-level protocol surface.
+await server.server.sendResourceUpdated(
+  const ResourceUpdatedNotification(uri: 'file:///data/metrics.json'),
+);
 
-// Or notify of list changes (new/removed resources)
-await server.sendResourceListChanged();
+// Notify after an external registry change. registerResource already notifies.
+server.sendResourceListChanged();
 ```
 
 ## Creating Prompts
@@ -666,8 +653,8 @@ server.registerPrompt(
     ),
   },
   callback: (args, extra) async {
-    final language = args['target_language'] as String;
-    final formality = args['formality'] as String? ?? 'neutral';
+    final language = args?['target_language'] as String;
+    final formality = args?['formality'] as String? ?? 'neutral';
 
     return GetPromptResult(
       description: 'Translate text to $language',
@@ -737,7 +724,7 @@ server.registerPrompt(
     ),
   },
   callback: (args, extra) async {
-    final topic = args['topic'] as String;
+    final topic = args?['topic'] as String;
 
     return GetPromptResult(
       messages: [
@@ -781,16 +768,18 @@ server.registerPrompt(
     ),
   },
   callback: (args, extra) async {
-    final fileUri = args['file_uri'] as String;
+    final fileUri = args?['file_uri'] as String;
+    final fileText = await File(Uri.parse(fileUri).toFilePath()).readAsString();
 
     return GetPromptResult(
       messages: [
         PromptMessage(
           role: PromptMessageRole.user,
           content: EmbeddedResource(
-            resource: ResourceReference(
+            resource: TextResourceContents(
               uri: fileUri,
-              type: 'resource',
+              text: fileText,
+              mimeType: 'text/plain',
             ),
           ),
         ),
@@ -809,13 +798,95 @@ server.registerPrompt(
 );
 ```
 
-## Task Management
+## Long-running tasks
 
-Tasks allow servers to expose long-running operations that can be tracked, paused, and resumed by clients.
+MCP has two task protocols that are not wire-compatible. Use the 2026 extension
+for stateless peers and retain the 2025 API only when interoperating with a
+legacy peer.
 
-### Enabling Tasks
+### MCP 2026 Tasks extension
 
-To enable tasks, use the `experimental` property on your `McpServer` instance.
+Declare `io.modelcontextprotocol/tasks` on both peers. Task creation is
+server-directed: a normal `tools/call` may return `CreateTaskExtensionResult`
+only when that request's client capabilities include the extension. Store the
+task before returning it; the SDK verifies that the new ID is immediately
+resolvable through `tasks/get`.
+
+The low-level handlers below show the minimum creation and polling shape:
+
+```dart
+final tasks = <String, TaskExtensionTask>{};
+final server = McpServer(
+  const Implementation(name: 'task-server', version: '1.0.0'),
+  options: McpServerOptions(
+    protocol: McpProtocol.stable,
+    capabilities: ServerCapabilities(
+      tools: const ServerCapabilitiesTools(),
+      extensions: withMcpTasksExtension(),
+    ),
+  ),
+);
+
+server.server.setRequestHandler<JsonRpcGetTaskRequest>(
+  Method.tasksGet,
+  (request, extra) async {
+    final task = tasks[request.getParams.taskId];
+    if (task == null) {
+      throw McpError(ErrorCode.invalidParams.value, 'Task not found');
+    }
+    return GetTaskExtensionResult(task: task);
+  },
+  (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+    'jsonrpc': jsonRpcVersion,
+    'id': id,
+    'method': Method.tasksGet,
+    'params': params,
+    if (meta != null) '_meta': meta,
+  }),
+);
+
+server.server.setRequestHandler<JsonRpcCallToolRequest>(
+  Method.toolsCall,
+  (request, extra) async {
+    if (!(extra.clientCapabilities?.supportsTasksExtension ?? false)) {
+      return const CallToolResult(
+        content: [TextContent(text: 'Completed synchronously')],
+      );
+    }
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    final task = TaskExtensionTask(
+      taskId: generateUUID(),
+      status: TaskStatus.working,
+      createdAt: now,
+      lastUpdatedAt: now,
+      ttlMs: 60000,
+      pollIntervalMs: 1000,
+    );
+    tasks[task.taskId] = task; // Persist durably in production.
+    return CreateTaskExtensionResult(task: task);
+  },
+  (id, params, meta) => JsonRpcCallToolRequest.fromJson({
+    'jsonrpc': jsonRpcVersion,
+    'id': id,
+    'method': Method.toolsCall,
+    'params': params,
+    if (meta != null) '_meta': meta,
+  }),
+);
+```
+
+A complete service must also handle `tasks/update` and `tasks/cancel` for task
+input and cancellation; successful handlers return
+`TaskExtensionAcknowledgementResult`. The 2026 extension has no `tasks/list`,
+`tasks/result`, or client-supplied `task` option. `McpClient.callTool()` polls
+`tasks/get` and returns the final `CallToolResult` transparently.
+
+### MCP 2025-11-25 legacy task augmentation
+
+The legacy flow advertises `tasks.requests.*`, lets clients opt in per request,
+and includes `tasks/list` and `tasks/result`. Configure it through
+`server.experimental` only for `McpProtocol.legacy` interoperability:
 
 ```dart
 server.experimental.onListTasks((extra) async {
@@ -873,25 +944,23 @@ server.experimental.onTaskResult((taskId, extra) async {
 3. Server calls appropriate handler
 4. Server returns result or error
 
-### Logging
+### Observability and deprecated protocol logging
 
-Send log messages to the client:
+Use application logging for new servers:
 
 ```dart
-// Set up logging
-server.logger.info('Server started');
-server.logger.warning('Rate limit approaching');
-server.logger.severe('Database connection failed');
-
-// Custom log levels
-await server.sendLoggingMessage(
-  LoggingMessageNotification(
-    level: LoggingLevel.debug,
-    data: 'Detailed debug information',
-    logger: 'MyComponent',
-  ),
-);
+// Local application/SDK logging (not sent over MCP).
+final logger = Logger('my-server');
+logger.info('Server started');
+logger.warn('Rate limit approaching');
+logger.error('Database connection failed');
 ```
+
+MCP 2026 deprecates `notifications/message`. The SDK keeps
+`sendLoggingMessage` for compatibility, but new stdio servers should log to
+`stderr` and deployed services should prefer OpenTelemetry. Compatibility
+implementations must advertise the logging capability, honor the request's log
+level, and exclude secrets and personal identifying information.
 
 ## Server Lifecycle
 
@@ -939,16 +1008,18 @@ await server.close();
 try {
   await server.connect(transport);
 } catch (e) {
-  server.logger.severe('Failed to start server: $e');
+  Logger('my-server').error('Failed to start server: $e');
   rethrow;
 }
 ```
 
 ## Advanced Topics
 
-### Multiple Transports
+### Choose a transport per server instance
 
-Run server on multiple transports simultaneously:
+Register shared capabilities in a factory, then create a separate `McpServer`
+instance for each transport. A connected server instance owns one transport;
+run stdio and HTTP entry points in separate processes or isolates.
 
 ```dart
 void main() async {
@@ -973,8 +1044,6 @@ void main() async {
   final stdioTransport = StdioServerTransport();
   await server.connect(stdioTransport);
 
-  // Also listen on HTTP (in a separate process/isolate)
-  // See HTTP transport documentation
 }
 ```
 
@@ -982,14 +1051,14 @@ void main() async {
 
 ```dart
 server.registerTool(
-  name: 'custom-validation',
+  'custom-validation',
   description: 'Tool with custom validation',
   inputSchema: {...},
-  callback: ({args, extra}) async {
+  callback: (args, extra) async {
     // Custom validation logic
     if (!_isValid(args)) {
       throw McpError(
-        ErrorCode.invalidParams,
+        ErrorCode.invalidParams.value,
         'Validation failed: ${_getValidationError(args)}',
       );
     }
@@ -1013,27 +1082,14 @@ server.registerTool('tool1', ...);
 // Later, add more tools dynamically
 void addNewTool() {
   server.registerTool('tool2', ...);
-
-  // Notify clients of the change
-  server.sendToolListChanged();
 }
 ```
 
-### Resource Listing with Pagination
-
-```dart
-// Clients can request paginated resource lists
-// Server automatically handles the pagination
-
-server.registerResource(uri: 'resource-1', ...);
-server.registerResource(uri: 'resource-2', ...);
-server.registerResource(uri: 'resource-3', ...);
-// ... many resources
-
-// Client requests:
-// listResources(cursor: null) -> first page
-// listResources(cursor: 'page2-token') -> second page
-```
+When `tools.listChanged` is advertised and the server is connected,
+`registerTool` sends the list-change notification. Do not send a duplicate
+notification. The high-level registry currently returns its complete resource
+list; implement a lower-level request handler if an application needs custom
+pagination.
 
 ## Best Practices
 
@@ -1042,7 +1098,7 @@ server.registerResource(uri: 'resource-3', ...);
 ```dart
 // ✅ Good
 server.registerTool(
-  name: 'search',
+  'search',
   description: 'Search the knowledge base using keywords. '
                'Returns up to 10 most relevant results.',
   ...
@@ -1050,7 +1106,7 @@ server.registerTool(
 
 // ❌ Bad
 server.registerTool(
-  name: 'search',
+  'search',
   description: 'Searches stuff',
   ...
 );
@@ -1093,10 +1149,11 @@ callback: (args, extra) async {
     return CallToolResult(
       content: [TextContent(text: result)],
     );
-  } catch (e) {
-    return CallToolResult(
+  } catch (error, stackTrace) {
+    logger.severe('Unexpected tool failure', error, stackTrace);
+    return const CallToolResult(
       isError: true,
-      content: [TextContent(text: 'Operation failed: $e')],
+      content: [TextContent(text: 'Operation failed')],
     );
   }
 }
@@ -1115,15 +1172,15 @@ callback: (args, extra) async {
 ```dart
 // Destructive operations
 server.registerTool(
-  name: 'delete-account',
-  destructiveHint: true,  // ⚠️ Warn clients
+  'delete-account',
+  annotations: const ToolAnnotations(destructiveHint: true),
   ...
 );
 
 // Read-only operations
 server.registerTool(
-  name: 'get-stats',
-  readOnlyHint: true,  // Safe to call
+  'get-stats',
+  annotations: const ToolAnnotations(readOnlyHint: true),
   ...
 );
 ```

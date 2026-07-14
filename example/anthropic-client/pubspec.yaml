@@ -1,14 +1,14 @@
 name: anthropic_client
-description: A sample command-line application.
+description: An Anthropic Messages API client example backed by MCP tools.
 version: 1.0.1
 publish_to: none
 
 environment:
-  sdk: ^3.7.2
+  sdk: ^3.9.0
 
 # Add regular dependencies here.
 dependencies:
-  anthropic_sdk_dart: ^0.2.0+1
+  anthropic_sdk_dart: ^6.0.0
   mcp_dart:
     path: ../../
 

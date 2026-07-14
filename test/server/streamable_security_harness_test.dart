@@ -22,6 +22,8 @@ void main() {
 
       expect(badOrigin.statusCode, HttpStatus.forbidden);
       expect(badOrigin.body, contains('DNS rebinding protection'));
+      expect(badOrigin.header('access-control-allow-origin'), isNull);
+      expect(badOrigin.header('access-control-allow-credentials'), isNull);
       expect(harness.authenticatorCalls, 0);
 
       final missingAuth = await harness.postInitialize(
@@ -41,6 +43,12 @@ void main() {
 
       expect(allowed.statusCode, HttpStatus.ok);
       expect(allowed.header('mcp-session-id'), isNotNull);
+      expect(
+        allowed.header('access-control-allow-origin'),
+        'http://localhost:${harness.port}',
+      );
+      expect(allowed.header('access-control-allow-credentials'), 'true');
+      expect(allowed.header('vary'), contains('Origin'));
       expect(harness.authenticatorCalls, 2);
     });
 
@@ -195,7 +203,7 @@ class _SecurityHarness {
         id: 1,
         method: Method.initialize,
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(
             name: 'SecurityHarnessClient',

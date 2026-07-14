@@ -2,10 +2,20 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+/// Legacy MCP SSE transport example.
+///
+/// New servers should use Streamable HTTP. This example intentionally uses the
+/// 2025-era initialization profile because the SSE transport is deprecated.
 Future<void> main() async {
+  final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 3000;
+  final allowedBrowserOrigin =
+      Platform.environment['MCP_ALLOWED_ORIGIN'] ?? 'http://localhost:$port';
   final mcpServer = McpServer(
     const Implementation(name: "example-dart-server", version: "1.0.0"),
-    options: const McpServerOptions(capabilities: ServerCapabilities()),
+    options: const McpServerOptions(
+      protocol: McpProtocol.legacy,
+      capabilities: ServerCapabilities(),
+    ),
   );
 
   mcpServer.registerTool(
@@ -41,14 +51,18 @@ Future<void> main() async {
     },
   );
 
-  final sseServerManager = SseServerManager(mcpServer);
+  final sseServerManager = SseServerManager(
+    mcpServer,
+    enableDnsRebindingProtection: true,
+    allowedHosts: const {'localhost', '127.0.0.1'},
+    allowedOrigins: {allowedBrowserOrigin},
+  );
   try {
-    final port = 3000;
-    final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     print('Server listening on http://localhost:$port');
 
     await for (final request in server) {
-      sseServerManager.handleRequest(request);
+      await sseServerManager.handleRequest(request);
     }
   } catch (e) {
     print('Error starting server: $e');

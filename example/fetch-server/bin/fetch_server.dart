@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:http/http.dart' as http;
+import 'package:fetch_server/safe_fetcher.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main(List<String> arguments) async {
@@ -10,11 +10,11 @@ void main(List<String> arguments) async {
       version: '0.1.0',
     ),
   );
+  final fetcher = SafeFetcher();
 
   server.registerTool(
     'fetch',
-    description:
-        'Fetches a URL from the internet and optionally extracts its contents as markdown.',
+    description: 'Fetches bounded text content from a public HTTP(S) URL.',
     inputSchema: ToolInputSchema(
       properties: {
         'url': JsonSchema.string(
@@ -37,19 +37,19 @@ void main(List<String> arguments) async {
           minimum: 0,
           title: 'Start Index',
         ),
-        'raw': JsonSchema.boolean(
-          defaultValue: false,
-          description:
-              'Get the actual HTML content of the requested page, without simplification.',
-          title: 'Raw',
-        ),
       },
+      required: const ['url'],
+    ),
+    annotations: const ToolAnnotations(
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
     ),
     callback: (args, _) async {
       final url = args['url'];
-      final maxLength = (args['max_length'] as num?)?.toInt() ?? 5000;
-      final startIndex = (args['start_index'] as num?)?.toInt() ?? 0;
-      final raw = args['raw'] as bool? ?? false;
+      final maxLengthValue = args['max_length'];
+      final startIndexValue = args['start_index'];
 
       if (url == null || url is! String || url.isEmpty) {
         throw McpError(
@@ -57,9 +57,44 @@ void main(List<String> arguments) async {
           'Missing or invalid "url" argument.',
         );
       }
+      if (maxLengthValue != null && maxLengthValue is! int) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          '"max_length" must be an integer.',
+        );
+      }
+      if (startIndexValue != null && startIndexValue is! int) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          '"start_index" must be an integer.',
+        );
+      }
+
+      final maxLength = maxLengthValue as int? ?? 5000;
+      final startIndex = startIndexValue as int? ?? 0;
+      if (maxLength <= 0 || maxLength >= 1000000) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          '"max_length" must be between 1 and 999999.',
+        );
+      }
+      if (startIndex < 0) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          '"start_index" must be zero or greater.',
+        );
+      }
+
+      final uri = Uri.tryParse(url);
+      if (uri == null) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          'The "url" argument is not a valid URI.',
+        );
+      }
 
       try {
-        final response = await http.get(Uri.parse(url));
+        final response = await fetcher.fetch(uri);
 
         if (response.statusCode != 200) {
           return CallToolResult(
@@ -73,15 +108,8 @@ void main(List<String> arguments) async {
           );
         }
 
-        String content = response.body;
+        var content = response.body;
 
-        // Basic handling for raw and truncation (more sophisticated parsing could be added here)
-        if (!raw) {
-          // In a real server, you might use a library to parse HTML and extract meaningful text.
-          // For this example, we'll just return the raw text content.
-        }
-
-        // Apply start_index and max_length
         final effectiveStartIndex = startIndex.clamp(0, content.length);
         final effectiveEndIndex =
             (effectiveStartIndex + maxLength).clamp(0, content.length);

@@ -1,105 +1,80 @@
 # Examples
 
-## Stdio Server
+These examples are runnable from a repository checkout or the published
+package archive. The default SDK profile prefers MCP `2026-07-28` and falls
+back to initialization-era peers; strict and legacy examples opt into one era
+explicitly.
 
-```dart
-import 'package:mcp_dart/mcp_dart.dart';
+Run these commands from the package root.
 
-void main() async {
-  McpServer server = McpServer(
-    Implementation(name: "example-server", version: "1.0.0"),
-    options: McpServerOptions(
-      capabilities: ServerCapabilities(
-        resources: ServerCapabilitiesResources(),
-        tools: ServerCapabilitiesTools(),
-      ),
-    ),
-  );
+## Strict MCP 2026-07-28
 
-  server.registerTool(
-    "calculate",
-    description: 'Perform basic arithmetic operations',
-    inputSchema: JsonSchema.object(
-      properties: {
-        'operation': JsonSchema.string(
-          enumValues: ['add', 'subtract', 'multiply', 'divide'],
-        ),
-        'a': JsonSchema.number(),
-        'b': JsonSchema.number(),
-      },
-      required: ['operation', 'a', 'b'],
-    ),
-    callback: (args, extra) async {
-      final operation = args['operation'];
-      final a = args['a'];
-      final b = args['b'];
-      return CallToolResult(
-        content: [
-          TextContent(
-            text: switch (operation) {
-              'add' => 'Result: ${a + b}',
-              'subtract' => 'Result: ${a - b}',
-              'multiply' => 'Result: ${a * b}',
-              'divide' => 'Result: ${a / b}',
-              _ => throw Exception('Invalid operation'),
-            },
-          ),
-        ],
-      );
-    },
-  );
+The client starts its paired server and exercises `server/discover`,
+`subscriptions/listen`, `input_required`, and non-object structured output:
 
-  server.connect(StdioServerTransport());
-}
+```bash
+dart run example/mcp_2026_07_28/client.dart
 ```
 
-## Streamable HTTP Server
+[Client source](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_2026_07_28/client.dart)
+and
+[server source](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_2026_07_28/server.dart).
 
-```dart
-import 'dart:io';
-import 'package:mcp_dart/mcp_dart.dart';
+## Default dual-era
 
-void main() async {
-  final server = McpServer(
-    Implementation(name: "example-http-server", version: "1.0.0"),
-    options: McpServerOptions(
-      capabilities: ServerCapabilities(
-        tools: ServerCapabilitiesTools(),
-      ),
-    ),
-  );
+The stdio client starts its paired server, lists capabilities, calls a tool,
+reads a resource, and gets a prompt:
 
-  server.registerTool(
-    "echo",
-    description: 'Echoes back the input',
-    inputSchema: JsonSchema.object(properties: {
-      'message': JsonSchema.string(),
-    }),
-    callback: (args, extra) async {
-      return CallToolResult(
-        content: [TextContent(text: "Echo: ${args['message']}")],
-      );
-    },
-  );
-
-  final transport = StreamableHTTPServerTransport(
-      options: StreamableHTTPServerTransportOptions());
-  await server.connect(transport);
-
-  final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, 3000);
-  print('Server listening on http://localhost:3000/mcp');
-
-  await for (final request in httpServer) {
-    if (request.uri.path == '/mcp') {
-      await transport.handleRequest(request);
-    } else {
-      request.response.statusCode = 404;
-      await request.response.close();
-    }
-  }
-}
+```bash
+dart run example/client_stdio.dart
 ```
 
-For a more complex example handling multiple sessions, tasks, and interactive capabilities, see [`simple_task_interactive_server.dart`](https://github.com/leehack/mcp_dart/tree/main/example/simple_task_interactive_server.dart).
+[Stdio client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/client_stdio.dart)
+and
+[stdio server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/server_stdio.dart).
 
-## [More Examples](https://github.com/leehack/mcp_dart/tree/main/example)
+For Streamable HTTP, run these in separate terminals:
+
+```bash
+dart run example/streamable_https/server_streamable_https.dart
+dart run example/streamable_https/client_streamable_https.dart
+```
+
+[Streamable HTTP server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/streamable_https/server_streamable_https.dart)
+and
+[client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/streamable_https/client_streamable_https.dart).
+
+## MCP 2025 and legacy compatibility
+
+The
+[interactive task client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/simple_task_interactive_client.dart)
+and
+[server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/simple_task_interactive_server.dart),
+[elicitation server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/elicitation_http_server.dart),
+and
+[SSE server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/server_sse.dart)
+intentionally demonstrate retained initialization-era behavior.
+
+## Integrations
+
+- [Authentication and OAuth](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/authentication/README.md)
+- [Anthropic client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/anthropic-client/README.md)
+- [Gemini client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/gemini-client/README.md)
+- [Safe fetch server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/fetch-server/README.md)
+- [Flutter client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/flutter_http_client/README.md)
+- [Jaspr browser client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/jaspr-client/README.md)
+- [MCP Apps helpers](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_apps_helpers_server.dart)
+- [MCP Apps metadata server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_apps_metadata_server.dart)
+
+## Validation
+
+CI runs credential-free process smokes for stdio, strict MCP 2026, a Streamable
+HTTP tool flow against the high-level server, and representative legacy and MCP
+Apps paths. It tests and compiles the Anthropic, Gemini, and fetch packages,
+builds Flutter web, and builds the Jaspr production bundle. Live provider and
+OAuth calls require credentials or external services; interactive browser and
+native-device sessions remain manual.
+
+See the complete
+[examples guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/examples.md)
+for setup, security boundaries, and additional recipes.

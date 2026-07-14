@@ -255,7 +255,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -580,7 +580,7 @@ void main() {
       final response = JsonRpcResponse(
         id: 1,
         result: const InitializeResult(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '1.0.0'),
         ).toJson(),

@@ -14,7 +14,7 @@ class McpUiAppToolConfig {
   /// Stable MCP `2025-11-25` object-root output schema.
   final ToolOutputSchema? outputSchema;
 
-  /// MCP `2026-07-28` draft/RC output schema with any JSON Schema root.
+  /// MCP `2026-07-28` output schema with any JSON Schema root.
   final JsonSchema? outputJsonSchema;
 
   final ToolAnnotations? annotations;

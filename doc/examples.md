@@ -4,16 +4,50 @@ Real-world examples and usage patterns for the MCP Dart SDK.
 
 ## Overview
 
-The SDK includes extensive examples in the [`example/`](../example/) directory. This guide highlights key examples and explains their usage.
+The SDK includes examples in [`example/`](../example/) for each supported
+protocol era. Choose the profile that matches what you want to test:
+
+| Profile | Start with | Purpose |
+| --- | --- | --- |
+| Strict MCP `2026-07-28` | [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/) | Guarantee discovery and the stateless 2026 request model |
+| Default dual-era | [`server_stdio.dart`](../example/server_stdio.dart), [`client_stdio.dart`](../example/client_stdio.dart), [`streamable_https/`](../example/streamable_https/) | Prefer 2026 and retain legacy fallback |
+| Representative MCP 2025 / legacy | [`simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`elicitation_http_server.dart`](../example/elicitation_http_server.dart), [`server_sse.dart`](../example/server_sse.dart) | Demonstrate initialization-era APIs retained for compatibility |
 
 For task-focused guidance, also see:
 
+- [MCP 2026 Tasks extension](tools.md#mcp-2026-tasks-extension) for the client
+  flow and links to the server handlers.
 - [SDK interoperability matrix](interoperability.md) for verified cross-SDK scenarios.
 - [Flutter host and client recipes](flutter-recipes.md) for platform-specific Flutter guidance.
 - [MCP migration cookbooks](migration-cookbooks.md) for TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migrations.
 - [MCP Apps guide](mcp-apps.md) for `io.modelcontextprotocol/ui` metadata and host compatibility notes.
 
-## Basic Examples
+## MCP 2026-07-28 core
+
+### Strict server and client
+
+**Location**: [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/)
+
+The client starts the server over stdio, so the complete flow uses one command:
+
+```bash
+dart run example/mcp_2026_07_28/client.dart
+```
+
+**Features**:
+
+- `McpProtocol.require2026` and `server/discover` negotiation
+- Per-request protocol, identity, and capability metadata
+- `subscriptions/listen` acknowledgment, resource update, and graceful close
+- Automatic `input_required` elicitation and retry with preserved request state
+- Explicit accept, decline, and cancel handling
+- String-root output schema and structured tool result
+- A process smoke test in `test/example/non_credentialed_examples_smoke_test.dart`
+
+## Default dual-era examples
+
+These examples use `McpProtocol.stable`, explicitly or by default. Compatible
+peers negotiate MCP 2026; older peers use initialization fallback.
 
 ### Stdio Server and Client
 
@@ -31,7 +65,7 @@ dart run example/client_stdio.dart
 - Tool invocation with the `calculate` arithmetic tool
 - Static resource reading from `file:///logs`
 - Prompt retrieval with the `analyze-code` prompt
-- Ping, capability discovery, and clean stdio shutdown
+- Capability discovery and clean stdio shutdown
 
 ### Weather API Integration
 
@@ -55,13 +89,32 @@ dart run packages/mcp_dart_cli/bin/mcp_dart.dart inspect \
 - Error handling for API failures
 - Type-safe parameter validation
 
+### Safe HTTP Fetch Server
+
+**Location**: [`example/fetch-server/`](../example/fetch-server/)
+
+A bounded stdio tool for fetching public HTTP(S) text:
+
+```bash
+cd example/fetch-server
+dart pub get
+dart run bin/fetch_server.dart
+```
+
+The example rejects credentials and non-public network destinations, pins
+connections to validated DNS answers, revalidates redirects, and caps time,
+redirects, and response bytes. Its
+[README](../example/fetch-server/README.md) explains the remaining production
+egress, authentication, and rate-limit responsibilities.
+
 ## Transport Examples
 
-### HTTP/SSE Server
+### Legacy SSE Server (Deprecated)
 
 **Location**: [`example/server_sse.dart`](../example/server_sse.dart)
 
-Server-Sent Events based server:
+Older Server-Sent Events transport retained with `McpProtocol.legacy`. Use the
+Streamable HTTP example below for new projects.
 
 ```bash
 dart run example/server_sse.dart
@@ -73,12 +126,13 @@ dart run example/server_sse.dart
 - SSE transport configuration
 - Session management
 - Multiple concurrent connections
+- Explicit Host and Origin allowlists for DNS-rebinding protection
 
 ### Streamable HTTP
 
 **Location**: [`example/streamable_https/`](../example/streamable_https/)
 
-Modern HTTP streaming with resumability:
+Modern Streamable HTTP with dual-era protocol negotiation:
 
 ```bash
 # Start server
@@ -90,9 +144,8 @@ dart run example/streamable_https/client_streamable_https.dart
 
 **Features**:
 
-- Session persistence
-- Connection resumption
-- Stateful and stateless modes
+- Stateless POST requests for MCP 2026
+- Session persistence and connection resumption for legacy MCP
 - CORS support for browser examples
 
 ### High-Level Streamable Server
@@ -108,8 +161,8 @@ dart run example/streamable_https/high_level_server.dart
 **Features**:
 
 - Simplified server creation
-- built-in session management
-- built-in event store
+- Stateless 2026 request routing
+- Sessions, event storage, and resumability for legacy MCP
 - Automatic transport handling
 
 ### In-Process Communication
@@ -131,29 +184,29 @@ dart run example/iostream-client-server/simple.dart
 
 ## Authentication Examples
 
-### OAuth2 Server with PKCE
+### OAuth protected resource
 
 **Location**: [`example/authentication/oauth_server_example.dart`](../example/authentication/oauth_server_example.dart)
 
-Complete OAuth2 implementation:
+Local protected-resource metadata and bearer-challenge pattern:
 
 ```bash
-dart run example/authentication/oauth_server_example.dart
+MCP_BEARER_TOKEN=local-secret \
+  dart run example/authentication/oauth_server_example.dart
 ```
 
 **Features**:
 
-- OAuth2 authorization flow
-- PKCE support (RFC 7636)
-- Token generation and validation
-- Secure token storage
-- Refresh token support
+- Protected-resource metadata
+- `401` bearer challenges
+- Fail-closed static token check for local testing
+- Explicit application boundary for production token verification
 
 ### OAuth2 Client
 
 **Location**: [`example/authentication/oauth_client_example.dart`](../example/authentication/oauth_client_example.dart)
 
-Client-side OAuth2 integration:
+Generic OAuth client building blocks pinned to the initialization-era profile:
 
 ```bash
 dart run example/authentication/oauth_client_example.dart
@@ -164,7 +217,10 @@ dart run example/authentication/oauth_client_example.dart
 - Authorization code flow
 - PKCE challenge generation
 - Token exchange
-- Authenticated requests
+- Callback-state validation
+- Token refresh and plaintext local storage
+
+The generic example does not host a callback or target a real provider.
 
 ### GitHub OAuth Integration
 
@@ -184,8 +240,9 @@ dart run example/authentication/github_oauth_example.dart
 
 - GitHub OAuth provider
 - User authentication
-- API access with tokens
-- Profile information retrieval
+- PKCE S256 and callback-state validation
+- Plaintext token reuse for local testing
+- Connection and tool discovery against the configured MCP endpoint
 
 ### GitHub Personal Access Token
 
@@ -205,7 +262,7 @@ dart run example/authentication/github_pat_example.dart
 - API integration
 - Simpler than OAuth for scripts
 
-## Advanced Features
+## MCP extensions
 
 ### MCP Apps Helpers (TypeScript-style)
 
@@ -244,11 +301,26 @@ dart run example/mcp_apps_metadata_server.dart
 - `ResourceLink` output from a tool result
 - Host-facing `io.modelcontextprotocol/ui` metadata
 
+MCP Apps is an optional extension and is tracked separately from core protocol
+coverage.
+
+## MCP 2025 and legacy compatibility
+
+### Core task augmentation
+
+**Location**: [`example/simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`example/simple_task_interactive_client.dart`](../example/simple_task_interactive_client.dart)
+
+This pair explicitly selects `McpProtocol.legacy` to demonstrate the 2025-era
+core task APIs, including task-scoped elicitation and sampling. MCP 2026 uses
+`input_required` in core and exposes long-running Tasks as an extension; start
+with the strict 2026 pair for the modern input flow.
+
 ### Argument Completions
 
 **Location**: [`example/completions_capability_demo.dart`](../example/completions_capability_demo.dart)
 
-Auto-completion for arguments:
+Initialization-era auto-completion for arguments. This example explicitly uses
+`McpProtocol.legacy` because its commentary targets the 2025 feature shape.
 
 ```bash
 dart run example/completions_capability_demo.dart
@@ -261,11 +333,11 @@ dart run example/completions_capability_demo.dart
 - Up to 100 suggestions
 - Pagination support
 
-### User Input Elicitation
+### Server-initiated user input
 
 **Location**: [`example/elicitation_http_server.dart`](../example/elicitation_http_server.dart)
 
-Server-initiated user input collection:
+Session-scoped server-initiated input collection with `McpProtocol.legacy`:
 
 ```bash
 dart run example/elicitation_http_server.dart
@@ -276,7 +348,14 @@ dart run example/elicitation_http_server.dart
 - Multiple input types (boolean, string, number, enum)
 - Schema validation
 - Action handling (accept/decline/cancel)
-- Structured form data results
+- Structured, non-secret form data results
+
+Form elicitation must not collect passwords, access tokens, or other secrets.
+
+For MCP 2026, return `InputRequiredResult` from the tool, resource, or prompt
+handler as shown in the strict 2026 example.
+
+## Other feature examples
 
 ### Required Fields Validation
 
@@ -306,15 +385,18 @@ Integration with Claude API:
 ```bash
 export ANTHROPIC_API_KEY=your_key
 cd example/anthropic-client
-dart run
+dart run bin/main.dart dart ../server_stdio.dart
 ```
 
 **Features**:
 
-- Claude API integration
-- Message formatting
-- Streaming responses
-- Tool use with Claude
+- Current Anthropic Messages API and model override support
+- Complete paginated MCP tool discovery with collision-safe provider aliases
+- Correlated `tool_use` / `tool_result` turns
+- Multiple tool calls and tool-use rounds
+- Explicit per-call approval and rejection of unadvertised tool names
+- Native text/image result mapping, structured-result preservation, and
+  correlated recoverable MCP errors
 
 ### Google Gemini Client
 
@@ -325,15 +407,17 @@ Integration with Gemini API:
 ```bash
 export GEMINI_API_KEY=your_key
 cd example/gemini-client
-dart run
+dart run bin/main.dart dart ../server_stdio.dart
 ```
 
 **Features**:
 
-- Gemini API integration
-- Multi-turn conversations
-- Content generation
-- Function calling
+- Current Gemini Interactions API with stored multi-turn interactions
+- Complete paginated MCP tool discovery with collision-safe provider aliases
+- Correlated function-call / function-response turns
+- Parallel and sequential tool calls with explicit per-call approval
+- Native text/image/structured result mapping without MCP metadata leakage
+- Fail-closed conversion for Gemini's supported JSON Schema subset
 
 ## Flutter Examples
 
@@ -341,13 +425,13 @@ dart run
 
 **Location**: [`example/flutter_http_client/`](../example/flutter_http_client/)
 
-Flutter mobile app with MCP integration:
+Flutter Web app with MCP integration:
 
 ```bash
 dart run example/streamable_https/server_streamable_https.dart
 
 cd example/flutter_http_client
-flutter run -d chrome
+flutter run -d chrome --web-port 8080
 ```
 
 **Features**:
@@ -360,11 +444,12 @@ flutter run -d chrome
 
 See [Flutter Host and Client Recipes](flutter-recipes.md) for platform-specific transport, lifecycle, authentication, and testing guidance.
 
-### Jaspr MCP Client
+### Jaspr MCP 2025 task client
 
 **Location**: [`example/jaspr-client/`](../example/jaspr-client/)
 
-Browser client focused on elicitation, sampling, and task-aware tool flows:
+Browser client explicitly using `McpProtocol.legacy` for elicitation, sampling,
+and 2025-era task-aware tool flows:
 
 ```bash
 dart run example/simple_task_interactive_server.dart
@@ -481,31 +566,14 @@ server.registerResourceTemplate(
 );
 ```
 
-### OAuth Flow Pattern
+### OAuth boundary pattern
 
-```dart
-// From oauth_server_example.dart
-
-// 1. Client requests authorization
-final authUrl = buildAuthorizationUrl(
-  clientId: clientId,
-  redirectUri: redirectUri,
-  codeChallenge: challenge,
-);
-
-// 2. User approves
-
-// 3. Exchange code for token
-final token = await exchangeCodeForToken(
-  code: authCode,
-  codeVerifier: verifier,
-);
-
-// 4. Use token for requests
-final response = await makeAuthenticatedRequest(
-  accessToken: token.accessToken,
-);
-```
+Use `OAuthAuthorizationCodeProvider` when the client transport should discover
+metadata, create the PKCE request, and exchange the returned code. On servers,
+use `OAuthProtectedResourceOptions` plus `authenticationHandler`; the
+application must still verify token signature or introspection, issuer,
+resource audience, expiry, and scopes. See the
+[authentication examples](../example/authentication/README.md).
 
 ### Completion Handler Pattern
 
@@ -587,7 +655,10 @@ test('tool execution', () async {
     arguments: {'a': 5, 'b': 3},
   ));
 
-  expect(result.content.first.text, '8');
+  expect(
+    result.content.first,
+    isA<TextContent>().having((content) => content.text, 'text', '8'),
+  );
 
   // Cleanup
   await client.close();
@@ -618,6 +689,10 @@ export GITHUB_CLIENT_ID=your_id
 export GITHUB_CLIENT_SECRET=your_secret
 export GITHUB_TOKEN=your_pat
 
+# Local protected-resource example
+export MCP_BEARER_TOKEN=local-secret
+export MCP_AUTHORIZATION_SERVER=https://auth.example.com
+
 # LLM examples
 export ANTHROPIC_API_KEY=your_key
 export GEMINI_API_KEY=your_key
@@ -630,12 +705,15 @@ export GEMINI_API_KEY=your_key
 dart run example/server_stdio.dart
 dart run example/client_stdio.dart
 
+# Strict MCP 2026 example (starts its paired server)
+dart run example/mcp_2026_07_28/client.dart
+
 # HTTP examples
 dart run example/server_sse.dart
 dart run example/streamable_https/server_streamable_https.dart
 
-# Auth examples
-dart run example/authentication/oauth_server_example.dart
+# Auth examples (server also needs MCP_BEARER_TOKEN)
+MCP_BEARER_TOKEN=local-secret dart run example/authentication/oauth_server_example.dart
 dart run example/authentication/github_oauth_example.dart
 
 # Feature examples
@@ -645,11 +723,15 @@ dart run example/elicitation_http_server.dart
 # Flutter example
 dart run example/streamable_https/server_streamable_https.dart
 cd example/flutter_http_client
-flutter run -d chrome
+flutter run -d chrome --web-port 8080
 
 # Non-credentialed smoke checks used by CI/local release validation
 dart test test/example/non_credentialed_examples_smoke_test.dart
 ```
+
+Core CI also analyzes, tests, and AOT-compiles the nested Anthropic, Gemini,
+and fetch packages; builds the Jaspr production bundle; and analyzes, tests,
+and builds the Flutter web app.
 
 ## Next Steps
 
@@ -661,9 +743,9 @@ dart test test/example/non_credentialed_examples_smoke_test.dart
 
 ### For Advanced Users
 
-1. Study [oauth_server_example.dart](../example/authentication/oauth_server_example.dart)
-2. Explore [completions_capability_demo.dart](../example/completions_capability_demo.dart)
-3. Review [elicitation_http_server.dart](../example/elicitation_http_server.dart)
+1. Run the [strict MCP 2026 example](../example/mcp_2026_07_28/)
+2. Study the [authentication boundary guide](../example/authentication/OAUTH_SERVER_GUIDE.md)
+3. Review the [protocol coverage matrices](spec-coverage-2026-07-28.md)
 
 ### For Flutter Developers
 
@@ -688,8 +770,9 @@ dart test test/example/non_credentialed_examples_smoke_test.dart
 
 Have a great example? Contributions are welcome!
 
-1. Create example in `example/` directory
-2. Add README explaining the example
-3. Include comments for clarity
-4. Test on multiple platforms
-5. Submit a pull request
+1. Create the example in the `example/` directory
+2. State whether it is strict 2026, dual-era, or intentionally legacy
+3. Add a README explaining the example
+4. Include comments for clarity
+5. Test on the applicable platforms
+6. Submit a pull request

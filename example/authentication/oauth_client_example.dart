@@ -1,17 +1,17 @@
 /// Example demonstrating OAuth 2.0 authentication with MCP Dart SDK
 ///
-/// **COMPLIES WITH MCP OAUTH SPECIFICATION (2025-11-25)**
+/// **DEMONSTRATES MCP OAUTH 2025-11-25 PROTOCOL SHAPES**
 ///
-/// This example shows how to implement a complete OAuth flow for authenticating
-/// with an MCP server that requires OAuth 2.0 authorization.
+/// This example shows the authorization-request, PKCE, token-exchange, refresh,
+/// and storage building blocks for an MCP OAuth client. It deliberately does
+/// not host a redirect callback or connect to a real authorization server.
 ///
-/// ## MCP Specification Compliance
+/// ## Covered protocol patterns
 ///
 /// ✅ **PKCE Support** - Generates code_verifier and code_challenge
 /// ✅ **Resource Parameter** - Includes resource parameter in authorization and token requests
 /// ✅ **Proper Authorization** - Uses body parameters (not Basic Auth header)
 ///
-/// Compatible with [oauth_server_example.dart](oauth_server_example.dart)
 library;
 
 import 'dart:async';
@@ -61,8 +61,10 @@ class OAuthAuthorizationRequest {
   });
 }
 
-/// Implementation of OAuthClientProvider for OAuth 2.0 flow
-/// Complies with MCP OAuth specification
+/// Educational OAuthClientProvider authorization-code implementation.
+///
+/// The included file storage is plaintext. Replace it with platform secure
+/// storage or an encrypted credential service in production.
 class OAuth2Provider implements OAuthClientProvider {
   final OAuthConfig config;
   final TokenStorage storage;
@@ -149,11 +151,9 @@ class OAuth2Provider implements OAuthClientProvider {
     final authRequest = await createAuthorizationRequest();
 
     print('\n${'=' * 60}');
-    print('AUTHORIZATION REQUIRED (MCP OAuth Spec Compliant)');
+    print('OAUTH AUTHORIZATION REQUEST PREPARED');
     print('=' * 60);
-    print('\nPKCE Code Verifier: ${authRequest.codeVerifier}');
-    print('PKCE Code Challenge: ${authRequest.codeChallenge}\n');
-    print('Please open the following URL in your browser:\n');
+    print('\nOpen the following URL in your browser:\n');
     print(authRequest.authorizationUri.toString());
     print('\nAfter authorization, you will be redirected to:');
     print(
@@ -161,14 +161,12 @@ class OAuth2Provider implements OAuthClientProvider {
     );
     print('=' * 60 + '\n');
 
-    // In a real application, you would:
-    // - Open the URL in the system browser
-    // - Set up a local HTTP server to receive the callback
-    // - Extract the authorization code from the callback
+    // The application must open the URL, receive the callback, validate the
+    // returned state, and call exchangeCodeForTokens. Never log the verifier.
   }
 
   /// Refreshes an expired access token using the refresh token
-  /// Complies with MCP spec by including resource parameter
+  /// Includes the MCP resource parameter in the refresh request.
   Future<OAuthTokens?> _refreshToken(String refreshToken) async {
     try {
       final body = {
@@ -208,12 +206,17 @@ class OAuth2Provider implements OAuthClientProvider {
     }
   }
 
-  /// Exchanges authorization code for access token with PKCE
-  /// Complies with MCP OAuth spec requirements:
-  /// - PKCE code_verifier parameter
-  /// - resource parameter for audience validation
-  Future<StoredOAuthTokens?> exchangeCodeForTokens(String code) async {
+  /// Validates callback state and exchanges an authorization code with PKCE.
+  Future<StoredOAuthTokens?> exchangeCodeForTokens(
+    String code, {
+    required String state,
+  }) async {
     try {
+      final expectedState = await storage.getState();
+      if (expectedState == null || state != expectedState) {
+        throw StateError('OAuth callback state did not match');
+      }
+
       // Retrieve stored code verifier
       final codeVerifier = await storage.getCodeVerifier();
       if (codeVerifier == null) {
@@ -254,6 +257,7 @@ class OAuth2Provider implements OAuthClientProvider {
 
         // Clear PKCE verifier after successful exchange
         await storage.clearCodeVerifier();
+        await storage.clearState();
 
         return tokens;
       }
@@ -267,7 +271,7 @@ class OAuth2Provider implements OAuthClientProvider {
 
   String _generateRandomState() {
     return _base64UrlNoPadding(
-      List<int>.generate(16, (_) => _random.nextInt(256)),
+      List<int>.generate(32, (_) => _random.nextInt(256)),
     );
   }
 
@@ -359,6 +363,10 @@ class TokenStorage {
     return _state;
   }
 
+  Future<void> clearState() async {
+    _state = null;
+  }
+
   /// Save PKCE code verifier for token exchange
   Future<void> saveCodeVerifier(String codeVerifier) async {
     _codeVerifier = codeVerifier;
@@ -375,11 +383,10 @@ class TokenStorage {
   }
 }
 
-/// Main example demonstrating MCP-compliant OAuth authentication
-/// Compatible with oauth_server_example.dart
+/// Prints the generic authorization request and explains the missing app hook.
 Future<void> main(List<String> args) async {
   // Configuration for MCP server with OAuth
-  // This example is configured for the oauth_server_example.dart
+  // Replace these placeholders with one authorization server's endpoints.
   final config = OAuthConfig(
     clientId: 'your-client-id',
     clientSecret: 'your-client-secret',
@@ -399,12 +406,13 @@ Future<void> main(List<String> args) async {
   // Create MCP client
   final client = McpClient(
     const Implementation(name: 'oauth-example-client', version: '1.0.0'),
+    options: const McpClientOptions(protocol: McpProtocol.legacy),
   );
 
   try {
     // Create transport with authentication
     final transport = StreamableHttpClientTransport(
-      Uri.parse('https://api.example.com/mcp'),
+      Uri.parse('${config.serverUri}/mcp'),
       opts: StreamableHttpClientTransportOptions(
         authProvider: authProvider,
       ),
@@ -429,33 +437,25 @@ Future<void> main(List<String> args) async {
 
     // Keep the connection alive
     await Future.delayed(const Duration(seconds: 5));
-
-    await client.close();
   } catch (e) {
     if (e is UnauthorizedError) {
       print('\n⚠ Authorization required!');
-      print('Please complete the OAuth flow and run the following command:');
-      print('dart run example/authentication/oauth_finish_auth.dart <CODE>\n');
+      print(
+        'This generic example prepares the request but does not host a '
+        'callback server.',
+      );
+      print(
+        'Integrate your app callback and call '
+        'exchangeCodeForTokens(code, state: state).',
+      );
+      print(
+        'For a runnable local callback pattern, see '
+        'github_oauth_example.dart.\n',
+      );
     } else {
       print('Error: $e');
     }
-  }
-}
-
-/// Helper function to finish OAuth flow after receiving authorization code
-/// This would typically be in a separate callback handler
-Future<void> finishOAuthFlow(
-  StreamableHttpClientTransport transport,
-  OAuth2Provider authProvider,
-  String authorizationCode,
-) async {
-  // Exchange authorization code for tokens
-  final tokens = await authProvider.exchangeCodeForTokens(authorizationCode);
-  if (tokens != null) {
-    // Complete the auth flow with the transport
-    await transport.finishAuth(authorizationCode);
-    print('✓ Authentication completed successfully!');
-  } else {
-    print('✗ Failed to exchange authorization code');
+  } finally {
+    await client.close();
   }
 }

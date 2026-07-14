@@ -321,7 +321,7 @@ void main() {
       expect(receivedErrors, isEmpty);
     });
 
-    test('resumed SSE response rewrites id and joins multi-line data',
+    test('resumed SSE response preserves id and joins multi-line data',
         () async {
       final receivedErrors = <Error>[];
       final receivedTokens = <String>[];
@@ -342,7 +342,7 @@ void main() {
           request.response.write(
             'event: message\n'
             'id: server-event-2\n'
-            'data: {"jsonrpc":"2.0","id":1,\n'
+            'data: {"jsonrpc":"2.0","id":99,\n'
             'data: "result":{"ok":true}}\n\n',
           );
           await request.response.flush();
@@ -380,6 +380,7 @@ void main() {
 
     test('invalid resumed SSE message reports parser errors', () async {
       final receivedErrors = <Error>[];
+      final errorCompleter = Completer<Error>();
       final sawResumeRequest = Completer<void>();
 
       final subscription = requestController!.stream.listen((request) async {
@@ -401,7 +402,12 @@ void main() {
       });
 
       transport = StreamableHttpClientTransport(serverUrl);
-      transport.onerror = receivedErrors.add;
+      transport.onerror = (error) {
+        receivedErrors.add(error);
+        if (!errorCompleter.isCompleted) {
+          errorCompleter.complete(error);
+        }
+      };
 
       await transport.start();
       await transport.send(
@@ -410,7 +416,7 @@ void main() {
       );
 
       await sawResumeRequest.future.timeout(const Duration(seconds: 3));
-      await pumpEventQueue(times: 5);
+      await errorCompleter.future.timeout(const Duration(seconds: 3));
       await subscription.cancel();
 
       expect(receivedErrors, isNotEmpty);

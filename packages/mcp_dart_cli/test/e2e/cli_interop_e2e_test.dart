@@ -71,34 +71,9 @@ void main() {
         return;
       }
 
-      final probeConfig = File(
-        p.join(cliDir.path, '.dart_tool', 'inspect-probes-ts.json'),
-      );
-      await probeConfig.parent.create(recursive: true);
-      await probeConfig.writeAsString(
-        jsonEncode(<String, dynamic>{
-          'tools': <Map<String, dynamic>>[
-            <String, dynamic>{
-              'name': 'structured_echo',
-              'arguments': <String, dynamic>{'message': 'configured probe'},
-            },
-          ],
-          'resource': <String, dynamic>{'uri': 'resource://test'},
-          'prompt': <String, dynamic>{
-            'name': 'greeting',
-            'arguments': <String, dynamic>{'language': 'English'},
-          },
-          'completion': <String, dynamic>{
-            'prompt': 'greeting',
-            'argument': 'language',
-            'value': 'E',
-          },
-          'task': <String, dynamic>{
-            'tool': 'long_running',
-            'arguments': <String, dynamic>{'duration': 20},
-            'ttl': 60000,
-          },
-        }),
+      final probeConfig = await _writeTypeScriptProbeConfig(
+        cliDir,
+        'inspect-probes-ts.json',
       );
 
       final result = await _runCli([
@@ -156,10 +131,16 @@ void main() {
         try {
           final url = Uri.parse('http://127.0.0.1:$port/mcp');
           await _waitForHttpEndpoint(url);
+          final probeConfig = await _writeTypeScriptProbeConfig(
+            cliDir,
+            'inspect-probes-ts-http.json',
+          );
 
           final result = await _runCli([
             'inspect-server',
             '--json',
+            '--probe-config',
+            probeConfig.path,
             '--url',
             url.toString(),
           ], workingDirectory: cliDir);
@@ -441,7 +422,7 @@ void main() {
           '--server-command',
           'dart',
           '--server-args',
-          'run bin/mcp_dart.dart inspect-client --report ${reportFile.path} --idle-timeout-ms 1000',
+          'run bin/mcp_dart.dart inspect-client --active-probes --report ${reportFile.path} --idle-timeout-ms 1000',
           '--server-cwd',
           cliDir.path,
           '--expect-inspector-primitives',
@@ -561,6 +542,42 @@ void main() {
       );
     });
   });
+}
+
+Future<File> _writeTypeScriptProbeConfig(
+  Directory cliDir,
+  String fileName,
+) async {
+  final probeConfig = File(
+    p.join(cliDir.path, '.dart_tool', fileName),
+  );
+  await probeConfig.parent.create(recursive: true);
+  await probeConfig.writeAsString(
+    jsonEncode(<String, dynamic>{
+      'tools': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'name': 'structured_echo',
+          'arguments': <String, dynamic>{'message': 'configured probe'},
+        },
+      ],
+      'resource': <String, dynamic>{'uri': 'resource://test'},
+      'prompt': <String, dynamic>{
+        'name': 'greeting',
+        'arguments': <String, dynamic>{'language': 'English'},
+      },
+      'completion': <String, dynamic>{
+        'prompt': 'greeting',
+        'argument': 'language',
+        'value': 'E',
+      },
+      'task': <String, dynamic>{
+        'tool': 'long_running',
+        'arguments': <String, dynamic>{'duration': 20},
+        'ttl': 60000,
+      },
+    }),
+  );
+  return probeConfig;
 }
 
 Directory _findRepoRoot(Directory start) {

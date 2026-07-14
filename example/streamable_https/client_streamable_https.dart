@@ -7,12 +7,9 @@ import 'package:mcp_dart/mcp_dart.dart';
 // Global client and transport for interactive commands
 McpClient? client;
 StreamableHttpClientTransport? transport;
-String serverUrl = 'http://localhost:3000/mcp';
-String? notificationsToolLastEventId;
+String serverUrl =
+    Platform.environment['MCP_SERVER_URL'] ?? 'http://localhost:3000/mcp';
 String? sessionId;
-
-// Track received notifications for debugging resumability
-int notificationCount = 0;
 
 Future<void> main() async {
   print('MCP Interactive Client');
@@ -29,10 +26,10 @@ Future<void> main() async {
 void printHelp() {
   print('\nAvailable commands:');
   print(
-    '  connect [url]              - Connect to MCP server (default: http://localhost:3000/mcp)',
+    '  connect [url]              - Connect to MCP server (default: $serverUrl)',
   );
   print('  disconnect                 - Disconnect from server');
-  print('  terminate-session          - Terminate the current session');
+  print('  terminate-session          - Terminate a legacy MCP session');
   print('  reconnect                  - Reconnect to the server');
   print('  list-tools                 - List available tools');
   print(
@@ -40,10 +37,10 @@ void printHelp() {
   );
   print('  greet [name]               - Call the greet tool');
   print(
-    '  multi-greet [name]         - Call the multi-greet tool with notifications',
+    '  multi-greet [name]         - Call multi-greet with progress updates',
   );
   print(
-    '  start-notifications [interval] [count] - Start periodic notifications',
+    '  start-notifications [interval] [count] - Run periodic progress updates',
   );
   print('  list-prompts               - List available prompts');
   print(
@@ -55,121 +52,122 @@ void printHelp() {
 }
 
 Future<void> commandLoop() async {
-  final inputController = StreamController<String>.broadcast();
-  final stdinStream =
-      stdin.transform(utf8.decoder).transform(const LineSplitter());
-
-  // Pass stdin data to our controller
-  stdinStream.listen((input) {
-    inputController.add(input);
-  });
+  final input = StreamIterator<String>(
+    stdin.transform(utf8.decoder).transform(const LineSplitter()),
+  );
 
   bool running = true;
-  while (running) {
-    stdout.write('\n> ');
-    final String input = await inputController.stream.first;
-    final args = input.trim().split(RegExp(r'\s+'));
-    final command = args.isNotEmpty ? args[0].toLowerCase() : '';
-
-    try {
-      switch (command) {
-        case 'connect':
-          await connect(args.length > 1 ? args[1] : null);
-          break;
-
-        case 'disconnect':
-          await disconnect();
-          break;
-
-        case 'terminate-session':
-          await terminateSession();
-          break;
-
-        case 'reconnect':
-          await reconnect();
-          break;
-
-        case 'list-tools':
-          await listTools();
-          break;
-
-        case 'call-tool':
-          if (args.length < 2) {
-            print('Usage: call-tool <name> [args]');
-          } else {
-            final toolName = args[1];
-            Map<String, dynamic> toolArgs = {};
-            if (args.length > 2) {
-              try {
-                toolArgs = jsonDecode(args.sublist(2).join(' '));
-              } catch (_) {
-                print('Invalid JSON arguments. Using empty args.');
-              }
-            }
-            await callTool(toolName, toolArgs);
-          }
-          break;
-
-        case 'greet':
-          await callGreetTool(args.length > 1 ? args[1] : 'MCP User');
-          break;
-
-        case 'multi-greet':
-          await callMultiGreetTool(args.length > 1 ? args[1] : 'MCP User');
-          break;
-
-        case 'start-notifications':
-          final interval =
-              args.length > 1 ? int.tryParse(args[1]) ?? 2000 : 2000;
-          final count = args.length > 2 ? int.tryParse(args[2]) : 10;
-          await startNotifications(interval, count);
-          break;
-
-        case 'list-prompts':
-          await listPrompts();
-          break;
-
-        case 'get-prompt':
-          if (args.length < 2) {
-            print('Usage: get-prompt <name> [args]');
-          } else {
-            final promptName = args[1];
-            Map<String, dynamic> promptArgs = {};
-            if (args.length > 2) {
-              try {
-                promptArgs = jsonDecode(args.sublist(2).join(' '));
-              } catch (_) {
-                print('Invalid JSON arguments. Using empty args.');
-              }
-            }
-            await getPrompt(promptName, promptArgs);
-          }
-          break;
-
-        case 'list-resources':
-          await listResources();
-          break;
-
-        case 'help':
-          printHelp();
-          break;
-
-        case 'quit':
-        case 'exit':
-          await cleanup();
-          running = false;
-          inputController.close();
-          break;
-
-        default:
-          if (command.isNotEmpty) {
-            print('Unknown command: $command');
-          }
-          break;
+  try {
+    while (running) {
+      stdout.write('\n> ');
+      if (!await input.moveNext()) {
+        await cleanup();
+        break;
       }
-    } catch (error) {
-      print('Error executing command: $error');
+      final args = input.current.trim().split(RegExp(r'\s+'));
+      final command = args.isNotEmpty ? args[0].toLowerCase() : '';
+
+      try {
+        switch (command) {
+          case 'connect':
+            await connect(args.length > 1 ? args[1] : null);
+            break;
+
+          case 'disconnect':
+            await disconnect();
+            break;
+
+          case 'terminate-session':
+            await terminateSession();
+            break;
+
+          case 'reconnect':
+            await reconnect();
+            break;
+
+          case 'list-tools':
+            await listTools();
+            break;
+
+          case 'call-tool':
+            if (args.length < 2) {
+              print('Usage: call-tool <name> [args]');
+            } else {
+              final toolName = args[1];
+              Map<String, dynamic> toolArgs = {};
+              if (args.length > 2) {
+                try {
+                  toolArgs = jsonDecode(args.sublist(2).join(' '));
+                } catch (_) {
+                  print('Invalid JSON arguments. Using empty args.');
+                }
+              }
+              await callTool(toolName, toolArgs);
+            }
+            break;
+
+          case 'greet':
+            await callGreetTool(args.length > 1 ? args[1] : 'MCP User');
+            break;
+
+          case 'multi-greet':
+            await callMultiGreetTool(args.length > 1 ? args[1] : 'MCP User');
+            break;
+
+          case 'start-notifications':
+            final interval =
+                args.length > 1 ? int.tryParse(args[1]) ?? 2000 : 2000;
+            final count = args.length > 2 ? int.tryParse(args[2]) ?? 10 : 10;
+            await startNotifications(interval, count);
+            break;
+
+          case 'list-prompts':
+            await listPrompts();
+            break;
+
+          case 'get-prompt':
+            if (args.length < 2) {
+              print('Usage: get-prompt <name> [args]');
+            } else {
+              final promptName = args[1];
+              Map<String, dynamic> promptArgs = {};
+              if (args.length > 2) {
+                try {
+                  promptArgs = jsonDecode(args.sublist(2).join(' '));
+                } catch (_) {
+                  print('Invalid JSON arguments. Using empty args.');
+                }
+              }
+              await getPrompt(promptName, promptArgs);
+            }
+            break;
+
+          case 'list-resources':
+            await listResources();
+            break;
+
+          case 'help':
+            printHelp();
+            break;
+
+          case 'quit':
+          case 'exit':
+            await cleanup();
+            running = false;
+            break;
+
+          default:
+            if (command.isNotEmpty) {
+              print('Unknown command: $command');
+            }
+            break;
+        }
+      } catch (error) {
+        print('Error executing command: $error');
+      }
     }
+  } finally {
+    await input.cancel();
   }
 }
 
@@ -202,34 +200,8 @@ Future<void> connect([String? url]) async {
       ),
     );
 
-    // Set up notification handlers
-    client!.setNotificationHandler(
-      "notifications/message",
-      (notification) async {
-        // Type check is not needed since the notification factory ensures correct type
-        notificationCount++;
-        final params = notification.logParams;
-        print(
-          '\nNotification #$notificationCount: ${params.level} - ${params.data}',
-        );
-        // Re-display the prompt
-        stdout.write('> ');
-        return Future.value();
-      },
-      (params, meta) {
-        if (params == null) {
-          throw const FormatException(
-            'Missing params for logging message notification',
-          );
-        }
-
-        return JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotification.fromJson(params),
-          meta: meta,
-        );
-      },
-    );
-
+    // Legacy peers use global list-changed notifications. MCP 2026 uses
+    // subscriptions/listen, as shown in example/mcp_2026_07_28/client.dart.
     client!.setNotificationHandler(
       "notifications/resources/list_changed",
       (notification) async {
@@ -260,8 +232,14 @@ Future<void> connect([String? url]) async {
 
     // Connect the client
     await client!.connect(transport!);
+    final protocolVersion = client!.getProtocolVersion();
     sessionId = transport!.sessionId;
-    print('Transport created with session ID: $sessionId');
+    print('Negotiated protocol: $protocolVersion');
+    if (sessionId == null && protocolVersion == previewProtocolVersion) {
+      print('No session ID (expected for stateless MCP 2026).');
+    } else {
+      print('Transport created with session ID: $sessionId');
+    }
     print('Connected to MCP server');
   } catch (error) {
     print('Failed to connect: $error');
@@ -277,18 +255,24 @@ Future<void> disconnect() async {
   }
 
   try {
-    await transport!.close();
+    await client!.close();
     print('Disconnected from MCP server');
-    client = null;
-    transport = null;
   } catch (error) {
     print('Error disconnecting: $error');
+  } finally {
+    client = null;
+    transport = null;
   }
 }
 
 Future<void> terminateSession() async {
   if (client == null || transport == null) {
     print('Not connected.');
+    return;
+  }
+
+  if (client!.getProtocolVersion() == previewProtocolVersion) {
+    print('MCP 2026 is stateless and has no protocol session to terminate.');
     return;
   }
 
@@ -393,13 +377,13 @@ Future<void> callGreetTool(String name) async {
 }
 
 Future<void> callMultiGreetTool(String name) async {
-  print('Calling multi-greet tool with notifications...');
+  print('Calling multi-greet tool with progress updates...');
   await callTool('multi-greet', {'name': name});
 }
 
 Future<void> startNotifications(int interval, int? count) async {
   print(
-    'Starting notification stream: interval=${interval}ms, count=${count ?? 'unlimited'}',
+    'Starting progress stream: interval=${interval}ms, count=${count ?? 10}',
   );
   await callTool(
     'start-notification-stream',
@@ -503,7 +487,6 @@ Future<void> cleanup() async {
   }
 
   print('\nGoodbye!');
-  exit(0);
 }
 
 // Set up special keyboard handler for Escape key

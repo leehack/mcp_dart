@@ -1,85 +1,46 @@
 ## 2.3.0-dev.2
 
+This preview makes MCP `2026-07-28` the preferred protocol while preserving
+MCP `2025-11-25` and earlier initialization compatibility.
+
 ### Changed
 
-- Started the `dev/2026-07-28` development line from the RC branch and made
-  `McpProtocol.stable` the default profile for `McpClientOptions` and
-  `McpServerOptions`. Default clients now probe with `server/discover` and
-  retain legacy initialization fallback. `McpProtocol.legacy` keeps
-  `2025-11-25` and earlier behavior, while `McpProtocol.require2026` remains
-  strict; the former `McpProtocol.preview2026` profile was removed.
-- Renamed `draftProtocolVersion2026_07_28` to
-  `stableProtocolVersion2026_07_28` for the default SDK profile. Future
-  pre-release protocol revisions can use draft-specific names.
-- Legacy initialization and stable-profile fallback now honor an explicit
-  supported legacy `McpClientOptions.protocolVersion` override.
-- Legacy-only servers now reject `server/discover` with `MethodNotFound`, while
-  modern discovery results and protocol errors remain on stateless negotiation
-  instead of silently downgrading to legacy initialization.
-- The CLI `inspect-client` harness now inspects both stateless
-  `server/discover` clients and legacy `initialize` clients, including required
-  per-request metadata and 2026 result envelopes.
-- Streamable HTTP clients now reject invalid or unreachable `x-mcp-header`
-  annotations, retain tool validation metadata across paginated lists, and
-  follow pagination when refreshing metadata after `HeaderMismatch`.
-- Clients now clear negotiated server state, lifecycle flags, and tool
-  validation metadata when a connection closes, preventing stale state from
-  leaking into a later connection.
-- Raised the minimum Dart SDK to 3.5 to match the package's direct dependency
-  requirements.
+- Made `McpProtocol.stable` the default dual-era profile: prefer stateless
+  `server/discover`, then fall back to legacy initialization. Use
+  `McpProtocol.require2026` to reject legacy peers.
+- Removed `McpProtocol.preview2026`; added clearer preview, stable, and default
+  version constants, plus a separate initialization-version constant, while
+  retaining `latestProtocolVersion` as a deprecated stable-version alias.
+- Added and aligned 2026 APIs for `input_required`, deprecated request-scoped
+  logging compatibility, subscriptions, cache metadata, arbitrary structured
+  tool output, routing headers, and the Tasks extension.
+- Hardened discovery fallback, Streamable HTTP validation and pagination, SSE
+  closure, URL elicitation, and client reconnect state.
+- Raised the minimum Dart SDK to 3.5 and retained the web/WASM-safe default
+  export path alongside Dart IO exports.
 
-### Platform support
+### Security
 
-- Inherited the stable 2.2.2 web/WASM-safe default export path, preserving
-  Dart IO native exports while working around pub.dev/pana 0.23.13 WASM
-  platform scoring for conditional exports.
+- OAuth authorization-code flows now require matching state, reject untrusted
+  discovery origins, insecure endpoints, unsupported token authentication
+  methods, and automatic endpoint redirects.
+- Unexpected handler and validation failures no longer expose internal details
+  in protocol responses; details remain available in server logs.
+- Credentialed Streamable HTTP CORS now requires `allowedOrigins`, except for
+  DNS-protected loopback development; examples use safe loopback defaults.
+- Added explicit stdio child-environment isolation and hardened provider
+  examples to withhold API keys, drain child stderr, refresh bounded tool
+  inventories, and require approval for every tool call.
 
-### Conformance and interoperability
+### Validation and documentation
 
-- Updated the TypeScript SDK 2026-07-28 RC interop fixture to published
-  `@modelcontextprotocol/client@2.0.0-beta.4` and
-  `@modelcontextprotocol/server@2.0.0-beta.4` packages after verifying both
-  directions, including a TypeScript-server `input_required` retry.
-- Added bidirectional MCP 2026-07-28 Streamable HTTP interop against the
-  official Python SDK `mcp==2.0.0b1` package.
-- Added a real Chrome MCP 2026-07-28 Streamable HTTP smoke test and preserved
-  CORS headers when stateless SSE responses detach their HTTP socket.
-- Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.9`, including the stricter
-  `MissingRequiredClientCapability` `requiredCapabilities` object assertion in
-  the 2026 stateless server suite. Both 2026 suites pass without expected
-  failures, with a local network-`$ref` security canary retained.
-- Added resumable SSE priming IDs and retry guidance, wired request-scoped
-  stream closure through `RequestHandlerExtra`, and removed the remaining
-  expected 2026 client conformance failure.
-- Aligned MCP `2026-07-28` draft URL elicitation with the current draft
-  schema: URL-mode `elicitation/create` no longer emits or accepts
-  `elicitationId`, and `notifications/elicitation/complete` is treated as a
-  legacy/non-draft notification rather than a typed draft notification.
-- Added dedicated TypeScript, Python, and Chrome interop jobs for relevant PRs,
-  daily schedules, and manual runs, plus a temporary default-branch drift
-  monitor until the release reaches `main`.
-- Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the current
-  profile to official conformance, local tests, cross-SDK interop, and browser
-  coverage.
-- Switched the reverse Dart 2026 client -> TypeScript SDK beta server fixture
-  to the TypeScript SDK's 2026 HTTP handler entry, making `server/discover`,
-  `tools/list`, and `tools/call` strict interop checks instead of diagnostic
-  skips.
-- Added `SubscriptionsListenResult` for graceful `subscriptions/listen` closure
-  and now include the required `io.modelcontextprotocol/subscriptionId` metadata
-  in Dart server responses and client `McpSubscription.done` results.
-- Cleaned up root analyzer coverage for standalone example packages and moved
-  Streamable HTTP, Flutter/Jaspr web client, and MCP Apps examples to the
-  default stable profile with legacy fallback where applicable.
-
-### Release tooling
-
-- Stable release retries now reuse an existing tag only at its original commit,
-  while CLI binary builds verify that the tag, package version, and compiled
-  binary version all match.
-- Prerelease package documentation now links to immutable release tags instead
-  of development branches.
+- All current official MCP 2025 and 2026 conformance scenarios applicable
+  to the SDK's core client/server roles pass, with bidirectional
+  TypeScript/Python interop and a real Chrome HTTP smoke test.
+- Added a strict 2026 example, retained labeled legacy examples, refreshed the
+  protocol coverage matrices, and shortened release and onboarding docs.
+- Release retries now validate tag provenance, while prerelease documentation
+  and CLI binaries use immutable, version-matched release metadata.
 
 ## 2.3.0-dev.1
 

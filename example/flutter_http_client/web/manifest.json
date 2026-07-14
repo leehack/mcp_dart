@@ -1,11 +1,11 @@
 {
-    "name": "web_client",
-    "short_name": "web_client",
+    "name": "MCP Dart Flutter Client",
+    "short_name": "MCP Client",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Flutter Web client for MCP over Streamable HTTP.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

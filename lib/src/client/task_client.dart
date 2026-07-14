@@ -57,7 +57,7 @@ class TaskClient {
   /// and long-running tasks (yielding [TaskCreatedMessage], multiple
   /// [TaskStatusMessage]s, and finally [TaskResultMessage]).
   ///
-  /// For MCP `2026-07-28` draft/RC stateless sessions with the
+  /// For MCP `2026-07-28` stateless sessions with the
   /// `io.modelcontextprotocol/tasks` extension, task creation is
   /// server-directed and [task] must be omitted. The call is routed through
   /// [McpClient.callTool], which transparently follows the extension polling

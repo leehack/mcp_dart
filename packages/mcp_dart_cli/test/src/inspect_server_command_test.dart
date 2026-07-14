@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:mason/mason.dart';
+import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 import 'package:mcp_dart_cli/src/inspect_server_command.dart';
 import 'package:mcp_dart_cli/src/inspectors/inspection_report.dart';
 import 'package:mocktail/mocktail.dart';
@@ -139,6 +140,42 @@ void main() {
   });
 
   group('McpServerInspector', () {
+    test('normalizes and orders path issuer metadata probes like the SDK', () {
+      final inspector = McpServerInspector(logger: MockLogger());
+
+      expect(
+        inspector
+            .authorizationServerMetadataCandidates(
+              Uri.parse(
+                'https://auth.example.com/tenant1/?source=config#ignored',
+              ),
+            )
+            .map((candidate) => candidate.toString()),
+        <String>[
+          'https://auth.example.com/.well-known/oauth-authorization-server/tenant1',
+          'https://auth.example.com/.well-known/openid-configuration/tenant1',
+          'https://auth.example.com/tenant1/.well-known/openid-configuration',
+          'https://auth.example.com/tenant1/.well-known/oauth-authorization-server',
+        ],
+      );
+    });
+
+    test('does not duplicate metadata probes for a root issuer', () {
+      final inspector = McpServerInspector(logger: MockLogger());
+
+      expect(
+        inspector
+            .authorizationServerMetadataCandidates(
+              Uri.parse('https://auth.example.com/?source=config#ignored'),
+            )
+            .map((candidate) => candidate.toString()),
+        <String>[
+          'https://auth.example.com/.well-known/oauth-authorization-server',
+          'https://auth.example.com/.well-known/openid-configuration',
+        ],
+      );
+    });
+
     test('returns a structured report for a Dart stdio server', () async {
       final report = await McpServerInspector(logger: MockLogger()).inspect(
         const ServerInspectionTarget(
@@ -155,6 +192,12 @@ void main() {
       expect(report.kind, equals('server'));
       expect(report.passed, isTrue);
       expect(report.inventory['tools'], isA<List<dynamic>>());
+      expect(report.inventory, isNot(contains('toolCalls')));
+      expect(report.inventory, isNot(contains('resourceReads')));
+      expect(report.inventory, isNot(contains('resourceSubscriptions')));
+      expect(report.inventory, isNot(contains('promptGets')));
+      expect(report.inventory, isNot(contains('completions')));
+      expect(report.inventory, isNot(contains('taskToolCalls')));
       expect(
         report.checks.map((check) => check.id),
         containsAll(<String>[
@@ -163,6 +206,31 @@ void main() {
           'resources.list',
         ]),
       );
+    });
+
+    test('skips removed and active probes for a 2026 server', () async {
+      final report = await McpServerInspector(logger: MockLogger()).inspect(
+        const ServerInspectionTarget(
+          command: 'dart',
+          serverArgs: <String>[
+            'run',
+            'test/fixtures/stateless_inventory_server.dart',
+          ],
+          url: null,
+          env: <String, String>{},
+        ),
+      );
+
+      expect(report.passed, isTrue);
+      expect(report.warningCount, isZero);
+      expect(report.metadata['protocolVersion'], previewProtocolVersion);
+      final checksById = <String, InspectionCheck>{
+        for (final check in report.checks) check.id: check,
+      };
+      expect(checksById['base.ping']?.status, 'info');
+      expect(checksById['base.ping']?.message, contains('no probe was sent'));
+      expect(checksById['logging.request-scoped']?.status, 'info');
+      expect(report.inventory, isNot(contains('toolCalls')));
     });
 
     test(

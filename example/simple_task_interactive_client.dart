@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+// This example intentionally uses MCP 2025-era core task augmentation. For
+// MCP 2026-07-28 input_required, see example/mcp_2026_07_28/client.dart.
+
 // ============================================================================
 // Input Handling
 // ============================================================================
@@ -102,6 +105,7 @@ Future<void> run(String url) async {
       version: '1.0.0',
     ),
     options: const McpClientOptions(
+      protocol: McpProtocol.legacy,
       capabilities: ClientCapabilities(
         elicitation: ClientElicitation.formOnly(),
         sampling: ClientCapabilitiesSampling(),
@@ -122,7 +126,6 @@ Future<void> run(String url) async {
   // Set up elicitation request handler
   client.onElicitRequest = elicitationCallback;
 
-  // Set up task status notification handler
   // Set up task status notification handler
   client.onTaskStatus = (params) {
     print('[Notification] Task ${params.taskId}: ${params.status.name}'

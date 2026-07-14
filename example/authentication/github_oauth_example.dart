@@ -7,7 +7,7 @@
 /// 1. Create a GitHub OAuth App at https://github.com/settings/developers
 /// 2. Set callback URL to http://localhost:8080/callback
 /// 3. Copy Client ID and Client Secret
-/// 4. Set environment variables or use .env file
+/// 4. Export GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET
 ///
 /// Run:
 /// dart run example/authentication/github_oauth_example.dart
@@ -16,8 +16,53 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 import 'package:mcp_dart/mcp_dart.dart';
+
+/// Generates a 256-bit, base64url-encoded OAuth state value.
+String generateOAuthState({Random? random}) {
+  final source = random ?? Random.secure();
+  final bytes = List<int>.generate(32, (_) => source.nextInt(256));
+  return base64UrlEncode(bytes).replaceAll('=', '');
+}
+
+/// Generates a 256-bit PKCE verifier in the RFC 7636 unreserved alphabet.
+String generatePkceCodeVerifier({Random? random}) {
+  final source = random ?? Random.secure();
+  final bytes = List<int>.generate(32, (_) => source.nextInt(256));
+  return base64UrlEncode(bytes).replaceAll('=', '');
+}
+
+/// Derives the S256 PKCE challenge for [codeVerifier].
+String generatePkceS256Challenge(String codeVerifier) {
+  final digest = crypto.sha256.convert(utf8.encode(codeVerifier));
+  return base64UrlEncode(digest.bytes).replaceAll('=', '');
+}
+
+/// Validates a returned OAuth state value without accepting missing values.
+bool isValidOAuthState(String? returnedState, String? expectedState) {
+  if (returnedState == null || expectedState == null) {
+    return false;
+  }
+
+  final returnedBytes = utf8.encode(returnedState);
+  final expectedBytes = utf8.encode(expectedState);
+  final length = returnedBytes.length > expectedBytes.length
+      ? returnedBytes.length
+      : expectedBytes.length;
+  var difference = returnedBytes.length ^ expectedBytes.length;
+  for (var index = 0; index < length; index++) {
+    final returnedByte =
+        index < returnedBytes.length ? returnedBytes[index] : 0;
+    final expectedByte =
+        index < expectedBytes.length ? expectedBytes[index] : 0;
+    difference |= returnedByte ^ expectedByte;
+  }
+  return difference == 0;
+}
 
 /// GitHub OAuth configuration
 class GitHubOAuthConfig {
@@ -30,7 +75,7 @@ class GitHubOAuthConfig {
     required this.clientId,
     required this.clientSecret,
     required this.scopes,
-    this.callbackPort = 8090,
+    this.callbackPort = 8080,
   });
 
   Uri get authorizationEndpoint =>
@@ -49,7 +94,7 @@ class GitHubOAuthConfig {
   ];
 }
 
-/// GitHub OAuth tokens with expiration tracking
+/// GitHub OAuth token metadata used by this example.
 class GitHubOAuthTokens extends OAuthTokens {
   final DateTime issuedAt;
   final String tokenType;
@@ -88,7 +133,7 @@ class GitHubOAuthTokens extends OAuthTokens {
   }
 }
 
-/// GitHub OAuth provider with device flow support
+/// GitHub OAuth provider using the authorization-code flow.
 class GitHubOAuthProvider implements OAuthClientProvider {
   final GitHubOAuthConfig config;
   final GitHubTokenStorage storage;
@@ -108,9 +153,11 @@ class GitHubOAuthProvider implements OAuthClientProvider {
 
   @override
   Future<void> redirectToAuthorization() async {
-    // Generate state for CSRF protection
-    final state = _generateState();
+    final state = generateOAuthState();
+    final codeVerifier = generatePkceCodeVerifier();
+    final codeChallenge = generatePkceS256Challenge(codeVerifier);
     await storage.saveState(state);
+    await storage.saveCodeVerifier(codeVerifier);
 
     // Build authorization URL
     final authUrl = Uri(
@@ -122,6 +169,8 @@ class GitHubOAuthProvider implements OAuthClientProvider {
         'redirect_uri': config.callbackUri.toString(),
         'scope': config.scopes.join(' '),
         'state': state,
+        'code_challenge': codeChallenge,
+        'code_challenge_method': 'S256',
       },
     );
 
@@ -179,29 +228,9 @@ class GitHubOAuthProvider implements OAuthClientProvider {
     // Send response to browser
     request.response.headers.contentType = ContentType.html;
 
-    if (error != null) {
-      request.response.write('''
-        <!DOCTYPE html>
-        <html>
-        <head><title>Authorization Failed</title></head>
-        <body>
-          <h1>❌ Authorization Failed</h1>
-          <p>Error: $error</p>
-          <p>You can close this window.</p>
-        </body>
-        </html>
-      ''');
-      await request.response.close();
-      _authorizationCodeCompleter?.completeError(
-        Exception('Authorization failed: $error'),
-      );
-      await _callbackServer?.close();
-      return;
-    }
-
-    // Validate state
     final expectedState = await storage.getState();
-    if (state != expectedState) {
+    if (!isValidOAuthState(state, expectedState)) {
+      request.response.statusCode = HttpStatus.badRequest;
       request.response.write('''
         <!DOCTYPE html>
         <html>
@@ -214,29 +243,67 @@ class GitHubOAuthProvider implements OAuthClientProvider {
         </html>
       ''');
       await request.response.close();
-      _authorizationCodeCompleter?.completeError(
-        Exception('Invalid state parameter'),
-      );
+      _completeAuthorizationError(Exception('Invalid state parameter'));
+      await storage.clearState();
+      await storage.clearCodeVerifier();
       await _callbackServer?.close();
       return;
     }
 
-    if (code != null) {
+    if (error != null) {
+      final safeError = const HtmlEscape().convert(error);
+      request.response.statusCode = HttpStatus.badRequest;
       request.response.write('''
         <!DOCTYPE html>
         <html>
-        <head><title>Authorization Successful</title></head>
+        <head><title>Authorization Failed</title></head>
         <body>
-          <h1>✅ Authorization Successful!</h1>
-          <p>You have successfully authorized the application.</p>
-          <p>You can close this window and return to the terminal.</p>
-          <script>window.close();</script>
+          <h1>❌ Authorization Failed</h1>
+          <p>Error: $safeError</p>
+          <p>You can close this window.</p>
         </body>
         </html>
       ''');
       await request.response.close();
-      _authorizationCodeCompleter?.complete(code);
+      _completeAuthorizationError(Exception('Authorization failed: $error'));
+      await storage.clearState();
+      await storage.clearCodeVerifier();
+      await _callbackServer?.close();
+      return;
     }
+
+    if (code == null || code.isEmpty) {
+      request.response
+        ..statusCode = HttpStatus.badRequest
+        ..write('Missing authorization code.');
+      await request.response.close();
+      _completeAuthorizationError(
+        Exception('Authorization callback did not include a code'),
+      );
+      await storage.clearState();
+      await storage.clearCodeVerifier();
+      await _callbackServer?.close();
+      return;
+    }
+
+    request.response.write('''
+      <!DOCTYPE html>
+      <html>
+      <head><title>Authorization Successful</title></head>
+      <body>
+        <h1>✅ Authorization Successful!</h1>
+        <p>You have successfully authorized the application.</p>
+        <p>You can close this window and return to the terminal.</p>
+        <script>window.close();</script>
+      </body>
+      </html>
+    ''');
+    await request.response.close();
+    final completer = _authorizationCodeCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(code);
+    }
+    await storage.clearState();
 
     await _callbackServer?.close();
     _callbackServer = null;
@@ -245,6 +312,11 @@ class GitHubOAuthProvider implements OAuthClientProvider {
   /// Exchange authorization code for access token
   Future<GitHubOAuthTokens> exchangeCode(String code) async {
     try {
+      final codeVerifier = await storage.getCodeVerifier();
+      if (codeVerifier == null) {
+        throw StateError('PKCE verifier is missing');
+      }
+
       final response = await http.post(
         config.tokenEndpoint,
         headers: {
@@ -256,6 +328,7 @@ class GitHubOAuthProvider implements OAuthClientProvider {
           'client_secret': config.clientSecret,
           'code': code,
           'redirect_uri': config.callbackUri.toString(),
+          'code_verifier': codeVerifier,
         },
       );
 
@@ -280,6 +353,7 @@ class GitHubOAuthProvider implements OAuthClientProvider {
       );
 
       await storage.saveTokens(tokens);
+      await storage.clearCodeVerifier();
       return tokens;
     } catch (e) {
       throw Exception('Failed to exchange authorization code: $e');
@@ -300,22 +374,30 @@ class GitHubOAuthProvider implements OAuthClientProvider {
     }
   }
 
-  String _generateState() {
-    final random = DateTime.now().millisecondsSinceEpoch.toString();
-    return base64UrlEncode(utf8.encode(random)).replaceAll('=', '');
-  }
-
   Future<void> cleanup() async {
     await _callbackServer?.close();
+    await storage.clearState();
+    await storage.clearCodeVerifier();
     _callbackServer = null;
     _authorizationCodeCompleter = null;
   }
+
+  void _completeAuthorizationError(Object error) {
+    final completer = _authorizationCodeCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(error);
+    }
+  }
 }
 
-/// Token storage for GitHub OAuth tokens
+/// Plaintext token storage for this local example only.
+///
+/// Production applications must replace this with platform secure storage or
+/// an encrypted credential service.
 class GitHubTokenStorage {
   final String filePath;
   String? _state;
+  String? _codeVerifier;
 
   GitHubTokenStorage(this.filePath);
 
@@ -337,7 +419,8 @@ class GitHubTokenStorage {
     try {
       final file = File(filePath);
       await file.writeAsString(jsonEncode(tokens.toJson()));
-      print('✓ Tokens saved to $filePath');
+      print('✓ Example token file saved to $filePath');
+      print('  Warning: this file is plaintext; do not use it in production.');
     } catch (e) {
       print('Failed to save tokens: $e');
     }
@@ -360,6 +443,22 @@ class GitHubTokenStorage {
 
   Future<String?> getState() async {
     return _state;
+  }
+
+  Future<void> clearState() async {
+    _state = null;
+  }
+
+  Future<void> saveCodeVerifier(String codeVerifier) async {
+    _codeVerifier = codeVerifier;
+  }
+
+  Future<String?> getCodeVerifier() async {
+    return _codeVerifier;
+  }
+
+  Future<void> clearCodeVerifier() async {
+    _codeVerifier = null;
   }
 }
 
@@ -384,7 +483,7 @@ Future<void> main(List<String> args) async {
     print('To create a GitHub OAuth App:');
     print('  1. Go to https://github.com/settings/developers');
     print('  2. Click "New OAuth App"');
-    print('  3. Set callback URL to: http://localhost:8090/callback');
+    print('  3. Set callback URL to: http://localhost:8080/callback');
     print('  4. Copy the Client ID and Client Secret');
     print('');
     exit(1);
@@ -394,7 +493,7 @@ Future<void> main(List<String> args) async {
     clientId: clientId,
     clientSecret: clientSecret,
     scopes: GitHubOAuthConfig.recommendedScopes,
-    callbackPort: 8090,
+    callbackPort: 8080,
   );
 
   final storage = GitHubTokenStorage('.github_oauth_tokens.json');
@@ -428,7 +527,6 @@ Future<void> main(List<String> args) async {
       print('Waiting for authorization...');
       final tokens = await authProvider.waitForAuthorization();
       print('\n✓ Authorization successful!');
-      print('  Access token: ${tokens.accessToken.substring(0, 20)}...');
       print('  Scopes: ${tokens.grantedScopes.join(', ')}\n');
     } else {
       print('✓ Using existing tokens from storage\n');
@@ -456,13 +554,11 @@ Future<void> main(List<String> args) async {
     print('\n${'=' * 70}');
     print('Connection successful! You can now use the GitHub MCP server.');
     print('=' * 70);
-
-    // Cleanup
-    await authProvider.cleanup();
-    await client.close();
   } catch (e) {
     print('\n✗ Error: $e');
+    exitCode = 1;
+  } finally {
     await authProvider.cleanup();
-    exit(1);
+    await client.close();
   }
 }

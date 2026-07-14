@@ -2,6 +2,11 @@
 
 A modern, web-based MCP (Model Context Protocol) client built with [Jaspr](https://jaspr.site), demonstrating interactive MCP features like **elicitation** and **sampling**.
 
+> This example intentionally uses `McpProtocol.legacy` with MCP 2025-era core
+> task augmentation so it can pair with `simple_task_interactive_server.dart`.
+> For the MCP 2026 `input_required` flow, see
+> [`example/mcp_2026_07_28/`](../mcp_2026_07_28/).
+
 ## Features
 
 - 🔌 **Connection Management** - Connect/disconnect from MCP servers
@@ -13,8 +18,8 @@ A modern, web-based MCP (Model Context Protocol) client built with [Jaspr](https
 
 ## Prerequisites
 
-- Dart SDK ^3.7.2
-- Jaspr CLI (`dart pub global activate jaspr_cli`)
+- Dart 3.10 or later
+- Jaspr CLI 0.22.3 (`dart pub global activate jaspr_cli 0.22.3`)
 
 ## Quick Start
 
@@ -135,7 +140,10 @@ Output will be in the `build/` directory.
 
 ### CORS Issues
 
-If you encounter CORS issues, ensure the MCP server allows cross-origin requests, or run both the server and client on the same origin.
+The paired server allows the Jaspr development origins
+`http://localhost:8080` and `http://127.0.0.1:8080`. If you change either port
+or deploy the client, update the server's explicit origin allowlist; do not use
+a wildcard origin with credentials.
 
 ### Connection Refused
 

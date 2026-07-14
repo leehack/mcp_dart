@@ -42,7 +42,7 @@ void main() {
         () async {
       // Connect the client to the transport first
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -79,7 +79,7 @@ void main() {
         () async {
       // Setup the mock transport to respond to initialization
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
         instructions: 'Test instructions',
@@ -179,7 +179,7 @@ void main() {
       await server.connect(serverTransport);
       await client.connect(clientTransport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(client.getProtocolVersion(), latestInitializationProtocolVersion);
       expect(
         clientTransport.sentMessages
             .whereType<JsonRpcRequest>()
@@ -215,7 +215,7 @@ void main() {
       final discoverRequest = requests.first;
       expect(
         discoverRequest.meta?[McpMetaKey.protocolVersion],
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
       final initializeRequest = transport.sentMessages
           .whereType<JsonRpcRequest>()
@@ -230,14 +230,14 @@ void main() {
         'Discovery probe timed out',
       );
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
 
       await client.connect(transport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(client.getProtocolVersion(), latestInitializationProtocolVersion);
       expect(
         transport.sentMessages
             .whereType<JsonRpcRequest>()
@@ -266,7 +266,7 @@ void main() {
         () async {
       // Setup connected client with capabilities
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -298,7 +298,7 @@ void main() {
       final limitedClient = Client(clientInfo);
       transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(), // No capabilities
         serverInfo: Implementation(name: 'LimitedServer', version: '1.0.0'),
       );
@@ -396,7 +396,7 @@ void main() {
 
     test('ping sends a ping request and returns EmptyResult', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -418,7 +418,7 @@ void main() {
 
     test('complete sends completion request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -447,7 +447,7 @@ void main() {
 
     test('setLoggingLevel sends logging level request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -467,7 +467,7 @@ void main() {
 
     test('getPrompt sends prompt request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -488,7 +488,7 @@ void main() {
 
     test('listPrompts sends list prompts request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -508,7 +508,7 @@ void main() {
 
     test('listResources sends list resources request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -529,7 +529,7 @@ void main() {
     test('listResourceTemplates sends list resource templates request',
         () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -549,7 +549,7 @@ void main() {
 
     test('readResource sends resource read request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -570,7 +570,7 @@ void main() {
 
     test('subscribeResource sends resource subscribe request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -591,7 +591,7 @@ void main() {
 
     test('unsubscribeResource sends resource unsubscribe request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -612,7 +612,7 @@ void main() {
 
     test('callTool sends tool call request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -633,7 +633,7 @@ void main() {
 
     test('callTool sends tool call request with structured output', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -657,7 +657,7 @@ void main() {
 
     test('listTools sends list tools request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -678,7 +678,7 @@ void main() {
     test('sendRootsListChanged sends roots list changed notification',
         () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1004,7 +1004,7 @@ void _addCriticalPathTests() {
     test('elicitation request fails when no handler registered', () async {
       // Connect client (don't set onElicitRequest handler)
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1052,7 +1052,7 @@ void _addCriticalPathTests() {
       };
 
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1086,7 +1086,7 @@ void _addCriticalPathTests() {
       };
 
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1111,7 +1111,7 @@ void _addCriticalPathTests() {
     test('resources/read requires resources capability', () async {
       // Connect with server that has NO resources capability
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(), // No resources
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1129,7 +1129,7 @@ void _addCriticalPathTests() {
 
     test('resources/list requires resources capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(), // No resources
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1146,7 +1146,7 @@ void _addCriticalPathTests() {
 
     test('resources/templates/list requires resources capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1164,7 +1164,7 @@ void _addCriticalPathTests() {
     test('resources/subscribe requires subscribe capability', () async {
       // Has resources but not subscribe
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(
           resources: ServerCapabilitiesResources(), // No subscribe
         ),
@@ -1186,7 +1186,7 @@ void _addCriticalPathTests() {
 
     test('resources/unsubscribe requires subscribe capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(
           resources: ServerCapabilitiesResources(),
         ),
@@ -1208,7 +1208,7 @@ void _addCriticalPathTests() {
 
     test('tools/call requires tools capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(), // No tools
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1225,7 +1225,7 @@ void _addCriticalPathTests() {
 
     test('tools/list requires tools capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1242,7 +1242,7 @@ void _addCriticalPathTests() {
 
     test('completion/complete requires completions capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(), // No completions
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1259,7 +1259,7 @@ void _addCriticalPathTests() {
 
     test('custom method logs warning but does not throw', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1339,7 +1339,7 @@ void _addCriticalPathTests() {
       );
       final transport = MockTransport()
         ..mockInitializeResponse = const InitializeResult(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
         );
@@ -1395,7 +1395,7 @@ void _addCriticalPathTests() {
       );
       final transport = MockTransport()
         ..mockInitializeResponse = const InitializeResult(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
         );
@@ -1449,7 +1449,7 @@ void _addCriticalPathTests() {
       );
       final transport = MockTransport()
         ..mockInitializeResponse = const InitializeResult(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
         );
@@ -1548,7 +1548,7 @@ void _addCriticalPathTests() {
 
     test('custom notification logs warning but does not throw', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: stableProtocolVersion2025_11_25,
+        protocolVersion: latestInitializationProtocolVersion,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );

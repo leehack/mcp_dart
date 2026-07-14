@@ -20,7 +20,7 @@ class CalculatorTool extends BaseTool {
       );
 
   @override
-  JsonSchema? get outputSchema => ToolOutputSchema(
+  ToolOutputSchema? get outputSchema => ToolOutputSchema(
         properties: {
           'result': JsonSchema.number(description: 'The sum of a and b'),
         },
@@ -28,7 +28,9 @@ class CalculatorTool extends BaseTool {
 
   @override
   Future<CallToolResult> execute(
-      Map<String, dynamic> args, RequestHandlerExtra? extra) async {
+    Map<String, dynamic> args,
+    RequestHandlerExtra extra,
+  ) async {
     final a = args['a'] as num;
     final b = args['b'] as num;
     return CallToolResult.fromStructuredContent(

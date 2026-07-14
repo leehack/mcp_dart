@@ -72,7 +72,7 @@ JsonSchema? _outputSchemaForProtocol(
   }
 
   // MCP 2025-11-25 restricts tool output schemas to object roots. MCP
-  // 2026-07-28 draft/RC allows any JSON Schema, so omit non-object schemas for
+  // 2026-07-28 allows any JSON Schema, so omit non-object schemas for
   // stable callers.
   if (schema.toJson()['type'] == 'object') {
     return schema;
@@ -596,14 +596,14 @@ abstract class RegisteredTool {
 
   /// The object-root output schema for stable MCP `2025-11-25` tool results.
   ///
-  /// MCP `2026-07-28` draft/RC allows non-object JSON Schema roots. Use
+  /// MCP `2026-07-28` allows non-object JSON Schema roots. Use
   /// [outputJsonSchema] for that wire-level schema.
   ToolOutputSchema? get outputSchema;
 
   /// The wire-level output schema for this tool.
   ///
   /// This may be any JSON Schema when the server is using the explicit
-  /// MCP `2026-07-28` draft/RC profile. Stable MCP `2025-11-25` callers only
+  /// MCP `2026-07-28` profile. Stable MCP `2025-11-25` callers only
   /// receive this schema when it has an object root.
   JsonSchema? get outputJsonSchema;
 
@@ -1706,10 +1706,15 @@ class McpServer {
                 registeredTool.outputJsonSchema!.validate(
                   result.structuredContentJson?.toJson(),
                 );
-              } catch (e) {
+              } catch (error, stackTrace) {
+                _logger.error(
+                  "Output validation failed for tool '$toolName': "
+                  '$error\n$stackTrace',
+                );
                 throw McpError(
                   ErrorCode.invalidParams.value,
-                  "Output validation error: Invalid structured content for tool '$toolName': $e",
+                  "Tool '$toolName' returned structured content that does not "
+                  'match its output schema.',
                 );
               }
             }
@@ -1723,13 +1728,15 @@ class McpServer {
           }
 
           return result;
-        } catch (error) {
-          _logger.warn("Error executing tool '$toolName': $error");
+        } catch (error, stackTrace) {
+          _logger.error(
+            "Error executing tool '$toolName': $error\n$stackTrace",
+          );
           if (error is McpError) {
             rethrow; // Pass through McpErrors (like methodNotFound)
           }
-          return CallToolResult(
-            content: [TextContent(text: error.toString())],
+          return const CallToolResult(
+            content: [TextContent(text: 'Tool execution failed.')],
             isError: true,
           );
         }
@@ -2006,12 +2013,14 @@ class McpServer {
           } else {
             throw StateError("No callback found");
           }
-        } catch (error) {
-          _logger.warn("Error executing prompt '$name': $error");
+        } catch (error, stackTrace) {
+          _logger.error(
+            "Error executing prompt '$name': $error\n$stackTrace",
+          );
           if (error is McpError) rethrow;
           throw McpError(
             ErrorCode.internalError.value,
-            "Failed to generate prompt '$name': $error",
+            "Failed to generate prompt '$name'.",
           );
         }
       },
@@ -2142,7 +2151,7 @@ class McpServer {
   /// [description] explains what the tool does.
   /// [inputSchema] defines the expected arguments.
   /// [outputSchema] defines the stable object-root result structure.
-  /// [outputJsonSchema] defines an MCP `2026-07-28` draft/RC result structure
+  /// [outputJsonSchema] defines an MCP `2026-07-28` result structure
   /// whose JSON Schema root may be any valid JSON Schema type.
   /// [annotations] provides additional metadata.
   /// [callback] is the function executed when the tool is called.

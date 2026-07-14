@@ -4,6 +4,10 @@ import 'package:pub_updater/pub_updater.dart';
 import 'version.dart';
 
 Future<void> checkForUpdate(Logger logger) async {
+  if (isPrereleaseVersion(packageVersion)) {
+    return;
+  }
+
   try {
     final pubUpdater = PubUpdater();
     final isUpToDate = await pubUpdater.isUpToDate(

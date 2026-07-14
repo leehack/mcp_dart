@@ -7,7 +7,11 @@ This document demonstrates how to use `mcp_dart_cli` to create, run, and inspect
 First, install the CLI globally:
 
 ```bash
+# Latest stable
 dart pub global activate mcp_dart_cli
+
+# Coordinated MCP 2026-07-28 preview
+dart pub global activate mcp_dart_cli 0.2.0-dev.2
 ```
 
 ## Creating a Project
@@ -88,12 +92,12 @@ mcp_dart serve --transport http --port 8080
 Automatically restart the server when files change:
 
 ```bash
-mcp_dart serve --watch
+mcp_dart serve --transport http --watch
 ```
 
 ## Checking Project Health
 
-Run the `doctor` command to verify your project configuration and test connectivity:
+Run the `doctor` command to verify project configuration and safe discovery:
 
 ```bash
 mcp_dart doctor
@@ -102,7 +106,11 @@ mcp_dart doctor
 This will:
 1. Check for required files (`pubspec.yaml`, `lib/mcp/mcp.dart`, etc.)
 2. Verify the `mcp_dart` dependency
-3. Start the server and test all tools, resources, and prompts
+3. Start the server and list advertised tools, resources, resource templates,
+   and prompts without invoking or reading them
+
+Use `inspect-server --probe-config` for intentional calls, reads, or prompt
+retrieval with explicit arguments.
 
 ## Inspecting MCP Servers
 

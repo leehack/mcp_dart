@@ -1,21 +1,28 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
+  final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 3000;
+  final allowedBrowserOrigin =
+      Platform.environment['MCP_ALLOWED_ORIGIN'] ?? 'http://localhost:8080';
   final server = StreamableMcpServer(
     serverFactory: (sessionId) {
       print('Creating new server for session: $sessionId');
       return getServer();
     },
-    host: '0.0.0.0', // Listen on all interfaces
-    port: 3000,
+    host: '127.0.0.1',
+    port: port,
     path: '/mcp',
     eventStore: InMemoryEventStore(), // Use the built-in in-memory event store
+    allowedHosts: const {'localhost', '127.0.0.1'},
+    allowedOrigins: {allowedBrowserOrigin},
   );
 
   await server.start();
-  print('High-level Streamable MCP Server running! Use Ctrl+C to stop.');
+  print('Server running on http://127.0.0.1:$port/mcp');
+  print('Allowed browser origin: $allowedBrowserOrigin');
 }
 
 // Create an MCP server with implementation details
@@ -51,11 +58,10 @@ McpServer getServer() {
     },
   );
 
-  // Register a tool that sends multiple greetings with notifications
+  // Register a tool that reports progress while preparing a greeting.
   server.registerTool(
     'multi-greet',
-    description:
-        'A tool that sends different greetings with delays between them',
+    description: 'A tool that prepares a greeting with progress updates',
     inputSchema: JsonSchema.object(
       properties: {
         'name': JsonSchema.string(
@@ -74,38 +80,26 @@ McpServer getServer() {
       // Helper function for sleeping
       Future<void> sleep(int ms) => Future.delayed(Duration(milliseconds: ms));
 
-      // Send debug notification
-      await extra.sendNotification(
-        JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotification(
-            level: LoggingLevel.debug,
-            data: 'Starting multi-greet for $name',
-          ),
-        ),
+      await extra.sendProgress(
+        0,
+        total: 2,
+        message: 'Starting multi-greet',
       );
 
       await sleep(1000); // Wait 1 second before first greeting
 
-      // Send first info notification
-      await extra.sendNotification(
-        JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotification(
-            level: LoggingLevel.info,
-            data: 'Sending first greeting to $name',
-          ),
-        ),
+      await extra.sendProgress(
+        1,
+        total: 2,
+        message: 'First greeting prepared',
       );
 
       await sleep(1000); // Wait another second before second greeting
 
-      // Send second info notification
-      await extra.sendNotification(
-        JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotification(
-            level: LoggingLevel.info,
-            data: 'Sending second greeting to $name',
-          ),
-        ),
+      await extra.sendProgress(
+        2,
+        total: 2,
+        message: 'Greeting complete',
       );
 
       return CallToolResult.fromContent(
@@ -141,11 +135,10 @@ McpServer getServer() {
     },
   );
 
-  // Register a tool specifically for testing resumability
+  // Register a tool that emits periodic request-scoped progress.
   server.registerTool(
     'start-notification-stream',
-    description:
-        'Starts sending periodic notifications for testing resumability',
+    description: 'Sends periodic progress notifications during one tool call',
     inputSchema: JsonSchema.object(
       properties: {
         'interval': JsonSchema.number(
@@ -153,7 +146,7 @@ McpServer getServer() {
           defaultValue: 100,
         ),
         'count': JsonSchema.number(
-          description: 'Number of notifications to send (0 for 100)',
+          description: 'Number of progress updates to send (0 for 100)',
           defaultValue: 50,
         ),
       },
@@ -165,23 +158,14 @@ McpServer getServer() {
       // Helper function for sleeping
       Future<void> sleep(int ms) => Future.delayed(Duration(milliseconds: ms));
 
-      var counter = 0;
+      final total = count == 0 ? 100 : count.toInt();
 
-      while (count == 0 || counter < count) {
-        counter++;
-        try {
-          await extra.sendNotification(
-            JsonRpcLoggingMessageNotification(
-              logParams: LoggingMessageNotification(
-                level: LoggingLevel.info,
-                data:
-                    'Periodic notification #$counter at ${DateTime.now().toIso8601String()}',
-              ),
-            ),
-          );
-        } catch (error) {
-          print('Error sending notification: $error');
-        }
+      for (var counter = 1; counter <= total; counter++) {
+        await extra.sendProgress(
+          counter.toDouble(),
+          total: total.toDouble(),
+          message: 'Progress update $counter',
+        );
 
         // Wait for the specified interval
         await sleep(interval.toInt());
@@ -190,7 +174,7 @@ McpServer getServer() {
       return CallToolResult.fromContent(
         [
           TextContent(
-            text: 'Started sending periodic notifications every ${interval}ms',
+            text: 'Sent $total progress updates every ${interval}ms',
           ),
         ],
       );

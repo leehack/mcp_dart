@@ -26,21 +26,23 @@ The template is organized to promote separation of concerns and scalability:
 
 ### Usage
 
-The `mcp_dart` CLI fetches templates remotely by default.
+Released versions of the `mcp_dart` CLI fetch the template from their matching,
+immutable `mcp_dart_cli-v<version>` tag by default. Use `--template` to select a
+different source while developing a template.
 
 ```bash
-# Default: Fetches from the official repository (main branch)
-dart bin/mcp_dart.dart create my_project
+# Installed CLI: fetches the template paired with that release
+mcp_dart create my_project
 
-# GitHub Actions Style (Shortest & Best)
-dart bin/mcp_dart.dart create my_project --template leehack/mcp_dart/packages/templates/simple@main
+# Repository shorthand
+mcp_dart create my_project --template leehack/mcp_dart/packages/templates/simple@main
 
 # Custom Template (GitHub Tree URL)
-dart bin/mcp_dart.dart create my_project --template https://github.com/my/repo/tree/main/path/to/brick
+mcp_dart create my_project --template https://github.com/my/repo/tree/main/path/to/brick
 
 # Custom Template (Git Syntax)
-dart bin/mcp_dart.dart create my_project --template https://github.com/my/repo.git#ref:path/to/brick
+mcp_dart create my_project --template https://github.com/my/repo.git#ref:path/to/brick
 
 # Local Template (Path)
-dart bin/mcp_dart.dart create my_project --template ./my_local_brick
+mcp_dart create my_project --template ./my_local_brick
 ```

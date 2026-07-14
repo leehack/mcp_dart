@@ -1,6 +1,8 @@
 # MCP Web Client Example
 
-This is an example Flutter web application that demonstrates how to use the MCP (Model Context Protocol) client in a web environment. The application provides a simple button-based interface for direct interaction with an MCP server using streamable HTTP connections.
+This Flutter Web application demonstrates an MCP client using Streamable HTTP.
+Its button-based UI covers connection state, tools, prompts, resources, and
+notifications against both MCP 2026 and initialization-era servers.
 
 ## Features
 
@@ -15,8 +17,8 @@ This is an example Flutter web application that demonstrates how to use the MCP 
 
 ### Prerequisites
 
-- Flutter SDK (latest stable version)
-- Dart SDK (latest stable version)
+- Flutter SDK with Dart 3.7.2 or later
+- Chrome
 - An MCP server to connect to (for local testing, use the Streamable HTTP example server)
 
 ### Running the Example
@@ -34,20 +36,21 @@ This will start an MCP server on `http://localhost:3000/mcp`.
 
 ```shell
 cd /path/to/mcp_dart/example/flutter_http_client
-flutter run -d chrome
+flutter run -d chrome --web-port 8080
 ```
 
-This will launch the application in Chrome. You can also use other browsers by specifying a different device.
+The fixed port matches the server's default `MCP_ALLOWED_ORIGIN`. If you use a
+different browser origin, start the server with that exact value, for example
+`MCP_ALLOWED_ORIGIN=http://localhost:9000 dart run ...`.
 
 3. In the application, click the "Connect" button to establish a connection to the server.
 
 4. Once connected, you can use various buttons to interact with the server:
    - List Tools: See available tools on the server
-   - Call Tool: Execute the selected tool with the text input mapped to its primary required argument
+   - Call Tool: Enter a scalar for a one-argument tool, or a JSON object for a tool with multiple arguments
    - List Prompts: View available prompts
    - Get Prompt: Retrieve the selected prompt using its advertised prompt argument schema
    - List Resources: See available resources
-   - Start Notifications: Begin receiving server notifications
 
 ### Local Smoke Flow
 
@@ -55,6 +58,23 @@ The default server exposes a `greet` tool and a `greeting-template` prompt.
 After connecting to `http://localhost:3000/mcp`, enter a name in the text field,
 then run `List Tools`, `Call Tool`, `List Prompts`, `Get Prompt`, and
 `List Resources`.
+
+For a browser connection-reuse smoke test, run `List Tools` 12 times and call
+`greet` 12 times without reconnecting or reloading. Every request should finish
+and each tool response should contain the name you entered.
+
+### Validation
+
+```shell
+# From example/flutter_http_client
+flutter analyze
+flutter test
+flutter build web
+
+# From the repository root: real Chrome, 12 list requests and 12 tool calls
+# against both the 2026 default and 2025 legacy profiles
+dart run tool/testing/run_browser_2026_07_28_interop.dart
+```
 
 ## Project Structure
 
@@ -68,8 +88,10 @@ The application demonstrates key aspects of MCP client implementation:
 
 1. **Connection**: The client establishes a connection to the MCP server and retrieves capabilities.
 2. **Tool Calling**: The client calls tools on the server with parameters.
-3. **Notifications**: The client receives real-time notifications from server tools.
-4. **Streaming Responses**: For a more interactive experience, the server can stream partial responses as they are generated.
+3. **Progress**: The client displays request-scoped progress while a tool call is active. Try `multi-greet`, or pass `{"interval": 100, "count": 5}` to `start-notification-stream`.
+4. **Dual-era behavior**: The default profile prefers MCP 2026 and can fall back
+   to initialization-era servers. Session controls are enabled only after a
+   legacy session is negotiated.
 
 The `StreamableMcpService` class handles all communication with the server and updates `ChangeNotifier` state that the UI listens to.
 
@@ -85,4 +107,7 @@ You can modify this example to connect to different MCP servers or implement add
 
 ## Web Compatibility
 
-This example demonstrates the web-compatible implementation of MCP using streamable HTTP connections. The `mcp_dart` library provides platform-specific implementations that work seamlessly in web environments.
+This example uses the browser implementation of Streamable HTTP. Browser
+servers must allow the exact app origin and all MCP request headers in CORS
+preflight responses; the paired server example handles both fixed headers and
+dynamic `Mcp-Param-*` headers.

@@ -97,6 +97,12 @@ class RequestOptions {
   /// rely on explicit cancellation or transport closure instead.
   final bool timeoutEnabled;
 
+  /// Minimum server log level requested for this 2026 stateless request.
+  ///
+  /// This is serialized as `io.modelcontextprotocol/logLevel` in request
+  /// metadata. Legacy peers use `logging/setLevel` instead.
+  final LoggingLevel? logLevel;
+
   /// Augments the request with task creation parameters.
   final TaskCreation? task;
 
@@ -111,6 +117,7 @@ class RequestOptions {
     this.resetTimeoutOnProgress = false,
     this.maxTotalTimeout,
     this.timeoutEnabled = true,
+    this.logLevel,
     this.task,
     this.relatedTask,
   });
@@ -1591,6 +1598,7 @@ abstract class Protocol {
           resetTimeoutOnProgress: options.resetTimeoutOnProgress,
           maxTotalTimeout: options.maxTotalTimeout,
           timeoutEnabled: options.timeoutEnabled,
+          logLevel: options.logLevel,
           task: options.task,
           relatedTask: options.relatedTask ??
               (relatedTaskId != null
@@ -1691,11 +1699,11 @@ abstract class Protocol {
           code = error.code;
           message = error.message;
           data = error.data;
-        } else if (error is Error) {
-          message = error.toString();
         } else {
-          message = "Unknown error processing ${request.method}";
-          data = error?.toString();
+          _logger.error(
+            'Unhandled error processing ${request.method}: '
+            '$error\n$stackTrace',
+          );
         }
 
         return _sendErrorResponse(
@@ -2569,25 +2577,25 @@ abstract class Protocol {
     assertRequestHandlerCapability(method);
 
     _requestHandlers[method] = (jsonRpcRequest, extra) async {
+      final ReqT specificRequest;
       try {
-        final specificRequest = requestFactory(
+        specificRequest = requestFactory(
           jsonRpcRequest.id,
           jsonRpcRequest.params,
           jsonRpcRequest.meta,
         );
-        return await handler(specificRequest, extra);
+      } on McpError {
+        rethrow;
       } catch (e, s) {
-        // If the error is already an McpError from the handler, re-throw it as-is
-        if (e is McpError) {
-          rethrow;
-        }
-        // Otherwise, it's a parameter parsing error
+        _logger.warn(
+          'Failed to parse params for request $method: $e\n$s',
+        );
         throw McpError(
           ErrorCode.invalidParams.value,
           "Failed to parse params for request $method",
-          "$e\n$s",
         );
       }
+      return handler(specificRequest, extra);
     };
   }
 

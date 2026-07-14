@@ -12,27 +12,40 @@ import 'subscriptions.dart';
 import 'tasks.dart';
 import 'validation.dart';
 
-/// The MCP `2026-07-28` version used by the SDK's stable profile.
-const stableProtocolVersion2026_07_28 = "2026-07-28";
+/// The MCP `2026-07-28` version used by the SDK preview.
+const previewProtocolVersion = "2026-07-28";
 
-/// The latest stable initialization-era MCP protocol version supported.
-const stableProtocolVersion2025_11_25 = "2025-11-25";
+/// The newest MCP version that uses the `initialize` lifecycle.
+///
+/// Keep this separate from [stableProtocolVersion]: after MCP `2026-07-28`
+/// becomes stable, legacy fallback must still initialize with `2025-11-25`.
+const latestInitializationProtocolVersion = "2025-11-25";
 
-/// The latest protocol version implemented by this development branch.
+/// The latest officially stable MCP protocol version supported.
+const stableProtocolVersion = latestInitializationProtocolVersion;
+
+/// The protocol version preferred by default in this SDK preview.
 ///
 /// The upstream `2026-07-28` specification is still a release candidate, but
-/// this branch uses it for the default stable SDK profile while retaining
+/// this preview prefers it by default while retaining
 /// legacy initialization fallback.
-const latestProtocolVersion = stableProtocolVersion2026_07_28;
+const defaultProtocolVersion = previewProtocolVersion;
+
+/// The latest officially stable MCP protocol version supported.
+///
+/// Use [defaultProtocolVersion] when selecting the SDK preview's preferred
+/// wire version.
+@Deprecated('Use stableProtocolVersion or defaultProtocolVersion instead.')
+const latestProtocolVersion = stableProtocolVersion;
 
 /// High-level MCP protocol compatibility profiles.
 ///
-/// On the `dev/2026-07-28` branch, [McpClientOptions] and [McpServerOptions]
+/// In the 2.3.0 preview, [McpClientOptions] and [McpServerOptions]
 /// default to [stable]. Use [legacy] to explicitly keep the 2025
 /// initialization flow, or [require2026] when a peer must support the
 /// `2026-07-28` stateless protocol.
 enum McpProtocol {
-  /// Stable SDK behavior for this development branch.
+  /// Default SDK compatibility behavior.
   ///
   /// This profile prefers MCP `2026-07-28` stateless negotiation, including
   /// `server/discover`, and falls back to legacy initialization for older
@@ -54,8 +67,8 @@ enum McpProtocol {
   /// Preferred protocol version for outgoing negotiation.
   String get preferredProtocolVersion {
     return switch (this) {
-      McpProtocol.stable || McpProtocol.require2026 => latestProtocolVersion,
-      McpProtocol.legacy => stableProtocolVersion2025_11_25,
+      McpProtocol.stable || McpProtocol.require2026 => defaultProtocolVersion,
+      McpProtocol.legacy => latestInitializationProtocolVersion,
     };
   }
 
@@ -91,25 +104,25 @@ enum McpProtocol {
 
 /// Model Context Protocol versions retained for compatibility with older peers.
 const legacyProtocolVersions = [
-  stableProtocolVersion2025_11_25,
+  latestInitializationProtocolVersion,
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
   "2024-10-07",
 ];
 
-/// Protocol versions supported by the `2026-07-28` development branch.
+/// Protocol versions supported by the 2.3.0 preview.
 const supportedProtocolVersions = [
-  latestProtocolVersion,
+  defaultProtocolVersion,
   ...legacyProtocolVersions,
 ];
 
 /// Protocol versions that use per-request metadata instead of initialization.
 const statelessProtocolVersions = [
-  latestProtocolVersion,
+  defaultProtocolVersion,
 ];
 
-/// Returns true when [version] uses the `2026-07-28` draft/RC stateless request
+/// Returns true when [version] uses the `2026-07-28` stateless request
 /// model.
 bool isStatelessProtocolVersion(String version) =>
     statelessProtocolVersions.contains(version);
@@ -128,8 +141,10 @@ String? negotiateProtocolVersion(
   return null;
 }
 
-/// MCP-reserved `_meta` keys used by the `2026-07-28` draft/RC stateless
-/// request model.
+/// Standard MCP `_meta` keys used by the `2026-07-28` stateless request model.
+///
+/// `_meta` itself is extensible; keys not defined by MCP remain application or
+/// extension metadata and are preserved on the wire.
 class McpMetaKey {
   static const protocolVersion = 'io.modelcontextprotocol/protocolVersion';
   static const clientInfo = 'io.modelcontextprotocol/clientInfo';
@@ -141,7 +156,7 @@ class McpMetaKey {
   const McpMetaKey._();
 }
 
-/// Builds request metadata required by the `2026-07-28` draft/RC stateless
+/// Builds request metadata required by the `2026-07-28` stateless
 /// request model.
 Map<String, dynamic> buildProtocolRequestMeta({
   required String protocolVersion,
@@ -336,9 +351,9 @@ final _metaNamePattern = RegExp(
   r'^(?:[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?)?$',
 );
 
-/// Validates an MCP `2026-07-28` draft/RC `_meta` key name.
+/// Validates an MCP `2026-07-28` `_meta` key name.
 ///
-/// MCP `2026-07-28` draft/RC constrains metadata keys to an optional
+/// MCP `2026-07-28` constrains metadata keys to an optional
 /// dot-separated prefix followed by `/`, plus a name segment. Earlier protocol
 /// versions did not define this grammar, so callers choose when to enforce it.
 void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
@@ -372,7 +387,7 @@ void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
 /// Validates request metadata that can affect protocol behavior.
 ///
 /// `_meta.progressToken` is an MCP wire token and must be a string or integer
-/// when present. [validateKeys] opts in to the MCP `2026-07-28` draft/RC
+/// when present. [validateKeys] opts in to the MCP `2026-07-28`
 /// `_meta` key-name grammar without changing stable/legacy request parsing.
 Map<String, dynamic>? validateRequestMeta(
   Map<String, dynamic>? meta, {
@@ -843,7 +858,7 @@ class InputRequest {
   /// Creates an embedded `elicitation/create` input request.
   factory InputRequest.elicit(ElicitRequest params) {
     final inputParams = params.toJson(
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: defaultProtocolVersion,
     )..remove('task');
     return InputRequest._(
       method: Method.elicitationCreate,
@@ -888,7 +903,7 @@ class InputRequest {
         }
         ElicitRequest.fromJson(
           params,
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: defaultProtocolVersion,
         );
         return InputRequest._(method: method, params: params);
       case Method.samplingCreateMessage:
@@ -949,7 +964,7 @@ class InputRequest {
     }
     return ElicitRequest.fromJson(
       params!,
-      protocolVersion: latestProtocolVersion,
+      protocolVersion: defaultProtocolVersion,
     );
   }
 

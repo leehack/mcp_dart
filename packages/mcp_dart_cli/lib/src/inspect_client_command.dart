@@ -29,6 +29,13 @@ class InspectClientCommand extends Command<int> {
         'max-runtime-ms',
         defaultsTo: '30000',
         help: 'Maximum milliseconds to keep the inspector server running.',
+      )
+      ..addFlag(
+        'active-probes',
+        defaultsTo: false,
+        negatable: false,
+        help:
+            'Actively call advertised legacy roots, sampling, and elicitation capabilities.',
       );
   }
 
@@ -62,6 +69,7 @@ class InspectClientCommand extends Command<int> {
       reportFile: File(reportPath),
       idleTimeout: idleTimeout,
       maxRuntime: maxRuntime,
+      activeProbes: argResults?['active-probes'] as bool? ?? false,
     );
     final report = await harness.run();
     return report.passed ? ExitCode.success.code : ExitCode.software.code;
@@ -99,6 +107,7 @@ class ClientInspectorHarness {
     required this.reportFile,
     required this.idleTimeout,
     required this.maxRuntime,
+    this.activeProbes = false,
     Stream<String>? clientLines,
     FutureOr<void> Function(String line)? writeLine,
   }) : _clientLines = clientLines,
@@ -112,6 +121,12 @@ class ClientInspectorHarness {
 
   /// Maximum runtime for the harness.
   final Duration maxRuntime;
+
+  /// Whether to call advertised legacy client capabilities.
+  ///
+  /// Disabled by default because roots may expose local paths, sampling may
+  /// incur model cost, and elicitation may open user interface.
+  final bool activeProbes;
 
   final Stream<String>? _clientLines;
   final FutureOr<void> Function(String line)? _writeLine;
@@ -339,7 +354,7 @@ class ClientInspectorHarness {
     _sendResult(
       request.id,
       const DiscoverResult(
-        supportedVersions: <String>[stableProtocolVersion2026_07_28],
+        supportedVersions: <String>[previewProtocolVersion],
         capabilities: ServerCapabilities(
           tools: ServerCapabilitiesTools(),
           resources: ServerCapabilitiesResources(),
@@ -366,12 +381,12 @@ class ClientInspectorHarness {
         'Missing required request metadata: ${McpMetaKey.protocolVersion}',
       );
     }
-    if (requestedVersion != stableProtocolVersion2026_07_28) {
+    if (requestedVersion != previewProtocolVersion) {
       return McpError(
         ErrorCode.unsupportedProtocolVersion.value,
         'Unsupported protocol version',
         <String, dynamic>{
-          'supported': const <String>[stableProtocolVersion2026_07_28],
+          'supported': const <String>[previewProtocolVersion],
           'requested': requestedVersion,
         },
       );
@@ -456,7 +471,9 @@ class ClientInspectorHarness {
     }
     if (method == Method.notificationsInitialized) {
       _sawInitialized = true;
-      _sendActiveProbes();
+      if (activeProbes) {
+        _sendActiveProbes();
+      }
     }
   }
 
@@ -674,7 +691,7 @@ class ClientInspectorHarness {
     if (requested != null && legacyProtocolVersions.contains(requested)) {
       return requested;
     }
-    return stableProtocolVersion2025_11_25;
+    return latestInitializationProtocolVersion;
   }
 
   void _sendResult(Object? id, Map<String, dynamic> result) {
@@ -779,6 +796,7 @@ class ClientInspectorHarness {
         if (_clientInfo != null) 'clientInfo': _clientInfo,
         if (_clientCapabilities != null) 'capabilities': _clientCapabilities,
         'observedMethods': _observedMethods.toList()..sort(),
+        'activeProbesEnabled': activeProbes,
         'activeProbes': _activeProbeResults,
       },
       inventory: <String, dynamic>{
@@ -928,8 +946,7 @@ class ClientInspectorHarness {
             ? 'server/discover request protocol metadata is missing.'
             : 'initialize.params.protocolVersion is missing.',
       );
-    } else if (stateless &&
-        _clientProtocolVersion == stableProtocolVersion2026_07_28) {
+    } else if (stateless && _clientProtocolVersion == previewProtocolVersion) {
       _checks.pass(
         'lifecycle.protocol-version',
         'Client requested supported stateless protocol version '
@@ -950,7 +967,7 @@ class ClientInspectorHarness {
                 '$_clientProtocolVersion.'
             : 'Client requested unsupported initialization protocol version '
                 '$_clientProtocolVersion; inspector negotiated '
-                '$stableProtocolVersion2025_11_25.',
+                '$latestInitializationProtocolVersion.',
       );
     }
 
@@ -1044,6 +1061,29 @@ class ClientInspectorHarness {
         id: 'client.elicitation.create',
         label: 'elicitation/create',
       );
+      return;
+    }
+
+    if (!activeProbes) {
+      for (final entry in const <(String, String, String)>[
+        ('roots', 'client.roots.list', 'roots/list'),
+        (
+          'sampling',
+          'client.sampling.create-message',
+          'sampling/createMessage',
+        ),
+        ('elicitation', 'client.elicitation.create', 'elicitation/create'),
+      ]) {
+        final (capability, id, label) = entry;
+        if (_clientCapabilities?.containsKey(capability) ?? false) {
+          _checks.info(
+            id,
+            'Client advertised $capability; active $label probing is disabled.',
+          );
+        } else {
+          _checks.info(id, 'Client did not advertise $capability.');
+        }
+      }
       return;
     }
 

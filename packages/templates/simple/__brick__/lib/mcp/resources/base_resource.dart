@@ -35,7 +35,10 @@ abstract class BaseResource {
   ///
   /// [requestUri] is the URI used to request the resource (may include query params).
   /// Returns a [ReadResourceResult] with the resource contents.
-  FutureOr<ReadResourceResult> read(Uri requestUri, RequestHandlerExtra? extra);
+  FutureOr<ReadResourceResult> read(
+    Uri requestUri,
+    RequestHandlerExtra extra,
+  );
 }
 
 /// Extension to register resources with an MCP server.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:mcp_dart/src/client/stdio.dart';
@@ -6,6 +7,40 @@ import 'package:test/test.dart';
 
 void main() {
   group('StdioClientTransport', () {
+    test('can launch a child without inheriting the parent environment',
+        () async {
+      final inheritedEntry = io.Platform.environment.entries.firstWhere(
+        (entry) => entry.key != 'MCP_DART_EXPLICIT_SENTINEL',
+      );
+      final parameters = StdioServerParameters(
+        command: io.Platform.executable,
+        args: [
+          'test/client/fixtures/stdio_environment_probe.dart',
+          inheritedEntry.key,
+        ],
+        environment: const {'MCP_DART_EXPLICIT_SENTINEL': 'explicit-value'},
+        includeParentEnvironment: false,
+        stderrMode: io.ProcessStartMode.normal,
+      );
+      final transport = StdioClientTransport(parameters);
+      final messageReceived = Completer<JsonRpcMessage>();
+      transport.onmessage = messageReceived.complete;
+
+      await transport.start();
+      final message = await messageReceived.future.timeout(
+        const Duration(seconds: 10),
+      );
+
+      expect(parameters.includeParentEnvironment, isFalse);
+      expect(message, isA<JsonRpcNotification>());
+      expect(message.toJson()['params'], {
+        'inherited': isNull,
+        'explicit': 'explicit-value',
+      });
+
+      await transport.close();
+    });
+
     test('throws StateError when process fails to start', () async {
       // Use a command that doesn't exist
       final transport = StdioClientTransport(

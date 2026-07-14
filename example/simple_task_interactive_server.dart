@@ -1,7 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:mcp_dart/mcp_dart.dart';
+
+import 'browser_cors.dart';
+
+// This example intentionally uses MCP 2025-era core task augmentation. For
+// MCP 2026-07-28 input_required, see example/mcp_2026_07_28/server.dart.
+
+const _allowedBrowserOrigins = {
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+};
 
 // ============================================================================
 // Server Implementation
@@ -45,6 +56,7 @@ class InteractiveServer {
     final server = McpServer(
       const Implementation(name: 'simple-task-interactive', version: '1.0.0'),
       options: const McpServerOptions(
+        protocol: McpProtocol.legacy,
         capabilities: ServerCapabilities(
           tools: ServerCapabilitiesTools(),
           tasks: ServerCapabilitiesTasks(listChanged: true),
@@ -146,24 +158,27 @@ class InteractiveServer {
   }
 
   Future<void> start() async {
-    final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, 8000);
-    print('Starting server on http://localhost:8000/mcp');
+    final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 8000;
+    final httpServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      port,
+    );
+    print('Starting server on http://localhost:$port/mcp');
 
     await for (final httpRequest in httpServer) {
-      // Add CORS headers
-      httpRequest.response.headers.add('Access-Control-Allow-Origin', '*');
-      httpRequest.response.headers
-          .add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      httpRequest.response.headers.add(
-        'Access-Control-Allow-Headers',
-        'Content-Type, mcp-session-id, mcp-protocol-version, Last-Event-ID, Authorization',
-      );
-      httpRequest.response.headers
-          .add('Access-Control-Expose-Headers', 'mcp-session-id');
+      if (!_setBrowserCorsHeaders(httpRequest)) {
+        httpRequest.response
+          ..statusCode = HttpStatus.forbidden
+          ..write('Forbidden browser origin');
+        await httpRequest.response.close();
+        continue;
+      }
 
       if (httpRequest.method == 'OPTIONS') {
-        httpRequest.response.statusCode = 200;
-        httpRequest.response.close();
+        httpRequest.response.statusCode = httpRequest.uri.path == '/mcp'
+            ? HttpStatus.noContent
+            : HttpStatus.notFound;
+        await httpRequest.response.close();
         continue;
       }
 
@@ -280,11 +295,12 @@ class InteractiveServer {
     }
 
     final body = await utf8.decodeStream(req);
-    print('[Server] Received POST body: $body');
-    print('[Server] Headers: ${req.headers}');
+    // Request headers can contain bearer tokens, and request bodies can contain
+    // user-provided elicitation or sampling data. Never dump either to logs.
     final json = jsonDecode(body) as Map<String, dynamic>;
 
     if (json['method'] == 'initialize') {
+      print('[Server] Starting MCP session initialization');
       // Create a temporary server instance for this connection
       final tempContext = _createSessionContext("pending-init");
 
@@ -292,6 +308,7 @@ class InteractiveServer {
 
       final options = StreamableHTTPServerTransportOptions(
         sessionIdGenerator: () => generateUUID(),
+        allowedOrigins: _allowedBrowserOrigins,
         onsessioninitialized: (sid) {
           print('Session initialized: $sid');
           _transports[sid] = createdTransport;
@@ -340,6 +357,12 @@ class InteractiveServer {
     }
   }
 }
+
+bool _setBrowserCorsHeaders(HttpRequest request) =>
+    setExampleBrowserCorsHeaders(
+      request,
+      allowedOrigins: _allowedBrowserOrigins,
+    );
 
 class SimpleToolTaskHandler extends CancelTaskResultHandler {
   final SessionContext context;

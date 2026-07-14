@@ -44,6 +44,7 @@ void main() {
       expect(await storage.getCodeVerifier(), request.codeVerifier);
       expect(await storage.getState(), request.state);
       expect(request.codeVerifier.length, greaterThanOrEqualTo(43));
+      expect(request.state.length, 43);
       expect(
         request.codeChallenge,
         _pkceS256Challenge(request.codeVerifier),
@@ -60,12 +61,16 @@ void main() {
       final provider = OAuth2Provider(config: config, storage: storage);
       final authRequest = await provider.createAuthorizationRequest();
 
-      final tokens = await provider.exchangeCodeForTokens('auth-code');
+      final tokens = await provider.exchangeCodeForTokens(
+        'auth-code',
+        state: authRequest.state,
+      );
 
       expect(tokens, isNotNull);
       expect(tokens!.accessToken, 'access-token');
       expect(tokens.refreshToken, 'refresh-token');
       expect(await storage.getCodeVerifier(), isNull);
+      expect(await storage.getState(), isNull);
 
       final storedTokens = await storage.loadTokens();
       expect(storedTokens?.accessToken, 'access-token');
@@ -99,6 +104,27 @@ void main() {
         tokenEndpoint.lastForm,
         containsPair('resource', config.serverUri),
       );
+    });
+
+    test('rejects a callback with mismatched state before token exchange',
+        () async {
+      final tokenEndpoint = await _TokenEndpoint.start();
+      addTearDown(tokenEndpoint.close);
+
+      final storage = TokenStorage('${tempDir.path}/tokens.json');
+      final provider = OAuth2Provider(
+        config: _oauthConfig(tokenEndpoint: tokenEndpoint.uri),
+        storage: storage,
+      );
+      await provider.createAuthorizationRequest();
+
+      final tokens = await provider.exchangeCodeForTokens(
+        'auth-code',
+        state: 'wrong-state',
+      );
+
+      expect(tokens, isNull);
+      expect(tokenEndpoint.lastForm, isNull);
     });
   });
 }

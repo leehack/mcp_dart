@@ -552,14 +552,14 @@ class SamplingToolResultContent extends SamplingContent {
   /// Object-root structured content returned by the tool.
   ///
   /// Stable MCP `2025-11-25` tool results use an object here. When working
-  /// with MCP `2026-07-28` draft/RC peers, use [structuredContentJson] to read
+  /// with MCP `2026-07-28` peers, use [structuredContentJson] to read
   /// non-object JSON values such as arrays, strings, numbers, booleans, or an
   /// explicit JSON `null`.
   Map<String, dynamic>? get structuredContent {
     return _structuredContentValue?.asObject ?? _structuredContent;
   }
 
-  /// Structured content returned by an MCP `2026-07-28` draft/RC tool result.
+  /// Structured content returned by an MCP `2026-07-28` tool result.
   ///
   /// This exposes the wire-level JSON value and may be an object, array,
   /// string, number, boolean, or null. Use [hasStructuredContent] to distinguish

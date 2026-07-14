@@ -6,7 +6,11 @@
 # https://dart.dev/guides/libraries/private-files#pubspeclock.
 pubspec.lock
 coverage/
+.playwright-cli/
 __pycache__/
 *.pyc
 .serena
 firebase-debug.log
+.env
+.github_oauth_tokens.json
+.oauth_tokens.json

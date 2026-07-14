@@ -166,7 +166,7 @@ void main() {
           'id': 1,
           'method': 'initialize',
           'params': <String, dynamic>{
-            'protocolVersion': latestProtocolVersion,
+            'protocolVersion': defaultProtocolVersion,
             'capabilities': <String, dynamic>{},
             'clientInfo': <String, dynamic>{
               'name': 'trace-fixture',
@@ -215,7 +215,7 @@ void main() {
             'id': 1,
             'method': Method.initialize,
             'params': <String, dynamic>{
-              'protocolVersion': latestProtocolVersion,
+              'protocolVersion': defaultProtocolVersion,
               'capabilities': <String, dynamic>{},
               'clientInfo': <String, dynamic>{
                 'name': 'trace-pipe-fixture',

@@ -17,7 +17,7 @@ class ManifestResource extends BaseResource {
   String get description => 'A simple manifest resource';
 
   @override
-  ReadResourceResult read(Uri requestUri, RequestHandlerExtra? extra) {
+  ReadResourceResult read(Uri requestUri, RequestHandlerExtra extra) {
     return ReadResourceResult(
       contents: [
         TextResourceContents(

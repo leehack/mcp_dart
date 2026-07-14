@@ -44,7 +44,7 @@ class MockTransport extends Transport
           JsonRpcResponse(
             id: message.id,
             result: DiscoverResult(
-              supportedVersions: const [stableProtocolVersion2026_07_28],
+              supportedVersions: const [previewProtocolVersion],
               capabilities: serverCapabilities,
               serverInfo:
                   const Implementation(name: 'MockServer', version: '1.0.0'),
@@ -70,7 +70,7 @@ class MockTransport extends Transport
         JsonRpcResponse(
           id: message.id,
           result: InitializeResult(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: serverCapabilities,
             serverInfo:
                 const Implementation(name: 'MockServer', version: '1.0.0'),
@@ -562,7 +562,7 @@ void main() {
 
       expect(client.getServerCapabilities(), isNotNull);
       expect(client.getServerVersion(), isNotNull);
-      expect(client.getProtocolVersion(), stableProtocolVersion2026_07_28);
+      expect(client.getProtocolVersion(), previewProtocolVersion);
       expect(transport.toolParameterHeaderMappings, {
         'header_tool': {'tenant': 'Tenant'},
       });

@@ -1,8 +1,8 @@
-/// Support for Model Controller Protocol (MCP) SDK for Dart.
+/// Support for the Model Context Protocol (MCP) SDK for Dart.
 ///
-/// This package provides a Dart implementation of the Model Controller Protocol (MCP),
-/// which is designed to facilitate communication between clients and servers in a
-/// structured and extensible way.
+/// This package provides a Dart implementation of the Model Context Protocol,
+/// which facilitates structured, extensible communication between MCP clients
+/// and servers.
 ///
 /// The library exports key modules and types for building MCP-based applications,
 /// including server implementations, type definitions, and utilities.

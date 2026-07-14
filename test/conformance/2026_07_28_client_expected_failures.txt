@@ -1,0 +1,9 @@
+# Expected failures for @modelcontextprotocol/conformance@0.2.0-alpha.9
+# against the 2026-07-28/DRAFT client suite.
+#
+# Keep this list scenario-based so the baseline is easy to review. When a
+# scenario turns green, remove it from this file in the same PR as the fix.
+#
+# No expected failures. The alpha.9 json-schema-ref-no-deref canary is forced
+# to its newest supported fixture protocol by the client runner; a local 2026
+# regression covers the draft wire shape without weakening the security check.

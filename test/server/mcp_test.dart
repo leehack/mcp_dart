@@ -88,7 +88,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -139,7 +139,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
           ),
@@ -193,7 +193,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
           ),
@@ -243,7 +243,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -265,7 +265,7 @@ void main() {
       mcpServer.registerTool(
         'error_tool',
         callback: (args, extra) async {
-          throw Exception('Tool execution failed');
+          throw Exception('sentinel-tool-secret');
         },
       );
 
@@ -274,7 +274,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -290,8 +290,14 @@ void main() {
       transport.receiveMessage(callRequest);
       await Future.delayed(const Duration(milliseconds: 10));
 
-      // Should handle gracefully with error result
-      expect(transport.sentMessages.isNotEmpty, isTrue);
+      final response = transport.sentMessages
+          .whereType<JsonRpcResponse>()
+          .singleWhere((message) => message.id == 2);
+      final result = CallToolResult.fromJson(response.result);
+      expect(result.isError, isTrue);
+      final text = (result.content.single as TextContent).text;
+      expect(text, 'Tool execution failed.');
+      expect(text, isNot(contains('sentinel-tool-secret')));
     });
 
     test('cannot register duplicate tool names', () {
@@ -371,7 +377,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -448,7 +454,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -547,7 +553,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -585,7 +591,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -668,7 +674,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -686,6 +692,51 @@ void main() {
 
       // Server should send error response
       expect(transport.sentMessages.isNotEmpty, isTrue);
+    });
+
+    test('unexpected resource errors do not leak callback details', () async {
+      mcpServer.resource(
+        'secret_resource',
+        'secret://resource',
+        (uri, extra) async => throw StateError('sentinel-resource-secret'),
+      );
+      await mcpServer.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestInitializationProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(
+              name: 'TestClient',
+              version: '1.0.0',
+            ),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+      transport.receiveMessage(
+        JsonRpcReadResourceRequest(
+          id: 2,
+          readParams: const ReadResourceRequestParams(uri: 'secret://resource'),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages
+          .whereType<JsonRpcError>()
+          .singleWhere((message) => message.id == 2);
+      expect(response.error.code, ErrorCode.internalError.value);
+      expect(
+        response.error.message,
+        'Internal server error processing resources/read',
+      );
+      expect(response.error.data, isNull);
+      expect(
+        response.toJson().toString(),
+        isNot(contains('sentinel-resource-secret')),
+      );
     });
   });
 
@@ -737,7 +788,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -758,6 +809,51 @@ void main() {
 
       expect(callbackInvoked, isTrue);
       expect(receivedArgs['topic'], equals('AI'));
+    });
+
+    test('unexpected prompt errors do not leak callback details', () async {
+      mcpServer.prompt(
+        'secret_prompt',
+        callback: (args, extra) async =>
+            throw StateError('sentinel-prompt-secret'),
+      );
+      await mcpServer.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestInitializationProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(
+              name: 'TestClient',
+              version: '1.0.0',
+            ),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+      transport.receiveMessage(
+        JsonRpcGetPromptRequest(
+          id: 2,
+          getParams: const GetPromptRequestParams(name: 'secret_prompt'),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages
+          .whereType<JsonRpcError>()
+          .singleWhere((message) => message.id == 2);
+      expect(response.error.code, ErrorCode.internalError.value);
+      expect(
+        response.error.message,
+        "Failed to generate prompt 'secret_prompt'.",
+      );
+      expect(response.error.data, isNull);
+      expect(
+        response.toJson().toString(),
+        isNot(contains('sentinel-prompt-secret')),
+      );
     });
 
     test('prompt with argument completion', () async {
@@ -796,7 +892,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -843,7 +939,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -891,7 +987,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1002,7 +1098,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1067,7 +1163,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1126,7 +1222,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1190,7 +1286,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1254,7 +1350,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1303,7 +1399,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion2025_11_25,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),

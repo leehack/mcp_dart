@@ -1,5 +1,9 @@
 # MCP 2025-11-25 Compatibility Migration
 
+> This guide covers the `McpProtocol.legacy` and 2025-era surface. The dev.2
+> default prefers MCP `2026-07-28`; see the
+> [transition guide](mcp-2026-07-28.md) for current default behavior.
+
 This guide helps update existing code that used older sampling/tool-choice APIs.
 
 ## What changed
@@ -65,6 +69,9 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
   serialize by omitting the field.
 - OAuth authorization-code discovery now refuses authorization servers that
   omit `code_challenge_methods_supported` or do not advertise PKCE `S256`.
+- First-class OAuth discovery requires callback `state`, accepts same-origin
+  HTTPS endpoints by default, allows loopback-to-loopback development flows,
+  and requires `oauthUriValidator` approval for other trusted HTTPS origins.
 - Streamable HTTP resumability now writes an initial empty SSE event with an
   `id` when an event store is configured, so clients can reconnect using
   `Last-Event-ID` even before JSON-RPC data has been sent.

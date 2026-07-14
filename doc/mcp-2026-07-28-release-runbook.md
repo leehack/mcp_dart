@@ -5,28 +5,36 @@ Do not publish the stable Dart packages from a moving draft commit.
 
 ## Branch policy
 
-- [PR #306](https://github.com/leehack/mcp_dart/pull/306) targets `main` and
-  remains open until the final spec delta is understood.
+- [PR #306](https://github.com/leehack/mcp_dart/pull/306) merged the 2026
+  implementation line into `main`. Prepare prereleases and the eventual
+  stable release on focused branches cut from the latest `main`.
 - Keep `dev/2026-07-28-rc` as a read-only archive. Published
   `mcp_dart 2.3.0-dev.0`, `2.3.0-dev.1`, and matching CLI prereleases contain
   documentation URLs for that branch; deleting it would break their metadata.
-- The default-branch monitor checks `dev/2026-07-28` daily. PR #306 deletes it
-  as the normal interop schedule reaches `main`, avoiding duplicate schedules.
+- The normal `Run MCP 2026-07-28 Interop` schedule now runs from `main`; the
+  temporary default-branch monitor and `dev/2026-07-28` branch are retired.
 
 ## Prerelease rehearsal
 
 Before the final specification is tagged, publish coordinated prereleases from
-the exact validated `dev/2026-07-28` commit:
+the exact validated release-prep commit:
 
-1. Publish `mcp_dart 2.3.0-dev.2` and wait until it resolves from pub.dev in a
-   clean consumer project.
-2. Run `dart run tool/validate_cli_publish.dart --published-sdk` so the CLI is
+1. Merge the green release-prep PR to `main`, then dispatch `Create Release`
+   for `mcp_dart`. Verify that tag `v2.3.0-dev.2` points at that exact commit,
+   the GitHub prerelease exists, and the tag-triggered pub.dev workflow passes.
+2. Wait until `mcp_dart 2.3.0-dev.2` resolves from pub.dev in a clean consumer
+   project.
+3. Run `dart run tool/validate_cli_publish.dart --published-sdk` so the CLI is
    tested without its monorepo path override.
-3. Publish `mcp_dart_cli 0.2.0-dev.2`, then verify its pub.dev package and every
-   standalone binary asset.
+4. Activate `pana`, then from `packages/mcp_dart_cli` run
+   `dart pub global run pana --no-warning --exit-code-threshold 0` and require
+   the full 160/160 score.
+5. Dispatch `Create Release` for `mcp_dart_cli`. Verify tag
+   `mcp_dart_cli-v0.2.0-dev.2`, its pub.dev package, and every standalone binary
+   asset against the same release-prep commit.
 
 Package metadata and README links use the immutable SDK and CLI prerelease tags
-so they remain valid if the development branch is later removed.
+so they remain valid after source branches are removed.
 
 The prerelease is a public workflow rehearsal and interoperability preview. It
 does not replace the final-spec delta review or authorize a stable release.
@@ -34,10 +42,10 @@ does not replace the final-spec delta review or authorize a stable release.
 ## 1. Freeze the official inputs
 
 1. Record the final specification tag and commit SHA.
-2. Diff that SHA against `tool/testing/mcp_2026_release_spec_ref.txt`.
+2. Diff that SHA against `tool/testing/mcp_2026_07_28_spec_ref.txt`.
 3. Review every schema, example, conformance, and normative prose change in
    that range; do not rely only on generated schema diffs.
-4. Update `tool/testing/mcp_2026_release_spec_ref.txt` to the final SHA.
+4. Update `tool/testing/mcp_2026_07_28_spec_ref.txt` to the final SHA.
 5. Update the official conformance package and the published TypeScript and
    Python SDK fixtures only after each candidate passes locally in both
    supported directions.
@@ -55,34 +63,40 @@ dart pub get
 dart format --output=none --set-exit-if-changed .
 dart analyze
 dart test
-SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_release_spec_ref.txt)"
+SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_07_28_spec_ref.txt)"
 git clone --filter=blob:none --no-checkout \
   https://github.com/modelcontextprotocol/modelcontextprotocol.git \
   .dart_tool/mcp-spec
 git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
 git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
 dart run tool/spec_example_audit.dart \
-  .dart_tool/mcp-spec/schema/draft/examples
+  .dart_tool/mcp-spec/schema/2026-07-28/examples
+dart run tool/spec_document_inventory_audit.dart \
+  .dart_tool/mcp-spec/docs/specification/2026-07-28
 dart run test/conformance/run_2025_server_conformance.dart \
   --timeout-seconds 90 --isolate-scenarios
 CONFORMANCE_VERSION=0.2.0-alpha.9 # Replace with the final compatible release.
 npx -y "@modelcontextprotocol/conformance@$CONFORMANCE_VERSION" client \
-  --command "dart run test/conformance/mcp_2026_07_28_rc_client.dart" \
+  --command "dart run test/conformance/mcp_2026_07_28_client.dart" \
   --suite all --spec-version 2025-11-25 --verbose
-dart run test/conformance/run_2026_07_28_rc_server_conformance.dart \
+dart run test/conformance/run_2026_07_28_server_conformance.dart \
   --timeout-seconds 90
-dart run test/conformance/run_2026_07_28_rc_client_conformance.dart \
+dart run test/conformance/run_2026_07_28_client_conformance.dart \
   --timeout-seconds 90
-cd test/interop/ts_2026_07_28_rc && npm ci && cd ../../..
-dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
+cd test/interop/ts_2026_07_28 && npm ci && cd ../../..
+dart run tool/testing/run_ts_2026_07_28_interop.dart
 python3 -m venv .dart_tool/python-2026-interop
 .dart_tool/python-2026-interop/bin/python -m pip install \
-  -r test/interop/python_2026_07_28_rc/requirements.txt
+  -r test/interop/python_2026_07_28/requirements.txt
 MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
-  dart run tool/testing/run_python_2026_07_28_rc_interop.dart
-dart run tool/testing/run_browser_2026_07_28_rc_interop.dart
+  dart run tool/testing/run_python_2026_07_28_interop.dart
+dart run tool/testing/run_browser_2026_07_28_interop.dart
 dart pub publish --dry-run
 ```
+
+Confirm the final repository's dated schema layout before running this command;
+do not substitute `schema/draft`, which may advance to the next protocol after
+the release tag. Update CI and any pinned audit helpers to the same dated path.
 
 Also run the nested example and CLI validation already enforced by CI. The
 release PR must have all required checks green and no unresolved review thread.
@@ -95,6 +109,16 @@ On the final release-prep commit:
 - Restore root `documentation` and all user-facing repository links to `main`.
 - Replace prerelease dependency snippets in the README, getting-started,
   quick-reference, and release docs with `mcp_dart: ^2.3.0`.
+- Keep the durable `2026-07-28` document, fixture, command, and workflow names;
+  update only maturity wording that changes when the final specification ships.
+- Promote `stableProtocolVersion` and `defaultProtocolVersion` to the final
+  `2026-07-28` constant, but keep `latestInitializationProtocolVersion` and
+  `legacyProtocolVersions.first` at `2025-11-25`. Run the profile regression
+  tests to prove `McpProtocol.legacy` never sends a stateless version through
+  `initialize`.
+- Stop presenting `previewProtocolVersion` as the preferred public name. Keep
+  it only as a deprecated alias of `stableProtocolVersion` for prerelease
+  adopters, and update examples to use the stable/default constants.
 - Move the relevant root changelog entries under `## 2.3.0` and remove wording
   that presents the now-final protocol as draft-only.
 - Keep migration and compatibility notes explicit: `McpProtocol.stable`
@@ -123,7 +147,8 @@ Do not start the stable CLI release until the published SDK resolves publicly.
 
 ## 5. Prepare and publish `mcp_dart_cli`
 
-- Set the CLI version and `packageVersion` constant to `0.2.0`.
+- Set the CLI version and `packageVersion` constant to `0.2.0`, and set
+  `generatedSdkConstraint` to `^2.3.0`.
 - Set its SDK dependency to `mcp_dart: ^2.3.0`.
 - Restore CLI homepage/documentation links to `main` and update templates and
   dependency snippets that still name prerelease SDK versions.
@@ -132,6 +157,9 @@ Do not start the stable CLI release until the published SDK resolves publicly.
 
 ```bash
 dart run tool/validate_cli_publish.dart --published-sdk
+dart pub global activate pana
+cd packages/mcp_dart_cli
+dart pub global run pana --no-warning --exit-code-threshold 0
 ```
 
 Then dispatch `Create Release` for `mcp_dart_cli`, verify the
@@ -143,12 +171,14 @@ and check out that exact tag before attaching files.
 ## 6. Public day-0 verification
 
 - Activate `mcp_dart_cli 0.2.0` from pub.dev in a clean environment.
-- Generate a project, run its tests, start a server, and inspect/call it from a
-  separate CLI process.
+- Generate a project and run its tests. Verify stdio with `mcp_dart inspect`
+  from the generated directory. Then start Streamable HTTP with
+  `mcp_dart serve --transport http --host 127.0.0.1 --port 3000` and inspect
+  `http://localhost:3000/mcp` from a separate process.
 - Recheck GitHub release links, pub.dev documentation links, installer asset
   resolution, and both stable package versions.
-- Confirm the release merge removed the temporary monitor and the normal
-  `main` interop schedule is active.
+- Confirm the normal `main` interop schedule is active and there is no duplicate
+  temporary monitor.
 
 If any public verification fails, stop promotion, document the exact affected
 surface, and prepare a patch release. Never move or recreate an already

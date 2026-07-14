@@ -11,7 +11,10 @@ on:
       - 'test/interop/ts/**'
       - 'tool/install.sh'
       - 'tool/install.ps1'
+      - 'tool/validate_cli_publish.dart'
+      - '.pubignore'
       - '.github/workflows/cli_binaries.yml'
+      - '.github/workflows/publish.yml'
       - '.github/workflows/test_cli.yml'
   push:
     branches:
@@ -22,7 +25,10 @@ on:
       - 'test/interop/ts/**'
       - 'tool/install.sh'
       - 'tool/install.ps1'
+      - 'tool/validate_cli_publish.dart'
+      - '.pubignore'
       - '.github/workflows/cli_binaries.yml'
+      - '.github/workflows/publish.yml'
       - '.github/workflows/test_cli.yml'
 
 jobs:
@@ -82,6 +88,10 @@ jobs:
 
       - name: Run MCP spec conformance gate
         run: dart run bin/mcp_dart.dart conformance --suite all --json
+
+      - name: Validate exported CLI package for publishing
+        working-directory: .
+        run: dart run tool/validate_cli_publish.dart
 
       - name: Run pana (package analysis)
         run: |

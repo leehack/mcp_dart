@@ -12,7 +12,7 @@ typedef ToolInputSchema = JsonObject;
 
 /// Legacy alias for object-root tool output schemas.
 ///
-/// MCP `2026-07-28` draft/RC allows [Tool.outputSchema] to be any JSON Schema.
+/// MCP `2026-07-28` allows [Tool.outputSchema] to be any JSON Schema.
 /// Use [JsonSchema] directly when the output schema root is not an object.
 typedef ToolOutputSchema = JsonObject;
 
@@ -429,14 +429,14 @@ class CallToolResult implements BaseResultData {
   /// Object-root structured content returned by the tool.
   ///
   /// Stable MCP `2025-11-25` tool results use an object here. When working
-  /// with MCP `2026-07-28` draft/RC peers, use [structuredContentJson] to read
+  /// with MCP `2026-07-28` peers, use [structuredContentJson] to read
   /// non-object JSON values such as arrays, strings, numbers, booleans, or an
   /// explicit JSON `null`.
   Map<String, dynamic>? get structuredContent {
     return _structuredContentValue?.asObject ?? _structuredContent;
   }
 
-  /// Structured content returned by an MCP `2026-07-28` draft/RC tool call.
+  /// Structured content returned by an MCP `2026-07-28` tool call.
   ///
   /// This exposes the wire-level JSON value and may be an object, array,
   /// string, number, boolean, or null. Use [hasStructuredContent] to distinguish
@@ -490,7 +490,7 @@ class CallToolResult implements BaseResultData {
     return CallToolResult.fromStructuredValue(JsonValue.object(content));
   }
 
-  /// Creates a result from arbitrary MCP `2026-07-28` draft/RC structured JSON.
+  /// Creates a result from arbitrary MCP `2026-07-28` structured JSON.
   ///
   /// This may be any JSON value, including arrays and explicit JSON `null`.
   /// Stable MCP `2025-11-25` callers receive only the JSON-serialized
@@ -503,27 +503,27 @@ class CallToolResult implements BaseResultData {
     );
   }
 
-  /// Creates a result from MCP `2026-07-28` draft/RC array structured content.
+  /// Creates a result from MCP `2026-07-28` array structured content.
   factory CallToolResult.fromStructuredArray(List<dynamic> content) {
     return CallToolResult.fromStructuredValue(JsonValue.array(content));
   }
 
-  /// Creates a result from MCP `2026-07-28` draft/RC string structured content.
+  /// Creates a result from MCP `2026-07-28` string structured content.
   factory CallToolResult.fromStructuredString(String content) {
     return CallToolResult.fromStructuredValue(JsonValue.string(content));
   }
 
-  /// Creates a result from MCP `2026-07-28` draft/RC number structured content.
+  /// Creates a result from MCP `2026-07-28` number structured content.
   factory CallToolResult.fromStructuredNumber(num content) {
     return CallToolResult.fromStructuredValue(JsonValue.number(content));
   }
 
-  /// Creates a result from MCP `2026-07-28` draft/RC boolean structured content.
+  /// Creates a result from MCP `2026-07-28` boolean structured content.
   factory CallToolResult.fromStructuredBoolean(bool content) {
     return CallToolResult.fromStructuredValue(JsonValue.boolean(content));
   }
 
-  /// Creates a result from MCP `2026-07-28` draft/RC null structured content.
+  /// Creates a result from MCP `2026-07-28` null structured content.
   factory CallToolResult.fromStructuredNull() {
     return CallToolResult.fromStructuredValue(JsonValue.nullValue);
   }

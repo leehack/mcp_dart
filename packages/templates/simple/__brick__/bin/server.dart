@@ -1,13 +1,13 @@
 /// MCP Server entry point.
 ///
-/// Supports both stdio (default) and StreamableHTTP transports.
+/// Supports both stdio (default) and Streamable HTTP transports.
 ///
 /// Usage:
 ///   dart run bin/server.dart [options]
 ///
 /// Options:
 ///   -t, --transport    Transport type: stdio (default) or http
-///   -h, --host         Host for HTTP transport (default: 0.0.0.0)
+///   -h, --host         Host for HTTP transport (default: 127.0.0.1)
 ///   -p, --port         Port for HTTP transport (default: 3000)
 ///       --path         Endpoint path for HTTP transport (default: /mcp)
 ///       --help         Show usage information
@@ -82,5 +82,5 @@ Future<void> _runHttpServer(
   );
 
   await server.start();
-  logger.info('StreamableHTTP server running at http://$host:$port$path');
+  logger.info('Streamable HTTP server running at http://$host:$port$path');
 }

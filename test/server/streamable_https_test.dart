@@ -151,7 +151,7 @@ List<Map<String, dynamic>> _decodeSseJsonMessages(String body) {
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
-      protocolVersion: stableProtocolVersion2026_07_28,
+      protocolVersion: previewProtocolVersion,
       clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
       clientCapabilities: const ClientCapabilities(),
     );
@@ -560,7 +560,7 @@ void main() {
                 JsonRpcResponse(
                   id: message.id,
                   result: const {
-                    'protocolVersion': stableProtocolVersion2025_11_25,
+                    'protocolVersion': latestInitializationProtocolVersion,
                     'capabilities': {},
                     'serverInfo': {'name': 'TestServer', 'version': '1.0.0'},
                   },
@@ -596,7 +596,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: {
-              'protocolVersion': stableProtocolVersion2025_11_25,
+              'protocolVersion': latestInitializationProtocolVersion,
               'capabilities': {},
               'clientInfo': {'name': 'TestClient', 'version': '1.0.0'},
             },
@@ -690,7 +690,7 @@ void main() {
           JsonRpcInitializeRequest(
             id: 1,
             initParams: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
             ),
@@ -909,7 +909,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -942,7 +942,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion2025_11_25,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'JsonErrorServer',
@@ -980,7 +980,7 @@ void main() {
           id: 1,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1034,7 +1034,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion2025_11_25,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'DuplicateInitServer',
@@ -1066,7 +1066,7 @@ void main() {
           id: id,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1133,7 +1133,7 @@ void main() {
               id: 1,
               method: 'initialize',
               params: const InitializeRequestParams(
-                protocolVersion: stableProtocolVersion2025_11_25,
+                protocolVersion: latestInitializationProtocolVersion,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(name: 'Client', version: '1.0'),
               ).toJson(),
@@ -1173,7 +1173,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion2025_11_25,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'InvalidEventIdServer',
@@ -1202,7 +1202,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -1272,7 +1272,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion2025_11_25,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'PrimingFailureServer',
@@ -1301,7 +1301,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -1362,7 +1362,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -1444,7 +1444,7 @@ void main() {
           id: 1,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1472,7 +1472,7 @@ void main() {
           id: 3,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion2025_11_25,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1590,7 +1590,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion2025_11_25,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'MultiStreamServer',
@@ -1619,7 +1619,7 @@ void main() {
               id: 1,
               method: 'initialize',
               params: const InitializeRequestParams(
-                protocolVersion: stableProtocolVersion2025_11_25,
+                protocolVersion: latestInitializationProtocolVersion,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(name: 'Client', version: '1.0'),
               ).toJson(),
@@ -1747,7 +1747,7 @@ void main() {
           JsonRpcInitializeRequest(
             id: 1,
             initParams: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ),
@@ -1819,7 +1819,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion2025_11_25,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'ReplayServer',
@@ -1848,7 +1848,7 @@ void main() {
               id: 1,
               method: 'initialize',
               params: const InitializeRequestParams(
-                protocolVersion: stableProtocolVersion2025_11_25,
+                protocolVersion: latestInitializationProtocolVersion,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(name: 'Client', version: '1.0'),
               ).toJson(),
@@ -1992,7 +1992,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion2025_11_25,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'LimitReplayServer',
@@ -2021,7 +2021,7 @@ void main() {
               id: 1,
               method: 'initialize',
               params: const InitializeRequestParams(
-                protocolVersion: stableProtocolVersion2025_11_25,
+                protocolVersion: latestInitializationProtocolVersion,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(name: 'Client', version: '1.0'),
               ).toJson(),
@@ -2364,7 +2364,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
         ..set('Mcp-Method', Method.toolsCall)
         ..set('Mcp-Name', 'wrong-tool');
       request.write(
@@ -2421,7 +2421,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
         ..set('Mcp-Method', Method.tasksUpdate)
         ..set('Mcp-Name', 'task-1');
       request.write(
@@ -2464,7 +2464,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
         ..set('Mcp-Method', Method.tasksUpdate);
       request.write(
         jsonEncode(
@@ -2510,7 +2510,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28);
+        ..set('MCP-Protocol-Version', previewProtocolVersion);
       request.write(
         jsonEncode(
           const JsonRpcResponse(
@@ -2562,7 +2562,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
         ..set('Mcp-Method', Method.toolsList)
         ..set('Mcp-Session-Id', 'legacy-session');
       request.write(
@@ -2598,7 +2598,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const InitializeResult(
-                  protocolVersion: stableProtocolVersion2025_11_25,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'StatefulServer',
@@ -2631,7 +2631,7 @@ void main() {
           JsonRpcInitializeRequest(
             id: 1,
             initParams: const InitializeRequest(
-              protocolVersion: stableProtocolVersion2025_11_25,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'client', version: '1.0.0'),
             ),
@@ -2650,7 +2650,7 @@ void main() {
       statelessRequest.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
         ..set('Mcp-Method', Method.toolsList)
         ..set('Mcp-Session-Id', sessionId!);
       statelessRequest.write(
@@ -2698,7 +2698,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
         ..set('Mcp-Method', Method.toolsCall)
         ..set('Mcp-Name', 'execute')
         ..set('Mcp-Param-region', 'us-east1')
@@ -2776,7 +2776,7 @@ void main() {
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
         ..set('Mcp-Method', Method.toolsList);
       request.write(
         jsonEncode(
@@ -2854,7 +2854,7 @@ void main() {
           'Host: localhost:$serverPort\r\n'
           'Content-Type: application/json\r\n'
           'Accept: application/json, text/event-stream\r\n'
-          'MCP-Protocol-Version: $stableProtocolVersion2026_07_28\r\n'
+          'MCP-Protocol-Version: $previewProtocolVersion\r\n'
           'Mcp-Method: ${Method.toolsList}\r\n'
           'Content-Length: ${bodyBytes.length}\r\n'
           '\r\n',
@@ -2936,7 +2936,7 @@ void main() {
         request.headers
           ..contentType = ContentType.json
           ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-          ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+          ..set('MCP-Protocol-Version', previewProtocolVersion)
           ..set('Mcp-Method', Method.toolsCall)
           ..set('Mcp-Name', 'execute');
         headers.forEach(request.headers.set);
@@ -3144,7 +3144,7 @@ void main() {
       var body = await postJson(
         const JsonRpcListToolsRequest(id: 4).toJson(),
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -3158,7 +3158,7 @@ void main() {
       body = await postJson(
         topLevelMetaOnly,
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -3168,7 +3168,7 @@ void main() {
       body = await postJson(
         JsonRpcListToolsRequest(id: 5, meta: _statelessMeta()).toJson(),
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
         },
       );
       expect(body['error']['message'], contains('Mcp-Method header'));
@@ -3183,7 +3183,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-count': '2',
@@ -3203,7 +3203,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-': 'us-east1',
@@ -3222,7 +3222,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-region': '=?base64?%%%?=',
@@ -3238,7 +3238,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-region': 'us-east1',
@@ -3260,7 +3260,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-zone': 'us-east1-b',
@@ -3282,7 +3282,7 @@ void main() {
           meta: _statelessMeta(),
         ).toJson(),
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
           'Mcp-Method': Method.toolsCall,
         },
       );
@@ -3295,7 +3295,7 @@ void main() {
           JsonRpcListToolsRequest(id: 9, meta: _statelessMeta()).toJson(),
         ],
         headers: {
-          'MCP-Protocol-Version': stableProtocolVersion2026_07_28,
+          'MCP-Protocol-Version': previewProtocolVersion,
         },
       );
       expect(body['error']['message'], contains('must contain one'));
@@ -3329,7 +3329,7 @@ void main() {
             HttpHeaders.acceptHeader,
             'application/json, text/event-stream',
           )
-          ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+          ..set('MCP-Protocol-Version', previewProtocolVersion)
           ..set('Mcp-Method', message.method);
         request.write(jsonEncode(message.toJson()));
 
@@ -3381,7 +3381,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion2025_11_25,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {'name': 'StatelessServer', 'version': '1.0.0'},
                 },
@@ -3407,7 +3407,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: {
-              'protocolVersion': stableProtocolVersion2025_11_25,
+              'protocolVersion': latestInitializationProtocolVersion,
               'capabilities': {},
               'clientInfo': {'name': 'TestClient', 'version': '1.0.0'},
             },
@@ -3440,7 +3440,7 @@ void main() {
       final request = await client.getUrl(Uri.parse('$serverUrlBase/mcp'));
       request.headers.set(
         'MCP-Protocol-Version',
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
 
       final response = await request.close();
@@ -3462,7 +3462,7 @@ void main() {
       );
       patchRequest.headers.set(
         'MCP-Protocol-Version',
-        stableProtocolVersion2026_07_28,
+        previewProtocolVersion,
       );
 
       final patchResponse = await patchRequest.close();
@@ -3483,7 +3483,7 @@ void main() {
         Uri.parse('$serverUrlBase/mcp'),
       );
       deleteRequest.headers
-        ..set('MCP-Protocol-Version', stableProtocolVersion2026_07_28)
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
         ..set('Mcp-Session-Id', 'ignored-stateless-session');
 
       final deleteResponse = await deleteRequest.close();

@@ -22,8 +22,18 @@ class StdioServerParameters {
   final List<String> args;
 
   /// Environment variables to use when spawning the process.
-  /// If null, the parent process environment will be inherited.
+  ///
+  /// When null, the child receives the parent environment only if
+  /// [includeParentEnvironment] is `true`.
   final Map<String, String>? environment;
+
+  /// Whether to merge the parent process environment into [environment].
+  ///
+  /// Defaults to `true`, matching [io.Process.start]. Set this to `false` when
+  /// the child must receive only the variables explicitly provided through
+  /// [environment], such as when isolating application credentials from an
+  /// MCP server subprocess.
+  final bool includeParentEnvironment;
 
   /// How to handle the stderr stream of the child process.
   /// Defaults to [io.ProcessStartMode.inheritStdio], printing to the parent's stderr.
@@ -38,19 +48,12 @@ class StdioServerParameters {
   const StdioServerParameters({
     required this.command,
     this.args = const [],
-    this.environment, // Consider defaulting using getDefaultEnvironment() if null
+    this.environment,
+    this.includeParentEnvironment = true,
     this.stderrMode = io.ProcessStartMode.inheritStdio,
     this.workingDirectory,
   });
 }
-
-// Note: DEFAULT_INHERITED_ENV_VARS and getDefaultEnvironment from the TS code
-// provide a mechanism to create a restricted default environment.
-// This can be complex to replicate perfectly across platforms in Dart.
-// For simplicity, this conversion allows passing a custom environment or
-// defaulting to inheriting the parent's environment (which is dart:io's default).
-// If strict environment control is needed, implement a Dart equivalent of
-// getDefaultEnvironment() based on io.Platform.environment.
 
 /// Client transport for stdio: connects to a server by spawning a process
 /// and communicating with it over stdin/stdout pipes.
@@ -124,6 +127,7 @@ class StdioClientTransport implements Transport {
         _serverParams.args,
         workingDirectory: _serverParams.workingDirectory,
         environment: _serverParams.environment,
+        includeParentEnvironment: _serverParams.includeParentEnvironment,
         runInShell: false,
         mode: io.ProcessStartMode.normal, // Always use normal to enable piping
       );

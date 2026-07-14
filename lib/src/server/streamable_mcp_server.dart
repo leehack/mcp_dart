@@ -296,7 +296,14 @@ class StreamableMcpServer {
   /// Explicit host allowlist used when DNS rebinding protection is enabled.
   final Set<String>? allowedHosts;
 
-  /// Explicit origin allowlist used when DNS rebinding protection is enabled.
+  /// Exact origin allowlist used for high-level CORS responses.
+  ///
+  /// Matching origins receive credentialed CORS headers. When
+  /// [enableDnsRebindingProtection] is true, the same set also validates Origin
+  /// headers. With protection enabled and no explicit allowlist, credentialed
+  /// CORS is limited to loopback development requests; other allowed requests
+  /// receive wildcard CORS without credentials. The provided set is copied at
+  /// construction and exposed as an unmodifiable configuration snapshot.
   final Set<String>? allowedOrigins;
 
   /// If true, reject unsupported `MCP-Protocol-Version` headers with HTTP 400.
@@ -313,6 +320,7 @@ class StreamableMcpServer {
   final Duration sseRetryDelay;
 
   final Set<String> _defaultDnsRebindingAllowedHosts;
+  final Set<String>? _normalizedCorsAllowedOrigins;
 
   HttpServer? _httpServer;
   final Map<String, StreamableHTTPServerTransport> _transports = {};
@@ -330,16 +338,25 @@ class StreamableMcpServer {
     this.oauthProtectedResource,
     this.enableDnsRebindingProtection = true,
     this.allowedHosts,
-    this.allowedOrigins,
+    Set<String>? allowedOrigins,
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
     this.enableJsonResponse = false,
     this.sseRetryDelay = const Duration(seconds: 1),
-  })  : _serverFactory = serverFactory,
+  })  : allowedOrigins = allowedOrigins == null
+            ? null
+            : Set<String>.unmodifiable(allowedOrigins),
+        _serverFactory = serverFactory,
         _defaultDnsRebindingAllowedHosts = {
           normalizeDnsHost(host),
           ...defaultDnsRebindingAllowedHosts,
-        } {
+        },
+        _normalizedCorsAllowedOrigins =
+            allowedOrigins == null || allowedOrigins.isEmpty
+                ? null
+                : Set<String>.unmodifiable(
+                    allowedOrigins.map(normalizeDnsOrigin).whereType<String>(),
+                  ) {
     if (sseRetryDelay.isNegative) {
       throw ArgumentError.value(
         sseRetryDelay,
@@ -381,8 +398,6 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
-    _setCorsHeaders(request, request.response);
-
     if (enableDnsRebindingProtection &&
         !isRequestAllowedByDnsRebindingProtection(
           request,
@@ -396,6 +411,8 @@ class StreamableMcpServer {
       await request.response.close();
       return;
     }
+
+    _setCorsHeaders(request, request.response);
 
     if (request.method == 'OPTIONS') {
       request.response.statusCode = HttpStatus.ok;
@@ -647,7 +664,7 @@ class StreamableMcpServer {
         sessionIdGenerator: () => generateUUID(),
         eventStore: eventStore,
         enableDnsRebindingProtection: enableDnsRebindingProtection,
-        allowedHosts: allowedHosts ?? {host},
+        allowedHosts: allowedHosts ?? _defaultDnsRebindingAllowedHosts,
         allowedOrigins: allowedOrigins,
         enableJsonResponse: enableJsonResponse,
         strictProtocolVersionHeaderValidation:
@@ -699,7 +716,7 @@ class StreamableMcpServer {
         sessionIdGenerator: () => null,
         eventStore: eventStore,
         enableDnsRebindingProtection: enableDnsRebindingProtection,
-        allowedHosts: allowedHosts ?? {host},
+        allowedHosts: allowedHosts ?? _defaultDnsRebindingAllowedHosts,
         allowedOrigins: allowedOrigins,
         enableJsonResponse: enableJsonResponse,
         strictProtocolVersionHeaderValidation:
@@ -986,15 +1003,69 @@ class StreamableMcpServer {
   }
 
   void _setCorsHeaders(HttpRequest request, HttpResponse response) {
-    response.headers.set('Access-Control-Allow-Origin', '*');
+    final requestOrigin = request.headers.value('origin')?.trim();
+    final allowedOrigin = _corsAllowedOrigin(request, requestOrigin);
+    response.headers.set(
+      HttpHeaders.varyHeader,
+      'Origin, Access-Control-Request-Headers',
+    );
+
+    if (allowedOrigin != null) {
+      response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    } else if (requestOrigin == null ||
+        requestOrigin.isEmpty ||
+        _normalizedCorsAllowedOrigins == null) {
+      response.headers.set('Access-Control-Allow-Origin', '*');
+    }
     response.headers
         .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     response.headers.set(
       'Access-Control-Allow-Headers',
       _corsAllowedHeaders(request),
     );
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Max-Age', defaultCorsMaxAgeSeconds);
     response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
+  }
+
+  String? _corsAllowedOrigin(HttpRequest request, String? requestOrigin) {
+    if (requestOrigin == null || requestOrigin.isEmpty) {
+      return null;
+    }
+
+    final normalizedRequestOrigin = normalizeDnsOrigin(requestOrigin);
+    if (normalizedRequestOrigin == null) {
+      return null;
+    }
+
+    final normalizedAllowedOrigins = _normalizedCorsAllowedOrigins;
+    if (normalizedAllowedOrigins != null) {
+      return normalizedAllowedOrigins.contains(normalizedRequestOrigin)
+          ? requestOrigin
+          : null;
+    }
+
+    // DNS rebinding validation runs before CORS headers are set, but a host
+    // match alone must not opt a public deployment into credentialed CORS for
+    // every scheme and port on that host. Preserve the zero-config local
+    // development path only when both sides of the request are loopback.
+    if (enableDnsRebindingProtection &&
+        _isLoopbackHost(normalizedRequestOrigin) &&
+        _isLoopbackHost(
+          request.headers.value(HttpHeaders.hostHeader) ?? '',
+        )) {
+      return requestOrigin;
+    }
+
+    return null;
+  }
+
+  bool _isLoopbackHost(String hostOrOrigin) {
+    final normalizedHost = normalizeDnsHost(hostOrOrigin);
+    if (normalizedHost == 'localhost') {
+      return true;
+    }
+
+    return InternetAddress.tryParse(normalizedHost)?.isLoopback ?? false;
   }
 }

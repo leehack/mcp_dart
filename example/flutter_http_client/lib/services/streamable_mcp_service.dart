@@ -29,9 +29,19 @@ class StreamableMcpService extends ChangeNotifier {
   String serverUrl;
   String? _sessionId;
   int _notificationCount = 0;
+  bool _isConnected = false;
+  bool _disposed = false;
 
   // Status state
-  bool get isConnected => _client != null;
+  bool get isConnected => _isConnected;
+  String? get negotiatedProtocolVersion => _client?.getProtocolVersion();
+  bool get canTerminateSession {
+    final protocolVersion = negotiatedProtocolVersion;
+    return _transport?.sessionId != null &&
+        (protocolVersion == null ||
+            !isStatelessProtocolVersion(protocolVersion));
+  }
+
   String? _connectionError;
   String? get connectionError => _connectionError;
 
@@ -51,18 +61,58 @@ class StreamableMcpService extends ChangeNotifier {
   /// Constructor
   StreamableMcpService({required this.serverUrl});
 
+  @override
+  void notifyListeners() {
+    if (!_disposed) {
+      super.notifyListeners();
+    }
+  }
+
+  void _addNotification({
+    required String level,
+    required String message,
+    bool notify = true,
+  }) {
+    if (_disposed) {
+      return;
+    }
+    _notificationCount++;
+    notifications.add(
+      NotificationMessage(
+        count: _notificationCount,
+        level: level,
+        message: message,
+        timestamp: DateTime.now(),
+      ),
+    );
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
   /// Update server URL
-  void updateServerUrl(String newUrl) {
+  bool updateServerUrl(String newUrl) {
     // Only update if not connected
     if (_client != null) {
       _connectionError =
           'Cannot change server URL while connected. Disconnect first.';
       notifyListeners();
-      return;
+      return false;
     }
 
-    serverUrl = newUrl;
+    final uri = Uri.tryParse(newUrl);
+    if (uri == null ||
+        !uri.hasAuthority ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      _connectionError = 'Enter an absolute HTTP or HTTPS server URL.';
+      notifyListeners();
+      return false;
+    }
+
+    serverUrl = uri.toString();
+    _connectionError = null;
     notifyListeners();
+    return true;
   }
 
   /// Connect to server
@@ -81,6 +131,7 @@ class StreamableMcpService extends ChangeNotifier {
       );
 
       _client!.onerror = (error) {
+        if (_disposed) return;
         _connectionError = 'Client error: $error';
         notifyListeners();
       };
@@ -93,45 +144,37 @@ class StreamableMcpService extends ChangeNotifier {
 
       // Set up transport error handler
       _transport!.onerror = (error) {
+        if (_disposed) return;
         _connectionError = 'Transport error: $error';
         notifyListeners();
       };
 
-      // Set up notification handlers
+      // These global handlers support initialization-era fallback peers. MCP
+      // 2026 uses request-scoped progress and subscriptions/listen instead.
       _client!.setNotificationHandler(
         "notifications/message",
         (notification) async {
           try {
-            _notificationCount++;
             final params = notification.logParams;
-
-            // Add notification to our list
-            final message = NotificationMessage(
-              count: _notificationCount,
+            _addNotification(
               level: params.level.toString(),
               message: params.data,
-              timestamp: DateTime.now(),
+              notify: false,
             );
-
-            notifications.add(message);
 
             // Schedule UI update
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              notifyListeners();
+              if (!_disposed) {
+                notifyListeners();
+              }
             });
           } catch (error) {
             // Add an error notification to make the error more visible
-            notifications.add(
-              NotificationMessage(
-                count: _notificationCount + 1,
-                level: 'error',
-                message: 'Error processing notification: $error',
-                timestamp: DateTime.now(),
-              ),
+            _addNotification(
+              level: 'error',
+              message: 'Error processing notification: $error',
             );
-            _notificationCount++;
             _connectionError = 'Error processing notification: $error';
-            notifyListeners();
           }
           return Future.value();
         },
@@ -152,15 +195,11 @@ class StreamableMcpService extends ChangeNotifier {
       _client!.setNotificationHandler(
         "notifications/resources/list_changed",
         (notification) async {
-          notifications.add(
-            NotificationMessage(
-              count: _notificationCount + 1,
-              level: 'info',
-              message: 'Resource list changed notification received',
-              timestamp: DateTime.now(),
-            ),
+          _addNotification(
+            level: 'info',
+            message: 'Resource list changed notification received',
+            notify: false,
           );
-          _notificationCount++;
 
           // Refresh resources when list changes
           try {
@@ -193,17 +232,15 @@ class StreamableMcpService extends ChangeNotifier {
                 );
               },
             );
+        _isConnected = true;
         _sessionId = _transport!.sessionId;
         _connectionError = null;
 
         // Add an initial notification
-        notifications.add(
-          NotificationMessage(
-            count: _notificationCount++,
-            level: 'info',
-            message: 'Connected to server',
-            timestamp: DateTime.now(),
-          ),
+        _addNotification(
+          level: 'info',
+          message: 'Connected to server',
+          notify: false,
         );
       } catch (e) {
         rethrow;
@@ -221,8 +258,15 @@ class StreamableMcpService extends ChangeNotifier {
             'If you\'re using a physical device, make sure to use the actual IP address instead of localhost.';
       }
       _connectionError = errorMessage;
+      _isConnected = false;
+      final failedTransport = _transport;
       _client = null;
       _transport = null;
+      try {
+        await failedTransport?.close();
+      } catch (_) {
+        // Connection failures may already have closed the transport.
+      }
       notifyListeners();
       return false;
     }
@@ -251,31 +295,51 @@ class StreamableMcpService extends ChangeNotifier {
           'Warning during disconnect: $error - Cleaning up anyway';
     } finally {
       // Always clean up client and transport regardless of errors
+      _isConnected = false;
       _client = null;
       _transport = null;
+      _availableTools = null;
+      _availableResources = null;
+      _availablePrompts = null;
       _connectionError = null;
       notifyListeners();
     }
   }
 
-  /// Terminate the session but keep the client/transport objects
-  Future<void> terminateSession() async {
-    if (_client == null || _transport == null) {
-      _connectionError = 'Not connected.';
+  /// Terminate the stateful session and disconnect the local client.
+  Future<bool> terminateSession() async {
+    final transport = _transport;
+    if (_client == null || transport == null || !canTerminateSession) {
+      _connectionError = 'No stateful session is available to terminate.';
       notifyListeners();
-      return;
+      return false;
     }
 
+    _connectionError = null;
+    Object? terminationError;
     try {
-      await _transport!.terminateSession();
-      if (_transport!.sessionId == null) {
-        _sessionId = null;
-      }
-      notifyListeners();
+      await transport.terminateSession();
     } catch (error) {
+      terminationError = error;
       _connectionError = 'Error terminating session: $error';
-      notifyListeners();
+    } finally {
+      try {
+        await transport.close();
+      } catch (error) {
+        terminationError ??= error;
+        _connectionError ??= 'Error closing terminated session: $error';
+      }
+      _isConnected = false;
+      _client = null;
+      _transport = null;
+      _sessionId = null;
+      _availableTools = null;
+      _availableResources = null;
+      _availablePrompts = null;
     }
+
+    notifyListeners();
+    return terminationError == null;
   }
 
   /// Reconnect to server
@@ -295,15 +359,10 @@ class StreamableMcpService extends ChangeNotifier {
 
     while (!connected && attempt <= maxAttempts) {
       try {
-        notifications.add(
-          NotificationMessage(
-            count: _notificationCount++,
-            level: 'info',
-            message: 'Reconnection attempt $attempt of $maxAttempts...',
-            timestamp: DateTime.now(),
-          ),
+        _addNotification(
+          level: 'info',
+          message: 'Reconnection attempt $attempt of $maxAttempts...',
         );
-        notifyListeners();
 
         // Wait longer between retry attempts
         if (attempt > 1) {
@@ -313,27 +372,17 @@ class StreamableMcpService extends ChangeNotifier {
         connected = await connect();
 
         if (connected) {
-          notifications.add(
-            NotificationMessage(
-              count: _notificationCount++,
-              level: 'info',
-              message: 'Reconnection successful on attempt $attempt',
-              timestamp: DateTime.now(),
-            ),
+          _addNotification(
+            level: 'info',
+            message: 'Reconnection successful on attempt $attempt',
           );
-          notifyListeners();
         }
       } catch (error) {
         // Add a notification about the failed attempt
-        notifications.add(
-          NotificationMessage(
-            count: _notificationCount++,
-            level: 'error',
-            message: 'Reconnection attempt $attempt failed: $error',
-            timestamp: DateTime.now(),
-          ),
+        _addNotification(
+          level: 'error',
+          message: 'Reconnection attempt $attempt failed: $error',
         );
-        notifyListeners();
       }
 
       attempt++;
@@ -371,6 +420,17 @@ class StreamableMcpService extends ChangeNotifier {
     return await _client!.callTool(
       params,
       options: RequestOptions(
+        onprogress: (progress) {
+          final position =
+              progress.total == null
+                  ? '${progress.progress}'
+                  : '${progress.progress}/${progress.total}';
+          final detail =
+              progress.message == null
+                  ? position
+                  : '${progress.message} ($position)';
+          _addNotification(level: 'progress', message: '$name: $detail');
+        },
         timeout: const Duration(seconds: 30),
         resetTimeoutOnProgress: true,
       ),
@@ -434,27 +494,48 @@ class StreamableMcpService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears displayed notifications and resets their sequence numbers.
+  void clearNotifications() {
+    notifications.clear();
+    _notificationCount = 0;
+    notifyListeners();
+  }
+
   /// Clean up resources
   @override
   void dispose() {
-    if (_client != null && _transport != null) {
-      try {
-        // First try to terminate the session gracefully if requested
-        if (_transport!.sessionId != null) {
-          try {
-            _transport!.terminateSession();
-          } catch (_) {
-            // Ignore termination errors during cleanup
-          }
-        }
-
-        // Then close the transport
-        _transport!.close();
-      } catch (_) {
-        // Ignore errors during cleanup
-      }
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    final client = _client;
+    final transport = _transport;
+    client?.onerror = null;
+    transport?.onerror = null;
+    _isConnected = false;
+    _client = null;
+    _transport = null;
+    if (transport != null) {
+      unawaited(_disposeTransport(transport));
     }
     super.dispose();
+  }
+
+  Future<void> _disposeTransport(
+    StreamableHttpClientTransport transport,
+  ) async {
+    if (transport.sessionId != null) {
+      try {
+        await transport.terminateSession();
+      } catch (_) {
+        // Ignore termination errors during cleanup.
+      }
+    }
+    try {
+      await transport.close();
+    } catch (_) {
+      // Ignore close errors during cleanup.
+    }
   }
 
   /// Reset the service state without disconnecting

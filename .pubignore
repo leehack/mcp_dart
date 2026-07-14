@@ -18,6 +18,7 @@ example/flutter_http_client/windows/
 coverage/
 build/
 .dart_tool/
+.playwright-cli/
 firebase-debug.log
 __pycache__/
 *.pyc

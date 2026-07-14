@@ -36,7 +36,7 @@ class McpClientOptions extends ProtocolOptions {
       return protocolVersion;
     }
     if (protocol == McpProtocol.legacy && _useServerDiscover == true) {
-      return latestProtocolVersion;
+      return defaultProtocolVersion;
     }
     return protocol.preferredProtocolVersion;
   }
@@ -45,6 +45,9 @@ class McpClientOptions extends ProtocolOptions {
 
   /// Whether [McpClient.connect] should probe with `server/discover` first.
   ///
+  /// [McpProtocol.require2026] always enables discovery, even when
+  /// [useServerDiscover] is explicitly set to `false`.
+  ///
   /// When omitted, an explicit stateless [protocolVersion] enables discovery,
   /// while an explicit supported legacy version selects `initialize` unless
   /// [protocol] is [McpProtocol.require2026]. Otherwise this is derived from
@@ -52,6 +55,10 @@ class McpClientOptions extends ProtocolOptions {
   /// the latest stateless version and preserves the legacy version for
   /// initialization fallback.
   bool get useServerDiscover {
+    if (protocol == McpProtocol.require2026) {
+      return true;
+    }
+
     final useServerDiscover = _useServerDiscover;
     if (useServerDiscover != null) {
       return useServerDiscover;
@@ -78,10 +85,15 @@ class McpClientOptions extends ProtocolOptions {
   /// Whether a failed `server/discover` probe should fall back to `initialize`.
   ///
   /// When omitted, this is derived from [protocol]. [McpProtocol.require2026]
-  /// disables fallback.
-  bool get allowLegacyInitializationFallback =>
-      _allowLegacyInitializationFallback ??
-      protocol.allowLegacyInitializationFallbackByDefault;
+  /// always disables fallback, even when
+  /// [allowLegacyInitializationFallback] is explicitly set to `true`.
+  bool get allowLegacyInitializationFallback {
+    if (protocol == McpProtocol.require2026) {
+      return false;
+    }
+    return _allowLegacyInitializationFallback ??
+        protocol.allowLegacyInitializationFallbackByDefault;
+  }
 
   const McpClientOptions({
     super.enforceStrictCapabilities,
@@ -226,7 +238,7 @@ class McpClient extends Protocol {
 
   String get _preferredDiscoveryProtocolVersion =>
       legacyProtocolVersions.contains(_preferredProtocolVersion)
-          ? latestProtocolVersion
+          ? defaultProtocolVersion
           : _preferredProtocolVersion;
 
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
@@ -260,10 +272,14 @@ class McpClient extends Protocol {
       : _capabilities = options?.capabilities ?? const ClientCapabilities(),
         _preferredProtocolVersion = options?.protocolVersion ??
             McpProtocol.stable.preferredProtocolVersion,
-        _useServerDiscover = options?.useServerDiscover ??
-            McpProtocol.stable.useServerDiscoverByDefault,
-        _allowLegacyInitializationFallback =
-            options?.allowLegacyInitializationFallback ??
+        _useServerDiscover = options?.protocol == McpProtocol.require2026
+            ? true
+            : options?.useServerDiscover ??
+                McpProtocol.stable.useServerDiscoverByDefault,
+        _allowLegacyInitializationFallback = options?.protocol ==
+                McpProtocol.require2026
+            ? false
+            : options?.allowLegacyInitializationFallback ??
                 McpProtocol.stable.allowLegacyInitializationFallbackByDefault,
         super(options) {
     // Register elicit handler if any elicitation mode is advertised.
@@ -386,7 +402,7 @@ class McpClient extends Protocol {
     final initializationProtocolVersion =
         legacyProtocolVersions.contains(_preferredProtocolVersion)
             ? _preferredProtocolVersion
-            : stableProtocolVersion2025_11_25;
+            : latestInitializationProtocolVersion;
     final initParams = InitializeRequest(
       protocolVersion: initializationProtocolVersion,
       capabilities: _capabilities,
@@ -434,12 +450,16 @@ class McpClient extends Protocol {
     );
   }
 
-  Map<String, dynamic> _statelessRequestMeta(Map<String, dynamic>? meta) {
+  Map<String, dynamic> _statelessRequestMeta(
+    Map<String, dynamic>? meta, {
+    LoggingLevel? logLevel,
+  }) {
     return buildProtocolRequestMeta(
       protocolVersion: _negotiatedProtocolVersion ?? _preferredProtocolVersion,
       clientInfo: _clientInfo,
       clientCapabilities: _capabilities,
       meta: meta,
+      logLevel: logLevel?.name,
     );
   }
 
@@ -652,7 +672,10 @@ class McpClient extends Protocol {
                 id: requestData.id,
                 method: requestData.method,
                 params: requestData.params,
-                meta: _statelessRequestMeta(requestData.meta),
+                meta: _statelessRequestMeta(
+                  requestData.meta,
+                  logLevel: options?.logLevel,
+                ),
               )
             : requestData;
 
@@ -945,6 +968,7 @@ class McpClient extends Protocol {
       resetTimeoutOnProgress: options.resetTimeoutOnProgress,
       maxTotalTimeout: options.maxTotalTimeout,
       timeoutEnabled: options.timeoutEnabled,
+      logLevel: options.logLevel,
     );
   }
 
@@ -1040,6 +1064,7 @@ class McpClient extends Protocol {
       resetTimeoutOnProgress: options.resetTimeoutOnProgress,
       maxTotalTimeout: options.maxTotalTimeout,
       timeoutEnabled: options.timeoutEnabled,
+      logLevel: options.logLevel,
     );
   }
 
@@ -1115,6 +1140,9 @@ class McpClient extends Protocol {
 
   /// Gets the server's reported capabilities after successful initialization.
   ServerCapabilities? getServerCapabilities() => _serverCapabilities;
+
+  /// Whether this client currently has an attached transport.
+  bool get isConnected => transport != null;
 
   /// Gets the server's reported implementation info after successful initialization.
   Implementation? getServerVersion() => _serverVersion;

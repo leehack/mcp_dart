@@ -62,8 +62,8 @@ final client = McpClient(
 
 ### Protocol Profile
 
-Clients on this development branch use `McpProtocol.stable` by default, which
-prefers MCP `2026-07-28` draft/RC negotiation. The default client probes with
+Clients in the 2.3.0 preview use `McpProtocol.stable` by default, which
+prefers MCP `2026-07-28` negotiation. The default client probes with
 `server/discover`, sends stateless request metadata for a compatible peer, and
 falls back to legacy `initialize` when discovery is unavailable. Select the
 legacy profile explicitly when a deployment must use only MCP `2025-11-25`
@@ -177,18 +177,17 @@ final result = await client.callTool(
 
 ### Task-Augmented Tool Calls
 
-For MCP `2026-07-28` draft/RC stateless servers that advertise the
+For MCP `2026-07-28` stateless servers that advertise the
 `io.modelcontextprotocol/tasks` extension, task creation is server-directed.
 Call `client.callTool()` normally, or call `TaskClient.callToolStream()` without
 the legacy `task` argument; the client follows `resultType: "task"` with
 `tasks/get`, using `tasks/update` only when the server requests more input,
 until the final tool result is available.
 
-For task-capable tools, use `TaskClient.callToolStream()` and pass task creation
-parameters through the `task` argument. The server must advertise
-`tasks.requests.tools.call`, and the target tool must be visible from
-`tools/list` with `execution.taskSupport` set to `optional` or `required`.
-`TaskClient` performs that `tools/list` preflight before it sends `tools/call`.
+For legacy MCP `2025-11-25` task augmentation only, callers can pass task
+creation parameters through the `task` argument. That legacy path requires
+`tasks.requests.tools.call` plus tool `execution.taskSupport`; do not send the
+legacy argument on a 2026 extension session.
 
 ```dart
 final taskClient = TaskClient(client);
@@ -196,7 +195,6 @@ final taskClient = TaskClient(client);
 await for (final event in taskClient.callToolStream(
   'slow-tool',
   {'query': 'large job'},
-  task: {'ttl': 60000, 'pollInterval': 1000},
 )) {
   switch (event) {
     case TaskCreatedMessage(:final task):
@@ -222,10 +220,15 @@ try {
     ),
   );
 
+  final content = result.content.first;
   if (result.isError == true) {
-    print('Tool returned error: ${result.content.first.text}');
+    print(
+      'Tool returned error: ${content is TextContent ? content.text : content.toJson()}',
+    );
   } else {
-    print('Result: ${result.content.first.text}');
+    print(
+      'Result: ${content is TextContent ? content.text : content.toJson()}',
+    );
   }
 } catch (e) {
   if (e is McpError) {
@@ -271,14 +274,49 @@ for (final content in result.contents) {
     print('Text content:');
     print(content.text);
   } else if (content is BlobResourceContents) {
-    print('Binary content: ${content.blob.length} bytes');
     final bytes = base64Decode(content.blob);
+    print('Binary content: ${bytes.length} bytes');
     // Use bytes...
   }
 }
 ```
 
-### Subscribe to Resource Updates
+### Listen for Resource Updates (MCP 2026)
+
+The default 2026 stateless profile uses `subscriptions/listen`. The returned
+handle exposes the required acknowledgment, filtered notification stream,
+graceful completion, and cancellation:
+
+```dart
+final subscription = client.listenSubscriptions(
+  const SubscriptionsListenRequest(
+    notifications: SubscriptionFilter(
+      resourceSubscriptions: ['file:///data/metrics.json'],
+    ),
+  ),
+);
+
+final acknowledged = await subscription.acknowledged;
+print(acknowledged.notifications.resourceSubscriptions);
+
+final listener = subscription.notifications.listen((notification) async {
+  if (notification is JsonRpcResourceUpdatedNotification) {
+    final result = await client.readResource(
+      ReadResourceRequest(uri: notification.updatedParams.uri),
+    );
+    print('Updated content blocks: ${result.contents.length}');
+  }
+});
+
+// When this caller no longer needs updates:
+subscription.cancel();
+await listener.cancel();
+```
+
+### Subscribe to Resource Updates (MCP 2025-11-25)
+
+Legacy stateful peers use `resources/subscribe`, global notifications, and
+`resources/unsubscribe`. These methods are removed from the 2026 profile.
 
 ```dart
 // Subscribe to changes
@@ -328,17 +366,14 @@ await client.unsubscribeResource(
 ### Resource Templates
 
 ```dart
-// List resources to discover templates
-final response = await client.listResources();
+// Templates have their own discovery method.
+final response = await client.listResourceTemplates();
 
-for (final resource in response.resources) {
-  if (resource.uri.contains('{')) {
-    print('Template: ${resource.uri}');
-    print('  Example: ${_expandTemplate(resource.uri)}');
-  }
+for (final template in response.resourceTemplates) {
+  print('Template: ${template.uriTemplate}');
 }
 
-// Read from template
+// Expand the advertised template with values from your application.
 final result = await client.readResource(
   ReadResourceRequest(
     uri: 'users://alice/profile',  // Expands template
@@ -380,7 +415,10 @@ final result = await client.getPrompt(
 
 print('Description: ${result.description}');
 for (final message in result.messages) {
-  print('${message.role}: ${message.content.text}');
+  final content = message.content;
+  print(
+    '${message.role}: ${content is TextContent ? content.text : content.toJson()}',
+  );
 }
 ```
 
@@ -400,7 +438,10 @@ final result = await client.getPrompt(
 
 // Use the prompt messages with an LLM
 for (final message in result.messages) {
-  print('${message.role}: ${message.content.text}');
+  final content = message.content;
+  print(
+    '${message.role}: ${content is TextContent ? content.text : content.toJson()}',
+  );
 }
 ```
 
@@ -420,18 +461,19 @@ for (final message in result.messages) {
   if (content is TextContent) {
     print('Text: ${content.text}');
   } else if (content is EmbeddedResource) {
-    // Resolve the embedded resource
-    final resourceUri = content.resource.uri;
-    final resourceData = await client.readResource(
-      ReadResourceRequest(uri: resourceUri),
+    final embedded = content.resource;
+    print(
+      'Embedded: ${embedded is TextResourceContents ? embedded.text : embedded.toJson()}',
     );
-    print('Embedded: ${resourceData.contents.first.text}');
   } else if (content is ResourceLink) {
     // Follow resource links directly
     final resourceData = await client.readResource(
       ReadResourceRequest(uri: content.uri),
     );
-    print('Linked: ${resourceData.contents.first.text}');
+    final linked = resourceData.contents.first;
+    print(
+      'Linked: ${linked is TextResourceContents ? linked.text : linked.toJson()}',
+    );
   }
 }
 ```
@@ -580,20 +622,37 @@ client.onListRoots = () async {
   );
 };
 
-// Notify server when roots change
+// Legacy 2025-11-25 only; this notification is removed in MCP 2026.
 await client.sendRootsListChanged();
 ```
 
 ## Logging
 
-### Set Logging Level
+MCP 2026 deprecates protocol logging. The SDK retains these APIs for
+compatibility; new implementations should prefer server `stderr` for stdio or
+OpenTelemetry for structured observability.
+
+### Deprecated Request Logs (MCP 2026)
+
+Logging is request-scoped in the 2026 profile. Set the minimum level on the
+operation that should emit logs:
+
+```dart
+final tools = await client.listTools(
+  options: const RequestOptions(logLevel: LoggingLevel.debug),
+);
+```
+
+Install the notification handler below before sending the request.
+
+### Set Logging Level (MCP 2025-11-25)
+
+`logging/setLevel` is legacy-only and is rejected by 2026 stateless peers.
 
 ```dart
 // Set server's logging level
 await client.setLoggingLevel(
-  SetLevelRequest(
-    level: LoggingLevel.debug,
-  ),
+  LoggingLevel.debug,
 );
 ```
 
@@ -645,16 +704,21 @@ await client.close();
 ### Reconnection Logic
 
 ```dart
-Future<void> connectWithRetry(McpClient client, Transport transport) async {
+Future<McpClient> connectWithRetry(
+  McpClient Function() createClient,
+  Transport Function() createTransport,
+) async {
   var retries = 0;
   const maxRetries = 3;
 
   while (retries < maxRetries) {
+    final client = createClient();
     try {
-      await client.connect(transport);
+      await client.connect(createTransport());
       print('Connected successfully');
-      return;
+      return client;
     } catch (e) {
+      await client.close();
       retries++;
       print('Connection failed (attempt $retries/$maxRetries): $e');
 
@@ -665,6 +729,8 @@ Future<void> connectWithRetry(McpClient client, Transport transport) async {
       }
     }
   }
+
+  throw StateError('Unreachable');
 }
 ```
 
@@ -754,15 +820,15 @@ Future<CallToolResult?> callToolSafely(
 ```dart
 // Custom timeout per request
 try {
-  final result = await client
-      .callTool(
-        CallToolRequest(
-          name: 'slow-tool',
-          arguments: {},
-        ),
-      )
-      .timeout(Duration(seconds: 60));
-} on TimeoutException {
+  final result = await client.callTool(
+    const CallToolRequest(
+      name: 'slow-tool',
+      arguments: {},
+    ),
+    options: const RequestOptions(timeout: Duration(seconds: 60)),
+  );
+} on McpError catch (error)
+    when (error.code == ErrorCode.requestTimeout.value) {
   print('Tool call timed out');
 }
 ```
@@ -815,7 +881,10 @@ final result = await client.callTool(request);
 processResult(result);
 ```
 
-### 3. Check Capabilities Before Use
+### 3. Check Legacy Capabilities Before Use
+
+This `resources.subscribe` check applies only to MCP 2025-11-25. MCP 2026 uses
+the `subscriptions/listen` flow shown earlier in this guide.
 
 ```dart
 // ✅ Good
@@ -830,8 +899,10 @@ if (client.getServerCapabilities()?.resources?.subscribe == true) {
 await client.subscribeResource(SubscribeRequest(uri: uri));
 ```
 
+### 4. Legacy Resource Subscription Management
 
-### 5. Resource Subscription Management
+The following tracking pattern is for MCP 2025-11-25
+`resources/subscribe`/`resources/unsubscribe` sessions.
 
 ```dart
 // ✅ Good - track subscriptions

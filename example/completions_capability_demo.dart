@@ -1,4 +1,4 @@
-// Demonstrates proper completions capability usage per MCP 2025-06-18 spec
+// Demonstrates completions capability usage on the MCP 2025-era profile.
 //
 // This example shows:
 // 1. Server declaring completions capability explicitly
@@ -14,6 +14,7 @@ void main() async {
   final server = McpServer(
     const Implementation(name: "completions-demo", version: "1.0.0"),
     options: const McpServerOptions(
+      protocol: McpProtocol.legacy,
       capabilities: ServerCapabilities(
         completions: ServerCapabilitiesCompletions(),
         resources: ServerCapabilitiesResources(),

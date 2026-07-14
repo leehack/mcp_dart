@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 2,
+  "specRevision": "2026-07-28",
+  "documents": {
+    "architecture/index.mdx": {
+      "scope": "Architecture and role context for the SDK client and server implementations.",
+      "sha256": "b3afbaa496cac959446ef7b137875350e0fe15bda425f7378cfb3a3f473b06b0",
+      "evidence": [
+        "lib/src/client/client.dart",
+        "lib/src/server/server.dart"
+      ]
+    },
+    "basic/authorization/authorization-server-discovery.mdx": {
+      "scope": "Client-side protected-resource and authorization-server discovery; implementing an authorization server is outside SDK scope.",
+      "sha256": "22e2841a5e561afa1bd246c9e3cac64392402b3cac19d33da1e5d0987ccb3df8",
+      "evidence": [
+        "lib/src/client/streamable_https.dart",
+        "test/client/streamable_https_test.dart"
+      ]
+    },
+    "basic/authorization/client-registration.mdx": {
+      "scope": "Client registration and client metadata consumption; authorization-server implementation is outside SDK scope.",
+      "sha256": "462d87866544bef7ce44fcbd6fcbb615eb30708e635d4d33a72ea7ae49866c23",
+      "evidence": [
+        "lib/src/client/streamable_https.dart",
+        "test/client/streamable_https_test.dart"
+      ]
+    },
+    "basic/authorization/index.mdx": {
+      "scope": "MCP authorization client behavior and authenticated Streamable HTTP integration.",
+      "sha256": "4e1e0b760e8c9ff7bc322502dccf4450cd626036648b8221f66eb4be371da3c3",
+      "evidence": [
+        "lib/src/client/streamable_https.dart",
+        "test/example/oauth_client_example_test.dart",
+        "test/client/streamable_https_test.dart"
+      ]
+    },
+    "basic/authorization/security-considerations.mdx": {
+      "scope": "Authorization client validation and server-side HTTP deployment protections applicable to the SDK.",
+      "sha256": "592befe83fe38e7184fda6e18a4dfba9748ab50280ea31fe1ad64974065a1612",
+      "evidence": [
+        "test/client/streamable_https_test.dart",
+        "test/server/streamable_security_harness_test.dart",
+        "test/server/streamable_mcp_server_test.dart"
+      ]
+    },
+    "basic/index.mdx": {
+      "scope": "Core JSON-RPC, stateless request metadata, result, error, and JSON Schema rules.",
+      "sha256": "37362008bccb4e6975df12b299f487527d61f7eafa261ef45b8160241442d1f2",
+      "evidence": [
+        "lib/src/types/json_rpc.dart",
+        "test/mcp_2026_07_28_test.dart",
+        "test/types_edge_cases_test.dart"
+      ]
+    },
+    "basic/patterns/cancellation.mdx": {
+      "scope": "Core request and subscription cancellation semantics across transports.",
+      "sha256": "5e1144654517b0a8a604f943e8b7d5f906af8fb67327ead3b541e9138dc8f18d",
+      "evidence": [
+        "lib/src/shared/protocol.dart",
+        "test/mcp_2026_07_28_test.dart",
+        "test/shared/protocol_test.dart"
+      ]
+    },
+    "basic/patterns/index.mdx": {
+      "scope": "Core request-response, multi-round-trip, and subscribe-notify pattern overview.",
+      "sha256": "a99260186f4a7b04b8509ada060b5961650ee30fae3d661ecdde2c139c84c316",
+      "evidence": [
+        "lib/src/shared/protocol.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "basic/patterns/mrtr.mdx": {
+      "scope": "Core multi-round-trip input_required request and retry behavior.",
+      "sha256": "8eb86c86dd02a0abdbdf2fcc069662fe6600e9226248c6de50c95fe34fe9e2d5",
+      "evidence": [
+        "lib/src/types/json_rpc.dart",
+        "test/mcp_2026_07_28_test.dart",
+        "example/mcp_2026_07_28/client.dart"
+      ]
+    },
+    "basic/patterns/progress.mdx": {
+      "scope": "Request-scoped progress token parsing, routing, and monotonic progress behavior.",
+      "sha256": "9f55aca08920c633f3a2a35e0c77533db08d3fd19ced43918ea7c57aa5f85409",
+      "evidence": [
+        "lib/src/shared/protocol.dart",
+        "test/shared/progress_test.dart",
+        "test/types_edge_cases_test.dart"
+      ]
+    },
+    "basic/patterns/subscriptions.mdx": {
+      "scope": "Core subscriptions/listen filters, per-subscription acknowledgment ordering, correlation, cancellation, and graceful close.",
+      "sha256": "d04929920af54510f817b9437a92d8c3b9dd12efd119a520dc29e0842037da34",
+      "evidence": [
+        "lib/src/types/subscriptions.dart",
+        "lib/src/shared/protocol.dart",
+        "test/mcp_2026_07_28_test.dart",
+        "example/mcp_2026_07_28/server.dart"
+      ]
+    },
+    "basic/transports/index.mdx": {
+      "scope": "Transport requirements shared by stdio and Streamable HTTP.",
+      "sha256": "df831894db607b5247c37d368e10a9e593b4c61002797d826fa430bc7fb90d50",
+      "evidence": [
+        "lib/src/shared/transport.dart",
+        "test/shared/transport_api_compatibility_test.dart"
+      ]
+    },
+    "basic/transports/stdio.mdx": {
+      "scope": "Stdio framing, process lifecycle, discovery probing, and legacy fallback.",
+      "sha256": "5aa46804a0e84ae84b4463acb1593dc5c7f90bfeaf013a7a393d1f9dc2b44e0b",
+      "evidence": [
+        "lib/src/shared/stdio.dart",
+        "test/integration/stdio_integration_test.dart",
+        "test/client/stdio_client_test.dart"
+      ]
+    },
+    "basic/transports/streamable-http.mdx": {
+      "scope": "Modern stateless and legacy stateful Streamable HTTP wire behavior, routing headers, security, streaming, and fallback.",
+      "sha256": "dd6a6255abab9207007d3aca525e5ee235fd6f66a22c240698831b3cc61d9034",
+      "evidence": [
+        "lib/src/client/streamable_https.dart",
+        "lib/src/server/streamable_https.dart",
+        "test/client/streamable_https_test.dart",
+        "test/server/streamable_https_test.dart"
+      ]
+    },
+    "basic/versioning.mdx": {
+      "scope": "Modern version discovery and retry plus dual-era negotiation and legacy initialization fallback.",
+      "sha256": "2c15ff5cf707151cb03137f4650b3beda3e11ec8c2469634581376755d601dac",
+      "evidence": [
+        "lib/src/client/client.dart",
+        "lib/src/server/server.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "changelog.mdx": {
+      "scope": "Authoritative 2025-to-2026 change inventory used to audit the SDK release delta.",
+      "sha256": "805c1569063741297d5e0777a4b31cbd65d3bd514e7856fd2ab974365722fa5d",
+      "evidence": [
+        "doc/spec-coverage-2026-07-28.md",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "client/elicitation.mdx": {
+      "scope": "Client elicitation handlers and 2026 MRTR form and URL wire shapes.",
+      "sha256": "ef3c22a7ed7a0d9a63d4e66eb16bbc1972690fa129ae14025995c14122767866",
+      "evidence": [
+        "lib/src/types/elicitation.dart",
+        "test/elicitation_test.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "client/roots.mdx": {
+      "scope": "Deprecated but supported roots client capability and MRTR roots/list input handling.",
+      "sha256": "27b2df19e384aa4a86f497cff93b72532487e3a696531e98e287642e6b942455",
+      "evidence": [
+        "lib/src/types/roots.dart",
+        "test/server/server_test.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "client/sampling.mdx": {
+      "scope": "Deprecated but supported sampling client capability and MRTR sampling/createMessage input handling.",
+      "sha256": "424770ecd936697bed7757925b32352b1140f544dfa8860bab0c851eb3a5edf3",
+      "evidence": [
+        "lib/src/types/sampling.dart",
+        "test/types/sampling_test.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "deprecated.mdx": {
+      "scope": "Deprecated feature compatibility and the modern profile's removed-method boundaries.",
+      "sha256": "95435a9c15ff5eb68b0770e6dec9f41bf8d9bc60ad4bc6a64b0755190e4a6794",
+      "evidence": [
+        "test/mcp_2026_07_28_test.dart",
+        "test/mcp_2025_11_25_test.dart"
+      ]
+    },
+    "index.mdx": {
+      "scope": "Specification landing page and declared core client-server role boundary.",
+      "sha256": "429270d0f42cb85c468ce5a9b610800a7092ee19f13b96b43ab3bfdf6dccb3b7",
+      "evidence": [
+        "doc/spec-coverage-2026-07-28.md",
+        "lib/mcp_dart.dart"
+      ]
+    },
+    "schema.mdx": {
+      "scope": "Authoritative generated wire schema and its official machine-readable examples.",
+      "sha256": "b9c02d8d20a481187b0722325b564b5d1f5d5b0837a85f218659311553f6ad6e",
+      "evidence": [
+        "tool/spec_example_audit.dart",
+        "test/tool/spec_example_audit_test.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "server/discover.mdx": {
+      "scope": "Required server/discover request, result, cache metadata, and capability advertisement.",
+      "sha256": "b9861bb66ca8505ff0a034247d6a065a2887fb156bb5dba35be7dbd8dfb56ae0",
+      "evidence": [
+        "lib/src/types/initialization.dart",
+        "lib/src/server/server.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "server/index.mdx": {
+      "scope": "Server feature overview for prompts, resources, and tools.",
+      "sha256": "989f3b346db2747276359fa7d95d68007848f46ab41ed5a0541cde839ae9445c",
+      "evidence": [
+        "lib/src/server/mcp_server.dart",
+        "test/server/mcp_server_test.dart"
+      ]
+    },
+    "server/prompts.mdx": {
+      "scope": "Prompt listing, retrieval, arguments, content, cache metadata, and list-change delivery.",
+      "sha256": "c5be28262bab8095704557f522c8f4d4084f283b7b57cfd65b9bcde4113b5817",
+      "evidence": [
+        "lib/src/types/prompts.dart",
+        "test/server/mcp_test.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "server/resources.mdx": {
+      "scope": "Resource and template listing, reads, errors, cache metadata, and subscription-delivered changes.",
+      "sha256": "ad88ba936b2da3f0a42a084d4a73bc69e31899adc7a8f0705c4ca4fb6cfe190d",
+      "evidence": [
+        "lib/src/types/resources.dart",
+        "test/types/resources_test.dart",
+        "test/server/mcp_server_test.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "server/tools.mdx": {
+      "scope": "Tool listing and invocation, JSON Schema 2020-12, structured output, deterministic ordering, headers, and MRTR.",
+      "sha256": "d31ad9c707486b2e1e9754167ae10c9bc990dd3af73ecdf00c414362cae8e8c1",
+      "evidence": [
+        "lib/src/types/tools.dart",
+        "test/tool_schema_test.dart",
+        "test/client/client_tool_validation_test.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "server/utilities/caching.mdx": {
+      "scope": "Cacheable result ttlMs and cacheScope validation and defaulting.",
+      "sha256": "db392b54dfc3427f2691bb215a02ad68b84c242977d610dca62520fb7afee0c0",
+      "evidence": [
+        "lib/src/shared/protocol.dart",
+        "lib/src/server/server.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "server/utilities/completion.mdx": {
+      "scope": "Completion capability, request, result, reference, argument, and pagination-limit behavior.",
+      "sha256": "45812345a0e6b81b5a72dc98195485fec5d96063cd30c9b213df23b1d94e27a9",
+      "evidence": [
+        "lib/src/types/completion.dart",
+        "test/server/mcp_test.dart",
+        "test/client/client_test.dart"
+      ]
+    },
+    "server/utilities/logging.mdx": {
+      "scope": "Deprecated request-scoped logging metadata and notification behavior retained by the modern profile.",
+      "sha256": "dd4c1de5bf8363abc7b4ff8583a3f324e5450713280c6fcaad0f5abc92ef385e",
+      "evidence": [
+        "lib/src/types/logging.dart",
+        "test/server/server_advanced_test.dart",
+        "test/mcp_2026_07_28_test.dart"
+      ]
+    },
+    "server/utilities/pagination.mdx": {
+      "scope": "Cursor request and nextCursor result behavior for paginated core list methods.",
+      "sha256": "c484dcd9349d1953aac65002242bb4da64c6d7d038f4f5f0a937920b1f9163a9",
+      "evidence": [
+        "test/types/resources_test.dart",
+        "test/types_test.dart",
+        "test/client/client_tool_validation_test.dart"
+      ]
+    }
+  }
+}

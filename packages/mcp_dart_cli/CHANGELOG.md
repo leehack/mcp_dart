@@ -1,19 +1,25 @@
 ## 0.2.0-dev.2
 
-- Update the CLI to depend on `mcp_dart ^2.3.0-dev.2` and align inspection and
-  conformance behavior with the SDK's default MCP 2026 profile and legacy
-  fallback.
-- Expand release validation so standalone binaries must report the same version
-  as both their package metadata and release tag.
-- Point prerelease package metadata and documentation at the immutable
-  `mcp_dart_cli-v0.2.0-dev.2` tag.
-- Raise the minimum Dart SDK to 3.7 to match the CLI's direct dependency
-  requirements.
+- Updated generated projects and inspection to use `mcp_dart ^2.3.0-dev.2`,
+  preferring MCP 2026 while retaining legacy fallback.
+- Raised the minimum Dart SDK to 3.7 and fixed Windows handling of prerelease
+  dependency constraints.
+- Generated and CLI-served HTTP servers now bind to loopback by default; remote
+  exposure requires an explicit `--host`.
+- `doctor` and server/client inspection are passive by default. Tool, resource,
+  prompt, completion, task, roots, sampling, and elicitation probes require
+  explicit opt-in.
+- OAuth inspection accepts only trusted same-origin or loopback metadata and
+  does not follow redirects.
+- Prerelease builds no longer update through the stable channel; stdio watch is
+  rejected and HTTP watch restarts are serialized.
+- Tagged templates, package metadata, standalone binaries, and documentation
+  now use coordinated immutable dev.2 versions.
 
 ## 0.2.0-dev.1
 
 - Update the dev CLI package to depend on `mcp_dart ^2.3.0-dev.1`.
-- Refresh built-in 2026-07-28 RC conformance checks for the current draft error
+- Refresh built-in 2026-07-28 conformance checks for the current preview error
   codes and cacheable `server/discover` behavior.
 - Keep CLI standalone binary release automation current with GitHub runner and
   artifact action updates.
