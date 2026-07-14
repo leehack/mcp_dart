@@ -193,6 +193,7 @@ class StreamableHTTPServerTransport
   final Map<String, HttpResponse> _streamMapping = {};
   final Set<StreamId> _standaloneSseStreamIds = {};
   final Map<StreamId, Set<HttpResponse>> _standaloneSseResponses = {};
+  final Map<HttpResponse, Future<void>> _responseWriteTails = Map.identity();
   final Set<StreamId> _ownedStreamIds = {};
   final Map<dynamic, String> _requestToStreamMapping = {};
   final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
@@ -1215,8 +1216,13 @@ class StreamableHTTPServerTransport
         // soon as the first replayed event arrives, so the resumed response
         // must already be attached and later replay events must already be
         // ordered ahead of any new live message.
-        res.add(replayBatch.takeBytes());
-        await res.flush();
+        final replayWritten = await _enqueueSseWrite(
+          res,
+          replayBatch.takeBytes(),
+        );
+        if (!replayWritten) {
+          throw StateError('Failed to replay events');
+        }
       } catch (error) {
         if (isStandaloneStream) {
           _removeStandaloneSseResponse(streamId, res);
@@ -1266,10 +1272,24 @@ class StreamableHTTPServerTransport
 
   /// Safely closes an HTTP response, ignoring errors if client disconnected
   Future<void> _safeClose(HttpResponse res) async {
+    final pendingWrite = _responseWriteTails[res];
+    if (pendingWrite != null) {
+      try {
+        await pendingWrite.timeout(const Duration(milliseconds: 100));
+      } catch (_) {
+        // Continue closing even if an in-flight write is stuck or failed.
+      }
+    }
+
     try {
       await res.close().timeout(const Duration(milliseconds: 100));
     } catch (e) {
       // Ignore close errors - client may have already disconnected
+    } finally {
+      if (pendingWrite != null &&
+          identical(_responseWriteTails[res], pendingWrite)) {
+        _responseWriteTails.remove(res);
+      }
     }
   }
 
@@ -1288,11 +1308,48 @@ class StreamableHTTPServerTransport
     String? eventId,
   ]) async {
     try {
-      res.add(_encodeSSEEvent(message, eventId));
-      await res.flush();
-      return true;
+      return await _enqueueSseWrite(res, _encodeSSEEvent(message, eventId));
     } catch (e) {
       return false;
+    }
+  }
+
+  Future<bool> _enqueueSseWrite(HttpResponse res, List<int> bytes) {
+    final previousWrite = _responseWriteTails[res] ?? Future<void>.value();
+    final writeCompleted = Completer<void>();
+    final writeTail = writeCompleted.future;
+
+    // Install the tail before awaiting the previous write. A client may react
+    // as soon as bytes arrive, before the corresponding flush future completes.
+    _responseWriteTails[res] = writeTail;
+    return _performSseWrite(
+      res,
+      bytes,
+      previousWrite: previousWrite,
+      writeCompleted: writeCompleted,
+      writeTail: writeTail,
+    );
+  }
+
+  Future<bool> _performSseWrite(
+    HttpResponse res,
+    List<int> bytes, {
+    required Future<void> previousWrite,
+    required Completer<void> writeCompleted,
+    required Future<void> writeTail,
+  }) async {
+    try {
+      await previousWrite;
+      res.add(bytes);
+      await res.flush();
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      writeCompleted.complete();
+      if (identical(_responseWriteTails[res], writeTail)) {
+        _responseWriteTails.remove(res);
+      }
     }
   }
 
@@ -1360,9 +1417,7 @@ class StreamableHTTPServerTransport
     EventId eventId,
   ) async {
     try {
-      res.add(_encodeSSEPrimingEvent(eventId));
-      await res.flush();
-      return true;
+      return await _enqueueSseWrite(res, _encodeSSEPrimingEvent(eventId));
     } catch (e) {
       return false;
     }
@@ -1391,8 +1446,7 @@ class StreamableHTTPServerTransport
     try {
       final store = _eventStore;
       if (store == null) {
-        await res.flush();
-        return true;
+        return _enqueueSseWrite(res, const <int>[]);
       }
 
       final eventId = await store.storeEvent(streamId, _ssePrimingMessage);
@@ -1906,6 +1960,7 @@ class StreamableHTTPServerTransport
     _detachedResumableStreamIds.clear();
     _standaloneSseStreamIds.clear();
     _standaloneSseResponses.clear();
+    _responseWriteTails.clear();
     _ownedStreamIds.clear();
 
     // Clear any pending responses
