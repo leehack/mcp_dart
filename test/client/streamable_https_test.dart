@@ -979,6 +979,12 @@ void main() {
             return;
           }
 
+          if (sessionHeader == replacementSessionId) {
+            request.response.statusCode = HttpStatus.methodNotAllowed;
+            await request.response.close();
+            return;
+          }
+
           request.response.statusCode = HttpStatus.notFound;
           request.response.write('Session not found');
           await request.response.close();
@@ -1184,6 +1190,80 @@ void main() {
       expect((response as JsonRpcResponse).id, equals(123));
       expect(response.result['success'], isTrue);
       expect(response.result['echo']['data'], equals('test-data'));
+    });
+
+    test('non-initialize responses cannot assign a session ID', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..headers.set('mcp-session-id', 'unexpected-session')
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 1,
+                result: {'ok': true},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      await transport.send(
+        const JsonRpcRequest(id: 1, method: 'test/session'),
+      );
+      expect(transport.sessionId, isNull);
+    });
+
+    test('non-initialize responses cannot replace a session ID', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..headers.set('mcp-session-id', 'replacement-session')
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 1,
+                result: {'ok': true},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      await expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 1, method: 'test/session'),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.invalidRequest.value,
+          ),
+        ),
+      );
+      expect(transport.sessionId, testSessionId);
     });
 
     test('send adds 2026 stateless HTTP metadata headers', () async {
@@ -1471,8 +1551,17 @@ void main() {
           }
         };
 
-      await transport.send(
-        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
       );
 
       final error = await errorCompleter.future.timeout(
@@ -1482,6 +1571,1607 @@ void main() {
       expect((error as McpError).code, ErrorCode.invalidRequest.value);
       expect(error.message, contains('input_required'));
       expect(messages, isEmpty);
+    });
+
+    test(
+        'completed stateful POST SSE streams preserve matching IDs and do not reconnect',
+        () async {
+      var getRequests = 0;
+      var postRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.method == 'GET') {
+          getRequests += 1;
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        if (request.method != 'POST') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        postRequests += 1;
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        final id = body['id'];
+        final response = id == 1
+            ? JsonRpcResponse(id: id, result: const {'ok': true})
+            : JsonRpcError(
+                id: id,
+                error: JsonRpcErrorData(
+                  code: ErrorCode.internalError.value,
+                  message: 'expected test error',
+                ),
+              );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write('data: ${jsonEncode(response.toJson())}\n\n');
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          reconnectionOptions: StreamableHttpReconnectionOptions(
+            initialReconnectionDelay: 10,
+            maxReconnectionDelay: 10,
+            reconnectionDelayGrowFactor: 1,
+            maxRetries: 2,
+          ),
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      final firstMessageReceived = Completer<JsonRpcMessage>();
+      final secondMessageReceived = Completer<JsonRpcMessage>();
+      transport.onmessage = (message) {
+        if (!firstMessageReceived.isCompleted) {
+          firstMessageReceived.complete(message);
+        } else if (!secondMessageReceived.isCompleted) {
+          secondMessageReceived.complete(message);
+        }
+      };
+
+      await transport.send(const JsonRpcRequest(id: 1, method: 'test/one'));
+      final firstMessage = await firstMessageReceived.future.timeout(
+        const Duration(seconds: 5),
+      );
+      await transport.send(const JsonRpcRequest(id: 2, method: 'test/two'));
+      final secondMessage = await secondMessageReceived.future.timeout(
+        const Duration(seconds: 5),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(postRequests, 2);
+      expect(firstMessage, isA<JsonRpcResponse>());
+      expect(secondMessage, isA<JsonRpcError>());
+      expect((firstMessage as JsonRpcResponse).id, 1);
+      expect((secondMessage as JsonRpcError).id, 2);
+      expect(getRequests, 0);
+    });
+
+    test('mismatched SSE response IDs do not settle or rewrite a request',
+        () async {
+      final mismatchSent = Completer<void>();
+      final releaseMatchingResponse = Completer<void>();
+      final protocolError = Completer<Error>();
+      final messages = <JsonRpcMessage>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseMatchingResponse.isCompleted) {
+          releaseMatchingResponse.complete();
+        }
+      });
+      server.listen((request) async {
+        await request.drain<void>();
+        final mismatchedResponse = jsonEncode(
+          const JsonRpcResponse(
+            id: 999,
+            result: {'mismatched': true},
+          ).toJson(),
+        );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..bufferOutput = false
+          ..write('data: $mismatchedResponse\n\n');
+        await request.response.flush();
+        if (!mismatchSent.isCompleted) {
+          mismatchSent.complete();
+        }
+
+        await releaseMatchingResponse.future;
+        final matchingResponse = jsonEncode(
+          const JsonRpcResponse(
+            id: 1,
+            result: {'matched': true},
+          ).toJson(),
+        );
+        request.response.write('data: $matchingResponse\n\n');
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport
+        ..onmessage = messages.add
+        ..onerror = (error) {
+          if (!protocolError.isCompleted) {
+            protocolError.complete(error);
+          }
+        };
+
+      var sendSettled = false;
+      final sendFuture = transport
+          .send(const JsonRpcRequest(id: 1, method: 'test/correlate'))
+          .whenComplete(() => sendSettled = true);
+      await mismatchSent.future.timeout(const Duration(seconds: 5));
+      final error = await protocolError.future.timeout(
+        const Duration(seconds: 5),
+      );
+
+      expect(sendSettled, isFalse);
+      expect(messages.single, isA<JsonRpcResponse>());
+      expect((messages.single as JsonRpcResponse).id, 999);
+      expect(error, isA<McpError>());
+      expect((error as McpError).code, ErrorCode.invalidRequest.value);
+
+      releaseMatchingResponse.complete();
+      await sendFuture.timeout(const Duration(seconds: 5));
+      expect(
+        messages.whereType<JsonRpcResponse>().map((message) => message.id),
+        [999, 1],
+      );
+    });
+
+    test('interrupted stateful POST SSE streams reconnect', () async {
+      var getRequests = 0;
+      String? lastEventId;
+      final messages = <JsonRpcMessage>[];
+      final resumptionTokens = <String>[];
+      final terminalResponse = Completer<JsonRpcResponse>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.method == 'GET') {
+          getRequests += 1;
+          lastEventId = request.headers.value('last-event-id');
+          final response = jsonEncode(
+            const JsonRpcResponse(
+              id: 1,
+              result: {'ok': true},
+            ).toJson(),
+          );
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType('text', 'event-stream')
+            ..headers.set('mcp-session-id', testSessionId)
+            ..write(
+              'id: checkpoint-2\n'
+              'data: ${jsonEncode(const JsonRpcNotification(method: 'test/resumed-two').toJson())}\n\n'
+              'id: checkpoint-3\n'
+              'data: ${jsonEncode(const JsonRpcNotification(method: 'test/resumed-three').toJson())}\n\n'
+              'id: checkpoint-4\n'
+              'data: $response\n\n',
+            );
+          await request.response.close();
+          return;
+        }
+
+        if (request.method != 'POST') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'id: checkpoint-1\n\n'
+            'id: ignored\u0000token\n\n'
+            'data: ${jsonEncode(const JsonRpcNotification(method: 'test/initial').toJson())}\n\n',
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          reconnectionOptions: StreamableHttpReconnectionOptions(
+            initialReconnectionDelay: 10,
+            maxReconnectionDelay: 10,
+            reconnectionDelayGrowFactor: 1,
+            maxRetries: 2,
+          ),
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport.onmessage = (message) {
+        messages.add(message);
+        if (message is JsonRpcResponse && !terminalResponse.isCompleted) {
+          terminalResponse.complete(message);
+        }
+      };
+
+      await transport.send(
+        const JsonRpcRequest(id: 1, method: 'test/one'),
+        onResumptionToken: resumptionTokens.add,
+      );
+      final response = await terminalResponse.future.timeout(
+        const Duration(seconds: 5),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(getRequests, 1);
+      expect(lastEventId, 'checkpoint-1');
+      expect(response.id, 1);
+      expect(resumptionTokens, [
+        'checkpoint-1',
+        'checkpoint-2',
+        'checkpoint-3',
+        'checkpoint-4',
+      ]);
+      expect(
+        messages.map(
+          (message) => switch (message) {
+            JsonRpcNotification(:final method) => method,
+            JsonRpcResponse() => 'response',
+            _ => 'unexpected',
+          },
+        ),
+        ['test/initial', 'test/resumed-two', 'test/resumed-three', 'response'],
+      );
+    });
+
+    test('interrupted POST SSE without an event ID does not reconnect',
+        () async {
+      var getRequests = 0;
+      var postRequests = 0;
+      final resumptionTokens = <String>[];
+      final terminalResponse = Completer<JsonRpcResponse>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.method == 'GET') {
+          getRequests += 1;
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        postRequests += 1;
+        final requestId = body['id'];
+        final payload = switch (requestId) {
+          1 => 'id: checkpoint-1\n\n'
+              'id:\n\n'
+              'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress-one').toJson())}\n\n',
+          2 => 'id: checkpoint-2\n\n'
+              'id\n\n'
+              'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress-two').toJson())}\n\n',
+          _ => 'data: ${jsonEncode(
+              JsonRpcResponse(
+                id: requestId,
+                result: const {'ok': true},
+              ).toJson(),
+            )}\n\n',
+        };
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(payload);
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          reconnectionOptions: StreamableHttpReconnectionOptions(
+            initialReconnectionDelay: 10,
+            maxReconnectionDelay: 10,
+            reconnectionDelayGrowFactor: 1,
+            maxRetries: 2,
+          ),
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport.onmessage = (message) {
+        if (message is JsonRpcResponse && !terminalResponse.isCompleted) {
+          terminalResponse.complete(message);
+        }
+      };
+
+      final connectionClosed = throwsA(
+        isA<McpError>().having(
+          (error) => error.code,
+          'code',
+          ErrorCode.connectionClosed.value,
+        ),
+      );
+      await expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 1, method: 'test/one'),
+          onResumptionToken: resumptionTokens.add,
+        ),
+        connectionClosed,
+      );
+      await expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 2, method: 'test/two'),
+          onResumptionToken: resumptionTokens.add,
+        ),
+        connectionClosed,
+      );
+      await transport.send(const JsonRpcRequest(id: 3, method: 'test/three'));
+      final response = await terminalResponse.future.timeout(
+        const Duration(seconds: 5),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(postRequests, 3);
+      expect(getRequests, 0);
+      expect(resumptionTokens, ['checkpoint-1', '', 'checkpoint-2', '']);
+      expect(response.id, 3);
+    });
+
+    test('stateless POST SSE never reconnects even with an event ID', () async {
+      var getRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.method == 'GET') {
+          getRequests += 1;
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..write(
+            'id: must-not-resume\n'
+            'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress').toJson())}\n\n',
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          reconnectionOptions: StreamableHttpReconnectionOptions(
+            initialReconnectionDelay: 10,
+            maxReconnectionDelay: 10,
+            reconnectionDelayGrowFactor: 1,
+            maxRetries: 2,
+          ),
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      await transport.start();
+
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(getRequests, 0);
+    });
+
+    test('empty resumption tokens fail without sending a request', () async {
+      var requests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        requests += 1;
+        await request.drain<void>();
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      await expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 1, method: 'test/resume'),
+          resumptionToken: '',
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(requests, 0);
+    });
+
+    test('resumption after close fails without sending a request', () async {
+      var requests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        requests += 1;
+        await request.drain<void>();
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      await transport.close();
+
+      await expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 1, method: 'test/resume'),
+          resumptionToken: 'checkpoint-1',
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(requests, 0);
+    });
+
+    test('stateless resumption after close fails without sending a request',
+        () async {
+      var requests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        requests += 1;
+        await request.drain<void>();
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = previewProtocolVersion;
+      await transport.start();
+      await transport.close();
+
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+          resumptionToken: 'checkpoint-1',
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(requests, 0);
+    });
+
+    test('stateless transports reject resumption without sending a request',
+        () async {
+      var requests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        requests += 1;
+        await request.drain<void>();
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = previewProtocolVersion;
+      await transport.start();
+
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+          resumptionToken: 'checkpoint-1',
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.invalidRequest.value,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(requests, 0);
+    });
+
+    test('resumption rejects a GET response that is not an SSE stream',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write('{}');
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      await expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 1, method: 'test/resume'),
+          resumptionToken: 'checkpoint-1',
+        ),
+        throwsA(
+          isA<StreamableHttpError>()
+              .having((error) => error.code, 'code', HttpStatus.ok)
+              .having(
+                (error) => error.message,
+                'message',
+                contains('Expected text/event-stream'),
+              ),
+        ),
+      );
+    });
+
+    test('resumption cancels an unexpected GET response body', () async {
+      final responseStarted = Completer<void>();
+      final releaseResponse = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseResponse.isCompleted) {
+          releaseResponse.complete();
+        }
+      });
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.serviceUnavailable
+          ..headers.contentType = ContentType.text
+          ..write('temporarily unavailable');
+        await request.response.flush();
+        if (!responseStarted.isCompleted) {
+          responseStarted.complete();
+        }
+        await releaseResponse.future;
+        try {
+          await request.response.close();
+        } on Object {
+          // The expected client-side cancellation may close the socket first.
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      final sendExpectation = expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 1, method: 'test/resume'),
+          resumptionToken: 'checkpoint-1',
+        ),
+        throwsA(
+          isA<StreamableHttpError>().having(
+            (error) => error.code,
+            'code',
+            HttpStatus.serviceUnavailable,
+          ),
+        ),
+      );
+      await responseStarted.future.timeout(const Duration(seconds: 5));
+      await sendExpectation.timeout(const Duration(seconds: 1));
+
+      releaseResponse.complete();
+    });
+
+    test('requests cancel an unexpected POST response body', () async {
+      final responseStarted = Completer<void>();
+      final releaseResponse = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseResponse.isCompleted) {
+          releaseResponse.complete();
+        }
+      });
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.text
+          ..bufferOutput = false
+          ..write('unexpected response');
+        await request.response.flush();
+        if (!responseStarted.isCompleted) {
+          responseStarted.complete();
+        }
+        await releaseResponse.future;
+        try {
+          await request.response.close();
+        } on Object {
+          // The expected client-side cancellation may close the socket first.
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      final sendExpectation = expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/unexpected')),
+        throwsA(
+          isA<StreamableHttpError>().having(
+            (error) => error.code,
+            'code',
+            -1,
+          ),
+        ),
+      );
+      await responseStarted.future.timeout(const Duration(seconds: 5));
+      await sendExpectation.timeout(const Duration(seconds: 1));
+
+      releaseResponse.complete();
+    });
+
+    test('close fails an active request-scoped SSE send', () async {
+      final streamOpened = Completer<void>();
+      final releaseResponse = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseResponse.isCompleted) {
+          releaseResponse.complete();
+        }
+      });
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress').toJson())}\n\n',
+          );
+        await request.response.flush();
+        if (!streamOpened.isCompleted) {
+          streamOpened.complete();
+        }
+        await releaseResponse.future;
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      final sendExpectation = expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/pending')),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await streamOpened.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await transport.close();
+      releaseResponse.complete();
+      await sendExpectation;
+    });
+
+    test('close fails a request waiting in reconnection backoff', () async {
+      var getRequests = 0;
+      final progressReceived = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        if (request.method == 'GET') {
+          getRequests += 1;
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'retry: 5000\n'
+            'id: pending-checkpoint\n'
+            'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress').toJson())}\n\n',
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport.onmessage = (message) {
+        if (message is JsonRpcNotification && !progressReceived.isCompleted) {
+          progressReceived.complete();
+        }
+      };
+
+      final sendExpectation = expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/pending')),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await progressReceived.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(getRequests, 0);
+
+      await transport.close();
+      await sendExpectation.timeout(const Duration(seconds: 1));
+      expect(getRequests, 0);
+    });
+
+    test('resumed streams that repeatedly end exhaust max retries', () async {
+      var getRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        if (request.method == 'GET') {
+          getRequests += 1;
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType('text', 'event-stream')
+            ..headers.set('mcp-session-id', testSessionId)
+            ..write(
+              'id: checkpoint-${getRequests + 1}\n'
+              'data: ${jsonEncode(JsonRpcNotification(method: 'test/resumed-$getRequests').toJson())}\n\n',
+            );
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'id: checkpoint-1\n'
+            'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress').toJson())}\n\n',
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          reconnectionOptions: StreamableHttpReconnectionOptions(
+            initialReconnectionDelay: 10,
+            maxReconnectionDelay: 10,
+            reconnectionDelayGrowFactor: 1,
+            maxRetries: 2,
+          ),
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      await expectLater(
+        transport
+            .send(const JsonRpcRequest(id: 1, method: 'test/pending'))
+            .timeout(const Duration(seconds: 2)),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      expect(getRequests, 2);
+    });
+
+    test('a resumed request stops after an empty SSE event ID', () async {
+      var getRequests = 0;
+      final resumptionTokens = <String>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        if (request.method == 'GET') {
+          getRequests += 1;
+          expect(
+            request.headers.value('last-event-id'),
+            'checkpoint-1',
+          );
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType('text', 'event-stream')
+            ..headers.set('mcp-session-id', testSessionId)
+            ..write('id:\n\n');
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'id: checkpoint-1\n'
+            'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress').toJson())}\n\n',
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          reconnectionOptions: StreamableHttpReconnectionOptions(
+            initialReconnectionDelay: 10,
+            maxReconnectionDelay: 10,
+            reconnectionDelayGrowFactor: 1,
+            maxRetries: 3,
+          ),
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      await expectLater(
+        transport
+            .send(
+              const JsonRpcRequest(id: 1, method: 'test/pending'),
+              onResumptionToken: resumptionTokens.add,
+            )
+            .timeout(const Duration(seconds: 2)),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      expect(getRequests, 1);
+      expect(resumptionTokens, ['checkpoint-1', '']);
+    });
+
+    test('session reset fails a request opening its resumed GET', () async {
+      final getReceived = Completer<void>();
+      final releaseGetResponse = Completer<void>();
+      final finishGetResponse = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseGetResponse.isCompleted) {
+          releaseGetResponse.complete();
+        }
+        if (!finishGetResponse.isCompleted) {
+          finishGetResponse.complete();
+        }
+      });
+      server.listen((request) async {
+        if (request.method == 'GET') {
+          await request.drain<void>();
+          if (!getReceived.isCompleted) {
+            getReceived.complete();
+          }
+          await releaseGetResponse.future;
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType('text', 'event-stream')
+            ..headers.set('mcp-session-id', testSessionId)
+            ..write(
+              'data: ${jsonEncode(const JsonRpcNotification(method: 'test/resumed').toJson())}\n\n',
+            );
+          await request.response.flush();
+          await finishGetResponse.future;
+          await request.response.close();
+          return;
+        }
+
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        if (body['id'] == 1) {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType('text', 'event-stream')
+            ..headers.set('mcp-session-id', testSessionId)
+            ..write(
+              'retry: 0\n'
+              'id: pending-checkpoint\n'
+              'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress').toJson())}\n\n',
+            );
+        } else {
+          request.response.statusCode = HttpStatus.notFound;
+        }
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      final originalSendExpectation = expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/pending')),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await getReceived.future.timeout(const Duration(seconds: 5));
+
+      await expectLater(
+        transport.send(const JsonRpcRequest(id: 2, method: 'test/reset')),
+        throwsA(isA<StaleSessionError>()),
+      );
+      releaseGetResponse.complete();
+
+      await originalSendExpectation.timeout(const Duration(seconds: 1));
+      finishGetResponse.complete();
+    });
+
+    test('session reset rejects a late request-scoped POST response', () async {
+      final heldPostReceived = Completer<void>();
+      final releaseHeldPost = Completer<void>();
+      final finishHeldPost = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseHeldPost.isCompleted) {
+          releaseHeldPost.complete();
+        }
+        if (!finishHeldPost.isCompleted) {
+          finishHeldPost.complete();
+        }
+      });
+      server.listen((request) async {
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        if (body['id'] != 1) {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        if (!heldPostReceived.isCompleted) {
+          heldPostReceived.complete();
+        }
+        await releaseHeldPost.future;
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'data: ${jsonEncode(const JsonRpcNotification(method: 'test/late').toJson())}\n\n',
+          );
+        await request.response.flush();
+        await finishHeldPost.future;
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      final heldSendExpectation = expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/held')),
+        throwsA(isA<StaleSessionError>()),
+      );
+      await heldPostReceived.future.timeout(const Duration(seconds: 5));
+
+      await expectLater(
+        transport.send(const JsonRpcRequest(id: 2, method: 'test/reset')),
+        throwsA(isA<StaleSessionError>()),
+      );
+
+      await heldSendExpectation.timeout(const Duration(seconds: 1));
+      expect(transport.sessionId, isNull);
+      releaseHeldPost.complete();
+      finishHeldPost.complete();
+    });
+
+    test('session reset aborts a request waiting on its response body',
+        () async {
+      final bodyStarted = Completer<void>();
+      final releaseBody = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseBody.isCompleted) {
+          releaseBody.complete();
+        }
+      });
+      server.listen((request) async {
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        if (body['id'] != 1) {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write('{"jsonrpc":"2.0","id":1,"result":');
+        await request.response.flush();
+        if (!bodyStarted.isCompleted) {
+          bodyStarted.complete();
+        }
+        await releaseBody.future;
+        try {
+          request.response.write('{"ok":true}}');
+          await request.response.close();
+        } on Object {
+          // The expected client-side abort may close the socket first.
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      final heldSendExpectation = expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/held-body')),
+        throwsA(isA<StaleSessionError>()),
+      );
+      await bodyStarted.future.timeout(const Duration(seconds: 5));
+
+      await expectLater(
+        transport.send(const JsonRpcRequest(id: 2, method: 'test/reset')),
+        throwsA(isA<StaleSessionError>()),
+      );
+      await heldSendExpectation.timeout(const Duration(seconds: 1));
+      expect(transport.sessionId, isNull);
+
+      releaseBody.complete();
+    });
+
+    test('session reset suppresses a late terminal SSE callback', () async {
+      final streamOpened = Completer<void>();
+      final releaseTerminal = Completer<void>();
+      final messages = <JsonRpcMessage>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseTerminal.isCompleted) {
+          releaseTerminal.complete();
+        }
+      });
+      server.listen((request) async {
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        if (body['id'] != 1) {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'data: ${jsonEncode(const JsonRpcNotification(method: 'test/progress').toJson())}\n\n',
+          );
+        await request.response.flush();
+        if (!streamOpened.isCompleted) {
+          streamOpened.complete();
+        }
+        await releaseTerminal.future;
+        try {
+          final terminalResponse = jsonEncode(
+            const JsonRpcResponse(
+              id: 1,
+              result: {'ok': true},
+            ).toJson(),
+          );
+          request.response.write('data: $terminalResponse\n\n');
+          await request.response.close();
+        } on Object {
+          // The expected client-side abort may close the socket first.
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport.onmessage = messages.add;
+
+      final heldSendExpectation = expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/held-sse')),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await streamOpened.future.timeout(const Duration(seconds: 5));
+
+      await expectLater(
+        transport.send(const JsonRpcRequest(id: 2, method: 'test/reset')),
+        throwsA(isA<StaleSessionError>()),
+      );
+      await heldSendExpectation.timeout(const Duration(seconds: 1));
+      releaseTerminal.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        messages.whereType<JsonRpcResponse>(),
+        isEmpty,
+      );
+    });
+
+    test('throwing resumption callbacks do not strand terminal responses',
+        () async {
+      final callbackError = Completer<Error>();
+      final responseReceived = Completer<JsonRpcMessage>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        final terminalResponse = jsonEncode(
+          const JsonRpcResponse(
+            id: 1,
+            result: {'ok': true},
+          ).toJson(),
+        );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'id: checkpoint-1\n'
+            'data: $terminalResponse\n\n',
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport
+        ..onmessage = responseReceived.complete
+        ..onerror = (error) {
+          if (!callbackError.isCompleted) {
+            callbackError.complete(error);
+          }
+        };
+
+      await transport.send(
+        const JsonRpcRequest(id: 1, method: 'test/terminal'),
+        onResumptionToken: (_) => throw StateError('callback failed'),
+      );
+
+      expect(
+        await responseReceived.future.timeout(const Duration(seconds: 5)),
+        isA<JsonRpcResponse>(),
+      );
+      expect(
+        await callbackError.future.timeout(const Duration(seconds: 5)),
+        isA<StateError>(),
+      );
+    });
+
+    test('session termination aborts an in-flight request', () async {
+      final postReceived = Completer<void>();
+      final releasePost = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releasePost.isCompleted) {
+          releasePost.complete();
+        }
+      });
+      server.listen((request) async {
+        await request.drain<void>();
+        if (request.method == 'DELETE') {
+          request.response.statusCode = HttpStatus.ok;
+          await request.response.close();
+          return;
+        }
+
+        if (!postReceived.isCompleted) {
+          postReceived.complete();
+        }
+        await releasePost.future;
+        try {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType.json
+            ..headers.set('mcp-session-id', testSessionId)
+            ..write(
+              jsonEncode(
+                const JsonRpcResponse(
+                  id: 1,
+                  result: {'ok': true},
+                ).toJson(),
+              ),
+            );
+          await request.response.close();
+        } on Object {
+          // The expected client-side abort may close the socket first.
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+
+      final heldSendExpectation = expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/held')),
+        throwsA(isA<StaleSessionError>()),
+      );
+      await postReceived.future.timeout(const Duration(seconds: 5));
+
+      await transport.terminateSession();
+      await heldSendExpectation.timeout(const Duration(seconds: 1));
+      expect(transport.sessionId, isNull);
+
+      releasePost.complete();
+    });
+
+    test('late session termination cannot clear a replacement session',
+        () async {
+      const replacementSessionId = 'replacement-session';
+      final deleteReceived = Completer<void>();
+      final releaseDelete = Completer<void>();
+      final responseReceived = Completer<JsonRpcMessage>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseDelete.isCompleted) {
+          releaseDelete.complete();
+        }
+      });
+      server.listen((request) async {
+        if (request.method == 'DELETE') {
+          await request.drain<void>();
+          if (!deleteReceived.isCompleted) {
+            deleteReceived.complete();
+          }
+          await releaseDelete.future;
+          try {
+            request.response.statusCode = HttpStatus.ok;
+            await request.response.close();
+          } on Object {
+            // The stale-session abort may close the socket first.
+          }
+          return;
+        }
+
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        if (body['method'] == 'test/reset') {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..headers.set('mcp-session-id', replacementSessionId)
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 2,
+                result: {'initialized': true},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport.onmessage = responseReceived.complete;
+
+      final terminationExpectation = expectLater(
+        transport.terminateSession(),
+        throwsA(isA<StaleSessionError>()),
+      );
+      await deleteReceived.future.timeout(const Duration(seconds: 5));
+
+      await expectLater(
+        transport.send(const JsonRpcRequest(id: 1, method: 'test/reset')),
+        throwsA(isA<StaleSessionError>()),
+      );
+      await transport.send(
+        const JsonRpcRequest(id: 2, method: 'initialize'),
+      );
+      await responseReceived.future.timeout(const Duration(seconds: 5));
+      expect(transport.sessionId, replacementSessionId);
+
+      releaseDelete.complete();
+      await terminationExpectation.timeout(const Duration(seconds: 1));
+      expect(transport.sessionId, replacementSessionId);
+    });
+
+    test('terminal responses settle sends when onmessage throws', () async {
+      final callbackError = Completer<Error>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        final response = JsonRpcResponse(
+          id: body['id'],
+          result: const {'ok': true},
+        );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write(
+            'data: ${jsonEncode(response.toJson())}\n\n',
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport.onmessage = (_) {
+        throw StateError('expected callback failure');
+      };
+      transport.onerror = (error) {
+        if (!callbackError.isCompleted) {
+          callbackError.complete(error);
+        }
+      };
+
+      await transport.send(
+        const JsonRpcRequest(id: 1, method: 'test/callback'),
+      );
+      final error = await callbackError.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(error, isA<StateError>());
+    });
+
+    test('throwing onerror cannot strand a malformed final SSE event',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write('data: {"jsonrpc":\n\n');
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport.onerror = (_) => throw StateError('callback failed');
+
+      await expectLater(
+        transport
+            .send(const JsonRpcRequest(id: 1, method: 'test/malformed'))
+            .timeout(const Duration(seconds: 2)),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+    });
+
+    test('throwing onerror cannot strand an errored SSE response', () async {
+      final progressReceived = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        final progress = jsonEncode(
+          const JsonRpcNotification(method: 'test/progress').toJson(),
+        );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..contentLength = 4096
+          ..bufferOutput = false
+          ..write('data: $progress\n\n');
+        try {
+          await request.response.close();
+        } on Object {
+          // Closing before contentLength bytes induces the client stream error.
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport
+        ..onmessage = (message) {
+          if (message is JsonRpcNotification && !progressReceived.isCompleted) {
+            progressReceived.complete();
+          }
+        }
+        ..onerror = (_) => throw StateError('callback failed');
+
+      final sendExpectation = expectLater(
+        transport
+            .send(const JsonRpcRequest(id: 1, method: 'test/stream-error'))
+            .timeout(const Duration(seconds: 2)),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await progressReceived.future.timeout(const Duration(seconds: 2));
+      await sendExpectation;
+    });
+
+    test('resumed POST SSE errors keep the original request ID', () async {
+      var getRequests = 0;
+      String? lastEventId;
+      final terminalError = Completer<JsonRpcError>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.method == 'GET') {
+          getRequests += 1;
+          lastEventId = request.headers.value('last-event-id');
+          final error = jsonEncode(
+            const JsonRpcError(
+              id: 7,
+              error: JsonRpcErrorData(
+                code: -32001,
+                message: 'resumed failure',
+                data: {'reason': 'expected'},
+              ),
+            ).toJson(),
+          );
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType('text', 'event-stream')
+            ..headers.set('mcp-session-id', testSessionId)
+            ..write('data: $error\n\n');
+          await request.response.close();
+          return;
+        }
+
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..headers.set('mcp-session-id', testSessionId)
+          ..write('id: checkpoint-error\n\n');
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          reconnectionOptions: StreamableHttpReconnectionOptions(
+            initialReconnectionDelay: 10,
+            maxReconnectionDelay: 10,
+            reconnectionDelayGrowFactor: 1,
+            maxRetries: 2,
+          ),
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      transport.onmessage = (message) {
+        if (message is JsonRpcError && !terminalError.isCompleted) {
+          terminalError.complete(message);
+        }
+      };
+
+      await transport.send(const JsonRpcRequest(id: 7, method: 'test/error'));
+      final error = await terminalError.future.timeout(
+        const Duration(seconds: 5),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(getRequests, 1);
+      expect(lastEventId, 'checkpoint-error');
+      expect(error.id, 7);
+      expect(error.error.code, -32001);
+      expect(error.error.message, 'resumed failure');
+      expect(error.error.data, {'reason': 'expected'});
     });
 
     test('stateless JSON responses reject server-initiated requests', () async {
@@ -1662,6 +3352,21 @@ void main() {
         const Duration(seconds: 2),
         onTimeout: () => throw TimeoutException('onclose not called'),
       );
+    });
+
+    test('close method is idempotent', () async {
+      transport = StreamableHttpClientTransport(serverUrl);
+      await transport.start();
+
+      var closeCallbacks = 0;
+      transport.onclose = () {
+        closeCallbacks += 1;
+      };
+
+      await transport.close();
+      await transport.close();
+
+      expect(closeCallbacks, 1);
     });
 
     test(
@@ -1987,15 +3692,13 @@ void main() {
     );
 
     test('terminateSession sends DELETE request', () async {
-      transport = StreamableHttpClientTransport(serverUrl);
+      transport = StreamableHttpClientTransport(
+        serverUrl,
+        opts: StreamableHttpClientTransportOptions(
+          sessionId: testSessionId,
+        ),
+      );
       await transport.start();
-
-      // Ensure we have a session ID
-      final notification = const JsonRpcInitializedNotification();
-      await transport.send(notification);
-
-      // Wait for session establishment
-      await Future.delayed(const Duration(milliseconds: 500));
 
       // Now terminate the session
       await transport.terminateSession();
@@ -2897,9 +4600,10 @@ void main() {
 
         expect(transport.sessionId, isNull);
 
-        // Send a message that will get a session ID
-        final notification = const JsonRpcInitializedNotification();
-        await transport.send(notification);
+        // Only an initialize response can assign the session ID.
+        await transport.send(
+          const JsonRpcRequest(id: 1, method: 'initialize'),
+        );
 
         await Future.delayed(const Duration(milliseconds: 500));
 

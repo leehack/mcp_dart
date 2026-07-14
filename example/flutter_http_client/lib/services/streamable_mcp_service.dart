@@ -29,9 +29,11 @@ class StreamableMcpService extends ChangeNotifier {
   String serverUrl;
   String? _sessionId;
   int _notificationCount = 0;
+  bool _isConnected = false;
+  bool _disposed = false;
 
   // Status state
-  bool get isConnected => _client != null;
+  bool get isConnected => _isConnected;
   String? get negotiatedProtocolVersion => _client?.getProtocolVersion();
   bool get canTerminateSession {
     final protocolVersion = negotiatedProtocolVersion;
@@ -59,11 +61,21 @@ class StreamableMcpService extends ChangeNotifier {
   /// Constructor
   StreamableMcpService({required this.serverUrl});
 
+  @override
+  void notifyListeners() {
+    if (!_disposed) {
+      super.notifyListeners();
+    }
+  }
+
   void _addNotification({
     required String level,
     required String message,
     bool notify = true,
   }) {
+    if (_disposed) {
+      return;
+    }
     _notificationCount++;
     notifications.add(
       NotificationMessage(
@@ -79,17 +91,28 @@ class StreamableMcpService extends ChangeNotifier {
   }
 
   /// Update server URL
-  void updateServerUrl(String newUrl) {
+  bool updateServerUrl(String newUrl) {
     // Only update if not connected
     if (_client != null) {
       _connectionError =
           'Cannot change server URL while connected. Disconnect first.';
       notifyListeners();
-      return;
+      return false;
     }
 
-    serverUrl = newUrl;
+    final uri = Uri.tryParse(newUrl);
+    if (uri == null ||
+        !uri.hasAuthority ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      _connectionError = 'Enter an absolute HTTP or HTTPS server URL.';
+      notifyListeners();
+      return false;
+    }
+
+    serverUrl = uri.toString();
+    _connectionError = null;
     notifyListeners();
+    return true;
   }
 
   /// Connect to server
@@ -108,6 +131,7 @@ class StreamableMcpService extends ChangeNotifier {
       );
 
       _client!.onerror = (error) {
+        if (_disposed) return;
         _connectionError = 'Client error: $error';
         notifyListeners();
       };
@@ -120,6 +144,7 @@ class StreamableMcpService extends ChangeNotifier {
 
       // Set up transport error handler
       _transport!.onerror = (error) {
+        if (_disposed) return;
         _connectionError = 'Transport error: $error';
         notifyListeners();
       };
@@ -139,7 +164,9 @@ class StreamableMcpService extends ChangeNotifier {
 
             // Schedule UI update
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              notifyListeners();
+              if (!_disposed) {
+                notifyListeners();
+              }
             });
           } catch (error) {
             // Add an error notification to make the error more visible
@@ -205,6 +232,7 @@ class StreamableMcpService extends ChangeNotifier {
                 );
               },
             );
+        _isConnected = true;
         _sessionId = _transport!.sessionId;
         _connectionError = null;
 
@@ -230,8 +258,15 @@ class StreamableMcpService extends ChangeNotifier {
             'If you\'re using a physical device, make sure to use the actual IP address instead of localhost.';
       }
       _connectionError = errorMessage;
+      _isConnected = false;
+      final failedTransport = _transport;
       _client = null;
       _transport = null;
+      try {
+        await failedTransport?.close();
+      } catch (_) {
+        // Connection failures may already have closed the transport.
+      }
       notifyListeners();
       return false;
     }
@@ -260,31 +295,51 @@ class StreamableMcpService extends ChangeNotifier {
           'Warning during disconnect: $error - Cleaning up anyway';
     } finally {
       // Always clean up client and transport regardless of errors
+      _isConnected = false;
       _client = null;
       _transport = null;
+      _availableTools = null;
+      _availableResources = null;
+      _availablePrompts = null;
       _connectionError = null;
       notifyListeners();
     }
   }
 
-  /// Terminate the session but keep the client/transport objects
-  Future<void> terminateSession() async {
-    if (_client == null || _transport == null) {
-      _connectionError = 'Not connected.';
+  /// Terminate the stateful session and disconnect the local client.
+  Future<bool> terminateSession() async {
+    final transport = _transport;
+    if (_client == null || transport == null || !canTerminateSession) {
+      _connectionError = 'No stateful session is available to terminate.';
       notifyListeners();
-      return;
+      return false;
     }
 
+    _connectionError = null;
+    Object? terminationError;
     try {
-      await _transport!.terminateSession();
-      if (_transport!.sessionId == null) {
-        _sessionId = null;
-      }
-      notifyListeners();
+      await transport.terminateSession();
     } catch (error) {
+      terminationError = error;
       _connectionError = 'Error terminating session: $error';
-      notifyListeners();
+    } finally {
+      try {
+        await transport.close();
+      } catch (error) {
+        terminationError ??= error;
+        _connectionError ??= 'Error closing terminated session: $error';
+      }
+      _isConnected = false;
+      _client = null;
+      _transport = null;
+      _sessionId = null;
+      _availableTools = null;
+      _availableResources = null;
+      _availablePrompts = null;
     }
+
+    notifyListeners();
+    return terminationError == null;
   }
 
   /// Reconnect to server
@@ -449,24 +504,38 @@ class StreamableMcpService extends ChangeNotifier {
   /// Clean up resources
   @override
   void dispose() {
-    if (_client != null && _transport != null) {
-      try {
-        // First try to terminate the session gracefully if requested
-        if (_transport!.sessionId != null) {
-          try {
-            _transport!.terminateSession();
-          } catch (_) {
-            // Ignore termination errors during cleanup
-          }
-        }
-
-        // Then close the transport
-        _transport!.close();
-      } catch (_) {
-        // Ignore errors during cleanup
-      }
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    final client = _client;
+    final transport = _transport;
+    client?.onerror = null;
+    transport?.onerror = null;
+    _isConnected = false;
+    _client = null;
+    _transport = null;
+    if (transport != null) {
+      unawaited(_disposeTransport(transport));
     }
     super.dispose();
+  }
+
+  Future<void> _disposeTransport(
+    StreamableHttpClientTransport transport,
+  ) async {
+    if (transport.sessionId != null) {
+      try {
+        await transport.terminateSession();
+      } catch (_) {
+        // Ignore termination errors during cleanup.
+      }
+    }
+    try {
+      await transport.close();
+    } catch (_) {
+      // Ignore close errors during cleanup.
+    }
   }
 
   /// Reset the service state without disconnecting

@@ -321,7 +321,7 @@ void main() {
       expect(receivedErrors, isEmpty);
     });
 
-    test('resumed SSE response rewrites id and joins multi-line data',
+    test('resumed SSE response preserves id and joins multi-line data',
         () async {
       final receivedErrors = <Error>[];
       final receivedTokens = <String>[];
@@ -342,7 +342,7 @@ void main() {
           request.response.write(
             'event: message\n'
             'id: server-event-2\n'
-            'data: {"jsonrpc":"2.0","id":1,\n'
+            'data: {"jsonrpc":"2.0","id":99,\n'
             'data: "result":{"ok":true}}\n\n',
           );
           await request.response.flush();

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_dart/mcp_dart.dart';
@@ -84,6 +86,21 @@ void main() {
     expect(() => buildToolArguments(tool, '2'), throwsFormatException);
   });
 
+  test('accepts only absolute HTTP server URLs', () {
+    final service = StreamableMcpService(
+      serverUrl: 'http://localhost:3000/mcp',
+    );
+    addTearDown(service.dispose);
+
+    expect(service.updateServerUrl('/relative'), isFalse);
+    expect(service.serverUrl, 'http://localhost:3000/mcp');
+    expect(service.connectionError, contains('absolute HTTP or HTTPS'));
+
+    expect(service.updateServerUrl('https://example.com/mcp'), isTrue);
+    expect(service.serverUrl, 'https://example.com/mcp');
+    expect(service.connectionError, isNull);
+  });
+
   testWidgets('rebuilds when service notifications change', (
     WidgetTester tester,
   ) async {
@@ -119,4 +136,146 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     service.dispose();
   });
+
+  testWidgets('disables commands while a request is pending', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _PendingListToolsService();
+    addTearDown(service.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: McpClientScreen(mcpService: service)),
+    );
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'List Tools'));
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<ElevatedButton>(
+            find.widgetWithText(ElevatedButton, 'Disconnect'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<ElevatedButton>(
+            find.widgetWithText(ElevatedButton, 'List Tools'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byIcon(Icons.settings),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    service.completeListTools();
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<ElevatedButton>(
+            find.widgetWithText(ElevatedButton, 'Disconnect'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byIcon(Icons.settings),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('ignores a pending request completion after unmount', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _PendingListToolsService();
+    addTearDown(service.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: McpClientScreen(mcpService: service)),
+    );
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'List Tools'));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+    service.completeListTools();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reports a failed session termination', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FailedTerminationService();
+    addTearDown(service.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: McpClientScreen(mcpService: service)),
+    );
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Terminate Session'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Failed to terminate session'), findsOneWidget);
+    expect(find.textContaining('expected termination failure'), findsOneWidget);
+  });
+}
+
+class _PendingListToolsService extends StreamableMcpService {
+  final Completer<void> _listToolsCompleter = Completer<void>();
+
+  _PendingListToolsService() : super(serverUrl: 'http://localhost:3000/mcp');
+
+  @override
+  bool get isConnected => true;
+
+  @override
+  Future<void> listTools() => _listToolsCompleter.future;
+
+  void completeListTools() => _listToolsCompleter.complete();
+}
+
+class _FailedTerminationService extends StreamableMcpService {
+  _FailedTerminationService() : super(serverUrl: 'http://localhost:3000/mcp');
+
+  @override
+  bool get isConnected => true;
+
+  @override
+  bool get canTerminateSession => true;
+
+  @override
+  String? get connectionError => 'expected termination failure';
+
+  @override
+  Future<bool> terminateSession() async => false;
 }

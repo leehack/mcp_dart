@@ -425,7 +425,7 @@ dart run bin/main.dart dart ../server_stdio.dart
 
 **Location**: [`example/flutter_http_client/`](../example/flutter_http_client/)
 
-Flutter mobile app with MCP integration:
+Flutter Web app with MCP integration:
 
 ```bash
 dart run example/streamable_https/server_streamable_https.dart

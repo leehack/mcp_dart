@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+import 'browser_cors.dart';
+
 // This example intentionally uses MCP 2025-era core task augmentation. For
 // MCP 2026-07-28 input_required, see example/mcp_2026_07_28/server.dart.
 
@@ -356,29 +358,11 @@ class InteractiveServer {
   }
 }
 
-bool _setBrowserCorsHeaders(HttpRequest request) {
-  final origin = request.headers.value('Origin');
-  request.response.headers.set(HttpHeaders.varyHeader, 'Origin');
-  if (origin == null) {
-    return true;
-  }
-  if (!_allowedBrowserOrigins.contains(origin)) {
-    return false;
-  }
-
-  request.response.headers
-    ..set('Access-Control-Allow-Origin', origin)
-    ..set('Access-Control-Allow-Credentials', 'true')
-    ..set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-    ..set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Accept, Authorization, MCP-Protocol-Version, '
-          'MCP-Session-Id, Last-Event-ID',
-    )
-    ..set('Access-Control-Expose-Headers', 'MCP-Session-Id')
-    ..set('Access-Control-Max-Age', '86400');
-  return true;
-}
+bool _setBrowserCorsHeaders(HttpRequest request) =>
+    setExampleBrowserCorsHeaders(
+      request,
+      allowedOrigins: _allowedBrowserOrigins,
+    );
 
 class SimpleToolTaskHandler extends CancelTaskResultHandler {
   final SessionContext context;

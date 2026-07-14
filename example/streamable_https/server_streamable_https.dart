@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+import '../browser_cors.dart';
+
 final allowedBrowserOrigin =
     Platform.environment['MCP_ALLOWED_ORIGIN'] ?? 'http://localhost:8080';
 
@@ -233,24 +235,10 @@ McpServer getServer() {
   return server;
 }
 
-void setCorsHeaders(HttpRequest request) {
-  final origin = request.headers.value('Origin');
-  if (origin == allowedBrowserOrigin) {
-    request.response.headers
-        .set('Access-Control-Allow-Origin', allowedBrowserOrigin);
-    request.response.headers.set('Access-Control-Allow-Credentials', 'true');
-  }
-  request.response.headers.set(HttpHeaders.varyHeader, 'Origin');
-  request.response.headers
-      .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  request.response.headers.set(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, mcp-protocol-version, Last-Event-ID, Authorization',
-  );
-  request.response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours
-  request.response.headers
-      .set('Access-Control-Expose-Headers', 'mcp-session-id');
-}
+bool setCorsHeaders(HttpRequest request) => setExampleBrowserCorsHeaders(
+      request,
+      allowedOrigins: {allowedBrowserOrigin},
+    );
 
 void main() async {
   final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 3000;
@@ -263,12 +251,16 @@ void main() async {
   print('Allowed browser origin: $allowedBrowserOrigin');
 
   await for (final request in server) {
-    // Apply CORS headers to all responses
-    setCorsHeaders(request);
+    // Apply CORS headers to all responses.
+    if (!setCorsHeaders(request)) {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+      continue;
+    }
 
     if (request.method == 'OPTIONS') {
       // Handle CORS preflight request
-      request.response.statusCode = HttpStatus.ok;
+      request.response.statusCode = HttpStatus.noContent;
       await request.response.close();
       continue;
     }
@@ -386,8 +378,6 @@ Future<void> handlePostRequest(
         ..statusCode =
             sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-      // Apply CORS headers to this specific response
-      setCorsHeaders(request);
       request.response.write(
         jsonEncode(
           JsonRpcError(
@@ -423,8 +413,6 @@ Future<void> handlePostRequest(
       request.response
         ..statusCode = HttpStatus.internalServerError
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-      // Apply CORS headers
-      setCorsHeaders(request);
       request.response.write(
         jsonEncode(
           JsonRpcError(
@@ -450,8 +438,6 @@ Future<void> handleGetRequest(
   if (sessionId == null || !transports.containsKey(sessionId)) {
     request.response.statusCode =
         sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound;
-    // Apply CORS headers
-    setCorsHeaders(request);
     request.response
       ..write(sessionId == null ? 'Missing session ID' : 'Session not found')
       ..close();
@@ -479,8 +465,6 @@ Future<void> handleDeleteRequest(
   if (sessionId == null || !transports.containsKey(sessionId)) {
     request.response.statusCode =
         sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound;
-    // Apply CORS headers
-    setCorsHeaders(request);
     request.response
       ..write(sessionId == null ? 'Missing session ID' : 'Session not found')
       ..close();
@@ -506,8 +490,6 @@ Future<void> handleDeleteRequest(
 
     if (!headersSent) {
       request.response.statusCode = HttpStatus.internalServerError;
-      // Apply CORS headers
-      setCorsHeaders(request);
       request.response
         ..write('Error processing session termination')
         ..close();

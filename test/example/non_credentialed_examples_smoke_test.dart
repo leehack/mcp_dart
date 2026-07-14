@@ -195,6 +195,7 @@ void main() {
       'browser server examples allow only documented CORS origins',
       () async {
         for (final script in [
+          'example/streamable_https/server_streamable_https.dart',
           'example/simple_task_interactive_server.dart',
           'example/elicitation_http_server.dart',
         ]) {
@@ -527,6 +528,45 @@ Future<void> _expectBrowserCorsPolicy(String script) async {
       contains('mcp-protocol-version'),
       reason: script,
     );
+    expect(
+      allowed.allowHeaders?.toLowerCase(),
+      contains('mcp-method'),
+      reason: script,
+    );
+    expect(
+      allowed.allowHeaders?.toLowerCase(),
+      contains('mcp-name'),
+      reason: script,
+    );
+    expect(
+      allowed.allowHeaders?.toLowerCase(),
+      contains('mcp-param-region'),
+      reason: script,
+    );
+    expect(
+      allowed.allowHeaders?.toLowerCase(),
+      isNot(contains('x-unrelated')),
+      reason: script,
+    );
+    expect(allowed.allowCredentials, 'true', reason: script);
+    for (final method in ['get', 'post', 'delete', 'options']) {
+      expect(
+        allowed.allowMethods?.toLowerCase(),
+        contains(method),
+        reason: script,
+      );
+    }
+    expect(
+      allowed.exposeHeaders?.toLowerCase(),
+      contains('mcp-session-id'),
+      reason: script,
+    );
+    expect(allowed.vary?.toLowerCase(), contains('origin'), reason: script);
+    expect(
+      allowed.vary?.toLowerCase(),
+      contains('access-control-request-headers'),
+      reason: script,
+    );
 
     final rejected = await _preflight(
       port,
@@ -569,13 +609,20 @@ Future<_PreflightResult> _preflight(
           ..set('Access-Control-Request-Method', 'POST')
           ..set(
             'Access-Control-Request-Headers',
-            'content-type,mcp-protocol-version,mcp-session-id',
+            'content-type,mcp-protocol-version,mcp-session-id,'
+                'mcp-method,mcp-name,mcp-param-region,x-unrelated',
           );
         final response = await request.close();
         final result = _PreflightResult(
           statusCode: response.statusCode,
           allowOrigin: response.headers.value('Access-Control-Allow-Origin'),
           allowHeaders: response.headers.value('Access-Control-Allow-Headers'),
+          allowCredentials:
+              response.headers.value('Access-Control-Allow-Credentials'),
+          allowMethods: response.headers.value('Access-Control-Allow-Methods'),
+          exposeHeaders:
+              response.headers.value('Access-Control-Expose-Headers'),
+          vary: response.headers.value(HttpHeaders.varyHeader),
         );
         await response.drain<void>();
         return result;
@@ -631,11 +678,19 @@ class _PreflightResult {
   final int statusCode;
   final String? allowOrigin;
   final String? allowHeaders;
+  final String? allowCredentials;
+  final String? allowMethods;
+  final String? exposeHeaders;
+  final String? vary;
 
   const _PreflightResult({
     required this.statusCode,
     required this.allowOrigin,
     required this.allowHeaders,
+    required this.allowCredentials,
+    required this.allowMethods,
+    required this.exposeHeaders,
+    required this.vary,
   });
 }
 

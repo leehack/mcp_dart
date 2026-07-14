@@ -171,7 +171,9 @@ class McpClientScreenState extends State<McpClientScreen> {
   }) {
     return ElevatedButton(
       onPressed:
-          (enabled && (!requiresConnection || widget.mcpService.isConnected))
+          (!_isLoading &&
+                  enabled &&
+                  (!requiresConnection || widget.mcpService.isConnected))
               ? onPressed
               : null,
       style:
@@ -181,12 +183,14 @@ class McpClientScreenState extends State<McpClientScreen> {
   }
 
   void _showLoading(bool isLoading) {
+    if (!mounted) return;
     setState(() {
       _isLoading = isLoading;
     });
   }
 
   void _setResponse(String text) {
+    if (!mounted) return;
     setState(() {
       _responseText = text;
     });
@@ -236,8 +240,12 @@ class McpClientScreenState extends State<McpClientScreen> {
   Future<void> _terminateSession() async {
     _showLoading(true);
     try {
-      await widget.mcpService.terminateSession();
-      _setResponse('Session terminated');
+      final terminated = await widget.mcpService.terminateSession();
+      _setResponse(
+        terminated
+            ? 'Session terminated'
+            : 'Failed to terminate session: ${widget.mcpService.connectionError}',
+      );
     } catch (e) {
       _setResponse('Error terminating session: $e');
     } finally {
@@ -286,9 +294,11 @@ class McpClientScreenState extends State<McpClientScreen> {
             orElse: () => tools.first,
           );
 
-          setState(() {
-            _selectedTool = commonTool.name;
-          });
+          if (mounted) {
+            setState(() {
+              _selectedTool = commonTool.name;
+            });
+          }
         }
       }
     } catch (e) {
@@ -394,9 +404,11 @@ class McpClientScreenState extends State<McpClientScreen> {
 
         // Update dropdown with first prompt
         if (prompts.isNotEmpty) {
-          setState(() {
-            _selectedPrompt = prompts.first.name;
-          });
+          if (mounted) {
+            setState(() {
+              _selectedPrompt = prompts.first.name;
+            });
+          }
         }
       }
     } catch (e) {
@@ -493,54 +505,60 @@ class McpClientScreenState extends State<McpClientScreen> {
   // Method removed (web-specific functionality)
 
   // Show server configuration dialog
-  void _showServerConfigDialog() {
+  Future<void> _showServerConfigDialog() async {
     final serverController = TextEditingController(
       text: widget.mcpService.serverUrl,
     );
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Server Configuration'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: serverController,
-                  decoration: const InputDecoration(
-                    labelText: 'Server URL',
-                    hintText: 'e.g., http://10.0.2.2:3000/mcp',
-                    border: OutlineInputBorder(),
+    try {
+      await showDialog<void>(
+        context: context,
+        builder:
+            (dialogContext) => AlertDialog(
+              title: const Text('Server Configuration'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: serverController,
+                    decoration: const InputDecoration(
+                      labelText: 'Server URL',
+                      hintText: 'e.g., http://10.0.2.2:3000/mcp',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Note: For physical devices, use the actual IP address instead of localhost. '
+                    'For Android emulators, use 10.0.2.2 instead of localhost.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Note: For physical devices, use the actual IP address instead of localhost. '
-                  'For Android emulators, use 10.0.2.2 instead of localhost.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                TextButton(
+                  onPressed: () {
+                    final newUrl = serverController.text.trim();
+                    final updated = widget.mcpService.updateServerUrl(newUrl);
+                    _setResponse(
+                      updated
+                          ? 'Server URL updated to: $newUrl'
+                          : 'Server URL not updated: ${widget.mcpService.connectionError}',
+                    );
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Update'),
                 ),
               ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  final newUrl = serverController.text.trim();
-                  if (newUrl.isNotEmpty) {
-                    widget.mcpService.updateServerUrl(newUrl);
-                    _setResponse('Server URL updated to: $newUrl');
-                  }
-                  Navigator.pop(context);
-                },
-                child: const Text('Update'),
-              ),
-            ],
-          ),
-    );
+      );
+    } finally {
+      serverController.dispose();
+    }
   }
 
   // Show an error dialog with detailed information
@@ -549,6 +567,7 @@ class McpClientScreenState extends State<McpClientScreen> {
     String message, {
     Object? error,
   }) async {
+    if (!mounted) return;
     final errorDetails = error != null ? '\n\nError details: $error' : '';
 
     await showDialog(
@@ -577,7 +596,10 @@ class McpClientScreenState extends State<McpClientScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: _showServerConfigDialog,
+            onPressed:
+                _isLoading || widget.mcpService.isConnected
+                    ? null
+                    : _showServerConfigDialog,
             tooltip: 'Configure Server',
           ),
           Padding(
@@ -607,6 +629,7 @@ class McpClientScreenState extends State<McpClientScreen> {
                     'Connect',
                     _connect,
                     requiresConnection: false,
+                    enabled: !widget.mcpService.isConnected,
                   ),
                   _buildCommandButton('Disconnect', _disconnect),
                   _buildCommandButton(
@@ -673,7 +696,7 @@ class McpClientScreenState extends State<McpClientScreen> {
                           initialValue: _selectedTool,
                           items: availableTools,
                           onChanged:
-                              widget.mcpService.isConnected
+                              widget.mcpService.isConnected && !_isLoading
                                   ? (value) {
                                     if (value != null) {
                                       setState(() {
@@ -692,7 +715,9 @@ class McpClientScreenState extends State<McpClientScreen> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed:
-                          widget.mcpService.isConnected ? _callTool : null,
+                          widget.mcpService.isConnected && !_isLoading
+                              ? _callTool
+                              : null,
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(120, 58),
                       ),
@@ -736,20 +761,25 @@ class McpClientScreenState extends State<McpClientScreen> {
                                   ),
                                 )
                                 .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() {
-                              _selectedPrompt = value;
-                            });
-                          }
-                        },
+                        onChanged:
+                            _isLoading || !widget.mcpService.isConnected
+                                ? null
+                                : (value) {
+                                  if (value != null) {
+                                    setState(() {
+                                      _selectedPrompt = value;
+                                    });
+                                  }
+                                },
                       ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: OutlinedButton(
                         onPressed:
-                            widget.mcpService.isConnected ? _getPrompt : null,
+                            widget.mcpService.isConnected && !_isLoading
+                                ? _getPrompt
+                                : null,
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(120, 58),
                         ),

@@ -11,22 +11,33 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late final StreamableMcpService _mcpService = StreamableMcpService(
+    serverUrl: 'http://localhost:3000/mcp',
+  );
+
+  @override
+  void dispose() {
+    _mcpService.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Simple MCP Client',
+      title: 'MCP Dart Flutter Client',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: McpClientScreen(
-        mcpService: StreamableMcpService(
-          serverUrl: 'http://localhost:3000/mcp',
-        ),
-      ),
+      home: McpClientScreen(mcpService: _mcpService),
       builder: (context, child) {
         // Add an error handling wrapper around the app
         return Builder(

@@ -19,6 +19,8 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+import 'browser_cors.dart';
+
 final allowedBrowserOrigin =
     Platform.environment['MCP_ALLOWED_ORIGIN'] ?? 'http://localhost:8080';
 
@@ -516,28 +518,10 @@ $city, $state $zipCode${phone.isNotEmpty ? '\nPhone: $phone' : ''}''',
   return server;
 }
 
-bool setCorsHeaders(HttpRequest request) {
-  final response = request.response;
-  final origin = request.headers.value('Origin');
-  response.headers.set(HttpHeaders.varyHeader, 'Origin');
-  if (origin != null && origin != allowedBrowserOrigin) {
-    return false;
-  }
-  if (origin == allowedBrowserOrigin) {
-    response.headers.set('Access-Control-Allow-Origin', allowedBrowserOrigin);
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
-  }
-  response.headers
-      .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  response.headers.set(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, mcp-protocol-version, '
-        'mcp-session-id, Last-Event-ID, Authorization',
-  );
-  response.headers.set('Access-Control-Max-Age', '86400');
-  response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
-  return true;
-}
+bool setCorsHeaders(HttpRequest request) => setExampleBrowserCorsHeaders(
+      request,
+      allowedOrigins: {allowedBrowserOrigin},
+    );
 
 void main() async {
   final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 3000;

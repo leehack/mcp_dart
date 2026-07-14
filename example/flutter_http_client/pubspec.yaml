@@ -1,5 +1,5 @@
 name: flutter_http_client
-description: "A new Flutter project."
+description: "Flutter Web example for mcp_dart's Streamable HTTP client."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -31,19 +31,13 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
+  # Flutter's web icon tree shaker detects the Cupertino font through the
+  # framework even though this example primarily uses Material widgets.
   cupertino_icons: ^1.0.8
 
   # MCP Dart package for Model Context Protocol
   mcp_dart:
     path: ../..
-
-  # HTTP package for API requests
-  http: ^1.1.0
-
-  # Provider for state management
-  provider: ^6.1.1
 
 dev_dependencies:
   flutter_test:

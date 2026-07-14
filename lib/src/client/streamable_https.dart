@@ -47,6 +47,18 @@ class StartSseOptions {
   /// so that response can be associated with the new resumed request.
   final dynamic replayMessageId;
 
+  /// The originating request ID for a request-scoped SSE response.
+  ///
+  /// Unlike [replayMessageId], this does not rewrite wire messages. It only
+  /// tracks completion and supplies the ID if the stream must later resume.
+  final RequestId? requestMessageId;
+
+  /// Completes the originating send after its terminal response is dispatched.
+  final void Function()? onTerminalResponse;
+
+  /// Fails the originating send when its response stream cannot resume.
+  final void Function(Error error)? onRequestStreamEnd;
+
   /// Whether to attempt reconnection when the stream closes.
   /// Default is true.
   final bool shouldReconnect;
@@ -58,9 +70,38 @@ class StartSseOptions {
     this.resumptionToken,
     this.onResumptionToken,
     this.replayMessageId,
+    this.requestMessageId,
+    this.onTerminalResponse,
+    this.onRequestStreamEnd,
     this.shouldReconnect = true,
     this.rejectServerRequests = false,
   });
+}
+
+class _HttpAbortBinding {
+  final Completer<void> _abortTrigger = Completer<void>();
+  // Cancelled by [dispose] after the bound request settles.
+  // ignore: cancel_subscriptions
+  StreamSubscription<bool>? _subscription;
+
+  _HttpAbortBinding(StreamController<bool>? controller) {
+    if (controller == null || controller.isClosed) {
+      return;
+    }
+    _subscription = controller.stream.listen((_) {
+      if (!_abortTrigger.isCompleted) {
+        _abortTrigger.complete();
+      }
+    });
+  }
+
+  Future<void> get abortTrigger => _abortTrigger.future;
+
+  Future<void> dispose() async {
+    final subscription = _subscription;
+    _subscription = null;
+    await subscription?.cancel();
+  }
 }
 
 /// Configuration options for reconnection behavior of the StreamableHttpClientTransport.
@@ -1238,35 +1279,101 @@ class StreamableHttpClientTransport
     _sessionId = null;
     _protocolVersion = null;
     _staleSessionDetected = true;
+    _signalSessionChange();
+    return staleSessionId;
+  }
+
+  void _signalSessionChange() {
     _sessionGeneration += 1;
     if (_abortController != null && !_abortController!.isClosed) {
       _abortController!.add(true);
     }
-    return staleSessionId;
   }
 
-  Future<void> _startOrAuthSse(StartSseOptions options) async {
+  Future<void> _startOrAuthSse(
+    StartSseOptions options, {
+    int? sessionGeneration,
+    int reconnectionAttempt = 0,
+  }) async {
     if (_protocolVersion != null &&
         isStatelessProtocolVersion(_protocolVersion!)) {
       return;
     }
 
+    final expectedSessionGeneration = sessionGeneration ?? _sessionGeneration;
+    final trackedRequestId =
+        options.requestMessageId ?? options.replayMessageId;
+    Future<void> cancelResponseStream(http.StreamedResponse response) async {
+      final responseSubscription = response.stream.listen(null);
+      await responseSubscription.cancel();
+    }
+
+    void failRequestStream(Error error) {
+      final onRequestStreamEnd = options.onRequestStreamEnd;
+      if (onRequestStreamEnd != null) {
+        onRequestStreamEnd(error);
+        return;
+      }
+      if (trackedRequestId != null) {
+        throw error;
+      }
+    }
+
+    McpError interruptedConnectionError() {
+      final detail = _isClosed
+          ? 'The transport closed while reconnecting.'
+          : 'The session reset while reconnecting.';
+      return _requestSseStreamEndedError(trackedRequestId, detail);
+    }
+
+    bool connectionInterrupted() =>
+        _isClosed || expectedSessionGeneration != _sessionGeneration;
+
+    void handleInterruptedConnection() {
+      failRequestStream(interruptedConnectionError());
+    }
+
+    if (connectionInterrupted()) {
+      handleInterruptedConnection();
+      return;
+    }
+
     final resumptionToken = options.resumptionToken;
+    _HttpAbortBinding? abortBinding;
     try {
       // Try to open an initial SSE stream with GET to listen for server messages
       // This is optional according to the spec - server may not support it
       final headers = await _commonHeaders();
+      if (connectionInterrupted()) {
+        handleInterruptedConnection();
+        return;
+      }
       final requestSessionId = headers['mcp-session-id'];
       headers['Accept'] = "text/event-stream";
 
       // Include Last-Event-ID header for resumable streams if provided
-      if (resumptionToken != null) {
-        headers['last-event-id'] = resumptionToken;
+      if (resumptionToken?.isNotEmpty == true) {
+        headers['last-event-id'] = resumptionToken!;
       }
 
-      final request = http.Request('GET', _url);
+      abortBinding = _HttpAbortBinding(_abortController);
+      if (connectionInterrupted()) {
+        handleInterruptedConnection();
+        return;
+      }
+      final request = http.AbortableRequest(
+        'GET',
+        _url,
+        abortTrigger: abortBinding.abortTrigger,
+      );
       request.headers.addAll(headers);
       final response = await _httpClient.send(request);
+
+      if (connectionInterrupted()) {
+        await cancelResponseStream(response);
+        handleInterruptedConnection();
+        return;
+      }
 
       if (response.statusCode != 200) {
         if (_authProvider != null &&
@@ -1280,11 +1387,26 @@ class StreamableHttpClientTransport
         // 405 indicates that the server does not offer an SSE stream at GET endpoint
         // This is an expected case that should not trigger an error
         if (response.statusCode == 405) {
+          await cancelResponseStream(response);
+          if (connectionInterrupted()) {
+            handleInterruptedConnection();
+            return;
+          }
+          failRequestStream(
+            _requestSseStreamEndedError(
+              trackedRequestId,
+              'The server does not support GET resumption.',
+            ),
+          );
           return;
         }
 
         if (response.statusCode == 404 && requestSessionId != null) {
-          await response.stream.drain<void>();
+          await cancelResponseStream(response);
+          if (connectionInterrupted()) {
+            handleInterruptedConnection();
+            return;
+          }
           String? staleSessionId = requestSessionId;
           if (_sessionId == requestSessionId) {
             staleSessionId = _clearStaleSession();
@@ -1296,21 +1418,49 @@ class StreamableHttpClientTransport
           );
         }
 
+        await cancelResponseStream(response);
         throw StreamableHttpError(
           response.statusCode,
           "Failed to open SSE stream: ${response.reasonPhrase}",
         );
       }
 
-      _handleSseStream(response, options);
-    } catch (error) {
-      if (error is Error) {
-        onerror?.call(error);
-      } else {
-        final err = McpError(0, error.toString());
-        onerror?.call(err);
+      final responseMediaType = response.headers['content-type']
+          ?.split(';')
+          .first
+          .trim()
+          .toLowerCase();
+      if (responseMediaType != 'text/event-stream') {
+        await cancelResponseStream(response);
+        if (connectionInterrupted()) {
+          handleInterruptedConnection();
+          return;
+        }
+        throw StreamableHttpError(
+          response.statusCode,
+          'Expected text/event-stream from GET, received '
+          '${responseMediaType ?? 'no Content-Type'}',
+        );
       }
+
+      _handleSseStream(
+        response,
+        options,
+        isReconnectable: true,
+        reconnectionAttempt: reconnectionAttempt,
+      );
+    } on http.RequestAbortedException catch (error) {
+      if (connectionInterrupted()) {
+        handleInterruptedConnection();
+        return;
+      }
+      _reportError(error);
       rethrow;
+    } catch (error) {
+      _reportError(error);
+      rethrow;
+    } finally {
+      await abortBinding?.dispose();
     }
   }
 
@@ -1330,6 +1480,18 @@ class StreamableHttpClientTransport
         .clamp(0, maxDelay);
   }
 
+  McpError _requestSseStreamEndedError(
+    RequestId? requestId, [
+    String? detail,
+  ]) {
+    final requestLabel = requestId == null ? '' : ' for request $requestId';
+    final detailSuffix = detail == null ? '' : ' $detail';
+    return McpError(
+      ErrorCode.connectionClosed.value,
+      'Request SSE stream$requestLabel ended before a response.$detailSuffix',
+    );
+  }
+
   /// Schedule a reconnection attempt with exponential backoff
   ///
   /// @param options The SSE connection options
@@ -1341,7 +1503,24 @@ class StreamableHttpClientTransport
     int? sessionGeneration,
   ]) {
     final expectedSessionGeneration = sessionGeneration ?? _sessionGeneration;
+    void reportInterruptedReconnection() {
+      final onRequestStreamEnd = options.onRequestStreamEnd;
+      if (onRequestStreamEnd == null) {
+        return;
+      }
+      final detail = _isClosed
+          ? 'The transport closed during reconnection.'
+          : 'The session reset during reconnection.';
+      onRequestStreamEnd(
+        _requestSseStreamEndedError(
+          options.requestMessageId ?? options.replayMessageId,
+          detail,
+        ),
+      );
+    }
+
     if (_isClosed || expectedSessionGeneration != _sessionGeneration) {
+      reportInterruptedReconnection();
       return;
     }
 
@@ -1350,30 +1529,75 @@ class StreamableHttpClientTransport
 
     // Check if we've exceeded maximum retry attempts
     if (maxRetries > 0 && attemptCount >= maxRetries) {
-      onerror?.call(
-        McpError(0, "Maximum reconnection attempts ($maxRetries) exceeded."),
+      final error = _requestSseStreamEndedError(
+        options.requestMessageId ?? options.replayMessageId,
+        'Maximum reconnection attempts ($maxRetries) exceeded.',
       );
+      _reportError(error);
+      options.onRequestStreamEnd?.call(error);
       return;
     }
 
     // Calculate next delay based on current attempt count
     final delay = retryDelayMs ?? _getNextReconnectionDelay(attemptCount);
 
-    // Schedule the reconnection
-    Future.delayed(Duration(milliseconds: delay), () {
+    Timer? reconnectTimer;
+    // Cancelled when the timer fires or the transport/session is aborted.
+    // ignore: cancel_subscriptions
+    StreamSubscription<bool>? abortSubscription;
+    var waitingToReconnect = true;
+
+    void finishWaiting() {
+      if (!waitingToReconnect) {
+        return;
+      }
+      waitingToReconnect = false;
+      reconnectTimer?.cancel();
+      final currentAbortSubscription = abortSubscription;
+      abortSubscription = null;
+      if (currentAbortSubscription != null) {
+        unawaited(currentAbortSubscription.cancel());
+      }
+    }
+
+    void interruptWaiting() {
+      if (!waitingToReconnect) {
+        return;
+      }
+      finishWaiting();
+      reportInterruptedReconnection();
+    }
+
+    abortSubscription = _abortController?.stream.listen((_) {
+      interruptWaiting();
+    });
+
+    // Schedule the reconnection while keeping the request lifecycle attached
+    // to transport/session cancellation during the backoff interval.
+    reconnectTimer = Timer(Duration(milliseconds: delay), () {
+      if (!waitingToReconnect) {
+        return;
+      }
+      finishWaiting();
       if (_isClosed || expectedSessionGeneration != _sessionGeneration) {
+        reportInterruptedReconnection();
         return;
       }
 
       // Use the last event ID to resume where we left off
-      _startOrAuthSse(options).catchError((error) {
+      _startOrAuthSse(
+        options,
+        sessionGeneration: expectedSessionGeneration,
+        reconnectionAttempt: attemptCount + 1,
+      ).catchError((error) {
         if (error is StaleSessionError) {
+          options.onRequestStreamEnd?.call(error);
           return null;
         }
 
         final errorMessage =
             error is Error ? error.toString() : error.toString();
-        onerror?.call(
+        _reportError(
           McpError(0, "Failed to reconnect SSE stream: $errorMessage"),
         );
 
@@ -1391,31 +1615,117 @@ class StreamableHttpClientTransport
     });
   }
 
-  void _handleSseStream(http.StreamedResponse stream, StartSseOptions options) {
+  void _handleSseStream(
+    http.StreamedResponse stream,
+    StartSseOptions options, {
+    required bool isReconnectable,
+    int reconnectionAttempt = 0,
+  }) {
     final onResumptionToken = options.onResumptionToken;
     final replayMessageId = options.replayMessageId;
+    final requestMessageId = options.requestMessageId ?? replayMessageId;
     final streamSessionGeneration = _sessionGeneration;
 
-    String? lastEventId;
+    String? lastEventId = options.resumptionToken;
     int? retryDelayMs;
     String buffer = '';
     String? eventName;
     String? eventId;
     String? eventData;
+    var terminalResponseReceived = false;
+    var responseStreamFinished = false;
+    var requestLifecycleSettled = false;
+    // Cancelled by every stream terminal path and by the abort callback.
+    // ignore: cancel_subscriptions
+    StreamSubscription<bool>? abortSubscription;
+    // Cancelled by stream completion/error or transport/session interruption.
+    // ignore: cancel_subscriptions
+    StreamSubscription<String>? streamSubscription;
+
+    bool streamIsCurrent() =>
+        !_isClosed && streamSessionGeneration == _sessionGeneration;
+
+    void cancelAbortSubscription() {
+      final current = abortSubscription;
+      abortSubscription = null;
+      if (current != null) {
+        unawaited(current.cancel());
+      }
+    }
+
+    void cancelStreamSubscription() {
+      final current = streamSubscription;
+      streamSubscription = null;
+      if (current != null) {
+        unawaited(current.cancel());
+      }
+    }
+
+    void settleTerminalResponse() {
+      if (requestLifecycleSettled) {
+        return;
+      }
+      requestLifecycleSettled = true;
+      options.onTerminalResponse?.call();
+    }
+
+    void settleRequestError(Error error) {
+      if (requestLifecycleSettled) {
+        return;
+      }
+      requestLifecycleSettled = true;
+      options.onRequestStreamEnd?.call(error);
+    }
+
+    void reportResumptionToken(String token) {
+      try {
+        onResumptionToken?.call(token);
+      } catch (error) {
+        _reportError(error);
+      }
+    }
+
+    void interruptStream([String? detail]) {
+      responseStreamFinished = true;
+      cancelStreamSubscription();
+      cancelAbortSubscription();
+      if (requestMessageId != null && !terminalResponseReceived) {
+        settleRequestError(
+          _requestSseStreamEndedError(
+            requestMessageId,
+            detail ?? 'The transport closed or reset the session.',
+          ),
+        );
+      }
+    }
 
     // Function to process a complete SSE event
     void processEvent() {
+      if (!streamIsCurrent()) {
+        interruptStream();
+        return;
+      }
+
       final data = eventData;
+
+      // A non-empty ID-only event primes a request-scoped POST stream for
+      // resumption. Capture it before checking data; an empty ID resets the
+      // SSE cursor and is not a usable resumption token.
+      if (eventId != null) {
+        final nextEventId = eventId!;
+        if (nextEventId.isEmpty) {
+          lastEventId = null;
+          reportResumptionToken('');
+        } else {
+          lastEventId = nextEventId;
+          reportResumptionToken(nextEventId);
+        }
+      }
+
       if (data == null) {
         eventName = null;
         eventId = null;
         return;
-      }
-
-      // Update last event ID if provided
-      if (eventId != null) {
-        lastEventId = eventId;
-        onResumptionToken?.call(eventId!);
       }
 
       final currentEventName = eventName;
@@ -1434,39 +1744,61 @@ class StreamableHttpClientTransport
       try {
         final message = JsonRpcMessage.fromJson(jsonDecode(data));
 
-        // Can't set id directly if it's final, need to create a new message
-        if (replayMessageId != null && message is JsonRpcResponse) {
-          // Create a new response with the same data but different ID
-          final newMessage = JsonRpcResponse(
-            id: replayMessageId,
-            result: message.result,
-            meta: message.meta,
+        final isResponseMessage =
+            message is JsonRpcResponse || message is JsonRpcError;
+        final responseId = switch (message) {
+          JsonRpcResponse(:final id) => id,
+          JsonRpcError(:final id) => id,
+          _ => null,
+        };
+        final isTerminalResponse = requestMessageId != null &&
+            isResponseMessage &&
+            responseId == requestMessageId;
+        if (isTerminalResponse) {
+          terminalResponseReceived = true;
+        } else if (requestMessageId != null && isResponseMessage) {
+          final error = McpError(
+            ErrorCode.invalidRequest.value,
+            'Request SSE stream for $requestMessageId received a response '
+            'for ${responseId ?? 'a null ID'}.',
           );
-          _dispatchReceivedMessage(
-            newMessage,
-            rejectServerRequests: options.rejectServerRequests,
-          );
-        } else {
+          _reportError(error);
+        }
+
+        try {
           _dispatchReceivedMessage(
             message,
             rejectServerRequests: options.rejectServerRequests,
           );
+        } finally {
+          if (isTerminalResponse) {
+            settleTerminalResponse();
+          }
         }
       } catch (error) {
-        if (error is Error) {
-          onerror?.call(error);
-        } else {
-          onerror?.call(McpError(0, error.toString()));
-        }
+        _reportError(error);
       }
     }
 
     // Helper function to handle reconnection logic
-    void handleReconnection(String? eventId, [int? retryDelayOverrideMs]) {
-      if (_isClosed ||
-          !options.shouldReconnect ||
-          streamSessionGeneration != _sessionGeneration) {
-        return;
+    bool handleReconnection(String? eventId, [int? retryDelayOverrideMs]) {
+      if (_isClosed || streamSessionGeneration != _sessionGeneration) {
+        if (requestMessageId != null && !terminalResponseReceived) {
+          settleRequestError(
+            _requestSseStreamEndedError(
+              requestMessageId,
+              'The transport closed or reset the session.',
+            ),
+          );
+        }
+        return true;
+      }
+      if (terminalResponseReceived) {
+        return true;
+      }
+      if (!options.shouldReconnect ||
+          eventId == null && (requestMessageId != null || !isReconnectable)) {
+        return false;
       }
 
       if (_abortController != null && !_abortController!.isClosed) {
@@ -1475,28 +1807,53 @@ class StreamableHttpClientTransport
             StartSseOptions(
               resumptionToken: eventId,
               onResumptionToken: onResumptionToken,
-              replayMessageId: replayMessageId,
+              replayMessageId: replayMessageId ?? requestMessageId,
+              requestMessageId: requestMessageId,
+              onTerminalResponse: options.onTerminalResponse,
+              onRequestStreamEnd: options.onRequestStreamEnd,
               shouldReconnect: options.shouldReconnect,
+              rejectServerRequests: options.rejectServerRequests,
             ),
-            0,
+            reconnectionAttempt,
             retryDelayOverrideMs,
             streamSessionGeneration,
           );
+          return true;
         } catch (error) {
           final errorMessage =
               error is Error ? error.toString() : error.toString();
-          onerror?.call(McpError(0, "Failed to reconnect: $errorMessage"));
+          _reportError(McpError(0, "Failed to reconnect: $errorMessage"));
         }
       }
+      return false;
     }
 
-    // Convert the stream to a broadcast stream to allow multiple listeners if needed
-    final broadcastStream = stream.stream;
+    void reportUnresumableEnd([String? detail]) {
+      if (terminalResponseReceived || requestMessageId == null) {
+        return;
+      }
+      settleRequestError(
+        _requestSseStreamEndedError(requestMessageId, detail),
+      );
+    }
+
+    if (!streamIsCurrent()) {
+      final staleSubscription = stream.stream.listen(null);
+      unawaited(staleSubscription.cancel());
+      interruptStream();
+      return;
+    }
 
     // Create a subscription to the stream
-    final subscription =
-        broadcastStream.transform(utf8.decoder).asBroadcastStream().listen(
+    streamSubscription = stream.stream.transform(utf8.decoder).listen(
       (data) {
+        if (responseStreamFinished) {
+          return;
+        }
+        if (!streamIsCurrent()) {
+          interruptStream();
+          return;
+        }
         buffer += data;
 
         // Process the buffer line by line
@@ -1520,57 +1877,106 @@ class StreamableHttpClientTransport
           }
 
           final colonIndex = line.indexOf(':');
-          if (colonIndex > 0) {
-            final field = line.substring(0, colonIndex);
-            // The value starts after colon + optional space
-            final valueStart = colonIndex +
-                1 +
-                (line.length > colonIndex + 1 && line[colonIndex + 1] == ' '
-                    ? 1
-                    : 0);
-            final value = line.substring(valueStart);
+          final field = colonIndex == -1 ? line : line.substring(0, colonIndex);
+          final value = colonIndex == -1
+              ? ''
+              : line.substring(
+                  colonIndex +
+                      1 +
+                      (line.length > colonIndex + 1 &&
+                              line[colonIndex + 1] == ' '
+                          ? 1
+                          : 0),
+                );
 
-            switch (field) {
-              case 'event':
-                eventName = value;
-                break;
-              case 'id':
+          switch (field) {
+            case 'event':
+              eventName = value;
+              break;
+            case 'id':
+              if (!value.contains('\u0000')) {
                 eventId = value;
-                break;
-              case 'retry':
-                final parsedRetry = int.tryParse(value.trim());
-                if (parsedRetry != null && parsedRetry >= 0) {
-                  retryDelayMs = parsedRetry;
-                }
-                break;
-              case 'data':
-                eventData = eventData == null ? value : '$eventData\n$value';
-                break;
-            }
+              }
+              break;
+            case 'retry':
+              final parsedRetry = int.tryParse(value.trim());
+              if (parsedRetry != null && parsedRetry >= 0) {
+                retryDelayMs = parsedRetry;
+              }
+              break;
+            case 'data':
+              eventData = eventData == null ? value : '$eventData\n$value';
+              break;
           }
         }
       },
       onDone: () {
+        if (responseStreamFinished) {
+          return;
+        }
+        if (!streamIsCurrent()) {
+          interruptStream();
+          return;
+        }
+        responseStreamFinished = true;
+
         // Process any final event
         processEvent();
+        cancelAbortSubscription();
 
         // Handle stream closure - likely a network disconnect
-        handleReconnection(lastEventId, retryDelayMs);
+        final reconnecting = handleReconnection(lastEventId, retryDelayMs);
+        if (!reconnecting) {
+          reportUnresumableEnd();
+        }
       },
       onError: (error) {
+        if (responseStreamFinished) {
+          return;
+        }
+        if (!streamIsCurrent()) {
+          interruptStream();
+          return;
+        }
+        responseStreamFinished = true;
+        cancelAbortSubscription();
+
         final errorMessage =
             error is Error ? error.toString() : error.toString();
-        onerror?.call(McpError(0, "SSE stream disconnected: $errorMessage"));
+        _reportError(McpError(0, "SSE stream disconnected: $errorMessage"));
 
         // Attempt to reconnect if the stream disconnects unexpectedly
-        handleReconnection(lastEventId, retryDelayMs);
+        final reconnecting = handleReconnection(lastEventId, retryDelayMs);
+        if (!reconnecting) {
+          reportUnresumableEnd('The stream disconnected: $errorMessage');
+        }
       },
+      cancelOnError: true,
     );
 
+    if (responseStreamFinished) {
+      cancelStreamSubscription();
+      return;
+    }
+
     // Register the subscription cleanup when the abort controller is triggered
-    _abortController?.stream.listen((_) {
-      subscription.cancel();
+    abortSubscription = _abortController?.stream.listen((_) {
+      interruptStream();
     });
+
+    if (!streamIsCurrent()) {
+      interruptStream();
+    }
+  }
+
+  void _reportError(Object error) {
+    final reportedError =
+        error is Error ? error : McpError(0, error.toString());
+    try {
+      onerror?.call(reportedError);
+    } on Object {
+      // User callbacks must not interrupt transport cleanup or settlement.
+    }
   }
 
   void _dispatchReceivedMessage(
@@ -1578,7 +1984,7 @@ class StreamableHttpClientTransport
     required bool rejectServerRequests,
   }) {
     if (rejectServerRequests && message is JsonRpcRequest) {
-      onerror?.call(
+      _reportError(
         McpError(
           ErrorCode.invalidRequest.value,
           'Server-initiated JSON-RPC requests are not supported on 2026 '
@@ -1676,10 +2082,17 @@ class StreamableHttpClientTransport
 
   @override
   Future<void> close() async {
+    if (_isClosed) {
+      return;
+    }
     _isClosed = true;
+
     // Abort any pending requests
-    _abortController?.add(true);
-    _abortController?.close();
+    final abortController = _abortController;
+    if (abortController != null && !abortController.isClosed) {
+      abortController.add(true);
+      await abortController.close();
+    }
     _httpClient.close();
 
     onclose?.call();
@@ -1709,24 +2122,66 @@ class StreamableHttpClientTransport
   }) async {
     var retryFailureAlreadyReported = false;
     try {
+      if (_isClosed) {
+        final requestId = message is JsonRpcRequest ? message.id : null;
+        final requestLabel = requestId == null ? '' : ' $requestId';
+        throw McpError(
+          ErrorCode.connectionClosed.value,
+          'HTTP request$requestLabel was interrupted because the transport '
+          'closed.',
+        );
+      }
       if (resumptionToken != null) {
+        final protocolVersion =
+            _protocolVersion ?? _protocolVersionFrom(message);
+        if (protocolVersion != null &&
+            isStatelessProtocolVersion(protocolVersion)) {
+          throw McpError(
+            ErrorCode.invalidRequest.value,
+            'MCP $protocolVersion does not support SSE resumption tokens.',
+          );
+        }
+        if (resumptionToken.isEmpty) {
+          final requestId = message is JsonRpcRequest ? message.id : null;
+          throw _requestSseStreamEndedError(
+            requestId,
+            'The resumption cursor was reset.',
+          );
+        }
         // If we have a last event ID, we need to reconnect the SSE stream
         final replayId = message is JsonRpcRequest ? message.id : null;
-        _startOrAuthSse(
+        await _startOrAuthSse(
           StartSseOptions(
             resumptionToken: resumptionToken,
             replayMessageId: replayId,
             onResumptionToken: onResumptionToken,
           ),
-        ).catchError((err) {
-          if (err is Error) {
-            onerror?.call(err);
-          } else {
-            onerror?.call(McpError(0, err.toString()));
-          }
-        });
+        );
         return;
       }
+
+      final requestSessionGeneration = _sessionGeneration;
+      final requestSessionIdAtStart = _sessionId;
+      void ensureRequestIsCurrent() {
+        if (_isClosed) {
+          final requestId = message is JsonRpcRequest ? message.id : null;
+          final requestLabel = requestId == null ? '' : ' $requestId';
+          throw McpError(
+            ErrorCode.connectionClosed.value,
+            'HTTP request$requestLabel was interrupted because the transport '
+            'closed.',
+          );
+        }
+        if (requestSessionGeneration != _sessionGeneration) {
+          throw StaleSessionError(
+            'Session changed while the HTTP request was in flight',
+            code: 404,
+            sessionId: requestSessionIdAtStart,
+          );
+        }
+      }
+
+      ensureRequestIsCurrent();
 
       // Check for authentication first - if we need auth, handle it before proceeding
       if (_staleSessionDetected && !_isInitializeRequest(message)) {
@@ -1735,6 +2190,7 @@ class StreamableHttpClientTransport
 
       if (_authProvider != null) {
         final tokens = await _authProvider.tokens();
+        ensureRequestIsCurrent();
         if (tokens == null) {
           if (_authProvider is OAuthAuthorizationCodeProvider) {
             // Let the server return a challenge so discovery can follow MCP
@@ -1748,6 +2204,7 @@ class StreamableHttpClientTransport
       }
 
       final headers = await _commonHeaders();
+      ensureRequestIsCurrent();
       headers.addAll(_headersForMessage(message));
       final protocolVersion = _protocolVersion ?? _protocolVersionFrom(message);
       final isStatelessRequest = protocolVersion != null &&
@@ -1759,163 +2216,204 @@ class StreamableHttpClientTransport
       headers['content-type'] = 'application/json';
       headers['accept'] = 'application/json, text/event-stream';
 
-      final request = http.Request('POST', _url);
-      request.headers.addAll(headers);
-      request.body = jsonEncode(message.toJson());
-
-      final response = await _httpClient.send(request);
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        if (_authProvider != null &&
-            _isAuthorizationRequiredResponse(
-              response.statusCode,
-              response.headers,
-            )) {
-          return await _handleAuthorizationRequired(response);
-        }
-
-        final text = await response.stream.transform(utf8.decoder).join();
-        if (response.statusCode == 404 &&
-            retryStaleSessionOn404 &&
-            requestSessionId != null) {
-          String? staleSessionId = requestSessionId;
-          if (_sessionId == requestSessionId) {
-            staleSessionId = _clearStaleSession();
-          }
-          if (!_isInitializeRequest(message)) {
-            throw StaleSessionError(
-              'Session not found',
-              code: 404,
-              sessionId: staleSessionId,
-            );
-          }
-
-          try {
-            await _send(
-              message,
-              relatedRequestId: relatedRequestId,
-              resumptionToken: resumptionToken,
-              onResumptionToken: onResumptionToken,
-              retryStaleSessionOn404: false,
-            );
-          } catch (_) {
-            retryFailureAlreadyReported = true;
-            rethrow;
-          }
-          return;
-        }
-        // HTTP compatibility permits legacy fallback only after a 400
-        // discovery response. Keep the HTTP status observable for all other
-        // statuses instead of reducing them to the JSON-RPC body error.
-        final canDispatchJsonRpcError = message is! JsonRpcRequest ||
-            message.method != Method.serverDiscover ||
-            response.statusCode == 400;
-        if (canDispatchJsonRpcError &&
-            _dispatchHttpJsonRpcErrorBody(
-              text,
-              message,
-              rejectServerRequests: isStatelessRequest,
-            )) {
-          return;
-        }
-        throw McpError(
-          0,
-          "Error POSTing to endpoint (HTTP ${response.statusCode}): $text",
+      final abortBinding = _HttpAbortBinding(_abortController);
+      try {
+        ensureRequestIsCurrent();
+        final request = http.AbortableRequest(
+          'POST',
+          _url,
+          abortTrigger: abortBinding.abortTrigger,
         );
-      }
+        request.headers.addAll(headers);
+        request.body = jsonEncode(message.toJson());
 
-      // Handle session ID received from successful stateful responses.
-      final sessionId = response.headers['mcp-session-id'];
-      if (sessionId != null && !isStatelessRequest) {
-        _sessionId = sessionId;
-        _staleSessionDetected = false;
-      }
+        final response = await _httpClient.send(request);
+        if (_isClosed || requestSessionGeneration != _sessionGeneration) {
+          final responseSubscription = response.stream.listen(null);
+          unawaited(responseSubscription.cancel());
+          ensureRequestIsCurrent();
+        }
 
-      // If the response is 202 Accepted, there's no body to process
-      if (response.statusCode == 202) {
-        // Ensure we drain the stream to release the connection
-        await response.stream.drain();
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          if (_authProvider != null &&
+              _isAuthorizationRequiredResponse(
+                response.statusCode,
+                response.headers,
+              )) {
+            return await _handleAuthorizationRequired(response);
+          }
 
-        await Future.delayed(Duration.zero);
-
-        // if the accepted notification is initialized, we start the SSE stream
-        // if it's supported by the server
-        if (_isInitializedNotification(message)) {
-          // Start without a lastEventId since this is a fresh connection
-          _startOrAuthSse(const StartSseOptions()).catchError((err) {
-            if (err is Error) {
-              onerror?.call(err);
-            } else {
-              onerror?.call(McpError(0, err.toString()));
+          final text = await response.stream.transform(utf8.decoder).join();
+          ensureRequestIsCurrent();
+          if (response.statusCode == 404 &&
+              retryStaleSessionOn404 &&
+              requestSessionId != null) {
+            String? staleSessionId = requestSessionId;
+            if (_sessionId == requestSessionId) {
+              staleSessionId = _clearStaleSession();
             }
+            if (!_isInitializeRequest(message)) {
+              throw StaleSessionError(
+                'Session not found',
+                code: 404,
+                sessionId: staleSessionId,
+              );
+            }
+
+            try {
+              await _send(
+                message,
+                relatedRequestId: relatedRequestId,
+                resumptionToken: resumptionToken,
+                onResumptionToken: onResumptionToken,
+                retryStaleSessionOn404: false,
+              );
+            } catch (_) {
+              retryFailureAlreadyReported = true;
+              rethrow;
+            }
+            return;
+          }
+          // HTTP compatibility permits legacy fallback only after a 400
+          // discovery response. Keep the HTTP status observable for all other
+          // statuses instead of reducing them to the JSON-RPC body error.
+          final canDispatchJsonRpcError = message is! JsonRpcRequest ||
+              message.method != Method.serverDiscover ||
+              response.statusCode == 400;
+          if (canDispatchJsonRpcError &&
+              _dispatchHttpJsonRpcErrorBody(
+                text,
+                message,
+                rejectServerRequests: isStatelessRequest,
+              )) {
+            return;
+          }
+          throw McpError(
+            0,
+            "Error POSTing to endpoint (HTTP ${response.statusCode}): $text",
+          );
+        }
+
+        // A server assigns a session ID only on a successful initialization
+        // response. Later responses may repeat that ID but cannot replace it.
+        final sessionId = response.headers['mcp-session-id'];
+        if (sessionId != null && !isStatelessRequest) {
+          if (_isInitializeRequest(message)) {
+            _sessionId = sessionId;
+            _staleSessionDetected = false;
+          } else if (_sessionId != null && _sessionId != sessionId) {
+            final responseSubscription = response.stream.listen(null);
+            await responseSubscription.cancel();
+            throw McpError(
+              ErrorCode.invalidRequest.value,
+              'A non-initialize response attempted to replace the MCP '
+              'session ID.',
+            );
+          }
+        }
+
+        // If the response is 202 Accepted, there's no body to process
+        if (response.statusCode == 202) {
+          // Ensure we drain the stream to release the connection
+          await response.stream.drain();
+
+          await Future.delayed(Duration.zero);
+          ensureRequestIsCurrent();
+
+          // if the accepted notification is initialized, we start the SSE stream
+          // if it's supported by the server
+          if (_isInitializedNotification(message)) {
+            // Start without a lastEventId since this is a fresh connection
+            _startOrAuthSse(const StartSseOptions()).catchError((err) {
+              _reportError(err);
+            });
+          }
+          return;
+        }
+
+        // Start SSE if this was the initialized notification, even if 200 OK
+        if (_isInitializedNotification(message)) {
+          _startOrAuthSse(const StartSseOptions()).catchError((err) {
+            _reportError(err);
           });
         }
-        return;
-      }
 
-      // Start SSE if this was the initialized notification, even if 200 OK
-      if (_isInitializedNotification(message)) {
-        _startOrAuthSse(const StartSseOptions()).catchError((err) {
-          if (err is Error) {
-            onerror?.call(err);
-          } else {
-            onerror?.call(McpError(0, err.toString()));
-          }
-        });
-      }
+        // Check if the message is a request that expects a response
+        final hasRequests = message is JsonRpcRequest && message.id != null;
 
-      // Check if the message is a request that expects a response
-      final hasRequests = message is JsonRpcRequest && message.id != null;
+        // Check the response type
+        final contentType = response.headers['content-type'];
 
-      // Check the response type
-      final contentType = response.headers['content-type'];
+        if (hasRequests) {
+          if (contentType?.contains('text/event-stream') ?? false) {
+            // Handle SSE stream responses for requests
+            final requestStreamCompletion = Completer<void>();
+            _handleSseStream(
+              response,
+              StartSseOptions(
+                onResumptionToken: onResumptionToken,
+                requestMessageId: message.id,
+                onTerminalResponse: () {
+                  if (!requestStreamCompletion.isCompleted) {
+                    requestStreamCompletion.complete();
+                  }
+                },
+                onRequestStreamEnd: (error) {
+                  if (!requestStreamCompletion.isCompleted) {
+                    requestStreamCompletion.completeError(error);
+                  }
+                },
+                shouldReconnect: !isStatelessRequest,
+                rejectServerRequests: isStatelessRequest,
+              ),
+              isReconnectable: false,
+            );
+            await requestStreamCompletion.future;
+          } else if (contentType?.contains('application/json') ?? false) {
+            // For non-streaming servers, we might get direct JSON responses
+            final jsonStr =
+                await response.stream.transform(utf8.decoder).join();
+            ensureRequestIsCurrent();
+            final data = jsonDecode(jsonStr);
 
-      if (hasRequests) {
-        if (contentType?.contains('text/event-stream') ?? false) {
-          // Handle SSE stream responses for requests
-          _handleSseStream(
-            response,
-            StartSseOptions(
-              onResumptionToken: onResumptionToken,
-              replayMessageId: message.id,
-              shouldReconnect: !isStatelessRequest,
-              rejectServerRequests: isStatelessRequest,
-            ),
-          );
-        } else if (contentType?.contains('application/json') ?? false) {
-          // For non-streaming servers, we might get direct JSON responses
-          final jsonStr = await response.stream.transform(utf8.decoder).join();
-          final data = jsonDecode(jsonStr);
-
-          if (data is List) {
-            for (final item in data) {
-              final msg = JsonRpcMessage.fromJson(item);
+            if (data is List) {
+              for (final item in data) {
+                final msg = JsonRpcMessage.fromJson(item);
+                _dispatchReceivedMessage(
+                  msg,
+                  rejectServerRequests: isStatelessRequest,
+                );
+              }
+            } else {
+              final msg = JsonRpcMessage.fromJson(data);
               _dispatchReceivedMessage(
                 msg,
                 rejectServerRequests: isStatelessRequest,
               );
             }
           } else {
-            final msg = JsonRpcMessage.fromJson(data);
-            _dispatchReceivedMessage(
-              msg,
-              rejectServerRequests: isStatelessRequest,
+            final responseSubscription = response.stream.listen(null);
+            await responseSubscription.cancel();
+            ensureRequestIsCurrent();
+            throw StreamableHttpError(
+              -1,
+              "Unexpected content type: $contentType",
             );
           }
         } else {
-          throw StreamableHttpError(
-            -1,
-            "Unexpected content type: $contentType",
-          );
+          final responseSubscription = response.stream.listen(null);
+          await responseSubscription.cancel();
+          ensureRequestIsCurrent();
         }
+      } on http.RequestAbortedException {
+        ensureRequestIsCurrent();
+        rethrow;
+      } finally {
+        await abortBinding.dispose();
       }
     } catch (error) {
       if (!retryFailureAlreadyReported && error is! StaleSessionError) {
-        if (error is Error) {
-          onerror?.call(error);
-        } else {
-          onerror?.call(McpError(0, error.toString()));
-        }
+        _reportError(error);
       }
       rethrow;
     }
@@ -1996,14 +2494,52 @@ class StreamableHttpClientTransport
       return;
     }
 
-    if (_sessionId == null) {
+    final terminatingSessionId = _sessionId;
+    if (terminatingSessionId == null) {
       return; // No session to terminate
     }
 
+    final terminatingSessionGeneration = _sessionGeneration;
+    void ensureTerminationIsCurrent() {
+      if (_isClosed) {
+        throw McpError(
+          ErrorCode.connectionClosed.value,
+          'Session termination was interrupted because the transport closed.',
+        );
+      }
+      if (terminatingSessionGeneration != _sessionGeneration ||
+          _sessionId != terminatingSessionId) {
+        throw StaleSessionError(
+          'Session changed while the termination request was in flight',
+          code: 404,
+          sessionId: terminatingSessionId,
+        );
+      }
+    }
+
+    _HttpAbortBinding? abortBinding;
     try {
       final headers = await _commonHeaders();
+      ensureTerminationIsCurrent();
 
-      final response = await _httpClient.delete(_url, headers: headers);
+      abortBinding = _HttpAbortBinding(_abortController);
+      final request = http.AbortableRequest(
+        'DELETE',
+        _url,
+        abortTrigger: abortBinding.abortTrigger,
+      );
+      request.headers.addAll(headers);
+
+      final response = await _httpClient.send(request);
+      if (_isClosed ||
+          terminatingSessionGeneration != _sessionGeneration ||
+          _sessionId != terminatingSessionId) {
+        final responseSubscription = response.stream.listen(null);
+        unawaited(responseSubscription.cancel());
+        ensureTerminationIsCurrent();
+      }
+      await response.stream.drain<void>();
+      ensureTerminationIsCurrent();
 
       // We specifically handle 405 as a valid response according to the spec,
       // meaning the server does not support explicit session termination
@@ -2015,15 +2551,20 @@ class StreamableHttpClientTransport
         );
       }
 
+      await abortBinding.dispose();
+      abortBinding = null;
+      ensureTerminationIsCurrent();
       _sessionId = null;
       _staleSessionDetected = false;
-    } catch (error) {
-      if (error is Error) {
-        onerror?.call(error);
-      } else {
-        onerror?.call(McpError(0, error.toString()));
-      }
+      _signalSessionChange();
+    } on http.RequestAbortedException {
+      ensureTerminationIsCurrent();
       rethrow;
+    } catch (error) {
+      _reportError(error);
+      rethrow;
+    } finally {
+      await abortBinding?.dispose();
     }
   }
 
