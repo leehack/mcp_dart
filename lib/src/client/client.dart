@@ -204,6 +204,7 @@ const Set<String> _statelessInputRequiredResultMethods = {
 };
 
 const int _maxInputRequiredRetries = 16;
+const int _maxToolMetadataRefreshPages = 100;
 
 /// An MCP client implementation built on top of a pluggable [Transport].
 ///
@@ -231,6 +232,7 @@ class McpClient extends Protocol {
   final Map<String, JsonSchema> _cachedToolOutputSchemas = {};
   final Set<String> _cachedRequiredTaskTools = {};
   final ToolParameterHeaderMappings _cachedToolParameterHeaders = {};
+  String? _expectedToolListCursor;
   final Map<Object, _ClientSubscriptionState> _activeSubscriptions = {};
 
   /// Callback for handling elicitation requests from the server.
@@ -860,7 +862,7 @@ class McpClient extends Protocol {
             'tools/call for "${params.name}" returned HeaderMismatch; '
             'refreshing tools/list and retrying.',
           );
-          await listTools(options: options);
+          await _refreshToolMetadataFor(params.name, options);
           continue;
         }
         rethrow;
@@ -894,6 +896,55 @@ class McpClient extends Protocol {
 
     throw StateError(
       'Unreachable input_required retry state for ${Method.toolsCall}.',
+    );
+  }
+
+  Future<void> _refreshToolMetadataFor(
+    String toolName,
+    RequestOptions? options,
+  ) async {
+    String? cursor;
+    final seenCursors = <String>{};
+
+    for (var page = 0; page < _maxToolMetadataRefreshPages; page++) {
+      final result = await listTools(
+        params: cursor == null ? null : ListToolsRequest(cursor: cursor),
+        options: _toolMetadataRefreshOptions(options),
+      );
+      if (result.tools.any((tool) => tool.name == toolName)) {
+        return;
+      }
+
+      final nextCursor = result.nextCursor;
+      if (nextCursor == null) {
+        return;
+      }
+      if (!seenCursors.add(nextCursor)) {
+        _logger.warn(
+          'Stopping tools/list refresh for "$toolName" because cursor '
+          '"$nextCursor" was repeated.',
+        );
+        return;
+      }
+      cursor = nextCursor;
+    }
+
+    _logger.warn(
+      'Stopping tools/list refresh for "$toolName" after '
+      '$_maxToolMetadataRefreshPages pages.',
+    );
+  }
+
+  RequestOptions? _toolMetadataRefreshOptions(RequestOptions? options) {
+    if (options == null) {
+      return null;
+    }
+    return RequestOptions(
+      signal: options.signal,
+      timeout: options.timeout,
+      resetTimeoutOnProgress: options.resetTimeoutOnProgress,
+      maxTotalTimeout: options.maxTotalTimeout,
+      timeoutEnabled: options.timeoutEnabled,
     );
   }
 
@@ -1573,7 +1624,14 @@ class McpClient extends Protocol {
       options,
     );
 
-    final tools = _cacheToolMetadata(result.tools);
+    final cursor = params?.cursor;
+    final continuesCurrentPagination =
+        cursor != null && cursor == _expectedToolListCursor;
+    final tools = _cacheToolMetadata(
+      result.tools,
+      reset: !continuesCurrentPagination,
+    );
+    _expectedToolListCursor = result.nextCursor;
 
     if (identical(tools, result.tools)) {
       return result;
@@ -1588,15 +1646,24 @@ class McpClient extends Protocol {
     );
   }
 
-  List<Tool> _cacheToolMetadata(List<Tool> tools) {
-    _cachedToolOutputSchemas.clear();
-    _cachedRequiredTaskTools.clear();
-    _cachedToolParameterHeaders.clear();
+  List<Tool> _cacheToolMetadata(
+    List<Tool> tools, {
+    required bool reset,
+  }) {
+    if (reset) {
+      _cachedToolOutputSchemas.clear();
+      _cachedRequiredTaskTools.clear();
+      _cachedToolParameterHeaders.clear();
+    }
 
     var filtered = false;
     final validTools = <Tool>[];
 
     for (final tool in tools) {
+      _cachedToolOutputSchemas.remove(tool.name);
+      _cachedRequiredTaskTools.remove(tool.name);
+      _cachedToolParameterHeaders.remove(tool.name);
+
       final headerValidation = _validateToolParameterHeaders(tool);
       if (headerValidation.rejectionReason != null) {
         filtered = true;

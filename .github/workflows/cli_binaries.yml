@@ -14,6 +14,9 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
 jobs:
   build:
     name: Build ${{ matrix.asset }}
@@ -37,6 +40,30 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Verify release tag checkout
+        shell: bash
+        run: |
+          case "$RELEASE_TAG" in
+            mcp_dart_cli-v*) ;;
+            *)
+              echo "❌ Invalid CLI release tag: $RELEASE_TAG"
+              exit 1
+              ;;
+          esac
+          TAG_REF=$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")
+          if [ -z "$TAG_REF" ]; then
+            echo "❌ Remote CLI release tag does not exist: $RELEASE_TAG"
+            exit 1
+          fi
+          TAG_COMMIT=$(git rev-list -n 1 "$RELEASE_TAG")
+          if [ -z "$TAG_COMMIT" ] || [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
+            echo "❌ Checkout does not match $RELEASE_TAG."
+            exit 1
+          fi
+          echo "✅ Building exact tag $RELEASE_TAG at $TAG_COMMIT."
 
       - uses: dart-lang/setup-dart@v1
         with:
@@ -69,15 +96,30 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
-      - name: Resolve release tag
-        id: tag
+      - name: Verify release tag checkout
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          case "$RELEASE_TAG" in
+            mcp_dart_cli-v*) ;;
+            *)
+              echo "❌ Invalid CLI release tag: $RELEASE_TAG"
+              exit 1
+              ;;
+          esac
+          TAG_REF=$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")
+          if [ -z "$TAG_REF" ]; then
+            echo "❌ Remote CLI release tag does not exist: $RELEASE_TAG"
+            exit 1
           fi
+          TAG_COMMIT=$(git rev-list -n 1 "$RELEASE_TAG")
+          if [ -z "$TAG_COMMIT" ] || [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
+            echo "❌ Checkout does not match $RELEASE_TAG."
+            exit 1
+          fi
+          echo "✅ Attaching assets built from $RELEASE_TAG at $TAG_COMMIT."
 
       - name: Download binary artifacts
         uses: actions/download-artifact@v6
@@ -92,6 +134,6 @@ jobs:
       - name: Attach binaries
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
+          tag_name: ${{ env.RELEASE_TAG }}
           files: dist/*
           fail_on_unmatched_files: true

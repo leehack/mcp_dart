@@ -8,19 +8,23 @@ class MockTransport extends Transport
   final List<JsonRpcMessage> sentMessages = [];
   ServerCapabilities serverCapabilities;
   List<Tool> advertisedTools;
+  final List<List<Tool>>? advertisedToolPages;
   ToolParameterHeaderMappings toolParameterHeaderMappings = const {};
   int headerMismatchResponsesRemaining;
   int toolCallRequestCount = 0;
   int toolListRequestCount = 0;
   final bool useStatelessDiscovery;
+  final bool repeatToolListCursor;
 
   MockTransport({
     this.serverCapabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
     List<Tool>? advertisedTools,
+    this.advertisedToolPages,
     this.headerMismatchResponsesRemaining = 0,
     this.useStatelessDiscovery = false,
+    this.repeatToolListCursor = false,
   }) : advertisedTools = advertisedTools ?? _defaultAdvertisedTools();
 
   @override
@@ -76,13 +80,23 @@ class MockTransport extends Transport
     } else if (message is JsonRpcRequest &&
         message.method == Method.toolsList) {
       toolListRequestCount += 1;
+      final cursor = message.params?['cursor'];
+      final pageIndex = cursor == null ? 0 : int.parse(cursor as String);
+      final pages = advertisedToolPages;
+      final tools = pages == null ? advertisedTools : pages[pageIndex];
+      final nextCursor = repeatToolListCursor
+          ? cursor as String? ?? '0'
+          : pages != null && pageIndex + 1 < pages.length
+              ? '${pageIndex + 1}'
+              : null;
       _respond(
         JsonRpcResponse(
           id: message.id,
           result: {
             if (useStatelessDiscovery) 'resultType': resultTypeComplete,
             ...ListToolsResult(
-              tools: advertisedTools,
+              tools: tools,
+              nextCursor: nextCursor,
               ttlMs: useStatelessDiscovery ? 0 : null,
               cacheScope: useStatelessDiscovery ? CacheScope.private : null,
             ).toJson(),
@@ -139,6 +153,16 @@ class MockTransport extends Transport
           ),
         );
       } else if (name == 'header_retry_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: {
+              if (useStatelessDiscovery) 'resultType': resultTypeComplete,
+              ...const CallToolResult(content: []).toJson(),
+            },
+          ),
+        );
+      } else {
         _respond(
           JsonRpcResponse(
             id: message.id,
@@ -405,6 +429,150 @@ void main() {
       expect(transport.toolParameterHeaderMappings, {
         'header_retry_tool': {'region': 'Region'},
       });
+    });
+
+    test('callTool finds paginated tool metadata after HeaderMismatch',
+        () async {
+      transport = MockTransport(
+        headerMismatchResponsesRemaining: 1,
+        useStatelessDiscovery: true,
+        advertisedToolPages: [
+          [
+            Tool(
+              name: 'first_page_tool',
+              inputSchema: JsonSchema.object(
+                properties: {
+                  'tenant': JsonSchema.string(mcpHeader: 'Tenant'),
+                },
+              ),
+            ),
+          ],
+          [
+            Tool(
+              name: 'header_retry_tool',
+              inputSchema: JsonSchema.object(
+                properties: {
+                  'region': JsonSchema.string(mcpHeader: 'Region'),
+                },
+              ),
+            ),
+          ],
+        ],
+      );
+
+      await client.connect(transport);
+      final result = await client.callTool(
+        const CallToolRequest(
+          name: 'header_retry_tool',
+          arguments: {'region': 'us-east1'},
+        ),
+      );
+
+      expect(result.content, isEmpty);
+      expect(transport.toolCallRequestCount, 2);
+      expect(transport.toolListRequestCount, 2);
+      expect(transport.toolParameterHeaderMappings, {
+        'first_page_tool': {'tenant': 'Tenant'},
+        'header_retry_tool': {'region': 'Region'},
+      });
+    });
+
+    test('listTools retains validation metadata across pagination', () async {
+      transport = MockTransport(
+        advertisedToolPages: [
+          [
+            ...MockTransport._defaultAdvertisedTools(),
+            Tool(
+              name: 'first_page_header',
+              inputSchema: JsonSchema.object(
+                properties: {
+                  'tenant': JsonSchema.string(mcpHeader: 'Tenant'),
+                },
+              ),
+            ),
+          ],
+          [
+            Tool(
+              name: 'second_page_header',
+              inputSchema: JsonSchema.object(
+                properties: {
+                  'region': JsonSchema.string(mcpHeader: 'Region'),
+                },
+              ),
+            ),
+          ],
+        ],
+      );
+
+      await client.connect(transport);
+      final firstPage = await client.listTools();
+      await client.listTools(
+        params: ListToolsRequest(cursor: firstPage.nextCursor),
+      );
+
+      expect(transport.toolParameterHeaderMappings, {
+        'first_page_header': {'tenant': 'Tenant'},
+        'second_page_header': {'region': 'Region'},
+      });
+      await expectLater(
+        client.callTool(const CallToolRequest(name: 'broken_tool')),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('Structured content does not match'),
+          ),
+        ),
+      );
+      await expectLater(
+        client.callTool(const CallToolRequest(name: 'task_required_tool')),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
+            'message',
+            contains('requires task-based execution'),
+          ),
+        ),
+      );
+
+      await client.listTools();
+      expect(transport.toolParameterHeaderMappings, {
+        'first_page_header': {'tenant': 'Tenant'},
+      });
+    });
+
+    test('HeaderMismatch refresh stops on a repeated pagination cursor',
+        () async {
+      transport = MockTransport(
+        headerMismatchResponsesRemaining: 2,
+        useStatelessDiscovery: true,
+        repeatToolListCursor: true,
+        advertisedToolPages: [
+          [
+            const Tool(
+              name: 'unrelated_tool',
+              inputSchema: ToolInputSchema(),
+            ),
+          ],
+        ],
+      );
+
+      await client.connect(transport);
+      await expectLater(
+        client.callTool(
+          const CallToolRequest(name: 'header_retry_tool'),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.headerMismatch.value,
+          ),
+        ),
+      );
+
+      expect(transport.toolListRequestCount, 2);
+      expect(transport.toolCallRequestCount, 2);
     });
 
     test('callTool does not loop on repeated HeaderMismatch', () async {

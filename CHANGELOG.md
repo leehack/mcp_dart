@@ -20,8 +20,8 @@
   `server/discover` clients and legacy `initialize` clients, including required
   per-request metadata and 2026 result envelopes.
 - Streamable HTTP clients now reject invalid or unreachable `x-mcp-header`
-  annotations and refresh `tools/list` once before retrying a tool call rejected
-  with `HeaderMismatch`.
+  annotations, retain tool validation metadata across paginated lists, and
+  follow pagination when refreshing metadata after `HeaderMismatch`.
 
 ### Platform support
 
@@ -51,9 +51,9 @@
   schema: URL-mode `elicitation/create` no longer emits or accepts
   `elicitationId`, and `notifications/elicitation/complete` is treated as a
   legacy/non-draft notification rather than a typed draft notification.
-- Added dedicated TypeScript, Python, and Chrome interop jobs for relevant PRs
-  and `dev/2026-07-28` pushes, plus a temporary default-branch drift monitor
-  until the release reaches `main`.
+- Added dedicated TypeScript, Python, and Chrome interop jobs for relevant PRs,
+  daily schedules, and manual runs, plus a temporary default-branch drift
+  monitor until the release reaches `main`.
 - Added an MCP 2026-07-28 draft/RC spec coverage matrix that maps the current
   profile to official conformance, local tests, cross-SDK interop, and browser
   coverage.

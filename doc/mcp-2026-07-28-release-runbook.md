@@ -89,8 +89,9 @@ Merge the release PR to `main` only after this commit passes the complete gate.
 ## 4. Publish and verify `mcp_dart`
 
 1. Dispatch `Create Release` for `mcp_dart` from the merged `main` commit.
-   The workflow rejects stable versions dispatched from another ref or from a
-   stale `main` commit.
+   New stable tags require the latest `main` commit. A retry may reuse an
+   existing tag only when that tag resolves to the exact original release
+   commit; the workflow never moves it.
 2. Verify tag `v2.3.0`, the GitHub release, and the `Publish to pub.dev` workflow.
 3. Confirm pub.dev shows version `2.3.0`, correct `main` documentation links,
    and a successful package analysis.
@@ -114,7 +115,9 @@ dart run tool/validate_cli_publish.dart --published-sdk
 
 Then dispatch `Create Release` for `mcp_dart_cli`, verify the
 `mcp_dart_cli-v0.2.0` publish, and verify the standalone binary workflow and
-release assets for every supported platform.
+release assets for every supported platform. If the binary workflow must be
+dispatched manually, supply the release tag; both build and asset jobs verify
+and check out that exact tag before attaching files.
 
 ## 6. Public day-0 verification
 

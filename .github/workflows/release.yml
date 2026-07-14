@@ -69,34 +69,47 @@ jobs:
             echo "❌ Could not resolve origin/$DEFAULT_BRANCH."
             exit 1
           fi
-          if [ "$(git rev-parse HEAD)" != "$DEFAULT_SHA" ]; then
-            echo "❌ Stable releases must use the latest origin/$DEFAULT_BRANCH commit."
-            exit 1
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "$HEAD_SHA" != "$DEFAULT_SHA" ]; then
+            TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
+            TAG_REF=$(git ls-remote --tags origin "refs/tags/$TAG")
+            if [ -z "$TAG_REF" ]; then
+              echo "❌ Stable releases must use the latest origin/$DEFAULT_BRANCH commit."
+              exit 1
+            fi
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+            if [ "$HEAD_SHA" != "$TAG_COMMIT" ]; then
+              echo "❌ Stale release source does not match existing tag $TAG."
+              exit 1
+            fi
+            echo "✅ Stable release recovery matches existing tag $TAG."
+          else
+            echo "✅ Stable release source matches origin/$DEFAULT_BRANCH."
           fi
-          echo "✅ Stable release source matches origin/$DEFAULT_BRANCH."
 
-      - name: Check if tag already exists
-        run: |
-          TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
-          TAG_SHA=$(git ls-remote --tags origin "refs/tags/$TAG")
-          if [ -n "$TAG_SHA" ]; then
-            echo "❌ Error: Tag $TAG already exists!"
-            echo "   This version has already been released."
-            echo "   Please bump the version in pubspec.yaml first."
-            exit 1
-          fi
-          echo "✅ Tag $TAG does not exist, proceeding..."
-
-      - name: Create and push tag
+      - name: Resolve release tag
         id: create-tag
         run: |
           TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release ${{ inputs.package }} ${{ steps.get-version.outputs.version }}"
-          git push origin "$TAG"
+          TAG_REF=$(git ls-remote --tags origin "refs/tags/$TAG")
+          if [ -n "$TAG_REF" ]; then
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+            if [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
+              echo "❌ Existing tag $TAG points to $TAG_COMMIT, not $(git rev-parse HEAD)."
+              echo "   Never move or recreate a published tag; bump the version instead."
+              exit 1
+            fi
+            echo "✅ Reusing existing tag $TAG at $TAG_COMMIT."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release ${{ inputs.package }} ${{ steps.get-version.outputs.version }}"
+            git push origin "$TAG"
+            echo "🏷️ Created and pushed tag: $TAG"
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "🏷️ Created and pushed tag: $TAG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
