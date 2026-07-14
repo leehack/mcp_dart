@@ -26,8 +26,8 @@ MCP `2025-11-25` and earlier initialization compatibility.
   endpoint redirects automatically.
 - Unexpected handler and validation failures no longer expose internal details
   in protocol responses; details remain available in server logs.
-- Credentialed Streamable HTTP CORS responses now reflect only validated
-  origins, and the OAuth/HTTP examples use safer loopback defaults.
+- Credentialed Streamable HTTP CORS now requires an explicit origin allowlist
+  or a loopback development request; OAuth/HTTP examples use loopback defaults.
 
 ### Validation and documentation
 

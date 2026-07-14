@@ -1748,6 +1748,87 @@ void main() {
       }
     });
 
+    test('default CORS credentials are limited to loopback requests', () async {
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: stableProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(Uri.parse(baseUrl));
+        req.headers.contentType = ContentType.json;
+        req.headers.set('Origin', 'http://localhost:5173');
+        req.headers.set('Accept', 'application/json, text/event-stream');
+        req.write(jsonEncode(initRequest.toJson()));
+
+        final res = await req.close();
+        expect(res.statusCode, HttpStatus.ok);
+        expect(
+          res.headers.value('access-control-allow-origin'),
+          'http://localhost:5173',
+        );
+        expect(
+          res.headers.value('access-control-allow-credentials'),
+          'true',
+        );
+        await res.drain();
+      } finally {
+        client.close(force: true);
+      }
+    });
+
+    test('public host requires an explicit origin for credentialed CORS',
+        () async {
+      await server.stop();
+
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'DnsServer', version: '1.0')),
+        host: host,
+        port: port,
+        enableDnsRebindingProtection: true,
+        allowedHosts: {'mcp.example.com'},
+      );
+      await server.start();
+
+      final initRequest = JsonRpcRequest(
+        id: 1,
+        method: 'initialize',
+        params: const InitializeRequestParams(
+          protocolVersion: stableProtocolVersion,
+          capabilities: ClientCapabilities(),
+          clientInfo: Implementation(name: 'Client', version: '1.0'),
+        ).toJson(),
+      );
+
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(Uri.parse(baseUrl));
+        req.headers.contentType = ContentType.json;
+        req.headers.set(HttpHeaders.hostHeader, 'mcp.example.com');
+        req.headers.set('Origin', 'https://mcp.example.com:444');
+        req.headers.set('Accept', 'application/json, text/event-stream');
+        req.write(jsonEncode(initRequest.toJson()));
+
+        final res = await req.close();
+        expect(res.statusCode, HttpStatus.ok);
+        expect(res.headers.value('access-control-allow-origin'), '*');
+        expect(
+          res.headers.value('access-control-allow-credentials'),
+          isNull,
+        );
+        await res.drain();
+      } finally {
+        client.close(force: true);
+      }
+    });
+
     test('rejects PUT request with 405 Method Not Allowed', () async {
       final client = http.Client();
       try {

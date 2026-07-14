@@ -297,6 +297,10 @@ class StreamableMcpServer {
   final Set<String>? allowedHosts;
 
   /// Explicit origin allowlist used when DNS rebinding protection is enabled.
+  ///
+  /// Matching origins receive credentialed CORS headers. Without an explicit
+  /// allowlist, credentialed CORS is limited to loopback development requests;
+  /// other allowed requests receive wildcard CORS without credentials.
   final Set<String>? allowedOrigins;
 
   /// If true, reject unsupported `MCP-Protocol-Version` headers with HTTP 400.
@@ -987,7 +991,7 @@ class StreamableMcpServer {
 
   void _setCorsHeaders(HttpRequest request, HttpResponse response) {
     final requestOrigin = request.headers.value('origin')?.trim();
-    final allowedOrigin = _corsAllowedOrigin(requestOrigin);
+    final allowedOrigin = _corsAllowedOrigin(request, requestOrigin);
     response.headers.set(
       HttpHeaders.varyHeader,
       'Origin, Access-Control-Request-Headers',
@@ -1012,30 +1016,46 @@ class StreamableMcpServer {
     response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
   }
 
-  String? _corsAllowedOrigin(String? requestOrigin) {
+  String? _corsAllowedOrigin(HttpRequest request, String? requestOrigin) {
     if (requestOrigin == null || requestOrigin.isEmpty) {
       return null;
     }
 
-    // DNS rebinding validation runs before CORS headers are set, so an origin
-    // reaching this branch has already passed the configured policy.
-    if (enableDnsRebindingProtection) {
-      return requestOrigin;
-    }
-
     final configuredOrigins = allowedOrigins;
-    if (configuredOrigins == null || configuredOrigins.isEmpty) {
-      return null;
-    }
-
     final normalizedRequestOrigin = normalizeDnsOrigin(requestOrigin);
     if (normalizedRequestOrigin == null) {
       return null;
     }
-    final normalizedAllowedOrigins =
-        configuredOrigins.map(normalizeDnsOrigin).whereType<String>().toSet();
-    return normalizedAllowedOrigins.contains(normalizedRequestOrigin)
-        ? requestOrigin
-        : null;
+
+    if (configuredOrigins != null && configuredOrigins.isNotEmpty) {
+      final normalizedAllowedOrigins =
+          configuredOrigins.map(normalizeDnsOrigin).whereType<String>().toSet();
+      return normalizedAllowedOrigins.contains(normalizedRequestOrigin)
+          ? requestOrigin
+          : null;
+    }
+
+    // DNS rebinding validation runs before CORS headers are set, but a host
+    // match alone must not opt a public deployment into credentialed CORS for
+    // every scheme and port on that host. Preserve the zero-config local
+    // development path only when both sides of the request are loopback.
+    if (enableDnsRebindingProtection &&
+        _isLoopbackHost(normalizedRequestOrigin) &&
+        _isLoopbackHost(
+          request.headers.value(HttpHeaders.hostHeader) ?? '',
+        )) {
+      return requestOrigin;
+    }
+
+    return null;
+  }
+
+  bool _isLoopbackHost(String hostOrOrigin) {
+    final normalizedHost = normalizeDnsHost(hostOrOrigin);
+    if (normalizedHost == 'localhost') {
+      return true;
+    }
+
+    return InternetAddress.tryParse(normalizedHost)?.isLoopback ?? false;
   }
 }

@@ -617,10 +617,13 @@ final httpServer = StreamableMcpServer(
 await httpServer.start();
 ```
 
-The high-level server validates Host and Origin, handles preflight requests, and
-returns an exact allowed Origin when credentials are enabled. Low-level
-`StreamableHTTPServerTransport.handleRequest` callers own their HTTP routing and
-CORS headers. Keep explicit `allowedOrigins` for browser clients.
+The high-level server validates Host and Origin and handles preflight requests.
+Matching `allowedOrigins` receive exact, credentialed CORS responses. Without
+an explicit origin allowlist, only loopback-to-loopback development requests
+receive credentialed CORS; other allowed requests receive wildcard CORS without
+credentials. Low-level `StreamableHTTPServerTransport.handleRequest` callers own
+their HTTP routing and CORS headers. Keep explicit `allowedOrigins` for browser
+clients.
 
 ### Platform Support
 
