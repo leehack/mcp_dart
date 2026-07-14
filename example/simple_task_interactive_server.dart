@@ -4,6 +4,14 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+// This example intentionally uses MCP 2025-era core task augmentation. For
+// MCP 2026-07-28 input_required, see example/mcp_2026_07_28/server.dart.
+
+const _allowedBrowserOrigins = {
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+};
+
 // ============================================================================
 // Server Implementation
 // ============================================================================
@@ -46,6 +54,7 @@ class InteractiveServer {
     final server = McpServer(
       const Implementation(name: 'simple-task-interactive', version: '1.0.0'),
       options: const McpServerOptions(
+        protocol: McpProtocol.legacy,
         capabilities: ServerCapabilities(
           tools: ServerCapabilitiesTools(),
           tasks: ServerCapabilitiesTasks(listChanged: true),
@@ -147,15 +156,26 @@ class InteractiveServer {
   }
 
   Future<void> start() async {
+    final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 8000;
     final httpServer = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
-      8000,
+      port,
     );
-    print('Starting server on http://localhost:8000/mcp');
+    print('Starting server on http://localhost:$port/mcp');
 
     await for (final httpRequest in httpServer) {
+      if (!_setBrowserCorsHeaders(httpRequest)) {
+        httpRequest.response
+          ..statusCode = HttpStatus.forbidden
+          ..write('Forbidden browser origin');
+        await httpRequest.response.close();
+        continue;
+      }
+
       if (httpRequest.method == 'OPTIONS') {
-        httpRequest.response.statusCode = HttpStatus.methodNotAllowed;
+        httpRequest.response.statusCode = httpRequest.uri.path == '/mcp'
+            ? HttpStatus.noContent
+            : HttpStatus.notFound;
         await httpRequest.response.close();
         continue;
       }
@@ -285,6 +305,7 @@ class InteractiveServer {
 
       final options = StreamableHTTPServerTransportOptions(
         sessionIdGenerator: () => generateUUID(),
+        allowedOrigins: _allowedBrowserOrigins,
         onsessioninitialized: (sid) {
           print('Session initialized: $sid');
           _transports[sid] = createdTransport;
@@ -332,6 +353,30 @@ class InteractiveServer {
       req.response.close();
     }
   }
+}
+
+bool _setBrowserCorsHeaders(HttpRequest request) {
+  final origin = request.headers.value('Origin');
+  request.response.headers.set(HttpHeaders.varyHeader, 'Origin');
+  if (origin == null) {
+    return true;
+  }
+  if (!_allowedBrowserOrigins.contains(origin)) {
+    return false;
+  }
+
+  request.response.headers
+    ..set('Access-Control-Allow-Origin', origin)
+    ..set('Access-Control-Allow-Credentials', 'true')
+    ..set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+    ..set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Accept, Authorization, MCP-Protocol-Version, '
+          'MCP-Session-Id, Last-Event-ID',
+    )
+    ..set('Access-Control-Expose-Headers', 'MCP-Session-Id')
+    ..set('Access-Control-Max-Age', '86400');
+  return true;
 }
 
 class SimpleToolTaskHandler extends CancelTaskResultHandler {

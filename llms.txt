@@ -13,9 +13,16 @@
 
 ## Release status
 
-The 2.3.0 preview implements the MCP `2026-07-28` draft/RC and keeps legacy
-MCP `2025-11-25` initialization fallback. It is prerelease evidence, not a
-claim of conformance to the not-yet-published final specification.
+The 2.3.0 preview implements the complete core client/server wire surface of
+the locked MCP `2026-07-28` release candidate, retains the MCP `2025-11-25`
+feature set, and negotiates supported earlier initialization versions. Core
+means the normative wire requirements assigned to client and server roles by
+the pinned RC; it excludes optional extensions, host UI behavior, an
+authorization-server implementation, and a general-purpose JSON Schema
+validation engine. All current official conformance scenarios applicable to
+the SDK's core client/server roles pass for 2025 and the 2026 RC. This is
+prerelease evidence, not a claim about the not-yet-published final
+specification.
 
 Use the latest stable SDK for production:
 
@@ -38,10 +45,11 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 ## Protocol profiles
 
-- `McpProtocol.stable` (default): prefer 2026 draft/RC stateless discovery,
-  then fall back to legacy initialization when the peer is legacy-only.
-- `McpProtocol.legacy`: advertise/use MCP 2025-11-25 and earlier supported
-  initialization-era versions.
+- `McpProtocol.stable` (default dual-era profile): prefer 2026 draft/RC
+  stateless discovery, then fall back to legacy initialization when the peer is
+  legacy-only.
+- `McpProtocol.legacy` (initialization-era profile): negotiate MCP 2025-11-25
+  or an earlier supported initialization-era version.
 - `McpProtocol.require2026`: require the 2026 draft/RC stateless protocol.
 
 ```dart
@@ -51,16 +59,22 @@ final client = McpClient(
 );
 ```
 
-Draft-only APIs and fallback rules:
+2026-only APIs, examples, and fallback rules:
 https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-rc.md
+
+Strict 2026 runnable example:
+https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28
 
 ## Main capabilities
 
 - Tools and JSON Schema input/output.
 - Resources, URI templates, and subscriptions.
 - Prompts and completion.
-- Sampling, roots, elicitation, tasks, progress, logging, and cancellation.
-- Generic extension negotiation and typed MCP Apps metadata helpers.
+- Sampling, roots, elicitation, progress, logging, and cancellation. MCP 2026
+  logging is implemented for compatibility but deprecated upstream; new
+  examples use progress and subscriptions instead.
+- A Tasks extension implementation, generic extension negotiation, and typed
+  MCP Apps metadata helpers. Extensions are separate from core coverage.
 - Text, image, audio, embedded resource, and resource-link content.
 
 Always check negotiated capabilities before an optional operation. Advertising

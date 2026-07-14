@@ -2,6 +2,12 @@
 
 A Model Context Protocol (MCP) server created with `mcp_dart`.
 
+The generated server uses the default dual-era profile: it prefers MCP
+`2026-07-28` RC discovery and retains MCP `2025-11-25` and earlier
+initialization fallback. Select `McpProtocol.require2026` or
+`McpProtocol.legacy` in `lib/mcp/mcp.dart` when a deployment must require one
+era.
+
 ## Running the Server
 
 ```bash

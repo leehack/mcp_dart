@@ -8,11 +8,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 McpClient? client;
 StreamableHttpClientTransport? transport;
 String serverUrl = 'http://localhost:3000/mcp';
-String? notificationsToolLastEventId;
 String? sessionId;
-
-// Track received notifications for debugging resumability
-int notificationCount = 0;
 
 Future<void> main() async {
   print('MCP Interactive Client');
@@ -32,7 +28,7 @@ void printHelp() {
     '  connect [url]              - Connect to MCP server (default: http://localhost:3000/mcp)',
   );
   print('  disconnect                 - Disconnect from server');
-  print('  terminate-session          - Terminate the current session');
+  print('  terminate-session          - Terminate a legacy MCP session');
   print('  reconnect                  - Reconnect to the server');
   print('  list-tools                 - List available tools');
   print(
@@ -40,10 +36,10 @@ void printHelp() {
   );
   print('  greet [name]               - Call the greet tool');
   print(
-    '  multi-greet [name]         - Call the multi-greet tool with notifications',
+    '  multi-greet [name]         - Call multi-greet with progress updates',
   );
   print(
-    '  start-notifications [interval] [count] - Start periodic notifications',
+    '  start-notifications [interval] [count] - Run periodic progress updates',
   );
   print('  list-prompts               - List available prompts');
   print(
@@ -121,7 +117,7 @@ Future<void> commandLoop() async {
         case 'start-notifications':
           final interval =
               args.length > 1 ? int.tryParse(args[1]) ?? 2000 : 2000;
-          final count = args.length > 2 ? int.tryParse(args[2]) : 10;
+          final count = args.length > 2 ? int.tryParse(args[2]) ?? 10 : 10;
           await startNotifications(interval, count);
           break;
 
@@ -202,34 +198,8 @@ Future<void> connect([String? url]) async {
       ),
     );
 
-    // Set up notification handlers
-    client!.setNotificationHandler(
-      "notifications/message",
-      (notification) async {
-        // Type check is not needed since the notification factory ensures correct type
-        notificationCount++;
-        final params = notification.logParams;
-        print(
-          '\nNotification #$notificationCount: ${params.level} - ${params.data}',
-        );
-        // Re-display the prompt
-        stdout.write('> ');
-        return Future.value();
-      },
-      (params, meta) {
-        if (params == null) {
-          throw const FormatException(
-            'Missing params for logging message notification',
-          );
-        }
-
-        return JsonRpcLoggingMessageNotification(
-          logParams: LoggingMessageNotification.fromJson(params),
-          meta: meta,
-        );
-      },
-    );
-
+    // Legacy peers use global list-changed notifications. MCP 2026 uses
+    // subscriptions/listen, as shown in example/mcp_2026_07_28/client.dart.
     client!.setNotificationHandler(
       "notifications/resources/list_changed",
       (notification) async {
@@ -260,8 +230,14 @@ Future<void> connect([String? url]) async {
 
     // Connect the client
     await client!.connect(transport!);
+    final protocolVersion = client!.getProtocolVersion();
     sessionId = transport!.sessionId;
-    print('Transport created with session ID: $sessionId');
+    print('Negotiated protocol: $protocolVersion');
+    if (sessionId == null && protocolVersion == previewProtocolVersion) {
+      print('No session ID (expected for stateless MCP 2026).');
+    } else {
+      print('Transport created with session ID: $sessionId');
+    }
     print('Connected to MCP server');
   } catch (error) {
     print('Failed to connect: $error');
@@ -277,18 +253,24 @@ Future<void> disconnect() async {
   }
 
   try {
-    await transport!.close();
+    await client!.close();
     print('Disconnected from MCP server');
-    client = null;
-    transport = null;
   } catch (error) {
     print('Error disconnecting: $error');
+  } finally {
+    client = null;
+    transport = null;
   }
 }
 
 Future<void> terminateSession() async {
   if (client == null || transport == null) {
     print('Not connected.');
+    return;
+  }
+
+  if (client!.getProtocolVersion() == previewProtocolVersion) {
+    print('MCP 2026 is stateless and has no protocol session to terminate.');
     return;
   }
 
@@ -393,13 +375,13 @@ Future<void> callGreetTool(String name) async {
 }
 
 Future<void> callMultiGreetTool(String name) async {
-  print('Calling multi-greet tool with notifications...');
+  print('Calling multi-greet tool with progress updates...');
   await callTool('multi-greet', {'name': name});
 }
 
 Future<void> startNotifications(int interval, int? count) async {
   print(
-    'Starting notification stream: interval=${interval}ms, count=${count ?? 'unlimited'}',
+    'Starting progress stream: interval=${interval}ms, count=${count ?? 10}',
   );
   await callTool(
     'start-notification-stream',

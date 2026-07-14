@@ -321,20 +321,13 @@ server.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
   ),
 );
 
-await server.sendLoggingMessage(
-  const LoggingMessageNotification(
-    level: LoggingLevel.info,
-    logger: 'example',
-    data: {'message': 'ready'},
-  ),
-  requestMeta: extra.meta,
-);
 ```
 
-The logging call belongs inside a request handler where `extra` is available;
-MCP 2026 only emits messages allowed by that request's log level. Legacy MCP
-2025-11-25 peers instead use global capability-gated methods such as
-`sendToolListChanged`, `sendResourceUpdated`, and `logging/setLevel`.
+MCP 2026 deprecates protocol logging. The compatibility API belongs inside a
+request handler, must receive `requestMeta: extra.meta`, and emits only messages
+allowed by that request's log level. Legacy MCP 2025-11-25 peers instead use
+global capability-gated methods such as `sendToolListChanged`,
+`sendResourceUpdated`, and `logging/setLevel`.
 
 Stdio servers must reserve stdout for MCP frames; send application logs to
 stderr. Configure internal SDK logs with `setMcpLogHandler`,

@@ -5,8 +5,8 @@ Do not publish the stable Dart packages from a moving draft commit.
 
 ## Branch policy
 
-- [PR #306](https://github.com/leehack/mcp_dart/pull/306) merged the complete
-  2026 development line into `main`. Prepare prereleases and the eventual
+- [PR #306](https://github.com/leehack/mcp_dart/pull/306) merged the 2026
+  implementation line into `main`. Prepare prereleases and the eventual
   stable release on focused branches cut from the latest `main`.
 - Keep `dev/2026-07-28-rc` as a read-only archive. Published
   `mcp_dart 2.3.0-dev.0`, `2.3.0-dev.1`, and matching CLI prereleases contain

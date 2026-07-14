@@ -16,6 +16,7 @@ McpServer createMcpServer() {
   final server = McpServer(
     Implementation(name: '{{name}}', version: '1.0.0'),
     options: McpServerOptions(
+      protocol: McpProtocol.stable,
       capabilities: ServerCapabilities(
         tools: ServerCapabilitiesTools(),
         resources: ServerCapabilitiesResources(),

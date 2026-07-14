@@ -142,6 +142,8 @@ Adhere strictly to the following conventions.
 6.  **Review Loop**: For PR-bound work, keep the branch focused, update docs or
     changelog entries when behavior changes, request/monitor review after pushes,
     and do not report done until CI and unresolved review threads are clean.
+7.  **Changelog**: Keep entries concise and user-facing. Put implementation
+    details, validation logs, and maintainer notes in the PR or focused docs.
 
 ## 6. Example Patterns
 

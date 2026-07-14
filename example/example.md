@@ -1,108 +1,22 @@
 # Examples
 
-## Stdio Server
+Choose an example by protocol profile:
 
-```dart
-import 'package:mcp_dart/mcp_dart.dart';
+- **Strict MCP 2026-07-28 RC:**
+  [`mcp_2026_07_28/`](mcp_2026_07_28/) demonstrates `server/discover`,
+  `subscriptions/listen`, `input_required`, and non-object structured output.
+- **Default dual-era:** [`server_stdio.dart`](server_stdio.dart) with
+  [`client_stdio.dart`](client_stdio.dart), or
+  [`streamable_https/`](streamable_https/), prefers 2026 and retains legacy
+  fallback.
+- **Representative MCP 2025 / legacy:**
+  [`simple_task_interactive_server.dart`](simple_task_interactive_server.dart),
+  [`elicitation_http_server.dart`](elicitation_http_server.dart), and
+  [`server_sse.dart`](server_sse.dart) intentionally demonstrate retained
+  initialization-era behavior.
+- **Optional extensions:** [`mcp_apps_helpers_server.dart`](mcp_apps_helpers_server.dart)
+  and [`mcp_apps_metadata_server.dart`](mcp_apps_metadata_server.dart) cover MCP
+  Apps metadata separately from core protocol support.
 
-void main() async {
-  McpServer server = McpServer(
-    Implementation(name: "example-server", version: "1.0.0"),
-    options: McpServerOptions(
-      capabilities: ServerCapabilities(
-        resources: ServerCapabilitiesResources(),
-        tools: ServerCapabilitiesTools(),
-      ),
-    ),
-  );
-
-  server.registerTool(
-    "calculate",
-    description: 'Perform basic arithmetic operations',
-    inputSchema: JsonSchema.object(
-      properties: {
-        'operation': JsonSchema.string(
-          enumValues: ['add', 'subtract', 'multiply', 'divide'],
-        ),
-        'a': JsonSchema.number(),
-        'b': JsonSchema.number(),
-      },
-      required: ['operation', 'a', 'b'],
-    ),
-    callback: (args, extra) async {
-      final operation = args['operation'];
-      final a = args['a'];
-      final b = args['b'];
-      return CallToolResult(
-        content: [
-          TextContent(
-            text: switch (operation) {
-              'add' => 'Result: ${a + b}',
-              'subtract' => 'Result: ${a - b}',
-              'multiply' => 'Result: ${a * b}',
-              'divide' => 'Result: ${a / b}',
-              _ => throw Exception('Invalid operation'),
-            },
-          ),
-        ],
-      );
-    },
-  );
-
-  server.connect(StdioServerTransport());
-}
-```
-
-## Streamable HTTP Server
-
-```dart
-import 'dart:io';
-import 'package:mcp_dart/mcp_dart.dart';
-
-void main() async {
-  final server = McpServer(
-    Implementation(name: "example-http-server", version: "1.0.0"),
-    options: McpServerOptions(
-      capabilities: ServerCapabilities(
-        tools: ServerCapabilitiesTools(),
-      ),
-    ),
-  );
-
-  server.registerTool(
-    "echo",
-    description: 'Echoes back the input',
-    inputSchema: JsonSchema.object(properties: {
-      'message': JsonSchema.string(),
-    }),
-    callback: (args, extra) async {
-      return CallToolResult(
-        content: [TextContent(text: "Echo: ${args['message']}")],
-      );
-    },
-  );
-
-  final transport = StreamableHTTPServerTransport(
-      options: StreamableHTTPServerTransportOptions());
-  await server.connect(transport);
-
-  final httpServer = await HttpServer.bind(
-    InternetAddress.loopbackIPv4,
-    3000,
-  );
-  print('Server listening on http://localhost:3000/mcp');
-
-  await for (final request in httpServer) {
-    if (request.uri.path == '/mcp') {
-      await transport.handleRequest(request);
-    } else {
-      request.response.statusCode = 404;
-      await request.response.close();
-    }
-  }
-}
-```
-
-For a more complex example handling multiple sessions, tasks, and interactive capabilities, see [`simple_task_interactive_server.dart`](simple_task_interactive_server.dart).
-
-## [More Examples](https://github.com/leehack/mcp_dart/tree/main/example)
+See the complete [examples guide](../doc/examples.md) for setup instructions,
+authentication examples, Flutter clients, and integration recipes.

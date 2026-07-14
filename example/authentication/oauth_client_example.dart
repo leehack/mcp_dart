@@ -406,6 +406,7 @@ Future<void> main(List<String> args) async {
   // Create MCP client
   final client = McpClient(
     const Implementation(name: 'oauth-example-client', version: '1.0.0'),
+    options: const McpClientOptions(protocol: McpProtocol.legacy),
   );
 
   try {

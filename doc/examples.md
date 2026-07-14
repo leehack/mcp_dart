@@ -4,16 +4,50 @@ Real-world examples and usage patterns for the MCP Dart SDK.
 
 ## Overview
 
-The SDK includes extensive examples in the [`example/`](../example/) directory. This guide highlights key examples and explains their usage.
+The SDK includes examples in [`example/`](../example/) for each supported
+protocol era. Choose the profile that matches what you want to test:
+
+| Profile | Start with | Purpose |
+| --- | --- | --- |
+| Strict MCP `2026-07-28` RC | [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/) | Guarantee discovery and the stateless 2026 request model |
+| Default dual-era | [`server_stdio.dart`](../example/server_stdio.dart), [`client_stdio.dart`](../example/client_stdio.dart), [`streamable_https/`](../example/streamable_https/) | Prefer 2026 and retain legacy fallback |
+| Representative MCP 2025 / legacy | [`simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`elicitation_http_server.dart`](../example/elicitation_http_server.dart), [`server_sse.dart`](../example/server_sse.dart) | Demonstrate initialization-era APIs retained for compatibility |
 
 For task-focused guidance, also see:
 
+- [MCP 2026 Tasks extension](tools.md#mcp-2026-tasks-extension) for the client
+  flow and links to the server handlers.
 - [SDK interoperability matrix](interoperability.md) for verified cross-SDK scenarios.
 - [Flutter host and client recipes](flutter-recipes.md) for platform-specific Flutter guidance.
 - [MCP migration cookbooks](migration-cookbooks.md) for TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migrations.
 - [MCP Apps guide](mcp-apps.md) for `io.modelcontextprotocol/ui` metadata and host compatibility notes.
 
-## Basic Examples
+## MCP 2026-07-28 RC core
+
+### Strict server and client
+
+**Location**: [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/)
+
+The client starts the server over stdio, so the complete flow uses one command:
+
+```bash
+dart run example/mcp_2026_07_28/client.dart
+```
+
+**Features**:
+
+- `McpProtocol.require2026` and `server/discover` negotiation
+- Per-request protocol, identity, and capability metadata
+- `subscriptions/listen` acknowledgment, resource update, and graceful close
+- Automatic `input_required` elicitation and retry with preserved request state
+- Explicit accept, decline, and cancel handling
+- String-root output schema and structured tool result
+- A process smoke test in `test/example/non_credentialed_examples_smoke_test.dart`
+
+## Default dual-era examples
+
+These examples use `McpProtocol.stable`, explicitly or by default. Compatible
+peers negotiate the 2026 RC; older peers use initialization fallback.
 
 ### Stdio Server and Client
 
@@ -61,7 +95,7 @@ dart run packages/mcp_dart_cli/bin/mcp_dart.dart inspect \
 
 **Location**: [`example/server_sse.dart`](../example/server_sse.dart)
 
-Older Server-Sent Events transport retained for compatibility. Use the
+Older Server-Sent Events transport retained with `McpProtocol.legacy`. Use the
 Streamable HTTP example below for new projects.
 
 ```bash
@@ -79,7 +113,7 @@ dart run example/server_sse.dart
 
 **Location**: [`example/streamable_https/`](../example/streamable_https/)
 
-Modern HTTP streaming with resumability:
+Modern Streamable HTTP with dual-era protocol negotiation:
 
 ```bash
 # Start server
@@ -91,9 +125,8 @@ dart run example/streamable_https/client_streamable_https.dart
 
 **Features**:
 
-- Session persistence
-- Connection resumption
-- Stateful and stateless modes
+- Stateless POST requests for MCP 2026
+- Session persistence and connection resumption for legacy MCP
 - CORS support for browser examples
 
 ### High-Level Streamable Server
@@ -154,7 +187,7 @@ MCP_BEARER_TOKEN=local-secret \
 
 **Location**: [`example/authentication/oauth_client_example.dart`](../example/authentication/oauth_client_example.dart)
 
-Generic OAuth client building blocks:
+Generic OAuth client building blocks pinned to the initialization-era profile:
 
 ```bash
 dart run example/authentication/oauth_client_example.dart
@@ -210,7 +243,7 @@ dart run example/authentication/github_pat_example.dart
 - API integration
 - Simpler than OAuth for scripts
 
-## Advanced Features
+## MCP extensions
 
 ### MCP Apps Helpers (TypeScript-style)
 
@@ -249,11 +282,26 @@ dart run example/mcp_apps_metadata_server.dart
 - `ResourceLink` output from a tool result
 - Host-facing `io.modelcontextprotocol/ui` metadata
 
+MCP Apps is an optional extension and is tracked separately from core protocol
+coverage.
+
+## MCP 2025 and legacy compatibility
+
+### Core task augmentation
+
+**Location**: [`example/simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`example/simple_task_interactive_client.dart`](../example/simple_task_interactive_client.dart)
+
+This pair explicitly selects `McpProtocol.legacy` to demonstrate the 2025-era
+core task APIs, including task-scoped elicitation and sampling. MCP 2026 uses
+`input_required` in core and exposes long-running Tasks as an extension; start
+with the strict 2026 pair for the modern input flow.
+
 ### Argument Completions
 
 **Location**: [`example/completions_capability_demo.dart`](../example/completions_capability_demo.dart)
 
-Auto-completion for arguments:
+Initialization-era auto-completion for arguments. This example explicitly uses
+`McpProtocol.legacy` because its commentary targets the 2025 feature shape.
 
 ```bash
 dart run example/completions_capability_demo.dart
@@ -266,11 +314,11 @@ dart run example/completions_capability_demo.dart
 - Up to 100 suggestions
 - Pagination support
 
-### User Input Elicitation
+### Server-initiated user input
 
 **Location**: [`example/elicitation_http_server.dart`](../example/elicitation_http_server.dart)
 
-Server-initiated user input collection:
+Session-scoped server-initiated input collection with `McpProtocol.legacy`:
 
 ```bash
 dart run example/elicitation_http_server.dart
@@ -281,7 +329,14 @@ dart run example/elicitation_http_server.dart
 - Multiple input types (boolean, string, number, enum)
 - Schema validation
 - Action handling (accept/decline/cancel)
-- Structured form data results
+- Structured, non-secret form data results
+
+Form elicitation must not collect passwords, access tokens, or other secrets.
+
+For MCP 2026, return `InputRequiredResult` from the tool, resource, or prompt
+handler as shown in the strict 2026 example.
+
+## Other feature examples
 
 ### Required Fields Validation
 
@@ -365,11 +420,12 @@ flutter run -d chrome
 
 See [Flutter Host and Client Recipes](flutter-recipes.md) for platform-specific transport, lifecycle, authentication, and testing guidance.
 
-### Jaspr MCP Client
+### Jaspr MCP 2025 task client
 
 **Location**: [`example/jaspr-client/`](../example/jaspr-client/)
 
-Browser client focused on elicitation, sampling, and task-aware tool flows:
+Browser client explicitly using `McpProtocol.legacy` for elicitation, sampling,
+and 2025-era task-aware tool flows:
 
 ```bash
 dart run example/simple_task_interactive_server.dart
@@ -625,6 +681,9 @@ export GEMINI_API_KEY=your_key
 dart run example/server_stdio.dart
 dart run example/client_stdio.dart
 
+# Strict MCP 2026 example (starts its paired server)
+dart run example/mcp_2026_07_28/client.dart
+
 # HTTP examples
 dart run example/server_sse.dart
 dart run example/streamable_https/server_streamable_https.dart
@@ -656,9 +715,9 @@ dart test test/example/non_credentialed_examples_smoke_test.dart
 
 ### For Advanced Users
 
-1. Study the [authentication boundary guide](../example/authentication/OAUTH_SERVER_GUIDE.md)
-2. Explore [completions_capability_demo.dart](../example/completions_capability_demo.dart)
-3. Review [elicitation_http_server.dart](../example/elicitation_http_server.dart)
+1. Run the [strict MCP 2026 example](../example/mcp_2026_07_28/)
+2. Study the [authentication boundary guide](../example/authentication/OAUTH_SERVER_GUIDE.md)
+3. Review the [protocol coverage matrices](spec-coverage-2026-07-28-rc.md)
 
 ### For Flutter Developers
 
@@ -683,8 +742,9 @@ dart test test/example/non_credentialed_examples_smoke_test.dart
 
 Have a great example? Contributions are welcome!
 
-1. Create example in `example/` directory
-2. Add README explaining the example
-3. Include comments for clarity
-4. Test on multiple platforms
-5. Submit a pull request
+1. Create the example in the `example/` directory
+2. State whether it is strict 2026, dual-era, or intentionally legacy
+3. Add a README explaining the example
+4. Include comments for clarity
+5. Test on the applicable platforms
+6. Submit a pull request

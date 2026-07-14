@@ -138,6 +138,10 @@ request with `RequestOptions(logLevel: ...)`; MCP 2025-11-25 clients use the
 legacy `logging/setLevel` method. Both profiles deliver accepted messages as
 `notifications/message`.
 
+MCP 2026 deprecates protocol logging. Those APIs remain available for
+compatibility, but new implementations should use `stderr` for stdio servers or
+OpenTelemetry for structured observability.
+
 By default:
 
 - **Dart VM/Flutter**: Logs are written to `stderr`
@@ -529,12 +533,13 @@ final result = await client.callTool(
 
 The SDK includes many examples in the `example/` directory:
 
+- **[`mcp_2026_07_28/`](../example/mcp_2026_07_28/)** - Strict 2026 RC discovery, subscriptions, `input_required`, and structured output
 - **[server_stdio.dart](../example/server_stdio.dart)** - Complete stdio server
 - **[client_stdio.dart](../example/client_stdio.dart)** - Stdio client
 - **[weather.dart](../example/weather.dart)** - Real weather API integration
 - **[oauth_server_example.dart](../example/authentication/oauth_server_example.dart)** - OAuth protected-resource metadata and challenge hooks
-- **[completions_capability_demo.dart](../example/completions_capability_demo.dart)** - Auto-completion
-- **[elicitation_http_server.dart](../example/elicitation_http_server.dart)** - User input collection
+- **[completions_capability_demo.dart](../example/completions_capability_demo.dart)** - MCP 2025-era auto-completion
+- **[elicitation_http_server.dart](../example/elicitation_http_server.dart)** - Legacy server-initiated user input
 
 Browse the examples to see real-world usage patterns!
 

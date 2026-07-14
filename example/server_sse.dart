@@ -2,10 +2,17 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+/// Legacy MCP SSE transport example.
+///
+/// New servers should use Streamable HTTP. This example intentionally uses the
+/// 2025-era initialization profile because the SSE transport is deprecated.
 Future<void> main() async {
   final mcpServer = McpServer(
     const Implementation(name: "example-dart-server", version: "1.0.0"),
-    options: const McpServerOptions(capabilities: ServerCapabilities()),
+    options: const McpServerOptions(
+      protocol: McpProtocol.legacy,
+      capabilities: ServerCapabilities(),
+    ),
   );
 
   mcpServer.registerTool(

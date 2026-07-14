@@ -1,9 +1,10 @@
 # MCP 2025-11-25 Spec Coverage Matrix
 
-This matrix maps high-risk MCP 2025-11-25 requirements to checked-in
-`mcp_dart` coverage. It is intentionally conservative: a row is marked
-`Verified` only when the repository has executable tests or a CI command for
-the behavior.
+The `McpProtocol.legacy` path retains the MCP `2025-11-25` client/server feature
+set and negotiates `2025-06-18`, `2025-03-26`, `2024-11-05`, and `2024-10-07`
+for older peers. This matrix maps high-risk `2025-11-25` requirements to
+checked-in evidence. A row is `Verified` only when the repository has an
+executable test or CI command for the behavior.
 
 ## Conformance Gate
 
@@ -20,6 +21,9 @@ cd packages/mcp_dart_cli
 dart pub get
 dart run bin/mcp_dart.dart conformance --suite all --json
 ```
+
+Despite its filename, `mcp_2026_07_28_rc_client.dart` is the dual-era official
+client fixture. `--spec-version 2025-11-25` selects its initialization-era path.
 
 Run the cross-SDK interop gate from the repository root:
 
@@ -95,8 +99,3 @@ Use exact-case filtering when diagnosing one row:
 cd packages/mcp_dart_cli
 dart run bin/mcp_dart.dart conformance --suite all --case lifecycle.rejects-pre-initialize-request
 ```
-
-## Known Gaps
-
-- [#96](https://github.com/leehack/mcp_dart/issues/96): broader CLI debugging
-  commands such as replay/proxy/validate flows.

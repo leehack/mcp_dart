@@ -628,7 +628,11 @@ await client.sendRootsListChanged();
 
 ## Logging
 
-### Request Logs (MCP 2026)
+MCP 2026 deprecates protocol logging. The SDK retains these APIs for
+compatibility; new implementations should prefer server `stderr` for stdio or
+OpenTelemetry for structured observability.
+
+### Deprecated Request Logs (MCP 2026)
 
 Logging is request-scoped in the 2026 profile. Set the minimum level on the
 operation that should emit logs:

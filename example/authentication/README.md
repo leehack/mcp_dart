@@ -14,7 +14,7 @@ credential-storage implementations.
 | Example | What it demonstrates | Important limit |
 | --- | --- | --- |
 | [`github_oauth_example.dart`](github_oauth_example.dart) | Browser authorization, PKCE S256, a localhost callback, state validation, token exchange, and MCP tool discovery | Provider-specific and plaintext storage |
-| [`oauth_client_example.dart`](oauth_client_example.dart) | Generic PKCE request, callback-state validation, token exchange, refresh, and storage building blocks | Does not host a callback or target a real provider |
+| [`oauth_client_example.dart`](oauth_client_example.dart) | Generic MCP 2025-era PKCE request, callback-state validation, token exchange, refresh, and storage building blocks | Uses `McpProtocol.legacy`; does not host a callback or target a real provider |
 | [`oauth_server_example.dart`](oauth_server_example.dart) | Protected-resource metadata, bearer challenges, and a fail-closed authentication callback | Accepts one static local test token; it is not an authorization server |
 | [`github_pat_example.dart`](github_pat_example.dart) | Supplying an existing GitHub token through `OAuthClientProvider` | Intended for local/personal testing |
 

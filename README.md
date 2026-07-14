@@ -4,16 +4,22 @@
 [![Pub Version](https://img.shields.io/pub/v/mcp_dart?color=blueviolet)](https://pub.dev/packages/mcp_dart)
 [![likes](https://img.shields.io/pub/likes/mcp_dart?logo=dart)](https://pub.dev/packages/mcp_dart/score)
 
-`mcp_dart` is a Dart and Flutter SDK for building Model Context Protocol (MCP)
-servers, clients, and AI hosts. It supports local stdio processes, remote
-Streamable HTTP services, browser clients, OAuth hooks, and a companion CLI for
-live inspection and protocol regression checks.
+`mcp_dart` is a dual-era Dart and Flutter SDK for MCP clients, servers, and AI
+hosts. It implements the complete core client/server wire surface of the locked
+MCP `2026-07-28` release candidate, retains the MCP `2025-11-25` feature set,
+and negotiates supported earlier initialization-based versions.
+
+Here, core means the normative wire requirements assigned to client and server
+roles by the pinned RC. It excludes optional MCP extensions, host UI behavior,
+an authorization-server implementation, and a general-purpose JSON Schema
+validation engine.
 
 > [!IMPORTANT]
 > This prerelease coordinates `mcp_dart 2.3.0-dev.2` and
-> `mcp_dart_cli 0.2.0-dev.2`. It implements the MCP `2026-07-28`
-> draft/RC and retains legacy negotiation. It is not a claim of conformance to
-> the final specification, which has not been released.
+> `mcp_dart_cli 0.2.0-dev.2`. All current official conformance scenarios
+> applicable to the SDK's core client/server roles pass for both MCP
+> `2025-11-25` and the `2026-07-28` RC. This is prerelease evidence, not a
+> claim about the final specification, which has not shipped.
 
 ## Requirements
 
@@ -49,14 +55,17 @@ a clean consumer project.
 ## What the SDK provides
 
 - MCP servers, clients, and host integrations with null-safe Dart APIs.
-- Tools, resources, prompts, sampling, roots, completions, elicitation, tasks,
-  subscriptions, and generic extension negotiation.
+- Core tools, resources, prompts, completion, elicitation, subscriptions,
+  logging, roots, and sampling APIs with behavior selected for the negotiated
+  protocol era. MCP 2026 logging is retained for compatibility but is
+  deprecated upstream.
 - Stdio, Streamable HTTP, IO stream, and custom transports.
 - OAuth client discovery/PKCE hooks, server authentication callbacks, DNS
   rebinding protection, and strict Streamable HTTP validation.
-- MCP Apps metadata helpers and current content/metadata types.
-- Automated 2025 conformance plus 2026 draft/RC conformance and bidirectional
-  TypeScript/Python interoperability fixtures.
+- A Tasks extension implementation, MCP Apps metadata helpers, and generic
+  extension negotiation. Extensions are separate from core protocol coverage.
+- Automated 2025 and 2026 RC conformance, bidirectional TypeScript/Python
+  interoperability fixtures, and a real-browser Streamable HTTP smoke test.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host
@@ -64,10 +73,16 @@ can manage multiple clients and servers.
 
 ## Protocol profiles
 
-The 2.3.0 preview defaults to `McpProtocol.stable`. It prefers MCP
-`2026-07-28` draft/RC discovery and stateless request metadata, then falls back
-to the legacy `2025-11-25` initialization flow when a peer does not support the
-preview protocol.
+| Profile | Protocol behavior |
+| --- | --- |
+| `McpProtocol.stable` | Default dual-era profile: prefer the `2026-07-28` RC, then fall back to initialization-based MCP |
+| `McpProtocol.legacy` | Initialization-era profile: negotiate `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`, or `2024-10-07` |
+| `McpProtocol.require2026` | Require the `2026-07-28` RC and reject legacy initialization |
+
+The `stable` profile name describes the SDK's default compatibility policy, not
+the maturity of the preferred wire version. Use `stableProtocolVersion` for
+the official `2025-11-25` version, `previewProtocolVersion` for the locked RC,
+and `defaultProtocolVersion` for this SDK preview's preferred version.
 
 Select a profile only when you need to constrain negotiation:
 
@@ -84,7 +99,8 @@ final strictPreviewServer = McpServer(
 ```
 
 See the [2026 transition guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-rc.md)
-for fallback rules and draft-only APIs.
+for fallback rules and 2026-only APIs, or run the
+[strict 2026 example](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28).
 
 ## Quick start with the CLI
 
@@ -165,4 +181,5 @@ surface. Re-check both packages' current releases before a production decision.
 - [SDK on pub.dev](https://pub.dev/packages/mcp_dart)
 - [dev.2 API reference](https://pub.dev/documentation/mcp_dart/2.3.0-dev.2/)
 - [Changelog](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/CHANGELOG.md)
-- [MCP specification](https://modelcontextprotocol.io/specification/2025-11-25)
+- [MCP 2026-07-28 RC](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
+- [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25)

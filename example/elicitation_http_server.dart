@@ -1,4 +1,4 @@
-/// HTTP server example demonstrating elicitation feature with Streamable HTTP transport.
+/// Legacy HTTP server example demonstrating server-initiated elicitation.
 ///
 /// This example mirrors the TypeScript elicitationExample.ts and shows:
 /// - User registration with multiple fields
@@ -8,6 +8,9 @@
 /// Run with: dart run example/elicitation_http_server.dart
 ///
 /// Connect using an HTTP MCP client on http://localhost:3000/mcp
+///
+/// This intentionally uses the 2025-era initialization flow. MCP 2026-07-28
+/// returns `InputRequiredResult` instead; see `example/mcp_2026_07_28/`.
 library;
 
 import 'dart:async';
@@ -69,11 +72,11 @@ class InMemoryEventStore implements EventStore {
 McpServer getServer() {
   final server = McpServer(
     const Implementation(name: 'elicitation-example-server', version: '1.0.0'),
-    options: const McpServerOptions(protocol: McpProtocol.stable),
+    options: const McpServerOptions(protocol: McpProtocol.legacy),
   );
 
   // Example 1: Simple user registration tool
-  // Collects username, email, and password from the user
+  // Collects non-secret profile and preference fields from the user.
   server.registerTool(
     'register_user',
     description: 'Register a new user account by collecting their information',
@@ -132,30 +135,6 @@ McpServer getServer() {
         }
 
         final email = emailResult.content?['email'] as String;
-
-        // Collect password
-        final passwordResult = await server.elicitInput(
-          ElicitRequest.form(
-            message: 'Enter your password (min 8 characters)',
-            requestedSchema: JsonSchema.object(
-              properties: {
-                'password': JsonSchema.string(
-                  minLength: 8,
-                  description: 'Your password',
-                ),
-              },
-              required: ['password'],
-            ),
-          ),
-        );
-
-        if (!passwordResult.accepted) {
-          return CallToolResult.fromContent(
-            [
-              const TextContent(text: 'Registration cancelled by user.'),
-            ],
-          );
-        }
 
         // Collect newsletter preference
         final newsletterResult = await server.elicitInput(
@@ -537,21 +516,27 @@ $city, $state $zipCode${phone.isNotEmpty ? '\nPhone: $phone' : ''}''',
   return server;
 }
 
-void setCorsHeaders(HttpRequest request) {
+bool setCorsHeaders(HttpRequest request) {
   final response = request.response;
-  if (request.headers.value('Origin') == allowedBrowserOrigin) {
+  final origin = request.headers.value('Origin');
+  response.headers.set(HttpHeaders.varyHeader, 'Origin');
+  if (origin != null && origin != allowedBrowserOrigin) {
+    return false;
+  }
+  if (origin == allowedBrowserOrigin) {
     response.headers.set('Access-Control-Allow-Origin', allowedBrowserOrigin);
     response.headers.set('Access-Control-Allow-Credentials', 'true');
   }
-  response.headers.set(HttpHeaders.varyHeader, 'Origin');
   response.headers
       .set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   response.headers.set(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, mcp-session-id, Last-Event-ID, Authorization',
+    'Origin, X-Requested-With, Content-Type, Accept, mcp-protocol-version, '
+        'mcp-session-id, Last-Event-ID, Authorization',
   );
   response.headers.set('Access-Control-Max-Age', '86400');
   response.headers.set('Access-Control-Expose-Headers', 'mcp-session-id');
+  return true;
 }
 
 void main() async {
@@ -572,22 +557,26 @@ void main() async {
   print('Allowed browser origin: $allowedBrowserOrigin');
 
   await for (final request in httpServer) {
-    // Apply CORS headers to all responses
-    setCorsHeaders(request);
-
-    if (request.method == 'OPTIONS') {
-      // Handle CORS preflight request
-      request.response.statusCode = HttpStatus.ok;
+    if (!setCorsHeaders(request)) {
+      request.response
+        ..statusCode = HttpStatus.forbidden
+        ..write('Forbidden browser origin');
       await request.response.close();
       continue;
     }
 
     if (request.uri.path != '/mcp') {
-      // Not an MCP endpoint
       request.response
         ..statusCode = HttpStatus.notFound
-        ..write('Not Found')
-        ..close();
+        ..write('Not Found');
+      await request.response.close();
+      continue;
+    }
+
+    if (request.method == 'OPTIONS') {
+      // Handle CORS preflight request
+      request.response.statusCode = HttpStatus.noContent;
+      await request.response.close();
       continue;
     }
 

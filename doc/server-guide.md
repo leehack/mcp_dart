@@ -944,9 +944,9 @@ server.experimental.onTaskResult((taskId, extra) async {
 3. Server calls appropriate handler
 4. Server returns result or error
 
-### Logging
+### Observability and deprecated protocol logging
 
-Send log messages to the client:
+Use application logging for new servers:
 
 ```dart
 // Local application/SDK logging (not sent over MCP).
@@ -954,16 +954,13 @@ final logger = Logger('my-server');
 logger.info('Server started');
 logger.warn('Rate limit approaching');
 logger.error('Database connection failed');
-
-// Custom log levels
-await server.sendLoggingMessage(
-  LoggingMessageNotification(
-    level: LoggingLevel.debug,
-    data: 'Detailed debug information',
-    logger: 'MyComponent',
-  ),
-);
 ```
+
+MCP 2026 deprecates `notifications/message`. The SDK keeps
+`sendLoggingMessage` for compatibility, but new stdio servers should log to
+`stderr` and deployed services should prefer OpenTelemetry. Compatibility
+implementations must advertise the logging capability, honor the request's log
+level, and exclude secrets and personal identifying information.
 
 ## Server Lifecycle
 
