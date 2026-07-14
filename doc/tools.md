@@ -28,7 +28,19 @@ server.registerTool(
 
 ## JSON Schema Validation
 
-mcp_dart implements a pragmatic JSON Schema subset for MCP tool input/output and elicitation schemas; it is not a complete JSON Schema 2020-12 validator.
+The built-in validator defaults to JSON Schema Draft 2020-12 and accepts an
+explicitly declared Draft 7 schema for MCP 2025-11-25 compatibility. It
+validates schema structure and instances, including same-document fragment
+references, conditionals, tuple/array constraints, and unevaluated items and
+properties.
+
+Local fragments and absolute or relative resource identifiers that resolve
+inside the supplied schema document are evaluated synchronously, including
+`$dynamicRef`. For predictable offline behavior, unresolved references outside
+that document are rejected without network I/O, as are unsupported dialects
+and custom vocabularies. Schema evaluation is bounded to a depth of 64 and
+1,024 subschemas. Keep external reference resolution and custom-vocabulary
+processing in application code when needed.
 
 MCP 2025-11-25 requires both `inputSchema` and `outputSchema` on a `Tool` to be
 object-root JSON Schema values. Use `JsonSchema.object(...)` or
@@ -474,12 +486,12 @@ server.registerTool(
 
 ## Long-running tool calls
 
-### MCP 2026 Tasks extension
+### MCP 2026-07-28 Tasks extension
 
-The 2026 extension is server-directed. Both peers advertise
+The MCP 2026-07-28 extension is server-directed. Both peers advertise
 `io.modelcontextprotocol/tasks`, the client makes a normal `tools/call`, and the
 server may return a durable `CreateTaskExtensionResult`. See the
-[server guide](server-guide.md#mcp-2026-tasks-extension) for the low-level
+[server guide](server-guide.md#mcp-2026-07-28-tasks-extension) for the low-level
 creation and `tasks/get` handlers.
 
 Opt the client in through its per-request capabilities. `callTool()` then polls

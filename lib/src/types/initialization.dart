@@ -800,7 +800,7 @@ class JsonRpcInitializeRequest extends JsonRpcRequest {
   }
 }
 
-/// Request sent by a 2026 client to discover server protocol support.
+/// Request sent by an MCP `2026-07-28` client to discover server support.
 class JsonRpcServerDiscoverRequest extends JsonRpcRequest {
   JsonRpcServerDiscoverRequest({
     required super.id,
@@ -952,8 +952,8 @@ class ServerCapabilitiesPrompts {
 class ServerCapabilitiesResources {
   /// Whether the server supports resource update subscriptions.
   ///
-  /// MCP 2025 uses `resources/subscribe` and `resources/unsubscribe`; MCP
-  /// `2026-07-28` uses `subscriptions/listen` with
+  /// MCP `2025-11-25` uses `resources/subscribe` and
+  /// `resources/unsubscribe`; MCP `2026-07-28` uses `subscriptions/listen` with
   /// `resourceSubscriptions`.
   final bool? subscribe;
 
@@ -1346,7 +1346,7 @@ class InitializeResult implements BaseResultData {
 
 /// Result data for a successful `server/discover` request.
 class DiscoverResult implements CacheableResultData {
-  /// Result discriminator used by the 2026 result model.
+  /// Result discriminator used by the MCP `2026-07-28` result model.
   final String resultType;
 
   /// Protocol versions supported by the server.

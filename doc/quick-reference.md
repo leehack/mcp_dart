@@ -29,7 +29,7 @@ const strictServerOptions = McpServerOptions(
 );
 ```
 
-See the [2026 transition guide](mcp-2026-07-28.md) before depending on
+See the [MCP 2026-07-28 transition guide](mcp-2026-07-28.md) before depending on
 draft-only behavior.
 
 ## Server
@@ -121,7 +121,8 @@ server.registerResource(
 
 Use `registerResourceTemplate` for parameterized URIs and declare
 `resources.subscribe` only when supporting legacy MCP 2025-11-25 resource
-subscriptions. MCP 2026 sends resource updates through `subscriptions/listen`.
+subscriptions. MCP 2026-07-28 sends resource updates through
+`subscriptions/listen`.
 
 ### Register a prompt
 
@@ -258,8 +259,8 @@ EmbeddedResource(
 );
 ```
 
-Tool results can contain multiple content items. The 2026 preview also supports
-the documented draft-only structured-content helpers.
+Tool results can contain multiple content items. The MCP 2026-07-28 preview also
+supports the documented draft-only structured-content helpers.
 
 ## JSON Schema
 
@@ -275,7 +276,10 @@ final schema = JsonSchema.object(
 );
 ```
 
-The SDK preserves supported JSON Schema 2020-12 constructs. Validate business
+The SDK validates JSON Schema Draft 2020-12 by default and accepts an explicitly
+declared Draft 7 schema for MCP 2025-11-25 compatibility. Same-document fragment
+references are supported; relative and network references, `$dynamicRef`,
+unsupported dialects, and custom vocabularies are rejected. Validate business
 rules in the callback as well as describing inputs in the schema.
 
 ## Errors
@@ -298,8 +302,8 @@ Common JSON-RPC codes are available through `ErrorCode`, including
 
 ## Notifications and logging
 
-For MCP 2026, acknowledge the caller's `subscriptions/listen` filter before
-sending correlated notifications on that request stream:
+For MCP 2026-07-28, acknowledge the caller's `subscriptions/listen` filter
+before sending correlated notifications on that request stream:
 
 ```dart
 server.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
@@ -323,10 +327,10 @@ server.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
 
 ```
 
-MCP 2026 deprecates protocol logging. The compatibility API belongs inside a
-request handler, must receive `requestMeta: extra.meta`, and emits only messages
-allowed by that request's log level. Legacy MCP 2025-11-25 peers instead use
-global capability-gated methods such as `sendToolListChanged`,
+MCP 2026-07-28 deprecates protocol logging. The compatibility API belongs
+inside a request handler, must receive `requestMeta: extra.meta`, and emits only
+messages allowed by that request's log level. Legacy MCP 2025-11-25 peers
+instead use global capability-gated methods such as `sendToolListChanged`,
 `sendResourceUpdated`, and `logging/setLevel`.
 
 Stdio servers must reserve stdout for MCP frames; send application logs to

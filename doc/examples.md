@@ -9,13 +9,13 @@ protocol era. Choose the profile that matches what you want to test:
 
 | Profile | Start with | Purpose |
 | --- | --- | --- |
-| Strict MCP `2026-07-28` | [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/) | Guarantee discovery and the stateless 2026 request model |
-| Default dual-era | [`server_stdio.dart`](../example/server_stdio.dart), [`client_stdio.dart`](../example/client_stdio.dart), [`streamable_https/`](../example/streamable_https/) | Prefer 2026 and retain legacy fallback |
-| Representative MCP 2025 / legacy | [`simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`elicitation_http_server.dart`](../example/elicitation_http_server.dart), [`server_sse.dart`](../example/server_sse.dart) | Demonstrate initialization-era APIs retained for compatibility |
+| Strict MCP `2026-07-28` | [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/) | Guarantee discovery and the stateless MCP 2026-07-28 request model |
+| Default dual-era | [`server_stdio.dart`](../example/server_stdio.dart), [`client_stdio.dart`](../example/client_stdio.dart), [`streamable_https/`](../example/streamable_https/) | Prefer MCP 2026-07-28 and retain legacy fallback |
+| Representative MCP 2025-11-25 / legacy | [`simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`elicitation_http_server.dart`](../example/elicitation_http_server.dart), [`server_sse.dart`](../example/server_sse.dart) | Demonstrate initialization-era APIs retained for compatibility |
 
 For task-focused guidance, also see:
 
-- [MCP 2026 Tasks extension](tools.md#mcp-2026-tasks-extension) for the client
+- [MCP 2026-07-28 Tasks extension](tools.md#mcp-2026-07-28-tasks-extension) for the client
   flow and links to the server handlers.
 - [SDK interoperability matrix](interoperability.md) for verified cross-SDK scenarios.
 - [Flutter host and client recipes](flutter-recipes.md) for platform-specific Flutter guidance.
@@ -47,7 +47,7 @@ dart run example/mcp_2026_07_28/client.dart
 ## Default dual-era examples
 
 These examples use `McpProtocol.stable`, explicitly or by default. Compatible
-peers negotiate MCP 2026; older peers use initialization fallback.
+peers negotiate MCP 2026-07-28; older peers use initialization fallback.
 
 ### Stdio Server and Client
 
@@ -144,7 +144,7 @@ dart run example/streamable_https/client_streamable_https.dart
 
 **Features**:
 
-- Stateless POST requests for MCP 2026
+- Stateless POST requests for MCP 2026-07-28
 - Session persistence and connection resumption for legacy MCP
 - CORS support for browser examples
 
@@ -161,7 +161,7 @@ dart run example/streamable_https/high_level_server.dart
 **Features**:
 
 - Simplified server creation
-- Stateless 2026 request routing
+- Stateless MCP 2026-07-28 request routing
 - Sessions, event storage, and resumability for legacy MCP
 - Automatic transport handling
 
@@ -304,23 +304,25 @@ dart run example/mcp_apps_metadata_server.dart
 MCP Apps is an optional extension and is tracked separately from core protocol
 coverage.
 
-## MCP 2025 and legacy compatibility
+## MCP 2025-11-25 and earlier compatibility
 
 ### Core task augmentation
 
 **Location**: [`example/simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`example/simple_task_interactive_client.dart`](../example/simple_task_interactive_client.dart)
 
-This pair explicitly selects `McpProtocol.legacy` to demonstrate the 2025-era
-core task APIs, including task-scoped elicitation and sampling. MCP 2026 uses
+This pair explicitly selects `McpProtocol.legacy` to demonstrate the MCP
+2025-11-25 initialization-era core task APIs, including task-scoped elicitation
+and sampling. MCP 2026-07-28 uses
 `input_required` in core and exposes long-running Tasks as an extension; start
-with the strict 2026 pair for the modern input flow.
+with the strict MCP 2026-07-28 pair for the modern input flow.
 
 ### Argument Completions
 
 **Location**: [`example/completions_capability_demo.dart`](../example/completions_capability_demo.dart)
 
 Initialization-era auto-completion for arguments. This example explicitly uses
-`McpProtocol.legacy` because its commentary targets the 2025 feature shape.
+`McpProtocol.legacy` because its commentary targets the MCP 2025-11-25 feature
+shape.
 
 ```bash
 dart run example/completions_capability_demo.dart
@@ -352,8 +354,8 @@ dart run example/elicitation_http_server.dart
 
 Form elicitation must not collect passwords, access tokens, or other secrets.
 
-For MCP 2026, return `InputRequiredResult` from the tool, resource, or prompt
-handler as shown in the strict 2026 example.
+For MCP 2026-07-28, return `InputRequiredResult` from the tool, resource, or
+prompt handler as shown in the strict MCP 2026-07-28 example.
 
 ## Other feature examples
 
@@ -434,6 +436,17 @@ cd example/flutter_http_client
 flutter run -d chrome --web-port 8080
 ```
 
+Run the automated browser service integration from the repository root:
+
+```bash
+dart run tool/testing/run_flutter_web_example_e2e.dart
+```
+
+It starts the MCP 2026-07-28 conformance server and runs the example's service
+layer in Chrome through repeated tool requests, RPC-error recovery, reconnect,
+and disconnect. The ordinary Flutter test suite covers the UI with widget
+tests.
+
 **Features**:
 
 - Cross-platform (iOS, Android, Web)
@@ -444,12 +457,12 @@ flutter run -d chrome --web-port 8080
 
 See [Flutter Host and Client Recipes](flutter-recipes.md) for platform-specific transport, lifecycle, authentication, and testing guidance.
 
-### Jaspr MCP 2025 task client
+### Jaspr MCP 2025-11-25 task client
 
 **Location**: [`example/jaspr-client/`](../example/jaspr-client/)
 
 Browser client explicitly using `McpProtocol.legacy` for elicitation, sampling,
-and 2025-era task-aware tool flows:
+and MCP 2025-11-25 initialization-era task-aware tool flows:
 
 ```bash
 dart run example/simple_task_interactive_server.dart
@@ -705,7 +718,7 @@ export GEMINI_API_KEY=your_key
 dart run example/server_stdio.dart
 dart run example/client_stdio.dart
 
-# Strict MCP 2026 example (starts its paired server)
+# Strict MCP 2026-07-28 example (starts its paired server)
 dart run example/mcp_2026_07_28/client.dart
 
 # HTTP examples
@@ -731,7 +744,8 @@ dart test test/example/non_credentialed_examples_smoke_test.dart
 
 Core CI also analyzes, tests, and AOT-compiles the nested Anthropic, Gemini,
 and fetch packages; builds the Jaspr production bundle; and analyzes, tests,
-and builds the Flutter web app.
+builds, and runs the Flutter Web service integration in Chrome plus separate
+widget tests.
 
 ## Next Steps
 
@@ -743,7 +757,7 @@ and builds the Flutter web app.
 
 ### For Advanced Users
 
-1. Run the [strict MCP 2026 example](../example/mcp_2026_07_28/)
+1. Run the [strict MCP 2026-07-28 example](../example/mcp_2026_07_28/)
 2. Study the [authentication boundary guide](../example/authentication/OAUTH_SERVER_GUIDE.md)
 3. Review the [protocol coverage matrices](spec-coverage-2026-07-28.md)
 
@@ -771,7 +785,7 @@ and builds the Flutter web app.
 Have a great example? Contributions are welcome!
 
 1. Create the example in the `example/` directory
-2. State whether it is strict 2026, dual-era, or intentionally legacy
+2. State whether it is strict MCP 2026-07-28, dual-era, or intentionally legacy
 3. Add a README explaining the example
 4. Include comments for clarity
 5. Test on the applicable platforms

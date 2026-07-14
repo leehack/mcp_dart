@@ -1,6 +1,8 @@
 # MCP Migration Cookbooks
 
-This page collects practical migration paths into `mcp_dart`. It complements the protocol-specific [`2025-11-25 compatibility migration`](migration_2025_11_25_compat.md) guide.
+This page collects practical migration paths into `mcp_dart`. It complements
+the protocol-specific [MCP 2025-11-25 compatibility migration](migration_2025_11_25_compat.md)
+guide.
 
 ## Cookbook 1: TypeScript SDK server example -> Dart server
 
@@ -125,7 +127,7 @@ Deployment checklist:
 - Keep compatibility toggles documented and temporary when migrating older clients.
 - Verify `MCP-Protocol-Version`, `MCP-Session-Id`, and `Last-Event-ID` behavior with tests or manual curl/browser checks.
 
-## Cookbook 4: older `mcp_dart` API usage -> current 2025-11-25 behavior
+## Cookbook 4: older `mcp_dart` API usage -> current MCP 2025-11-25 behavior
 
 For code already using `mcp_dart`, start with [`doc/migration_2025_11_25_compat.md`](migration_2025_11_25_compat.md). The most important compatibility areas are:
 

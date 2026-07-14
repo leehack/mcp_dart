@@ -336,7 +336,7 @@ Future<void> handlePostRequest(
       // Reuse existing transport
       transport = transports[sessionId]!;
     } else if (sessionId == null && canHandleSessionlessPost(request, body)) {
-      // New legacy session request or stateless 2026 request
+      // New legacy session request or stateless MCP 2026-07-28 request.
       final eventStore = InMemoryEventStore();
       transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(

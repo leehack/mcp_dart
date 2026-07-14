@@ -150,7 +150,8 @@ class StreamableMcpService extends ChangeNotifier {
       };
 
       // These global handlers support initialization-era fallback peers. MCP
-      // 2026 uses request-scoped progress and subscriptions/listen instead.
+      // 2026-07-28 uses request-scoped progress and subscriptions/listen
+      // instead.
       _client!.setNotificationHandler(
         "notifications/message",
         (notification) async {

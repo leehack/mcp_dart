@@ -1,0 +1,56 @@
+name: Run Streamable HTTP Lifecycle Stress
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 8 * * *'
+  pull_request:
+    paths:
+      - 'lib/src/client/streamable_https.dart'
+      - 'lib/src/server/streamable_https.dart'
+      - 'lib/src/shared/protocol.dart'
+      - 'lib/src/shared/transport.dart'
+      - 'test/client/streamable_https_test.dart'
+      - 'test/client/streamable_https_advanced_test.dart'
+      - 'test/server/streamable_https_test.dart'
+      - 'test/mcp_2026_07_28_test.dart'
+      - '.github/workflows/lifecycle_stress.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+
+jobs:
+  lifecycle-stress:
+    name: lifecycle-stress (seed ${{ matrix.seed }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        seed:
+          - 20251125
+          - 20260728
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Run randomized lifecycle suites
+        run: >-
+          dart test
+          --test-randomize-ordering-seed ${{ matrix.seed }}
+          --concurrency 2
+          --timeout 2x
+          test/client/streamable_https_test.dart
+          test/client/streamable_https_advanced_test.dart
+          test/server/streamable_https_test.dart
+          test/mcp_2026_07_28_test.dart

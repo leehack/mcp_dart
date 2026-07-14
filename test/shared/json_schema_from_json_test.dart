@@ -1,4 +1,5 @@
 import 'package:mcp_dart/src/shared/json_schema/json_schema.dart';
+import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -67,6 +68,25 @@ void main() {
       expect(schema, isA<JsonEnum>());
       final s = schema as JsonEnum;
       expect(s.values, ['simple', 'complex']);
+    });
+
+    test('canonicalizes and validates legacy string values', () {
+      final schema = JsonSchema.fromJson({
+        'type': 'string',
+        'values': ['simple', 'complex'],
+      });
+
+      expect(schema, isA<JsonString>());
+      expect((schema as JsonString).enumValues, ['simple', 'complex']);
+      expect(schema.toJson(), {
+        'type': 'string',
+        'enum': ['simple', 'complex'],
+      });
+      schema.validate('simple');
+      expect(
+        () => schema.validate('unsupported'),
+        throwsA(isA<JsonSchemaValidationException>()),
+      );
     });
 
     test('parses enum-only schema', () {
@@ -396,7 +416,30 @@ void main() {
       final schema = JsonSchema.fromJson(json);
 
       expect(schema, isA<JsonObject>());
+      final object = schema as JsonObject;
+      expect(object.extra, containsPair(r'$schema', json[r'$schema']));
+      expect(object.extra, contains(r'$defs'));
       expect(schema.toJson(), json);
+    });
+
+    test('keeps the public JsonObject.extra builder API', () {
+      const schema = JsonObject(
+        additionalProperties: false,
+        extra: {
+          r'$defs': {
+            'identifier': {'type': 'string'},
+          },
+        },
+      );
+
+      expect(schema.extra, contains(r'$defs'));
+      expect(schema.toJson(), {
+        'type': 'object',
+        'additionalProperties': false,
+        r'$defs': {
+          'identifier': {'type': 'string'},
+        },
+      });
     });
 
     test('parses object schema with additionalProperties as schema', () {

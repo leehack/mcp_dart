@@ -15,8 +15,8 @@ do not fit Gemini's function-name rules are exposed through deterministic,
 collision-safe aliases and mapped back before the MCP call runs.
 
 The MCP client uses the SDK's default dual-era compatibility profile. It
-prefers MCP `2026-07-28` stateless discovery and falls back to the
-`2025-11-25` and earlier supported initialization versions for older servers.
+prefers MCP 2026-07-28 stateless discovery and falls back to MCP 2025-11-25 and
+earlier supported initialization specifications for older servers.
 The example does not force either protocol generation.
 
 The CLI asks for approval before every Gemini-requested tool call and rejects

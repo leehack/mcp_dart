@@ -2137,7 +2137,7 @@ class StreamableHTTPServerTransport
     return false;
   }
 
-  /// Checks if a message uses the stateless 2026 protocol metadata.
+  /// Checks if a message uses stateless MCP `2026-07-28` metadata.
   bool _isStatelessJsonRpcRequest(JsonRpcMessage message) {
     if (message is JsonRpcRequest) {
       final version = message.meta?[McpMetaKey.protocolVersion];

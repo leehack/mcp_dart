@@ -7,6 +7,22 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '17 9 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/**'
+      - 'test/conformance/**'
+      - 'test/interop/test_dart_server.dart'
+      - 'test/interop/ts_2026_07_28/**'
+      - 'test/interop/python_2026_07_28/**'
+      - 'test/browser/mcp_2026_07_28_streamable_http_test.dart'
+      - 'tool/testing/run_ts_2026_07_28_interop.dart'
+      - 'tool/testing/run_python_2026_07_28_interop.dart'
+      - 'tool/testing/run_browser_2026_07_28_interop.dart'
+      - '.github/workflows/interop_2026_07_28.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
   pull_request:
     paths:
       - 'lib/**'

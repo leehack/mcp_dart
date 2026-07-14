@@ -138,6 +138,40 @@ void main() {
       expect(unbalancedFiles, isEmpty);
     });
 
+    test('dated MCP specification names are not shortened to years', () {
+      final shortenedNames = <String>[];
+
+      for (final file in markdownFiles) {
+        final content = File(file).readAsStringSync();
+        for (final pattern in _shortenedMcpSpecNamePatterns) {
+          for (final match in pattern.allMatches(content)) {
+            shortenedNames.add(
+              '${p.relative(file, from: repoRoot)}:'
+              '${_lineNumberAt(content, match.start)} -> ${match.group(0)}',
+            );
+          }
+        }
+        final lines = const LineSplitter().convert(content);
+        for (var index = 0; index < lines.length; index++) {
+          final line = lines[index];
+          if (_mcpSpecContextPattern.hasMatch(line)) {
+            for (final match in _shortenedMcpSpecYearPattern.allMatches(line)) {
+              shortenedNames.add(
+                '${p.relative(file, from: repoRoot)}:${index + 1} -> '
+                '${match.group(0)}',
+              );
+            }
+          }
+        }
+      }
+
+      expect(
+        shortenedNames,
+        isEmpty,
+        reason: 'Use the complete names MCP 2025-11-25 and MCP 2026-07-28.',
+      );
+    });
+
     test('the rendered server template analyzes and passes its tests',
         () async {
       final templateRoot = Directory(
@@ -234,6 +268,28 @@ final _markdownLinkPattern = RegExp(
 final _dartRunFilePattern = RegExp(
   r'dart run (?<target>(?:example|packages|test|bin|tool)/[^\s`]+\.dart)',
 );
+
+final _shortenedMcpSpecNamePatterns = <RegExp>[
+  RegExp(r'\bMCP\s+2025(?!-\d{2}-\d{2}\b)', caseSensitive: false),
+  RegExp(r'\bMCP\s+2026(?!-\d{2}-\d{2}\b)', caseSensitive: false),
+  RegExp(
+    r'\b202[56]\s+(?:MCP\s+)?(?:spec(?:ification)?|protocol|compatibility|conformance)\b',
+    caseSensitive: false,
+  ),
+];
+
+final _mcpSpecContextPattern = RegExp(
+  r'\b(?:MCP|SDK|spec(?:ification)?|protocol|profile|compatibility|conformance|coverage|stateless|legacy)\b',
+  caseSensitive: false,
+);
+
+final _shortenedMcpSpecYearPattern = RegExp(
+  r'(?<![-_/`])\b202[56]\b(?!-\d{2}-\d{2}\b|[-_/`])',
+);
+
+int _lineNumberAt(String content, int offset) {
+  return '\n'.allMatches(content.substring(0, offset)).length + 1;
+}
 
 Iterable<String> _markdownFiles(String repoRoot) sync* {
   final roots = [

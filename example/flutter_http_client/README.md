@@ -2,7 +2,8 @@
 
 This Flutter Web application demonstrates an MCP client using Streamable HTTP.
 Its button-based UI covers connection state, tools, prompts, resources, and
-notifications against both MCP 2026 and initialization-era servers.
+notifications against both MCP 2026-07-28 and MCP 2025-11-25
+initialization-era servers.
 
 ## Features
 
@@ -71,8 +72,14 @@ flutter analyze
 flutter test
 flutter build web
 
-# From the repository root: real Chrome, 12 list requests and 12 tool calls
-# against both the 2026 default and 2025 legacy profiles
+# From the repository root: real Flutter Web service integration in Chrome.
+# This runs 12 tool lists, 12 tool calls, RPC-error recovery, reconnect, and
+# disconnect against the MCP 2026-07-28 conformance server. The ordinary
+# flutter test suite covers the UI separately with deterministic widget tests.
+dart run tool/testing/run_flutter_web_example_e2e.dart
+
+# Also from the repository root: lower-level SDK browser-transport regression
+# in real Chrome against MCP 2026-07-28 and MCP 2025-11-25.
 dart run tool/testing/run_browser_2026_07_28_interop.dart
 ```
 
@@ -89,9 +96,9 @@ The application demonstrates key aspects of MCP client implementation:
 1. **Connection**: The client establishes a connection to the MCP server and retrieves capabilities.
 2. **Tool Calling**: The client calls tools on the server with parameters.
 3. **Progress**: The client displays request-scoped progress while a tool call is active. Try `multi-greet`, or pass `{"interval": 100, "count": 5}` to `start-notification-stream`.
-4. **Dual-era behavior**: The default profile prefers MCP 2026 and can fall back
-   to initialization-era servers. Session controls are enabled only after a
-   legacy session is negotiated.
+4. **Dual-era behavior**: The default profile prefers MCP 2026-07-28 and can
+   fall back to MCP 2025-11-25 initialization-era servers. Session controls are
+   enabled only after a legacy session is negotiated.
 
 The `StreamableMcpService` class handles all communication with the server and updates `ChangeNotifier` state that the UI listens to.
 

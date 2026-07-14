@@ -5,9 +5,9 @@ Do not publish the stable Dart packages from a moving draft commit.
 
 ## Branch policy
 
-- [PR #306](https://github.com/leehack/mcp_dart/pull/306) merged the 2026
-  implementation line into `main`. Prepare prereleases and the eventual
-  stable release on focused branches cut from the latest `main`.
+- [PR #306](https://github.com/leehack/mcp_dart/pull/306) merged the MCP
+  2026-07-28 implementation line into `main`. Prepare prereleases and the
+  eventual stable release on focused branches cut from the latest `main`.
 - Keep `dev/2026-07-28-rc` as a read-only archive. Published
   `mcp_dart 2.3.0-dev.0`, `2.3.0-dev.1`, and matching CLI prereleases contain
   documentation URLs for that branch; deleting it would break their metadata.
@@ -23,7 +23,8 @@ the exact validated release-prep commit:
    for `mcp_dart`. Verify that tag `v2.3.0-dev.2` points at that exact commit,
    the GitHub prerelease exists, and the tag-triggered pub.dev workflow passes.
 2. Wait until `mcp_dart 2.3.0-dev.2` resolves from pub.dev in a clean consumer
-   project.
+   project. Verify its API-documentation page and every URL in `README.md` and
+   `example/example.md`; version-pinned links must no longer return 404.
 3. Run `dart run tool/validate_cli_publish.dart --published-sdk` so the CLI is
    tested without its monorepo path override.
 4. Activate `pana`, then from `packages/mcp_dart_cli` run
@@ -31,7 +32,8 @@ the exact validated release-prep commit:
    the full 160/160 score.
 5. Dispatch `Create Release` for `mcp_dart_cli`. Verify tag
    `mcp_dart_cli-v0.2.0-dev.2`, its pub.dev package, and every standalone binary
-   asset against the same release-prep commit.
+   asset against the same release-prep commit. Verify every URL in
+   `packages/mcp_dart_cli/README.md` after the CLI tag exists.
 
 Package metadata and README links use the immutable SDK and CLI prerelease tags
 so they remain valid after source branches are removed.
@@ -73,6 +75,18 @@ dart run tool/spec_example_audit.dart \
   .dart_tool/mcp-spec/schema/2026-07-28/examples
 dart run tool/spec_document_inventory_audit.dart \
   .dart_tool/mcp-spec/docs/specification/2026-07-28
+JSON_SCHEMA_SUITE_REF="$(tr -d '[:space:]' \
+  < tool/testing/json_schema_test_suite_ref.txt)"
+git clone --filter=blob:none --no-checkout \
+  https://github.com/json-schema-org/JSON-Schema-Test-Suite.git \
+  .dart_tool/json-schema-test-suite
+git -C .dart_tool/json-schema-test-suite fetch --depth=1 \
+  origin "$JSON_SCHEMA_SUITE_REF"
+git -C .dart_tool/json-schema-test-suite checkout --detach FETCH_HEAD
+dart run tool/testing/run_json_schema_2020_12_suite.dart \
+  .dart_tool/json-schema-test-suite/tests/draft2020-12
+dart run tool/testing/run_json_schema_draft7_suite.dart \
+  .dart_tool/json-schema-test-suite/tests/draft7
 dart run test/conformance/run_2025_server_conformance.dart \
   --timeout-seconds 90 --isolate-scenarios
 CONFORMANCE_VERSION=0.2.0-alpha.9 # Replace with the final compatible release.
@@ -91,6 +105,7 @@ python3 -m venv .dart_tool/python-2026-interop
 MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
   dart run tool/testing/run_python_2026_07_28_interop.dart
 dart run tool/testing/run_browser_2026_07_28_interop.dart
+dart run tool/testing/run_flutter_web_example_e2e.dart
 dart pub publish --dry-run
 ```
 
@@ -141,7 +156,8 @@ Merge the release PR to `main` only after this commit passes the complete gate.
 3. Confirm pub.dev shows version `2.3.0`, correct `main` documentation links,
    and a successful package analysis.
 4. Create a clean temporary Dart project, resolve `mcp_dart: ^2.3.0`, and run a
-   minimal 2026 client/server smoke test using only the published package.
+   minimal MCP 2026-07-28 client/server smoke test using only the published
+   package.
 
 Do not start the stable CLI release until the published SDK resolves publicly.
 

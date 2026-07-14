@@ -9,7 +9,7 @@ correlated Anthropic `tool_result` blocks. Multiple tool calls in one assistant
 turn and multiple tool-use rounds are supported.
 
 Its `McpClient` uses the SDK's default dual-era compatibility profile: it
-prefers MCP `2026-07-28` and falls back to the `2025-11-25` initialization flow
+prefers MCP 2026-07-28 and falls back to the MCP 2025-11-25 initialization flow
 for legacy servers.
 
 The CLI asks for approval before every Anthropic-requested tool call and

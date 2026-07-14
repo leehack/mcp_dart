@@ -1,6 +1,7 @@
 # MCP 2025-11-25 Compatibility Migration
 
-> This guide covers the `McpProtocol.legacy` and 2025-era surface. The dev.2
+> This guide covers the `McpProtocol.legacy` and MCP 2025-11-25
+> initialization-era surface. The dev.2
 > default prefers MCP `2026-07-28`; see the
 > [transition guide](mcp-2026-07-28.md) for current default behavior.
 

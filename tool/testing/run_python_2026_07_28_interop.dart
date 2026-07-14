@@ -78,7 +78,7 @@ Future<void> _runPythonClientAgainstDartServer(
     await Future.wait([clientStdout, clientStderr]);
     if (clientExit != 0) {
       throw StateError(
-        'Python 2026-07-28 client exited with $clientExit',
+        'Python MCP 2026-07-28 client exited with $clientExit',
       );
     }
   } finally {

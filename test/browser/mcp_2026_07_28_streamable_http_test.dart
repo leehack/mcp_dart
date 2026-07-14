@@ -1,6 +1,8 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
+
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
@@ -19,6 +21,79 @@ void main() {
       expectedVersion: stableProtocolVersion,
       label: 'legacy',
     );
+  });
+
+  test('browser cancellation closes one 2026 response stream and recovers',
+      () async {
+    final client = McpClient(
+      const Implementation(
+        name: 'mcp-dart-browser-cancellation-client',
+        version: '0.0.0',
+      ),
+      options: const McpClientOptions(protocol: McpProtocol.require2026),
+    );
+    final transport = StreamableHttpClientTransport(
+      Uri.parse('http://localhost:8765/mcp'),
+    );
+
+    try {
+      await client.connect(transport).timeout(const Duration(seconds: 20));
+      final controller = BasicAbortController();
+      final requestStarted = Completer<void>();
+      final request = client.callTool(
+        const CallToolRequest(
+          name: 'test_stream_cancellation',
+          arguments: {},
+        ),
+        options: RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+          onprogress: (_) {
+            if (!requestStarted.isCompleted) {
+              requestStarted.complete();
+            }
+          },
+        ),
+      );
+      await requestStarted.future.timeout(const Duration(seconds: 10));
+
+      controller.abort('browser request cancelled');
+      await expectLater(
+        request,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('browser request cancelled'),
+          ),
+        ),
+      );
+
+      var observedCancellations = 0;
+      for (var attempt = 0;
+          attempt < 10 && observedCancellations == 0;
+          attempt++) {
+        final status = await client
+            .callTool(
+              const CallToolRequest(
+                name: 'test_stream_cancellation_status',
+                arguments: {},
+              ),
+            )
+            .timeout(const Duration(seconds: 10));
+        observedCancellations = int.parse(
+          (status.content.single as TextContent).text,
+        );
+      }
+      expect(observedCancellations, greaterThan(0));
+
+      final tools =
+          await client.listTools().timeout(const Duration(seconds: 10));
+      expect(
+        tools.tools.map((tool) => tool.name),
+        contains('echo'),
+      );
+    } finally {
+      await client.close();
+    }
   });
 }
 

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'conformance_scenario_inventory.dart';
+
 const _defaultConformancePackage =
     '@modelcontextprotocol/conformance@0.2.0-alpha.9';
 const _defaultTimeout = Duration(seconds: 25);
@@ -63,6 +65,14 @@ Future<void> main(List<String> args) async {
   final scenarios =
       options.scenario == null ? _serverScenarios : [options.scenario!];
 
+  await verifyConformanceScenarioInventory(
+    conformancePackage: options.conformancePackage,
+    role: 'server',
+    specVersion: '2026-07-28',
+    expectedScenarios: scenarios,
+    requireExactMatch: options.scenario == null,
+  );
+
   Process? serverProcess;
   var serverOutputSubscriptions = <StreamSubscription<String>>[];
   late final Uri serverUrl;
@@ -85,7 +95,7 @@ Future<void> main(List<String> args) async {
       serverUrl = Uri.parse(options.url!);
     }
 
-    stdout.writeln('2026-07-28 conformance URL: $serverUrl');
+    stdout.writeln('MCP 2026-07-28 conformance URL: $serverUrl');
     stdout.writeln('Conformance package: ${options.conformancePackage}');
     stdout.writeln('Output: ${outputRoot.path}');
     stdout.writeln('');

@@ -19,8 +19,8 @@ class MockTransport extends Transport {
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
 
-    // Handle discovery probe from default 2026 clients against this legacy
-    // mock transport.
+    // Handle discovery probes from default MCP 2026-07-28 clients against this
+    // legacy mock transport.
     if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
       onmessage?.call(
         JsonRpcError(

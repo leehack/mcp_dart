@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
@@ -59,6 +60,12 @@ class StartSseOptions {
   /// Fails the originating send when its response stream cannot resume.
   final void Function(Error error)? onRequestStreamEnd;
 
+  /// Whether the originating request was cancelled through its HTTP stream.
+  final bool Function()? isRequestCancelled;
+
+  /// Completes when the originating request is explicitly cancelled.
+  final Future<void>? requestCancellationTrigger;
+
   /// Whether to attempt reconnection when the stream closes.
   /// Default is true.
   final bool shouldReconnect;
@@ -73,9 +80,25 @@ class StartSseOptions {
     this.requestMessageId,
     this.onTerminalResponse,
     this.onRequestStreamEnd,
+    this.isRequestCancelled,
+    this.requestCancellationTrigger,
     this.shouldReconnect = true,
     this.rejectServerRequests = false,
   });
+}
+
+class _RequestCancellation {
+  final Completer<void> _trigger = Completer<void>();
+
+  bool get isCancelled => _trigger.isCompleted;
+
+  Future<void> get trigger => _trigger.future;
+
+  void cancel() {
+    if (!_trigger.isCompleted) {
+      _trigger.complete();
+    }
+  }
 }
 
 class _HttpAbortBinding {
@@ -83,12 +106,28 @@ class _HttpAbortBinding {
   // Cancelled by [dispose] after the bound request settles.
   // ignore: cancel_subscriptions
   StreamSubscription<bool>? _subscription;
+  // Cancelled by [dispose] after the bound operation settles.
+  // ignore: cancel_subscriptions
+  StreamSubscription<void>? _additionalSubscription;
 
-  _HttpAbortBinding(StreamController<bool>? controller) {
-    if (controller == null || controller.isClosed) {
-      return;
+  _HttpAbortBinding(
+    StreamController<bool>? controller, {
+    Future<void>? requestAbortTrigger,
+    Stream<void>? additionalAbortStream,
+  }) {
+    if (controller != null && !controller.isClosed) {
+      _subscription = controller.stream.listen((_) {
+        if (!_abortTrigger.isCompleted) {
+          _abortTrigger.complete();
+        }
+      });
     }
-    _subscription = controller.stream.listen((_) {
+    requestAbortTrigger?.then((_) {
+      if (!_abortTrigger.isCompleted) {
+        _abortTrigger.complete();
+      }
+    });
+    _additionalSubscription = additionalAbortStream?.listen((_) {
       if (!_abortTrigger.isCompleted) {
         _abortTrigger.complete();
       }
@@ -100,9 +139,90 @@ class _HttpAbortBinding {
   Future<void> dispose() async {
     final subscription = _subscription;
     _subscription = null;
+    final additionalSubscription = _additionalSubscription;
+    _additionalSubscription = null;
     await subscription?.cancel();
+    await additionalSubscription?.cancel();
   }
 }
+
+class _RequestOperationGuard {
+  final Future<void> abortTrigger;
+  final void Function() _ensureCurrent;
+
+  const _RequestOperationGuard({
+    required this.abortTrigger,
+    required void Function() ensureCurrent,
+  }) : _ensureCurrent = ensureCurrent;
+
+  void check() => _ensureCurrent();
+
+  Future<T> run<T>(FutureOr<T> Function() operation) {
+    final completion = Completer<T>();
+
+    void completeCurrentError() {
+      if (completion.isCompleted) {
+        return;
+      }
+      try {
+        _ensureCurrent();
+      } catch (error, stackTrace) {
+        completion.completeError(error, stackTrace);
+        return;
+      }
+      completion.completeError(
+        StateError('A guarded HTTP operation was interrupted.'),
+      );
+    }
+
+    unawaited(
+      abortTrigger.then<void>(
+        (_) => completeCurrentError(),
+        onError: (Object error, StackTrace stackTrace) {
+          if (!completion.isCompleted) {
+            completion.completeError(error, stackTrace);
+          }
+        },
+      ),
+    );
+
+    Future<T>.sync(() {
+      _ensureCurrent();
+      return operation();
+    }).then<void>(
+      (value) {
+        if (completion.isCompleted) {
+          return;
+        }
+        try {
+          _ensureCurrent();
+          completion.complete(value);
+        } catch (error, stackTrace) {
+          completion.completeError(error, stackTrace);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (completion.isCompleted) {
+          return;
+        }
+        try {
+          _ensureCurrent();
+          completion.completeError(error, stackTrace);
+        } catch (interruption, interruptionStackTrace) {
+          completion.completeError(interruption, interruptionStackTrace);
+        }
+      },
+    );
+
+    return completion.future;
+  }
+}
+
+Future<T> _runRequestOperation<T>(
+  _RequestOperationGuard? guard,
+  FutureOr<T> Function() operation,
+) =>
+    guard?.run(operation) ?? Future<T>.sync(operation);
 
 /// Configuration options for reconnection behavior of the StreamableHttpClientTransport.
 class StreamableHttpReconnectionOptions {
@@ -219,6 +339,7 @@ class StreamableHttpClientTransport
     implements
         Transport,
         ProtocolVersionAwareTransport,
+        RequestCancellationAwareTransport,
         ToolParameterHeaderAwareTransport {
   StreamController<bool>? _abortController;
   final Uri _url;
@@ -233,8 +354,12 @@ class StreamableHttpClientTransport
   final StreamableHttpReconnectionOptions _reconnectionOptions;
   bool _isClosed = false;
   _PendingOAuthAuthorization? _pendingOAuthAuthorization;
+  Object? _pendingOAuthAuthorizationOwner;
   final Map<String, _OAuthClientRegistration> _oauthRegistrations = {};
   final Set<String> _oauthRequestedScopes = {};
+  final Map<RequestId, _RequestCancellation> _requestCancellations = {};
+  final StreamController<void> _closeController =
+      StreamController<void>.broadcast();
 
   @override
   void Function()? onclose;
@@ -275,40 +400,110 @@ class StreamableHttpClientTransport
   }
 
   Future<void> _handleAuthorizationRequired(
-    http.StreamedResponse response,
-  ) async {
+    http.StreamedResponse response, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
     final authProvider = _authProvider;
     if (authProvider == null) {
-      await response.stream.drain<void>();
+      await _drainAuthorizationResponse(response, requestGuard);
       throw UnauthorizedError('Authentication required');
     }
 
     final challenge = OAuthBearerChallengeParameters.fromHeader(
       response.headers['www-authenticate'],
     );
-    await response.stream.drain<void>();
+    await _drainAuthorizationResponse(response, requestGuard);
 
     if (authProvider is OAuthAuthorizationCodeProvider) {
-      final authorizationRequest = await _prepareAuthorizationRequest(
-        authProvider,
-        challenge,
-      );
-      await authProvider.redirectToAuthorizationUrl(
-        authorizationRequest.authorizationUri,
-      );
-      throw UnauthorizedError('Authentication required');
+      Object? authorizationOwner;
+      try {
+        final preparedAuthorization = await _prepareAuthorizationRequest(
+          authProvider,
+          challenge,
+          requestGuard: requestGuard,
+        );
+        requestGuard?.check();
+        authorizationOwner = Object();
+        _pendingOAuthAuthorization = preparedAuthorization.pending;
+        _pendingOAuthAuthorizationOwner = authorizationOwner;
+        await _runRequestOperation(
+          requestGuard,
+          () => authProvider.redirectToAuthorizationUrl(
+            preparedAuthorization.request.authorizationUri,
+          ),
+        );
+        throw UnauthorizedError('Authentication required');
+      } catch (error, stackTrace) {
+        if (requestGuard != null) {
+          try {
+            requestGuard.check();
+          } catch (interruption, interruptionStackTrace) {
+            if (authorizationOwner != null &&
+                identical(
+                  _pendingOAuthAuthorizationOwner,
+                  authorizationOwner,
+                )) {
+              _pendingOAuthAuthorization = null;
+              _pendingOAuthAuthorizationOwner = null;
+            }
+            Error.throwWithStackTrace(interruption, interruptionStackTrace);
+          }
+        }
+        Error.throwWithStackTrace(error, stackTrace);
+      }
     }
 
-    await authProvider.redirectToAuthorization();
+    await _runRequestOperation(
+      requestGuard,
+      authProvider.redirectToAuthorization,
+    );
     throw UnauthorizedError('Authentication required');
   }
 
-  Future<OAuthAuthorizationRequest> _prepareAuthorizationRequest(
-    OAuthAuthorizationCodeProvider provider,
-    OAuthBearerChallengeParameters? challenge,
+  Future<void> _drainAuthorizationResponse(
+    http.StreamedResponse response,
+    _RequestOperationGuard? requestGuard,
   ) async {
-    final protectedResourceMetadata =
-        await _discoverProtectedResourceMetadata(challenge);
+    if (requestGuard == null) {
+      await response.stream.drain<void>();
+      return;
+    }
+
+    final drained = Completer<void>();
+    final subscription = response.stream.listen(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        if (!drained.isCompleted) {
+          drained.completeError(error, stackTrace);
+        }
+      },
+      onDone: () {
+        if (!drained.isCompleted) {
+          drained.complete();
+        }
+      },
+      cancelOnError: true,
+    );
+    try {
+      await requestGuard.run(() => drained.future);
+    } finally {
+      unawaited(
+        subscription.cancel().onError((_, __) {
+          // Request cancellation has already determined the public outcome.
+        }),
+      );
+    }
+  }
+
+  Future<_PreparedOAuthAuthorization> _prepareAuthorizationRequest(
+    OAuthAuthorizationCodeProvider provider,
+    OAuthBearerChallengeParameters? challenge, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
+    final protectedResourceMetadata = await _discoverProtectedResourceMetadata(
+      challenge,
+      requestGuard: requestGuard,
+    );
     final authorizationServerUri =
         protectedResourceMetadata.authorizationServers.isEmpty
             ? null
@@ -324,7 +519,10 @@ class StreamableHttpClientTransport
     );
 
     final authorizationServerMetadata =
-        await _discoverAuthorizationServerMetadata(authorizationServerUri);
+        await _discoverAuthorizationServerMetadata(
+      authorizationServerUri,
+      requestGuard: requestGuard,
+    );
     final authorizationEndpoint =
         authorizationServerMetadata.authorizationEndpoint;
     final tokenEndpoint = authorizationServerMetadata.tokenEndpoint;
@@ -349,6 +547,7 @@ class StreamableHttpClientTransport
     final clientRegistration = await _resolveOAuthClientRegistration(
       provider,
       authorizationServerMetadata,
+      requestGuard: requestGuard,
     );
     _validateOAuthClientRegistration(clientRegistration);
     final scope = _authorizationScope(
@@ -383,7 +582,7 @@ class StreamableHttpClientTransport
       scope: scope,
     );
 
-    _pendingOAuthAuthorization = _PendingOAuthAuthorization(
+    final pendingAuthorization = _PendingOAuthAuthorization(
       tokenEndpoint: tokenEndpoint,
       codeVerifier: codeVerifier,
       clientId: clientRegistration.clientId,
@@ -398,7 +597,11 @@ class StreamableHttpClientTransport
           .authorizationResponseIssParameterSupported,
     );
 
-    return authorizationRequest;
+    requestGuard?.check();
+    return _PreparedOAuthAuthorization(
+      request: authorizationRequest,
+      pending: pendingAuthorization,
+    );
   }
 
   String? _authorizationScope(
@@ -439,8 +642,9 @@ class StreamableHttpClientTransport
 
   Future<_OAuthClientRegistration> _resolveOAuthClientRegistration(
     OAuthAuthorizationCodeProvider provider,
-    OAuthAuthorizationServerMetadataDocument authorizationServerMetadata,
-  ) async {
+    OAuthAuthorizationServerMetadataDocument authorizationServerMetadata, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
     final issuerKey = authorizationServerMetadata.issuer.toString();
     if (authorizationServerMetadata.clientIdMetadataDocumentSupported == true &&
         _isClientIdMetadataDocumentUri(provider.clientId)) {
@@ -462,11 +666,16 @@ class StreamableHttpClientTransport
         return existingRegistration;
       }
 
-      final registration = await _registerOAuthClient(
-        provider,
-        authorizationServerMetadata,
-        registrationEndpoint,
+      final registration = await _runRequestOperation(
+        requestGuard,
+        () => _registerOAuthClient(
+          provider,
+          authorizationServerMetadata,
+          registrationEndpoint,
+          requestGuard: requestGuard,
+        ),
       );
+      requestGuard?.check();
       _oauthRegistrations[issuerKey] = registration;
       return registration;
     }
@@ -494,8 +703,9 @@ class StreamableHttpClientTransport
   Future<_OAuthClientRegistration> _registerOAuthClient(
     OAuthAuthorizationCodeProvider provider,
     OAuthAuthorizationServerMetadataDocument authorizationServerMetadata,
-    Uri registrationEndpoint,
-  ) async {
+    Uri registrationEndpoint, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
     _validateOAuthUri(
       registrationEndpoint,
       OAuthEndpointKind.registrationEndpoint,
@@ -504,21 +714,25 @@ class StreamableHttpClientTransport
       authorizationServerMetadata,
       provider.clientSecret,
     );
-    final response = await _sendOAuthRequest(
-      'POST',
-      registrationEndpoint,
-      headers: const {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode({
-        'client_name': provider.clientId,
-        'redirect_uris': [provider.redirectUri.toString()],
-        'grant_types': ['authorization_code', 'refresh_token'],
-        'response_types': ['code'],
-        'application_type': 'native',
-        'token_endpoint_auth_method': tokenEndpointAuthMethod,
-      }),
+    final response = await _runRequestOperation(
+      requestGuard,
+      () => _sendOAuthRequest(
+        'POST',
+        registrationEndpoint,
+        headers: const {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'client_name': provider.clientId,
+          'redirect_uris': [provider.redirectUri.toString()],
+          'grant_types': ['authorization_code', 'refresh_token'],
+          'response_types': ['code'],
+          'application_type': 'native',
+          'token_endpoint_auth_method': tokenEndpointAuthMethod,
+        }),
+        abortTrigger: requestGuard?.abortTrigger,
+      ),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw UnauthorizedError(
@@ -628,18 +842,27 @@ class StreamableHttpClientTransport
 
   Future<OAuthProtectedResourceMetadataDocument>
       _discoverProtectedResourceMetadata(
-    OAuthBearerChallengeParameters? challenge,
-  ) async {
+    OAuthBearerChallengeParameters? challenge, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
     final resourceMetadata = challenge?.resourceMetadata;
     if (resourceMetadata != null) {
-      return _fetchProtectedResourceMetadata(resourceMetadata);
+      return _fetchProtectedResourceMetadata(
+        resourceMetadata,
+        requestGuard: requestGuard,
+      );
     }
 
     final errors = <Object>[];
     for (final uri in _protectedResourceMetadataCandidates()) {
+      requestGuard?.check();
       try {
-        return await _fetchProtectedResourceMetadata(uri);
+        return await _fetchProtectedResourceMetadata(
+          uri,
+          requestGuard: requestGuard,
+        );
       } catch (error) {
+        requestGuard?.check();
         errors.add(error);
       }
     }
@@ -675,12 +898,19 @@ class StreamableHttpClientTransport
   }
 
   Future<OAuthProtectedResourceMetadataDocument>
-      _fetchProtectedResourceMetadata(Uri uri) async {
+      _fetchProtectedResourceMetadata(
+    Uri uri, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
     _validateOAuthUri(uri, OAuthEndpointKind.protectedResourceMetadata);
-    final response = await _sendOAuthRequest(
-      'GET',
-      uri,
-      headers: const {'Accept': 'application/json'},
+    final response = await _runRequestOperation(
+      requestGuard,
+      () => _sendOAuthRequest(
+        'GET',
+        uri,
+        headers: const {'Accept': 'application/json'},
+        abortTrigger: requestGuard?.abortTrigger,
+      ),
     );
     if (response.statusCode != 200) {
       throw UnauthorizedError(
@@ -718,12 +948,19 @@ class StreamableHttpClientTransport
   }
 
   Future<OAuthAuthorizationServerMetadataDocument>
-      _discoverAuthorizationServerMetadata(Uri issuer) async {
+      _discoverAuthorizationServerMetadata(
+    Uri issuer, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
     _validateOAuthUri(issuer, OAuthEndpointKind.authorizationServer);
     final errors = <Object>[];
     for (final uri in _authorizationServerMetadataCandidates(issuer)) {
+      requestGuard?.check();
       try {
-        final metadata = await _fetchAuthorizationServerMetadata(uri);
+        final metadata = await _fetchAuthorizationServerMetadata(
+          uri,
+          requestGuard: requestGuard,
+        );
         if (metadata.issuer.toString() != issuer.toString()) {
           throw UnauthorizedError(
             'Authorization-server metadata issuer does not match $issuer',
@@ -731,6 +968,7 @@ class StreamableHttpClientTransport
         }
         return metadata;
       } catch (error) {
+        requestGuard?.check();
         errors.add(error);
       }
     }
@@ -785,12 +1023,19 @@ class StreamableHttpClientTransport
       );
 
   Future<OAuthAuthorizationServerMetadataDocument>
-      _fetchAuthorizationServerMetadata(Uri uri) async {
+      _fetchAuthorizationServerMetadata(
+    Uri uri, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
     _validateOAuthUri(uri, OAuthEndpointKind.authorizationServerMetadata);
-    final response = await _sendOAuthRequest(
-      'GET',
-      uri,
-      headers: const {'Accept': 'application/json'},
+    final response = await _runRequestOperation(
+      requestGuard,
+      () => _sendOAuthRequest(
+        'GET',
+        uri,
+        headers: const {'Accept': 'application/json'},
+        abortTrigger: requestGuard?.abortTrigger,
+      ),
     );
     if (response.statusCode != 200) {
       throw UnauthorizedError(
@@ -832,8 +1077,9 @@ class StreamableHttpClientTransport
   Future<OAuthTokens> _exchangeAuthorizationCode(
     OAuthAuthorizationCodeProvider provider,
     String authorizationCode,
-    _PendingOAuthAuthorization pendingAuthorization,
-  ) async {
+    _PendingOAuthAuthorization pendingAuthorization, {
+    _RequestOperationGuard? requestGuard,
+  }) async {
     _validateOAuthUri(
       pendingAuthorization.tokenEndpoint,
       OAuthEndpointKind.tokenEndpoint,
@@ -881,11 +1127,15 @@ class StreamableHttpClientTransport
         );
     }
 
-    final response = await _sendOAuthRequest(
-      'POST',
-      pendingAuthorization.tokenEndpoint,
-      headers: headers,
-      body: body,
+    final response = await _runRequestOperation(
+      requestGuard,
+      () => _sendOAuthRequest(
+        'POST',
+        pendingAuthorization.tokenEndpoint,
+        headers: headers,
+        body: body,
+        abortTrigger: requestGuard?.abortTrigger,
+      ),
     );
     if (response.statusCode != 200) {
       throw UnauthorizedError(
@@ -909,9 +1159,13 @@ class StreamableHttpClientTransport
       expiresIn: _parseExpiresIn(json['expires_in']),
       scope: json['scope'] as String?,
     );
+    await _runRequestOperation(
+      requestGuard,
+      () => provider.saveTokens(tokens),
+    );
+    requestGuard?.check();
     _oauthRequestedScopes.addAll(_splitOAuthScopes(pendingAuthorization.scope));
     _oauthRequestedScopes.addAll(_splitOAuthScopes(tokens.scope));
-    await provider.saveTokens(tokens);
     return tokens;
   }
 
@@ -920,8 +1174,15 @@ class StreamableHttpClientTransport
     Uri uri, {
     Map<String, String> headers = const {},
     Object? body,
+    Future<void>? abortTrigger,
   }) async {
-    final request = http.Request(method, uri)
+    final request = (abortTrigger == null
+        ? http.Request(method, uri)
+        : http.AbortableRequest(
+            method,
+            uri,
+            abortTrigger: abortTrigger,
+          ))
       ..followRedirects = false
       ..headers.addAll(headers);
     if (body is String) {
@@ -933,13 +1194,69 @@ class StreamableHttpClientTransport
     }
 
     final streamedResponse = await _httpClient.send(request);
-    final response = await http.Response.fromStream(streamedResponse);
+    final response = await _readOAuthResponse(
+      streamedResponse,
+      uri,
+      abortTrigger,
+    );
     if (response.isRedirect) {
       throw UnauthorizedError(
         'OAuth endpoint redirects are not followed automatically',
       );
     }
     return response;
+  }
+
+  Future<http.Response> _readOAuthResponse(
+    http.StreamedResponse response,
+    Uri uri,
+    Future<void>? abortTrigger,
+  ) async {
+    if (abortTrigger == null) {
+      return http.Response.fromStream(response);
+    }
+
+    final body = BytesBuilder(copy: false);
+    final completed = Completer<void>();
+    late final StreamSubscription<List<int>> subscription;
+    subscription = response.stream.listen(
+      body.add,
+      onError: (Object error, StackTrace stackTrace) {
+        if (!completed.isCompleted) {
+          completed.completeError(error, stackTrace);
+        }
+      },
+      onDone: () {
+        if (!completed.isCompleted) {
+          completed.complete();
+        }
+      },
+      cancelOnError: true,
+    );
+    unawaited(
+      abortTrigger.then<void>((_) {
+        if (completed.isCompleted) {
+          return;
+        }
+        completed.completeError(http.RequestAbortedException(uri));
+        unawaited(
+          subscription.cancel().onError((_, __) {
+            // The request abort already determines the public outcome.
+          }),
+        );
+      }),
+    );
+
+    await completed.future;
+    return http.Response.bytes(
+      body.takeBytes(),
+      response.statusCode,
+      request: response.request,
+      headers: response.headers,
+      isRedirect: response.isRedirect,
+      persistentConnection: response.persistentConnection,
+      reasonPhrase: response.reasonPhrase,
+    );
   }
 
   void _validateOAuthUri(Uri uri, OAuthEndpointKind endpointKind) {
@@ -1029,13 +1346,15 @@ class StreamableHttpClientTransport
       base64UrlEncode(bytes).replaceAll('=', '');
 
   Future<Map<String, String>> _commonHeaders() async {
+    final tokens = await _authProvider?.tokens();
+    return _commonHeadersWithTokens(tokens);
+  }
+
+  Map<String, String> _commonHeadersWithTokens(OAuthTokens? tokens) {
     final headers = <String, String>{};
 
-    if (_authProvider != null) {
-      final tokens = await _authProvider.tokens();
-      if (tokens != null) {
-        headers["Authorization"] = "Bearer ${tokens.accessToken}";
-      }
+    if (tokens != null) {
+      headers["Authorization"] = "Bearer ${tokens.accessToken}";
     }
 
     if (_sessionId != null) {
@@ -1253,6 +1572,39 @@ class StreamableHttpClientTransport
     return version is String ? version : null;
   }
 
+  _RequestCancellation? _registerRequestCancellation(
+    JsonRpcMessage message,
+  ) {
+    if (message is! JsonRpcRequest) {
+      return null;
+    }
+    final protocolVersion = _protocolVersion ?? _protocolVersionFrom(message);
+    if (protocolVersion == null ||
+        !isStatelessProtocolVersion(protocolVersion)) {
+      return null;
+    }
+
+    final cancellation = _RequestCancellation();
+    final previous = _requestCancellations[message.id];
+    if (previous != null) {
+      throw StateError(
+        'A request with ID ${message.id} is already active on this transport.',
+      );
+    }
+    _requestCancellations[message.id] = cancellation;
+    return cancellation;
+  }
+
+  void _unregisterRequestCancellation(
+    JsonRpcMessage message,
+    _RequestCancellation? cancellation,
+  ) {
+    if (message is JsonRpcRequest &&
+        identical(_requestCancellations[message.id], cancellation)) {
+      _requestCancellations.remove(message.id);
+    }
+  }
+
   String? _standardNameHeaderValue(
     String method,
     Map<String, dynamic>? params,
@@ -1339,11 +1691,24 @@ class StreamableHttpClientTransport
     }
 
     final resumptionToken = options.resumptionToken;
-    _HttpAbortBinding? abortBinding;
+    final abortBinding = _HttpAbortBinding(
+      _abortController,
+      additionalAbortStream: _closeController.stream,
+    );
+    void ensureConnectionIsCurrent() {
+      if (connectionInterrupted()) {
+        throw interruptedConnectionError();
+      }
+    }
+
+    final connectionGuard = _RequestOperationGuard(
+      abortTrigger: abortBinding.abortTrigger,
+      ensureCurrent: ensureConnectionIsCurrent,
+    );
     try {
       // Try to open an initial SSE stream with GET to listen for server messages
       // This is optional according to the spec - server may not support it
-      final headers = await _commonHeaders();
+      final headers = await connectionGuard.run(_commonHeaders);
       if (connectionInterrupted()) {
         handleInterruptedConnection();
         return;
@@ -1356,7 +1721,6 @@ class StreamableHttpClientTransport
         headers['last-event-id'] = resumptionToken!;
       }
 
-      abortBinding = _HttpAbortBinding(_abortController);
       if (connectionInterrupted()) {
         handleInterruptedConnection();
         return;
@@ -1367,7 +1731,9 @@ class StreamableHttpClientTransport
         abortTrigger: abortBinding.abortTrigger,
       );
       request.headers.addAll(headers);
-      final response = await _httpClient.send(request);
+      final response = await connectionGuard.run(
+        () => _httpClient.send(request),
+      );
 
       if (connectionInterrupted()) {
         await cancelResponseStream(response);
@@ -1381,7 +1747,10 @@ class StreamableHttpClientTransport
               response.statusCode,
               response.headers,
             )) {
-          return await _handleAuthorizationRequired(response);
+          return await _handleAuthorizationRequired(
+            response,
+            requestGuard: connectionGuard,
+          );
         }
 
         // 405 indicates that the server does not offer an SSE stream at GET endpoint
@@ -1457,10 +1826,14 @@ class StreamableHttpClientTransport
       _reportError(error);
       rethrow;
     } catch (error) {
+      if (connectionInterrupted() && error is! StaleSessionError) {
+        handleInterruptedConnection();
+        return;
+      }
       _reportError(error);
       rethrow;
     } finally {
-      await abortBinding?.dispose();
+      await abortBinding.dispose();
     }
   }
 
@@ -1645,6 +2018,8 @@ class StreamableHttpClientTransport
     bool streamIsCurrent() =>
         !_isClosed && streamSessionGeneration == _sessionGeneration;
 
+    bool requestWasCancelled() => options.isRequestCancelled?.call() == true;
+
     void cancelAbortSubscription() {
       final current = abortSubscription;
       abortSubscription = null;
@@ -1699,8 +2074,26 @@ class StreamableHttpClientTransport
       }
     }
 
+    void interruptCancelledStream() {
+      responseStreamFinished = true;
+      cancelStreamSubscription();
+      cancelAbortSubscription();
+      if (requestMessageId != null && !terminalResponseReceived) {
+        settleRequestError(
+          _requestSseStreamEndedError(
+            requestMessageId,
+            'The request response stream was cancelled.',
+          ),
+        );
+      }
+    }
+
     // Function to process a complete SSE event
     void processEvent() {
+      if (requestWasCancelled()) {
+        interruptCancelledStream();
+        return;
+      }
       if (!streamIsCurrent()) {
         interruptStream();
         return;
@@ -1772,7 +2165,10 @@ class StreamableHttpClientTransport
           );
         } finally {
           if (isTerminalResponse) {
+            responseStreamFinished = true;
             settleTerminalResponse();
+            cancelStreamSubscription();
+            cancelAbortSubscription();
           }
         }
       } catch (error) {
@@ -1782,6 +2178,10 @@ class StreamableHttpClientTransport
 
     // Helper function to handle reconnection logic
     bool handleReconnection(String? eventId, [int? retryDelayOverrideMs]) {
+      if (requestWasCancelled()) {
+        interruptCancelledStream();
+        return true;
+      }
       if (_isClosed || streamSessionGeneration != _sessionGeneration) {
         if (requestMessageId != null && !terminalResponseReceived) {
           settleRequestError(
@@ -1811,6 +2211,8 @@ class StreamableHttpClientTransport
               requestMessageId: requestMessageId,
               onTerminalResponse: options.onTerminalResponse,
               onRequestStreamEnd: options.onRequestStreamEnd,
+              isRequestCancelled: options.isRequestCancelled,
+              requestCancellationTrigger: options.requestCancellationTrigger,
               shouldReconnect: options.shouldReconnect,
               rejectServerRequests: options.rejectServerRequests,
             ),
@@ -1837,6 +2239,13 @@ class StreamableHttpClientTransport
       );
     }
 
+    if (requestWasCancelled()) {
+      final cancelledSubscription = stream.stream.listen(null);
+      unawaited(cancelledSubscription.cancel());
+      interruptCancelledStream();
+      return;
+    }
+
     if (!streamIsCurrent()) {
       final staleSubscription = stream.stream.listen(null);
       unawaited(staleSubscription.cancel());
@@ -1848,6 +2257,10 @@ class StreamableHttpClientTransport
     streamSubscription = stream.stream.transform(utf8.decoder).listen(
       (data) {
         if (responseStreamFinished) {
+          return;
+        }
+        if (requestWasCancelled()) {
+          interruptCancelledStream();
           return;
         }
         if (!streamIsCurrent()) {
@@ -1868,6 +2281,9 @@ class StreamableHttpClientTransport
           if (line.isEmpty) {
             // Empty line means end of event
             processEvent();
+            if (responseStreamFinished) {
+              return;
+            }
             continue;
           }
 
@@ -1914,6 +2330,10 @@ class StreamableHttpClientTransport
         if (responseStreamFinished) {
           return;
         }
+        if (requestWasCancelled()) {
+          interruptCancelledStream();
+          return;
+        }
         if (!streamIsCurrent()) {
           interruptStream();
           return;
@@ -1932,6 +2352,10 @@ class StreamableHttpClientTransport
       },
       onError: (error) {
         if (responseStreamFinished) {
+          return;
+        }
+        if (requestWasCancelled()) {
+          interruptCancelledStream();
           return;
         }
         if (!streamIsCurrent()) {
@@ -1963,6 +2387,9 @@ class StreamableHttpClientTransport
     abortSubscription = _abortController?.stream.listen((_) {
       interruptStream();
     });
+    options.requestCancellationTrigger?.then((_) {
+      interruptCancelledStream();
+    });
 
     if (!streamIsCurrent()) {
       interruptStream();
@@ -1987,8 +2414,8 @@ class StreamableHttpClientTransport
       _reportError(
         McpError(
           ErrorCode.invalidRequest.value,
-          'Server-initiated JSON-RPC requests are not supported on 2026 '
-          'stateless MCP response streams; return input_required with '
+          'Server-initiated JSON-RPC requests are not supported on MCP '
+          '2026-07-28 stateless response streams; return input_required with '
           'inputRequests instead.',
         ),
       );
@@ -2013,6 +2440,11 @@ class StreamableHttpClientTransport
   /// Call this method after the user has finished authorizing via their user agent and is redirected
   /// back to the MCP client application. This will exchange the authorization code for an access token,
   /// enabling the next connection attempt to successfully auth.
+  ///
+  /// Closing the transport interrupts this future. Provider callbacks that
+  /// have already started cannot be forcibly stopped, so provider
+  /// implementations remain responsible for suppressing their own late side
+  /// effects after cancellation.
   Future<void> finishAuth(
     String authorizationCode, {
     String? state,
@@ -2023,30 +2455,63 @@ class StreamableHttpClientTransport
     }
 
     final authProvider = _authProvider;
-    final pendingAuthorization = _pendingOAuthAuthorization;
-    if (authProvider is OAuthAuthorizationCodeProvider &&
-        pendingAuthorization != null) {
-      _validateOAuthAuthorizationRedirect(
-        pendingAuthorization,
-        state: state,
-        issuer: issuer,
-      );
-      await _exchangeAuthorizationCode(
-        authProvider,
-        authorizationCode,
-        pendingAuthorization,
-      );
-      _pendingOAuthAuthorization = null;
-      return;
-    }
-
-    final result = await auth(
-      authProvider,
-      serverUrl: _url,
-      authorizationCode: authorizationCode,
+    final abortBinding = _HttpAbortBinding(
+      null,
+      additionalAbortStream: _closeController.stream,
     );
-    if (result != "AUTHORIZED") {
-      throw UnauthorizedError("Failed to authorize");
+    try {
+      void ensureTransportOpen() {
+        if (_isClosed) {
+          throw McpError(
+            ErrorCode.connectionClosed.value,
+            'Authorization was interrupted because the transport closed.',
+          );
+        }
+      }
+
+      final authGuard = _RequestOperationGuard(
+        abortTrigger: abortBinding.abortTrigger,
+        ensureCurrent: ensureTransportOpen,
+      );
+      authGuard.check();
+      final pendingAuthorization = _pendingOAuthAuthorization;
+      final pendingAuthorizationOwner = _pendingOAuthAuthorizationOwner;
+      if (authProvider is OAuthAuthorizationCodeProvider &&
+          pendingAuthorization != null) {
+        _validateOAuthAuthorizationRedirect(
+          pendingAuthorization,
+          state: state,
+          issuer: issuer,
+        );
+        await _exchangeAuthorizationCode(
+          authProvider,
+          authorizationCode,
+          pendingAuthorization,
+          requestGuard: authGuard,
+        );
+        if (identical(_pendingOAuthAuthorization, pendingAuthorization) &&
+            identical(
+              _pendingOAuthAuthorizationOwner,
+              pendingAuthorizationOwner,
+            )) {
+          _pendingOAuthAuthorization = null;
+          _pendingOAuthAuthorizationOwner = null;
+        }
+        return;
+      }
+
+      final result = await authGuard.run(
+        () => auth(
+          authProvider,
+          serverUrl: _url,
+          authorizationCode: authorizationCode,
+        ),
+      );
+      if (result != "AUTHORIZED") {
+        throw UnauthorizedError("Failed to authorize");
+      }
+    } finally {
+      await abortBinding.dispose();
     }
   }
 
@@ -2086,6 +2551,10 @@ class StreamableHttpClientTransport
       return;
     }
     _isClosed = true;
+    if (!_closeController.isClosed) {
+      _closeController.add(null);
+      await _closeController.close();
+    }
 
     // Abort any pending requests
     final abortController = _abortController;
@@ -2120,7 +2589,9 @@ class StreamableHttpClientTransport
     void Function(String)? onResumptionToken,
     bool retryStaleSessionOn404 = true,
   }) async {
+    final requestCancellation = _registerRequestCancellation(message);
     var retryFailureAlreadyReported = false;
+    _HttpAbortBinding? abortBinding;
     try {
       if (_isClosed) {
         final requestId = message is JsonRpcRequest ? message.id : null;
@@ -2163,6 +2634,9 @@ class StreamableHttpClientTransport
       final requestSessionGeneration = _sessionGeneration;
       final requestSessionIdAtStart = _sessionId;
       void ensureRequestIsCurrent() {
+        if (requestCancellation?.isCancelled == true) {
+          throw http.RequestAbortedException(_url);
+        }
         if (_isClosed) {
           final requestId = message is JsonRpcRequest ? message.id : null;
           final requestLabel = requestId == null ? '' : ' $requestId';
@@ -2182,29 +2656,38 @@ class StreamableHttpClientTransport
       }
 
       ensureRequestIsCurrent();
+      abortBinding = _HttpAbortBinding(
+        _abortController,
+        requestAbortTrigger: requestCancellation?.trigger,
+        additionalAbortStream: _closeController.stream,
+      );
+      final requestGuard = _RequestOperationGuard(
+        abortTrigger: abortBinding.abortTrigger,
+        ensureCurrent: ensureRequestIsCurrent,
+      );
 
       // Check for authentication first - if we need auth, handle it before proceeding
       if (_staleSessionDetected && !_isInitializeRequest(message)) {
         throw StaleSessionError('Session not found', code: 404);
       }
 
+      OAuthTokens? tokens;
       if (_authProvider != null) {
-        final tokens = await _authProvider.tokens();
-        ensureRequestIsCurrent();
+        tokens = await requestGuard.run(_authProvider.tokens);
         if (tokens == null) {
           if (_authProvider is OAuthAuthorizationCodeProvider) {
             // Let the server return a challenge so discovery can follow MCP
             // protected-resource metadata before redirecting.
           } else {
             // No tokens available - trigger authentication flow
-            await _authProvider.redirectToAuthorization();
+            await requestGuard.run(_authProvider.redirectToAuthorization);
             throw UnauthorizedError('Authentication required');
           }
         }
       }
 
-      final headers = await _commonHeaders();
-      ensureRequestIsCurrent();
+      final headers = _commonHeadersWithTokens(tokens);
+      requestGuard.check();
       headers.addAll(_headersForMessage(message));
       final protocolVersion = _protocolVersion ?? _protocolVersionFrom(message);
       final isStatelessRequest = protocolVersion != null &&
@@ -2216,7 +2699,6 @@ class StreamableHttpClientTransport
       headers['content-type'] = 'application/json';
       headers['accept'] = 'application/json, text/event-stream';
 
-      final abortBinding = _HttpAbortBinding(_abortController);
       try {
         ensureRequestIsCurrent();
         final request = http.AbortableRequest(
@@ -2227,8 +2709,12 @@ class StreamableHttpClientTransport
         request.headers.addAll(headers);
         request.body = jsonEncode(message.toJson());
 
-        final response = await _httpClient.send(request);
-        if (_isClosed || requestSessionGeneration != _sessionGeneration) {
+        final response = await requestGuard.run(
+          () => _httpClient.send(request),
+        );
+        if (_isClosed ||
+            requestSessionGeneration != _sessionGeneration ||
+            requestCancellation?.isCancelled == true) {
           final responseSubscription = response.stream.listen(null);
           unawaited(responseSubscription.cancel());
           ensureRequestIsCurrent();
@@ -2240,11 +2726,15 @@ class StreamableHttpClientTransport
                 response.statusCode,
                 response.headers,
               )) {
-            return await _handleAuthorizationRequired(response);
+            return await _handleAuthorizationRequired(
+              response,
+              requestGuard: requestGuard,
+            );
           }
 
-          final text = await response.stream.transform(utf8.decoder).join();
-          ensureRequestIsCurrent();
+          final text = await requestGuard.run(
+            () => response.stream.transform(utf8.decoder).join(),
+          );
           if (response.statusCode == 404 &&
               retryStaleSessionOn404 &&
               requestSessionId != null) {
@@ -2315,10 +2805,9 @@ class StreamableHttpClientTransport
         // If the response is 202 Accepted, there's no body to process
         if (response.statusCode == 202) {
           // Ensure we drain the stream to release the connection
-          await response.stream.drain();
+          await requestGuard.run(response.stream.drain);
 
-          await Future.delayed(Duration.zero);
-          ensureRequestIsCurrent();
+          await requestGuard.run(() => Future<void>.delayed(Duration.zero));
 
           // if the accepted notification is initialized, we start the SSE stream
           // if it's supported by the server
@@ -2363,6 +2852,9 @@ class StreamableHttpClientTransport
                     requestStreamCompletion.completeError(error);
                   }
                 },
+                isRequestCancelled: () =>
+                    requestCancellation?.isCancelled == true,
+                requestCancellationTrigger: requestCancellation?.trigger,
                 shouldReconnect: !isStatelessRequest,
                 rejectServerRequests: isStatelessRequest,
               ),
@@ -2371,9 +2863,9 @@ class StreamableHttpClientTransport
             await requestStreamCompletion.future;
           } else if (contentType?.contains('application/json') ?? false) {
             // For non-streaming servers, we might get direct JSON responses
-            final jsonStr =
-                await response.stream.transform(utf8.decoder).join();
-            ensureRequestIsCurrent();
+            final jsonStr = await requestGuard.run(
+              () => response.stream.transform(utf8.decoder).join(),
+            );
             final data = jsonDecode(jsonStr);
 
             if (data is List) {
@@ -2408,14 +2900,17 @@ class StreamableHttpClientTransport
       } on http.RequestAbortedException {
         ensureRequestIsCurrent();
         rethrow;
-      } finally {
-        await abortBinding.dispose();
       }
     } catch (error) {
-      if (!retryFailureAlreadyReported && error is! StaleSessionError) {
+      if (!retryFailureAlreadyReported &&
+          error is! StaleSessionError &&
+          requestCancellation?.isCancelled != true) {
         _reportError(error);
       }
       rethrow;
+    } finally {
+      await abortBinding?.dispose();
+      _unregisterRequestCancellation(message, requestCancellation);
     }
   }
 
@@ -2461,6 +2956,15 @@ class StreamableHttpClientTransport
 
   @override
   String? get protocolVersion => _protocolVersion;
+
+  @override
+  bool canCancelRequest(RequestId requestId) =>
+      _requestCancellations.containsKey(requestId);
+
+  @override
+  Future<void> cancelRequest(RequestId requestId) async {
+    _requestCancellations[requestId]?.cancel();
+  }
 
   @override
   set protocolVersion(String? value) {
@@ -2517,12 +3021,17 @@ class StreamableHttpClientTransport
       }
     }
 
-    _HttpAbortBinding? abortBinding;
+    _HttpAbortBinding? abortBinding = _HttpAbortBinding(
+      _abortController,
+      additionalAbortStream: _closeController.stream,
+    );
+    final terminationGuard = _RequestOperationGuard(
+      abortTrigger: abortBinding.abortTrigger,
+      ensureCurrent: ensureTerminationIsCurrent,
+    );
     try {
-      final headers = await _commonHeaders();
-      ensureTerminationIsCurrent();
+      final headers = await terminationGuard.run(_commonHeaders);
 
-      abortBinding = _HttpAbortBinding(_abortController);
       final request = http.AbortableRequest(
         'DELETE',
         _url,
@@ -2530,7 +3039,9 @@ class StreamableHttpClientTransport
       );
       request.headers.addAll(headers);
 
-      final response = await _httpClient.send(request);
+      final response = await terminationGuard.run(
+        () => _httpClient.send(request),
+      );
       if (_isClosed ||
           terminatingSessionGeneration != _sessionGeneration ||
           _sessionId != terminatingSessionId) {
@@ -2538,8 +3049,7 @@ class StreamableHttpClientTransport
         unawaited(responseSubscription.cancel());
         ensureTerminationIsCurrent();
       }
-      await response.stream.drain<void>();
-      ensureTerminationIsCurrent();
+      await terminationGuard.run(response.stream.drain);
 
       // We specifically handle 405 as a valid response according to the spec,
       // meaning the server does not support explicit session termination
@@ -2877,6 +3387,16 @@ class _PendingOAuthAuthorization {
     required this.state,
     required this.scope,
     required this.authorizationResponseIssParameterSupported,
+  });
+}
+
+class _PreparedOAuthAuthorization {
+  final OAuthAuthorizationRequest request;
+  final _PendingOAuthAuthorization pending;
+
+  const _PreparedOAuthAuthorization({
+    required this.request,
+    required this.pending,
   });
 }
 

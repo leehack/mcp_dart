@@ -200,7 +200,7 @@ Future<void> connect([String? url]) async {
       ),
     );
 
-    // Legacy peers use global list-changed notifications. MCP 2026 uses
+    // Legacy peers use global list-changed notifications. MCP 2026-07-28 uses
     // subscriptions/listen, as shown in example/mcp_2026_07_28/client.dart.
     client!.setNotificationHandler(
       "notifications/resources/list_changed",
@@ -236,7 +236,7 @@ Future<void> connect([String? url]) async {
     sessionId = transport!.sessionId;
     print('Negotiated protocol: $protocolVersion');
     if (sessionId == null && protocolVersion == previewProtocolVersion) {
-      print('No session ID (expected for stateless MCP 2026).');
+      print('No session ID (expected for stateless MCP 2026-07-28).');
     } else {
       print('Transport created with session ID: $sessionId');
     }
@@ -272,7 +272,9 @@ Future<void> terminateSession() async {
   }
 
   if (client!.getProtocolVersion() == previewProtocolVersion) {
-    print('MCP 2026 is stateless and has no protocol session to terminate.');
+    print(
+      'MCP 2026-07-28 is stateless and has no protocol session to terminate.',
+    );
     return;
   }
 

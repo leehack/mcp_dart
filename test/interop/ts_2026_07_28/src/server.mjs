@@ -9,6 +9,7 @@ import {
 import { z } from 'zod';
 
 const PROTOCOL_VERSION = '2026-07-28';
+let streamCancellationCount = 0;
 
 function readArg(args, name) {
   const index = args.indexOf(name);
@@ -36,6 +37,53 @@ function createInteropServer() {
     },
     async ({ message }) => ({
       content: [{ type: 'text', text: message }],
+    }),
+  );
+
+  server.registerTool(
+    'ts_stream_cancellation',
+    {
+      description:
+        'Keeps a streamed response open until the Dart client aborts it.',
+      inputSchema: z.object({}),
+    },
+    async (_args, ctx) => {
+      const progressToken = ctx.mcpReq._meta?.progressToken;
+      if (progressToken === undefined) {
+        throw new Error('ts_stream_cancellation requires a progress token');
+      }
+      await ctx.mcpReq.notify({
+        method: 'notifications/progress',
+        params: {
+          progressToken,
+          progress: 1,
+          total: 1,
+          message: 'TypeScript cancellation probe started',
+        },
+      });
+
+      await new Promise((resolve) => {
+        if (ctx.mcpReq.signal.aborted) {
+          resolve();
+          return;
+        }
+        ctx.mcpReq.signal.addEventListener('abort', resolve, { once: true });
+      });
+      streamCancellationCount += 1;
+      return {
+        content: [{ type: 'text', text: 'cancelled' }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'ts_stream_cancellation_status',
+    {
+      description: 'Reports response-stream cancellations observed by TS.',
+      inputSchema: z.object({}),
+    },
+    async () => ({
+      content: [{ type: 'text', text: String(streamCancellationCount) }],
     }),
   );
 
@@ -152,6 +200,15 @@ async function main() {
         method: req.method,
         headers: requestHeaders(req),
       };
+      const requestAbort = new AbortController();
+      const abortRequest = () => requestAbort.abort();
+      req.once('aborted', abortRequest);
+      res.once('close', () => {
+        if (!res.writableEnded) {
+          abortRequest();
+        }
+      });
+      init.signal = requestAbort.signal;
       let body;
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         body = await readBody(req);

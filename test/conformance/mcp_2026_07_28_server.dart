@@ -82,7 +82,8 @@ McpServer _createConformanceServer() {
 
   server.registerTool(
     'test_custom_headers_valid',
-    description: 'Exercises valid 2026 x-mcp-header parameter mirroring',
+    description:
+        'Exercises valid MCP 2026-07-28 x-mcp-header parameter mirroring',
     inputSchema: JsonSchema.object(
       properties: {
         'region': JsonSchema.string(mcpHeader: 'Region'),

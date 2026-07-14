@@ -1,4 +1,4 @@
-// Demonstrates completions capability usage on the MCP 2025-era profile.
+// Demonstrates completions capability usage on the MCP 2025-11-25 profile.
 //
 // This example shows:
 // 1. Server declaring completions capability explicitly
@@ -10,7 +10,8 @@ library;
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
-  // Server declares completions support explicitly per 2025-06-18 spec
+  // Server declares completions support explicitly per the MCP 2025-06-18
+  // specification.
   final server = McpServer(
     const Implementation(name: "completions-demo", version: "1.0.0"),
     options: const McpServerOptions(

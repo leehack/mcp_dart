@@ -143,6 +143,13 @@ class MockTransport extends Transport
             result: CallToolResult.fromStructuredArray(['alpha', 1]).toJson(),
           ),
         );
+      } else if (name == 'advanced_broken_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: CallToolResult.fromStructuredArray([1, 'extra']).toJson(),
+          ),
+        );
       } else if (name == 'broken_tool') {
         // Returns data that violates the schema (missing 'result')
         _respond(
@@ -226,6 +233,17 @@ class MockTransport extends Transport
         name: 'broken_array_tool',
         inputSchema: const ToolInputSchema(),
         outputSchema: JsonSchema.array(items: JsonSchema.string()),
+      ),
+      Tool(
+        name: 'advanced_broken_tool',
+        inputSchema: const ToolInputSchema(),
+        outputSchema: JsonSchema.fromJson({
+          'type': 'array',
+          'prefixItems': [
+            {'type': 'integer'},
+          ],
+          'items': false,
+        }),
       ),
       const Tool(
         name: 'task_required_tool',
@@ -703,6 +721,24 @@ void main() {
         throwsA(
           isA<McpError>().having(
             (e) => e.message,
+            'message',
+            contains('Structured content does not match'),
+          ),
+        ),
+      );
+    });
+
+    test('enforces 2020-12 keywords in advertised output schemas', () async {
+      await client.connect(transport);
+      await client.listTools();
+
+      expect(
+        () => client.callTool(
+          const CallToolRequest(name: 'advanced_broken_tool'),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.message,
             'message',
             contains('Structured content does not match'),
           ),

@@ -11,11 +11,15 @@ MCP `2025-11-25` and earlier initialization compatibility.
 - Removed `McpProtocol.preview2026`; added clearer preview, stable, and default
   version constants, plus a separate initialization-version constant, while
   retaining `latestProtocolVersion` as a deprecated stable-version alias.
-- Added and aligned 2026 APIs for `input_required`, deprecated request-scoped
-  logging compatibility, subscriptions, cache metadata, arbitrary structured
-  tool output, routing headers, and the Tasks extension.
+- Added and aligned MCP 2026-07-28 APIs for `input_required`, deprecated
+  request-scoped logging compatibility, subscriptions, cache metadata,
+  arbitrary structured tool output, routing headers, and the Tasks extension.
 - Hardened discovery fallback, Streamable HTTP validation and pagination, SSE
-  closure, URL elicitation, and client reconnect state.
+  closure and request cancellation, URL elicitation, and client reconnect
+  state.
+- Upgraded built-in validation to JSON Schema Draft 2020-12 with declared
+  Draft 7 compatibility and same-document references; unsafe external
+  references remain blocked.
 - Raised the minimum Dart SDK to 3.5 and retained the web/WASM-safe default
   export path alongside Dart IO exports.
 
@@ -34,11 +38,15 @@ MCP `2025-11-25` and earlier initialization compatibility.
 
 ### Validation and documentation
 
-- All current official MCP 2025 and 2026 conformance scenarios applicable
-  to the SDK's core client/server roles pass, with bidirectional
-  TypeScript/Python interop and a real Chrome HTTP smoke test.
-- Added a strict 2026 example, retained labeled legacy examples, refreshed the
-  protocol coverage matrices, and shortened release and onboarding docs.
+- All current official MCP 2025-11-25 and MCP 2026-07-28 conformance scenarios
+  applicable to the SDK's core client/server roles pass, with bidirectional
+  TypeScript/Python interop, real Chrome transport coverage, a Flutter Web
+  service integration, and widget tests. A pinned JSON Schema Test Suite gate
+  independently exercises the supported Draft 2020-12 and Draft 7 validation
+  surfaces.
+- Added a strict MCP 2026-07-28 example, retained labeled legacy examples,
+  refreshed the protocol coverage matrices, and shortened release and
+  onboarding docs.
 - Release retries now validate tag provenance, while prerelease documentation
   and CLI binaries use immutable, version-matched release metadata.
 
@@ -53,7 +61,7 @@ This dev preview refreshes MCP `2026-07-28` draft/RC support while keeping MCP
   `HeaderMismatch` is now `-32020`,
   `MissingRequiredClientCapability` is now `-32021`, and
   `UnsupportedProtocolVersion` is now `-32022`.
-- Marked `server/discover` as a 2026 cacheable result so stateless responses
+- Marked `server/discover` as an MCP 2026-07-28 cacheable result so stateless responses
   include default `ttlMs` and `cacheScope` hints.
 - Removed the legacy `DRAFT-2026-v1` draft alias now that official conformance
   targets the `2026-07-28` wire version.
@@ -63,8 +71,9 @@ This dev preview refreshes MCP `2026-07-28` draft/RC support while keeping MCP
 ### Conformance and interoperability
 
 - Updated official conformance gates to
-  `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with full 2026-07-28 RC server
-  scenario coverage and alpha.4's spec-filtered 2026 client scenario list in CI.
+  `@modelcontextprotocol/conformance@0.2.0-alpha.4`, with full MCP 2026-07-28 RC
+  server scenario coverage and alpha.4's spec-filtered MCP 2026-07-28 client
+  scenario list in CI.
 - Expanded the manual TypeScript SDK 2026-07-28 RC interop fixture pinned to the
   upstream PR #2327 preview package, covering modern negotiation,
   `server/discover` cache metadata, `tools/list`, `tools/call`,
@@ -103,7 +112,7 @@ explicitly and may still change before the official spec release.
   structured output from stable MCP `2025-11-25` responses.
 - Preserved stable session behavior, registration-order list output, legacy task
   augmentation, stable-only `Tool.execution` metadata, and legacy resource error
-  codes outside the 2026 stateless profile.
+  codes outside the MCP 2026-07-28 stateless profile.
 - Preserved numeric JSON-RPC request IDs and progress tokens end-to-end while
   continuing to reject non-finite numeric values.
 
@@ -507,7 +516,7 @@ explicitly and may still change before the official spec release.
   - **Progress Notifications**: Implemented full support for progress tracking.
     - Added `RequestHandlerExtra.sendProgress()` helper for servers to report progress.
     - Added `RequestOptions.onprogress` callback for clients to receive progress updates.
-    - Updated `Progress` and `ProgressNotification` types to include optional `message` field (compliant with 2025-11-25 spec).
+    - Updated `Progress` and `ProgressNotification` types to include optional `message` field (compliant with the MCP 2025-11-25 specification).
   - **Protocol Improvements**:
     - `JsonRpcMessage.fromJson` now supports custom/unknown methods instead of throwing.
     - Fixed `JsonRpcRequest` metadata extraction to correctly handle nested `_meta` in `params`.
@@ -619,7 +628,7 @@ explicitly and may still change before the official spec release.
 
 ## 1.0.0
 
-- Update protocol version to 2025-06-18
+- Update the supported protocol version to MCP 2025-06-18.
 - Add Elicitation support (server-initiated input collection)
   - API: `McpServer.elicitUserInput()` (server) | `Client.onElicitRequest` (client handler)
   - Types: ElicitRequestParams (`message`, `requestedSchema`), ElicitResult (`action`, `content`), ClientCapabilitiesElicitation
@@ -640,7 +649,7 @@ explicitly and may still change before the official spec release.
 
 ## 0.7.0
 
-- Add support for Completions capability per MCP 2025-06-18 spec
+- Add the Completions capability from the MCP 2025-06-18 specification.
 - Add ServerCapabilitiesCompletions class for explicit completions capability declaration
 - Update ServerCapabilities to include completions field
 - Update client capability check to use explicit completions capability instead of inferring from prompts/resources
@@ -682,7 +691,7 @@ explicitly and may still change before the official spec release.
 
 ## 0.5.0
 
-- Protocol version 2025-03-26
+- Add support for the MCP 2025-03-26 specification.
 
 ## 0.4.3
 

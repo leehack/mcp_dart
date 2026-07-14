@@ -164,3 +164,12 @@ For local development, a loopback callback can be convenient. For production mob
 - For web, run at least one browser smoke test against a local Streamable HTTP server.
 - For desktop stdio hosts, verify child process cleanup after `client.close()`.
 - For auth flows, test expired-token and denied-consent paths, not only the happy path.
+
+From the repository root, the checked-in Flutter Web example has a real Chrome
+service integration that covers repeated tool requests, RPC-error recovery,
+reconnect, and disconnect against the MCP 2026-07-28 conformance server. Its
+ordinary Flutter test suite covers UI behavior with widget tests:
+
+```bash
+dart run tool/testing/run_flutter_web_example_e2e.dart
+```

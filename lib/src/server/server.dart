@@ -1438,7 +1438,7 @@ class Server extends Protocol {
   }
 
   void _validateSamplingToolMessages(List<SamplingMessage> messages) {
-    // MCP 2026 Sampling, "Message Content Constraints": tool uses belong to
+    // MCP 2026-07-28 Sampling, "Message Content Constraints": tool uses belong to
     // assistant turns and every one must be immediately resolved by a user
     // turn containing only matching tool results. Validate the full history,
     // not just its final pair.

@@ -15,7 +15,7 @@ const _defaultAllowedHeaders = <String>[
 
 /// Applies the browser CORS policy shared by the HTTP examples.
 ///
-/// MCP 2026 may add validated `Mcp-Param-*` routing headers derived from a
+/// MCP 2026-07-28 may add validated `Mcp-Param-*` routing headers derived from a
 /// tool's advertised schema. Echoing token-valid requested header names keeps
 /// preflight responses aligned with those dynamic names.
 bool setExampleBrowserCorsHeaders(

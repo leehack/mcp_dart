@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
-// This example intentionally uses MCP 2025-era core task augmentation. For
+// This example intentionally uses MCP 2025-11-25 core task augmentation. For
 // MCP 2026-07-28 input_required, see example/mcp_2026_07_28/client.dart.
 
 // ============================================================================
