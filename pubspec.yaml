@@ -5,12 +5,14 @@ repository: https://github.com/leehack/mcp_dart
 homepage: https://github.com/leehack/mcp_dart
 issue_tracker: https://github.com/leehack/mcp_dart/issues
 documentation: https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/doc
+funding:
+  - https://buymeacoffee.com/leehack
 topics:
   - mcp
+  - model-context-protocol
   - ai
   - llm
   - api
-  - dart
 platforms:
   android:
   ios:

@@ -26,7 +26,10 @@ the exact validated release-prep commit:
    project.
 3. Run `dart run tool/validate_cli_publish.dart --published-sdk` so the CLI is
    tested without its monorepo path override.
-4. Dispatch `Create Release` for `mcp_dart_cli`. Verify tag
+4. Activate `pana`, then from `packages/mcp_dart_cli` run
+   `dart pub global run pana --no-warning --exit-code-threshold 0` and require
+   the full 160/160 score.
+5. Dispatch `Create Release` for `mcp_dart_cli`. Verify tag
    `mcp_dart_cli-v0.2.0-dev.2`, its pub.dev package, and every standalone binary
    asset against the same release-prep commit.
 
@@ -154,6 +157,9 @@ Do not start the stable CLI release until the published SDK resolves publicly.
 
 ```bash
 dart run tool/validate_cli_publish.dart --published-sdk
+dart pub global activate pana
+cd packages/mcp_dart_cli
+dart pub global run pana --no-warning --exit-code-threshold 0
 ```
 
 Then dispatch `Create Release` for `mcp_dart_cli`, verify the

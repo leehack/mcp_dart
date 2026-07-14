@@ -18,8 +18,8 @@ A modern, web-based MCP (Model Context Protocol) client built with [Jaspr](https
 
 ## Prerequisites
 
-- Dart SDK ^3.7.2
-- Jaspr CLI (`dart pub global activate jaspr_cli`)
+- Dart 3.10 or later
+- Jaspr CLI 0.22.3 (`dart pub global activate jaspr_cli 0.22.3`)
 
 ## Quick Start
 

@@ -225,6 +225,12 @@ SDK rather than the monorepo override:
 
 ```bash
 dart run tool/validate_cli_publish.dart --published-sdk
+dart pub global activate pana
+cd packages/mcp_dart_cli
+dart pub global run pana --no-warning --exit-code-threshold 0
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution instructions.
+Require the full 160/160 score before publishing.
+
+See [CONTRIBUTING.md](https://github.com/leehack/mcp_dart/blob/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli/CONTRIBUTING.md)
+for contribution instructions.

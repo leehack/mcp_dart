@@ -3,6 +3,10 @@
 This example exposes a `fetch` MCP tool over stdio. It returns a bounded slice
 of text from a public HTTP or HTTPS URL.
 
+## Requirements
+
+- Dart 3.5 or later
+
 ```bash
 dart pub get
 dart run bin/fetch_server.dart

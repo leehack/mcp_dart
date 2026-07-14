@@ -1,7 +1,7 @@
 # MCP (Model Context Protocol) for Dart
 
 [![Coverage](https://img.shields.io/codecov/c/github/leehack/mcp_dart)](https://app.codecov.io/gh/leehack/mcp_dart)
-[![Pub Version](https://img.shields.io/pub/v/mcp_dart?color=blueviolet)](https://pub.dev/packages/mcp_dart)
+[![Stable package](https://img.shields.io/pub/v/mcp_dart?color=blueviolet&label=stable)](https://pub.dev/packages/mcp_dart)
 [![likes](https://img.shields.io/pub/likes/mcp_dart?logo=dart)](https://pub.dev/packages/mcp_dart/score)
 
 `mcp_dart` is a dual-era Dart and Flutter SDK for MCP clients, servers, and AI
@@ -21,7 +21,7 @@ general-purpose JSON Schema validation engine.
 > `2025-11-25` and `2026-07-28`. This is prerelease evidence, not a
 > claim about the final specification, which has not shipped.
 
-## Requirements
+## Preview requirements
 
 | Package | Minimum Dart SDK |
 | --- | --- |
@@ -32,25 +32,36 @@ Install Dart from [dart.dev](https://dart.dev/get-dart).
 
 ## Installation
 
-Use the latest stable SDK for production projects:
+### Production channel
+
+Use the latest stable package for production projects:
 
 ```bash
 dart pub add mcp_dart
 ```
 
-To test the 2026 preview, select the prerelease explicitly:
+### Evaluate the 2026 preview
+
+Select the prerelease explicitly:
 
 ```yaml
 dependencies:
   mcp_dart: ^2.3.0-dev.2
 ```
 
-The remainder of this README describes dev.2. Stable users should follow the
-documentation for the version resolved in their own `pubspec.lock`.
+The remainder of this README describes dev.2. Production-channel users should
+follow the documentation for the version resolved in their own `pubspec.lock`.
+Package channels are separate from protocol profiles: `McpProtocol.stable`
+names the SDK's default compatibility policy, not package or wire-spec maturity.
 
 Prerelease packages are published in order: SDK first, then CLI. Verify the
 requested version is available on pub.dev before installing the CLI or creating
 a clean consumer project.
+
+For direct SDK integration, start with the
+[getting-started guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/getting-started.md).
+The CLI below is optional and provides scaffolding, inspection, and conformance
+commands.
 
 ## What the SDK provides
 
@@ -79,10 +90,9 @@ can manage multiple clients and servers.
 | `McpProtocol.legacy` | Initialization-era profile: negotiate `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`, or `2024-10-07` |
 | `McpProtocol.require2026` | Require `2026-07-28` and reject legacy initialization |
 
-The `stable` profile name describes the SDK's default compatibility policy, not
-the maturity of the preferred wire version. Use `stableProtocolVersion` for
-the official `2025-11-25` version, `previewProtocolVersion` for the 2026 preview,
-and `defaultProtocolVersion` for this SDK preview's preferred version.
+Use `stableProtocolVersion` for the official `2025-11-25` version,
+`previewProtocolVersion` for the 2026 preview, and `defaultProtocolVersion` for
+this SDK preview's preferred version.
 `latestInitializationProtocolVersion` remains `2025-11-25` when the default
 profile falls back to the legacy lifecycle.
 
@@ -136,7 +146,7 @@ Useful commands:
 | `trace` | Proxy and record a real stdio session |
 | `conformance` | Run the repository's built-in protocol regression fixtures |
 
-See the [CLI documentation](https://github.com/leehack/mcp_dart/tree/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli)
+See the [CLI documentation](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/packages/mcp_dart_cli)
 for command options and scope.
 
 ## Documentation
@@ -145,6 +155,9 @@ for command options and scope.
 - Build: [tools](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/tools.md), [transports](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md), [examples](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/examples.md), [MCP Apps](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-apps.md)
 - Deploy: [Streamable HTTP security](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md#dns-rebinding-protection), [OAuth examples](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/authentication), [Flutter recipes](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/flutter-recipes.md)
 - Verify: [interop matrix](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/interoperability.md), [2025 coverage](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2025-11-25.md), [2026 preview coverage](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2026-07-28.md), [day-0 runbook](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-release-runbook.md)
+
+Standalone integration examples may declare newer Dart SDK requirements; check
+each example README before running it.
 
 ## Authentication
 
@@ -156,6 +169,10 @@ The checked-in OAuth examples store tokens in plaintext files for local
 learning. Production applications must use platform secure storage or an
 encrypted credential service. See the [OAuth examples](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/authentication)
 and [Streamable HTTP authentication](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md#streamable-http-authentication).
+
+Do not expose example HTTP servers directly to untrusted networks. Production
+deployments should use TLS, authenticate requests, and configure the documented
+[Host and Origin protections](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md#dns-rebinding-protection).
 
 ## Platform support
 

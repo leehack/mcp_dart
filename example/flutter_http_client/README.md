@@ -15,8 +15,8 @@ This is an example Flutter web application that demonstrates how to use the MCP 
 
 ### Prerequisites
 
-- Flutter SDK (latest stable version)
-- Dart SDK (latest stable version)
+- Flutter SDK with Dart 3.7.2 or later
+- Chrome
 - An MCP server to connect to (for local testing, use the Streamable HTTP example server)
 
 ### Running the Example

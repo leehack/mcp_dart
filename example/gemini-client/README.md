@@ -69,6 +69,10 @@ not exposed to the spawned MCP server. Review Google's
 [data retention guidance](https://ai.google.dev/gemini-api/terms) before using
 the example with sensitive queries, schemas, arguments, or results.
 
+## Requirements
+
+- Dart 3.7.2 or later
+
 ## Run
 
 Create an API key in [AI Studio](https://aistudio.google.com/apikey), then set:
