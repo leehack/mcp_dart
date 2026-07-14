@@ -238,7 +238,7 @@ class LegacyFallbackTransport extends Transport
         JsonRpcResponse(
           id: message.id,
           result: const InitializeResult(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ServerCapabilities(
               tools: ServerCapabilitiesTools(),
             ),
@@ -353,7 +353,7 @@ void _registerTaskGetExtensionHandler(Server server) {
 }
 
 void main() {
-  group('MCP 2026-07-28 RC protocol foundation', () {
+  group('MCP 2026-07-28 protocol foundation', () {
     test('distinguishes preview, stable, and default versions', () {
       expect(defaultProtocolVersion, previewProtocolVersion);
       expect(McpProtocol.values, [
@@ -365,13 +365,13 @@ void main() {
       expect(const McpClientOptions().useServerDiscover, isTrue);
       expect(
         const McpClientOptions(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
         ).useServerDiscover,
         isFalse,
       );
       expect(
         const McpClientOptions(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           useServerDiscover: true,
         ).useServerDiscover,
         isTrue,
@@ -379,7 +379,7 @@ void main() {
       expect(
         const McpClientOptions(
           protocol: McpProtocol.require2026,
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
         ).useServerDiscover,
         isTrue,
       );
@@ -423,8 +423,8 @@ void main() {
 
       await client.connect(transport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion);
-      expect(transport.protocolVersion, stableProtocolVersion);
+      expect(client.getProtocolVersion(), latestInitializationProtocolVersion);
+      expect(transport.protocolVersion, latestInitializationProtocolVersion);
       expect(
         transport.sentMessages
             .whereType<JsonRpcRequest>()
@@ -1260,7 +1260,7 @@ void main() {
       );
 
       final stableMeta = buildProtocolRequestMeta(
-        protocolVersion: stableProtocolVersion,
+        protocolVersion: latestInitializationProtocolVersion,
         clientInfo: const Implementation(name: 'client', version: '1.0.0'),
         clientCapabilities: clientCapabilities,
       );
@@ -3385,7 +3385,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 'init',
           initParams: const InitializeRequest(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(
               extensions: {mcpTasksExtensionId: {}},
             ),
@@ -4581,7 +4581,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(
               elicitation: ClientElicitation.formOnly(),
             ),
@@ -4648,7 +4648,7 @@ void main() {
       final response = transport.sentMessages.single as JsonRpcResponse;
       expect(
         response.result['protocolVersion'],
-        stableProtocolVersion,
+        latestInitializationProtocolVersion,
       );
       expect(
         response.result['protocolVersion'],
@@ -4717,7 +4717,7 @@ void main() {
       );
       expect(
         validateDiscoverRequest(
-          _clientMeta(protocolVersion: stableProtocolVersion),
+          _clientMeta(protocolVersion: latestInitializationProtocolVersion),
         ),
         isA<McpError>().having(
           (error) => error.message,
@@ -5155,8 +5155,11 @@ void main() {
 
         await client.connect(transport);
 
-        expect(client.getProtocolVersion(), stableProtocolVersion);
-        expect(transport.protocolVersion, stableProtocolVersion);
+        expect(
+          client.getProtocolVersion(),
+          latestInitializationProtocolVersion,
+        );
+        expect(transport.protocolVersion, latestInitializationProtocolVersion);
         expect(
           transport.sentMessages
               .whereType<JsonRpcRequest>()
@@ -5947,7 +5950,8 @@ void main() {
       );
     });
 
-    test('client listenSubscriptions demultiplexes by subscription id',
+    test(
+        'client listenSubscriptions demultiplexes and orders acknowledgments per id',
         () async {
       final transport = DiscoveringClientTransport(
         capabilities: const ServerCapabilities(
@@ -5993,6 +5997,7 @@ void main() {
         'toolsListChanged': true,
       });
 
+      final resourceNotification = resourcesSubscription.notifications.first;
       transport.onmessage?.call(
         JsonRpcSubscriptionsAcknowledgedNotification(
           acknowledgedParams: const SubscriptionsAcknowledgedNotification(
@@ -6003,6 +6008,22 @@ void main() {
           meta: {McpMetaKey.subscriptionId: resourcesSubscription.id},
         ),
       );
+      transport.onmessage?.call(
+        JsonRpcResourceUpdatedNotification(
+          updatedParams: const ResourceUpdatedNotification(
+            uri: 'file:///project/config.json',
+          ),
+          meta: {McpMetaKey.subscriptionId: resourcesSubscription.id},
+        ),
+      );
+      expect(
+        (await resourceNotification).method,
+        Method.notificationsResourcesUpdated,
+      );
+
+      // On stdio, another subscription may be acknowledged and emit its first
+      // notification before this subscription's acknowledgment. Ordering is
+      // defined per subscription ID, not for the shared channel as a whole.
       transport.onmessage?.call(
         JsonRpcSubscriptionsAcknowledgedNotification(
           acknowledgedParams: const SubscriptionsAcknowledgedNotification(
@@ -6021,28 +6042,14 @@ void main() {
       );
 
       final toolNotification = toolsSubscription.notifications.first;
-      final resourceNotification = resourcesSubscription.notifications.first;
       transport.onmessage?.call(
         JsonRpcToolListChangedNotification(
           meta: {McpMetaKey.subscriptionId: toolsSubscription.id},
         ),
       );
-      transport.onmessage?.call(
-        JsonRpcResourceUpdatedNotification(
-          updatedParams: const ResourceUpdatedNotification(
-            uri: 'file:///project/config.json',
-          ),
-          meta: {McpMetaKey.subscriptionId: resourcesSubscription.id},
-        ),
-      );
-
       expect(
         (await toolNotification).method,
         Method.notificationsToolsListChanged,
-      );
-      expect(
-        (await resourceNotification).method,
-        Method.notificationsResourcesUpdated,
       );
 
       toolsSubscription.cancel('done');
@@ -6766,7 +6773,7 @@ void main() {
       await client.connect(transport);
 
       final result = await client.listTools();
-      expect(client.getProtocolVersion(), stableProtocolVersion);
+      expect(client.getProtocolVersion(), latestInitializationProtocolVersion);
       expect(result.tools, isEmpty);
     });
 
@@ -7084,8 +7091,8 @@ void main() {
 
       await client.connect(transport);
 
-      expect(client.getProtocolVersion(), stableProtocolVersion);
-      expect(transport.protocolVersion, stableProtocolVersion);
+      expect(client.getProtocolVersion(), latestInitializationProtocolVersion);
+      expect(transport.protocolVersion, latestInitializationProtocolVersion);
       expect(
         transport.sentMessages
             .whereType<JsonRpcRequest>()
@@ -7097,7 +7104,7 @@ void main() {
           .singleWhere((message) => message.method == Method.initialize);
       expect(
         initializeRequest.params?['protocolVersion'],
-        stableProtocolVersion,
+        latestInitializationProtocolVersion,
       );
       expect(
         transport.sentMessages.whereType<JsonRpcInitializedNotification>(),

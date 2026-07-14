@@ -140,6 +140,42 @@ void main() {
   });
 
   group('McpServerInspector', () {
+    test('normalizes and orders path issuer metadata probes like the SDK', () {
+      final inspector = McpServerInspector(logger: MockLogger());
+
+      expect(
+        inspector
+            .authorizationServerMetadataCandidates(
+              Uri.parse(
+                'https://auth.example.com/tenant1/?source=config#ignored',
+              ),
+            )
+            .map((candidate) => candidate.toString()),
+        <String>[
+          'https://auth.example.com/.well-known/oauth-authorization-server/tenant1',
+          'https://auth.example.com/.well-known/openid-configuration/tenant1',
+          'https://auth.example.com/tenant1/.well-known/openid-configuration',
+          'https://auth.example.com/tenant1/.well-known/oauth-authorization-server',
+        ],
+      );
+    });
+
+    test('does not duplicate metadata probes for a root issuer', () {
+      final inspector = McpServerInspector(logger: MockLogger());
+
+      expect(
+        inspector
+            .authorizationServerMetadataCandidates(
+              Uri.parse('https://auth.example.com/?source=config#ignored'),
+            )
+            .map((candidate) => candidate.toString()),
+        <String>[
+          'https://auth.example.com/.well-known/oauth-authorization-server',
+          'https://auth.example.com/.well-known/openid-configuration',
+        ],
+      );
+    });
+
     test('returns a structured report for a Dart stdio server', () async {
       final report = await McpServerInspector(logger: MockLogger()).inspect(
         const ServerInspectionTarget(

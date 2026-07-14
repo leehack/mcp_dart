@@ -977,7 +977,7 @@ JsonRpcInitializeRequest _initializeRequest({
   return JsonRpcInitializeRequest(
     id: id,
     initParams: InitializeRequest(
-      protocolVersion: stableProtocolVersion,
+      protocolVersion: latestInitializationProtocolVersion,
       capabilities: capabilities,
       clientInfo: const Implementation(
         name: 'conformance-client',
@@ -995,7 +995,7 @@ JsonRpcResponse _initializeResponse({
     id: id,
     result:
         InitializeResult(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: capabilities,
           serverInfo: const Implementation(
             name: 'conformance-server',
@@ -1693,10 +1693,11 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
     serverTransport.sentMessages,
     id: 'draft-initialize',
   );
-  if (serverResponse.result['protocolVersion'] != stableProtocolVersion) {
+  if (serverResponse.result['protocolVersion'] !=
+      latestInitializationProtocolVersion) {
     throw StateError(
       'Expected initialize response protocolVersion '
-      '$stableProtocolVersion, '
+      '$latestInitializationProtocolVersion, '
       'got ${serverResponse.result['protocolVersion']}.',
     );
   }
@@ -1734,10 +1735,11 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
   final initializeRequest = clientTransport.sentMessages
       .whereType<JsonRpcRequest>()
       .singleWhere((request) => request.method == Method.initialize);
-  if (initializeRequest.params?['protocolVersion'] != stableProtocolVersion) {
+  if (initializeRequest.params?['protocolVersion'] !=
+      latestInitializationProtocolVersion) {
     throw StateError(
       'Expected fallback initialize request protocolVersion '
-      '$stableProtocolVersion, got '
+      '$latestInitializationProtocolVersion, got '
       '${initializeRequest.params?['protocolVersion']}.',
     );
   }
@@ -2755,7 +2757,7 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
             id: message.id,
             result:
                 const InitializeResult(
-                  protocolVersion: stableProtocolVersion,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'conformance-server',
@@ -2794,7 +2796,7 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
         JsonRpcInitializeRequest(
           id: 'initialize-session',
           initParams: const InitializeRequest(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'client', version: '1.0.0'),
           ),
@@ -4973,7 +4975,7 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
   }
 
   final legacyMeta = _statelessRequestMeta(
-    protocolVersion: stableProtocolVersion,
+    protocolVersion: latestInitializationProtocolVersion,
     capabilities: clientCapabilities,
   );
   final legacyCapabilities =
@@ -5725,10 +5727,12 @@ Future<void> _advertisesLatestProtocolVersion() async {
   if (supportedProtocolVersions.first != defaultProtocolVersion) {
     throw StateError('Expected defaultProtocolVersion to be advertised first.');
   }
-  if (!supportedProtocolVersions.contains(stableProtocolVersion)) {
+  if (!supportedProtocolVersions.contains(
+    latestInitializationProtocolVersion,
+  )) {
     throw StateError(
       'Expected supported versions to include '
-      '$stableProtocolVersion.',
+      '$latestInitializationProtocolVersion.',
     );
   }
 }

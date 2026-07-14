@@ -414,7 +414,7 @@ Future<void> _sendInit(MockTransport transport) async {
   final initRequest = JsonRpcInitializeRequest(
     id: 1,
     initParams: const InitializeRequestParams(
-      protocolVersion: stableProtocolVersion,
+      protocolVersion: latestInitializationProtocolVersion,
       capabilities: ClientCapabilities(),
       clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
     ),

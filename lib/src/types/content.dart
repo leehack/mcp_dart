@@ -305,7 +305,7 @@ class BlobResourceContents extends ResourceContents {
 
 /// Represents unknown or passthrough resource content types.
 ///
-/// Stable MCP and MCP `2026-07-28` draft/RC wire results require either text or
+/// Stable MCP and MCP `2026-07-28` wire results require either text or
 /// blob content. This class is retained for source compatibility, but
 /// serialization rejects it because no current protocol result shape references bare
 /// `ResourceContents`.

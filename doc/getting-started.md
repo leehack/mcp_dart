@@ -533,7 +533,7 @@ final result = await client.callTool(
 
 The SDK includes many examples in the `example/` directory:
 
-- **[`mcp_2026_07_28/`](../example/mcp_2026_07_28/)** - Strict 2026 RC discovery, subscriptions, `input_required`, and structured output
+- **[`mcp_2026_07_28/`](../example/mcp_2026_07_28/)** - Strict 2026 discovery, subscriptions, `input_required`, and structured output
 - **[server_stdio.dart](../example/server_stdio.dart)** - Complete stdio server
 - **[client_stdio.dart](../example/client_stdio.dart)** - Stdio client
 - **[weather.dart](../example/weather.dart)** - Real weather API integration

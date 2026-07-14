@@ -1,6 +1,110 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_http_client/services/streamable_mcp_service.dart';
 import 'package:mcp_dart/mcp_dart.dart';
+
+Map<String, dynamic> buildToolArguments(Tool tool, String input) {
+  final schema = tool.inputSchema.toJson();
+  final rawProperties = schema['properties'];
+  if (rawProperties is! Map || rawProperties.isEmpty) {
+    return const {};
+  }
+
+  final properties = Map<String, dynamic>.from(rawProperties);
+  final required = switch (schema['required']) {
+    final List<dynamic> values => values.whereType<String>().toList(),
+    _ => const <String>[],
+  };
+  final trimmedInput = input.trim();
+
+  if (properties.length > 1) {
+    if (trimmedInput.isEmpty) {
+      if (required.isNotEmpty) {
+        throw const FormatException(
+          'Enter a JSON object containing the required tool arguments.',
+        );
+      }
+      return const {};
+    }
+
+    final decoded = jsonDecode(trimmedInput);
+    if (decoded is! Map) {
+      throw const FormatException(
+        'Tools with multiple arguments require a JSON object.',
+      );
+    }
+    final arguments = Map<String, dynamic>.from(decoded);
+    final missing = required.where((name) => !arguments.containsKey(name));
+    if (missing.isNotEmpty) {
+      throw FormatException(
+        'Missing required tool argument(s): ${missing.join(', ')}.',
+      );
+    }
+    return arguments;
+  }
+
+  final argumentName =
+      required.isNotEmpty ? required.first : properties.keys.first;
+  final rawArgumentSchema = properties[argumentName];
+  final argumentSchema =
+      rawArgumentSchema is Map
+          ? Map<String, dynamic>.from(rawArgumentSchema)
+          : const <String, dynamic>{};
+  if (trimmedInput.isEmpty) {
+    if (argumentSchema.containsKey('default')) {
+      return {argumentName: argumentSchema['default']};
+    }
+    if (required.contains(argumentName)) {
+      throw FormatException(
+        'Enter a value for required argument "$argumentName".',
+      );
+    }
+    return const {};
+  }
+
+  return {
+    argumentName: _parseToolArgument(trimmedInput, argumentSchema['type']),
+  };
+}
+
+dynamic _parseToolArgument(String input, Object? type) {
+  switch (type) {
+    case 'string':
+      return input;
+    case 'integer':
+      return int.tryParse(input) ??
+          (throw FormatException('Expected an integer, received "$input".'));
+    case 'number':
+      return num.tryParse(input) ??
+          (throw FormatException('Expected a number, received "$input".'));
+    case 'boolean':
+      return switch (input.toLowerCase()) {
+        'true' => true,
+        'false' => false,
+        _ =>
+          throw FormatException('Expected true or false, received "$input".'),
+      };
+    case 'object':
+    case 'array':
+    case 'null':
+      final value = jsonDecode(input);
+      if (type == 'object' && value is! Map ||
+          type == 'array' && value is! List ||
+          type == 'null' && value != null) {
+        throw FormatException(
+          'Input does not match the advertised $type schema.',
+        );
+      }
+      return value;
+    default:
+      try {
+        return jsonDecode(input);
+      } on FormatException {
+        return input;
+      }
+  }
+}
 
 class McpClientScreen extends StatefulWidget {
   final StreamableMcpService mcpService;
@@ -23,6 +127,7 @@ class McpClientScreenState extends State<McpClientScreen> {
   @override
   void initState() {
     super.initState();
+    widget.mcpService.addListener(_onServiceChanged);
 
     // Set default response text
     _responseText =
@@ -35,7 +140,23 @@ class McpClientScreenState extends State<McpClientScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant McpClientScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mcpService != widget.mcpService) {
+      oldWidget.mcpService.removeListener(_onServiceChanged);
+      widget.mcpService.addListener(_onServiceChanged);
+    }
+  }
+
+  void _onServiceChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
+    widget.mcpService.removeListener(_onServiceChanged);
     _scrollController.dispose();
     _inputController.dispose();
     super.dispose();
@@ -45,11 +166,12 @@ class McpClientScreenState extends State<McpClientScreen> {
     String label,
     VoidCallback onPressed, {
     bool requiresConnection = true,
+    bool enabled = true,
     ButtonStyle? style,
   }) {
     return ElevatedButton(
       onPressed:
-          (!requiresConnection || widget.mcpService.isConnected)
+          (enabled && (!requiresConnection || widget.mcpService.isConnected))
               ? onPressed
               : null,
       style:
@@ -186,20 +308,11 @@ class McpClientScreenState extends State<McpClientScreen> {
     _showLoading(true);
 
     try {
-      // Parse arguments based on the selected tool
-      Map<String, dynamic> args = {};
-      final inputText = _inputController.text.trim();
-
-      if (_selectedTool == 'greet') {
-        // For greet tool, the input is the name
-        args = {'name': inputText.isEmpty ? 'MCP User' : inputText};
-      } else if (_selectedTool == 'multi-greet') {
-        // For multi-greet, same as greet
-        args = {'name': inputText.isEmpty ? 'MCP User' : inputText};
-      } else {
-        // For other tools, basic text input
-        args = {'text': inputText};
+      final selectedTool = _selectedToolDefinition();
+      if (selectedTool == null) {
+        throw StateError('The selected tool is no longer advertised.');
       }
+      final args = buildToolArguments(selectedTool, _inputController.text);
 
       // Call the tool
       final result = await widget.mcpService.callTool(_selectedTool!, args);
@@ -231,6 +344,37 @@ class McpClientScreenState extends State<McpClientScreen> {
     } finally {
       _showLoading(false);
     }
+  }
+
+  Tool? _selectedToolDefinition() {
+    for (final tool in widget.mcpService.availableTools ?? const <Tool>[]) {
+      if (tool.name == _selectedTool) {
+        return tool;
+      }
+    }
+    return null;
+  }
+
+  bool get _selectedToolUsesJsonObject {
+    final properties =
+        _selectedToolDefinition()?.inputSchema.toJson()['properties'];
+    return properties is Map && properties.length > 1;
+  }
+
+  String _toolInputLabel() {
+    if (_selectedToolUsesJsonObject) {
+      return 'Arguments (JSON object)';
+    }
+    if (_selectedTool == 'greet' || _selectedTool == 'multi-greet') {
+      return 'Enter name (e.g. MCP User)';
+    }
+    return 'Enter input text';
+  }
+
+  String _toolInputHint() {
+    return _selectedToolUsesJsonObject
+        ? r'Example: {"interval": 100, "count": 5}'
+        : 'Input argument for tool or prompt';
   }
 
   // List available prompts
@@ -343,19 +487,7 @@ class McpClientScreenState extends State<McpClientScreen> {
 
   // Clear notifications and reset counters
   void _clearNotifications() {
-    setState(() {
-      widget.mcpService.notifications.clear();
-
-      // Reset the notification counter in the service
-      try {
-        (widget.mcpService as dynamic)._notificationCount = 0;
-      } catch (_) {
-        // Ignore if the field is not accessible
-      }
-
-      widget.mcpService
-          .refresh(); // Use refresh method instead of directly calling notifyListeners
-    });
+    widget.mcpService.clearNotifications();
   }
 
   // Method removed (web-specific functionality)
@@ -477,7 +609,11 @@ class McpClientScreenState extends State<McpClientScreen> {
                     requiresConnection: false,
                   ),
                   _buildCommandButton('Disconnect', _disconnect),
-                  _buildCommandButton('Terminate Session', _terminateSession),
+                  _buildCommandButton(
+                    'Terminate Session',
+                    _terminateSession,
+                    enabled: widget.mcpService.canTerminateSession,
+                  ),
                   _buildCommandButton(
                     'Reconnect',
                     _reconnect,
@@ -632,12 +768,9 @@ class McpClientScreenState extends State<McpClientScreen> {
               child: TextField(
                 controller: _inputController,
                 decoration: InputDecoration(
-                  labelText:
-                      _selectedTool == 'greet' || _selectedTool == 'multi-greet'
-                          ? 'Enter name (e.g. MCP User)'
-                          : 'Enter input text',
+                  labelText: _toolInputLabel(),
                   border: const OutlineInputBorder(),
-                  hintText: 'Input arguments for tool or prompt',
+                  hintText: _toolInputHint(),
                 ),
                 enabled: widget.mcpService.isConnected,
               ),

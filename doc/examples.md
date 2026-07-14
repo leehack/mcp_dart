@@ -9,7 +9,7 @@ protocol era. Choose the profile that matches what you want to test:
 
 | Profile | Start with | Purpose |
 | --- | --- | --- |
-| Strict MCP `2026-07-28` RC | [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/) | Guarantee discovery and the stateless 2026 request model |
+| Strict MCP `2026-07-28` | [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/) | Guarantee discovery and the stateless 2026 request model |
 | Default dual-era | [`server_stdio.dart`](../example/server_stdio.dart), [`client_stdio.dart`](../example/client_stdio.dart), [`streamable_https/`](../example/streamable_https/) | Prefer 2026 and retain legacy fallback |
 | Representative MCP 2025 / legacy | [`simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`elicitation_http_server.dart`](../example/elicitation_http_server.dart), [`server_sse.dart`](../example/server_sse.dart) | Demonstrate initialization-era APIs retained for compatibility |
 
@@ -22,7 +22,7 @@ For task-focused guidance, also see:
 - [MCP migration cookbooks](migration-cookbooks.md) for TypeScript SDK, `dart_mcp`, stdio-to-HTTP, and version migrations.
 - [MCP Apps guide](mcp-apps.md) for `io.modelcontextprotocol/ui` metadata and host compatibility notes.
 
-## MCP 2026-07-28 RC core
+## MCP 2026-07-28 core
 
 ### Strict server and client
 
@@ -47,7 +47,7 @@ dart run example/mcp_2026_07_28/client.dart
 ## Default dual-era examples
 
 These examples use `McpProtocol.stable`, explicitly or by default. Compatible
-peers negotiate the 2026 RC; older peers use initialization fallback.
+peers negotiate MCP 2026; older peers use initialization fallback.
 
 ### Stdio Server and Client
 
@@ -89,6 +89,24 @@ dart run packages/mcp_dart_cli/bin/mcp_dart.dart inspect \
 - Error handling for API failures
 - Type-safe parameter validation
 
+### Safe HTTP Fetch Server
+
+**Location**: [`example/fetch-server/`](../example/fetch-server/)
+
+A bounded stdio tool for fetching public HTTP(S) text:
+
+```bash
+cd example/fetch-server
+dart pub get
+dart run bin/fetch_server.dart
+```
+
+The example rejects credentials and non-public network destinations, pins
+connections to validated DNS answers, revalidates redirects, and caps time,
+redirects, and response bytes. Its
+[README](../example/fetch-server/README.md) explains the remaining production
+egress, authentication, and rate-limit responsibilities.
+
 ## Transport Examples
 
 ### Legacy SSE Server (Deprecated)
@@ -108,6 +126,7 @@ dart run example/server_sse.dart
 - SSE transport configuration
 - Session management
 - Multiple concurrent connections
+- Explicit Host and Origin allowlists for DNS-rebinding protection
 
 ### Streamable HTTP
 
@@ -366,15 +385,18 @@ Integration with Claude API:
 ```bash
 export ANTHROPIC_API_KEY=your_key
 cd example/anthropic-client
-dart run
+dart run bin/main.dart dart ../server_stdio.dart
 ```
 
 **Features**:
 
-- Claude API integration
-- Message formatting
-- Streaming responses
-- Tool use with Claude
+- Current Anthropic Messages API and model override support
+- Complete paginated MCP tool discovery with collision-safe provider aliases
+- Correlated `tool_use` / `tool_result` turns
+- Multiple tool calls and tool-use rounds
+- Explicit per-call approval and rejection of unadvertised tool names
+- Native text/image result mapping, structured-result preservation, and
+  correlated recoverable MCP errors
 
 ### Google Gemini Client
 
@@ -385,15 +407,17 @@ Integration with Gemini API:
 ```bash
 export GEMINI_API_KEY=your_key
 cd example/gemini-client
-dart run
+dart run bin/main.dart dart ../server_stdio.dart
 ```
 
 **Features**:
 
-- Gemini API integration
-- Multi-turn conversations
-- Content generation
-- Function calling
+- Current Gemini Interactions API with stored multi-turn interactions
+- Complete paginated MCP tool discovery with collision-safe provider aliases
+- Correlated function-call / function-response turns
+- Parallel and sequential tool calls with explicit per-call approval
+- Native text/image/structured result mapping without MCP metadata leakage
+- Fail-closed conversion for Gemini's supported JSON Schema subset
 
 ## Flutter Examples
 
@@ -407,7 +431,7 @@ Flutter mobile app with MCP integration:
 dart run example/streamable_https/server_streamable_https.dart
 
 cd example/flutter_http_client
-flutter run -d chrome
+flutter run -d chrome --web-port 8080
 ```
 
 **Features**:
@@ -699,11 +723,15 @@ dart run example/elicitation_http_server.dart
 # Flutter example
 dart run example/streamable_https/server_streamable_https.dart
 cd example/flutter_http_client
-flutter run -d chrome
+flutter run -d chrome --web-port 8080
 
 # Non-credentialed smoke checks used by CI/local release validation
 dart test test/example/non_credentialed_examples_smoke_test.dart
 ```
+
+Core CI also analyzes, tests, and AOT-compiles the nested Anthropic, Gemini,
+and fetch packages; builds the Jaspr production bundle; and analyzes, tests,
+and builds the Flutter web app.
 
 ## Next Steps
 
@@ -717,7 +745,7 @@ dart test test/example/non_credentialed_examples_smoke_test.dart
 
 1. Run the [strict MCP 2026 example](../example/mcp_2026_07_28/)
 2. Study the [authentication boundary guide](../example/authentication/OAUTH_SERVER_GUIDE.md)
-3. Review the [protocol coverage matrices](spec-coverage-2026-07-28-rc.md)
+3. Review the [protocol coverage matrices](spec-coverage-2026-07-28.md)
 
 ### For Flutter Developers
 

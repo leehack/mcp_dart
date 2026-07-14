@@ -604,16 +604,6 @@ bool _isInitializeRequest(dynamic body) {
   return body is Map<String, dynamic> && body['method'] == Method.initialize;
 }
 
-bool _isStatelessRequest(HttpRequest request) {
-  final protocolVersion = request.headers.value('mcp-protocol-version');
-  return protocolVersion != null &&
-      isStatelessProtocolVersion(protocolVersion.trim());
-}
-
-bool _canHandleSessionlessPost(HttpRequest request, dynamic body) {
-  return _isInitializeRequest(body) || _isStatelessRequest(request);
-}
-
 // Handle POST requests
 Future<void> _handlePostRequest(
   HttpRequest request,
@@ -632,8 +622,9 @@ Future<void> _handlePostRequest(
     if (sessionId != null && transports.containsKey(sessionId)) {
       // Reuse existing transport
       transport = transports[sessionId]!;
-    } else if (sessionId == null && _canHandleSessionlessPost(request, body)) {
-      // New legacy session request or stateless 2026 request
+    } else if (sessionId == null && _isInitializeRequest(body)) {
+      // This example is intentionally legacy-only, so only initialize may
+      // create a new Streamable HTTP session.
       final eventStore = InMemoryEventStore();
       transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
@@ -676,7 +667,7 @@ Future<void> _handlePostRequest(
             error: JsonRpcErrorData(
               code: ErrorCode.connectionClosed.value,
               message: sessionId == null
-                  ? 'Bad Request: sessionless requests must be initialize or include a stateless MCP-Protocol-Version'
+                  ? 'Bad Request: a sessionless request must be initialize'
                   : 'Session not found',
             ),
           ).toJson(),

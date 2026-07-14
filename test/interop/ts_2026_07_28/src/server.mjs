@@ -19,7 +19,7 @@ function readArg(args, name) {
 }
 
 function createInteropServer() {
-  const serverInfo = { name: 'ts-2026-07-28-rc-interop-server', version: '0.0.0' };
+  const serverInfo = { name: 'ts-2026-07-28-interop-server', version: '0.0.0' };
   const server = new McpServer(
     serverInfo,
     {
@@ -31,7 +31,7 @@ function createInteropServer() {
   server.registerTool(
     'ts_echo',
     {
-      description: 'Echoes a message from the Dart 2026-07-28 RC client.',
+      description: 'Echoes a message from the Dart 2026-07-28 client.',
       inputSchema: z.object({ message: z.string() }),
     },
     async ({ message }) => ({
@@ -174,7 +174,7 @@ async function main() {
   const address = httpServer.address();
   const boundPort = typeof address === 'object' && address ? address.port : port;
   console.log(
-    `TS 2026-07-28 RC interop server listening on http://${host}:${boundPort}/mcp`,
+    `TS 2026-07-28 interop server listening on http://${host}:${boundPort}/mcp`,
   );
 
   const stop = async () => {

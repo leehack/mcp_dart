@@ -24,7 +24,7 @@ ElicitResult parseGreetingProfileResponse(InputResponse response) {
   }
 }
 
-/// Strict MCP 2026-07-28 RC server example.
+/// Strict MCP 2026-07-28 server example.
 ///
 /// The paired client starts this server over stdio and demonstrates stateless
 /// discovery, `subscriptions/listen`, multi-round-trip `input_required`, and a

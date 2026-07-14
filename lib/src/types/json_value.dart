@@ -2,7 +2,7 @@ import 'validation.dart';
 
 /// A validated JSON value.
 ///
-/// This represents the MCP `2026-07-28` draft/RC cases where protocol fields
+/// This represents the MCP `2026-07-28` cases where protocol fields
 /// may carry any JSON value instead of only an object. Prefer the typed
 /// constructors such as [JsonValue.object], [JsonValue.array], or
 /// [JsonValue.nullValue] at public API boundaries.

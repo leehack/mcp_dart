@@ -16,7 +16,7 @@ Future<void> main(List<String> args) async {
     Platform.resolvedExecutable,
     [
       'run',
-      'test/conformance/mcp_2026_07_28_rc_server.dart',
+      'test/conformance/mcp_2026_07_28_server.dart',
       '--host',
       'localhost',
       '--port',
@@ -32,7 +32,7 @@ Future<void> main(List<String> args) async {
     onLine: (line) {
       if (!serverReady.isCompleted &&
           line.contains(
-            'MCP 2026-07-28 RC conformance server listening on',
+            'MCP 2026-07-28 conformance server listening on',
           )) {
         serverReady.complete();
       }
@@ -67,7 +67,7 @@ Future<void> main(List<String> args) async {
       throw StateError('Browser 2026-07-28 test exited with $testExit');
     }
   } on Object catch (error) {
-    stderr.writeln('Browser 2026-07-28 RC interop failed: $error');
+    stderr.writeln('Browser 2026-07-28 interop failed: $error');
     exitCode = 1;
   } finally {
     await _terminate(server);

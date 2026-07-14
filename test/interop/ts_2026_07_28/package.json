@@ -1,9 +1,9 @@
 {
-  "name": "mcp-dart-ts-2026-07-28-rc-interop",
+  "name": "mcp-dart-ts-2026-07-28-interop",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "TypeScript SDK 2026-07-28 RC interop fixture for mcp_dart.",
+  "description": "TypeScript SDK 2026-07-28 interop fixture for mcp_dart.",
   "scripts": {
     "client": "node src/client.mjs"
   },

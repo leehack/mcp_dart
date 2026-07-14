@@ -20,7 +20,7 @@ The SDK requires Dart 3.5 or later. The dev.2 CLI requires Dart 3.7 or later.
 ## Protocol profile
 
 The 2.3.0 preview defaults to `McpProtocol.stable`: try MCP `2026-07-28`
-draft/RC, then fall back to legacy initialization when needed.
+preview, then fall back to legacy initialization when needed.
 
 ```dart
 const legacyClientOptions = McpClientOptions(protocol: McpProtocol.legacy);
@@ -29,7 +29,7 @@ const strictServerOptions = McpServerOptions(
 );
 ```
 
-See the [2026 transition guide](mcp-2026-07-28-rc.md) before depending on
+See the [2026 transition guide](mcp-2026-07-28.md) before depending on
 draft-only behavior.
 
 ## Server

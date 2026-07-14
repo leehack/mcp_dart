@@ -560,7 +560,7 @@ void main() {
                 JsonRpcResponse(
                   id: message.id,
                   result: const {
-                    'protocolVersion': stableProtocolVersion,
+                    'protocolVersion': latestInitializationProtocolVersion,
                     'capabilities': {},
                     'serverInfo': {'name': 'TestServer', 'version': '1.0.0'},
                   },
@@ -596,7 +596,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: {
-              'protocolVersion': stableProtocolVersion,
+              'protocolVersion': latestInitializationProtocolVersion,
               'capabilities': {},
               'clientInfo': {'name': 'TestClient', 'version': '1.0.0'},
             },
@@ -690,7 +690,7 @@ void main() {
           JsonRpcInitializeRequest(
             id: 1,
             initParams: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
             ),
@@ -909,7 +909,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -942,7 +942,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'JsonErrorServer',
@@ -980,7 +980,7 @@ void main() {
           id: 1,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1034,7 +1034,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'DuplicateInitServer',
@@ -1066,7 +1066,7 @@ void main() {
           id: id,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1133,7 +1133,7 @@ void main() {
               id: 1,
               method: 'initialize',
               params: const InitializeRequestParams(
-                protocolVersion: stableProtocolVersion,
+                protocolVersion: latestInitializationProtocolVersion,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(name: 'Client', version: '1.0'),
               ).toJson(),
@@ -1173,7 +1173,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'InvalidEventIdServer',
@@ -1202,7 +1202,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -1272,7 +1272,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'PrimingFailureServer',
@@ -1301,7 +1301,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -1362,7 +1362,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -1444,7 +1444,7 @@ void main() {
           id: 1,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1472,7 +1472,7 @@ void main() {
           id: 3,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1590,7 +1590,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'MultiStreamServer',
@@ -1619,7 +1619,7 @@ void main() {
               id: 1,
               method: 'initialize',
               params: const InitializeRequestParams(
-                protocolVersion: stableProtocolVersion,
+                protocolVersion: latestInitializationProtocolVersion,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(name: 'Client', version: '1.0'),
               ).toJson(),
@@ -1747,7 +1747,7 @@ void main() {
           JsonRpcInitializeRequest(
             id: 1,
             initParams: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ),
@@ -1819,7 +1819,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'ReplayServer',
@@ -1848,7 +1848,7 @@ void main() {
               id: 1,
               method: 'initialize',
               params: const InitializeRequestParams(
-                protocolVersion: stableProtocolVersion,
+                protocolVersion: latestInitializationProtocolVersion,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(name: 'Client', version: '1.0'),
               ).toJson(),
@@ -1992,7 +1992,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {
                     'name': 'LimitReplayServer',
@@ -2021,7 +2021,7 @@ void main() {
               id: 1,
               method: 'initialize',
               params: const InitializeRequestParams(
-                protocolVersion: stableProtocolVersion,
+                protocolVersion: latestInitializationProtocolVersion,
                 capabilities: ClientCapabilities(),
                 clientInfo: Implementation(name: 'Client', version: '1.0'),
               ).toJson(),
@@ -2598,7 +2598,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const InitializeResult(
-                  protocolVersion: stableProtocolVersion,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'StatefulServer',
@@ -2631,7 +2631,7 @@ void main() {
           JsonRpcInitializeRequest(
             id: 1,
             initParams: const InitializeRequest(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'client', version: '1.0.0'),
             ),
@@ -3381,7 +3381,7 @@ void main() {
               JsonRpcResponse(
                 id: message.id,
                 result: const {
-                  'protocolVersion': stableProtocolVersion,
+                  'protocolVersion': latestInitializationProtocolVersion,
                   'capabilities': {},
                   'serverInfo': {'name': 'StatelessServer', 'version': '1.0.0'},
                 },
@@ -3407,7 +3407,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: {
-              'protocolVersion': stableProtocolVersion,
+              'protocolVersion': latestInitializationProtocolVersion,
               'capabilities': {},
               'clientInfo': {'name': 'TestClient', 'version': '1.0.0'},
             },

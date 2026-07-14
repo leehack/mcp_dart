@@ -39,10 +39,10 @@ does not replace the final-spec delta review or authorize a stable release.
 ## 1. Freeze the official inputs
 
 1. Record the final specification tag and commit SHA.
-2. Diff that SHA against `tool/testing/mcp_2026_release_spec_ref.txt`.
+2. Diff that SHA against `tool/testing/mcp_2026_07_28_spec_ref.txt`.
 3. Review every schema, example, conformance, and normative prose change in
    that range; do not rely only on generated schema diffs.
-4. Update `tool/testing/mcp_2026_release_spec_ref.txt` to the final SHA.
+4. Update `tool/testing/mcp_2026_07_28_spec_ref.txt` to the final SHA.
 5. Update the official conformance package and the published TypeScript and
    Python SDK fixtures only after each candidate passes locally in both
    supported directions.
@@ -60,7 +60,7 @@ dart pub get
 dart format --output=none --set-exit-if-changed .
 dart analyze
 dart test
-SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_release_spec_ref.txt)"
+SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_07_28_spec_ref.txt)"
 git clone --filter=blob:none --no-checkout \
   https://github.com/modelcontextprotocol/modelcontextprotocol.git \
   .dart_tool/mcp-spec
@@ -68,24 +68,26 @@ git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
 git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
 dart run tool/spec_example_audit.dart \
   .dart_tool/mcp-spec/schema/2026-07-28/examples
+dart run tool/spec_document_inventory_audit.dart \
+  .dart_tool/mcp-spec/docs/specification/2026-07-28
 dart run test/conformance/run_2025_server_conformance.dart \
   --timeout-seconds 90 --isolate-scenarios
 CONFORMANCE_VERSION=0.2.0-alpha.9 # Replace with the final compatible release.
 npx -y "@modelcontextprotocol/conformance@$CONFORMANCE_VERSION" client \
-  --command "dart run test/conformance/mcp_2026_07_28_rc_client.dart" \
+  --command "dart run test/conformance/mcp_2026_07_28_client.dart" \
   --suite all --spec-version 2025-11-25 --verbose
-dart run test/conformance/run_2026_07_28_rc_server_conformance.dart \
+dart run test/conformance/run_2026_07_28_server_conformance.dart \
   --timeout-seconds 90
-dart run test/conformance/run_2026_07_28_rc_client_conformance.dart \
+dart run test/conformance/run_2026_07_28_client_conformance.dart \
   --timeout-seconds 90
-cd test/interop/ts_2026_07_28_rc && npm ci && cd ../../..
-dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
+cd test/interop/ts_2026_07_28 && npm ci && cd ../../..
+dart run tool/testing/run_ts_2026_07_28_interop.dart
 python3 -m venv .dart_tool/python-2026-interop
 .dart_tool/python-2026-interop/bin/python -m pip install \
-  -r test/interop/python_2026_07_28_rc/requirements.txt
+  -r test/interop/python_2026_07_28/requirements.txt
 MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
-  dart run tool/testing/run_python_2026_07_28_rc_interop.dart
-dart run tool/testing/run_browser_2026_07_28_rc_interop.dart
+  dart run tool/testing/run_python_2026_07_28_interop.dart
+dart run tool/testing/run_browser_2026_07_28_interop.dart
 dart pub publish --dry-run
 ```
 
@@ -104,12 +106,16 @@ On the final release-prep commit:
 - Restore root `documentation` and all user-facing repository links to `main`.
 - Replace prerelease dependency snippets in the README, getting-started,
   quick-reference, and release docs with `mcp_dart: ^2.3.0`.
-- Rename `doc/mcp-2026-07-28-rc.md` to `doc/mcp-2026-07-28.md` and
-  `doc/spec-coverage-2026-07-28-rc.md` to
-  `doc/spec-coverage-2026-07-28.md`, then update every incoming link.
-- Rename user-facing RC fixtures, commands, and workflow labels that now
-  describe the final specification. Retain an `RC` name only when it identifies
-  a historical upstream artifact or compatibility pin, and document why.
+- Keep the durable `2026-07-28` document, fixture, command, and workflow names;
+  update only maturity wording that changes when the final specification ships.
+- Promote `stableProtocolVersion` and `defaultProtocolVersion` to the final
+  `2026-07-28` constant, but keep `latestInitializationProtocolVersion` and
+  `legacyProtocolVersions.first` at `2025-11-25`. Run the profile regression
+  tests to prove `McpProtocol.legacy` never sends a stateless version through
+  `initialize`.
+- Stop presenting `previewProtocolVersion` as the preferred public name. Keep
+  it only as a deprecated alias of `stableProtocolVersion` for prerelease
+  adopters, and update examples to use the stable/default constants.
 - Move the relevant root changelog entries under `## 2.3.0` and remove wording
   that presents the now-final protocol as draft-only.
 - Keep migration and compatibility notes explicit: `McpProtocol.stable`

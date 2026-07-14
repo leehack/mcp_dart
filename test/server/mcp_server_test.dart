@@ -55,7 +55,7 @@ class McpServerTestTransport
       JsonRpcInitializeRequest(
         id: 0,
         initParams: const InitializeRequest(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
         ),

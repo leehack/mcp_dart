@@ -350,7 +350,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: const InitializeResult(
-                  protocolVersion: stableProtocolVersion,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: ServerCapabilities(
                     logging: {'supported': true},
                   ),
@@ -517,7 +517,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: const InitializeResult(
-                  protocolVersion: stableProtocolVersion,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer',
@@ -609,7 +609,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: stableProtocolVersion,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -729,7 +729,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: stableProtocolVersion,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -836,7 +836,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: stableProtocolVersion,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -1010,7 +1010,7 @@ void main() {
               JsonRpcResponse(
                 id: json['id'],
                 result: InitializeResult(
-                  protocolVersion: stableProtocolVersion,
+                  protocolVersion: latestInitializationProtocolVersion,
                   capabilities: const ServerCapabilities(),
                   serverInfo: Implementation(
                     name: 'RetrySessionServer$initializeCount',
@@ -1137,7 +1137,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
             ).toJson(),
@@ -2073,6 +2073,109 @@ void main() {
     );
 
     group('OAuth Discovery', () {
+      Future<void> expectClientRegistrationSelection({
+        required String clientId,
+        required bool expectsDynamicRegistration,
+      }) async {
+        final oauthServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        addTearDown(() => oauthServer.close(force: true));
+        final oauthPort = oauthServer.port;
+        var registrationRequests = 0;
+
+        oauthServer.listen((request) async {
+          switch (request.uri.path) {
+            case '/mcp':
+              request.response
+                ..statusCode = HttpStatus.unauthorized
+                ..headers.set(
+                  HttpHeaders.wwwAuthenticateHeader,
+                  'Bearer resource_metadata="http://localhost:$oauthPort/.well-known/oauth-protected-resource/mcp"',
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-protected-resource/mcp':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'resource': 'http://localhost:$oauthPort/mcp',
+                    'authorization_servers': [
+                      'http://localhost:$oauthPort/auth',
+                    ],
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-authorization-server/auth':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'issuer': 'http://localhost:$oauthPort/auth',
+                    'authorization_endpoint':
+                        'http://localhost:$oauthPort/authorize',
+                    'token_endpoint': 'http://localhost:$oauthPort/token',
+                    'registration_endpoint':
+                        'http://localhost:$oauthPort/register',
+                    'code_challenge_methods_supported': ['S256'],
+                    'token_endpoint_auth_methods_supported': ['none'],
+                    'client_id_metadata_document_supported': true,
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/register':
+              registrationRequests += 1;
+              await utf8.decoder.bind(request).join();
+              request.response
+                ..statusCode = HttpStatus.created
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'client_id': 'registered-client',
+                    'token_endpoint_auth_method': 'none',
+                  }),
+                );
+              await request.response.close();
+              break;
+            default:
+              request.response.statusCode = HttpStatus.notFound;
+              await request.response.close();
+          }
+        });
+
+        final authProvider = DiscoveryOAuthClientProvider(
+          clientId: clientId,
+          redirectUri: Uri.parse('http://localhost/callback'),
+        );
+        final oauthTransport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:$oauthPort/mcp'),
+          opts: StreamableHttpClientTransportOptions(
+            authProvider: authProvider,
+          ),
+        );
+        addTearDown(oauthTransport.close);
+        await oauthTransport.start();
+
+        await expectLater(
+          oauthTransport.send(
+            const JsonRpcRequest(id: 75, method: 'test/method'),
+          ),
+          throwsA(isA<UnauthorizedError>()),
+        );
+
+        expect(registrationRequests, expectsDynamicRegistration ? 1 : 0);
+        expect(
+          authProvider.authorizationUri?.queryParameters['client_id'],
+          expectsDynamicRegistration ? 'registered-client' : clientId,
+        );
+      }
+
       test('parses bearer challenge parameters', () {
         final challenge = OAuthBearerChallengeParameters.fromHeader(
           r'Bearer resource_metadata="https://mcp.example/.well-known/oauth-protected-resource/mcp", scope="tools:\"read\"\\admin", error="insufficient_scope"',
@@ -2094,6 +2197,126 @@ void main() {
         expect(challenge, isNotNull);
         expect(challenge?.resourceMetadata, isNull);
         expect(challenge?.scope, 'tools:read');
+      });
+
+      for (final clientId in [
+        'http://client.example/client.json',
+        'https://client.example',
+        'https://client.example/',
+      ]) {
+        test('does not treat $clientId as a client ID metadata document',
+            () async {
+          await expectClientRegistrationSelection(
+            clientId: clientId,
+            expectsDynamicRegistration: true,
+          );
+        });
+      }
+
+      test('uses an HTTPS client ID with a path as a metadata document',
+          () async {
+        await expectClientRegistrationSelection(
+          clientId: 'https://client.example/client.json',
+          expectsDynamicRegistration: false,
+        );
+      });
+
+      test('normalizes and tries path issuer metadata in MCP priority order',
+          () async {
+        final oauthServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        addTearDown(() => oauthServer.close(force: true));
+        final oauthPort = oauthServer.port;
+        final discoveryPaths = <String>[];
+        final discoveryQueries = <String>[];
+
+        oauthServer.listen((request) async {
+          switch (request.uri.path) {
+            case '/mcp':
+              request.response
+                ..statusCode = HttpStatus.unauthorized
+                ..headers.set(
+                  HttpHeaders.wwwAuthenticateHeader,
+                  'Bearer resource_metadata="http://localhost:$oauthPort/.well-known/oauth-protected-resource/mcp"',
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-protected-resource/mcp':
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'resource': 'http://localhost:$oauthPort/mcp',
+                    'authorization_servers': [
+                      'http://localhost:$oauthPort/tenant1/?source=config',
+                    ],
+                  }),
+                );
+              await request.response.close();
+              break;
+            case '/.well-known/oauth-authorization-server/tenant1':
+            case '/.well-known/openid-configuration/tenant1':
+            case '/tenant1/.well-known/openid-configuration':
+              discoveryPaths.add(request.uri.path);
+              discoveryQueries.add(request.uri.query);
+              request.response.statusCode = HttpStatus.notFound;
+              await request.response.close();
+              break;
+            case '/tenant1/.well-known/oauth-authorization-server':
+              discoveryPaths.add(request.uri.path);
+              discoveryQueries.add(request.uri.query);
+              request.response
+                ..statusCode = HttpStatus.ok
+                ..headers.contentType = ContentType.json
+                ..write(
+                  jsonEncode({
+                    'issuer':
+                        'http://localhost:$oauthPort/tenant1/?source=config',
+                    'authorization_endpoint':
+                        'http://localhost:$oauthPort/authorize',
+                    'token_endpoint': 'http://localhost:$oauthPort/token',
+                    'code_challenge_methods_supported': ['S256'],
+                    'token_endpoint_auth_methods_supported': ['none'],
+                  }),
+                );
+              await request.response.close();
+              break;
+            default:
+              request.response.statusCode = HttpStatus.notFound;
+              await request.response.close();
+          }
+        });
+
+        final authProvider = DiscoveryOAuthClientProvider(
+          redirectUri: Uri.parse('http://localhost/callback'),
+        );
+        final oauthTransport = StreamableHttpClientTransport(
+          Uri.parse('http://localhost:$oauthPort/mcp'),
+          opts: StreamableHttpClientTransportOptions(
+            authProvider: authProvider,
+          ),
+        );
+        addTearDown(oauthTransport.close);
+        await oauthTransport.start();
+
+        await expectLater(
+          oauthTransport.send(
+            const JsonRpcRequest(id: 76, method: 'test/method'),
+          ),
+          throwsA(isA<UnauthorizedError>()),
+        );
+
+        expect(authProvider.authorizationUri, isNotNull);
+        expect(discoveryPaths, [
+          '/.well-known/oauth-authorization-server/tenant1',
+          '/.well-known/openid-configuration/tenant1',
+          '/tenant1/.well-known/openid-configuration',
+          '/tenant1/.well-known/oauth-authorization-server',
+        ]);
+        expect(discoveryQueries, ['', '', '', '']);
       });
 
       test('rejects untrusted cross-origin OAuth discovery URLs', () async {

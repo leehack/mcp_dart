@@ -2584,6 +2584,8 @@ abstract class Protocol {
           jsonRpcRequest.params,
           jsonRpcRequest.meta,
         );
+      } on McpError {
+        rethrow;
       } catch (e, s) {
         _logger.warn(
           'Failed to parse params for request $method: $e\n$s',

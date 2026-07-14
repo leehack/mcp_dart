@@ -50,7 +50,7 @@ Future<void> main() async {
 
     print('Listing tools...');
     final tools = await client.listTools();
-    print('Resources: ${tools.toJson()}');
+    print('Tools: ${tools.tools}');
 
     print('Listing resources...');
     final resources = await client.listResources();
@@ -58,7 +58,7 @@ Future<void> main() async {
 
     print('Listing prompts...');
     final prompts = await client.listPrompts();
-    print('Resources: ${prompts.prompts}');
+    print('Prompts: ${prompts.prompts}');
 
     print('Calling a tool...');
     final toolResult = await client.callTool(
@@ -69,11 +69,11 @@ Future<void> main() async {
     );
     print('Tool result: ${toolResult.toJson()}');
 
-    print('Calling a tool...');
+    print('Reading a resource...');
     final resourceResult = await client.readResource(
       const ReadResourceRequest(uri: 'file:///logs'),
     );
-    print('Tool result: ${resourceResult.toJson()}');
+    print('Resource result: ${resourceResult.toJson()}');
 
     print('Calling a prompt...');
     final promptResult = await client.getPrompt(
@@ -83,8 +83,11 @@ Future<void> main() async {
       ),
     );
     print('Prompt result: ${promptResult.toJson()}');
-  } catch (e) {
-    print('Error: $e');
+  } catch (error, stackTrace) {
+    stderr
+      ..writeln('Example failed: $error')
+      ..writeln(stackTrace);
+    exitCode = 1;
   } finally {
     // Close the client and transport
     print('Closing client...');

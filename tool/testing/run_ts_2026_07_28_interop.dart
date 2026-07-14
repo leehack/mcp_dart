@@ -6,13 +6,13 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 Future<void> main(List<String> args) async {
   final repoRoot = Directory.current;
-  final fixtureDir = Directory('test/interop/ts_2026_07_28_rc');
+  final fixtureDir = Directory('test/interop/ts_2026_07_28');
   final clientPackage = File(
-    'test/interop/ts_2026_07_28_rc/node_modules/'
+    'test/interop/ts_2026_07_28/node_modules/'
     '@modelcontextprotocol/client/package.json',
   );
   final serverPackage = File(
-    'test/interop/ts_2026_07_28_rc/node_modules/'
+    'test/interop/ts_2026_07_28/node_modules/'
     '@modelcontextprotocol/server/package.json',
   );
 
@@ -27,7 +27,7 @@ Future<void> main(List<String> args) async {
   if (!clientPackage.existsSync()) {
     stderr.writeln(
       'Missing TypeScript fixture dependencies. Run:\n'
-      '  cd test/interop/ts_2026_07_28_rc\n'
+      '  cd test/interop/ts_2026_07_28\n'
       '  npm install',
     );
     exitCode = 64;
@@ -36,7 +36,7 @@ Future<void> main(List<String> args) async {
   if (!serverPackage.existsSync()) {
     stderr.writeln(
       'Missing TypeScript server fixture dependencies. Run:\n'
-      '  cd test/interop/ts_2026_07_28_rc\n'
+      '  cd test/interop/ts_2026_07_28\n'
       '  npm install',
     );
     exitCode = 64;
@@ -47,7 +47,7 @@ Future<void> main(List<String> args) async {
     await _runTsClientAgainstDartServer(repoRoot, fixtureDir);
     await _runDartClientAgainstTsServer(repoRoot, fixtureDir);
   } on Object catch (error) {
-    stderr.writeln('TS 2026-07-28 RC interop failed: $error');
+    stderr.writeln('TS 2026-07-28 interop failed: $error');
     exitCode = 1;
   }
 }
@@ -60,7 +60,7 @@ Future<void> _runTsClientAgainstDartServer(
     Platform.resolvedExecutable,
     [
       'run',
-      'test/conformance/mcp_2026_07_28_rc_server.dart',
+      'test/conformance/mcp_2026_07_28_server.dart',
       '--host',
       '127.0.0.1',
       '--port',
@@ -77,7 +77,7 @@ Future<void> _runTsClientAgainstDartServer(
     onLine: (line) => _completeUrlFromLine(
       serverUrl,
       line,
-      'MCP 2026-07-28 RC conformance server listening on',
+      'MCP 2026-07-28 conformance server listening on',
     ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[dart-server]');
@@ -104,7 +104,7 @@ Future<void> _runTsClientAgainstDartServer(
 
     if (clientExit != 0) {
       throw StateError(
-        'TypeScript 2026-07-28 RC client exited with $clientExit',
+        'TypeScript 2026-07-28 client exited with $clientExit',
       );
     }
   } finally {
@@ -131,7 +131,7 @@ Future<void> _runDartClientAgainstTsServer(
     onLine: (line) => _completeUrlFromLine(
       serverUrl,
       line,
-      'TS 2026-07-28 RC interop server listening on',
+      'TS 2026-07-28 interop server listening on',
     ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[ts-server]');
@@ -154,7 +154,7 @@ Future<void> _exerciseDartClient(String url) async {
   final transport = StreamableHttpClientTransport(Uri.parse(url));
   final client = McpClient(
     const Implementation(
-      name: 'mcp-dart-2026-07-28-rc-client',
+      name: 'mcp-dart-2026-07-28-client',
       version: '0.0.0',
     ),
     options: const McpClientOptions(
@@ -183,7 +183,7 @@ Future<void> _exerciseDartClient(String url) async {
       throw StateError('Expected 2026-07-28, got $version');
     }
     final serverInfo = client.getServerVersion();
-    if (serverInfo?.name != 'ts-2026-07-28-rc-interop-server') {
+    if (serverInfo?.name != 'ts-2026-07-28-interop-server') {
       throw StateError('Unexpected TS server info: ${serverInfo?.toJson()}');
     }
 
@@ -226,7 +226,7 @@ Future<void> _exerciseDartClient(String url) async {
       );
     }
 
-    const message = 'from Dart 2026-07-28 RC';
+    const message = 'from Dart 2026-07-28';
     final echo = await client
         .callTool(
           const CallToolRequest(

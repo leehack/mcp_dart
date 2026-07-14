@@ -6,7 +6,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 Future<void> main(List<String> args) async {
   final repoRoot = Directory.current;
-  final fixtureDir = Directory('test/interop/python_2026_07_28_rc');
+  final fixtureDir = Directory('test/interop/python_2026_07_28');
   final configuredPython = Platform.environment['MCP_PYTHON'] ?? 'python3';
   final python = configuredPython.contains(Platform.pathSeparator)
       ? File(configuredPython).absolute.path
@@ -22,7 +22,7 @@ Future<void> main(List<String> args) async {
     await _runPythonClientAgainstDartServer(repoRoot, fixtureDir, python);
     await _runDartClientAgainstPythonServer(repoRoot, fixtureDir, python);
   } on Object catch (error) {
-    stderr.writeln('Python 2026-07-28 RC interop failed: $error');
+    stderr.writeln('Python 2026-07-28 interop failed: $error');
     exitCode = 1;
   }
 }
@@ -36,7 +36,7 @@ Future<void> _runPythonClientAgainstDartServer(
     Platform.resolvedExecutable,
     [
       'run',
-      'test/conformance/mcp_2026_07_28_rc_server.dart',
+      'test/conformance/mcp_2026_07_28_server.dart',
       '--host',
       '127.0.0.1',
       '--port',
@@ -53,7 +53,7 @@ Future<void> _runPythonClientAgainstDartServer(
     onLine: (line) => _completeUrlFromLine(
       serverUrl,
       line,
-      'MCP 2026-07-28 RC conformance server listening on',
+      'MCP 2026-07-28 conformance server listening on',
     ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[dart-server]');
@@ -78,7 +78,7 @@ Future<void> _runPythonClientAgainstDartServer(
     await Future.wait([clientStdout, clientStderr]);
     if (clientExit != 0) {
       throw StateError(
-        'Python 2026-07-28 RC client exited with $clientExit',
+        'Python 2026-07-28 client exited with $clientExit',
       );
     }
   } finally {
@@ -109,7 +109,7 @@ Future<void> _runDartClientAgainstPythonServer(
     onLine: (line) => _completeUrlFromLine(
       serverUrl,
       line,
-      'Python 2026-07-28 RC interop server listening on',
+      'Python 2026-07-28 interop server listening on',
     ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[python-server]');
@@ -132,7 +132,7 @@ Future<void> _exerciseDartClient(String url) async {
   final transport = StreamableHttpClientTransport(Uri.parse(url));
   final client = McpClient(
     const Implementation(
-      name: 'mcp-dart-python-2026-07-28-rc-client',
+      name: 'mcp-dart-python-2026-07-28-client',
       version: '0.0.0',
     ),
     options: const McpClientOptions(protocol: McpProtocol.stable),
@@ -145,7 +145,7 @@ Future<void> _exerciseDartClient(String url) async {
       throw StateError('Expected 2026-07-28, got $version');
     }
     final serverInfo = client.getServerVersion();
-    if (serverInfo?.name != 'python-2026-07-28-rc-interop-server') {
+    if (serverInfo?.name != 'python-2026-07-28-interop-server') {
       throw StateError(
         'Unexpected Python server info: ${serverInfo?.toJson()}',
       );
@@ -159,7 +159,7 @@ Future<void> _exerciseDartClient(String url) async {
       );
     }
 
-    const message = 'from Dart 2026-07-28 RC';
+    const message = 'from Dart 2026-07-28';
     final echo = await client
         .callTool(
           const CallToolRequest(

@@ -1,6 +1,6 @@
 import 'package:mcp_dart/mcp_dart.dart';
 
-/// Runs the strict MCP 2026-07-28 RC example over stdio.
+/// Runs the strict MCP 2026-07-28 example over stdio.
 ///
 /// Run from the repository root:
 ///

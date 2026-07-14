@@ -41,7 +41,7 @@ Repository-wide evidence is tracked in:
 - [`test/`](../../../test/)
 - [MCP interoperability](../../../doc/interoperability.md)
 - [MCP 2025-11-25 coverage](../../../doc/spec-coverage-2025-11-25.md)
-- [MCP 2026-07-28 draft/RC coverage](../../../doc/spec-coverage-2026-07-28-rc.md)
+- [MCP 2026-07-28 coverage](../../../doc/spec-coverage-2026-07-28.md)
 
 ## Good next probes
 

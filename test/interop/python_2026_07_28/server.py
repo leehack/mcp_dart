@@ -5,7 +5,7 @@ import uvicorn
 from mcp.server.mcpserver import MCPServer
 
 mcp = MCPServer(
-    "python-2026-07-28-rc-interop-server",
+    "python-2026-07-28-interop-server",
     version="0.0.0",
 )
 
@@ -31,7 +31,7 @@ async def run(host: str, port: int) -> None:
         await server_task
         raise RuntimeError("Python MCP server stopped before becoming ready")
     print(
-        f"Python 2026-07-28 RC interop server listening on "
+        f"Python 2026-07-28 interop server listening on "
         f"http://{host}:{port}/mcp",
         flush=True,
     )

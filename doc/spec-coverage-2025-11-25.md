@@ -13,7 +13,7 @@ Run the matrix-critical local gate from the repository root:
 ```bash
 dart run test/conformance/run_2025_server_conformance.dart
 npx -y @modelcontextprotocol/conformance@0.2.0-alpha.9 client \
-  --command "dart run test/conformance/mcp_2026_07_28_rc_client.dart" \
+  --command "dart run test/conformance/mcp_2026_07_28_client.dart" \
   --suite all \
   --spec-version 2025-11-25
 
@@ -22,7 +22,7 @@ dart pub get
 dart run bin/mcp_dart.dart conformance --suite all --json
 ```
 
-Despite its filename, `mcp_2026_07_28_rc_client.dart` is the dual-era official
+Despite its filename, `mcp_2026_07_28_client.dart` is the dual-era official
 client fixture. `--spec-version 2025-11-25` selects its initialization-era path.
 
 Run the cross-SDK interop gate from the repository root:
@@ -37,7 +37,7 @@ dart test -t interop
 
 CI runs the official conformance gate, TypeScript interop suite, and full CLI
 conformance gate. The CLI workflow also runs the CLI tests and conformance gate.
-See the [2026-07-28 matrix](spec-coverage-2026-07-28-rc.md) for draft/RC gates.
+See the [2026-07-28 matrix](spec-coverage-2026-07-28.md) for preview gates.
 
 ## Matrix
 
@@ -90,8 +90,8 @@ without relying on output text:
 - `progress.rejects-malformed-progress-token`
 - `progress.dispatches-integer-progress-token`
 
-The CLI also includes 2026 draft/RC cases. They are scoped in the
-[2026-07-28 coverage matrix](spec-coverage-2026-07-28-rc.md), not here.
+The CLI also includes 2026 cases. They are scoped in the
+[2026-07-28 coverage matrix](spec-coverage-2026-07-28.md), not here.
 
 Use exact-case filtering when diagnosing one row:
 

@@ -32,6 +32,14 @@ class StreamableMcpService extends ChangeNotifier {
 
   // Status state
   bool get isConnected => _client != null;
+  String? get negotiatedProtocolVersion => _client?.getProtocolVersion();
+  bool get canTerminateSession {
+    final protocolVersion = negotiatedProtocolVersion;
+    return _transport?.sessionId != null &&
+        (protocolVersion == null ||
+            !isStatelessProtocolVersion(protocolVersion));
+  }
+
   String? _connectionError;
   String? get connectionError => _connectionError;
 
@@ -50,6 +58,25 @@ class StreamableMcpService extends ChangeNotifier {
 
   /// Constructor
   StreamableMcpService({required this.serverUrl});
+
+  void _addNotification({
+    required String level,
+    required String message,
+    bool notify = true,
+  }) {
+    _notificationCount++;
+    notifications.add(
+      NotificationMessage(
+        count: _notificationCount,
+        level: level,
+        message: message,
+        timestamp: DateTime.now(),
+      ),
+    );
+    if (notify) {
+      notifyListeners();
+    }
+  }
 
   /// Update server URL
   void updateServerUrl(String newUrl) {
@@ -97,23 +124,18 @@ class StreamableMcpService extends ChangeNotifier {
         notifyListeners();
       };
 
-      // Set up notification handlers
+      // These global handlers support initialization-era fallback peers. MCP
+      // 2026 uses request-scoped progress and subscriptions/listen instead.
       _client!.setNotificationHandler(
         "notifications/message",
         (notification) async {
           try {
-            _notificationCount++;
             final params = notification.logParams;
-
-            // Add notification to our list
-            final message = NotificationMessage(
-              count: _notificationCount,
+            _addNotification(
               level: params.level.toString(),
               message: params.data,
-              timestamp: DateTime.now(),
+              notify: false,
             );
-
-            notifications.add(message);
 
             // Schedule UI update
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -121,17 +143,11 @@ class StreamableMcpService extends ChangeNotifier {
             });
           } catch (error) {
             // Add an error notification to make the error more visible
-            notifications.add(
-              NotificationMessage(
-                count: _notificationCount + 1,
-                level: 'error',
-                message: 'Error processing notification: $error',
-                timestamp: DateTime.now(),
-              ),
+            _addNotification(
+              level: 'error',
+              message: 'Error processing notification: $error',
             );
-            _notificationCount++;
             _connectionError = 'Error processing notification: $error';
-            notifyListeners();
           }
           return Future.value();
         },
@@ -152,15 +168,11 @@ class StreamableMcpService extends ChangeNotifier {
       _client!.setNotificationHandler(
         "notifications/resources/list_changed",
         (notification) async {
-          notifications.add(
-            NotificationMessage(
-              count: _notificationCount + 1,
-              level: 'info',
-              message: 'Resource list changed notification received',
-              timestamp: DateTime.now(),
-            ),
+          _addNotification(
+            level: 'info',
+            message: 'Resource list changed notification received',
+            notify: false,
           );
-          _notificationCount++;
 
           // Refresh resources when list changes
           try {
@@ -197,13 +209,10 @@ class StreamableMcpService extends ChangeNotifier {
         _connectionError = null;
 
         // Add an initial notification
-        notifications.add(
-          NotificationMessage(
-            count: _notificationCount++,
-            level: 'info',
-            message: 'Connected to server',
-            timestamp: DateTime.now(),
-          ),
+        _addNotification(
+          level: 'info',
+          message: 'Connected to server',
+          notify: false,
         );
       } catch (e) {
         rethrow;
@@ -295,15 +304,10 @@ class StreamableMcpService extends ChangeNotifier {
 
     while (!connected && attempt <= maxAttempts) {
       try {
-        notifications.add(
-          NotificationMessage(
-            count: _notificationCount++,
-            level: 'info',
-            message: 'Reconnection attempt $attempt of $maxAttempts...',
-            timestamp: DateTime.now(),
-          ),
+        _addNotification(
+          level: 'info',
+          message: 'Reconnection attempt $attempt of $maxAttempts...',
         );
-        notifyListeners();
 
         // Wait longer between retry attempts
         if (attempt > 1) {
@@ -313,27 +317,17 @@ class StreamableMcpService extends ChangeNotifier {
         connected = await connect();
 
         if (connected) {
-          notifications.add(
-            NotificationMessage(
-              count: _notificationCount++,
-              level: 'info',
-              message: 'Reconnection successful on attempt $attempt',
-              timestamp: DateTime.now(),
-            ),
+          _addNotification(
+            level: 'info',
+            message: 'Reconnection successful on attempt $attempt',
           );
-          notifyListeners();
         }
       } catch (error) {
         // Add a notification about the failed attempt
-        notifications.add(
-          NotificationMessage(
-            count: _notificationCount++,
-            level: 'error',
-            message: 'Reconnection attempt $attempt failed: $error',
-            timestamp: DateTime.now(),
-          ),
+        _addNotification(
+          level: 'error',
+          message: 'Reconnection attempt $attempt failed: $error',
         );
-        notifyListeners();
       }
 
       attempt++;
@@ -371,6 +365,17 @@ class StreamableMcpService extends ChangeNotifier {
     return await _client!.callTool(
       params,
       options: RequestOptions(
+        onprogress: (progress) {
+          final position =
+              progress.total == null
+                  ? '${progress.progress}'
+                  : '${progress.progress}/${progress.total}';
+          final detail =
+              progress.message == null
+                  ? position
+                  : '${progress.message} ($position)';
+          _addNotification(level: 'progress', message: '$name: $detail');
+        },
         timeout: const Duration(seconds: 30),
         resetTimeoutOnProgress: true,
       ),
@@ -431,6 +436,13 @@ class StreamableMcpService extends ChangeNotifier {
 
   /// Public method to refresh the UI
   void refresh() {
+    notifyListeners();
+  }
+
+  /// Clears displayed notifications and resets their sequence numbers.
+  void clearNotifications() {
+    notifications.clear();
+    _notificationCount = 0;
     notifyListeners();
   }
 

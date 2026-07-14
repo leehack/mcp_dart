@@ -402,7 +402,7 @@ class StreamableHttpClientTransport
   ) async {
     final issuerKey = authorizationServerMetadata.issuer.toString();
     if (authorizationServerMetadata.clientIdMetadataDocumentSupported == true &&
-        _isAbsoluteHttpUri(provider.clientId)) {
+        _isClientIdMetadataDocumentUri(provider.clientId)) {
       return _OAuthClientRegistration(
         clientId: provider.clientId,
         clientSecret: provider.clientSecret,
@@ -440,11 +440,14 @@ class StreamableHttpClientTransport
     );
   }
 
-  bool _isAbsoluteHttpUri(String value) {
+  bool _isClientIdMetadataDocumentUri(String value) {
     final uri = Uri.tryParse(value);
+    // The pinned MCP client-registration rules require an HTTPS client ID
+    // with a non-root path before it can identify a metadata document.
     return uri != null &&
-        (uri.scheme == 'http' || uri.scheme == 'https') &&
-        uri.host.isNotEmpty;
+        uri.scheme == 'https' &&
+        uri.host.isNotEmpty &&
+        uri.pathSegments.any((segment) => segment.isNotEmpty);
   }
 
   Future<_OAuthClientRegistration> _registerOAuthClient(
@@ -610,18 +613,16 @@ class StreamableHttpClientTransport
     final endpointPath = _url.path.isEmpty ? '/' : _url.path;
     if (endpointPath != '/') {
       candidates.add(
-        _url.replace(
+        _oauthDiscoveryUri(
+          _url,
           path: '/.well-known/oauth-protected-resource$endpointPath',
-          queryParameters: const {},
-          fragment: null,
         ),
       );
     }
     candidates.add(
-      _url.replace(
+      _oauthDiscoveryUri(
+        _url,
         path: '/.well-known/oauth-protected-resource',
-        queryParameters: const {},
-        fragment: null,
       ),
     );
 
@@ -699,29 +700,31 @@ class StreamableHttpClientTransport
 
   List<Uri> _authorizationServerMetadataCandidates(Uri issuer) {
     final issuerPath = issuer.path.isEmpty ? '' : issuer.path;
-    final pathPrefix = issuerPath == '/' ? '' : issuerPath;
+    final pathPrefix = issuerPath == '/'
+        ? ''
+        : issuerPath.endsWith('/')
+            ? issuerPath.substring(0, issuerPath.length - 1)
+            : issuerPath;
+    // The pinned MCP discovery rules put both insertion forms before OIDC
+    // path appending. OAuth path appending remains a final compatibility probe.
     final candidates = [
-      issuer.replace(
+      _oauthDiscoveryUri(
+        issuer,
         path: '/.well-known/oauth-authorization-server$pathPrefix',
-        queryParameters: const {},
-        fragment: null,
       ),
-      issuer.replace(
+      _oauthDiscoveryUri(
+        issuer,
         path: '/.well-known/openid-configuration$pathPrefix',
-        queryParameters: const {},
-        fragment: null,
       ),
-      issuer.replace(
-        path:
-            '${pathPrefix.isEmpty ? '' : pathPrefix}/.well-known/oauth-authorization-server',
-        queryParameters: const {},
-        fragment: null,
-      ),
-      issuer.replace(
+      _oauthDiscoveryUri(
+        issuer,
         path:
             '${pathPrefix.isEmpty ? '' : pathPrefix}/.well-known/openid-configuration',
-        queryParameters: const {},
-        fragment: null,
+      ),
+      _oauthDiscoveryUri(
+        issuer,
+        path:
+            '${pathPrefix.isEmpty ? '' : pathPrefix}/.well-known/oauth-authorization-server',
       ),
     ];
 
@@ -731,6 +734,14 @@ class StreamableHttpClientTransport
         if (seen.add(candidate.toString())) candidate,
     ];
   }
+
+  Uri _oauthDiscoveryUri(Uri base, {required String path}) => Uri(
+        scheme: base.scheme,
+        userInfo: base.userInfo,
+        host: base.host,
+        port: base.hasPort ? base.port : null,
+        path: path,
+      );
 
   Future<OAuthAuthorizationServerMetadataDocument>
       _fetchAuthorizationServerMetadata(Uri uri) async {

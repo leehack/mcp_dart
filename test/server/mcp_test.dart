@@ -88,7 +88,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -139,7 +139,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
           ),
@@ -193,7 +193,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
           ),
@@ -243,7 +243,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -274,7 +274,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -377,7 +377,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -454,7 +454,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -553,7 +553,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -591,7 +591,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -674,7 +674,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -706,7 +706,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(
               name: 'TestClient',
@@ -788,7 +788,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -823,7 +823,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(
               name: 'TestClient',
@@ -892,7 +892,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -939,7 +939,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -987,7 +987,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1098,7 +1098,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1163,7 +1163,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1222,7 +1222,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1286,7 +1286,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1350,7 +1350,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -1399,7 +1399,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),

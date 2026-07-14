@@ -25,7 +25,7 @@ void main() {
           await client.listTools().timeout(const Duration(seconds: 10));
       expect(tools.tools.map((tool) => tool.name), contains('echo'));
 
-      const message = 'from Dart browser 2026-07-28 RC';
+      const message = 'from Dart browser 2026-07-28';
       final result = await client
           .callTool(
             const CallToolRequest(

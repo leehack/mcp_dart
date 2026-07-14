@@ -142,7 +142,7 @@ Future<Set<String>> _readExpectedFailures(String path) async {
 Future<Directory> _createOutputRoot(String? outputDir) async {
   final root = outputDir == null
       ? Directory(
-          '.dart_tool/conformance/2026_07_28_rc_client/'
+          '.dart_tool/conformance/2026_07_28_client/'
           '${DateTime.now().toUtc().toIso8601String().replaceAll(':', '-')}',
         )
       : Directory(outputDir);
@@ -168,7 +168,7 @@ Future<_ScenarioResult> _runScenario({
       conformancePackage,
       'client',
       '--command',
-      'dart run test/conformance/mcp_2026_07_28_rc_client.dart',
+      'dart run test/conformance/mcp_2026_07_28_client.dart',
       '--scenario',
       scenario,
       '--spec-version',
@@ -269,7 +269,7 @@ Future<void> _writeSummary(
 
 void _printUsage() {
   stdout.writeln('''
-Usage: dart run test/conformance/run_2026_07_28_rc_client_conformance.dart [options]
+Usage: dart run test/conformance/run_2026_07_28_client_conformance.dart [options]
 
 Options:
   --scenario <name>              Run one scenario instead of the full draft list.
@@ -322,7 +322,7 @@ class _Options {
   static _Options parse(List<String> args) {
     String? scenario;
     var expectedFailuresPath =
-        'test/conformance/2026_07_28_rc_client_expected_failures.txt';
+        'test/conformance/2026_07_28_client_expected_failures.txt';
     String? outputDir;
     var conformancePackage = _defaultConformancePackage;
     var timeout = _defaultTimeout;

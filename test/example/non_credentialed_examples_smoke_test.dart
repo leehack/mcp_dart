@@ -118,6 +118,80 @@ void main() {
     });
 
     test(
+      'Streamable HTTP examples complete a real 2026 tool flow',
+      () async {
+        final portProbe =
+            await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final port = portProbe.port;
+        await portProbe.close(force: true);
+        final server = await Process.start(
+          Platform.resolvedExecutable,
+          ['run', 'example/streamable_https/high_level_server.dart'],
+          environment: {
+            ...Platform.environment,
+            'PORT': '$port',
+            'MCP_ALLOWED_ORIGIN': 'http://localhost:8080',
+          },
+        );
+        final serverStdout = server.stdout.transform(utf8.decoder).join();
+        final serverStderr = server.stderr.transform(utf8.decoder).join();
+
+        try {
+          await _preflight(
+            port,
+            origin: 'http://localhost:8080',
+            retryConnection: true,
+          );
+          final client = await Process.start(
+            Platform.resolvedExecutable,
+            ['run', 'example/streamable_https/client_streamable_https.dart'],
+            environment: {
+              ...Platform.environment,
+              'MCP_SERVER_URL': 'http://127.0.0.1:$port/mcp',
+            },
+          );
+          final clientStdout = client.stdout.transform(utf8.decoder).join();
+          final clientStderr = client.stderr.transform(utf8.decoder).join();
+          client.stdin
+            ..write('list-tools\n')
+            ..write('greet Ada\n')
+            ..write('list-resources\n')
+            ..write('quit\n');
+          await client.stdin.flush();
+          await client.stdin.close();
+
+          final exitCode = await client.exitCode.timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              client.kill();
+              return -1;
+            },
+          );
+          final output = '${await clientStdout}\n${await clientStderr}';
+          expect(exitCode, 0, reason: output);
+          expect(output, contains('Negotiated protocol: 2026-07-28'));
+          expect(output, contains('Available tools:'));
+          expect(output, contains('Hello, Ada!'));
+          expect(output, contains('Available resources:'));
+        } finally {
+          server.kill();
+          await server.exitCode.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              if (!Platform.isWindows) {
+                server.kill(ProcessSignal.sigkill);
+              }
+              return -1;
+            },
+          );
+          await serverStdout;
+          await serverStderr;
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 45)),
+    );
+
+    test(
       'browser server examples allow only documented CORS origins',
       () async {
         for (final script in [
@@ -125,6 +199,200 @@ void main() {
           'example/elicitation_http_server.dart',
         ]) {
           await _expectBrowserCorsPolicy(script);
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test(
+      'legacy SSE example rejects hostile origins and hosts',
+      () async {
+        final portProbe =
+            await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final port = portProbe.port;
+        await portProbe.close(force: true);
+        final process = await Process.start(
+          Platform.resolvedExecutable,
+          ['run', 'example/server_sse.dart'],
+          environment: {
+            ...Platform.environment,
+            'PORT': '$port',
+            'MCP_ALLOWED_ORIGIN': 'http://localhost:8080',
+          },
+        );
+        final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+        final stderrFuture = process.stderr.transform(utf8.decoder).join();
+
+        try {
+          expect(
+            await _sseRequestStatus(
+              port,
+              origin: 'https://untrusted.example',
+              retryConnection: true,
+            ),
+            HttpStatus.forbidden,
+          );
+          expect(
+            await _sseRequestStatus(
+              port,
+              origin: 'http://localhost:8080',
+              host: 'untrusted.example',
+            ),
+            HttpStatus.forbidden,
+          );
+        } finally {
+          process.kill();
+          await process.exitCode.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              if (!Platform.isWindows) {
+                process.kill(ProcessSignal.sigkill);
+              }
+              return -1;
+            },
+          );
+          await stdoutFuture;
+          await stderrFuture;
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test(
+      'interactive task server does not log request secrets',
+      () async {
+        const authorizationSentinel = 'authorization-sentinel-8c27dcb930d1';
+        const bodySentinel = 'body-sentinel-0e948fd8423f';
+        final portProbe =
+            await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final port = portProbe.port;
+        await portProbe.close(force: true);
+
+        final process = await Process.start(
+          Platform.resolvedExecutable,
+          ['run', 'example/simple_task_interactive_server.dart'],
+          environment: {
+            ...Platform.environment,
+            'PORT': '$port',
+          },
+        );
+        final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+        final stderrFuture = process.stderr.transform(utf8.decoder).join();
+        late String output;
+
+        try {
+          await _preflight(
+            port,
+            origin: 'http://localhost:8080',
+            retryConnection: true,
+          );
+
+          final client = HttpClient();
+          try {
+            final request = await client.postUrl(
+              Uri.parse('http://127.0.0.1:$port/mcp'),
+            );
+            request.headers
+              ..contentType = ContentType.json
+              ..set(
+                HttpHeaders.authorizationHeader,
+                'Bearer $authorizationSentinel',
+              );
+            request.write(
+              jsonEncode({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': 'test/not-initialize',
+                'params': {'secret': bodySentinel},
+              }),
+            );
+            final response = await request.close();
+            expect(response.statusCode, HttpStatus.badRequest);
+            await response.drain<void>();
+          } finally {
+            client.close(force: true);
+          }
+        } finally {
+          process.kill();
+          await process.exitCode.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              if (!Platform.isWindows) {
+                process.kill(ProcessSignal.sigkill);
+              }
+              return -1;
+            },
+          );
+          output = '${await stdoutFuture}\n${await stderrFuture}';
+        }
+
+        expect(output, isNot(contains(authorizationSentinel)));
+        expect(output, isNot(contains(bodySentinel)));
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test(
+      'legacy elicitation server rejects sessionless 2026 requests',
+      () async {
+        final portProbe =
+            await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final port = portProbe.port;
+        await portProbe.close(force: true);
+        final process = await Process.start(
+          Platform.resolvedExecutable,
+          ['run', 'example/elicitation_http_server.dart'],
+          environment: {
+            ...Platform.environment,
+            'PORT': '$port',
+            'MCP_ALLOWED_ORIGIN': 'http://localhost:8080',
+          },
+        );
+        final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+        final stderrFuture = process.stderr.transform(utf8.decoder).join();
+
+        try {
+          await _preflight(
+            port,
+            origin: 'http://localhost:8080',
+            retryConnection: true,
+          );
+          final client = HttpClient();
+          try {
+            final request = await client.postUrl(
+              Uri.parse('http://127.0.0.1:$port/mcp'),
+            );
+            request.headers
+              ..contentType = ContentType.json
+              ..set('Origin', 'http://localhost:8080')
+              ..set('MCP-Protocol-Version', previewProtocolVersion);
+            request.write(
+              jsonEncode({
+                'jsonrpc': jsonRpcVersion,
+                'id': 1,
+                'method': Method.toolsList,
+              }),
+            );
+            final response = await request.close();
+            final body = await response.transform(utf8.decoder).join();
+            expect(response.statusCode, HttpStatus.badRequest);
+            expect(body, contains('must be initialize'));
+          } finally {
+            client.close(force: true);
+          }
+        } finally {
+          process.kill();
+          await process.exitCode.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              if (!Platform.isWindows) {
+                process.kill(ProcessSignal.sigkill);
+              }
+              return -1;
+            },
+          );
+          await stdoutFuture;
+          await stderrFuture;
         }
       },
       timeout: const Timeout(Duration(seconds: 30)),
@@ -319,6 +587,41 @@ Future<_PreflightResult> _preflight(
       }
     }
     throw StateError('CORS preflight did not run.');
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<int> _sseRequestStatus(
+  int port, {
+  required String origin,
+  String? host,
+  bool retryConnection = false,
+}) async {
+  final client = HttpClient();
+  try {
+    final attempts = retryConnection ? 50 : 1;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      try {
+        final request = await client.getUrl(
+          Uri.parse('http://127.0.0.1:$port/sse'),
+        );
+        request.headers.set('Origin', origin);
+        if (host != null) {
+          request.headers.set(HttpHeaders.hostHeader, host);
+        }
+        final response = await request.close();
+        final status = response.statusCode;
+        await response.drain<void>();
+        return status;
+      } on SocketException {
+        if (attempt + 1 == attempts) {
+          rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    throw StateError('SSE request did not run.');
   } finally {
     client.close(force: true);
   }

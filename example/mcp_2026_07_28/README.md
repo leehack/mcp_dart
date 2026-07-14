@@ -1,4 +1,4 @@
-# MCP 2026-07-28 RC core example
+# MCP 2026-07-28 core example
 
 This pair requires the `2026-07-28` protocol instead of falling back to legacy
 initialization. The client starts the server over stdio, so one command runs the

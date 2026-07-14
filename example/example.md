@@ -2,7 +2,7 @@
 
 Choose an example by protocol profile:
 
-- **Strict MCP 2026-07-28 RC:**
+- **Strict MCP 2026-07-28:**
   [`mcp_2026_07_28/`](mcp_2026_07_28/) demonstrates `server/discover`,
   `subscriptions/listen`, `input_required`, and non-object structured output.
 - **Default dual-era:** [`server_stdio.dart`](server_stdio.dart) with

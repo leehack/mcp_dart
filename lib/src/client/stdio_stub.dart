@@ -19,8 +19,14 @@ class StdioServerParameters {
   /// Command line arguments to pass to the executable.
   final List<String> args;
 
-  /// Environment variables to use when spawning the process.
+  /// Environment variables to use when spawning the process on IO platforms.
+  ///
+  /// When null, the child receives the parent environment only if
+  /// [includeParentEnvironment] is `true`.
   final Map<String, String>? environment;
+
+  /// Whether to merge the parent process environment into [environment].
+  final bool includeParentEnvironment;
 
   /// How to handle the stderr stream of the child process on IO platforms.
   final Object? stderrMode;
@@ -33,6 +39,7 @@ class StdioServerParameters {
     required this.command,
     this.args = const [],
     this.environment,
+    this.includeParentEnvironment = true,
     this.stderrMode,
     this.workingDirectory,
   });

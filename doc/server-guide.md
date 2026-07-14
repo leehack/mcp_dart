@@ -66,7 +66,7 @@ final server = McpServer(
 ### Protocol Profile
 
 Servers in the 2.3.0 preview use `McpProtocol.stable` by default. They
-advertise and accept the stateless MCP `2026-07-28` draft/RC protocol alongside
+advertise and accept the stateless MCP `2026-07-28` protocol alongside
 legacy versions, including `server/discover`. Select the legacy profile
 explicitly to advertise only MCP `2025-11-25` and earlier versions:
 

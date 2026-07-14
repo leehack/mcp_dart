@@ -1,14 +1,14 @@
-# TypeScript SDK 2026-07-28 RC Interop
+# TypeScript SDK 2026-07-28 Interop
 
 This fixture is an experimental smoke test for the unreleased MCP
-`2026-07-28` draft/RC path against the official TypeScript SDK work in
+`2026-07-28` path against the official TypeScript SDK work in
 progress.
 
 It is intentionally separate from `test/interop/ts`, which tracks the published
 stable TypeScript SDK and MCP `2025-11-25` behavior. The fixture pins published
 `@modelcontextprotocol/client@2.0.0-beta.4` and
 `@modelcontextprotocol/server@2.0.0-beta.4` packages. The TypeScript client path
-is a draft-aligned smoke check against the Dart 2026-07-28 RC server. The
+is a draft-aligned smoke check against the Dart 2026-07-28 server. The
 reverse Dart client path is a draft-aligned smoke check against the TypeScript
 beta server.
 
@@ -17,13 +17,13 @@ beta server.
 From the repository root:
 
 ```bash
-cd test/interop/ts_2026_07_28_rc
+cd test/interop/ts_2026_07_28
 npm install
 cd ../../..
-dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
+dart run tool/testing/run_ts_2026_07_28_interop.dart
 ```
 
-The runner starts `test/conformance/mcp_2026_07_28_rc_server.dart`, waits for its
+The runner starts `test/conformance/mcp_2026_07_28_server.dart`, waits for its
 bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
 
 - TypeScript client negotiation selects the modern `2026-07-28` era.
@@ -61,7 +61,7 @@ with the discovered `Mcp-Param-*` header, and a 2026 `input_required`
 elicitation retry against the TypeScript beta server. Failures are treated as
 interop failures.
 
-Keep this fixture anchored to the official draft/RC behavior rather than the
+Keep this fixture anchored to the official preview behavior rather than the
 TypeScript beta implementation alone. In particular, `x-mcp-header` tests use
 only the draft-permitted primitive types: `string`, `integer`, and `boolean`.
 When TypeScript beta behavior conflicts with the draft, keep the draft as the

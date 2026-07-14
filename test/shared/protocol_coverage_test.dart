@@ -336,6 +336,75 @@ void main() {
       );
     });
 
+    test('preserves MCP errors from request factories', () async {
+      await protocol.connect(transport);
+      var handlerCalled = false;
+      protocol.setRequestHandler<JsonRpcPingRequest>(
+        'ping',
+        (request, extra) async {
+          handlerCalled = true;
+          return const EmptyResult();
+        },
+        (id, params, meta) {
+          throw McpError(
+            ErrorCode.unsupportedProtocolVersion.value,
+            'Unsupported test protocol version',
+            {
+              'supported': [previewProtocolVersion],
+            },
+          );
+        },
+      );
+
+      transport.receiveMessage(const JsonRpcPingRequest(id: 23));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final errorResponse = transport.sentMessages.single as JsonRpcError;
+      expect(
+        errorResponse.error.code,
+        ErrorCode.unsupportedProtocolVersion.value,
+      );
+      expect(
+        errorResponse.error.message,
+        'Unsupported test protocol version',
+      );
+      expect(errorResponse.error.data, {
+        'supported': [previewProtocolVersion],
+      });
+      expect(handlerCalled, isFalse);
+    });
+
+    test('redacts unexpected request factory errors', () async {
+      await protocol.connect(transport);
+      var handlerCalled = false;
+      protocol.setRequestHandler<JsonRpcPingRequest>(
+        'ping',
+        (request, extra) async {
+          handlerCalled = true;
+          return const EmptyResult();
+        },
+        (id, params, meta) {
+          throw const FormatException('sentinel-factory-secret');
+        },
+      );
+
+      transport.receiveMessage(const JsonRpcPingRequest(id: 24));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final errorResponse = transport.sentMessages.single as JsonRpcError;
+      expect(errorResponse.error.code, ErrorCode.invalidParams.value);
+      expect(
+        errorResponse.error.message,
+        equals('Failed to parse params for request ping'),
+      );
+      expect(errorResponse.error.data, isNull);
+      expect(
+        errorResponse.toJson().toString(),
+        isNot(contains('sentinel-factory-secret')),
+      );
+      expect(handlerCalled, isFalse);
+    });
+
     test('handles request for unregistered method', () async {
       await protocol.connect(transport);
 

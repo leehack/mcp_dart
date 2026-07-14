@@ -253,12 +253,13 @@ void setCorsHeaders(HttpRequest request) {
 }
 
 void main() async {
+  final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 3000;
   // Map to store transports by session ID
   final transports = <String, StreamableHTTPServerTransport>{};
 
   // Create HTTP server
-  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 3000);
-  print('MCP Streamable HTTP Server listening on http://localhost:3000/mcp');
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+  print('MCP Streamable HTTP Server listening on http://localhost:$port/mcp');
   print('Allowed browser origin: $allowedBrowserOrigin');
 
   await for (final request in server) {

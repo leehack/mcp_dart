@@ -1,8 +1,8 @@
 # MCP 2025-11-25 Compatibility Migration
 
 > This guide covers the `McpProtocol.legacy` and 2025-era surface. The dev.2
-> default prefers the MCP `2026-07-28` RC; see the
-> [transition guide](mcp-2026-07-28-rc.md) for current default behavior.
+> default prefers MCP `2026-07-28`; see the
+> [transition guide](mcp-2026-07-28.md) for current default behavior.
 
 This guide helps update existing code that used older sampling/tool-choice APIs.
 

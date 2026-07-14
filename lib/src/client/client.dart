@@ -402,7 +402,7 @@ class McpClient extends Protocol {
     final initializationProtocolVersion =
         legacyProtocolVersions.contains(_preferredProtocolVersion)
             ? _preferredProtocolVersion
-            : stableProtocolVersion;
+            : latestInitializationProtocolVersion;
     final initParams = InitializeRequest(
       protocolVersion: initializationProtocolVersion,
       capabilities: _capabilities,

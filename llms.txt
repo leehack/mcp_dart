@@ -17,10 +17,10 @@ The 2.3.0 preview implements the complete core client/server wire surface of
 the locked MCP `2026-07-28` release candidate, retains the MCP `2025-11-25`
 feature set, and negotiates supported earlier initialization versions. Core
 means the normative wire requirements assigned to client and server roles by
-the pinned RC; it excludes optional extensions, host UI behavior, an
+the pinned preview specification; it excludes optional extensions, host UI behavior, an
 authorization-server implementation, and a general-purpose JSON Schema
 validation engine. All current official conformance scenarios applicable to
-the SDK's core client/server roles pass for 2025 and the 2026 RC. This is
+the SDK's core client/server roles pass for 2025 and 2026. This is
 prerelease evidence, not a claim about the not-yet-published final
 specification.
 
@@ -45,12 +45,12 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 ## Protocol profiles
 
-- `McpProtocol.stable` (default dual-era profile): prefer 2026 draft/RC
+- `McpProtocol.stable` (default dual-era profile): prefer 2026
   stateless discovery, then fall back to legacy initialization when the peer is
   legacy-only.
 - `McpProtocol.legacy` (initialization-era profile): negotiate MCP 2025-11-25
   or an earlier supported initialization-era version.
-- `McpProtocol.require2026`: require the 2026 draft/RC stateless protocol.
+- `McpProtocol.require2026`: require the 2026 stateless protocol.
 
 ```dart
 final client = McpClient(
@@ -60,7 +60,7 @@ final client = McpClient(
 ```
 
 2026-only APIs, examples, and fallback rules:
-https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-rc.md
+https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28.md
 
 Strict 2026 runnable example:
 https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28
@@ -228,7 +228,7 @@ https://github.com/leehack/mcp_dart/tree/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_
 
 - Root Dart analyzer and unit/integration tests.
 - Official MCP 2025 server/client conformance paths.
-- MCP 2026 draft/RC server and client conformance alpha suites.
+- MCP 2026 server and client conformance alpha suites.
 - Bidirectional published TypeScript SDK beta interop.
 - Bidirectional published Python SDK beta interop.
 - Real Chrome cross-origin Streamable HTTP smoke coverage.
@@ -242,7 +242,7 @@ Evidence and runbooks:
 
 - https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/interoperability.md
 - https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2025-11-25.md
-- https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2026-07-28-rc.md
+- https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2026-07-28.md
 - https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-release-runbook.md
 
 ## Documentation map

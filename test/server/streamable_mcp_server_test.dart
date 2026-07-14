@@ -155,7 +155,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'Client', version: '1.0'),
             ).toJson(),
@@ -258,7 +258,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -287,7 +287,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -970,7 +970,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1013,7 +1013,7 @@ void main() {
           id: 1,
           method: 'initialize',
           params: const InitializeRequestParams(
-            protocolVersion: stableProtocolVersion,
+            protocolVersion: latestInitializationProtocolVersion,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ).toJson(),
@@ -1039,7 +1039,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1098,7 +1098,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1154,7 +1154,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1399,7 +1399,7 @@ void main() {
             id: 1,
             method: 'initialize',
             params: const InitializeRequestParams(
-              protocolVersion: stableProtocolVersion,
+              protocolVersion: latestInitializationProtocolVersion,
               capabilities: ClientCapabilities(),
               clientInfo: Implementation(name: 'test', version: '1.0'),
             ).toJson(),
@@ -1650,7 +1650,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1677,7 +1677,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1744,7 +1744,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1874,7 +1874,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),
@@ -1952,7 +1952,7 @@ void main() {
         id: 1,
         method: 'initialize',
         params: const InitializeRequestParams(
-          protocolVersion: stableProtocolVersion,
+          protocolVersion: latestInitializationProtocolVersion,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'Client', version: '1.0'),
         ).toJson(),

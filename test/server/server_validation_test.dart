@@ -1,8 +1,9 @@
-import 'package:test/test.dart';
+import 'dart:async';
+
 import 'package:mcp_dart/src/server/server.dart';
-import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
-import 'dart:async'; // For Future.delayed
+import 'package:mcp_dart/src/types.dart';
+import 'package:test/test.dart';
 
 class MockTransport extends Transport {
   final List<JsonRpcMessage> sent = [];
@@ -140,6 +141,116 @@ void main() {
         () => server.createMessage(invalidParams),
         throwsA(isA<McpError>()),
       );
+    });
+
+    test('createMessage validates every sampling tool turn and role', () {
+      final invalidHistories = <String, List<SamplingMessage>>{
+        'unresolved earlier tool use': const [
+          SamplingMessage(
+            role: SamplingMessageRole.assistant,
+            content: SamplingToolUseContent(
+              id: 'call1',
+              name: 'tool1',
+              input: {},
+            ),
+          ),
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingTextContent(text: 'skipped the tool result'),
+          ),
+          SamplingMessage(
+            role: SamplingMessageRole.assistant,
+            content: SamplingTextContent(text: 'continued anyway'),
+          ),
+        ],
+        'tool use on a user message': const [
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingToolUseContent(
+              id: 'call1',
+              name: 'tool1',
+              input: {},
+            ),
+          ),
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: SamplingToolResultContent(
+              toolUseId: 'call1',
+              content: [TextContent(text: 'result')],
+            ),
+          ),
+        ],
+        'tool result on an assistant message': const [
+          SamplingMessage(
+            role: SamplingMessageRole.assistant,
+            content: SamplingToolUseContent(
+              id: 'call1',
+              name: 'tool1',
+              input: {},
+            ),
+          ),
+          SamplingMessage(
+            role: SamplingMessageRole.assistant,
+            content: SamplingToolResultContent(
+              toolUseId: 'call1',
+              content: [TextContent(text: 'result')],
+            ),
+          ),
+        ],
+        'unresolved final tool use': const [
+          SamplingMessage(
+            role: SamplingMessageRole.assistant,
+            content: SamplingToolUseContent(
+              id: 'call1',
+              name: 'tool1',
+              input: {},
+            ),
+          ),
+        ],
+        'mixed tool result content in earlier history': const [
+          SamplingMessage(
+            role: SamplingMessageRole.assistant,
+            content: SamplingToolUseContent(
+              id: 'call1',
+              name: 'tool1',
+              input: {},
+            ),
+          ),
+          SamplingMessage(
+            role: SamplingMessageRole.user,
+            content: [
+              SamplingToolResultContent(
+                toolUseId: 'call1',
+                content: [TextContent(text: 'result')],
+              ),
+              SamplingTextContent(text: 'mixed content'),
+            ],
+          ),
+          SamplingMessage(
+            role: SamplingMessageRole.assistant,
+            content: SamplingTextContent(text: 'later message'),
+          ),
+        ],
+      };
+
+      for (final MapEntry(:key, :value) in invalidHistories.entries) {
+        expect(
+          () => server.createMessage(
+            CreateMessageRequestParams(
+              messages: value,
+              maxTokens: 100,
+            ),
+          ),
+          throwsA(
+            isA<McpError>().having(
+              (error) => error.code,
+              'code',
+              ErrorCode.invalidParams.value,
+            ),
+          ),
+          reason: key,
+        );
+      }
     });
 
     test('elicitInput validates schema', () async {

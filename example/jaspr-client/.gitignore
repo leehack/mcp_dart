@@ -5,6 +5,7 @@
 
 # Conventional directory for build output.
 /build/
+/lib/main.client.options.dart
 
 # Miscellaneous
 *.class

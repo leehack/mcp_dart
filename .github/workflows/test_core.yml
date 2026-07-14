@@ -39,9 +39,9 @@ jobs:
         working-directory: packages/mcp_dart_cli
         run: dart pub get
 
-      - name: Check out pinned MCP 2026 release schema
+      - name: Check out pinned MCP 2026 specification source
         run: |
-          SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_release_spec_ref.txt)"
+          SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_07_28_spec_ref.txt)"
           git clone --filter=blob:none --no-checkout https://github.com/modelcontextprotocol/modelcontextprotocol.git .dart_tool/mcp-spec
           git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
           git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
@@ -50,6 +50,11 @@ jobs:
         run: >
           dart run tool/spec_example_audit.dart
           .dart_tool/mcp-spec/schema/draft/examples
+
+      - name: Audit pinned MCP 2026 specification document inventory
+        run: >
+          dart run tool/spec_document_inventory_audit.dart
+          .dart_tool/mcp-spec/docs/specification/draft
 
       - name: Run MCP spec conformance gate
         working-directory: packages/mcp_dart_cli
@@ -65,21 +70,21 @@ jobs:
       - name: Run official MCP 2025 client conformance
         run: >
           npx -y @modelcontextprotocol/conformance@0.2.0-alpha.9 client
-          --command "dart run test/conformance/mcp_2026_07_28_rc_client.dart"
+          --command "dart run test/conformance/mcp_2026_07_28_client.dart"
           --suite all
           --spec-version 2025-11-25
           --verbose
           -o .dart_tool/conformance/ci_2025_client
 
-      - name: Run official MCP 2026-07-28 RC server conformance
+      - name: Run official MCP 2026-07-28 server conformance
         run: >
-          dart run test/conformance/run_2026_07_28_rc_server_conformance.dart
+          dart run test/conformance/run_2026_07_28_server_conformance.dart
           --timeout-seconds 90
           --output-dir .dart_tool/conformance/ci_2026_server
 
-      - name: Run official MCP 2026-07-28 RC client conformance
+      - name: Run official MCP 2026-07-28 client conformance
         run: >
-          dart run test/conformance/run_2026_07_28_rc_client_conformance.dart
+          dart run test/conformance/run_2026_07_28_client_conformance.dart
           --timeout-seconds 90
           --output-dir .dart_tool/conformance/ci_2026_client
 
@@ -121,3 +126,97 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: true
+
+  dart-examples:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - path: example/anthropic-client
+            entrypoint: bin/main.dart
+          - path: example/gemini-client
+            entrypoint: bin/main.dart
+          - path: example/fetch-server
+            entrypoint: bin/fetch_server.dart
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.path }}
+        run: dart pub get
+
+      - name: Analyze
+        working-directory: ${{ matrix.path }}
+        run: dart analyze
+
+      - name: Test
+        working-directory: ${{ matrix.path }}
+        run: dart test
+
+      - name: Compile executable
+        working-directory: ${{ matrix.path }}
+        run: dart compile exe ${{ matrix.entrypoint }} -o .dart_tool/example-smoke
+
+  jaspr-example:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        working-directory: example/jaspr-client
+        run: dart pub get
+
+      - name: Analyze
+        working-directory: example/jaspr-client
+        run: dart analyze
+
+      - name: Install Jaspr CLI
+        run: dart pub global activate jaspr_cli 0.22.3
+
+      - name: Build production bundle
+        working-directory: example/jaspr-client
+        run: jaspr build
+
+  flutter-example:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: example/flutter_http_client
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: example/flutter_http_client
+        run: flutter analyze
+
+      - name: Test
+        working-directory: example/flutter_http_client
+        run: flutter test
+
+      - name: Build release web bundle
+        working-directory: example/flutter_http_client
+        run: flutter build web --release

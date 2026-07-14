@@ -11,7 +11,7 @@ async def run(url: str) -> None:
         url,
         mode="auto",
         client_info=Implementation(
-            name="python-2026-07-28-rc-interop-client",
+            name="python-2026-07-28-interop-client",
             version="0.0.0",
         ),
     ) as client:
@@ -25,7 +25,7 @@ async def run(url: str) -> None:
         if "echo" not in names:
             raise RuntimeError(f"Expected echo tool, got {sorted(names)}")
 
-        message = "from Python 2026-07-28 RC"
+        message = "from Python 2026-07-28"
         result = await client.call_tool("echo", {"message": message})
         if not result.content or not isinstance(result.content[0], TextContent):
             raise RuntimeError(f"Expected text echo result, got {result!r}")

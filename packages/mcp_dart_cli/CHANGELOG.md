@@ -19,7 +19,7 @@
 ## 0.2.0-dev.1
 
 - Update the dev CLI package to depend on `mcp_dart ^2.3.0-dev.1`.
-- Refresh built-in 2026-07-28 RC conformance checks for the current draft error
+- Refresh built-in 2026-07-28 conformance checks for the current preview error
   codes and cacheable `server/discover` behavior.
 - Keep CLI standalone binary release automation current with GitHub runner and
   artifact action updates.

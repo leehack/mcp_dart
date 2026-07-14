@@ -9,8 +9,8 @@ MCP `2025-11-25` and earlier initialization compatibility.
   `server/discover`, then fall back to legacy initialization. Use
   `McpProtocol.require2026` to reject legacy peers.
 - Removed `McpProtocol.preview2026`; added clearer preview, stable, and default
-  version constants while retaining `latestProtocolVersion` as a deprecated
-  stable-version alias.
+  version constants, plus a separate initialization-version constant, while
+  retaining `latestProtocolVersion` as a deprecated stable-version alias.
 - Added and aligned 2026 APIs for `input_required`, deprecated request-scoped
   logging compatibility, subscriptions, cache metadata, arbitrary structured
   tool output, routing headers, and the Tasks extension.
@@ -28,10 +28,13 @@ MCP `2025-11-25` and earlier initialization compatibility.
   in protocol responses; details remain available in server logs.
 - Credentialed Streamable HTTP CORS now requires `allowedOrigins`, except for
   DNS-protected loopback development; examples use safe loopback defaults.
+- Added explicit stdio child-environment isolation and hardened provider
+  examples to withhold API keys, drain child stderr, refresh bounded tool
+  inventories, and require approval for every tool call.
 
 ### Validation and documentation
 
-- All current official MCP 2025 and 2026 RC conformance scenarios applicable
+- All current official MCP 2025 and 2026 conformance scenarios applicable
   to the SDK's core client/server roles pass, with bidirectional
   TypeScript/Python interop and a real Chrome HTTP smoke test.
 - Added a strict 2026 example, retained labeled legacy examples, refreshed the

@@ -72,7 +72,7 @@ JsonSchema? _outputSchemaForProtocol(
   }
 
   // MCP 2025-11-25 restricts tool output schemas to object roots. MCP
-  // 2026-07-28 draft/RC allows any JSON Schema, so omit non-object schemas for
+  // 2026-07-28 allows any JSON Schema, so omit non-object schemas for
   // stable callers.
   if (schema.toJson()['type'] == 'object') {
     return schema;
@@ -596,14 +596,14 @@ abstract class RegisteredTool {
 
   /// The object-root output schema for stable MCP `2025-11-25` tool results.
   ///
-  /// MCP `2026-07-28` draft/RC allows non-object JSON Schema roots. Use
+  /// MCP `2026-07-28` allows non-object JSON Schema roots. Use
   /// [outputJsonSchema] for that wire-level schema.
   ToolOutputSchema? get outputSchema;
 
   /// The wire-level output schema for this tool.
   ///
   /// This may be any JSON Schema when the server is using the explicit
-  /// MCP `2026-07-28` draft/RC profile. Stable MCP `2025-11-25` callers only
+  /// MCP `2026-07-28` profile. Stable MCP `2025-11-25` callers only
   /// receive this schema when it has an object root.
   JsonSchema? get outputJsonSchema;
 
@@ -2151,7 +2151,7 @@ class McpServer {
   /// [description] explains what the tool does.
   /// [inputSchema] defines the expected arguments.
   /// [outputSchema] defines the stable object-root result structure.
-  /// [outputJsonSchema] defines an MCP `2026-07-28` draft/RC result structure
+  /// [outputJsonSchema] defines an MCP `2026-07-28` result structure
   /// whose JSON Schema root may be any valid JSON Schema type.
   /// [annotations] provides additional metadata.
   /// [callback] is the function executed when the tool is called.

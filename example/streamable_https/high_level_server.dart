@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
+  final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 3000;
   final allowedBrowserOrigin =
       Platform.environment['MCP_ALLOWED_ORIGIN'] ?? 'http://localhost:8080';
   final server = StreamableMcpServer(
@@ -11,8 +12,8 @@ void main() async {
       print('Creating new server for session: $sessionId');
       return getServer();
     },
-    host: 'localhost',
-    port: 3000,
+    host: '127.0.0.1',
+    port: port,
     path: '/mcp',
     eventStore: InMemoryEventStore(), // Use the built-in in-memory event store
     allowedHosts: const {'localhost', '127.0.0.1'},
@@ -20,7 +21,7 @@ void main() async {
   );
 
   await server.start();
-  print('Server running on http://localhost:3000/mcp');
+  print('Server running on http://127.0.0.1:$port/mcp');
   print('Allowed browser origin: $allowedBrowserOrigin');
 }
 

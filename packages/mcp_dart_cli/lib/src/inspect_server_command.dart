@@ -7,6 +7,7 @@ import 'package:mason/mason.dart';
 import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 // ignore: implementation_imports
 import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
+import 'package:meta/meta.dart';
 
 import 'inspectors/inspection_report.dart';
 import 'utils/inspect_handlers.dart';
@@ -1875,7 +1876,7 @@ class McpServerInspector {
       }
 
       Map<String, dynamic>? discovered;
-      for (final candidate in _authorizationServerMetadataCandidates(issuer)) {
+      for (final candidate in authorizationServerMetadataCandidates(issuer)) {
         final result = await _httpGetJson(candidate);
         discoveries.add(<String, dynamic>{
           'issuer': server,
@@ -1925,19 +1926,38 @@ class McpServerInspector {
     reportMetadata['authorizationServerDiscovery'] = discoveries;
   }
 
-  List<Uri> _authorizationServerMetadataCandidates(Uri issuer) {
+  /// Returns MCP authorization-server metadata probes in priority order.
+  @visibleForTesting
+  List<Uri> authorizationServerMetadataCandidates(Uri issuer) {
     final pathPrefix =
         issuer.path.endsWith('/')
             ? issuer.path.substring(0, issuer.path.length - 1)
             : issuer.path;
-    return <Uri>[
-      issuer.replace(
-        path: '/.well-known/oauth-authorization-server$pathPrefix',
+    Uri discoveryUri(String path) => Uri(
+      scheme: issuer.scheme,
+      userInfo: issuer.userInfo,
+      host: issuer.host,
+      port: issuer.hasPort ? issuer.port : null,
+      path: path,
+    );
+    // MCP Authorization Server Metadata Discovery requires OAuth insertion,
+    // OIDC insertion, then OIDC path appending for issuers with paths. Match
+    // the SDK by retaining OAuth path appending only as a final compatibility
+    // probe after those three mandated candidates.
+    return <Uri>{
+      discoveryUri(
+        '/.well-known/oauth-authorization-server$pathPrefix',
       ),
-      issuer.replace(
-        path: '/.well-known/openid-configuration$pathPrefix',
+      discoveryUri(
+        '/.well-known/openid-configuration$pathPrefix',
       ),
-    ];
+      discoveryUri(
+        '${pathPrefix.isEmpty ? '' : pathPrefix}/.well-known/openid-configuration',
+      ),
+      discoveryUri(
+        '${pathPrefix.isEmpty ? '' : pathPrefix}/.well-known/oauth-authorization-server',
+      ),
+    }.toList(growable: false);
   }
 
   bool _isTrustedOAuthInspectionUri(Uri endpoint, Uri candidate) {

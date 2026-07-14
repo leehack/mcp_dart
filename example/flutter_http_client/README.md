@@ -34,20 +34,21 @@ This will start an MCP server on `http://localhost:3000/mcp`.
 
 ```shell
 cd /path/to/mcp_dart/example/flutter_http_client
-flutter run -d chrome
+flutter run -d chrome --web-port 8080
 ```
 
-This will launch the application in Chrome. You can also use other browsers by specifying a different device.
+The fixed port matches the server's default `MCP_ALLOWED_ORIGIN`. If you use a
+different browser origin, start the server with that exact value, for example
+`MCP_ALLOWED_ORIGIN=http://localhost:9000 dart run ...`.
 
 3. In the application, click the "Connect" button to establish a connection to the server.
 
 4. Once connected, you can use various buttons to interact with the server:
    - List Tools: See available tools on the server
-   - Call Tool: Execute the selected tool with the text input mapped to its primary required argument
+   - Call Tool: Enter a scalar for a one-argument tool, or a JSON object for a tool with multiple arguments
    - List Prompts: View available prompts
    - Get Prompt: Retrieve the selected prompt using its advertised prompt argument schema
    - List Resources: See available resources
-   - Start Notifications: Begin receiving server notifications
 
 ### Local Smoke Flow
 
@@ -68,8 +69,10 @@ The application demonstrates key aspects of MCP client implementation:
 
 1. **Connection**: The client establishes a connection to the MCP server and retrieves capabilities.
 2. **Tool Calling**: The client calls tools on the server with parameters.
-3. **Notifications**: The client receives real-time notifications from server tools.
-4. **Streaming Responses**: For a more interactive experience, the server can stream partial responses as they are generated.
+3. **Progress**: The client displays request-scoped progress while a tool call is active. Try `multi-greet`, or pass `{"interval": 100, "count": 5}` to `start-notification-stream`.
+4. **Dual-era behavior**: The default profile prefers MCP 2026 and can fall back
+   to initialization-era servers. Session controls are enabled only after a
+   legacy session is negotiated.
 
 The `StreamableMcpService` class handles all communication with the server and updates `ChangeNotifier` state that the UI listens to.
 

@@ -115,6 +115,15 @@ final transport = StdioClientTransport(
 );
 ```
 
+By default, `environment` is merged with the parent process environment. To
+withhold host credentials, copy and sanitize `Platform.environment`, pass that
+map as `environment`, and set `includeParentEnvironment: false`. Compare
+variable names case-insensitively when sanitizing for Windows compatibility.
+
+The default inherited stderr mode is continuously forwarded. If you choose
+`ProcessStartMode.normal`, continuously drain `transport.stderr`; otherwise a
+child that fills its stderr pipe can block protocol startup or later requests.
+
 ### Platform Support
 
 | Platform | Supported | Notes |

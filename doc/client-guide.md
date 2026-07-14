@@ -63,7 +63,7 @@ final client = McpClient(
 ### Protocol Profile
 
 Clients in the 2.3.0 preview use `McpProtocol.stable` by default, which
-prefers MCP `2026-07-28` draft/RC negotiation. The default client probes with
+prefers MCP `2026-07-28` negotiation. The default client probes with
 `server/discover`, sends stateless request metadata for a compatible peer, and
 falls back to legacy `initialize` when discovery is unavailable. Select the
 legacy profile explicitly when a deployment must use only MCP `2025-11-25`
@@ -177,7 +177,7 @@ final result = await client.callTool(
 
 ### Task-Augmented Tool Calls
 
-For MCP `2026-07-28` draft/RC stateless servers that advertise the
+For MCP `2026-07-28` stateless servers that advertise the
 `io.modelcontextprotocol/tasks` extension, task creation is server-directed.
 Call `client.callTool()` normally, or call `TaskClient.callToolStream()` without
 the legacy `task` argument; the client follows `resultType: "task"` with

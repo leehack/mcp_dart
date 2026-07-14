@@ -1427,55 +1427,7 @@ class Server extends Protocol {
       );
     }
 
-    // Message structure validation - always validate tool_use/tool_result pairs.
-    if (params.messages.isNotEmpty) {
-      final lastMessage = params.messages.last;
-      final lastContent = lastMessage.contentBlocks;
-      final hasToolResults =
-          lastContent.any((c) => c is SamplingToolResultContent);
-
-      final previousMessage = params.messages.length > 1
-          ? params.messages[params.messages.length - 2]
-          : null;
-      final previousContent =
-          previousMessage?.contentBlocks ?? const <SamplingContent>[];
-      final hasPreviousToolUse =
-          previousContent.any((c) => c is SamplingToolUseContent);
-
-      if (hasToolResults) {
-        if (lastContent.any((c) => c is! SamplingToolResultContent)) {
-          throw McpError(
-            ErrorCode.invalidParams.value,
-            "The last message must contain only tool_result content if any is present",
-          );
-        }
-        if (!hasPreviousToolUse) {
-          throw McpError(
-            ErrorCode.invalidParams.value,
-            "tool_result blocks are not matching any tool_use from the previous message",
-          );
-        }
-      }
-
-      if (hasPreviousToolUse) {
-        final toolUseIds = previousContent
-            .whereType<SamplingToolUseContent>()
-            .map((c) => c.id)
-            .toSet();
-        final toolResultIds = lastContent
-            .whereType<SamplingToolResultContent>()
-            .map((c) => c.toolUseId)
-            .toSet();
-
-        if (toolUseIds.length != toolResultIds.length ||
-            !toolUseIds.every((id) => toolResultIds.contains(id))) {
-          throw McpError(
-            ErrorCode.invalidParams.value,
-            "ids of tool_result blocks and tool_use blocks from previous message do not match",
-          );
-        }
-      }
-    }
+    _validateSamplingToolMessages(params.messages);
 
     final req = JsonRpcCreateMessageRequest(id: -1, createParams: params);
     return request<CreateMessageResult>(
@@ -1483,6 +1435,98 @@ class Server extends Protocol {
       (json) => CreateMessageResult.fromJson(json),
       options,
     );
+  }
+
+  void _validateSamplingToolMessages(List<SamplingMessage> messages) {
+    // MCP 2026 Sampling, "Message Content Constraints": tool uses belong to
+    // assistant turns and every one must be immediately resolved by a user
+    // turn containing only matching tool results. Validate the full history,
+    // not just its final pair.
+    for (var index = 0; index < messages.length; index++) {
+      final message = messages[index];
+      final content = message.contentBlocks;
+      final toolUses = content.whereType<SamplingToolUseContent>().toList();
+      final toolResults =
+          content.whereType<SamplingToolResultContent>().toList();
+
+      if (toolUses.isNotEmpty &&
+          message.role != SamplingMessageRole.assistant) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          'sampling message $index contains tool_use content but does not use '
+          'the assistant role',
+        );
+      }
+
+      if (toolResults.isNotEmpty) {
+        if (message.role != SamplingMessageRole.user) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'sampling message $index contains tool_result content but does '
+            'not use the user role',
+          );
+        }
+        if (toolResults.length != content.length) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'sampling message $index must contain only tool_result content '
+            'when any tool result is present',
+          );
+        }
+      }
+
+      if (toolUses.isEmpty) {
+        if (toolResults.isNotEmpty &&
+            (index == 0 ||
+                !messages[index - 1]
+                    .contentBlocks
+                    .any((item) => item is SamplingToolUseContent))) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'sampling message $index contains tool_result content without '
+            'tool_use content in the previous message',
+          );
+        }
+        continue;
+      }
+
+      if (index + 1 >= messages.length) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          'sampling message $index contains unresolved tool_use content',
+        );
+      }
+
+      final resultMessage = messages[index + 1];
+      final resultContent = resultMessage.contentBlocks;
+      final matchingResults =
+          resultContent.whereType<SamplingToolResultContent>().toList();
+      if (resultMessage.role != SamplingMessageRole.user ||
+          matchingResults.length != resultContent.length) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          'sampling message $index with tool_use content must be followed by '
+          'a user message containing only tool_result content',
+        );
+      }
+
+      final toolUseIds = toolUses.map((item) => item.id).toList()..sort();
+      final toolResultIds =
+          matchingResults.map((item) => item.toolUseId).toList()..sort();
+      var idsMatch = toolUseIds.length == toolResultIds.length;
+      for (var idIndex = 0;
+          idsMatch && idIndex < toolUseIds.length;
+          idIndex++) {
+        idsMatch = toolUseIds[idIndex] == toolResultIds[idIndex];
+      }
+      if (!idsMatch) {
+        throw McpError(
+          ErrorCode.invalidParams.value,
+          'sampling message $index tool_use IDs do not match the following '
+          'tool_result IDs',
+        );
+      }
+    }
   }
 
   /// Creates an elicitation request for the given parameters.

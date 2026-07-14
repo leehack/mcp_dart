@@ -1,5 +1,5 @@
 # Expected failures for @modelcontextprotocol/conformance@0.2.0-alpha.9
-# against the full 2026-07-28 RC/DRAFT server suite.
+# against the full 2026-07-28/DRAFT server suite.
 #
 # The alpha.9 server suite has no expected failures against the Dart fixture.
 #

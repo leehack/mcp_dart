@@ -293,11 +293,12 @@ class InteractiveServer {
     }
 
     final body = await utf8.decodeStream(req);
-    print('[Server] Received POST body: $body');
-    print('[Server] Headers: ${req.headers}');
+    // Request headers can contain bearer tokens, and request bodies can contain
+    // user-provided elicitation or sampling data. Never dump either to logs.
     final json = jsonDecode(body) as Map<String, dynamic>;
 
     if (json['method'] == 'initialize') {
+      print('[Server] Starting MCP session initialization');
       // Create a temporary server instance for this connection
       final tempContext = _createSessionContext("pending-init");
 

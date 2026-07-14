@@ -691,7 +691,7 @@ class ClientInspectorHarness {
     if (requested != null && legacyProtocolVersions.contains(requested)) {
       return requested;
     }
-    return stableProtocolVersion;
+    return latestInitializationProtocolVersion;
   }
 
   void _sendResult(Object? id, Map<String, dynamic> result) {
@@ -967,7 +967,7 @@ class ClientInspectorHarness {
                 '$_clientProtocolVersion.'
             : 'Client requested unsupported initialization protocol version '
                 '$_clientProtocolVersion; inspector negotiated '
-                '$stableProtocolVersion.',
+                '$latestInitializationProtocolVersion.',
       );
     }
 

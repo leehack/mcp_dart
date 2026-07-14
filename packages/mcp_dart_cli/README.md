@@ -11,7 +11,7 @@ With Dart 3.7 or later, install the stable CLI:
 dart pub global activate mcp_dart_cli
 ```
 
-Install the coordinated MCP `2026-07-28` draft/RC preview explicitly:
+Install the coordinated MCP `2026-07-28` preview explicitly:
 
 ```bash
 dart pub global activate mcp_dart_cli 0.2.0-dev.2
@@ -176,7 +176,7 @@ mcp_dart call-tool search \
 
 ## Built-in conformance fixtures
 
-`conformance` runs this repository's MCP 2025-11-25 and 2026-07-28 draft/RC
+`conformance` runs this repository's MCP 2025-11-25 and 2026-07-28
 wire regression cases, including malformed JSON-RPC, ID/token preservation,
 negotiation, capabilities, stateless metadata, task metadata, and deterministic
 fuzz cases.
