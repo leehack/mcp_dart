@@ -68,8 +68,9 @@ void main() {
     });
 
     test('fallbacks to git url', () {
-      final location =
-          resolver.resolve('https://github.com/felangel/mason.git');
+      final location = resolver.resolve(
+        'https://github.com/felangel/mason.git',
+      );
       expect(location.gitUrl, 'https://github.com/felangel/mason.git');
       expect(location.gitPath, isNull);
       expect(location.gitRef, isNull);

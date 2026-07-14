@@ -66,7 +66,8 @@ class ServeCommand extends Command<int> {
     if (!mcpFile.existsSync()) {
       _logger.err('Error: lib/mcp/mcp.dart not found.');
       _logger.err(
-          'Ensure your project follows the MCP server structure and exports createMcpServer().');
+        'Ensure your project follows the MCP server structure and exports createMcpServer().',
+      );
       return ExitCode.config.code;
     }
 
@@ -107,9 +108,10 @@ class ServeCommand extends Command<int> {
       process = await Process.start(
         'dart',
         ['run', runnerFile.path, ...args],
-        mode: transport == 'stdio'
-            ? ProcessStartMode.inheritStdio
-            : ProcessStartMode.normal,
+        mode:
+            transport == 'stdio'
+                ? ProcessStartMode.inheritStdio
+                : ProcessStartMode.normal,
       );
       if (transport == 'http') {
         process!.stdout.transform(utf8.decoder).listen(stdout.write);
@@ -132,9 +134,9 @@ class ServeCommand extends Command<int> {
       final watcher = DirectoryWatcher(p.join(Directory.current.path, 'lib'));
       _logger.info('Watching for changes in lib/...');
 
-      watcher.events
-          .debounce(Duration(milliseconds: 500))
-          .listen((event) async {
+      watcher.events.debounce(Duration(milliseconds: 500)).listen((
+        event,
+      ) async {
         isRestarting = true;
         await startServer();
         isRestarting = false;

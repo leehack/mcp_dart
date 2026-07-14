@@ -9,8 +9,8 @@ import 'package:path/path.dart' as p;
 class AgentSkillsCommand extends Command<int> {
   /// Creates the agent skills command group.
   AgentSkillsCommand({Logger? logger, AgentSkillLoader? skillLoader})
-      : _logger = logger ?? Logger(),
-        _skillLoader = skillLoader ?? const AgentSkillLoader() {
+    : _logger = logger ?? Logger(),
+      _skillLoader = skillLoader ?? const AgentSkillLoader() {
     addSubcommand(_PrintAgentSkillCommand(skillLoader: _skillLoader));
     addSubcommand(
       _InstallAgentSkillCommand(logger: _logger, skillLoader: _skillLoader),
@@ -30,7 +30,7 @@ class AgentSkillsCommand extends Command<int> {
 
 class _PrintAgentSkillCommand extends Command<int> {
   _PrintAgentSkillCommand({required AgentSkillLoader skillLoader})
-      : _skillLoader = skillLoader;
+    : _skillLoader = skillLoader;
 
   final AgentSkillLoader _skillLoader;
 
@@ -51,8 +51,8 @@ class _InstallAgentSkillCommand extends Command<int> {
   _InstallAgentSkillCommand({
     required Logger logger,
     required AgentSkillLoader skillLoader,
-  })  : _logger = logger,
-        _skillLoader = skillLoader {
+  }) : _logger = logger,
+       _skillLoader = skillLoader {
     argParser
       ..addOption(
         'target',
@@ -114,7 +114,8 @@ class _InstallAgentSkillCommand extends Command<int> {
       return p.join(codexHome, 'skills');
     }
 
-    final home = Platform.environment['HOME'] ??
+    final home =
+        Platform.environment['HOME'] ??
         Platform.environment['USERPROFILE'] ??
         Directory.current.path;
     return p.join(home, '.codex', 'skills');
@@ -131,8 +132,9 @@ class AgentSkillLoader {
 
   /// Loads the bundled MCP developer skill Markdown.
   Future<String> loadMcpDeveloperSkill() async {
-    final packageUri =
-        await Isolate.resolvePackageUri(Uri.parse(_packageSkillUri));
+    final packageUri = await Isolate.resolvePackageUri(
+      Uri.parse(_packageSkillUri),
+    );
     if (packageUri != null && packageUri.scheme == 'file') {
       final file = File.fromUri(packageUri);
       if (file.existsSync()) {

@@ -79,6 +79,21 @@ class InspectClientCommand extends Command<int> {
 
 /// Stdio server harness used to inspect MCP clients.
 class ClientInspectorHarness {
+  static const Set<String> _statelessRemovedRequestMethods = <String>{
+    Method.initialize,
+    Method.ping,
+    Method.loggingSetLevel,
+    Method.resourcesSubscribe,
+    Method.resourcesUnsubscribe,
+    Method.tasksList,
+    Method.tasksResult,
+  };
+  static const Set<String> _statelessRemovedNotificationMethods = <String>{
+    Method.notificationsInitialized,
+    Method.notificationsRootsListChanged,
+    Method.notificationsTasksStatus,
+  };
+
   /// Creates a client inspector harness.
   ClientInspectorHarness({
     required this.reportFile,
@@ -86,8 +101,8 @@ class ClientInspectorHarness {
     required this.maxRuntime,
     Stream<String>? clientLines,
     FutureOr<void> Function(String line)? writeLine,
-  })  : _clientLines = clientLines,
-        _writeLine = writeLine;
+  }) : _clientLines = clientLines,
+       _writeLine = writeLine;
 
   /// Report destination.
   final File reportFile;
@@ -118,13 +133,16 @@ class ClientInspectorHarness {
   Map<String, dynamic>? _clientInfo;
   Map<String, dynamic>? _clientCapabilities;
   String? _clientProtocolVersion;
+  String? _firstMethod;
   bool _sawAnyMessage = false;
+  bool _sawDiscover = false;
   bool _sawInitialize = false;
   bool _sawInitialized = false;
-  bool _firstMessageWasInitialize = true;
   bool _operationBeforeInitialized = false;
   bool _malformedMessage = false;
   bool _sentActiveProbes = false;
+  final List<String> _statelessMetadataErrors = <String>[];
+  final Set<String> _statelessRemovedMethods = <String>{};
   int _nextActiveProbeId = 1000;
 
   /// Runs the harness until stdin closes or a timeout expires.
@@ -132,7 +150,8 @@ class ClientInspectorHarness {
     _stopwatch.start();
     _maxTimer = Timer(maxRuntime, _finish);
 
-    final clientLines = _clientLines ??
+    final clientLines =
+        _clientLines ??
         stdin.transform(utf8.decoder).transform(const LineSplitter());
     _stdinSubscription = clientLines.listen(
       _handleLine,
@@ -177,13 +196,14 @@ class ClientInspectorHarness {
     }
 
     Map<String, dynamic> json;
+    late JsonRpcMessage message;
     try {
       final decoded = jsonDecode(line);
       if (decoded is! Map) {
         throw const FormatException('JSON-RPC message must be an object.');
       }
       json = decoded.cast<String, dynamic>();
-      JsonRpcMessage.fromJson(json);
+      message = JsonRpcMessage.fromJson(json);
     } catch (error) {
       _malformedMessage = true;
       _messages.add(<String, dynamic>{
@@ -198,15 +218,13 @@ class ClientInspectorHarness {
     final method = json['method'];
     if (method is String) {
       _observedMethods.add(method);
+      _firstMethod ??= method;
     }
     _messages.add(<String, dynamic>{
       'direction': 'client_to_server',
       'message': json,
     });
 
-    if (!_sawInitialize && method != Method.initialize) {
-      _firstMessageWasInitialize = false;
-    }
     if (_sawInitialize &&
         !_sawInitialized &&
         method is String &&
@@ -217,41 +235,82 @@ class ClientInspectorHarness {
     if (method == null && json.containsKey('id')) {
       _handleResponse(json);
     } else if (json.containsKey('id') && method is String) {
-      _handleRequest(json, method);
+      _handleRequest(json, method, message as JsonRpcRequest);
     } else if (method is String) {
       _handleNotification(json, method);
     }
   }
 
-  void _handleRequest(Map<String, dynamic> request, String method) {
+  void _handleRequest(
+    Map<String, dynamic> request,
+    String method,
+    JsonRpcRequest parsedRequest,
+  ) {
     final id = request['id'];
+    if (method == Method.initialize) {
+      _sawInitialize = true;
+    }
+    if (_sawDiscover && method != Method.serverDiscover) {
+      final metadataError = _validateStatelessRequestMetadata(parsedRequest);
+      if (metadataError != null) {
+        _recordStatelessMetadataError(method, metadataError);
+        _sendError(
+          id,
+          metadataError.code,
+          metadataError.message,
+          data: metadataError.data,
+        );
+        return;
+      }
+      if (_statelessRemovedRequestMethods.contains(method)) {
+        _statelessRemovedMethods.add(method);
+        _sendError(
+          id,
+          ErrorCode.methodNotFound.value,
+          '$method is not part of MCP stateless protocol versions.',
+        );
+        return;
+      }
+    }
+
     switch (method) {
+      case Method.serverDiscover:
+        _handleDiscover(parsedRequest);
+        break;
       case Method.initialize:
         _handleInitialize(request);
         break;
       case Method.ping:
-        _sendResult(id, const <String, dynamic>{});
+        _sendCompleteResult(id, const <String, dynamic>{});
         break;
       case Method.toolsList:
-        _sendResult(id, _toolsListResult());
+        _sendCompleteResult(id, _toolsListResult(), cacheable: true);
         break;
       case Method.toolsCall:
         _handleToolCall(id, request['params']);
         break;
       case Method.resourcesList:
-        _sendResult(id, _resourcesListResult());
+        _sendCompleteResult(id, _resourcesListResult(), cacheable: true);
         break;
       case Method.resourcesTemplatesList:
-        _sendResult(id, _resourceTemplatesListResult());
+        _sendCompleteResult(
+          id,
+          _resourceTemplatesListResult(),
+          cacheable: true,
+        );
         break;
       case Method.resourcesRead:
-        _sendResult(id, _resourceReadResult(request['params']));
+        _sendCompleteResult(
+          id,
+          _resourceReadResult(request['params']),
+          cacheable: true,
+        );
         break;
       case Method.promptsList:
-        _sendResult(id, _promptsListResult());
+        _sendCompleteResult(id, _promptsListResult(), cacheable: true);
         break;
       case Method.promptsGet:
-        _sendResult(id, _promptGetResult(request['params']));
+        _sendCompleteResult(id, _promptGetResult(request['params']));
         break;
       default:
         _sendError(
@@ -260,6 +319,109 @@ class ClientInspectorHarness {
           'Inspector harness does not implement $method.',
         );
     }
+  }
+
+  void _handleDiscover(JsonRpcRequest request) {
+    final metadataError = _validateStatelessRequestMetadata(request);
+    if (metadataError != null) {
+      _recordStatelessMetadataError(Method.serverDiscover, metadataError);
+      _sendError(
+        request.id,
+        metadataError.code,
+        metadataError.message,
+        data: metadataError.data,
+      );
+      return;
+    }
+
+    _sawDiscover = true;
+    _captureStatelessClientMetadata(request.meta!);
+    _sendResult(
+      request.id,
+      const DiscoverResult(
+        supportedVersions: <String>[stableProtocolVersion2026_07_28],
+        capabilities: ServerCapabilities(
+          tools: ServerCapabilitiesTools(),
+          resources: ServerCapabilitiesResources(),
+          prompts: ServerCapabilitiesPrompts(),
+        ),
+        serverInfo: Implementation(
+          name: 'mcp_dart_client_inspector',
+          version: cli_version.packageVersion,
+        ),
+        instructions:
+            'This is an MCP client inspector harness. Use tools/list and tools/call echo to exercise client behavior.',
+        ttlMs: 0,
+        cacheScope: CacheScope.private,
+      ).toJson(),
+    );
+  }
+
+  McpError? _validateStatelessRequestMetadata(JsonRpcRequest request) {
+    final meta = request.meta;
+    final requestedVersion = meta?[McpMetaKey.protocolVersion];
+    if (requestedVersion is! String || requestedVersion.isEmpty) {
+      return McpError(
+        ErrorCode.invalidParams.value,
+        'Missing required request metadata: ${McpMetaKey.protocolVersion}',
+      );
+    }
+    if (requestedVersion != stableProtocolVersion2026_07_28) {
+      return McpError(
+        ErrorCode.unsupportedProtocolVersion.value,
+        'Unsupported protocol version',
+        <String, dynamic>{
+          'supported': const <String>[stableProtocolVersion2026_07_28],
+          'requested': requestedVersion,
+        },
+      );
+    }
+
+    final clientInfo = meta?[McpMetaKey.clientInfo];
+    if (clientInfo is! Map) {
+      return McpError(
+        ErrorCode.invalidParams.value,
+        'Missing required request metadata: ${McpMetaKey.clientInfo}',
+      );
+    }
+    final clientCapabilities = meta?[McpMetaKey.clientCapabilities];
+    if (clientCapabilities is! Map) {
+      return McpError(
+        ErrorCode.invalidParams.value,
+        'Missing required request metadata: '
+        '${McpMetaKey.clientCapabilities}',
+      );
+    }
+
+    try {
+      Implementation.fromJson(clientInfo.cast<String, dynamic>());
+      ClientCapabilities.fromJson(
+        clientCapabilities.cast<String, dynamic>(),
+      );
+    } catch (error) {
+      return McpError(
+        ErrorCode.invalidParams.value,
+        'Invalid stateless request metadata.',
+        error.toString(),
+      );
+    }
+    return null;
+  }
+
+  void _captureStatelessClientMetadata(Map<String, dynamic> meta) {
+    _clientProtocolVersion = meta[McpMetaKey.protocolVersion] as String;
+    _clientInfo = (meta[McpMetaKey.clientInfo] as Map).cast<String, dynamic>();
+    _clientCapabilities =
+        (meta[McpMetaKey.clientCapabilities] as Map).cast<String, dynamic>();
+  }
+
+  void _recordStatelessMetadataError(String method, McpError error) {
+    if (error.code == ErrorCode.unsupportedProtocolVersion.value) {
+      // Version rejection is part of modern negotiation. A conforming client
+      // may retry with the supported version advertised by the harness.
+      return;
+    }
+    _statelessMetadataErrors.add('$method: ${error.message}');
   }
 
   void _handleInitialize(Map<String, dynamic> request) {
@@ -289,6 +451,9 @@ class ClientInspectorHarness {
   }
 
   void _handleNotification(Map<String, dynamic> notification, String method) {
+    if (_sawDiscover && _statelessRemovedNotificationMethods.contains(method)) {
+      _statelessRemovedMethods.add(method);
+    }
     if (method == Method.notificationsInitialized) {
       _sawInitialized = true;
       _sendActiveProbes();
@@ -378,7 +543,7 @@ class ClientInspectorHarness {
     final argumentMap =
         arguments is Map ? arguments.cast<String, dynamic>() : null;
     final message = argumentMap?['message']?.toString() ?? '';
-    _sendResult(id, <String, dynamic>{
+    _sendCompleteResult(id, <String, dynamic>{
       'content': <Map<String, dynamic>>[
         <String, dynamic>{'type': 'text', 'text': message},
       ],
@@ -387,54 +552,72 @@ class ClientInspectorHarness {
     });
   }
 
+  void _sendCompleteResult(
+    Object? id,
+    Map<String, dynamic> result, {
+    bool cacheable = false,
+  }) {
+    if (!_sawDiscover) {
+      _sendResult(id, result);
+      return;
+    }
+
+    _sendResult(id, <String, dynamic>{
+      'resultType': resultTypeComplete,
+      ...result,
+      if (cacheable) 'ttlMs': 0,
+      if (cacheable) 'cacheScope': CacheScope.private,
+    });
+  }
+
   Map<String, dynamic> _toolsListResult() => <String, dynamic>{
-        'tools': <Map<String, dynamic>>[
-          <String, dynamic>{
-            'name': 'echo',
-            'title': 'Echo',
-            'description': 'Echoes a message so MCP clients can be inspected.',
-            'inputSchema': <String, dynamic>{
-              'type': 'object',
-              'properties': <String, dynamic>{
-                'message': <String, dynamic>{
-                  'type': 'string',
-                  'description': 'Message to echo.',
-                },
-              },
-              'required': <String>['message'],
-            },
-            'outputSchema': <String, dynamic>{
-              'type': 'object',
-              'properties': <String, dynamic>{
-                'message': <String, dynamic>{'type': 'string'},
-              },
-              'required': <String>['message'],
+    'tools': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'name': 'echo',
+        'title': 'Echo',
+        'description': 'Echoes a message so MCP clients can be inspected.',
+        'inputSchema': <String, dynamic>{
+          'type': 'object',
+          'properties': <String, dynamic>{
+            'message': <String, dynamic>{
+              'type': 'string',
+              'description': 'Message to echo.',
             },
           },
-        ],
-      };
+          'required': <String>['message'],
+        },
+        'outputSchema': <String, dynamic>{
+          'type': 'object',
+          'properties': <String, dynamic>{
+            'message': <String, dynamic>{'type': 'string'},
+          },
+          'required': <String>['message'],
+        },
+      },
+    ],
+  };
 
   Map<String, dynamic> _resourcesListResult() => <String, dynamic>{
-        'resources': <Map<String, dynamic>>[
-          <String, dynamic>{
-            'uri': 'inspector://status',
-            'name': 'Inspector Status',
-            'description': 'A resource exposed by the MCP client inspector.',
-            'mimeType': 'text/plain',
-          },
-        ],
-      };
+    'resources': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'uri': 'inspector://status',
+        'name': 'Inspector Status',
+        'description': 'A resource exposed by the MCP client inspector.',
+        'mimeType': 'text/plain',
+      },
+    ],
+  };
 
   Map<String, dynamic> _resourceTemplatesListResult() => <String, dynamic>{
-        'resourceTemplates': <Map<String, dynamic>>[
-          <String, dynamic>{
-            'uriTemplate': 'inspector://echo/{message}',
-            'name': 'Inspector Echo Resource',
-            'description': 'Parameterized test resource for MCP clients.',
-            'mimeType': 'text/plain',
-          },
-        ],
-      };
+    'resourceTemplates': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'uriTemplate': 'inspector://echo/{message}',
+        'name': 'Inspector Echo Resource',
+        'description': 'Parameterized test resource for MCP clients.',
+        'mimeType': 'text/plain',
+      },
+    ],
+  };
 
   Map<String, dynamic> _resourceReadResult(Object? params) {
     final paramsMap = params is Map ? params.cast<String, dynamic>() : null;
@@ -451,21 +634,21 @@ class ClientInspectorHarness {
   }
 
   Map<String, dynamic> _promptsListResult() => <String, dynamic>{
-        'prompts': <Map<String, dynamic>>[
+    'prompts': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'name': 'inspector-summary',
+        'title': 'Inspector Summary',
+        'description': 'Prompt exposed by the MCP client inspector.',
+        'arguments': <Map<String, dynamic>>[
           <String, dynamic>{
-            'name': 'inspector-summary',
-            'title': 'Inspector Summary',
-            'description': 'Prompt exposed by the MCP client inspector.',
-            'arguments': <Map<String, dynamic>>[
-              <String, dynamic>{
-                'name': 'topic',
-                'description': 'Topic to summarize.',
-                'required': false,
-              },
-            ],
+            'name': 'topic',
+            'description': 'Topic to summarize.',
+            'required': false,
           },
         ],
-      };
+      },
+    ],
+  };
 
   Map<String, dynamic> _promptGetResult(Object? params) {
     final paramsMap = params is Map ? params.cast<String, dynamic>() : null;
@@ -488,10 +671,10 @@ class ClientInspectorHarness {
   }
 
   String _chooseProtocolVersion(String? requested) {
-    if (requested != null && supportedProtocolVersions.contains(requested)) {
+    if (requested != null && legacyProtocolVersions.contains(requested)) {
       return requested;
     }
-    return latestProtocolVersion;
+    return stableProtocolVersion2025_11_25;
   }
 
   void _sendResult(Object? id, Map<String, dynamic> result) {
@@ -502,11 +685,20 @@ class ClientInspectorHarness {
     });
   }
 
-  void _sendError(Object? id, int code, String message) {
+  void _sendError(
+    Object? id,
+    int code,
+    String message, {
+    Object? data,
+  }) {
     _send(<String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': id,
-      'error': <String, dynamic>{'code': code, 'message': message},
+      'error': <String, dynamic>{
+        'code': code,
+        'message': message,
+        if (data != null) 'data': data,
+      },
     });
   }
 
@@ -567,43 +759,13 @@ class ClientInspectorHarness {
       );
     }
 
-    if (_firstMessageWasInitialize && _sawInitialize) {
-      _checks.pass(
-        'lifecycle.initialize-first',
-        'Client sent initialize before other MCP messages.',
-      );
+    if (_observedMethods.contains(Method.serverDiscover)) {
+      _checkStatelessLifecycle();
     } else {
-      _checks.fail(
-        'lifecycle.initialize-first',
-        'Client did not send initialize as its first MCP message.',
-      );
+      _checkLegacyLifecycle();
     }
 
-    if (_sawInitialized) {
-      _checks.pass(
-        'lifecycle.initialized-notification',
-        'Client sent notifications/initialized after initialize.',
-      );
-    } else {
-      _checks.fail(
-        'lifecycle.initialized-notification',
-        'Client did not send notifications/initialized before disconnecting.',
-      );
-    }
-
-    if (_operationBeforeInitialized) {
-      _checks.fail(
-        'lifecycle.operation-after-initialized',
-        'Client sent an operation before notifications/initialized.',
-      );
-    } else if (_sawInitialized) {
-      _checks.pass(
-        'lifecycle.operation-after-initialized',
-        'Client waited for initialization before normal operations.',
-      );
-    }
-
-    _checkInitializeParams();
+    _checkClientMetadata();
     _checkObservedOperations();
     _checkActiveProbes();
 
@@ -635,26 +797,160 @@ class ClientInspectorHarness {
     );
   }
 
-  void _checkInitializeParams() {
+  void _checkStatelessLifecycle() {
+    if (_firstMethod == Method.serverDiscover) {
+      _checks.pass(
+        'lifecycle.discover-first',
+        'Client sent server/discover before other MCP methods.',
+      );
+    } else {
+      _checks.fail(
+        'lifecycle.discover-first',
+        'Client did not send server/discover as its first MCP method.',
+      );
+    }
+
+    if (_sawDiscover) {
+      _checks.pass(
+        'lifecycle.discover',
+        'Client completed the stateless server/discover handshake.',
+      );
+    } else {
+      _checks.fail(
+        'lifecycle.discover',
+        'Client did not complete a valid server/discover handshake.',
+      );
+    }
+
+    if (_sawInitialize) {
+      _checks.fail(
+        'lifecycle.stateless-no-initialize',
+        'Client sent legacy initialize after entering stateless MCP.',
+      );
+    } else {
+      _checks.pass(
+        'lifecycle.stateless-no-initialize',
+        'Client did not send legacy initialize in stateless MCP.',
+      );
+    }
+
+    if (_sawInitialized) {
+      _checks.fail(
+        'lifecycle.stateless-no-initialized-notification',
+        'Client sent removed notifications/initialized in stateless MCP.',
+      );
+    } else {
+      _checks.pass(
+        'lifecycle.stateless-no-initialized-notification',
+        'Client did not send notifications/initialized in stateless MCP.',
+      );
+    }
+
+    if (_statelessMetadataErrors.isEmpty && _sawDiscover) {
+      _checks.pass(
+        'lifecycle.stateless-request-metadata',
+        'Client supplied required metadata on stateless requests.',
+      );
+    } else {
+      _checks.fail(
+        'lifecycle.stateless-request-metadata',
+        'Client sent invalid stateless request metadata.',
+        details: <String, dynamic>{'errors': _statelessMetadataErrors},
+      );
+    }
+
+    if (_statelessRemovedMethods.isEmpty) {
+      _checks.pass(
+        'lifecycle.stateless-removed-methods',
+        'Client did not send methods removed from stateless MCP.',
+      );
+    } else {
+      _checks.fail(
+        'lifecycle.stateless-removed-methods',
+        'Client sent methods removed from stateless MCP.',
+        details: <String, dynamic>{
+          'methods': _statelessRemovedMethods.toList()..sort(),
+        },
+      );
+    }
+  }
+
+  void _checkLegacyLifecycle() {
+    if (_firstMethod == Method.initialize && _sawInitialize) {
+      _checks.pass(
+        'lifecycle.initialize-first',
+        'Client sent initialize before other MCP methods.',
+      );
+    } else {
+      _checks.fail(
+        'lifecycle.initialize-first',
+        'Client did not send initialize as its first MCP method.',
+      );
+    }
+
     if (!_sawInitialize) {
       _checks.fail('lifecycle.initialize', 'Client never sent initialize.');
       return;
     }
 
+    if (_sawInitialized) {
+      _checks.pass(
+        'lifecycle.initialized-notification',
+        'Client sent notifications/initialized after initialize.',
+      );
+    } else {
+      _checks.fail(
+        'lifecycle.initialized-notification',
+        'Client did not send notifications/initialized before disconnecting.',
+      );
+    }
+
+    if (_operationBeforeInitialized) {
+      _checks.fail(
+        'lifecycle.operation-after-initialized',
+        'Client sent an operation before notifications/initialized.',
+      );
+    } else if (_sawInitialized) {
+      _checks.pass(
+        'lifecycle.operation-after-initialized',
+        'Client waited for initialization before normal operations.',
+      );
+    }
+  }
+
+  void _checkClientMetadata() {
+    final stateless = _observedMethods.contains(Method.serverDiscover);
+
     if (_clientProtocolVersion == null || _clientProtocolVersion!.isEmpty) {
       _checks.fail(
         'lifecycle.protocol-version',
-        'initialize.params.protocolVersion is missing.',
+        stateless
+            ? 'server/discover request protocol metadata is missing.'
+            : 'initialize.params.protocolVersion is missing.',
       );
-    } else if (supportedProtocolVersions.contains(_clientProtocolVersion)) {
+    } else if (stateless &&
+        _clientProtocolVersion == stableProtocolVersion2026_07_28) {
       _checks.pass(
         'lifecycle.protocol-version',
-        'Client requested supported protocol version $_clientProtocolVersion.',
+        'Client requested supported stateless protocol version '
+            '$_clientProtocolVersion.',
+      );
+    } else if (!stateless &&
+        legacyProtocolVersions.contains(_clientProtocolVersion)) {
+      _checks.pass(
+        'lifecycle.protocol-version',
+        'Client requested supported initialization protocol version '
+            '$_clientProtocolVersion.',
       );
     } else {
       _checks.warning(
         'lifecycle.protocol-version',
-        'Client requested unsupported protocol version $_clientProtocolVersion; inspector negotiated $latestProtocolVersion.',
+        stateless
+            ? 'Client requested unsupported stateless protocol version '
+                '$_clientProtocolVersion.'
+            : 'Client requested unsupported initialization protocol version '
+                '$_clientProtocolVersion; inspector negotiated '
+                '$stableProtocolVersion2025_11_25.',
       );
     }
 
@@ -671,7 +967,9 @@ class ClientInspectorHarness {
     } else {
       _checks.fail(
         'lifecycle.client-info',
-        'initialize.params.clientInfo must include non-empty name and version.',
+        stateless
+            ? 'Stateless client metadata must include non-empty clientInfo name and version.'
+            : 'initialize.params.clientInfo must include non-empty name and version.',
       );
     }
 
@@ -684,7 +982,9 @@ class ClientInspectorHarness {
     } else {
       _checks.fail(
         'lifecycle.client-capabilities',
-        'initialize.params.capabilities must be an object.',
+        stateless
+            ? 'Stateless client capabilities metadata must be an object.'
+            : 'initialize.params.capabilities must be an object.',
       );
     }
   }
@@ -728,6 +1028,25 @@ class ClientInspectorHarness {
   }
 
   void _checkActiveProbes() {
+    if (_sawDiscover) {
+      _checkStatelessClientCapability(
+        capability: 'roots',
+        id: 'client.roots.list',
+        label: 'roots/list',
+      );
+      _checkStatelessClientCapability(
+        capability: 'sampling',
+        id: 'client.sampling.create-message',
+        label: 'sampling/createMessage',
+      );
+      _checkStatelessClientCapability(
+        capability: 'elicitation',
+        id: 'client.elicitation.create',
+        label: 'elicitation/create',
+      );
+      return;
+    }
+
     _checkActiveProbe(
       capability: 'roots',
       id: 'client.roots.list',
@@ -743,6 +1062,22 @@ class ClientInspectorHarness {
       id: 'client.elicitation.create',
       label: 'elicitation/create',
     );
+  }
+
+  void _checkStatelessClientCapability({
+    required String capability,
+    required String id,
+    required String label,
+  }) {
+    if (_clientCapabilities?.containsKey(capability) ?? false) {
+      _checks.info(
+        id,
+        'Client advertised $capability; stateless MCP carries $label through '
+        'MRTR input requests instead of an active server-to-client probe.',
+      );
+    } else {
+      _checks.info(id, 'Client did not advertise $capability.');
+    }
   }
 
   void _checkActiveProbe({

@@ -189,6 +189,7 @@ Future<void> connect([String? url]) async {
     // Create a new client
     client = McpClient(
       const Implementation(name: 'example-client', version: '1.0.0'),
+      options: const McpClientOptions(protocol: McpProtocol.stable),
     );
     client!.onerror = (error) {
       print('\x1b[31mClient error: $error\x1b[0m');
@@ -250,6 +251,8 @@ Future<void> connect([String? url]) async {
         return Future.value();
       },
       (params, meta) => JsonRpcResourceListChangedNotification.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsResourcesListChanged,
         'params': params,
         if (meta != null) '_meta': meta,
       }),

@@ -3,14 +3,26 @@ import 'dart:convert';
 import '../shared/json_schema/json_schema.dart';
 
 import 'content.dart';
+import 'json_value.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
 /// Legacy alias for [JsonObject] used as tool input schema.
 typedef ToolInputSchema = JsonObject;
 
-/// Legacy alias for [JsonObject] used as tool output schema.
+/// Legacy alias for object-root tool output schemas.
+///
+/// MCP `2026-07-28` draft/RC allows [Tool.outputSchema] to be any JSON Schema.
+/// Use [JsonSchema] directly when the output schema root is not an object.
 typedef ToolOutputSchema = JsonObject;
+
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  expectJsonRpcMethod(json, expected, context);
+}
 
 /// Additional properties describing a Tool to clients.
 ///
@@ -74,13 +86,32 @@ class ToolAnnotations {
 
   factory ToolAnnotations.fromJson(Map<String, dynamic> json) {
     return ToolAnnotations(
-      title: json['title'] as String?,
-      readOnlyHint: json['readOnlyHint'] as bool? ?? false,
-      destructiveHint: json['destructiveHint'] as bool? ?? true,
-      idempotentHint: json['idempotentHint'] as bool? ?? false,
-      openWorldHint: json['openWorldHint'] as bool? ?? true,
+      title: readOptionalString(json['title'], 'ToolAnnotations.title'),
+      readOnlyHint: readOptionalBool(
+            json['readOnlyHint'],
+            'ToolAnnotations.readOnlyHint',
+          ) ??
+          false,
+      destructiveHint: readOptionalBool(
+            json['destructiveHint'],
+            'ToolAnnotations.destructiveHint',
+          ) ??
+          true,
+      idempotentHint: readOptionalBool(
+            json['idempotentHint'],
+            'ToolAnnotations.idempotentHint',
+          ) ??
+          false,
+      openWorldHint: readOptionalBool(
+            json['openWorldHint'],
+            'ToolAnnotations.openWorldHint',
+          ) ??
+          true,
       priority: readUnitDouble(json['priority'], 'ToolAnnotations.priority'),
-      audience: (json['audience'] as List<dynamic>?)?.cast<String>(),
+      audience: readOptionalAnnotationAudience(
+        json['audience'],
+        'ToolAnnotations.audience',
+      ),
     );
   }
 
@@ -114,7 +145,9 @@ class ToolExecution {
   const ToolExecution({this.taskSupport = 'forbidden'});
 
   factory ToolExecution.fromJson(Map<String, dynamic> json) {
-    final taskSupport = json['taskSupport'] as String? ?? 'forbidden';
+    final taskSupport =
+        readOptionalString(json['taskSupport'], 'ToolExecution.taskSupport') ??
+            'forbidden';
     if (!allowedTaskSupportValues.contains(taskSupport)) {
       throw FormatException(
         "Invalid tool execution taskSupport '$taskSupport'. Expected one of: ${allowedTaskSupportValues.join(', ')}",
@@ -149,7 +182,7 @@ class Tool {
   /// JSON Schema defining the tool's input parameters.
   final JsonSchema inputSchema;
 
-  /// JSON Schema defining the tool's output parameters.
+  /// JSON Schema defining the tool's structured output.
   final JsonSchema? outputSchema;
 
   /// Optional additional properties describing the tool.
@@ -197,43 +230,37 @@ class Tool {
         _readOptionalJsonObject(json['outputSchema'], 'Tool.outputSchema');
     final outputSchema =
         outputSchemaJson == null ? null : JsonSchema.fromJson(outputSchemaJson);
-    if (outputSchema != null) {
-      _validateObjectRootSchema(
-        outputSchema,
-        'Tool.outputSchema',
-        formatException: true,
-      );
-    }
 
     return Tool(
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
+      name: readRequiredString(json['name'], 'Tool.name'),
+      title: readOptionalString(json['title'], 'Tool.title'),
+      description: readOptionalString(json['description'], 'Tool.description'),
       inputSchema: inputSchema,
       outputSchema: outputSchema,
       annotations: json['annotations'] != null
           ? ToolAnnotations.fromJson(
-              json['annotations'] as Map<String, dynamic>,
+              readJsonObject(json['annotations'], 'Tool.annotations'),
             )
           : null,
-      meta: json['_meta'] as Map<String, dynamic>?,
+      meta: readOptionalJsonObject(json['_meta'], 'Tool._meta'),
       execution: json['execution'] != null
-          ? ToolExecution.fromJson(json['execution'] as Map<String, dynamic>)
+          ? ToolExecution.fromJson(
+              readJsonObject(json['execution'], 'Tool.execution'),
+            )
           : null,
       icon: json['icon'] != null
-          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          ? ImageContent.fromJson(readJsonObject(json['icon'], 'Tool.icon'))
           : null,
-      icons: (json['icons'] as List<dynamic>?)
-          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      icons: _readOptionalObjectList(
+        json['icons'],
+        'Tool.icons',
+        McpIcon.fromJson,
+      ),
     );
   }
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson({bool omitExecution = false}) {
     _validateObjectRootSchema(inputSchema, 'Tool.inputSchema');
-    if (outputSchema != null) {
-      _validateObjectRootSchema(outputSchema!, 'Tool.outputSchema');
-    }
 
     return {
       'name': name,
@@ -242,8 +269,8 @@ class Tool {
       'inputSchema': inputSchema.toJson(),
       if (outputSchema != null) 'outputSchema': outputSchema!.toJson(),
       if (annotations != null) 'annotations': annotations!.toJson(),
-      if (meta != null) '_meta': meta,
-      if (execution != null) 'execution': execution!.toJson(),
+      if (meta != null) '_meta': readJsonObject(meta, 'Tool._meta'),
+      if (!omitExecution && execution != null) 'execution': execution!.toJson(),
       if (icons != null) 'icons': icons!.map((icon) => icon.toJson()).toList(),
     };
   }
@@ -258,7 +285,7 @@ class ListToolsRequest {
 
   factory ListToolsRequest.fromJson(Map<String, dynamic> json) {
     return ListToolsRequest(
-      cursor: json['cursor'] as String?,
+      cursor: readOptionalString(json['cursor'], 'ListToolsRequest.cursor'),
     );
   }
 
@@ -267,16 +294,25 @@ class ListToolsRequest {
       };
 }
 
+/// Deprecated alias for [ListToolsRequest].
 @Deprecated('Use [ListToolsRequest] instead.')
 typedef ListToolsRequestParams = ListToolsRequest;
 
 /// The server's response to a [ListToolsRequest].
-class ListToolsResult implements BaseResultData {
+class ListToolsResult implements CacheableResultData {
   /// A list of tools.
   final List<Tool> tools;
 
   /// An opaque token for pagination.
   final String? nextCursor;
+
+  /// How long, in milliseconds, the client may consider this result fresh.
+  @override
+  final int? ttlMs;
+
+  /// Intended cache visibility: `public` or `private`.
+  @override
+  final String? cacheScope;
 
   /// Optional metadata.
   @override
@@ -285,6 +321,8 @@ class ListToolsResult implements BaseResultData {
   const ListToolsResult({
     required this.tools,
     this.nextCursor,
+    this.ttlMs,
+    this.cacheScope,
     this.meta,
   });
 
@@ -294,21 +332,38 @@ class ListToolsResult implements BaseResultData {
       throw const FormatException('ListToolsResult.tools is required');
     }
     return ListToolsResult(
-      tools:
-          tools.map((e) => Tool.fromJson(e as Map<String, dynamic>)).toList(),
-      nextCursor: json['nextCursor'] as String?,
-      meta: json['_meta'] as Map<String, dynamic>?,
+      tools: [
+        for (var i = 0; i < tools.length; i++)
+          Tool.fromJson(
+            readJsonObject(tools[i], 'ListToolsResult.tools[$i]'),
+          ),
+      ],
+      nextCursor:
+          readOptionalString(json['nextCursor'], 'ListToolsResult.nextCursor'),
+      ttlMs: readOptionalTtlMs(json['ttlMs'], 'ListToolsResult.ttlMs'),
+      cacheScope: readOptionalCacheScope(
+        json['cacheScope'],
+        'ListToolsResult.cacheScope',
+      ),
+      meta: readOptionalJsonObject(json['_meta'], 'ListToolsResult._meta'),
     );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'tools': tools.map((e) => e.toJson()).toList(),
-        if (nextCursor != null) 'nextCursor': nextCursor,
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    validateTtlMs(ttlMs, 'ListToolsResult.ttlMs');
+    validateCacheScope(cacheScope, 'ListToolsResult.cacheScope');
+    return {
+      'tools': tools.map((e) => e.toJson()).toList(),
+      if (nextCursor != null) 'nextCursor': nextCursor,
+      if (ttlMs != null) 'ttlMs': ttlMs,
+      if (cacheScope != null) 'cacheScope': cacheScope,
+      if (meta != null) '_meta': readJsonObject(meta, 'ListToolsResult._meta'),
+    };
+  }
 }
 
+/// Deprecated alias for [CallToolRequest].
 @Deprecated('Use [CallToolRequest] instead.')
 typedef CallToolRequestParams = CallToolRequest;
 
@@ -320,24 +375,43 @@ class CallToolRequest {
   /// The arguments to pass to the tool.
   final Map<String, dynamic> arguments;
 
+  /// Client responses to MRTR input requests when retrying this tool call.
+  final InputResponses? inputResponses;
+
+  /// Opaque MRTR state returned by the server and echoed on retry.
+  final String? requestState;
+
   const CallToolRequest({
     required this.name,
     this.arguments = const {},
+    this.inputResponses,
+    this.requestState,
   });
 
   factory CallToolRequest.fromJson(Map<String, dynamic> json) {
     final arguments = json['arguments'];
     return CallToolRequest(
-      name: json['name'] as String,
+      name: readRequiredString(json['name'], 'CallToolRequest.name'),
       arguments: arguments == null
           ? const {}
-          : (arguments as Map).cast<String, dynamic>(),
+          : _readJsonObject(arguments, 'CallToolRequest.arguments'),
+      inputResponses: InputResponse.mapFromJson(
+        json['inputResponses'],
+        'CallToolRequest.inputResponses',
+      ),
+      requestState: readOptionalString(
+        json['requestState'],
+        'CallToolRequest.requestState',
+      ),
     );
   }
 
   Map<String, dynamic> toJson() => {
         'name': name,
-        'arguments': arguments,
+        'arguments': readJsonObject(arguments, 'CallToolRequest.arguments'),
+        if (inputResponses != null)
+          'inputResponses': InputResponse.mapToJson(inputResponses!),
+        if (requestState != null) 'requestState': requestState,
       };
 }
 
@@ -349,8 +423,38 @@ class CallToolResult implements BaseResultData {
   /// Whether the tool call returned an error.
   final bool isError;
 
-  /// Structured content returned by the tool.
-  final Map<String, dynamic>? structuredContent;
+  final Map<String, dynamic>? _structuredContent;
+  final JsonValue? _structuredContentValue;
+
+  /// Object-root structured content returned by the tool.
+  ///
+  /// Stable MCP `2025-11-25` tool results use an object here. When working
+  /// with MCP `2026-07-28` draft/RC peers, use [structuredContentJson] to read
+  /// non-object JSON values such as arrays, strings, numbers, booleans, or an
+  /// explicit JSON `null`.
+  Map<String, dynamic>? get structuredContent {
+    return _structuredContentValue?.asObject ?? _structuredContent;
+  }
+
+  /// Structured content returned by an MCP `2026-07-28` draft/RC tool call.
+  ///
+  /// This exposes the wire-level JSON value and may be an object, array,
+  /// string, number, boolean, or null. Use [hasStructuredContent] to distinguish
+  /// an omitted field from an explicit JSON `null`.
+  JsonValue? get structuredContentJson {
+    if (!hasStructuredContent) {
+      return null;
+    }
+    return _structuredContentValue ??
+        (structuredContent == null
+            ? JsonValue.nullValue
+            : JsonValue.object(structuredContent!));
+  }
+
+  /// Whether [structuredContent] was explicitly present.
+  ///
+  /// This distinguishes an omitted field from an explicit JSON `null`.
+  final bool hasStructuredContent;
 
   /// Optional metadata.
   @override
@@ -362,26 +466,66 @@ class CallToolResult implements BaseResultData {
   const CallToolResult({
     required this.content,
     this.isError = false,
-    this.structuredContent,
+    Map<String, dynamic>? structuredContent,
+    JsonValue? structuredContentJson,
+    bool? hasStructuredContent,
     this.meta,
     this.extra,
-  });
+  })  : _structuredContent = structuredContent,
+        _structuredContentValue = structuredContentJson,
+        hasStructuredContent = hasStructuredContent ??
+            (structuredContentJson != null || structuredContent != null);
 
   /// Creates a result from a list of content items.
   factory CallToolResult.fromContent(List<Content> content) {
     return CallToolResult(content: content);
   }
 
-  /// Creates a result from arbitrary structured data.
+  /// Creates a result from object-root structured content.
   ///
   /// Automatically populates [content] with a JSON-serialized version of
   /// [content] for backward compatibility with clients that do not support
   /// [structuredContent].
   factory CallToolResult.fromStructuredContent(Map<String, dynamic> content) {
+    return CallToolResult.fromStructuredValue(JsonValue.object(content));
+  }
+
+  /// Creates a result from arbitrary MCP `2026-07-28` draft/RC structured JSON.
+  ///
+  /// This may be any JSON value, including arrays and explicit JSON `null`.
+  /// Stable MCP `2025-11-25` callers receive only the JSON-serialized
+  /// [content] fallback when the structured value is not an object.
+  factory CallToolResult.fromStructuredValue(JsonValue content) {
     return CallToolResult(
-      content: [TextContent(text: jsonEncode(content))],
-      structuredContent: content,
+      content: [TextContent(text: jsonEncode(content.toJson()))],
+      structuredContentJson: content,
+      hasStructuredContent: true,
     );
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC array structured content.
+  factory CallToolResult.fromStructuredArray(List<dynamic> content) {
+    return CallToolResult.fromStructuredValue(JsonValue.array(content));
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC string structured content.
+  factory CallToolResult.fromStructuredString(String content) {
+    return CallToolResult.fromStructuredValue(JsonValue.string(content));
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC number structured content.
+  factory CallToolResult.fromStructuredNumber(num content) {
+    return CallToolResult.fromStructuredValue(JsonValue.number(content));
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC boolean structured content.
+  factory CallToolResult.fromStructuredBoolean(bool content) {
+    return CallToolResult.fromStructuredValue(JsonValue.boolean(content));
+  }
+
+  /// Creates a result from MCP `2026-07-28` draft/RC null structured content.
+  factory CallToolResult.fromStructuredNull() {
+    return CallToolResult.fromStructuredValue(JsonValue.nullValue);
   }
 
   factory CallToolResult.fromJson(Map<String, dynamic> json) {
@@ -394,13 +538,21 @@ class CallToolResult implements BaseResultData {
     }
 
     return CallToolResult(
-      content: content
-          .map((e) => Content.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      isError: json['isError'] as bool? ?? false,
-      structuredContent: json['structuredContent'] as Map<String, dynamic>?,
-      meta: json['_meta'] as Map<String, dynamic>?,
-      extra: extra.isEmpty ? null : extra,
+      content: [
+        for (var i = 0; i < content.length; i++)
+          Content.fromJson(
+            readJsonObject(content[i], 'CallToolResult.content[$i]'),
+          ),
+      ],
+      isError:
+          readOptionalBool(json['isError'], 'CallToolResult.isError') ?? false,
+      structuredContentJson: json.containsKey('structuredContent')
+          ? JsonValue.fromJson(json['structuredContent'])
+          : null,
+      hasStructuredContent: json.containsKey('structuredContent'),
+      meta: readOptionalJsonObject(json['_meta'], 'CallToolResult._meta'),
+      extra:
+          extra.isEmpty ? null : readJsonObject(extra, 'CallToolResult.extra'),
     );
   }
 
@@ -408,21 +560,31 @@ class CallToolResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         'content': content.map((e) => e.toJson()).toList(),
         if (isError) 'isError': isError,
-        if (structuredContent != null) 'structuredContent': structuredContent,
-        if (meta != null) '_meta': meta,
-        ...?extra,
+        if (hasStructuredContent)
+          'structuredContent': readJsonValue(
+            structuredContentJson?.toJson(),
+            'CallToolResult.structuredContent',
+          ),
+        if (meta != null) '_meta': readJsonObject(meta, 'CallToolResult._meta'),
+        if (extra != null) ...readJsonObject(extra, 'CallToolResult.extra'),
       };
 }
 
 /// Notification from server indicating the list of available tools has changed.
 class JsonRpcToolListChangedNotification extends JsonRpcNotification {
-  const JsonRpcToolListChangedNotification()
+  const JsonRpcToolListChangedNotification({super.meta})
       : super(method: Method.notificationsToolsListChanged);
 
   factory JsonRpcToolListChangedNotification.fromJson(
     Map<String, dynamic> json,
-  ) =>
-      const JsonRpcToolListChangedNotification();
+  ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsToolsListChanged,
+      'JsonRpcToolListChangedNotification',
+    );
+    return JsonRpcToolListChangedNotification(meta: extractRequestMeta(json));
+  }
 }
 
 void _validateObjectRootSchema(
@@ -457,15 +619,23 @@ Map<String, dynamic>? _readOptionalJsonObject(Object? value, String field) {
   return _readJsonObject(value, field);
 }
 
+List<T>? _readOptionalObjectList<T>(
+  Object? value,
+  String field,
+  T Function(Map<String, dynamic> json) fromJson,
+) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! List) {
+    throw FormatException('$field must be a list of JSON objects');
+  }
+  return [
+    for (var i = 0; i < value.length; i++)
+      fromJson(_readJsonObject(value[i], '$field[$i]')),
+  ];
+}
+
 Map<String, dynamic> _readJsonObject(Object? value, String field) {
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    if (value.keys.any((key) => key is! String)) {
-      throw FormatException('$field must be an object with string keys');
-    }
-    return value.cast<String, dynamic>();
-  }
-  throw FormatException('$field must be an object');
+  return readJsonObject(value, field);
 }

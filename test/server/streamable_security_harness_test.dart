@@ -195,7 +195,7 @@ class _SecurityHarness {
         id: 1,
         method: Method.initialize,
         params: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(
             name: 'SecurityHarnessClient',

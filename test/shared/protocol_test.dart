@@ -477,6 +477,46 @@ void main() {
       expect(response.result['value'], 'nested-ok');
     });
 
+    test('public request preserves string relatedRequestId', () async {
+      await protocol.connect(transport);
+
+      final requestFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(id: 0, method: 'test/method'),
+            (json) => TestResult(value: json['value'] as String),
+            const RequestOptions(timeout: Duration(seconds: 1)),
+            'parent-req-1',
+          )
+          .timeout(const Duration(seconds: 5));
+
+      await waitForSentMessages(transport, 1);
+
+      expect(transport.sentMessages[0], isA<JsonRpcRequest>());
+      expect(transport.relatedRequestIds[0], 'parent-req-1');
+
+      final request = transport.sentMessages[0] as JsonRpcRequest;
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: request.id,
+          result: {'value': 'ok'},
+        ),
+      );
+
+      expect((await requestFuture).value, 'ok');
+    });
+
+    test('public notification preserves integer relatedRequestId', () async {
+      await protocol.connect(transport);
+
+      await protocol.notification(
+        const JsonRpcNotification(method: 'test/notification'),
+        relatedRequestId: 15,
+      );
+
+      expect(transport.sentMessages.single, isA<JsonRpcNotification>());
+      expect(transport.relatedRequestIds.single, 15);
+    });
+
     test('routes nested cancellation notifications for string request IDs',
         () async {
       await protocol.connect(transport);
@@ -617,6 +657,58 @@ void main() {
       expect(result.value, 'response-data');
     });
 
+    test('dispatches integer progress tokens from request metadata', () async {
+      await protocol.connect(transport);
+
+      final progressUpdates = <Progress>[];
+      final requestFuture = protocol
+          .request<TestResult>(
+            const JsonRpcRequest(
+              id: 0,
+              method: 'test/method',
+              meta: {'progressToken': 15},
+            ),
+            (json) => TestResult(value: json['value'] as String),
+            RequestOptions(
+              onprogress: progressUpdates.add,
+              timeout: const Duration(seconds: 1),
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(transport.sentMessages, hasLength(1));
+      final sentRequest = transport.sentMessages.single as JsonRpcRequest;
+      expect(sentRequest.meta?['progressToken'], 15);
+
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 15,
+            progress: 50,
+            total: 100,
+            message: 'halfway',
+          ),
+        ),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(progressUpdates, hasLength(1));
+      expect(progressUpdates.single.progress, 50);
+      expect(progressUpdates.single.total, 100);
+      expect(progressUpdates.single.message, 'halfway');
+
+      transport.receiveMessage(
+        JsonRpcResponse(
+          id: sentRequest.id,
+          result: {'value': 'response-data'},
+        ),
+      );
+
+      final result = await requestFuture;
+      expect(result.value, 'response-data');
+    });
+
     test('task options serialize as task-augmented request params', () async {
       await protocol.connect(transport);
 
@@ -657,6 +749,43 @@ void main() {
         ),
       );
       expect((await requestFuture).task.taskId, 'shape-task');
+    });
+
+    test('handler extra accepts whole-number JSON task ttl values', () async {
+      await protocol.connect(transport);
+
+      final observedTtl = Completer<int?>();
+      protocol.setRequestHandler<JsonRpcRequest>(
+        'test/task-ttl',
+        (request, extra) async {
+          observedTtl.complete(extra.taskRequestedTtl);
+          return TestResult(value: 'ok');
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/task-ttl',
+          params: params,
+          meta: meta,
+        ),
+      );
+
+      transport.receiveMessage(
+        const JsonRpcRequest(
+          id: 99,
+          method: 'test/task-ttl',
+          params: {
+            'task': {'ttl': 1234.0},
+          },
+        ),
+      );
+
+      await waitForSentMessages(transport, 1);
+      expect(
+        await observedTtl.future.timeout(const Duration(seconds: 5)),
+        1234,
+      );
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result, {'value': 'ok'});
     });
 
     test('progress notifications reset timeout for custom tokens', () async {
@@ -1136,6 +1265,48 @@ void main() {
             id: 0,
             method: 'test/method',
             meta: {'progressToken': false},
+          ),
+          (json) => TestResult(value: json['value'] as String),
+          RequestOptions(onprogress: (_) {}),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test(
+        'rejects non-finite request progress tokens when progress handler is set',
+        () async {
+      await protocol.connect(transport);
+
+      await expectLater(
+        protocol.request<TestResult>(
+          const JsonRpcRequest(
+            id: 0,
+            method: 'test/method',
+            meta: {'progressToken': double.nan},
+          ),
+          (json) => TestResult(value: json['value'] as String),
+          RequestOptions(onprogress: (_) {}),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test(
+        'rejects fractional request progress tokens when progress handler is set',
+        () async {
+      await protocol.connect(transport);
+
+      await expectLater(
+        protocol.request<TestResult>(
+          const JsonRpcRequest(
+            id: 0,
+            method: 'test/method',
+            meta: {'progressToken': 1.5},
           ),
           (json) => TestResult(value: json['value'] as String),
           RequestOptions(onprogress: (_) {}),
@@ -2566,6 +2737,57 @@ void main() {
           reason: 'Should have sent a cancellation notification',
         );
       }
+    });
+
+    test('does not send cancellation notification for initialize request',
+        () async {
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      final requestFuture = protocol
+          .request<InitializeResult>(
+            JsonRpcInitializeRequest(
+              id: 0,
+              initParams: const InitializeRequest(
+                protocolVersion: stableProtocolVersion2025_11_25,
+                capabilities: ClientCapabilities(),
+                clientInfo: Implementation(
+                  name: 'test-client',
+                  version: '1.0.0',
+                ),
+              ),
+            ),
+            InitializeResult.fromJson,
+            RequestOptions(
+              signal: controller.signal,
+              timeoutEnabled: false,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(transport.sentMessages, hasLength(1));
+      expect(
+        (transport.sentMessages.single as JsonRpcRequest).method,
+        Method.initialize,
+      );
+
+      controller.abort('User cancelled initialize');
+
+      await expectLater(
+        requestFuture,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('User cancelled initialize'),
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        transport.sentMessages.whereType<JsonRpcCancelledNotification>(),
+        isEmpty,
+      );
+      expect(transport.sentMessages, hasLength(1));
     });
 
     test('enforces strict capabilities when enabled', () {

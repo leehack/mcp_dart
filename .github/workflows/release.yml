@@ -17,7 +17,7 @@ jobs:
     permissions:
       contents: write  # Required to create tags and releases
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.RELEASE_PAT }}
       
@@ -41,27 +41,75 @@ jobs:
           echo "📦 Package: ${{ inputs.package }}"
           echo "📦 Detected version: $VERSION"
 
-      - name: Check if tag already exists
+      - name: Determine release type
+        id: release-type
         run: |
-          TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "❌ Error: Tag $TAG already exists!"
-            echo "   This version has already been released."
-            echo "   Please bump the version in pubspec.yaml first."
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "make_latest=false" >> "$GITHUB_OUTPUT"
+            echo "📦 Release type: prerelease"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "make_latest=true" >> "$GITHUB_OUTPUT"
+            echo "📦 Release type: stable"
+          fi
+
+      - name: Verify stable release source
+        if: steps.release-type.outputs.prerelease == 'false'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" != "branch" ] || [ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]; then
+            echo "❌ Stable releases must be dispatched from $DEFAULT_BRANCH."
             exit 1
           fi
-          echo "✅ Tag $TAG does not exist, proceeding..."
+          DEFAULT_SHA=$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | awk 'NR == 1 { print $1 }')
+          if [ -z "$DEFAULT_SHA" ]; then
+            echo "❌ Could not resolve origin/$DEFAULT_BRANCH."
+            exit 1
+          fi
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "$HEAD_SHA" != "$DEFAULT_SHA" ]; then
+            TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
+            TAG_REF=$(git ls-remote --tags origin "refs/tags/$TAG")
+            if [ -z "$TAG_REF" ]; then
+              echo "❌ Stable releases must use the latest origin/$DEFAULT_BRANCH commit."
+              exit 1
+            fi
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+            if [ "$HEAD_SHA" != "$TAG_COMMIT" ]; then
+              echo "❌ Stale release source does not match existing tag $TAG."
+              exit 1
+            fi
+            echo "✅ Stable release recovery matches existing tag $TAG."
+          else
+            echo "✅ Stable release source matches origin/$DEFAULT_BRANCH."
+          fi
 
-      - name: Create and push tag
+      - name: Resolve release tag
         id: create-tag
         run: |
           TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release ${{ inputs.package }} ${{ steps.get-version.outputs.version }}"
-          git push origin "$TAG"
+          TAG_REF=$(git ls-remote --tags origin "refs/tags/$TAG")
+          if [ -n "$TAG_REF" ]; then
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+            if [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
+              echo "❌ Existing tag $TAG points to $TAG_COMMIT, not $(git rev-parse HEAD)."
+              echo "   Never move or recreate a published tag; bump the version instead."
+              exit 1
+            fi
+            echo "✅ Reusing existing tag $TAG at $TAG_COMMIT."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release ${{ inputs.package }} ${{ steps.get-version.outputs.version }}"
+            git push origin "$TAG"
+            echo "🏷️ Created and pushed tag: $TAG"
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "🏷️ Created and pushed tag: $TAG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -69,4 +117,6 @@ jobs:
           tag_name: ${{ steps.create-tag.outputs.tag }}
           name: ${{ inputs.package }} ${{ steps.get-version.outputs.version }}
           generate_release_notes: true
+          prerelease: ${{ steps.release-type.outputs.prerelease }}
+          make_latest: ${{ steps.release-type.outputs.make_latest }}
           draft: false

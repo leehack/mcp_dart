@@ -52,7 +52,8 @@ class InspectPrinter {
       _logger.info('Tools:');
       for (final tool in tools.tools) {
         _logger.info(
-            '  - ${tool.name}: ${tool.description ?? "(no description)"}');
+          '  - ${tool.name}: ${tool.description ?? "(no description)"}',
+        );
         _printSchemaUsage(tool.inputSchema);
       }
     }
@@ -106,8 +107,9 @@ class InspectPrinter {
 
         final desc = value.description != null ? ' - ${value.description}' : '';
 
-        _logger
-            .info('      $key ($type${isRequired ? ', required' : ''})$desc');
+        _logger.info(
+          '      $key ($type${isRequired ? ', required' : ''})$desc',
+        );
       });
     }
   }

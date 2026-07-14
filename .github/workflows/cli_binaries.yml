@@ -14,6 +14,9 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
 jobs:
   build:
     name: Build ${{ matrix.asset }}
@@ -28,7 +31,7 @@ jobs:
             asset: mcp_dart-macos-x64
           - os: macos-14
             asset: mcp_dart-macos-arm64
-          - os: windows-latest
+          - os: windows-2025
             asset: mcp_dart-windows-x64.exe
 
     defaults:
@@ -36,7 +39,38 @@ jobs:
         working-directory: packages/mcp_dart_cli
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Verify release tag checkout
+        shell: bash
+        run: |
+          case "$RELEASE_TAG" in
+            mcp_dart_cli-v*) ;;
+            *)
+              echo "❌ Invalid CLI release tag: $RELEASE_TAG"
+              exit 1
+              ;;
+          esac
+          TAG_REF=$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")
+          if [ -z "$TAG_REF" ]; then
+            echo "❌ Remote CLI release tag does not exist: $RELEASE_TAG"
+            exit 1
+          fi
+          TAG_COMMIT=$(git rev-list -n 1 "$RELEASE_TAG")
+          if [ -z "$TAG_COMMIT" ] || [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
+            echo "❌ Checkout does not match $RELEASE_TAG."
+            exit 1
+          fi
+          PACKAGE_VERSION=$(sed -n 's/^version: //p' pubspec.yaml)
+          EXPECTED_TAG="mcp_dart_cli-v$PACKAGE_VERSION"
+          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "❌ Tag $RELEASE_TAG does not match CLI version $PACKAGE_VERSION."
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> "$GITHUB_ENV"
+          echo "✅ Building exact tag $RELEASE_TAG at $TAG_COMMIT."
 
       - uses: dart-lang/setup-dart@v1
         with:
@@ -54,10 +88,15 @@ jobs:
       - name: Smoke test executable
         shell: bash
         run: |
-          "./dist/${{ matrix.asset }}" --version
+          BINARY_VERSION=$("./dist/${{ matrix.asset }}" --version | tr -d '\r\n')
+          if [ "$BINARY_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "❌ Binary reports $BINARY_VERSION, expected $PACKAGE_VERSION."
+            exit 1
+          fi
+          echo "✅ Binary reports version $BINARY_VERSION."
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset }}
           path: packages/mcp_dart_cli/dist/${{ matrix.asset }}
@@ -68,16 +107,37 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
-      - name: Resolve release tag
-        id: tag
+      - name: Verify release tag checkout
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          case "$RELEASE_TAG" in
+            mcp_dart_cli-v*) ;;
+            *)
+              echo "❌ Invalid CLI release tag: $RELEASE_TAG"
+              exit 1
+              ;;
+          esac
+          TAG_REF=$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")
+          if [ -z "$TAG_REF" ]; then
+            echo "❌ Remote CLI release tag does not exist: $RELEASE_TAG"
+            exit 1
           fi
+          TAG_COMMIT=$(git rev-list -n 1 "$RELEASE_TAG")
+          if [ -z "$TAG_COMMIT" ] || [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
+            echo "❌ Checkout does not match $RELEASE_TAG."
+            exit 1
+          fi
+          PACKAGE_VERSION=$(sed -n 's/^version: //p' packages/mcp_dart_cli/pubspec.yaml)
+          EXPECTED_TAG="mcp_dart_cli-v$PACKAGE_VERSION"
+          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "❌ Tag $RELEASE_TAG does not match CLI version $PACKAGE_VERSION."
+            exit 1
+          fi
+          echo "✅ Attaching assets built from $RELEASE_TAG at $TAG_COMMIT."
 
       - name: Download binary artifacts
         uses: actions/download-artifact@v6
@@ -92,6 +152,6 @@ jobs:
       - name: Attach binaries
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
+          tag_name: ${{ env.RELEASE_TAG }}
           files: dist/*
           fail_on_unmatched_files: true

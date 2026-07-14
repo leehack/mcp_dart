@@ -26,6 +26,7 @@ McpServer getServer() {
       name: 'simple-streamable-http-server',
       version: '1.0.0',
     ),
+    options: const McpServerOptions(protocol: McpProtocol.stable),
   );
 
   // Register a simple tool that returns a greeting

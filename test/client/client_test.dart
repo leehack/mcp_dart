@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/client/client.dart';
+import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -40,7 +42,7 @@ void main() {
         () async {
       // Connect the client to the transport first
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -56,14 +58,14 @@ void main() {
 
     test('registerCapabilities merges capabilities', () {
       final initialCapabilities =
-          const ClientCapabilities(experimental: {'feature1': true});
+          const ClientCapabilities(experimental: {'feature1': {}});
       client = Client(
         clientInfo,
         options: McpClientOptions(capabilities: initialCapabilities),
       );
 
       final additionalCapabilities = const ClientCapabilities(
-        experimental: {'feature2': true},
+        experimental: {'feature2': {}},
         roots: ClientCapabilitiesRoots(listChanged: true),
       );
 
@@ -73,10 +75,11 @@ void main() {
       // We'll test this indirectly in other tests
     });
 
-    test('connect initializes the client with the server', () async {
+    test('connect probes default discovery before initializing a legacy server',
+        () async {
       // Setup the mock transport to respond to initialization
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
         instructions: 'Test instructions',
@@ -109,8 +112,10 @@ void main() {
       expect(transport.sentMessages.length, greaterThan(0));
       expect(transport.sentMessages.first is JsonRpcRequest, isTrue);
       expect(
-        (transport.sentMessages.first as JsonRpcRequest).method,
-        equals('initialize'),
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.serverDiscover, Method.initialize],
       );
 
       // Verify that an initialized notification was sent
@@ -122,6 +127,123 @@ void main() {
           )
           .toList();
       expect(notifications.length, equals(1));
+    });
+
+    test('explicit legacy protocol version connects directly to stable server',
+        () async {
+      final clientTransport = LinkedTransport();
+      final serverTransport = LinkedTransport();
+      clientTransport.peer = serverTransport;
+      serverTransport.peer = clientTransport;
+
+      final server = McpServer(
+        const Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+      client = McpClient(
+        clientInfo,
+        options: const McpClientOptions(protocolVersion: '2025-06-18'),
+      );
+      addTearDown(() async {
+        await client.close();
+        await server.close();
+      });
+
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getProtocolVersion(), '2025-06-18');
+      expect(
+        clientTransport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.initialize],
+      );
+    });
+
+    test('stable client recognizes a legacy-only server profile', () async {
+      final clientTransport = LinkedTransport();
+      final serverTransport = LinkedTransport();
+      clientTransport.peer = serverTransport;
+      serverTransport.peer = clientTransport;
+
+      final server = McpServer(
+        const Implementation(name: 'TestServer', version: '2.0.0'),
+        options: const McpServerOptions(protocol: McpProtocol.legacy),
+      );
+      client = McpClient(clientInfo);
+      addTearDown(() async {
+        await client.close();
+        await server.close();
+      });
+
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(
+        clientTransport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.serverDiscover, Method.initialize],
+      );
+      final discoveryError =
+          serverTransport.sentMessages.whereType<JsonRpcError>().single;
+      expect(discoveryError.error.code, ErrorCode.methodNotFound.value);
+    });
+
+    test('forced discovery retains explicit legacy fallback version', () async {
+      client = Client(
+        clientInfo,
+        options: const McpClientOptions(
+          protocolVersion: '2025-06-18',
+          useServerDiscover: true,
+        ),
+      );
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: '2025-06-18',
+        capabilities: mockServerCapabilities,
+        serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+
+      await client.connect(transport);
+
+      final requests = transport.sentMessages.whereType<JsonRpcRequest>();
+      expect(
+        requests.map((message) => message.method),
+        [Method.serverDiscover, Method.initialize],
+      );
+      final discoverRequest = requests.first;
+      expect(
+        discoverRequest.meta?[McpMetaKey.protocolVersion],
+        stableProtocolVersion2026_07_28,
+      );
+      final initializeRequest = transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((message) => message.method == Method.initialize);
+      expect(initializeRequest.params?['protocolVersion'], '2025-06-18');
+    });
+
+    test('stream client falls back when a legacy discovery probe times out',
+        () async {
+      transport.discoveryError = McpError(
+        ErrorCode.requestTimeout.value,
+        'Discovery probe timed out',
+      );
+      transport.mockInitializeResponse = InitializeResult(
+        protocolVersion: stableProtocolVersion2025_11_25,
+        capabilities: mockServerCapabilities,
+        serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
+      );
+
+      await client.connect(transport);
+
+      expect(client.getProtocolVersion(), stableProtocolVersion2025_11_25);
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.serverDiscover, Method.initialize],
+      );
     });
 
     test('connect throws if server returns unsupported protocol version',
@@ -144,7 +266,7 @@ void main() {
         () async {
       // Setup connected client with capabilities
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -167,12 +289,16 @@ void main() {
         () => client.assertCapabilityForMethod("tools/call"),
         returnsNormally,
       );
+      expect(
+        () => client.assertCapabilityForMethod(Method.subscriptionsListen),
+        returnsNormally,
+      );
 
       // Create a client with limited capabilities
       final limitedClient = Client(clientInfo);
       transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(), // No capabilities
         serverInfo: Implementation(name: 'LimitedServer', version: '1.0.0'),
       );
@@ -181,11 +307,29 @@ void main() {
       // Should throw for unsupported capabilities
       expect(
         () => limitedClient.assertCapabilityForMethod("logging/setLevel"),
-        throwsA(isA<McpError>()),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
       expect(
         () => limitedClient.assertCapabilityForMethod("prompts/list"),
-        throwsA(isA<McpError>()),
+        throwsA(
+          isA<McpError>().having(
+            (e) => e.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
+      );
+      expect(
+        () => limitedClient.assertCapabilityForMethod(
+          Method.subscriptionsListen,
+        ),
+        returnsNormally,
       );
     });
 
@@ -252,15 +396,16 @@ void main() {
 
     test('ping sends a ping request and returns EmptyResult', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
+      transport.emptyResponseMeta = {'traceId': 'ping-trace'};
       await client.connect(transport);
 
       transport.clearSentMessages();
 
-      await client.ping();
+      final result = await client.ping();
 
       // Verify a ping request was sent
       expect(transport.sentMessages.length, equals(1));
@@ -268,11 +413,12 @@ void main() {
         (transport.sentMessages.first as JsonRpcRequest).method,
         equals('ping'),
       );
+      expect(result.meta, {'traceId': 'ping-trace'});
     });
 
     test('complete sends completion request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -301,7 +447,7 @@ void main() {
 
     test('setLoggingLevel sends logging level request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -321,7 +467,7 @@ void main() {
 
     test('getPrompt sends prompt request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -342,7 +488,7 @@ void main() {
 
     test('listPrompts sends list prompts request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -362,7 +508,7 @@ void main() {
 
     test('listResources sends list resources request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -383,7 +529,7 @@ void main() {
     test('listResourceTemplates sends list resource templates request',
         () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -403,7 +549,7 @@ void main() {
 
     test('readResource sends resource read request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -424,7 +570,7 @@ void main() {
 
     test('subscribeResource sends resource subscribe request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -445,7 +591,7 @@ void main() {
 
     test('unsubscribeResource sends resource unsubscribe request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -466,7 +612,7 @@ void main() {
 
     test('callTool sends tool call request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -487,7 +633,7 @@ void main() {
 
     test('callTool sends tool call request with structured output', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -511,7 +657,7 @@ void main() {
 
     test('listTools sends list tools request', () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -532,7 +678,7 @@ void main() {
     test('sendRootsListChanged sends roots list changed notification',
         () async {
       transport.mockInitializeResponse = InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: mockServerCapabilities,
         serverInfo: const Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -558,6 +704,8 @@ void main() {
 class MockTransport extends Transport {
   final List<JsonRpcMessage> sentMessages = [];
   InitializeResult? mockInitializeResponse;
+  McpError? discoveryError;
+  Map<String, dynamic>? emptyResponseMeta;
   bool shouldThrowOnStart = false;
 
   void clearSentMessages() {
@@ -575,8 +723,24 @@ class MockTransport extends Transport {
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
 
-    // If it's an initialize request, respond with the mock response
-    if (message is JsonRpcRequest &&
+    // Simulate a legacy peer by rejecting discovery, then respond to initialize.
+    if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      final error = discoveryError;
+      if (error != null) {
+        throw error;
+      }
+      if (onmessage != null) {
+        onmessage!(
+          JsonRpcError(
+            id: message.id,
+            error: const JsonRpcErrorData(
+              code: -32601,
+              message: 'Method not found',
+            ),
+          ),
+        );
+      }
+    } else if (message is JsonRpcRequest &&
         message.method == 'initialize' &&
         mockInitializeResponse != null) {
       if (onmessage != null) {
@@ -717,7 +881,7 @@ class MockTransport extends Transport {
         onmessage!(
           JsonRpcResponse(
             id: message.id,
-            result: const EmptyResult().toJson(),
+            result: EmptyResult(meta: emptyResponseMeta).toJson(),
           ),
         );
       }
@@ -767,6 +931,57 @@ class MockTransport extends Transport {
   }
 }
 
+class LinkedTransport extends Transport {
+  final List<JsonRpcMessage> sentMessages = [];
+  LinkedTransport? peer;
+
+  void Function()? _onclose;
+  void Function(Error error)? _onerror;
+  void Function(JsonRpcMessage message)? _onmessage;
+
+  @override
+  void Function()? get onclose => _onclose;
+
+  @override
+  set onclose(void Function()? value) {
+    _onclose = value;
+  }
+
+  @override
+  void Function(Error error)? get onerror => _onerror;
+
+  @override
+  set onerror(void Function(Error error)? value) {
+    _onerror = value;
+  }
+
+  @override
+  void Function(JsonRpcMessage message)? get onmessage => _onmessage;
+
+  @override
+  set onmessage(void Function(JsonRpcMessage message)? value) {
+    _onmessage = value;
+  }
+
+  @override
+  String? get sessionId => null;
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> send(
+    JsonRpcMessage message, {
+    int? relatedRequestId,
+  }) async {
+    sentMessages.add(message);
+    scheduleMicrotask(() => peer?.onmessage?.call(message));
+  }
+
+  @override
+  Future<void> close() async {}
+}
+
 // Additional tests for uncovered critical paths
 void _addCriticalPathTests() {
   group('Client - Elicitation', () {
@@ -789,7 +1004,7 @@ void _addCriticalPathTests() {
     test('elicitation request fails when no handler registered', () async {
       // Connect client (don't set onElicitRequest handler)
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -837,7 +1052,7 @@ void _addCriticalPathTests() {
       };
 
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -871,7 +1086,7 @@ void _addCriticalPathTests() {
       };
 
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -896,7 +1111,7 @@ void _addCriticalPathTests() {
     test('resources/read requires resources capability', () async {
       // Connect with server that has NO resources capability
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(), // No resources
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -906,6 +1121,7 @@ void _addCriticalPathTests() {
         () => client.assertCapabilityForMethod('resources/read'),
         throwsA(
           isA<McpError>()
+              .having((e) => e.code, 'code', ErrorCode.methodNotFound.value)
               .having((e) => e.message, 'message', contains('resources')),
         ),
       );
@@ -913,7 +1129,7 @@ void _addCriticalPathTests() {
 
     test('resources/list requires resources capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(), // No resources
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -930,7 +1146,7 @@ void _addCriticalPathTests() {
 
     test('resources/templates/list requires resources capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -948,7 +1164,7 @@ void _addCriticalPathTests() {
     test('resources/subscribe requires subscribe capability', () async {
       // Has resources but not subscribe
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(
           resources: ServerCapabilitiesResources(), // No subscribe
         ),
@@ -970,7 +1186,7 @@ void _addCriticalPathTests() {
 
     test('resources/unsubscribe requires subscribe capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(
           resources: ServerCapabilitiesResources(),
         ),
@@ -992,7 +1208,7 @@ void _addCriticalPathTests() {
 
     test('tools/call requires tools capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(), // No tools
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1009,7 +1225,7 @@ void _addCriticalPathTests() {
 
     test('tools/list requires tools capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1026,7 +1242,7 @@ void _addCriticalPathTests() {
 
     test('completion/complete requires completions capability', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(), // No completions
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1043,7 +1259,7 @@ void _addCriticalPathTests() {
 
     test('custom method logs warning but does not throw', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );
@@ -1069,7 +1285,9 @@ void _addCriticalPathTests() {
           'roots/list',
           (request, extra) async => const ListRootsResult(roots: []),
           (id, params, meta) => JsonRpcListRootsRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.rootsList,
             if (params != null) 'params': params,
             if (meta != null) '_meta': meta,
           }),
@@ -1096,7 +1314,9 @@ void _addCriticalPathTests() {
             content: SamplingTextContent(text: 'response'),
           ),
           (id, params, meta) => JsonRpcCreateMessageRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.samplingCreateMessage,
             'params': params ?? {},
             if (meta != null) '_meta': meta,
           }),
@@ -1119,7 +1339,7 @@ void _addCriticalPathTests() {
       );
       final transport = MockTransport()
         ..mockInitializeResponse = const InitializeResult(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
         );
@@ -1159,7 +1379,7 @@ void _addCriticalPathTests() {
       expect(transport.sentMessages.single, isA<JsonRpcError>());
       final error = transport.sentMessages.single as JsonRpcError;
       expect(error.id, 'sample-1');
-      expect(error.error.code, ErrorCode.invalidRequest.value);
+      expect(error.error.code, ErrorCode.methodNotFound.value);
       expect(error.error.message, contains('sampling.tools'));
     });
 
@@ -1175,7 +1395,7 @@ void _addCriticalPathTests() {
       );
       final transport = MockTransport()
         ..mockInitializeResponse = const InitializeResult(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
         );
@@ -1213,7 +1433,7 @@ void _addCriticalPathTests() {
       expect(transport.sentMessages.single, isA<JsonRpcError>());
       final error = transport.sentMessages.single as JsonRpcError;
       expect(error.id, 7);
-      expect(error.error.code, ErrorCode.invalidRequest.value);
+      expect(error.error.code, ErrorCode.methodNotFound.value);
       expect(error.error.message, contains('sampling.tools'));
     });
 
@@ -1229,7 +1449,7 @@ void _addCriticalPathTests() {
       );
       final transport = MockTransport()
         ..mockInitializeResponse = const InitializeResult(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
         );
@@ -1285,7 +1505,9 @@ void _addCriticalPathTests() {
             content: {},
           ),
           (id, params, meta) => JsonRpcElicitRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
             'id': id,
+            'method': Method.elicitationCreate,
             'params': params ?? {},
             if (meta != null) '_meta': meta,
           }),
@@ -1326,7 +1548,7 @@ void _addCriticalPathTests() {
 
     test('custom notification logs warning but does not throw', () async {
       transport.mockInitializeResponse = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'TestServer', version: '2.0.0'),
       );

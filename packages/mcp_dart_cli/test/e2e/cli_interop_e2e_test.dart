@@ -75,29 +75,31 @@ void main() {
         p.join(cliDir.path, '.dart_tool', 'inspect-probes-ts.json'),
       );
       await probeConfig.parent.create(recursive: true);
-      await probeConfig.writeAsString(jsonEncode(<String, dynamic>{
-        'tools': <Map<String, dynamic>>[
-          <String, dynamic>{
-            'name': 'structured_echo',
-            'arguments': <String, dynamic>{'message': 'configured probe'},
+      await probeConfig.writeAsString(
+        jsonEncode(<String, dynamic>{
+          'tools': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'name': 'structured_echo',
+              'arguments': <String, dynamic>{'message': 'configured probe'},
+            },
+          ],
+          'resource': <String, dynamic>{'uri': 'resource://test'},
+          'prompt': <String, dynamic>{
+            'name': 'greeting',
+            'arguments': <String, dynamic>{'language': 'English'},
           },
-        ],
-        'resource': <String, dynamic>{'uri': 'resource://test'},
-        'prompt': <String, dynamic>{
-          'name': 'greeting',
-          'arguments': <String, dynamic>{'language': 'English'},
-        },
-        'completion': <String, dynamic>{
-          'prompt': 'greeting',
-          'argument': 'language',
-          'value': 'E',
-        },
-        'task': <String, dynamic>{
-          'tool': 'long_running',
-          'arguments': <String, dynamic>{'duration': 20},
-          'ttl': 60000,
-        },
-      }));
+          'completion': <String, dynamic>{
+            'prompt': 'greeting',
+            'argument': 'language',
+            'value': 'E',
+          },
+          'task': <String, dynamic>{
+            'tool': 'long_running',
+            'arguments': <String, dynamic>{'duration': 20},
+            'ttl': 60000,
+          },
+        }),
+      );
 
       final result = await _runCli([
         'inspect-server',
@@ -133,137 +135,144 @@ void main() {
       ]);
     });
 
-    test('inspects an official TypeScript SDK Streamable HTTP server',
-        () async {
-      if (!_requireFile(tsServer, 'compiled TypeScript server fixture')) {
-        return;
-      }
+    test(
+      'inspects an official TypeScript SDK Streamable HTTP server',
+      () async {
+        if (!_requireFile(tsServer, 'compiled TypeScript server fixture')) {
+          return;
+        }
 
-      final port = await _findOpenPort();
-      final server = await _ManagedProcess.start(
-        'node',
-        [
-          tsServer.path,
-          '--transport',
-          'http',
-          '--port',
-          '$port',
-        ],
-      );
-      try {
-        final url = Uri.parse('http://127.0.0.1:$port/mcp');
-        await _waitForHttpEndpoint(url);
-
-        final result = await _runCli([
-          'inspect-server',
-          '--json',
-          '--url',
-          url.toString(),
-        ], workingDirectory: cliDir);
-
-        _expectSuccess(result, process: server);
-        final json =
-            jsonDecode(result.stdout as String) as Map<String, dynamic>;
-        expect(json['kind'], equals('server'));
-        expect(json['passed'], isTrue);
-        expect(
-          ((json['metadata'] as Map<String, dynamic>)['transport']),
-          equals('streamable-http'),
-        );
-        final inventory = json['inventory'] as Map<String, dynamic>;
-        final tools = inventory['tools'] as List<dynamic>;
-        expect(
-          tools.map((tool) => (tool as Map<String, dynamic>)['name']),
-          containsAll(['echo', 'add', 'structured_echo']),
-        );
-        _expectChecksPass(json, [
-          'transport.streamable-http.session',
-          'transport.streamable-http.get-without-session',
-          'transport.streamable-http.bogus-session',
-          'transport.streamable-http.delete-session',
-          'resources.read',
-          'prompts.get',
-          'completion.complete',
-          'tasks.tools.call',
-        ]);
-
-        final call = await _runCli([
-          'call-tool',
-          'echo',
-          '--json',
-          '--json-args',
-          '{"message":"from http inspector"}',
-          '--url',
-          url.toString(),
-        ], workingDirectory: cliDir);
-        _expectSuccess(call, process: server);
-        final callJson =
-            jsonDecode(call.stdout as String) as Map<String, dynamic>;
-        final content = callJson['content'] as List<dynamic>;
-        expect(
-          (content.first as Map<String, dynamic>)['text'],
-          equals('from http inspector'),
-        );
-      } finally {
-        await server.stop();
-      }
-    });
-
-    test('inspects and calls a published TypeScript filesystem MCP server',
-        () async {
-      if (!_requireFile(filesystemServer, 'published filesystem MCP server')) {
-        return;
-      }
-
-      final root = await Directory.systemTemp.createTemp('mcp_fs_interop_');
-      final canonicalRoot = Directory(root.resolveSymbolicLinksSync());
-      final file = File(p.join(canonicalRoot.path, 'hello.txt'));
-      await file.writeAsString('hello from filesystem server\n');
-      try {
-        final result = await _runCli([
-          'inspect-server',
-          '--json',
-          '--',
+        final port = await _findOpenPort();
+        final server = await _ManagedProcess.start(
           'node',
-          filesystemServer.path,
-          canonicalRoot.path,
-        ], workingDirectory: cliDir);
-
-        _expectSuccess(result);
-        final json =
-            jsonDecode(result.stdout as String) as Map<String, dynamic>;
-        expect(json['kind'], equals('server'));
-        expect(json['passed'], isTrue);
-        final inventory = json['inventory'] as Map<String, dynamic>;
-        final tools = inventory['tools'] as List<dynamic>;
-        expect(
-          tools.map((tool) => (tool as Map<String, dynamic>)['name']),
-          containsAll(['read_text_file', 'list_directory']),
+          [
+            tsServer.path,
+            '--transport',
+            'http',
+            '--port',
+            '$port',
+          ],
         );
+        try {
+          final url = Uri.parse('http://127.0.0.1:$port/mcp');
+          await _waitForHttpEndpoint(url);
 
-        final call = await _runCli([
-          'call-tool',
-          'read_text_file',
-          '--json',
-          '--json-args',
-          jsonEncode(<String, dynamic>{'path': file.path}),
-          '--',
-          'node',
-          filesystemServer.path,
-          canonicalRoot.path,
-        ], workingDirectory: cliDir);
-        _expectSuccess(call);
-        final callJson =
-            jsonDecode(call.stdout as String) as Map<String, dynamic>;
-        final content = callJson['content'] as List<dynamic>;
-        expect(
-          (content.first as Map<String, dynamic>)['text'],
-          contains('hello from filesystem server'),
-        );
-      } finally {
-        await root.delete(recursive: true);
-      }
-    });
+          final result = await _runCli([
+            'inspect-server',
+            '--json',
+            '--url',
+            url.toString(),
+          ], workingDirectory: cliDir);
+
+          _expectSuccess(result, process: server);
+          final json =
+              jsonDecode(result.stdout as String) as Map<String, dynamic>;
+          expect(json['kind'], equals('server'));
+          expect(json['passed'], isTrue);
+          expect(
+            ((json['metadata'] as Map<String, dynamic>)['transport']),
+            equals('streamable-http'),
+          );
+          final inventory = json['inventory'] as Map<String, dynamic>;
+          final tools = inventory['tools'] as List<dynamic>;
+          expect(
+            tools.map((tool) => (tool as Map<String, dynamic>)['name']),
+            containsAll(['echo', 'add', 'structured_echo']),
+          );
+          _expectChecksPass(json, [
+            'transport.streamable-http.session',
+            'transport.streamable-http.get-without-session',
+            'transport.streamable-http.bogus-session',
+            'transport.streamable-http.delete-session',
+            'resources.read',
+            'prompts.get',
+            'completion.complete',
+            'tasks.tools.call',
+          ]);
+
+          final call = await _runCli([
+            'call-tool',
+            'echo',
+            '--json',
+            '--json-args',
+            '{"message":"from http inspector"}',
+            '--url',
+            url.toString(),
+          ], workingDirectory: cliDir);
+          _expectSuccess(call, process: server);
+          final callJson =
+              jsonDecode(call.stdout as String) as Map<String, dynamic>;
+          final content = callJson['content'] as List<dynamic>;
+          expect(
+            (content.first as Map<String, dynamic>)['text'],
+            equals('from http inspector'),
+          );
+        } finally {
+          await server.stop();
+        }
+      },
+    );
+
+    test(
+      'inspects and calls a published TypeScript filesystem MCP server',
+      () async {
+        if (!_requireFile(
+          filesystemServer,
+          'published filesystem MCP server',
+        )) {
+          return;
+        }
+
+        final root = await Directory.systemTemp.createTemp('mcp_fs_interop_');
+        final canonicalRoot = Directory(root.resolveSymbolicLinksSync());
+        final file = File(p.join(canonicalRoot.path, 'hello.txt'));
+        await file.writeAsString('hello from filesystem server\n');
+        try {
+          final result = await _runCli([
+            'inspect-server',
+            '--json',
+            '--',
+            'node',
+            filesystemServer.path,
+            canonicalRoot.path,
+          ], workingDirectory: cliDir);
+
+          _expectSuccess(result);
+          final json =
+              jsonDecode(result.stdout as String) as Map<String, dynamic>;
+          expect(json['kind'], equals('server'));
+          expect(json['passed'], isTrue);
+          final inventory = json['inventory'] as Map<String, dynamic>;
+          final tools = inventory['tools'] as List<dynamic>;
+          expect(
+            tools.map((tool) => (tool as Map<String, dynamic>)['name']),
+            containsAll(['read_text_file', 'list_directory']),
+          );
+
+          final call = await _runCli([
+            'call-tool',
+            'read_text_file',
+            '--json',
+            '--json-args',
+            jsonEncode(<String, dynamic>{'path': file.path}),
+            '--',
+            'node',
+            filesystemServer.path,
+            canonicalRoot.path,
+          ], workingDirectory: cliDir);
+          _expectSuccess(call);
+          final callJson =
+              jsonDecode(call.stdout as String) as Map<String, dynamic>;
+          final content = callJson['content'] as List<dynamic>;
+          expect(
+            (content.first as Map<String, dynamic>)['text'],
+            contains('hello from filesystem server'),
+          );
+        } finally {
+          await root.delete(recursive: true);
+        }
+      },
+    );
 
     test('calls a tool on an official Python SDK server', () async {
       if (!_requireFile(pythonServer, 'Python server fixture')) {
@@ -348,29 +357,31 @@ void main() {
       );
     });
 
-    test('serves a Dart project to an official TypeScript SDK client',
-        () async {
-      if (!_requireFile(tsClient, 'compiled TypeScript client fixture')) {
-        return;
-      }
-      await _prepareDartFixture(dartFixture);
+    test(
+      'serves a Dart project to an official TypeScript SDK client',
+      () async {
+        if (!_requireFile(tsClient, 'compiled TypeScript client fixture')) {
+          return;
+        }
+        await _prepareDartFixture(dartFixture);
 
-      final result = await Process.run(
-        'node',
-        [
-          tsClient.path,
-          '--server-command',
-          'dart',
-          '--server-args',
-          'run mcp_dart_cli:mcp_dart serve',
-          '--server-cwd',
-          dartFixture.path,
-        ],
-      );
+        final result = await Process.run(
+          'node',
+          [
+            tsClient.path,
+            '--server-command',
+            'dart',
+            '--server-args',
+            'run mcp_dart_cli:mcp_dart serve',
+            '--server-cwd',
+            dartFixture.path,
+          ],
+        );
 
-      _expectSuccess(result);
-      expect(result.stdout, contains('typescript client interop passed'));
-    });
+        _expectSuccess(result);
+        expect(result.stdout, contains('typescript client interop passed'));
+      },
+    );
 
     test('traces an official TypeScript SDK client/server session', () async {
       if (!_requireFile(tsClient, 'compiled TypeScript client fixture') ||
@@ -556,8 +567,9 @@ Directory _findRepoRoot(Directory start) {
   var current = start.absolute;
   while (current.path != current.parent.path) {
     if (File(p.join(current.path, 'AGENTS.md')).existsSync() &&
-        Directory(p.join(current.path, 'packages', 'mcp_dart_cli'))
-            .existsSync()) {
+        Directory(
+          p.join(current.path, 'packages', 'mcp_dart_cli'),
+        ).existsSync()) {
       return current;
     }
     current = current.parent;
@@ -586,11 +598,12 @@ Future<void> _prepareDartFixture(Directory fixture) async {
 }
 
 Future<String?> _pythonWithMcpSdk() async {
-  for (final candidate in [
-    Platform.environment['PYTHON'],
-    'python3',
-    'python',
-  ].whereType<String>()) {
+  for (final candidate
+      in [
+        Platform.environment['PYTHON'],
+        'python3',
+        'python',
+      ].whereType<String>()) {
     final ProcessResult result;
     try {
       result = await Process.run(
@@ -615,9 +628,10 @@ Future<String?> _pythonWithMcpSdk() async {
 
 Future<File> _pythonConsoleScript(String python, String scriptName) async {
   final pythonFile = File(python);
-  final siblingNames = Platform.isWindows
-      ? <String>['$scriptName.exe', '$scriptName.cmd', scriptName]
-      : <String>[scriptName];
+  final siblingNames =
+      Platform.isWindows
+          ? <String>['$scriptName.exe', '$scriptName.cmd', scriptName]
+          : <String>[scriptName];
   for (final siblingName in siblingNames) {
     final candidate = File(p.join(pythonFile.parent.path, siblingName));
     if (candidate.existsSync()) {
@@ -661,12 +675,14 @@ Future<void> _waitForHttpEndpoint(Uri uri) async {
   for (var attempt = 0; attempt < 50; attempt += 1) {
     final client = HttpClient();
     try {
-      final request = await client.getUrl(uri).timeout(
+      final request = await client
+          .getUrl(uri)
+          .timeout(
             const Duration(milliseconds: 500),
           );
       final response = await request.close().timeout(
-            const Duration(milliseconds: 500),
-          );
+        const Duration(milliseconds: 500),
+      );
       await response.drain<void>();
       client.close(force: true);
       return;
@@ -690,9 +706,10 @@ bool _requireFile(File file, String description) {
 }
 
 void _expectChecksPass(Map<String, dynamic> report, List<String> ids) {
-  final checks = (report['checks'] as List<dynamic>)
-      .map((check) => (check as Map).cast<String, dynamic>())
-      .toList();
+  final checks =
+      (report['checks'] as List<dynamic>)
+          .map((check) => (check as Map).cast<String, dynamic>())
+          .toList();
   for (final id in ids) {
     expect(
       checks,
@@ -744,10 +761,12 @@ class _ManagedProcess {
     final process = await Process.start(executable, arguments);
     final stdout = StringBuffer();
     final stderr = StringBuffer();
-    final stdoutSubscription =
-        process.stdout.transform(utf8.decoder).listen(stdout.write);
-    final stderrSubscription =
-        process.stderr.transform(utf8.decoder).listen(stderr.write);
+    final stdoutSubscription = process.stdout
+        .transform(utf8.decoder)
+        .listen(stdout.write);
+    final stderrSubscription = process.stderr
+        .transform(utf8.decoder)
+        .listen(stderr.write);
     return _ManagedProcess._(
       process,
       stdoutSubscription,

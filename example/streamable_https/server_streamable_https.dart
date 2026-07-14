@@ -59,6 +59,7 @@ McpServer getServer() {
       name: 'simple-streamable-http-server',
       version: '1.0.0',
     ),
+    options: const McpServerOptions(protocol: McpProtocol.stable),
   );
 
   // Register a simple tool that returns a greeting
@@ -324,14 +325,18 @@ void main() async {
   }
 }
 
-// Function to check if a request is an initialization request
 bool isInitializeRequest(dynamic body) {
-  if (body is Map<String, dynamic> &&
-      body.containsKey('method') &&
-      body['method'] == 'initialize') {
-    return true;
-  }
-  return false;
+  return body is Map<String, dynamic> && body['method'] == Method.initialize;
+}
+
+bool isStatelessRequest(HttpRequest request) {
+  final protocolVersion = request.headers.value('mcp-protocol-version');
+  return protocolVersion != null &&
+      isStatelessProtocolVersion(protocolVersion.trim());
+}
+
+bool canHandleSessionlessPost(HttpRequest request, dynamic body) {
+  return isInitializeRequest(body) || isStatelessRequest(request);
 }
 
 // Handle POST requests
@@ -354,8 +359,8 @@ Future<void> handlePostRequest(
     if (sessionId != null && transports.containsKey(sessionId)) {
       // Reuse existing transport
       transport = transports[sessionId]!;
-    } else if (sessionId == null && isInitializeRequest(body)) {
-      // New initialization request
+    } else if (sessionId == null && canHandleSessionlessPost(request, body)) {
+      // New legacy session request or stateless 2026 request
       final eventStore = InMemoryEventStore();
       transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
@@ -384,13 +389,16 @@ Future<void> handlePostRequest(
       final server = getServer();
       await server.connect(transport);
 
-      print('Handling initialization request for a new session');
+      final method =
+          body is Map<String, dynamic> ? body['method'] : '<unknown>';
+      print('Handling sessionless request: $method');
       await transport.handleRequest(request, body);
       return; // Already handled
     } else {
-      // Invalid request - no session ID or not initialization request
+      // Invalid request - unknown session ID or non-initialize legacy request
       request.response
-        ..statusCode = HttpStatus.badRequest
+        ..statusCode =
+            sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound
         ..headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       // Apply CORS headers to this specific response
       setCorsHeaders(request);
@@ -400,8 +408,9 @@ Future<void> handlePostRequest(
             id: null,
             error: JsonRpcErrorData(
               code: ErrorCode.connectionClosed.value,
-              message:
-                  'Bad Request: No valid session ID provided or not an initialization request',
+              message: sessionId == null
+                  ? 'Bad Request: sessionless requests must be initialize or include a stateless MCP-Protocol-Version'
+                  : 'Session not found',
             ),
           ).toJson(),
         ),
@@ -453,11 +462,12 @@ Future<void> handleGetRequest(
 ) async {
   final sessionId = request.headers.value('mcp-session-id');
   if (sessionId == null || !transports.containsKey(sessionId)) {
-    request.response.statusCode = HttpStatus.badRequest;
+    request.response.statusCode =
+        sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound;
     // Apply CORS headers
     setCorsHeaders(request);
     request.response
-      ..write('Invalid or missing session ID')
+      ..write(sessionId == null ? 'Missing session ID' : 'Session not found')
       ..close();
     return;
   }
@@ -481,11 +491,12 @@ Future<void> handleDeleteRequest(
 ) async {
   final sessionId = request.headers.value('mcp-session-id');
   if (sessionId == null || !transports.containsKey(sessionId)) {
-    request.response.statusCode = HttpStatus.badRequest;
+    request.response.statusCode =
+        sessionId == null ? HttpStatus.badRequest : HttpStatus.notFound;
     // Apply CORS headers
     setCorsHeaders(request);
     request.response
-      ..write('Invalid or missing session ID')
+      ..write(sessionId == null ? 'Missing session ID' : 'Session not found')
       ..close();
     return;
   }

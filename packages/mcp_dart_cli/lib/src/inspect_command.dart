@@ -96,9 +96,10 @@ class InspectCommand extends Command<int> {
 
     // Parse wait time - default to 500ms for HTTP connections to allow notifications to arrive
     final isHttpConnection = urlStr != null;
-    final waitMs = waitStr != null
-        ? int.tryParse(waitStr) ?? (isHttpConnection ? 500 : 0)
-        : (isHttpConnection ? 500 : 0);
+    final waitMs =
+        waitStr != null
+            ? int.tryParse(waitStr) ?? (isHttpConnection ? 500 : 0)
+            : (isHttpConnection ? 500 : 0);
 
     final envMap = _parseEnvArgs();
     final itemArgs = _parseJsonArgs(jsonArgsStr);
@@ -147,8 +148,9 @@ class InspectCommand extends Command<int> {
     }
 
     if (urlStr != null) {
-      _logger
-          .err('Cannot specify positional command arguments when using --url.');
+      _logger.err(
+        'Cannot specify positional command arguments when using --url.',
+      );
       return null;
     }
 
@@ -220,7 +222,8 @@ class InspectCommand extends Command<int> {
     } else {
       if (serverArgs.isNotEmpty || envMap.isNotEmpty) {
         _logger.info(
-            "Using local project. --server-args and --env are ignored for local project runner.");
+          "Using local project. --server-args and --env are ignored for local project runner.",
+        );
       }
       return McpConnection.connectToLocalProject(
         _logger,
@@ -230,11 +233,15 @@ class InspectCommand extends Command<int> {
   }
 
   Future<void> _executeTool(
-      McpClient client, String name, Map<String, dynamic> args) async {
+    McpClient client,
+    String name,
+    Map<String, dynamic> args,
+  ) async {
     _logger.info('Executing tool: $name...');
     try {
-      final result =
-          await client.callTool(CallToolRequest(name: name, arguments: args));
+      final result = await client.callTool(
+        CallToolRequest(name: name, arguments: args),
+      );
       _printer.printToolResult(result);
     } catch (e) {
       _logger.err('Tool execution failed: $e');
@@ -252,12 +259,16 @@ class InspectCommand extends Command<int> {
   }
 
   Future<void> _getPrompt(
-      McpClient client, String name, Map<String, dynamic> args) async {
+    McpClient client,
+    String name,
+    Map<String, dynamic> args,
+  ) async {
     _logger.info('Getting prompt: $name...');
     try {
       final stringArgs = args.map((k, v) => MapEntry(k, v.toString()));
-      final result = await client
-          .getPrompt(GetPromptRequest(name: name, arguments: stringArgs));
+      final result = await client.getPrompt(
+        GetPromptRequest(name: name, arguments: stringArgs),
+      );
       _printer.printPromptResult(result);
     } catch (e) {
       _logger.err('Get prompt failed: $e');
@@ -267,15 +278,18 @@ class InspectCommand extends Command<int> {
   Future<void> _listCapabilities(McpClient client) async {
     try {
       final capabilities = client.getServerCapabilities();
-      final tools = capabilities?.tools != null
-          ? await client.listTools()
-          : const ListToolsResult(tools: []);
-      final resources = capabilities?.resources != null
-          ? await client.listResources()
-          : const ListResourcesResult(resources: []);
-      final prompts = capabilities?.prompts != null
-          ? await client.listPrompts()
-          : const ListPromptsResult(prompts: []);
+      final tools =
+          capabilities?.tools != null
+              ? await client.listTools()
+              : const ListToolsResult(tools: []);
+      final resources =
+          capabilities?.resources != null
+              ? await client.listResources()
+              : const ListResourcesResult(resources: []);
+      final prompts =
+          capabilities?.prompts != null
+              ? await client.listPrompts()
+              : const ListPromptsResult(prompts: []);
       _printer.printCapabilities(tools, resources, prompts);
     } catch (e) {
       _logger.err('Failed to list capabilities: $e');

@@ -77,7 +77,7 @@ void main() {
         elicitation: ClientElicitation.formOnly(),
       );
       final initParams = InitializeRequestParams(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: clientCaps,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
       );
@@ -119,7 +119,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ),
@@ -185,7 +185,13 @@ void main() {
           return const EmptyResult();
         },
         (id, params, meta) => JsonRpcCallToolRequest.fromJson(
-          {'id': id, 'params': params, '_meta': meta},
+          {
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': Method.toolsCall,
+            'params': params,
+            '_meta': meta,
+          },
         ),
       );
 
@@ -196,7 +202,7 @@ void main() {
         JsonRpcInitializeRequest(
           id: 1,
           initParams: const InitializeRequestParams(
-            protocolVersion: latestProtocolVersion,
+            protocolVersion: stableProtocolVersion2025_11_25,
             capabilities: ClientCapabilities(),
             clientInfo: Implementation(name: 'Client', version: '1.0'),
           ),
@@ -234,7 +240,7 @@ void main() {
         elicitation: ClientElicitation.all(),
       );
       final initParams = InitializeRequestParams(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: clientCaps,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
       );

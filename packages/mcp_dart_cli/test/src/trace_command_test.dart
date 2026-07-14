@@ -84,22 +84,19 @@ void main() {
       final tempDir = await Directory.systemTemp.createTemp('trace_timeout_');
       addTearDown(() => tempDir.delete(recursive: true));
       final report = File('${tempDir.path}/trace.json');
-      final process = await Process.start(
-          'dart',
-          <String>[
-            'run',
-            'bin/mcp_dart.dart',
-            'trace',
-            '--report',
-            report.path,
-            '--max-runtime-ms',
-            '100',
-            '--',
-            'dart',
-            'run',
-            'test/fixtures/hanging_process.dart',
-          ],
-          workingDirectory: Directory.current.path);
+      final process = await Process.start('dart', <String>[
+        'run',
+        'bin/mcp_dart.dart',
+        'trace',
+        '--report',
+        report.path,
+        '--max-runtime-ms',
+        '100',
+        '--',
+        'dart',
+        'run',
+        'test/fixtures/hanging_process.dart',
+      ], workingDirectory: Directory.current.path);
 
       await process.stdout.drain<void>();
       await process.stderr.drain<void>();
@@ -198,22 +195,19 @@ void main() {
         final tempDir = await Directory.systemTemp.createTemp('trace_pipe_');
         addTearDown(() => tempDir.delete(recursive: true));
         final report = File('${tempDir.path}/trace.json');
-        final process = await Process.start(
-            'dart',
-            <String>[
-              'run',
-              'bin/mcp_dart.dart',
-              'trace',
-              '--report',
-              report.path,
-              '--max-runtime-ms',
-              '2000',
-              '--',
-              'dart',
-              'run',
-              'test/fixtures/raw_stdio_server.dart',
-            ],
-            workingDirectory: Directory.current.path);
+        final process = await Process.start('dart', <String>[
+          'run',
+          'bin/mcp_dart.dart',
+          'trace',
+          '--report',
+          report.path,
+          '--max-runtime-ms',
+          '2000',
+          '--',
+          'dart',
+          'run',
+          'test/fixtures/raw_stdio_server.dart',
+        ], workingDirectory: Directory.current.path);
 
         process.stdin.writeln(
           jsonEncode(<String, dynamic>{

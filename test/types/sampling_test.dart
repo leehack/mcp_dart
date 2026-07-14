@@ -1,4 +1,6 @@
 import 'package:mcp_dart/src/types/content.dart';
+import 'package:mcp_dart/src/types/json_value.dart';
+import 'package:mcp_dart/src/types/json_rpc.dart';
 import 'package:mcp_dart/src/types/sampling.dart';
 import 'package:test/test.dart';
 
@@ -19,6 +21,13 @@ void main() {
       final json = {'name': 'gemini-pro'};
       final hint = ModelHint.fromJson(json);
       expect(hint.name, equals('gemini-pro'));
+    });
+
+    test('rejects malformed wire fields', () {
+      expect(
+        () => ModelHint.fromJson({'name': 1}),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -76,6 +85,34 @@ void main() {
       expect(prefs.hints, isNull);
       expect(prefs.costPriority, isNull);
     });
+
+    test('rejects non-finite priorities', () {
+      for (final value in [double.nan, double.infinity]) {
+        expect(
+          () => ModelPreferences.fromJson({'costPriority': value}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => ModelPreferences(costPriority: value).toJson(),
+          throwsA(anyOf(isA<AssertionError>(), isA<ArgumentError>())),
+        );
+      }
+    });
+
+    test('rejects malformed hint lists', () {
+      expect(
+        () => ModelPreferences.fromJson({'hints': 'model-a'}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => ModelPreferences.fromJson({
+          'hints': [
+            {'name': 1},
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('SamplingContent', () {
@@ -94,76 +131,239 @@ void main() {
       });
 
       test('fromJson parses correctly', () {
-        final json = {'type': 'text', 'text': 'Parsed text'};
+        final json = {
+          'type': 'text',
+          'text': 'Parsed text',
+          'annotations': {
+            'audience': ['user'],
+            'vendor': {'hint': true},
+          },
+        };
         final content = SamplingContent.fromJson(json);
         expect(content, isA<SamplingTextContent>());
-        expect((content as SamplingTextContent).text, equals('Parsed text'));
+        final text = content as SamplingTextContent;
+        expect(text.text, equals('Parsed text'));
+        expect(text.annotations?['vendor'], equals({'hint': true}));
+      });
+
+      test('validates shared annotation fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'text',
+            'text': 'Parsed text',
+            'annotations': {
+              'audience': ['model'],
+            },
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingTextContent(
+            text: 'Parsed text',
+            annotations: {
+              'priority': 2,
+            },
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('rejects malformed text wire fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 1,
+            'text': 'Parsed text',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'text',
+            'text': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingTextContent.fromJson({
+            'text': 'Parsed text',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingTextContent.fromJson({
+            'type': 'image',
+            'text': 'Parsed text',
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
 
     group('SamplingImageContent', () {
       test('constructs correctly', () {
+        const imageData = 'YmFzZTY0ZGF0YQ==';
         const content =
-            SamplingImageContent(data: 'base64data', mimeType: 'image/png');
-        expect(content.data, equals('base64data'));
+            SamplingImageContent(data: imageData, mimeType: 'image/png');
+        expect(content.data, equals(imageData));
         expect(content.mimeType, equals('image/png'));
       });
 
       test('toJson serializes correctly', () {
+        const imageData = 'aW1nZGF0YQ==';
         const content =
-            SamplingImageContent(data: 'imgdata', mimeType: 'image/jpeg');
+            SamplingImageContent(data: imageData, mimeType: 'image/jpeg');
         final json = content.toJson();
         expect(json['type'], equals('image'));
-        expect(json['data'], equals('imgdata'));
+        expect(json['data'], equals(imageData));
         expect(json['mimeType'], equals('image/jpeg'));
       });
 
       test('fromJson parses correctly', () {
+        const imageData = 'ZW5jb2RlZA==';
         final json = {
           'type': 'image',
-          'data': 'encoded',
+          'data': imageData,
           'mimeType': 'image/gif',
+          'annotations': {
+            'audience': ['assistant'],
+          },
         };
         final content = SamplingContent.fromJson(json);
         expect(content, isA<SamplingImageContent>());
         final img = content as SamplingImageContent;
-        expect(img.data, equals('encoded'));
+        expect(img.data, equals(imageData));
         expect(img.mimeType, equals('image/gif'));
+        expect(img.annotations?['audience'], equals(['assistant']));
+      });
+
+      test('validates base64 byte data', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'image',
+            'data': 'not base64!',
+            'mimeType': 'image/png',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingImageContent(
+            data: 'not base64!',
+            mimeType: 'image/png',
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('rejects malformed image wire fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'image',
+            'data': 'aW1nZGF0YQ==',
+            'mimeType': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingImageContent.fromJson({
+            'data': 'aW1nZGF0YQ==',
+            'mimeType': 'image/png',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingImageContent.fromJson({
+            'type': 'text',
+            'data': 'aW1nZGF0YQ==',
+            'mimeType': 'image/png',
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
 
     group('SamplingAudioContent', () {
       test('constructs correctly', () {
+        const audioData = 'YmFzZTY0YXVkaW8=';
         const content = SamplingAudioContent(
-          data: 'base64audio',
+          data: audioData,
           mimeType: 'audio/wav',
         );
-        expect(content.data, equals('base64audio'));
+        expect(content.data, equals(audioData));
         expect(content.mimeType, equals('audio/wav'));
       });
 
       test('toJson serializes correctly', () {
+        const audioData = 'YXVkaW8tZGF0YQ==';
         const content = SamplingAudioContent(
-          data: 'audio-data',
+          data: audioData,
           mimeType: 'audio/mpeg',
         );
         final json = content.toJson();
         expect(json['type'], equals('audio'));
-        expect(json['data'], equals('audio-data'));
+        expect(json['data'], equals(audioData));
         expect(json['mimeType'], equals('audio/mpeg'));
       });
 
       test('fromJson parses correctly', () {
+        const audioData = 'ZW5jb2RlZC1hdWRpbw==';
         final json = {
           'type': 'audio',
-          'data': 'encoded-audio',
+          'data': audioData,
           'mimeType': 'audio/ogg',
+          'annotations': {
+            'priority': 0.2,
+          },
         };
         final content = SamplingContent.fromJson(json);
         expect(content, isA<SamplingAudioContent>());
         final audio = content as SamplingAudioContent;
-        expect(audio.data, equals('encoded-audio'));
+        expect(audio.data, equals(audioData));
         expect(audio.mimeType, equals('audio/ogg'));
+        expect(audio.annotations?['priority'], equals(0.2));
+      });
+
+      test('validates base64 byte data', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'audio',
+            'data': 'not base64!',
+            'mimeType': 'audio/wav',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingAudioContent(
+            data: 'not base64!',
+            mimeType: 'audio/wav',
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('rejects malformed audio wire fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'audio',
+            'data': 'YXVkaW8tZGF0YQ==',
+            'mimeType': 1,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingAudioContent.fromJson({
+            'data': 'YXVkaW8tZGF0YQ==',
+            'mimeType': 'audio/wav',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingAudioContent.fromJson({
+            'type': 'image',
+            'data': 'YXVkaW8tZGF0YQ==',
+            'mimeType': 'audio/wav',
+          }),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
 
@@ -204,6 +404,64 @@ void main() {
         expect(tool.name, equals('fetch'));
         expect(tool.id, equals('tu1'));
       });
+
+      test('rejects non-JSON input objects', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_use',
+            'id': 'tu1',
+            'name': 'fetch',
+            'input': {1: 'bad'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingToolUseContent(
+            id: 'tu1',
+            name: 'fetch',
+            input: {'bad': Object()},
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('rejects malformed tool use wire fields', () {
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_use',
+            'id': 1,
+            'name': 'fetch',
+            'input': {'url': 'http://test.com'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_use',
+            'id': 'tu1',
+            'name': 1,
+            'input': {'url': 'http://test.com'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolUseContent.fromJson({
+            'id': 'tu1',
+            'name': 'fetch',
+            'input': {'url': 'http://test.com'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolUseContent.fromJson({
+            'type': 'tool_result',
+            'id': 'tu1',
+            'name': 'fetch',
+            'input': {'url': 'http://test.com'},
+          }),
+          throwsA(isA<FormatException>()),
+        );
+      });
     });
 
     group('SamplingToolResultContent', () {
@@ -235,6 +493,30 @@ void main() {
         expect((json['content'] as List).first['type'], equals('text'));
       });
 
+      test('toJson preserves arbitrary structured JSON values', () {
+        final content = SamplingToolResultContent(
+          toolUseId: 'res1',
+          content: [
+            const TextContent(text: 'array result'),
+          ],
+          structuredContentJson: JsonValue.array(['alpha', 'beta']),
+        );
+        final json = content.toJson();
+        expect(json['structuredContent'], equals(['alpha', 'beta']));
+
+        const nullContent = SamplingToolResultContent(
+          toolUseId: 'res2',
+          content: [
+            TextContent(text: 'null result'),
+          ],
+          structuredContentJson: JsonValue.nullValue,
+          hasStructuredContent: true,
+        );
+        final nullJson = nullContent.toJson();
+        expect(nullJson.containsKey('structuredContent'), isTrue);
+        expect(nullJson['structuredContent'], isNull);
+      });
+
       test('fromJson parses correctly', () {
         final json = {
           'type': 'tool_result',
@@ -253,6 +535,83 @@ void main() {
         expect(result.structuredContent, equals({'status': 'ok'}));
         expect(result.content, hasLength(1));
         expect(result.content.first, isA<TextContent>());
+      });
+
+      test('fromJson parses arbitrary structured JSON values', () {
+        final json = {
+          'type': 'tool_result',
+          'toolUseId': 'tr1',
+          'content': [
+            {'type': 'text', 'text': 'result data'},
+          ],
+          'structuredContent': ['alpha', 'beta'],
+        };
+        final content = SamplingContent.fromJson(json);
+        expect(content, isA<SamplingToolResultContent>());
+        final result = content as SamplingToolResultContent;
+        expect(result.hasStructuredContent, isTrue);
+        expect(
+          result.structuredContentJson?.toJson(),
+          equals(['alpha', 'beta']),
+        );
+
+        final nullJson = {
+          'type': 'tool_result',
+          'toolUseId': 'tr2',
+          'content': [
+            {'type': 'text', 'text': 'result data'},
+          ],
+          'structuredContent': null,
+        };
+        final nullContent =
+            SamplingContent.fromJson(nullJson) as SamplingToolResultContent;
+        expect(nullContent.hasStructuredContent, isTrue);
+        expect(nullContent.structuredContentJson?.toJson(), isNull);
+      });
+
+      test('rejects malformed tool result wire fields', () {
+        final content = [
+          {'type': 'text', 'text': 'result data'},
+        ];
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_result',
+            'toolUseId': 1,
+            'content': content,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingContent.fromJson({
+            'type': 'tool_result',
+            'toolUseId': 'tr1',
+            'content': content,
+            'isError': 'false',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'toolUseId': 'tr1',
+            'content': content,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => SamplingToolResultContent.fromJson({
+            'type': 'tool_use',
+            'toolUseId': 'tr1',
+            'content': content,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => const SamplingToolResultContent(
+            toolUseId: 'tr1',
+            content: {1: 'bad'},
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
       });
     });
   });
@@ -288,6 +647,23 @@ void main() {
       expect(msg.content, isA<SamplingTextContent>());
     });
 
+    test('validates role wire values', () {
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'system',
+          'content': {'type': 'text', 'text': 'Question'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 1,
+          'content': {'type': 'text', 'text': 'Question'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('supports array content with normalized contentBlocks', () {
       final msg = const SamplingMessage(
         role: SamplingMessageRole.assistant,
@@ -300,6 +676,25 @@ void main() {
       expect(msg.content, isA<List<SamplingContent>>());
       expect(msg.contentBlocks, hasLength(2));
       expect(msg.toJson()['content'], isA<List>());
+    });
+
+    test('rejects non-JSON metadata objects', () {
+      expect(
+        () => SamplingMessage.fromJson({
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+          '_meta': {1: 'bad'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const SamplingMessage(
+          role: SamplingMessageRole.user,
+          content: SamplingTextContent(text: 'Hello'),
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -388,6 +783,211 @@ void main() {
       expect(params.maxTokens, equals(200));
       expect(params.includeContext, equals(IncludeContext.allServers));
     });
+
+    test('validates enum wire fields', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'includeContext': 'nearbyServers',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'includeContext': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'toolChoice': {'mode': 'sometimes'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'toolChoice': {'mode': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const CreateMessageRequestParams(
+          messages: [
+            SamplingMessage(
+              role: SamplingMessageRole.user,
+              content: SamplingTextContent(text: 'Hello'),
+            ),
+          ],
+          maxTokens: 100,
+          toolChoice: {1: 'required'},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('validates string wire fields', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'systemPrompt': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'stopSequences': 'STOP',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'stopSequences': ['STOP', 1],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('validates tool wire fields', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'tools': 'bad',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'tools': [1],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('accepts whole-number JSON maxTokens values', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+
+      final params = CreateMessageRequestParams.fromJson({
+        'messages': messages,
+        'maxTokens': 100.0,
+      });
+
+      expect(params.maxTokens, 100);
+      expect(params.toJson()['maxTokens'], 100);
+
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100.5,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-finite temperature values', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      for (final value in [double.nan, double.infinity]) {
+        expect(
+          () => CreateMessageRequestParams.fromJson({
+            'messages': messages,
+            'maxTokens': 100,
+            'temperature': value,
+          }),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => CreateMessageRequestParams(
+            messages: const [
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: SamplingTextContent(text: 'Hello'),
+              ),
+            ],
+            maxTokens: 100,
+            temperature: value,
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      }
+    });
+
+    test('rejects non-JSON metadata objects', () {
+      final messages = [
+        {
+          'role': 'user',
+          'content': {'type': 'text', 'text': 'Hello'},
+        },
+      ];
+      expect(
+        () => CreateMessageRequestParams.fromJson({
+          'messages': messages,
+          'maxTokens': 100,
+          'metadata': {1: 'bad'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const CreateMessageRequestParams(
+          messages: [
+            SamplingMessage(
+              role: SamplingMessageRole.user,
+              content: SamplingTextContent(text: 'Hello'),
+            ),
+          ],
+          maxTokens: 100,
+          metadata: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('CreateMessageResult', () {
@@ -452,6 +1052,57 @@ void main() {
       final result = CreateMessageResult.fromJson(json);
       expect(result.stopReason, equals('customReason'));
     });
+
+    test('validates role wire values', () {
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'system',
+          'content': {'type': 'text', 'text': 'Msg'},
+          'model': 'model-x',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 1,
+          'content': {'type': 'text', 'text': 'Msg'},
+          'model': 'model-x',
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('validates model wire field', () {
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Msg'},
+          'model': 1,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-JSON metadata objects', () {
+      expect(
+        () => CreateMessageResult.fromJson({
+          'role': 'assistant',
+          'content': {'type': 'text', 'text': 'Message'},
+          'model': 'model-x',
+          '_meta': {1: 'bad'},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const CreateMessageResult(
+          role: SamplingMessageRole.assistant,
+          content: SamplingTextContent(text: 'Message'),
+          model: 'model-x',
+          meta: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('JsonRpcCreateMessageRequest', () {
@@ -502,6 +1153,68 @@ void main() {
         () => JsonRpcCreateMessageRequest.fromJson(json),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('fromJson rejects non-object params', () {
+      final json = {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'sampling/createMessage',
+        'params': 'bad',
+      };
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('fromJson rejects wrong wrapper constants', () {
+      final params = {
+        'messages': [
+          {
+            'role': 'user',
+            'content': {'type': 'text', 'text': 'Question'},
+          },
+        ],
+        'maxTokens': 100,
+      };
+
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.samplingCreateMessage,
+          'params': params,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcCreateMessageRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.elicitationCreate,
+          'params': params,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('embedded input requests do not require JSON-RPC wrapper fields', () {
+      final request = InputRequest.fromJson({
+        'method': Method.samplingCreateMessage,
+        'params': {
+          'messages': [
+            {
+              'role': 'user',
+              'content': {'type': 'text', 'text': 'Question'},
+            },
+          ],
+          'maxTokens': 100,
+        },
+      });
+
+      expect(request.method, Method.samplingCreateMessage);
+      expect(request.createMessageParams.maxTokens, 100);
     });
   });
 

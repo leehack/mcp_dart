@@ -1,5 +1,31 @@
 import '../types.dart';
 import 'json_rpc.dart';
+import 'validation.dart';
+
+void _expectJsonRpcMethod(
+  Map<String, dynamic> json,
+  String expected,
+  String context,
+) {
+  expectJsonRpcMethod(json, expected, context);
+}
+
+List<T>? _readOptionalObjectList<T>(
+  Object? value,
+  String field,
+  T Function(Map<String, dynamic> json) fromJson,
+) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! List) {
+    throw FormatException('$field must be a list of objects');
+  }
+  return [
+    for (var i = 0; i < value.length; i++)
+      fromJson(readJsonObject(value[i], '$field[$i]')),
+  ];
+}
 
 /// Describes an argument accepted by a prompt template.
 class PromptArgument {
@@ -24,10 +50,13 @@ class PromptArgument {
 
   factory PromptArgument.fromJson(Map<String, dynamic> json) {
     return PromptArgument(
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      required: json['required'] as bool?,
+      name: readRequiredString(json['name'], 'PromptArgument.name'),
+      title: readOptionalString(json['title'], 'PromptArgument.title'),
+      description: readOptionalString(
+        json['description'],
+        'PromptArgument.description',
+      ),
+      required: readOptionalBool(json['required'], 'PromptArgument.required'),
     );
   }
 
@@ -77,19 +106,24 @@ class Prompt {
 
   factory Prompt.fromJson(Map<String, dynamic> json) {
     return Prompt(
-      name: json['name'] as String,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      arguments: (json['arguments'] as List<dynamic>?)
-          ?.map((a) => PromptArgument.fromJson(a as Map<String, dynamic>))
-          .toList(),
+      name: readRequiredString(json['name'], 'Prompt.name'),
+      title: readOptionalString(json['title'], 'Prompt.title'),
+      description:
+          readOptionalString(json['description'], 'Prompt.description'),
+      arguments: _readOptionalObjectList(
+        json['arguments'],
+        'Prompt.arguments',
+        PromptArgument.fromJson,
+      ),
       icon: json['icon'] != null
-          ? ImageContent.fromJson(json['icon'] as Map<String, dynamic>)
+          ? ImageContent.fromJson(readJsonObject(json['icon'], 'Prompt.icon'))
           : null,
-      icons: (json['icons'] as List<dynamic>?)
-          ?.map((e) => McpIcon.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      meta: (json['_meta'] as Map?)?.cast<String, dynamic>(),
+      icons: _readOptionalObjectList(
+        json['icons'],
+        'Prompt.icons',
+        McpIcon.fromJson,
+      ),
+      meta: readOptionalJsonObject(json['_meta'], 'Prompt._meta'),
     );
   }
 
@@ -101,7 +135,7 @@ class Prompt {
           'arguments': arguments!.map((a) => a.toJson()).toList(),
         if (icons != null)
           'icons': icons!.map((icon) => icon.toJson()).toList(),
-        if (meta != null) '_meta': meta,
+        if (meta != null) '_meta': readJsonObject(meta, 'Prompt._meta'),
       };
 }
 
@@ -113,7 +147,9 @@ class ListPromptsRequest {
   const ListPromptsRequest({this.cursor});
 
   factory ListPromptsRequest.fromJson(Map<String, dynamic> json) =>
-      ListPromptsRequest(cursor: json['cursor'] as String?);
+      ListPromptsRequest(
+        cursor: readOptionalString(json['cursor'], 'ListPromptsRequest.cursor'),
+      );
 
   Map<String, dynamic> toJson() => {if (cursor != null) 'cursor': cursor};
 }
@@ -131,7 +167,15 @@ class JsonRpcListPromptsRequest extends JsonRpcRequest {
         super(method: Method.promptsList, params: params?.toJson());
 
   factory JsonRpcListPromptsRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    _expectJsonRpcMethod(
+      json,
+      Method.promptsList,
+      'JsonRpcListPromptsRequest',
+    );
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcListPromptsRequest.params',
+    );
     final meta = extractRequestMeta(json);
     return JsonRpcListPromptsRequest(
       id: parseRequestId(json['id']),
@@ -142,40 +186,74 @@ class JsonRpcListPromptsRequest extends JsonRpcRequest {
 }
 
 /// Result data for a successful `prompts/list` request.
-class ListPromptsResult implements BaseResultData {
+class ListPromptsResult implements CacheableResultData {
   /// The list of prompts/templates found.
   final List<Prompt> prompts;
 
   /// Opaque token for pagination.
   final Cursor? nextCursor;
 
+  /// How long, in milliseconds, the client may consider this result fresh.
+  @override
+  final int? ttlMs;
+
+  /// Intended cache visibility: `public` or `private`.
+  @override
+  final String? cacheScope;
+
   /// Optional metadata.
   @override
   final Map<String, dynamic>? meta;
 
-  const ListPromptsResult({required this.prompts, this.nextCursor, this.meta});
+  const ListPromptsResult({
+    required this.prompts,
+    this.nextCursor,
+    this.ttlMs,
+    this.cacheScope,
+    this.meta,
+  });
 
   factory ListPromptsResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta =
+        readOptionalJsonObject(json['_meta'], 'ListPromptsResult._meta');
     final prompts = json['prompts'];
     if (prompts is! List) {
       throw const FormatException('ListPromptsResult.prompts is required');
     }
     return ListPromptsResult(
       prompts: prompts
-          .map((p) => Prompt.fromJson(p as Map<String, dynamic>))
+          .map(
+            (p) => Prompt.fromJson(
+              readJsonObject(p, 'ListPromptsResult.prompts items'),
+            ),
+          )
           .toList(),
-      nextCursor: json['nextCursor'] as String?,
+      nextCursor: readOptionalString(
+        json['nextCursor'],
+        'ListPromptsResult.nextCursor',
+      ),
+      ttlMs: readOptionalTtlMs(json['ttlMs'], 'ListPromptsResult.ttlMs'),
+      cacheScope: readOptionalCacheScope(
+        json['cacheScope'],
+        'ListPromptsResult.cacheScope',
+      ),
       meta: meta,
     );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'prompts': prompts.map((p) => p.toJson()).toList(),
-        if (nextCursor != null) 'nextCursor': nextCursor,
-        if (meta != null) '_meta': meta,
-      };
+  Map<String, dynamic> toJson() {
+    validateTtlMs(ttlMs, 'ListPromptsResult.ttlMs');
+    validateCacheScope(cacheScope, 'ListPromptsResult.cacheScope');
+    return {
+      'prompts': prompts.map((p) => p.toJson()).toList(),
+      if (nextCursor != null) 'nextCursor': nextCursor,
+      if (ttlMs != null) 'ttlMs': ttlMs,
+      if (cacheScope != null) 'cacheScope': cacheScope,
+      if (meta != null)
+        '_meta': readJsonObject(meta, 'ListPromptsResult._meta'),
+    };
+  }
 }
 
 /// Parameters for the `prompts/get` request.
@@ -186,19 +264,42 @@ class GetPromptRequest {
   /// Arguments to use for templating the prompt.
   final Map<String, String>? arguments;
 
-  const GetPromptRequest({required this.name, this.arguments});
+  /// Client responses to MRTR input requests when retrying this prompt request.
+  final InputResponses? inputResponses;
+
+  /// Opaque MRTR state returned by the server and echoed on retry.
+  final String? requestState;
+
+  const GetPromptRequest({
+    required this.name,
+    this.arguments,
+    this.inputResponses,
+    this.requestState,
+  });
 
   factory GetPromptRequest.fromJson(Map<String, dynamic> json) =>
       GetPromptRequest(
-        name: json['name'] as String,
-        arguments: (json['arguments'] as Map<String, dynamic>?)?.map(
-          (k, v) => MapEntry(k, v as String),
+        name: readRequiredString(json['name'], 'GetPromptRequest.name'),
+        arguments: readOptionalStringMap(
+          json['arguments'],
+          'GetPromptRequest.arguments',
+        ),
+        inputResponses: InputResponse.mapFromJson(
+          json['inputResponses'],
+          'GetPromptRequest.inputResponses',
+        ),
+        requestState: readOptionalString(
+          json['requestState'],
+          'GetPromptRequest.requestState',
         ),
       );
 
   Map<String, dynamic> toJson() => {
         'name': name,
         if (arguments != null) 'arguments': arguments,
+        if (inputResponses != null)
+          'inputResponses': InputResponse.mapToJson(inputResponses!),
+        if (requestState != null) 'requestState': requestState,
       };
 }
 
@@ -214,7 +315,15 @@ class JsonRpcGetPromptRequest extends JsonRpcRequest {
   }) : super(method: Method.promptsGet, params: getParams.toJson());
 
   factory JsonRpcGetPromptRequest.fromJson(Map<String, dynamic> json) {
-    final paramsMap = json['params'] as Map<String, dynamic>?;
+    _expectJsonRpcMethod(
+      json,
+      Method.promptsGet,
+      'JsonRpcGetPromptRequest',
+    );
+    final paramsMap = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcGetPromptRequest.params',
+    );
     if (paramsMap == null) {
       throw const FormatException("Missing params for get prompt request");
     }
@@ -245,8 +354,12 @@ class PromptMessage {
 
   factory PromptMessage.fromJson(Map<String, dynamic> json) {
     return PromptMessage(
-      role: PromptMessageRole.values.byName(json['role'] as String),
-      content: Content.fromJson(json['content'] as Map<String, dynamic>),
+      role: PromptMessageRole.values.byName(
+        readRequiredRoleString(json['role'], 'PromptMessage.role'),
+      ),
+      content: Content.fromJson(
+        readJsonObject(json['content'], 'PromptMessage.content'),
+      ),
     );
   }
 
@@ -271,15 +384,22 @@ class GetPromptResult implements BaseResultData {
   const GetPromptResult({this.description, required this.messages, this.meta});
 
   factory GetPromptResult.fromJson(Map<String, dynamic> json) {
-    final meta = json['_meta'] as Map<String, dynamic>?;
+    final meta = readOptionalJsonObject(json['_meta'], 'GetPromptResult._meta');
     final messages = json['messages'];
     if (messages is! List) {
       throw const FormatException('GetPromptResult.messages is required');
     }
     return GetPromptResult(
-      description: json['description'] as String?,
+      description: readOptionalString(
+        json['description'],
+        'GetPromptResult.description',
+      ),
       messages: messages
-          .map((m) => PromptMessage.fromJson(m as Map<String, dynamic>))
+          .map(
+            (m) => PromptMessage.fromJson(
+              readJsonObject(m, 'GetPromptResult.messages items'),
+            ),
+          )
           .toList(),
       meta: meta,
     );
@@ -289,19 +409,26 @@ class GetPromptResult implements BaseResultData {
   Map<String, dynamic> toJson() => {
         if (description != null) 'description': description,
         'messages': messages.map((m) => m.toJson()).toList(),
-        if (meta != null) '_meta': meta,
+        if (meta != null)
+          '_meta': readJsonObject(meta, 'GetPromptResult._meta'),
       };
 }
 
 /// Notification from server indicating the list of available prompts has changed.
 class JsonRpcPromptListChangedNotification extends JsonRpcNotification {
-  const JsonRpcPromptListChangedNotification()
+  const JsonRpcPromptListChangedNotification({super.meta})
       : super(method: Method.notificationsPromptsListChanged);
 
   factory JsonRpcPromptListChangedNotification.fromJson(
     Map<String, dynamic> json,
-  ) =>
-      const JsonRpcPromptListChangedNotification();
+  ) {
+    _expectJsonRpcMethod(
+      json,
+      Method.notificationsPromptsListChanged,
+      'JsonRpcPromptListChangedNotification',
+    );
+    return JsonRpcPromptListChangedNotification(meta: extractRequestMeta(json));
+  }
 }
 
 /// Deprecated alias for [ListPromptsRequest].

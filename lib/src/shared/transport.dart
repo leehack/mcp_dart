@@ -45,7 +45,8 @@ abstract class Transport {
 }
 
 /// Optional capability for transports that can preserve JSON-RPC request IDs
-/// with their full MCP shape (string or integer) for request/stream correlation.
+/// with their full MCP shape (string or integer) for request/stream
+/// correlation.
 ///
 /// Existing custom transports can keep implementing [Transport.send] with
 /// `int? relatedRequestId`. Transports that need to route messages by string
@@ -58,8 +59,22 @@ abstract class RequestIdAwareTransport {
   });
 }
 
+/// Optional capability for request-scoped SSE streams that can be closed and
+/// later resumed from an event store.
+abstract class RequestSseStreamControlAwareTransport {
+  /// Whether the SSE stream for [requestId] can be closed without losing its
+  /// eventual response.
+  bool canCloseRequestSseStream(RequestId requestId);
+
+  /// Closes the current SSE response stream for [requestId].
+  ///
+  /// The request remains active and its eventual response must be available to
+  /// a client that reconnects with the last SSE event ID.
+  void closeRequestSseStream(RequestId requestId);
+}
+
 extension RequestIdAwareTransportSend on Transport {
-  /// Sends [message] while preserving string request IDs when the transport
+  /// Sends [message] while preserving non-integer request IDs when the transport
   /// supports [RequestIdAwareTransport].
   ///
   /// Legacy transports receive only integer IDs, matching the existing public
@@ -91,4 +106,31 @@ abstract class ProtocolVersionAwareTransport {
 
   /// Updates the negotiated MCP protocol version.
   set protocolVersion(String? value);
+}
+
+/// Maps tool names to argument selectors and their `Mcp-Param-*` header suffixes.
+///
+/// Top-level arguments use their argument name as the selector. Nested
+/// arguments use JSON Pointer selectors such as `/auth/tenant`.
+typedef ToolParameterHeaderMappings = Map<String, Map<String, String>>;
+
+/// Optional capability for transports that can mirror tool arguments into
+/// stateless HTTP headers.
+abstract class ToolParameterHeaderAwareTransport {
+  /// Updates the currently advertised tool parameter header mappings.
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  );
+}
+
+/// Optional capability for transports that can validate incoming requests
+/// before committing transport-level response details.
+abstract class IncomingRequestValidationAwareTransport {
+  /// Supplies the protocol-level request validator.
+  void setIncomingRequestValidator(
+    McpError? Function(JsonRpcRequest request) validator,
+  );
+
+  /// Supplies a live request-method support predicate.
+  void setRequestMethodSupported(bool Function(String method) isSupported);
 }

@@ -60,6 +60,25 @@ final client = McpClient(
 // Set up handlers after client creation if needed
 ```
 
+### Protocol Profile
+
+Clients on this development branch use `McpProtocol.stable` by default, which
+prefers MCP `2026-07-28` draft/RC negotiation. The default client probes with
+`server/discover`, sends stateless request metadata for a compatible peer, and
+falls back to legacy `initialize` when discovery is unavailable. Select the
+legacy profile explicitly when a deployment must use only MCP `2025-11-25`
+and earlier behavior:
+
+```dart
+final client = McpClient(
+  const Implementation(name: 'my-client', version: '1.0.0'),
+  options: const McpClientOptions(protocol: McpProtocol.legacy),
+);
+```
+
+Use `McpClientOptions(protocol: McpProtocol.require2026)` when fallback should
+be treated as an error.
+
 ## Client Capabilities
 
 Declare what your client supports:
@@ -157,6 +176,13 @@ final result = await client.callTool(
 ```
 
 ### Task-Augmented Tool Calls
+
+For MCP `2026-07-28` draft/RC stateless servers that advertise the
+`io.modelcontextprotocol/tasks` extension, task creation is server-directed.
+Call `client.callTool()` normally, or call `TaskClient.callToolStream()` without
+the legacy `task` argument; the client follows `resultType: "task"` with
+`tasks/get`, using `tasks/update` only when the server requests more input,
+until the final tool result is available.
 
 For task-capable tools, use `TaskClient.callToolStream()` and pass task creation
 parameters through the `task` argument. The server must advertise

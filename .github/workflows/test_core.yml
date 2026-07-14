@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Dart
         uses: dart-lang/setup-dart@v1
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install TS Interop dependencies
         working-directory: test/interop/ts
@@ -39,9 +39,49 @@ jobs:
         working-directory: packages/mcp_dart_cli
         run: dart pub get
 
+      - name: Check out pinned MCP 2026 release schema
+        run: |
+          SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_release_spec_ref.txt)"
+          git clone --filter=blob:none --no-checkout https://github.com/modelcontextprotocol/modelcontextprotocol.git .dart_tool/mcp-spec
+          git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
+          git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
+
+      - name: Audit pinned MCP 2026 specification examples
+        run: >
+          dart run tool/spec_example_audit.dart
+          .dart_tool/mcp-spec/schema/draft/examples
+
       - name: Run MCP spec conformance gate
         working-directory: packages/mcp_dart_cli
         run: dart run bin/mcp_dart.dart conformance --suite all --json
+
+      - name: Run official MCP 2025 server conformance
+        run: >
+          dart run test/conformance/run_2025_server_conformance.dart
+          --timeout-seconds 90
+          --isolate-scenarios
+          --output-dir .dart_tool/conformance/ci_2025_server
+
+      - name: Run official MCP 2025 client conformance
+        run: >
+          npx -y @modelcontextprotocol/conformance@0.2.0-alpha.9 client
+          --command "dart run test/conformance/mcp_2026_07_28_rc_client.dart"
+          --suite all
+          --spec-version 2025-11-25
+          --verbose
+          -o .dart_tool/conformance/ci_2025_client
+
+      - name: Run official MCP 2026-07-28 RC server conformance
+        run: >
+          dart run test/conformance/run_2026_07_28_rc_server_conformance.dart
+          --timeout-seconds 90
+          --output-dir .dart_tool/conformance/ci_2026_server
+
+      - name: Run official MCP 2026-07-28 RC client conformance
+        run: >
+          dart run test/conformance/run_2026_07_28_rc_client_conformance.dart
+          --timeout-seconds 90
+          --output-dir .dart_tool/conformance/ci_2026_client
 
       - name: Run interop test suite
         run: dart test -t interop

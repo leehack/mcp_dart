@@ -31,7 +31,8 @@ class TemplateLocation {
       );
     }
     throw StateError(
-        'Invalid TemplateLocation: neither path nor gitUrl provided');
+      'Invalid TemplateLocation: neither path nor gitUrl provided',
+    );
   }
 }
 

@@ -43,8 +43,9 @@ dependencies:
   mcp: ^0.1.0
 ''');
       Directory(p.join(tempDir.path, 'lib', 'mcp')).createSync(recursive: true);
-      File(p.join(tempDir.path, 'lib', 'mcp', 'mcp.dart'))
-          .writeAsStringSync('void main() {}');
+      File(
+        p.join(tempDir.path, 'lib', 'mcp', 'mcp.dart'),
+      ).writeAsStringSync('void main() {}');
       File(p.join(tempDir.path, 'analysis_options.yaml')).writeAsStringSync('');
 
       final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);

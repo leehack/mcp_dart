@@ -59,7 +59,8 @@ class MasonBundleBuilder implements Builder {
       'description': brickYaml['description'] as String? ?? '',
       'version': brickYaml['version'] as String? ?? '0.1.0',
       'environment': {
-        'mason': (brickYaml['environment'] as YamlMap?)?['mason'] as String? ??
+        'mason':
+            (brickYaml['environment'] as YamlMap?)?['mason'] as String? ??
             '>=0.1.0-dev.1 <0.1.0',
       },
       'vars': _convertVars(brickYaml['vars'] as YamlMap?),

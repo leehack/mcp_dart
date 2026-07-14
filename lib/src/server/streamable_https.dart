@@ -3,11 +3,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
+import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 
 import '../shared/transport.dart';
 import '../types.dart';
 import 'dns_rebinding_protection.dart';
+
+const String _xAccelBufferingHeader = 'X-Accel-Buffering';
 
 /// ID for SSE streams
 typedef StreamId = String;
@@ -98,6 +102,13 @@ class StreamableHTTPServerTransportOptions {
   /// Default is 1000.
   final int maxReplayedEvents;
 
+  /// Reconnection delay advertised in resumable SSE priming events.
+  ///
+  /// Clients use this value after a server-initiated disconnect. The field is
+  /// emitted only when [eventStore] enables resumability. Defaults to one
+  /// second.
+  final Duration sseRetryDelay;
+
   /// Creates configuration options for StreamableHTTPServerTransport
   StreamableHTTPServerTransportOptions({
     this.sessionIdGenerator,
@@ -110,7 +121,16 @@ class StreamableHTTPServerTransportOptions {
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
     this.maxReplayedEvents = 1000,
-  });
+    this.sseRetryDelay = const Duration(seconds: 1),
+  }) {
+    if (sseRetryDelay.isNegative) {
+      throw ArgumentError.value(
+        sseRetryDelay,
+        'sseRetryDelay',
+        'Must not be negative',
+      );
+    }
+  }
 }
 
 /// Server transport for Streamable HTTP: this implements the MCP Streamable HTTP transport specification.
@@ -153,7 +173,20 @@ class StreamableHTTPServerTransportOptions {
 /// - Session ID is only included in initialization responses
 /// - No session validation is performed
 class StreamableHTTPServerTransport
-    implements Transport, RequestIdAwareTransport {
+    implements
+        Transport,
+        RequestIdAwareTransport,
+        RequestSseStreamControlAwareTransport,
+        IncomingRequestValidationAwareTransport,
+        ToolParameterHeaderAwareTransport {
+  static const Set<String> _statelessRemovedRequestMethods = {
+    Method.initialize,
+    Method.ping,
+    Method.loggingSetLevel,
+    Method.resourcesSubscribe,
+    Method.resourcesUnsubscribe,
+  };
+
   // when sessionId is not set (null), it means the transport is in stateless mode
   final String? Function()? _sessionIdGenerator;
   bool _started = false;
@@ -163,6 +196,9 @@ class StreamableHTTPServerTransport
   final Set<StreamId> _ownedStreamIds = {};
   final Map<dynamic, String> _requestToStreamMapping = {};
   final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
+  final Set<dynamic> _statelessRequestIds = {};
+  final Map<StreamId, Socket> _responseStreamSockets = {};
+  final Set<StreamId> _detachedResumableStreamIds = {};
   bool _initialized = false;
   bool _terminated = false;
   final bool _enableJsonResponse;
@@ -176,6 +212,10 @@ class StreamableHTTPServerTransport
   final bool _strictProtocolVersionHeaderValidation;
   final bool _rejectBatchJsonRpcPayloads;
   final int _maxReplayedEvents;
+  final Duration _sseRetryDelay;
+  ToolParameterHeaderMappings _toolParameterHeaderMappings = const {};
+  McpError? Function(JsonRpcRequest request)? _incomingRequestValidator;
+  bool Function(String method)? _isRequestMethodSupported;
   static const JsonRpcNotification _ssePrimingMessage =
       JsonRpcNotification(method: 'notifications/experimental/sse/priming');
 
@@ -204,7 +244,8 @@ class StreamableHTTPServerTransport
         _strictProtocolVersionHeaderValidation =
             options.strictProtocolVersionHeaderValidation,
         _rejectBatchJsonRpcPayloads = options.rejectBatchJsonRpcPayloads,
-        _maxReplayedEvents = options.maxReplayedEvents;
+        _maxReplayedEvents = options.maxReplayedEvents,
+        _sseRetryDelay = options.sseRetryDelay;
 
   /// Starts the transport. This is required by the Transport interface but is a no-op
   /// for the Streamable HTTP transport as connections are managed per-request.
@@ -214,6 +255,52 @@ class StreamableHTTPServerTransport
       throw StateError("Transport already started");
     }
     _started = true;
+  }
+
+  @override
+  void setToolParameterHeaderMappings(
+    ToolParameterHeaderMappings mappings,
+  ) {
+    _toolParameterHeaderMappings = {
+      for (final entry in mappings.entries)
+        entry.key: Map.unmodifiable(Map<String, String>.from(entry.value)),
+    };
+  }
+
+  @override
+  void setIncomingRequestValidator(
+    McpError? Function(JsonRpcRequest request) validator,
+  ) {
+    _incomingRequestValidator = validator;
+  }
+
+  @override
+  void setRequestMethodSupported(bool Function(String method) isSupported) {
+    _isRequestMethodSupported = isSupported;
+  }
+
+  @override
+  bool canCloseRequestSseStream(RequestId requestId) {
+    final streamId = _requestToStreamMapping[requestId];
+    return _eventStore != null &&
+        !_enableJsonResponse &&
+        streamId != null &&
+        !_statelessRequestIds.contains(requestId) &&
+        _streamMapping.containsKey(streamId);
+  }
+
+  @override
+  void closeRequestSseStream(RequestId requestId) {
+    if (!canCloseRequestSseStream(requestId)) {
+      throw StateError(
+        'No resumable SSE stream established for request ID: $requestId',
+      );
+    }
+
+    final streamId = _requestToStreamMapping[requestId]!;
+    final response = _streamMapping.remove(streamId)!;
+    _detachedResumableStreamIds.add(streamId);
+    unawaited(_safeClose(response));
   }
 
   /// Handles an incoming HTTP request, whether GET or POST
@@ -232,12 +319,18 @@ class StreamableHTTPServerTransport
       return;
     }
 
-    if (!await _validateProtocolVersionHeader(req, req.response)) {
+    if (!await _validateProtocolVersionHeader(
+      req,
+      req.response,
+      parsedBody: parsedBody,
+    )) {
       return;
     }
 
     if (req.method == "POST") {
       await _handlePostRequest(req, parsedBody);
+    } else if (_isStatelessProtocolVersionRequest(req)) {
+      await _handleStatelessUnsupportedRequest(req.response);
     } else if (req.method == "GET") {
       await _handleGetRequest(req);
     } else if (req.method == "DELETE") {
@@ -249,8 +342,9 @@ class StreamableHTTPServerTransport
 
   Future<bool> _validateProtocolVersionHeader(
     HttpRequest req,
-    HttpResponse res,
-  ) async {
+    HttpResponse res, {
+    dynamic parsedBody,
+  }) async {
     if (!_strictProtocolVersionHeaderValidation) {
       return true;
     }
@@ -268,14 +362,31 @@ class StreamableHTTPServerTransport
     await _writeJsonRpcErrorResponse(
       res,
       httpStatus: HttpStatus.badRequest,
-      errorCode: ErrorCode.invalidRequest,
-      message: 'Invalid MCP-Protocol-Version header',
+      errorCode: ErrorCode.unsupportedProtocolVersion,
+      message: 'Unsupported protocol version',
+      id: _requestIdFromParsedBody(parsedBody),
       data: {
         'requested': requestedVersion,
         'supported': supportedProtocolVersions,
       },
     );
     return false;
+  }
+
+  bool _isStatelessProtocolVersionRequest(HttpRequest req) {
+    final versionHeader = req.headers.value('mcp-protocol-version');
+    return versionHeader != null &&
+        isStatelessProtocolVersion(versionHeader.trim());
+  }
+
+  bool _isValidHeaderValue(String value) {
+    if (value.trim() != value) {
+      return false;
+    }
+
+    return value.codeUnits.every(
+      (unit) => unit == 0x09 || unit == 0x20 || unit >= 0x21 && unit <= 0x7E,
+    );
   }
 
   bool _isValidVisibleAsciiToken(String value) {
@@ -288,6 +399,15 @@ class StreamableHTTPServerTransport
 
   bool _isValidSessionId(String sessionId) {
     return _isValidVisibleAsciiToken(sessionId);
+  }
+
+  Map<String, String> _sseResponseHeaders() {
+    return {
+      HttpHeaders.contentTypeHeader: 'text/event-stream; charset=utf-8',
+      HttpHeaders.cacheControlHeader: 'no-cache, no-transform',
+      HttpHeaders.connectionHeader: 'keep-alive',
+      _xAccelBufferingHeader: 'no',
+    };
   }
 
   void _validateSseEventId(EventId eventId) {
@@ -304,15 +424,35 @@ class StreamableHTTPServerTransport
     required int httpStatus,
     required ErrorCode errorCode,
     required String message,
+    RequestId? id,
+    Object? data,
+  }) {
+    return _writeJsonRpcErrorCodeResponse(
+      response,
+      httpStatus: httpStatus,
+      errorCode: errorCode.value,
+      message: message,
+      id: id,
+      data: data,
+    );
+  }
+
+  Future<void> _writeJsonRpcErrorCodeResponse(
+    HttpResponse response, {
+    required int httpStatus,
+    required int errorCode,
+    required String message,
+    RequestId? id,
     Object? data,
   }) async {
     response.statusCode = httpStatus;
+    response.headers.contentType = ContentType.json;
     response.write(
       jsonEncode(
         JsonRpcError(
-          id: null,
+          id: id,
           error: JsonRpcErrorData(
-            code: errorCode.value,
+            code: errorCode,
             message: message,
             data: data,
           ),
@@ -320,6 +460,556 @@ class StreamableHTTPServerTransport
       ),
     );
     await _safeClose(response);
+  }
+
+  int _statelessHttpStatusForErrorCode(int code) {
+    if (code == ErrorCode.methodNotFound.value) {
+      return HttpStatus.notFound;
+    }
+
+    return HttpStatus.badRequest;
+  }
+
+  Future<void> _writeHeaderMismatchResponse(
+    HttpResponse response,
+    JsonRpcMessage message,
+    String detail,
+  ) {
+    return _writeJsonRpcErrorResponse(
+      response,
+      httpStatus: HttpStatus.badRequest,
+      errorCode: ErrorCode.headerMismatch,
+      id: message is JsonRpcRequest ? message.id : null,
+      message: 'Header mismatch: $detail',
+    );
+  }
+
+  String? _metadataProtocolVersion(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      final version = message.meta?[McpMetaKey.protocolVersion];
+      return version is String ? version : null;
+    }
+    if (message is JsonRpcNotification) {
+      final version = message.meta?[McpMetaKey.protocolVersion];
+      return version is String ? version : null;
+    }
+    return null;
+  }
+
+  String? _nestedMetadataProtocolVersion(Map<String, dynamic> messageJson) {
+    final params = messageJson['params'];
+    if (params is Map) {
+      final meta = params['_meta'];
+      if (meta is Map) {
+        final version = meta[McpMetaKey.protocolVersion];
+        return version is String ? version : null;
+      }
+    }
+    return null;
+  }
+
+  RequestId? _requestIdFromParsedBody(dynamic parsedBody) {
+    if (parsedBody is! Map || !parsedBody.containsKey('id')) {
+      return null;
+    }
+
+    try {
+      return json_rpc.parseRequestId(parsedBody['id']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  RequestId? _rawRequestId(Map<String, dynamic> messageJson) {
+    if (!messageJson.containsKey('id')) {
+      return null;
+    }
+    try {
+      return json_rpc.parseRequestId(messageJson['id']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isStatelessServerDiscoverJson(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    if (messageJson['method'] != Method.serverDiscover) {
+      return false;
+    }
+
+    return _isStatelessRequestJson(req, messageJson);
+  }
+
+  bool _isStatelessRemovedRequestJson(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    final method = messageJson['method'];
+    return method is String &&
+        _statelessRemovedRequestMethods.contains(method) &&
+        messageJson.containsKey('id') &&
+        _isStatelessRequestJson(req, messageJson);
+  }
+
+  bool _isStatelessRequestJson(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    final headerVersion = req.headers.value('mcp-protocol-version')?.trim();
+    if (headerVersion != null && isStatelessProtocolVersion(headerVersion)) {
+      return true;
+    }
+
+    final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
+    return metadataVersion != null &&
+        isStatelessProtocolVersion(metadataVersion);
+  }
+
+  bool _usesStatelessHttpValidation(
+    HttpRequest req,
+    List<JsonRpcMessage> messages,
+  ) {
+    final headerVersion = req.headers.value('mcp-protocol-version')?.trim();
+    if (headerVersion != null && isStatelessProtocolVersion(headerVersion)) {
+      return true;
+    }
+
+    return messages.any((message) {
+      final version = _metadataProtocolVersion(message);
+      return version != null && isStatelessProtocolVersion(version);
+    });
+  }
+
+  String? _messageMethod(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      return message.method;
+    }
+    if (message is JsonRpcNotification) {
+      return message.method;
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _messageParams(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      return message.params;
+    }
+    if (message is JsonRpcNotification) {
+      return message.params;
+    }
+    return null;
+  }
+
+  String? _requiredNameHeaderValue(JsonRpcMessage message) {
+    final method = _messageMethod(message);
+    final params = _messageParams(message);
+    if (params == null) {
+      return null;
+    }
+
+    final value = switch (method) {
+      Method.toolsCall => params['name'],
+      Method.resourcesRead => params['uri'],
+      Method.promptsGet => params['name'],
+      Method.tasksGet ||
+      Method.tasksUpdate ||
+      Method.tasksCancel =>
+        params['taskId'],
+      _ => null,
+    };
+    return value is String ? value : null;
+  }
+
+  String? _decodeMcpParamHeaderValue(String value) {
+    if (value.startsWith('=?base64?') && value.endsWith('?=')) {
+      final encoded = value.substring('=?base64?'.length, value.length - 2);
+      try {
+        return utf8.decode(base64Decode(encoded));
+      } catch (_) {
+        return null;
+      }
+    }
+
+    return _isValidHeaderValue(value) ? value : null;
+  }
+
+  String? _primitiveHeaderString(Object? value) {
+    if (value is num) {
+      if (!value.isFinite) {
+        return null;
+      }
+      if (value is double && value.truncateToDouble() == value) {
+        return value.toInt().toString();
+      }
+      return value.toString();
+    }
+
+    return switch (value) {
+      null => null,
+      String() => value,
+      bool() => value.toString(),
+      _ => null,
+    };
+  }
+
+  bool _headerValueMatchesPrimitive(Object? bodyValue, String headerValue) {
+    if (bodyValue is num) {
+      if (!bodyValue.isFinite) {
+        return false;
+      }
+      final headerNumber = num.tryParse(headerValue);
+      return headerNumber != null &&
+          headerNumber.isFinite &&
+          headerNumber == bodyValue;
+    }
+
+    final value = _primitiveHeaderString(bodyValue);
+    return value != null && headerValue == value;
+  }
+
+  String? _toolName(JsonRpcMessage message) {
+    if (_messageMethod(message) != Method.toolsCall) {
+      return null;
+    }
+
+    final name = _messageParams(message)?['name'];
+    return name is String ? name : null;
+  }
+
+  Future<bool> _validateMcpParamHeaders(
+    HttpRequest req,
+    HttpResponse res,
+    JsonRpcMessage message,
+  ) async {
+    final headers = <String, _McpParamHeader>{};
+    req.headers.forEach((name, values) {
+      const prefix = 'mcp-param-';
+      final lowerName = name.toLowerCase();
+      if (!lowerName.startsWith(prefix)) {
+        return;
+      }
+
+      final headerSuffix = name.substring(prefix.length);
+      if (!isValidMcpHeaderNameSuffix(headerSuffix)) {
+        headers[lowerName] = _McpParamHeader.invalidName(
+          name: name,
+          suffix: headerSuffix,
+        );
+        return;
+      }
+
+      final headerValue = req.headers.value(name);
+      final decodedValue =
+          headerValue == null ? null : _decodeMcpParamHeaderValue(headerValue);
+      if (decodedValue == null) {
+        headers[lowerName] = _McpParamHeader.invalidValue(
+          name: name,
+          suffix: headerSuffix,
+        );
+        return;
+      }
+
+      headers[headerSuffix.toLowerCase()] = _McpParamHeader(
+        name: name,
+        suffix: headerSuffix,
+        value: decodedValue,
+      );
+    });
+
+    _McpParamHeader? invalidHeader;
+    for (final header in headers.values) {
+      if (header.validationError != null) {
+        invalidHeader = header;
+        break;
+      }
+    }
+    if (invalidHeader != null) {
+      final messageText =
+          invalidHeader.validationError == _McpParamHeaderValidationError.name
+              ? '${invalidHeader.name} header name is malformed'
+              : '${invalidHeader.name} header value is malformed';
+      await _writeHeaderMismatchResponse(res, message, messageText);
+      return false;
+    }
+
+    final params = _messageParams(message);
+    final arguments = params?['arguments'];
+    if (arguments is! Map) {
+      if (headers.isEmpty) {
+        return true;
+      }
+      await _writeHeaderMismatchResponse(
+        res,
+        message,
+        '${headers.values.first.name} header has no matching body arguments',
+      );
+      return false;
+    }
+
+    final argumentMap = arguments.cast<String, dynamic>();
+    final consumedHeaders = <String>{};
+    final toolName = _toolName(message);
+    final headerMappings =
+        toolName == null ? null : _toolParameterHeaderMappings[toolName];
+
+    if (headerMappings != null) {
+      for (final entry in headerMappings.entries) {
+        final argumentName = entry.key;
+        final headerSuffix = entry.value;
+        final header = headers[headerSuffix.toLowerCase()];
+        final argument = _toolParameterHeaderArgument(argumentMap, entry.key);
+        final hasArgument = argument.exists;
+        final bodyArgument = argument.value;
+        final bodyValue =
+            hasArgument ? _primitiveHeaderString(bodyArgument) : null;
+
+        if (!hasArgument || bodyValue == null) {
+          if (header != null) {
+            await _writeHeaderMismatchResponse(
+              res,
+              message,
+              '${header.name} header has no matching primitive body argument '
+              "'$argumentName'",
+            );
+            return false;
+          }
+          continue;
+        }
+
+        if (header == null) {
+          await _writeHeaderMismatchResponse(
+            res,
+            message,
+            'Mcp-Param-$headerSuffix header is required for body argument '
+            "'$argumentName'",
+          );
+          return false;
+        }
+
+        consumedHeaders.add(header.suffix.toLowerCase());
+        if (!_headerValueMatchesPrimitive(bodyArgument, header.value!)) {
+          await _writeHeaderMismatchResponse(
+            res,
+            message,
+            '${header.name} header value does not match body argument '
+            "'$argumentName'",
+          );
+          return false;
+        }
+      }
+    }
+
+    final argumentNamesByLowercase = <String, String>{};
+    for (final argumentName in argumentMap.keys) {
+      argumentNamesByLowercase.putIfAbsent(
+        argumentName.toLowerCase(),
+        () => argumentName,
+      );
+    }
+
+    for (final header in headers.values) {
+      if (consumedHeaders.contains(header.suffix.toLowerCase())) {
+        continue;
+      }
+
+      final argumentName = argumentMap.containsKey(header.suffix)
+          ? header.suffix
+          : argumentNamesByLowercase[header.suffix.toLowerCase()];
+      if (argumentName == null) {
+        await _writeHeaderMismatchResponse(
+          res,
+          message,
+          '${header.name} header has no matching body argument',
+        );
+        return false;
+      }
+
+      final bodyArgument = argumentMap[argumentName];
+      if (!_headerValueMatchesPrimitive(bodyArgument, header.value!)) {
+        await _writeHeaderMismatchResponse(
+          res,
+          message,
+          "${header.name} header value does not match body argument '$argumentName'",
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  ({bool exists, Object? value}) _toolParameterHeaderArgument(
+    Map<String, dynamic> arguments,
+    String selector,
+  ) {
+    if (!selector.startsWith('/')) {
+      return (
+        exists: arguments.containsKey(selector),
+        value: arguments[selector],
+      );
+    }
+
+    Object? current = arguments;
+    for (final segment in _jsonPointerSegments(selector)) {
+      if (current is! Map || !current.containsKey(segment)) {
+        return (exists: false, value: null);
+      }
+      current = current[segment];
+    }
+    return (exists: true, value: current);
+  }
+
+  Iterable<String> _jsonPointerSegments(String selector) {
+    if (selector == '/') {
+      return const [''];
+    }
+    return selector
+        .substring(1)
+        .split('/')
+        .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
+  }
+
+  Future<bool> _validateStatelessHttpHeaders(
+    HttpRequest req,
+    List<JsonRpcMessage> messages,
+    List<Map<String, dynamic>> messageJsons,
+  ) async {
+    if (!_usesStatelessHttpValidation(req, messages)) {
+      return true;
+    }
+
+    if (messages.length != 1) {
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.invalidRequest,
+        message:
+            'Invalid Request: stateless MCP POST body must contain one JSON-RPC message',
+      );
+      return false;
+    }
+
+    final message = messages.single;
+    final messageJson = messageJsons.single;
+    final protocolHeader = req.headers.value('mcp-protocol-version')?.trim();
+    if (protocolHeader == null || protocolHeader.isEmpty) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        'MCP-Protocol-Version header is required',
+      );
+      return false;
+    }
+    if (!_isValidHeaderValue(protocolHeader)) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        'MCP-Protocol-Version header value is malformed',
+      );
+      return false;
+    }
+
+    if (message is JsonRpcResponse || message is JsonRpcError) {
+      return true;
+    }
+
+    final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
+    if (metadataVersion == null) {
+      if (message is! JsonRpcServerDiscoverRequest) {
+        await _writeHeaderMismatchResponse(
+          req.response,
+          message,
+          'MCP-Protocol-Version header has no matching request _meta protocol version in params._meta',
+        );
+        return false;
+      }
+    } else if (protocolHeader != metadataVersion) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        "MCP-Protocol-Version header value '$protocolHeader' does not match body value '$metadataVersion'",
+      );
+      return false;
+    }
+    final method = _messageMethod(message);
+    if (method == null) {
+      return true;
+    }
+
+    final methodHeader = req.headers.value('mcp-method');
+    if (methodHeader == null || methodHeader.isEmpty) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        'Mcp-Method header is required',
+      );
+      return false;
+    }
+    if (methodHeader != method) {
+      await _writeHeaderMismatchResponse(
+        req.response,
+        message,
+        "Mcp-Method header value '$methodHeader' does not match body value '$method'",
+      );
+      return false;
+    }
+
+    final requiredName = _requiredNameHeaderValue(message);
+    if (requiredName != null) {
+      final nameHeader = req.headers.value('mcp-name');
+      if (nameHeader == null || nameHeader.isEmpty) {
+        await _writeHeaderMismatchResponse(
+          req.response,
+          message,
+          'Mcp-Name header is required',
+        );
+        return false;
+      }
+      if (nameHeader != requiredName) {
+        await _writeHeaderMismatchResponse(
+          req.response,
+          message,
+          "Mcp-Name header value '$nameHeader' does not match body value '$requiredName'",
+        );
+        return false;
+      }
+    }
+
+    if (!await _validateMcpParamHeaders(req, req.response, message)) {
+      return false;
+    }
+
+    if (message is JsonRpcRequest) {
+      final validationError = _incomingRequestValidator?.call(message);
+      if (validationError != null) {
+        await _writeJsonRpcErrorCodeResponse(
+          req.response,
+          httpStatus: _statelessHttpStatusForErrorCode(validationError.code),
+          errorCode: validationError.code,
+          id: message.id,
+          message: validationError.message,
+          data: validationError.data,
+        );
+        return false;
+      }
+
+      final isRequestMethodSupported = _isRequestMethodSupported;
+      if (isRequestMethodSupported != null &&
+          !isRequestMethodSupported(message.method)) {
+        await _writeJsonRpcErrorResponse(
+          req.response,
+          httpStatus: HttpStatus.notFound,
+          errorCode: ErrorCode.methodNotFound,
+          id: message.id,
+          message: 'Method not found: ${message.method}',
+        );
+        return false;
+      }
+    }
+
+    return true;
   }
 
   bool _isStandaloneSseStreamId(StreamId streamId) {
@@ -397,20 +1087,12 @@ class StreamableHTTPServerTransport
     // The client MUST include an Accept header, listing text/event-stream as a supported content type.
     final acceptedMediaTypes = _parseAcceptedMediaTypes(req);
     if (!_acceptsMediaType(acceptedMediaTypes, 'text/event-stream')) {
-      req.response
-        ..statusCode = HttpStatus.notAcceptable
-        ..write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.connectionClosed.value,
-                message: 'Not Acceptable: Client must accept text/event-stream',
-              ),
-            ).toJson(),
-          ),
-        );
-      await _safeClose(req.response);
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.notAcceptable,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Not Acceptable: Client must accept text/event-stream',
+      );
       return;
     }
 
@@ -432,11 +1114,7 @@ class StreamableHTTPServerTransport
 
     // The server MUST either return Content-Type: text/event-stream in response to this HTTP GET,
     // or else return HTTP 405 Method Not Allowed
-    final headers = {
-      HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
-      HttpHeaders.cacheControlHeader: "no-cache, no-transform",
-      HttpHeaders.connectionHeader: "keep-alive",
-    };
+    final headers = _sseResponseHeaders();
 
     // After initialization, always include the session ID if we have one
     if (sessionId != null) {
@@ -446,6 +1124,7 @@ class StreamableHTTPServerTransport
     // We need to send headers immediately as messages will arrive much later,
     // otherwise the client will just wait for the first message
     req.response.statusCode = HttpStatus.ok;
+    req.response.bufferOutput = false;
     headers.forEach((key, value) {
       req.response.headers.set(key, value);
     });
@@ -479,7 +1158,7 @@ class StreamableHTTPServerTransport
     try {
       final maxEvents = _maxReplayedEvents;
       final replayedEvents = <({EventId eventId, JsonRpcMessage message})>[];
-      final streamId = await _eventStore!.replayEventsAfter(
+      final streamId = await _eventStore.replayEventsAfter(
         lastEventId,
         send: (eventId, message) async {
           _validateSseEventId(eventId);
@@ -502,11 +1181,7 @@ class StreamableHTTPServerTransport
         return;
       }
 
-      final headers = {
-        HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
-        HttpHeaders.cacheControlHeader: "no-cache, no-transform",
-        HttpHeaders.connectionHeader: "keep-alive",
-      };
+      final headers = _sseResponseHeaders();
 
       if (sessionId != null) {
         headers["mcp-session-id"] = sessionId!;
@@ -535,6 +1210,7 @@ class StreamableHTTPServerTransport
         _addStandaloneSseResponse(streamId, res);
       } else {
         _streamMapping[streamId] = res;
+        _detachedResumableStreamIds.remove(streamId);
       }
       res.done.then((_) {
         if (_isStandaloneSseStreamId(streamId)) {
@@ -546,8 +1222,9 @@ class StreamableHTTPServerTransport
     } catch (error) {
       onerror?.call(error is Error ? error : StateError(error.toString()));
       final errorStr = error.toString().toLowerCase();
-      final isNotFound =
-          errorStr.contains('not found') || errorStr.contains('unknown');
+      final isNotFound = errorStr.contains('not found') ||
+          errorStr.contains('unknown') ||
+          errorStr.contains('invalid sse event id');
       final isLimitExceeded = errorStr.contains('replay limit exceeded');
       await _writeJsonRpcErrorResponse(
         res,
@@ -575,6 +1252,14 @@ class StreamableHTTPServerTransport
     }
   }
 
+  Future<void> _safeCloseSocket(Socket socket) async {
+    try {
+      await socket.close().timeout(const Duration(milliseconds: 100));
+    } catch (e) {
+      socket.destroy();
+    }
+  }
+
   /// Writes an event to the SSE stream with proper formatting
   Future<bool> _writeSSEEvent(
     HttpResponse res,
@@ -598,14 +1283,75 @@ class StreamableHTTPServerTransport
     }
   }
 
+  Future<Socket> _detachSseSocket(
+    HttpRequest req,
+    Map<String, String> headers,
+  ) async {
+    final responseHeaders = <String, String>{};
+    req.response.headers.forEach((name, values) {
+      final normalizedName = name.toLowerCase();
+      if (normalizedName == HttpHeaders.contentLengthHeader ||
+          normalizedName == HttpHeaders.transferEncodingHeader ||
+          normalizedName == HttpHeaders.connectionHeader) {
+        return;
+      }
+      responseHeaders[name] = values.join(', ');
+    });
+    responseHeaders
+      ..addAll(headers)
+      ..[HttpHeaders.connectionHeader] = 'close';
+
+    final socket = await req.response.detachSocket(writeHeaders: false);
+    final responseHead = StringBuffer('HTTP/1.1 200 OK\r\n');
+    responseHeaders.forEach((key, value) {
+      responseHead.write('$key: $value\r\n');
+    });
+    responseHead.write('\r\n');
+    socket.add(utf8.encode(responseHead.toString()));
+    await socket.flush();
+    return socket;
+  }
+
+  Future<bool> _writeSSEEventToSocket(
+    Socket socket,
+    JsonRpcMessage message,
+  ) async {
+    try {
+      var eventData = "event: message\n";
+      eventData += "data: ${jsonEncode(message.toJson())}\n\n";
+
+      socket.add(utf8.encode(eventData));
+      await socket.flush();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> _writeSSEPrimingEvent(
     HttpResponse res,
     EventId eventId,
   ) async {
     try {
       _validateSseEventId(eventId);
-      res.add(utf8.encode('id: $eventId\ndata:\n\n'));
+      res.add(
+        utf8.encode(
+          'id: $eventId\n'
+          'retry: ${_sseRetryDelay.inMilliseconds}\n'
+          'data:\n\n',
+        ),
+      );
       await res.flush();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> _writeSSECommentToSocket(Socket socket) async {
+    try {
+      socket.add(utf8.encode(':\n\n'));
+      await socket.flush();
       return true;
     } catch (e) {
       return false;
@@ -637,22 +1383,33 @@ class StreamableHTTPServerTransport
     }
   }
 
+  Future<bool> _primeSseSocket(Socket socket) async {
+    final sent = await _writeSSECommentToSocket(socket);
+    if (!sent) {
+      onerror?.call(StateError('Failed to send initial SSE comment'));
+    }
+    return sent;
+  }
+
   /// Handles unsupported requests (PUT, PATCH, etc.)
   Future<void> _handleUnsupportedRequest(HttpResponse res) async {
-    res.statusCode = HttpStatus.methodNotAllowed;
     res.headers.set(HttpHeaders.allowHeader, "GET, POST, DELETE");
-    res.write(
-      jsonEncode(
-        JsonRpcError(
-          id: null,
-          error: JsonRpcErrorData(
-            code: ErrorCode.connectionClosed.value,
-            message: 'Method not allowed.',
-          ),
-        ).toJson(),
-      ),
+    await _writeJsonRpcErrorResponse(
+      res,
+      httpStatus: HttpStatus.methodNotAllowed,
+      errorCode: ErrorCode.connectionClosed,
+      message: 'Method not allowed.',
     );
-    await _safeClose(res);
+  }
+
+  Future<void> _handleStatelessUnsupportedRequest(HttpResponse res) async {
+    res.headers.set(HttpHeaders.allowHeader, "POST");
+    await _writeJsonRpcErrorResponse(
+      res,
+      httpStatus: HttpStatus.methodNotAllowed,
+      errorCode: ErrorCode.connectionClosed,
+      message: 'Method not allowed for stateless MCP requests.',
+    );
   }
 
   /// Handles POST requests containing JSON-RPC messages
@@ -663,39 +1420,25 @@ class StreamableHTTPServerTransport
       // The client MUST include an Accept header, listing both application/json and text/event-stream as supported content types.
       if (!_acceptsMediaType(acceptedMediaTypes, 'application/json') ||
           !_acceptsMediaType(acceptedMediaTypes, 'text/event-stream')) {
-        req.response.statusCode = HttpStatus.notAcceptable;
-        req.response.write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.connectionClosed.value,
-                message:
-                    'Not Acceptable: Client must accept both application/json and text/event-stream',
-              ),
-            ).toJson(),
-          ),
+        await _writeJsonRpcErrorResponse(
+          req.response,
+          httpStatus: HttpStatus.notAcceptable,
+          errorCode: ErrorCode.connectionClosed,
+          message:
+              'Not Acceptable: Client must accept both application/json and text/event-stream',
         );
-        await _safeClose(req.response);
         return;
       }
 
       final contentType = req.headers.contentType?.value ?? '';
       if (!contentType.contains("application/json")) {
-        req.response.statusCode = HttpStatus.unsupportedMediaType;
-        req.response.write(
-          jsonEncode(
-            JsonRpcError(
-              id: null,
-              error: JsonRpcErrorData(
-                code: ErrorCode.connectionClosed.value,
-                message:
-                    'Unsupported Media Type: Content-Type must be application/json',
-              ),
-            ).toJson(),
-          ),
+        await _writeJsonRpcErrorResponse(
+          req.response,
+          httpStatus: HttpStatus.unsupportedMediaType,
+          errorCode: ErrorCode.connectionClosed,
+          message:
+              'Unsupported Media Type: Content-Type must be application/json',
         );
-        await _safeClose(req.response);
         return;
       }
 
@@ -736,6 +1479,7 @@ class StreamableHTTPServerTransport
       }
 
       final List<JsonRpcMessage> messages = [];
+      final List<Map<String, dynamic>> messageJsons = [];
       if (rawMessages.isEmpty) {
         await _writeJsonRpcErrorResponse(
           req.response,
@@ -762,8 +1506,37 @@ class StreamableHTTPServerTransport
           final messageJson = rawItem is Map<String, dynamic>
               ? rawItem
               : rawItem.cast<String, dynamic>();
+          if (_isStatelessRemovedRequestJson(req, messageJson)) {
+            final method = messageJson['method'] as String;
+            await _writeJsonRpcErrorResponse(
+              req.response,
+              httpStatus: HttpStatus.notFound,
+              errorCode: ErrorCode.methodNotFound,
+              id: _rawRequestId(messageJson),
+              message:
+                  '$method is not part of MCP stateless protocol versions.',
+            );
+            return;
+          }
+          messageJsons.add(messageJson);
           messages.add(JsonRpcMessage.fromJson(messageJson));
         } catch (e) {
+          final messageJson = rawItem is Map<String, dynamic>
+              ? rawItem
+              : rawItem.cast<String, dynamic>();
+          if (_isStatelessServerDiscoverJson(req, messageJson)) {
+            await _writeJsonRpcErrorResponse(
+              req.response,
+              httpStatus: HttpStatus.badRequest,
+              errorCode: ErrorCode.invalidParams,
+              id: _rawRequestId(messageJson),
+              message: 'Invalid params',
+              data: e.toString(),
+            );
+            onerror?.call(e is Error ? e : StateError(e.toString()));
+            return;
+          }
+
           await _writeJsonRpcErrorResponse(
             req.response,
             httpStatus: HttpStatus.badRequest,
@@ -776,9 +1549,18 @@ class StreamableHTTPServerTransport
         }
       }
 
+      final usesStatelessHttpValidation =
+          _usesStatelessHttpValidation(req, messages);
+      if (!await _validateStatelessHttpHeaders(req, messages, messageJsons)) {
+        return;
+      }
+
       // Check if this is an initialization request
       // https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle/
       final isInitializationRequest = messages.any(_isInitializeRequest);
+      final isStatelessRequest = messages.any(_isStatelessJsonRpcRequest);
+      final isStatelessMessage =
+          usesStatelessHttpValidation || isStatelessRequest;
       if (isInitializationRequest) {
         final requestSessionId = req.headers.value('mcp-session-id');
 
@@ -797,36 +1579,22 @@ class StreamableHTTPServerTransport
             return;
           }
 
-          req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(
-            jsonEncode(
-              JsonRpcError(
-                id: null,
-                error: JsonRpcErrorData(
-                  code: ErrorCode.invalidRequest.value,
-                  message: 'Invalid Request: Server already initialized',
-                ),
-              ).toJson(),
-            ),
+          await _writeJsonRpcErrorResponse(
+            req.response,
+            httpStatus: HttpStatus.badRequest,
+            errorCode: ErrorCode.invalidRequest,
+            message: 'Invalid Request: Server already initialized',
           );
-          await _safeClose(req.response);
           return;
         }
         if (messages.length > 1) {
-          req.response.statusCode = HttpStatus.badRequest;
-          req.response.write(
-            jsonEncode(
-              JsonRpcError(
-                id: null,
-                error: JsonRpcErrorData(
-                  code: ErrorCode.invalidRequest.value,
-                  message:
-                      'Invalid Request: Only one initialization request is allowed',
-                ),
-              ).toJson(),
-            ),
+          await _writeJsonRpcErrorResponse(
+            req.response,
+            httpStatus: HttpStatus.badRequest,
+            errorCode: ErrorCode.invalidRequest,
+            message:
+                'Invalid Request: Only one initialization request is allowed',
           );
-          await _safeClose(req.response);
           return;
         }
 
@@ -860,7 +1628,7 @@ class StreamableHTTPServerTransport
         // If we have a session ID and an onsessioninitialized handler, call it immediately
         // This is needed in cases where the server needs to keep track of multiple sessions
         if (sessionId != null && _onsessioninitialized != null) {
-          _onsessioninitialized!(sessionId!);
+          _onsessioninitialized(sessionId!);
         }
       }
 
@@ -868,6 +1636,7 @@ class StreamableHTTPServerTransport
       // clients using the Streamable HTTP transport MUST include it
       // in the Mcp-Session-Id header on all of their subsequent HTTP requests.
       if (!isInitializationRequest &&
+          !isStatelessMessage &&
           !await _validateSession(req, req.response)) {
         return;
       }
@@ -893,22 +1662,24 @@ class StreamableHTTPServerTransport
         // The default behavior is to use SSE streaming
         // but in some cases server will return JSON responses
         final streamId = generateUUID();
+        Socket? responseSocket;
         if (!_enableJsonResponse) {
-          final headers = {
-            HttpHeaders.contentTypeHeader: "text/event-stream; charset=utf-8",
-            HttpHeaders.cacheControlHeader: "no-cache",
-            HttpHeaders.connectionHeader: "keep-alive",
-          };
+          final headers = _sseResponseHeaders();
 
           // After initialization, always include the session ID if we have one
-          if (sessionId != null) {
+          if (sessionId != null && !isStatelessRequest) {
             headers["mcp-session-id"] = sessionId!;
           }
 
-          req.response.statusCode = HttpStatus.ok;
-          headers.forEach((key, value) {
-            req.response.headers.set(key, value);
-          });
+          if (isStatelessRequest) {
+            responseSocket = await _detachSseSocket(req, headers);
+          } else {
+            req.response.statusCode = HttpStatus.ok;
+            req.response.bufferOutput = false;
+            headers.forEach((key, value) {
+              req.response.headers.set(key, value);
+            });
+          }
         }
 
         // Store the response for this request to send messages back through this connection
@@ -917,30 +1688,70 @@ class StreamableHTTPServerTransport
           if (_isJsonRpcRequest(message)) {
             final reqId = (message as JsonRpcRequest).id;
             _ownedStreamIds.add(streamId);
-            _streamMapping[streamId] = req.response;
+            if (responseSocket == null) {
+              _streamMapping[streamId] = req.response;
+            } else {
+              _responseStreamSockets[streamId] = responseSocket;
+            }
             _requestToStreamMapping[reqId] = streamId;
+            if (_isStatelessJsonRpcRequest(message)) {
+              _statelessRequestIds.add(reqId);
+            }
           }
         }
 
-        if (!_enableJsonResponse &&
-            !await _primeSseStream(streamId, req.response)) {
+        final ssePrimed = _enableJsonResponse ||
+            (responseSocket == null
+                ? await _primeSseStream(
+                    streamId,
+                    req.response,
+                  )
+                : await _primeSseSocket(
+                    responseSocket,
+                  ));
+        if (!ssePrimed) {
           _streamMapping.remove(streamId);
+          _responseStreamSockets.remove(streamId)?.destroy();
           _ownedStreamIds.remove(streamId);
           for (final message in messages) {
             if (_isJsonRpcRequest(message)) {
               final reqId = (message as JsonRpcRequest).id;
               _requestToStreamMapping.remove(reqId);
               _requestResponseMap.remove(reqId);
+              _statelessRequestIds.remove(reqId);
             }
           }
           await _safeClose(req.response);
           return;
         }
 
+        var responseDoneHandled = false;
+        void handleResponseDone() {
+          if (responseDoneHandled) {
+            return;
+          }
+          responseDoneHandled = true;
+          if (_enableJsonResponse) {
+            _streamMapping.remove(streamId);
+          } else {
+            _handleResponseStreamClosed(streamId);
+          }
+        }
+
         // Set up close handler for client disconnects
-        req.response.done.then((_) {
-          _streamMapping.remove(streamId);
-        });
+        if (responseSocket == null) {
+          req.response.done.then(
+            (_) => handleResponseDone(),
+            onError: (Object _, StackTrace __) => handleResponseDone(),
+          );
+        } else {
+          responseSocket.listen(
+            null,
+            onDone: handleResponseDone,
+            onError: (Object _, StackTrace __) => handleResponseDone(),
+            cancelOnError: true,
+          );
+        }
 
         // Handle each message
         for (final message in messages) {
@@ -1001,19 +1812,12 @@ class StreamableHTTPServerTransport
   Future<bool> _validateSession(HttpRequest req, HttpResponse res) async {
     if (!_initialized) {
       // If the server has not been initialized yet, reject all requests
-      res.statusCode = HttpStatus.badRequest;
-      res.write(
-        jsonEncode(
-          JsonRpcError(
-            id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.connectionClosed.value,
-              message: 'Bad Request: Server not initialized',
-            ),
-          ).toJson(),
-        ),
+      await _writeJsonRpcErrorResponse(
+        res,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Bad Request: Server not initialized',
       );
-      await _safeClose(res);
       return false;
     }
 
@@ -1027,35 +1831,21 @@ class StreamableHTTPServerTransport
 
     if (requestSessionId == null) {
       // Non-initialization requests without a session ID should return 400 Bad Request
-      res.statusCode = HttpStatus.badRequest;
-      res.write(
-        jsonEncode(
-          JsonRpcError(
-            id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.connectionClosed.value,
-              message: 'Bad Request: Mcp-Session-Id header is required',
-            ),
-          ).toJson(),
-        ),
+      await _writeJsonRpcErrorResponse(
+        res,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Bad Request: Mcp-Session-Id header is required',
       );
-      await _safeClose(res);
       return false;
     } else if (_terminated || requestSessionId != sessionId) {
       // Reject terminated or invalid session IDs with 404 Not Found.
-      res.statusCode = HttpStatus.notFound;
-      res.write(
-        jsonEncode(
-          JsonRpcError(
-            id: null,
-            error: JsonRpcErrorData(
-              code: ErrorCode.connectionClosed.value,
-              message: 'Session not found',
-            ),
-          ).toJson(),
-        ),
+      await _writeJsonRpcErrorResponse(
+        res,
+        httpStatus: HttpStatus.notFound,
+        errorCode: ErrorCode.connectionClosed,
+        message: 'Session not found',
       );
-      await _safeClose(res);
       return false;
     }
 
@@ -1078,7 +1868,13 @@ class StreamableHTTPServerTransport
     for (final response in responses) {
       await _safeClose(response);
     }
+    final sockets = _responseStreamSockets.values.toList();
+    for (final socket in sockets) {
+      await _safeCloseSocket(socket);
+    }
+    _responseStreamSockets.clear();
     _streamMapping.clear();
+    _detachedResumableStreamIds.clear();
     _standaloneSseStreamIds.clear();
     _standaloneSseResponses.clear();
     _ownedStreamIds.clear();
@@ -1086,6 +1882,7 @@ class StreamableHTTPServerTransport
     // Clear any pending responses
     _requestResponseMap.clear();
     _requestToStreamMapping.clear(); // Also clear this map
+    _statelessRequestIds.clear();
     onclose?.call();
   }
 
@@ -1103,6 +1900,15 @@ class StreamableHTTPServerTransport
     if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
       // If the message is a response, use the request ID from the message
       requestId = _getMessageId(message);
+    }
+
+    if (message is JsonRpcRequest &&
+        requestId != null &&
+        _statelessRequestIds.contains(requestId)) {
+      throw StateError(
+        "Cannot send JSON-RPC requests on stateless MCP response streams; "
+        "return an InputRequiredResult for client input instead.",
+      );
     }
 
     // Check if this message should be sent on the standalone SSE stream (no request ID)
@@ -1130,7 +1936,7 @@ class StreamableHTTPServerTransport
         // Generate and store a stream-specific event ID if event store is provided.
         String? eventId;
         if (_eventStore != null) {
-          eventId = await _eventStore!.storeEvent(target.key, message);
+          eventId = await _eventStore.storeEvent(target.key, message);
         }
 
         final sent = await _writeSSEEvent(target.value, message, eventId);
@@ -1148,26 +1954,54 @@ class StreamableHTTPServerTransport
       throw StateError("No connection established for request ID: $requestId");
     }
 
-    final response = _streamMapping[streamId];
+    var response = _streamMapping[streamId];
+    final responseSocket = _responseStreamSockets[streamId];
+    final isStatelessRequestStream =
+        requestId != null && _statelessRequestIds.contains(requestId);
 
     if (!_enableJsonResponse) {
+      if (response == null && responseSocket == null) {
+        if (isStatelessRequestStream) {
+          _handleResponseStreamClosed(streamId);
+          return;
+        }
+      }
+
       // For SSE responses, generate event ID if event store is provided
       String? eventId;
 
-      if (_eventStore != null) {
-        eventId = await _eventStore!.storeEvent(streamId, message);
+      if (_eventStore != null && !isStatelessRequestStream) {
+        eventId = await _eventStore.storeEvent(streamId, message);
+        response = _streamMapping[streamId];
       }
 
-      if (response != null) {
+      if (responseSocket != null) {
+        final sent = await _writeSSEEventToSocket(
+          responseSocket,
+          message,
+        );
+        if (!sent && isStatelessRequestStream) {
+          _handleResponseStreamClosed(streamId);
+          return;
+        }
+      } else if (response != null) {
         // Write the event to the response stream
-        await _writeSSEEvent(response, message, eventId);
+        final sent = await _writeSSEEvent(response, message, eventId);
+        if (!sent && isStatelessRequestStream) {
+          _handleResponseStreamClosed(streamId);
+          return;
+        }
       }
     }
 
-    if (_isJsonRpcResponse(message)) {
+    if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
+      if (!_requestToStreamMapping.containsKey(requestId)) {
+        return;
+      }
+
       _requestResponseMap[requestId] = message;
       final relatedIds = _requestToStreamMapping.entries
-          .where((entry) => _streamMapping[entry.value] == response)
+          .where((entry) => entry.value == streamId)
           .map((entry) => entry.key)
           .toList();
 
@@ -1177,10 +2011,20 @@ class StreamableHTTPServerTransport
       );
 
       if (allResponsesReady) {
-        if (response == null) {
-          throw StateError(
-            "No connection established for request ID: $requestId",
-          );
+        if (response == null && responseSocket == null) {
+          if (!_detachedResumableStreamIds.contains(streamId)) {
+            throw StateError(
+              "No connection established for request ID: $requestId",
+            );
+          }
+
+          for (final id in relatedIds) {
+            _requestResponseMap.remove(id);
+            _requestToStreamMapping.remove(id);
+            _statelessRequestIds.remove(id);
+          }
+          _detachedResumableStreamIds.remove(streamId);
+          return;
         }
 
         if (_enableJsonResponse) {
@@ -1189,43 +2033,115 @@ class StreamableHTTPServerTransport
             HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
           };
 
-          if (sessionId != null) {
+          final isStatelessResponse = relatedIds.any(
+            (id) => _statelessRequestIds.contains(id),
+          );
+          if (sessionId != null && !isStatelessResponse) {
             headers['mcp-session-id'] = sessionId!;
           }
 
           final responses =
               relatedIds.map((id) => _requestResponseMap[id]!).toList();
 
+          if (isStatelessResponse &&
+              responses.length == 1 &&
+              responses.single is JsonRpcError) {
+            final error = responses.single as JsonRpcError;
+            response!.statusCode =
+                _statelessHttpStatusForErrorCode(error.error.code);
+          }
+
           headers.forEach((key, value) {
-            response.headers.set(key, value);
+            response!.headers.set(key, value);
           });
 
           if (responses.length == 1) {
-            response.write(jsonEncode(responses[0].toJson()));
+            response!.write(jsonEncode(responses[0].toJson()));
           } else {
-            response.write(
+            response!.write(
               jsonEncode(responses.map((r) => r.toJson()).toList()),
             );
           }
           await _safeClose(response);
+        } else if (responseSocket != null) {
+          await _safeCloseSocket(responseSocket);
         } else {
           // End the SSE stream
-          await _safeClose(response);
+          await _safeClose(response!);
         }
 
         // Clean up
+        _responseStreamSockets.remove(streamId);
+        _detachedResumableStreamIds.remove(streamId);
         for (final id in relatedIds) {
           _requestResponseMap.remove(id);
           _requestToStreamMapping.remove(id);
+          _statelessRequestIds.remove(id);
         }
       }
+    }
+  }
+
+  void _handleResponseStreamClosed(StreamId streamId) {
+    _responseStreamSockets.remove(streamId)?.destroy();
+    final relatedIds = _requestToStreamMapping.entries
+        .where((entry) => entry.value == streamId)
+        .map((entry) => entry.key)
+        .toList();
+
+    _streamMapping.remove(streamId);
+
+    final statelessIds = relatedIds
+        .where((requestId) => _statelessRequestIds.contains(requestId))
+        .toList();
+    if (statelessIds.isEmpty) {
+      if (_eventStore != null && relatedIds.isNotEmpty) {
+        _detachedResumableStreamIds.add(streamId);
+      }
+      return;
+    }
+
+    for (final requestId in statelessIds) {
+      if (_requestResponseMap.containsKey(requestId)) {
+        continue;
+      }
+
+      try {
+        onmessage?.call(
+          JsonRpcCancelledNotification(
+            cancelParams: CancelledNotification(
+              requestId: requestId,
+              reason: 'SSE response stream closed by client',
+            ),
+          ),
+        );
+      } catch (error) {
+        onerror?.call(
+          error is Error ? error : StateError(error.toString()),
+        );
+      }
+    }
+
+    for (final requestId in statelessIds) {
+      _requestResponseMap.remove(requestId);
+      _requestToStreamMapping.remove(requestId);
+      _statelessRequestIds.remove(requestId);
     }
   }
 
   /// Checks if a message is an initialize request
   bool _isInitializeRequest(JsonRpcMessage message) {
     if (message is JsonRpcRequest) {
-      return message.method == "initialize";
+      return message.method == Method.initialize;
+    }
+    return false;
+  }
+
+  /// Checks if a message uses the stateless 2026 protocol metadata.
+  bool _isStatelessJsonRpcRequest(JsonRpcMessage message) {
+    if (message is JsonRpcRequest) {
+      final version = message.meta?[McpMetaKey.protocolVersion];
+      return version is String && isStatelessProtocolVersion(version);
     }
     return false;
   }
@@ -1254,4 +2170,31 @@ class StreamableHTTPServerTransport
     }
     return null;
   }
+}
+
+enum _McpParamHeaderValidationError { name, value }
+
+class _McpParamHeader {
+  final String name;
+  final String suffix;
+  final String? value;
+  final _McpParamHeaderValidationError? validationError;
+
+  const _McpParamHeader({
+    required this.name,
+    required this.suffix,
+    required String this.value,
+  }) : validationError = null;
+
+  const _McpParamHeader.invalidName({
+    required this.name,
+    required this.suffix,
+  })  : value = null,
+        validationError = _McpParamHeaderValidationError.name;
+
+  const _McpParamHeader.invalidValue({
+    required this.name,
+    required this.suffix,
+  })  : value = null,
+        validationError = _McpParamHeaderValidationError.value;
 }

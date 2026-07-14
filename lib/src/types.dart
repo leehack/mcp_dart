@@ -1,13 +1,17 @@
 export 'types/content.dart';
+export 'types/json_value.dart';
 export 'types/resources.dart';
+export 'types/subscriptions.dart';
 export 'types/prompts.dart';
 export 'types/tools.dart';
 export 'types/tasks.dart';
 export 'types/json_rpc.dart'
     hide
+        expectJsonRpcMethod,
         extractRequestMeta,
         parseProgressToken,
         parseRequestId,
+        validateMetaKeyName,
         validateRequestMeta;
 export 'types/mcp_ui.dart';
 export 'types/misc.dart';

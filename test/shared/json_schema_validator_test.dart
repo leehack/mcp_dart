@@ -160,7 +160,10 @@ void main() {
       });
 
       test('validates exclusiveMinimum', () {
-        final schema = JsonSchema.integer(exclusiveMinimum: 5);
+        final schema = JsonSchema.fromJson({
+          'type': 'integer',
+          'exclusiveMinimum': 5.5,
+        });
         schema.validate(6);
         expect(
           () => schema.validate(5),
@@ -169,19 +172,27 @@ void main() {
       });
 
       test('validates exclusiveMaximum', () {
-        final schema = JsonSchema.integer(exclusiveMaximum: 10);
+        final schema = JsonSchema.fromJson({
+          'type': 'integer',
+          'exclusiveMaximum': 10.5,
+        });
         schema.validate(9);
+        schema.validate(10);
         expect(
-          () => schema.validate(10),
+          () => schema.validate(11),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
 
       test('validates multipleOf', () {
-        final schema = JsonSchema.integer(multipleOf: 3);
-        schema.validate(9);
+        final schema = JsonSchema.fromJson({
+          'type': 'integer',
+          'multipleOf': 1.5,
+        });
+        schema.validate(3);
+        schema.validate(6);
         expect(
-          () => schema.validate(10),
+          () => schema.validate(4),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
@@ -744,7 +755,7 @@ void main() {
         }
       });
 
-      test('rejects malformed raw type arrays', () {
+      test('rejects malformed raw type arrays at parse time', () {
         final schemas = [
           {
             'type': ['string', 1],
@@ -763,11 +774,9 @@ void main() {
         ];
 
         for (final json in schemas) {
-          final schema = JsonSchema.fromJson(json);
-          expect(schema.toJson(), json);
           expect(
-            () => schema.validate('value'),
-            throwsA(isA<JsonSchemaValidationException>()),
+            () => JsonSchema.fromJson(json),
+            throwsA(isA<FormatException>()),
           );
         }
       });

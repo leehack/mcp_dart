@@ -6,6 +6,9 @@ class MockClient implements McpClient {
   final Map<String, dynamic> _responses = {};
   final List<JsonRpcRequest> requests = [];
   bool supportsTaskAugmentedTools = true;
+  String? protocolVersion;
+  ServerCapabilities? serverCapabilities;
+  CallToolResult? callToolResult;
   List<Tool> listedTools = const [];
   Map<String?, ListToolsResult> listedToolPages = const {};
 
@@ -29,7 +32,7 @@ class MockClient implements McpClient {
     JsonRpcRequest request,
     T Function(Map<String, dynamic> json) parser, [
     RequestOptions? options,
-    int? relatedRequestId,
+    RequestId? relatedRequestId,
   ]) async {
     requests.add(request);
 
@@ -71,6 +74,29 @@ class MockClient implements McpClient {
         "Server does not support capability 'tasks.requests.tools.call' required for task-based '$method'",
       );
     }
+  }
+
+  @override
+  String? getProtocolVersion() => protocolVersion;
+
+  @override
+  ServerCapabilities? getServerCapabilities() => serverCapabilities;
+
+  @override
+  Future<CallToolResult> callTool(
+    CallToolRequest params, {
+    RequestOptions? options,
+  }) async {
+    requests.add(JsonRpcCallToolRequest(id: -1, params: params.toJson()));
+    final result = callToolResult;
+    if (result != null) {
+      return result;
+    }
+    final response = _responses[Method.toolsCall];
+    if (response == null) {
+      throw Exception('Mock response not found for ${Method.toolsCall}');
+    }
+    return CallToolResult.fromJson(Map<String, dynamic>.from(response));
   }
 
   @override
@@ -119,6 +145,61 @@ void main() {
             .text,
         'Success',
       );
+    });
+
+    test('callToolStream delegates 2026 task extension tools to callTool',
+        () async {
+      mockClient.protocolVersion = stableProtocolVersion2026_07_28;
+      mockClient.serverCapabilities = ServerCapabilities(
+        tools: const ServerCapabilitiesTools(),
+        extensions: withMcpTasksExtension(null),
+      );
+      mockClient.callToolResult = const CallToolResult(
+        content: [TextContent(text: 'Extension task done')],
+      );
+
+      final events = await taskClient.callToolStream(
+        'extension-tool',
+        {'city': 'Toronto'},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskResultMessage>());
+      expect(
+        (((events.single as TaskResultMessage).result as CallToolResult)
+                .content
+                .single as TextContent)
+            .text,
+        'Extension task done',
+      );
+      expect(mockClient.requests.map((r) => r.method), [Method.toolsCall]);
+      expect(mockClient.requests.single.params, isNot(contains('task')));
+      expect(mockClient.requests.single.params?['arguments'], {
+        'city': 'Toronto',
+      });
+    });
+
+    test('callToolStream rejects legacy task parameter for 2026 task extension',
+        () async {
+      mockClient.protocolVersion = stableProtocolVersion2026_07_28;
+      mockClient.serverCapabilities = ServerCapabilities(
+        tools: const ServerCapabilitiesTools(),
+        extensions: withMcpTasksExtension(null),
+      );
+
+      final events = await taskClient.callToolStream(
+        'extension-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskErrorMessage>());
+      expect(
+        (events.single as TaskErrorMessage).error.toString(),
+        contains('legacy task request parameter'),
+      );
+      expect(mockClient.requests, isEmpty);
     });
 
     test('callToolStream handles long-running task workflow', () async {

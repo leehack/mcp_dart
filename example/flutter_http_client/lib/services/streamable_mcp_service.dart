@@ -76,7 +76,8 @@ class StreamableMcpService extends ChangeNotifier {
     try {
       // Create a new client
       _client = McpClient(
-        Implementation(name: 'flutter-mcp-client', version: '1.0.0'),
+        const Implementation(name: 'flutter-mcp-client', version: '1.0.0'),
+        options: const McpClientOptions(protocol: McpProtocol.stable),
       );
 
       _client!.onerror = (error) {
@@ -173,6 +174,8 @@ class StreamableMcpService extends ChangeNotifier {
           return Future.value();
         },
         (params, meta) => JsonRpcResourceListChangedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsResourcesListChanged,
           'params': params,
           if (meta != null) '_meta': meta,
         }),

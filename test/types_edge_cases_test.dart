@@ -13,6 +13,16 @@ void main() {
     test('ErrorCode.fromValue finds all standard codes', () {
       expect(ErrorCode.fromValue(-32000), equals(ErrorCode.connectionClosed));
       expect(ErrorCode.fromValue(-32001), equals(ErrorCode.requestTimeout));
+      expect(ErrorCode.fromValue(-32002), equals(ErrorCode.resourceNotFound));
+      expect(ErrorCode.fromValue(-32020), equals(ErrorCode.headerMismatch));
+      expect(
+        ErrorCode.fromValue(-32021),
+        equals(ErrorCode.missingRequiredClientCapability),
+      );
+      expect(
+        ErrorCode.fromValue(-32022),
+        equals(ErrorCode.unsupportedProtocolVersion),
+      );
       expect(ErrorCode.fromValue(-32700), equals(ErrorCode.parseError));
       expect(ErrorCode.fromValue(-32600), equals(ErrorCode.invalidRequest));
       expect(ErrorCode.fromValue(-32601), equals(ErrorCode.methodNotFound));
@@ -52,6 +62,117 @@ void main() {
       final restored = JsonRpcErrorData.fromJson(json);
       expect(restored.data['nested']['level'], equals(2));
     });
+
+    test('JsonRpcErrorData validates required code and message fields', () {
+      for (final code in [
+        null,
+        false,
+        'not-code',
+        1.5,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
+        expect(
+          () => JsonRpcErrorData.fromJson({
+            'code': code,
+            'message': 'Bad code',
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('code')),
+          ),
+        );
+      }
+
+      for (final message in [null, false, 1, <String, dynamic>{}, <Object>[]]) {
+        expect(
+          () => JsonRpcErrorData.fromJson({
+            'code': ErrorCode.invalidRequest.value,
+            'message': message,
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('message')),
+          ),
+        );
+      }
+    });
+
+    test('JsonRpcErrorData accepts whole-number numeric code values', () {
+      final errorData = JsonRpcErrorData.fromJson({
+        'code': -32600.0,
+        'message': 'Whole-number JSON code',
+      });
+
+      expect(errorData.code, ErrorCode.invalidRequest.value);
+    });
+
+    test('JsonRpcErrorData rejects non-JSON data values', () {
+      expect(
+        () => const JsonRpcErrorData(
+          code: -32600,
+          message: 'Bad data',
+          data: {'bad': Object()},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => const JsonRpcErrorData(
+          code: -32600,
+          message: 'Bad number',
+          data: {'score': double.infinity},
+        ).toJson(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcErrorData.fromJson({
+          'code': -32600,
+          'message': 'Bad data',
+          'data': {'bad': Object()},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('JsonRpcError rejects malformed error object wire values', () {
+      for (final error in [null, false, 1, 'not-error', <Object>[]]) {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'error': error,
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('error')),
+          ),
+        );
+      }
+    });
+
+    test('JsonRpcError validates JSON-RPC envelope fields directly', () {
+      for (final json in [
+        {
+          'jsonrpc': '1.0',
+          'error': {'code': -32600, 'message': 'Bad version'},
+        },
+        {
+          'jsonrpc': '2.0',
+          'method': 'unexpected/request',
+          'error': {'code': -32600, 'message': 'Bad kind'},
+        },
+        {
+          'jsonrpc': '2.0',
+          'result': {'ok': true},
+          'error': {'code': -32603, 'message': 'Internal error'},
+        },
+      ]) {
+        expect(
+          () => JsonRpcError.fromJson(json),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
   });
 
   group('JsonRpcCancelledNotification Edge Cases', () {
@@ -74,6 +195,25 @@ void main() {
       );
     });
 
+    test('rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcCancelledNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/cancelled',
+          'params': {'requestId': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcCancelledNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'notifications/progress',
+          'params': {'requestId': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('handles optional reason field correctly', () {
       // With reason
       final withReason = const CancelledNotificationParams(
@@ -89,8 +229,41 @@ void main() {
       expect(json.containsKey('reason'), isFalse);
     });
 
+    test('rejects omitted requestId per cancellation semantics', () {
+      expect(
+        () => JsonRpcCancelledNotification.fromJson({
+          'jsonrpc': '2.0',
+          'method': 'notifications/cancelled',
+          'params': {'reason': 'Task cancellation uses tasks/cancel'},
+        }),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('requestId')),
+        ),
+      );
+
+      expect(
+        () => const CancelledNotificationParams(
+          requestId: null,
+          reason: 'missing request id',
+        ).toJson(),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('requestId')),
+        ),
+      );
+    });
+
     test('rejects malformed requestId wire values', () {
-      for (final requestId in [null, true, <String, dynamic>{}, <Object>[]]) {
+      for (final requestId in [
+        null,
+        true,
+        123.5,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcCancelledNotification.fromJson({
             'jsonrpc': '2.0',
@@ -105,6 +278,21 @@ void main() {
           ),
         );
       }
+
+      expect(
+        () => const CancelledNotificationParams(requestId: 123.5).toJson(),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('requestId')),
+        ),
+      );
+      expect(
+        () => const CancelledNotificationParams(requestId: double.nan).toJson(),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('requestId')),
+        ),
+      );
     });
 
     test('preserves string and integer requestId wire values', () {
@@ -159,13 +347,40 @@ void main() {
       );
     });
 
+    test('rejects wrong wrapper constants', () {
+      final params = {
+        'protocolVersion': stableProtocolVersion2025_11_25,
+        'capabilities': <String, dynamic>{},
+        'clientInfo': <String, dynamic>{'name': 'test', 'version': '1.0'},
+      };
+
+      expect(
+        () => JsonRpcInitializeRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.initialize,
+          'params': params,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcInitializeRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.ping,
+          'params': params,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('handles meta field in initialize request', () {
       final json = <String, dynamic>{
         'jsonrpc': '2.0',
         'id': 1,
         'method': 'initialize',
         'params': <String, dynamic>{
-          'protocolVersion': latestProtocolVersion,
+          'protocolVersion': stableProtocolVersion2025_11_25,
           'capabilities': <String, dynamic>{},
           'clientInfo': <String, dynamic>{'name': 'test', 'version': '1.0'},
           '_meta': <String, dynamic>{'sessionId': 'abc123'},
@@ -174,6 +389,75 @@ void main() {
 
       final request = JsonRpcInitializeRequest.fromJson(json);
       expect(request.meta, equals({'sessionId': 'abc123'}));
+    });
+  });
+
+  group('JsonRpcInitializedNotification Edge Cases', () {
+    test('rejects wrong wrapper constants and malformed params', () {
+      expect(
+        () => JsonRpcInitializedNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': Method.notificationsInitialized,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcInitializedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsCancelled,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcInitializedNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsInitialized,
+          'params': null,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('handles metadata in params', () {
+      final notification = JsonRpcInitializedNotification.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsInitialized,
+        'params': {
+          '_meta': {'sessionId': 'abc123'},
+        },
+      });
+
+      expect(notification.meta, equals({'sessionId': 'abc123'}));
+    });
+  });
+
+  group('JsonRpcPingRequest Edge Cases', () {
+    test('rejects wrong wrapper constants and malformed params', () {
+      expect(
+        () => JsonRpcPingRequest.fromJson({
+          'jsonrpc': '1.0',
+          'id': 1,
+          'method': Method.ping,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcPingRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.toolsList,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcPingRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': 1,
+          'method': Method.ping,
+          'params': null,
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
@@ -197,6 +481,25 @@ void main() {
       );
     });
 
+    test('rejects wrong wrapper constants', () {
+      expect(
+        () => JsonRpcProgressNotification.fromJson({
+          'jsonrpc': '1.0',
+          'method': 'notifications/progress',
+          'params': {'progressToken': 'token', 'progress': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => JsonRpcProgressNotification.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': 'notifications/cancelled',
+          'params': {'progressToken': 'token', 'progress': 1},
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('handles progress with optional total field', () {
       // With total
       final withTotal = const Progress(progress: 50, total: 100);
@@ -211,10 +514,34 @@ void main() {
       expect(json.containsKey('total'), isFalse);
     });
 
+    test('rejects non-finite progress numbers', () {
+      for (final value in [double.nan, double.infinity]) {
+        expect(
+          () => Progress.fromJson({'progress': value}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Progress(progress: value).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          () => Progress.fromJson({'progress': 1, 'total': value}),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => Progress(progress: 1, total: value).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      }
+    });
+
     test('rejects malformed progressToken wire values', () {
       for (final progressToken in [
         null,
         false,
+        123.5,
+        double.nan,
+        double.infinity,
         <String, dynamic>{},
         <Object>[],
       ]) {
@@ -236,6 +563,23 @@ void main() {
           ),
         );
       }
+
+      expect(
+        () => const ProgressNotification(progressToken: 123.5, progress: 1)
+            .toJson(),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('progressToken')),
+        ),
+      );
+      expect(
+        () => const ProgressNotification(progressToken: double.nan, progress: 1)
+            .toJson(),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('progressToken')),
+        ),
+      );
     });
 
     test('preserves string and integer progressToken wire values', () {
@@ -288,8 +632,81 @@ void main() {
       );
     });
 
+    test('rejects malformed method wire values', () {
+      for (final method in [
+        null,
+        false,
+        1,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
+        for (final hasId in [true, false]) {
+          expect(
+            () => JsonRpcMessage.fromJson({
+              'jsonrpc': '2.0',
+              if (hasId) 'id': 'request-1',
+              'method': method,
+            }),
+            throwsA(
+              isA<FormatException>()
+                  .having((e) => e.message, 'message', contains('method')),
+            ),
+          );
+        }
+      }
+    });
+
+    test('rejects malformed generic request params wire values', () {
+      for (final params in [null, false, 1, 'not-params', <Object>[]]) {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': '2.0',
+            'id': 'request-1',
+            'method': 'unknown/request',
+            'params': params,
+          }),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('params')),
+          ),
+        );
+      }
+    });
+
+    test('rejects explicit null params on typed request and notification', () {
+      for (final json in [
+        {
+          'jsonrpc': '2.0',
+          'id': 'request-1',
+          'method': Method.ping,
+          'params': null,
+        },
+        {
+          'jsonrpc': '2.0',
+          'method': Method.notificationsInitialized,
+          'params': null,
+        },
+      ]) {
+        expect(
+          () => JsonRpcMessage.fromJson(json),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('params')),
+          ),
+        );
+      }
+    });
+
     test('rejects malformed request id wire values', () {
-      for (final id in [null, false, 1.5, <String, dynamic>{}, <Object>[]]) {
+      for (final id in [
+        null,
+        false,
+        123.5,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',
@@ -302,6 +719,33 @@ void main() {
           ),
         );
       }
+
+      expect(
+        () => const JsonRpcRequest(
+          id: 123.5,
+          method: 'unknown/request',
+        ).toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('JsonRpcRequest.id'),
+          ),
+        ),
+      );
+      expect(
+        () => const JsonRpcRequest(
+          id: double.nan,
+          method: 'unknown/request',
+        ).toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('JsonRpcRequest.id'),
+          ),
+        ),
+      );
     });
 
     test('preserves string and integer request ids', () {
@@ -319,7 +763,15 @@ void main() {
     });
 
     test('rejects malformed request progressToken wire values', () {
-      for (final token in [null, false, 1.5, <String, dynamic>{}, <Object>[]]) {
+      for (final token in [
+        null,
+        false,
+        123.5,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',
@@ -338,6 +790,21 @@ void main() {
           ),
         );
       }
+
+      expect(
+        () => const JsonRpcRequest(
+          id: 'request-1',
+          method: 'unknown/request',
+          meta: {'progressToken': 123.5},
+        ).toJson(),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('_meta.progressToken'),
+          ),
+        ),
+      );
     });
 
     test('rejects malformed request _meta wire values', () {
@@ -430,7 +897,14 @@ void main() {
     });
 
     test('rejects malformed response id wire values', () {
-      for (final id in [false, 1.5, <String, dynamic>{}, <Object>[]]) {
+      for (final id in [
+        false,
+        123.5,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',
@@ -445,10 +919,91 @@ void main() {
       }
     });
 
-    test('handles error with null id', () {
+    test('rejects response envelopes with both result and error', () {
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': '2.0',
+          'id': 1,
+          'result': {'data': 'test'},
+          'error': {'code': -32603, 'message': 'Internal error'},
+        }),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('result'))
+              .having((e) => e.message, 'message', contains('error')),
+        ),
+      );
+    });
+
+    test('rejects message envelopes mixing method with response fields', () {
+      for (final json in [
+        {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'unknown/request',
+          'result': {'ok': true},
+        },
+        {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'unknown/request',
+          'error': {'code': -32600, 'message': 'Invalid request'},
+        },
+      ]) {
+        expect(
+          () => JsonRpcMessage.fromJson(json),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('method'))
+                .having((e) => e.message, 'message', contains('result'))
+                .having((e) => e.message, 'message', contains('error')),
+          ),
+        );
+      }
+    });
+
+    test('typed parsers reject response fields directly', () {
+      for (final parse in [
+        () => JsonRpcPingRequest.fromJson({
+              'jsonrpc': '2.0',
+              'id': 1,
+              'method': Method.ping,
+              'result': {'ok': true},
+            }),
+        () => JsonRpcPingRequest.fromJson({
+              'jsonrpc': '2.0',
+              'id': 1,
+              'method': Method.ping,
+              'error': {'code': -32600, 'message': 'Invalid request'},
+            }),
+        () => JsonRpcProgressNotification.fromJson({
+              'jsonrpc': '2.0',
+              'method': Method.notificationsProgress,
+              'params': {'progressToken': 'p1', 'progress': 1},
+              'result': {'ok': true},
+            }),
+        () => JsonRpcProgressNotification.fromJson({
+              'jsonrpc': '2.0',
+              'method': Method.notificationsProgress,
+              'params': {'progressToken': 'p1', 'progress': 1},
+              'error': {'code': -32600, 'message': 'Invalid request'},
+            }),
+      ]) {
+        expect(
+          parse,
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('method'))
+                .having((e) => e.message, 'message', contains('result'))
+                .having((e) => e.message, 'message', contains('error')),
+          ),
+        );
+      }
+    });
+
+    test('handles error with omitted id', () {
       final json = {
         'jsonrpc': '2.0',
-        'id': null,
         'error': {'code': -32600, 'message': 'Error'},
       };
 
@@ -458,7 +1013,15 @@ void main() {
     });
 
     test('rejects malformed error id wire values', () {
-      for (final id in [false, 1.5, <String, dynamic>{}, <Object>[]]) {
+      for (final id in [
+        null,
+        false,
+        123.5,
+        double.nan,
+        double.infinity,
+        <String, dynamic>{},
+        <Object>[],
+      ]) {
         expect(
           () => JsonRpcMessage.fromJson({
             'jsonrpc': '2.0',
@@ -509,7 +1072,7 @@ void main() {
 
     test('handles null roots and elicitation maps', () {
       final json = {
-        'experimental': {'feature': true},
+        'experimental': {'feature': <String, dynamic>{}},
         'sampling': {'enabled': true},
         'roots': null,
         'elicitation': null,
@@ -541,7 +1104,7 @@ void main() {
 
     test('handles null capability maps', () {
       final json = {
-        'experimental': {'feature': true},
+        'experimental': {'feature': <String, dynamic>{}},
         'logging': {'level': 'info'},
         'prompts': null,
         'resources': null,
@@ -563,7 +1126,7 @@ void main() {
     test('handles optional instructions field', () {
       // With instructions
       final withInstructions = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test', version: '1.0'),
         instructions: 'How to use this server',
@@ -573,7 +1136,7 @@ void main() {
 
       // Without instructions
       final withoutInstructions = const InitializeResult(
-        protocolVersion: latestProtocolVersion,
+        protocolVersion: stableProtocolVersion2025_11_25,
         capabilities: ServerCapabilities(),
         serverInfo: Implementation(name: 'test', version: '1.0'),
       );
@@ -583,7 +1146,7 @@ void main() {
 
     test('extracts _meta from result JSON', () {
       final json = <String, dynamic>{
-        'protocolVersion': latestProtocolVersion,
+        'protocolVersion': stableProtocolVersion2025_11_25,
         'capabilities': <String, dynamic>{},
         'serverInfo': <String, dynamic>{'name': 'test', 'version': '1.0'},
         '_meta': <String, dynamic>{'sessionId': 'xyz'},
@@ -609,6 +1172,24 @@ void main() {
         equals({
           '_meta': {'key': 'value'},
         }),
+      );
+    });
+
+    test('parses meta when present', () {
+      final result = EmptyResult.fromJson({
+        '_meta': {'key': 'value'},
+      });
+
+      expect(result.meta, equals({'key': 'value'}));
+      expect(result.toJson(), {
+        '_meta': {'key': 'value'},
+      });
+    });
+
+    test('rejects malformed meta', () {
+      expect(
+        () => EmptyResult.fromJson({'_meta': 'bad'}),
+        throwsA(isA<FormatException>()),
       );
     });
   });

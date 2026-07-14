@@ -255,7 +255,7 @@ void main() {
       final initRequest = JsonRpcInitializeRequest(
         id: 1,
         initParams: const InitializeRequestParams(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ClientCapabilities(),
           clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
         ),
@@ -347,8 +347,29 @@ void main() {
           field: 'id',
           message: {
             'jsonrpc': '2.0',
+            'id': 1.5,
+            'method': 'ping',
+          },
+        ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
             'id': null,
             'method': 'ping',
+          },
+        ),
+        (
+          field: 'progressToken',
+          message: {
+            'jsonrpc': '2.0',
+            'id': 'with-bad-meta',
+            'method': 'ping',
+            'params': {
+              '_meta': {
+                'progressToken': 1.5,
+              },
+            },
           },
         ),
         (
@@ -381,6 +402,17 @@ void main() {
             'jsonrpc': '2.0',
             'method': 'notifications/progress',
             'params': {
+              'progressToken': 1.5,
+              'progress': 0,
+            },
+          },
+        ),
+        (
+          field: 'progressToken',
+          message: {
+            'jsonrpc': '2.0',
+            'method': 'notifications/progress',
+            'params': {
               'progressToken': <Object>[],
               'progress': 0,
             },
@@ -402,6 +434,17 @@ void main() {
             'jsonrpc': '2.0',
             'id': false,
             'result': <String, dynamic>{},
+          },
+        ),
+        (
+          field: 'id',
+          message: {
+            'jsonrpc': '2.0',
+            'id': null,
+            'error': {
+              'code': -32600,
+              'message': 'Invalid request',
+            },
           },
         ),
         (
@@ -537,7 +580,7 @@ void main() {
       final response = JsonRpcResponse(
         id: 1,
         result: const InitializeResult(
-          protocolVersion: latestProtocolVersion,
+          protocolVersion: stableProtocolVersion2025_11_25,
           capabilities: ServerCapabilities(),
           serverInfo: Implementation(name: 'TestServer', version: '1.0.0'),
         ).toJson(),

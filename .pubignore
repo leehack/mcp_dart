@@ -19,6 +19,8 @@ coverage/
 build/
 .dart_tool/
 firebase-debug.log
+__pycache__/
+*.pyc
 
 # JS interop test fixtures (not required by package consumers).
 test/interop/ts/

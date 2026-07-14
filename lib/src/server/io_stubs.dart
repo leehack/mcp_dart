@@ -103,6 +103,9 @@ class StreamableHTTPServerTransportOptions {
   /// The maximum number of events allowed during SSE resumption.
   final int maxReplayedEvents;
 
+  /// Reconnection delay advertised in resumable SSE priming events.
+  final Duration sseRetryDelay;
+
   /// Creates configuration options for StreamableHTTPServerTransport.
   StreamableHTTPServerTransportOptions({
     this.sessionIdGenerator,
@@ -115,7 +118,16 @@ class StreamableHTTPServerTransportOptions {
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
     this.maxReplayedEvents = 1000,
-  });
+    this.sseRetryDelay = const Duration(seconds: 1),
+  }) {
+    if (sseRetryDelay.isNegative) {
+      throw ArgumentError.value(
+        sseRetryDelay,
+        'sseRetryDelay',
+        'Must not be negative',
+      );
+    }
+  }
 }
 
 /// Stub for Streamable HTTP server transport on platforms without `dart:io`.
@@ -497,7 +509,17 @@ class StreamableMcpServer {
     this.allowedOrigins,
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
-  }) : _serverFactory = serverFactory;
+    this.enableJsonResponse = false,
+    this.sseRetryDelay = const Duration(seconds: 1),
+  }) : _serverFactory = serverFactory {
+    if (sseRetryDelay.isNegative) {
+      throw ArgumentError.value(
+        sseRetryDelay,
+        'sseRetryDelay',
+        'Must not be negative',
+      );
+    }
+  }
 
   final McpServer Function(String sessionId) _serverFactory;
 
@@ -538,6 +560,18 @@ class StreamableMcpServer {
   /// If true, reject JSON-RPC batch payloads.
   final bool rejectBatchJsonRpcPayloads;
 
+  /// If true, return JSON responses instead of SSE streams for request/response
+  /// interactions.
+  final bool enableJsonResponse;
+
+  /// Reconnection delay advertised in resumable SSE priming events.
+  final Duration sseRetryDelay;
+
+  /// Port currently bound by the HTTP server.
+  ///
+  /// Web/default stubs never bind a server, so this mirrors the configured port.
+  int get boundPort => port;
+
   /// Starts the HTTP server on IO platforms.
   Future<void> start() async {
     // Touch constructor fields so analyzer does not flag them as unused without
@@ -556,6 +590,8 @@ class StreamableMcpServer {
       allowedOrigins,
       strictProtocolVersionHeaderValidation,
       rejectBatchJsonRpcPayloads,
+      enableJsonResponse,
+      sseRetryDelay,
     );
     _unsupported('StreamableMcpServer.start');
   }

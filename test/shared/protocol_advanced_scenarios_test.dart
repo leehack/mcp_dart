@@ -103,12 +103,13 @@ void main() {
 
       // Send progress notification with an invalid progressToken type.
       transport.receiveMessage(
-        JsonRpcProgressNotification(
-          progressParams: const ProgressNotificationParams(
-            progressToken: false,
-            progress: 50,
-            total: 100,
-          ),
+        const JsonRpcNotification(
+          method: Method.notificationsProgress,
+          params: {
+            'progressToken': false,
+            'progress': 50,
+            'total': 100,
+          },
         ),
       );
 

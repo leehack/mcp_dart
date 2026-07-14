@@ -3,3 +3,6 @@ include: package:lints/recommended.yaml
 analyzer:
   exclude:
     - lib/src/bricks/**/__brick__/**
+
+formatter:
+  trailing_commas: preserve

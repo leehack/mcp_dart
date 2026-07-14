@@ -28,10 +28,12 @@ void main() {
       command = UpdateCommand(logger: logger, pubUpdater: pubUpdater);
 
       when(() => logger.progress(any())).thenReturn(progress);
-      when(() => pubUpdater.getLatestVersion(any()))
-          .thenAnswer((_) async => packageVersion);
-      when(() => pubUpdater.update(packageName: any(named: 'packageName')))
-          .thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+      when(
+        () => pubUpdater.getLatestVersion(any()),
+      ).thenAnswer((_) async => packageVersion);
+      when(
+        () => pubUpdater.update(packageName: any(named: 'packageName')),
+      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
     });
 
     test('can be instantiated', () {
@@ -39,8 +41,9 @@ void main() {
     });
 
     test('handles software error when checking for updates fails', () async {
-      when(() => pubUpdater.getLatestVersion(any()))
-          .thenThrow(Exception('oops'));
+      when(
+        () => pubUpdater.getLatestVersion(any()),
+      ).thenThrow(Exception('oops'));
 
       final result = await command.run();
 
@@ -50,10 +53,12 @@ void main() {
     });
 
     test('handles software error when update fails', () async {
-      when(() => pubUpdater.getLatestVersion(any()))
-          .thenAnswer((_) async => '9.9.9');
-      when(() => pubUpdater.update(packageName: any(named: 'packageName')))
-          .thenThrow(Exception('oops'));
+      when(
+        () => pubUpdater.getLatestVersion(any()),
+      ).thenAnswer((_) async => '9.9.9');
+      when(
+        () => pubUpdater.update(packageName: any(named: 'packageName')),
+      ).thenThrow(Exception('oops'));
 
       final result = await command.run();
 
@@ -63,27 +68,34 @@ void main() {
     });
 
     test('logs message when already at latest version', () async {
-      when(() => pubUpdater.getLatestVersion(any()))
-          .thenAnswer((_) async => packageVersion);
+      when(
+        () => pubUpdater.getLatestVersion(any()),
+      ).thenAnswer((_) async => packageVersion);
 
       final result = await command.run();
 
       expect(result, equals(ExitCode.success.code));
-      verify(() => logger.info('CLI is already at the latest version.'))
-          .called(1);
+      verify(
+        () => logger.info('CLI is already at the latest version.'),
+      ).called(1);
       verifyNever(
-          () => pubUpdater.update(packageName: any(named: 'packageName')));
+        () => pubUpdater.update(packageName: any(named: 'packageName')),
+      );
     });
 
     test('updates to latest version', () async {
-      when(() => pubUpdater.isUpToDate(
-            packageName: any(named: 'packageName'),
-            currentVersion: any(named: 'currentVersion'),
-          )).thenAnswer((_) async => false);
-      when(() => pubUpdater.getLatestVersion(any()))
-          .thenAnswer((_) async => '9.9.9');
-      when(() => pubUpdater.update(packageName: any(named: 'packageName')))
-          .thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+      when(
+        () => pubUpdater.isUpToDate(
+          packageName: any(named: 'packageName'),
+          currentVersion: any(named: 'currentVersion'),
+        ),
+      ).thenAnswer((_) async => false);
+      when(
+        () => pubUpdater.getLatestVersion(any()),
+      ).thenAnswer((_) async => '9.9.9');
+      when(
+        () => pubUpdater.update(packageName: any(named: 'packageName')),
+      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
 
       final result = await command.run();
 
@@ -207,41 +219,45 @@ void main() {
       );
     });
 
-    test('standalone updater installs missing skill when already current',
-        () async {
-      final assetName = releaseAssetNameForCurrentPlatform();
-      if (assetName == null) {
-        markTestSkipped('No standalone asset is published for this platform.');
-        return;
-      }
+    test(
+      'standalone updater installs missing skill when already current',
+      () async {
+        final assetName = releaseAssetNameForCurrentPlatform();
+        if (assetName == null) {
+          markTestSkipped(
+            'No standalone asset is published for this platform.',
+          );
+          return;
+        }
 
-      final tempDir = await Directory.systemTemp.createTemp('mcp_update_');
-      addTearDown(() => tempDir.delete(recursive: true));
-      final server = await _ReleaseFixtureServer.start(assetName);
-      addTearDown(server.close);
-      final installDir = Directory('${tempDir.path}/bin');
-      final updater = GitHubBinaryUpdater(
-        logger: logger,
-        releasesUri: server.releasesUri,
-      );
+        final tempDir = await Directory.systemTemp.createTemp('mcp_update_');
+        addTearDown(() => tempDir.delete(recursive: true));
+        final server = await _ReleaseFixtureServer.start(assetName);
+        addTearDown(server.close);
+        final installDir = Directory('${tempDir.path}/bin');
+        final updater = GitHubBinaryUpdater(
+          logger: logger,
+          releasesUri: server.releasesUri,
+        );
 
-      final result = await updater.update(
-        currentVersion: '9.9.9',
-        installDir: installDir.path,
-      );
+        final result = await updater.update(
+          currentVersion: '9.9.9',
+          installDir: installDir.path,
+        );
 
-      expect(result, equals(ExitCode.success.code));
-      expect(
-        File('${installDir.path}/$binaryExecutableName').existsSync(),
-        isFalse,
-      );
-      expect(
-        await File(
-          '${tempDir.path}/share/mcp_dart/skills/mcp-developer/SKILL.md',
-        ).readAsString(),
-        equals('skill payload'),
-      );
-    });
+        expect(result, equals(ExitCode.success.code));
+        expect(
+          File('${installDir.path}/$binaryExecutableName').existsSync(),
+          isFalse,
+        );
+        expect(
+          await File(
+            '${tempDir.path}/share/mcp_dart/skills/mcp-developer/SKILL.md',
+          ).readAsString(),
+          equals('skill payload'),
+        );
+      },
+    );
   });
 }
 
@@ -251,8 +267,10 @@ class _ReleaseFixtureServer {
   final HttpServer _server;
   final String _assetName;
 
-  Uri get releasesUri => Uri.parse('http://${_server.address.host}:'
-      '${_server.port}/repos/leehack/mcp_dart/releases?per_page=50');
+  Uri get releasesUri => Uri.parse(
+    'http://${_server.address.host}:'
+    '${_server.port}/repos/leehack/mcp_dart/releases?per_page=50',
+  );
 
   static Future<_ReleaseFixtureServer> start(String assetName) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -267,27 +285,29 @@ class _ReleaseFixtureServer {
     final origin = 'http://${_server.address.host}:${_server.port}';
     if (request.uri.path == '/repos/leehack/mcp_dart/releases') {
       request.response.headers.contentType = ContentType.json;
-      request.response.write(jsonEncode(<Map<String, dynamic>>[
-        <String, dynamic>{
-          'tag_name': 'mcp_dart_cli-v10.0.0-dev.1',
-          'prerelease': true,
-          'assets': <Map<String, dynamic>>[],
-        },
-        <String, dynamic>{
-          'tag_name': 'mcp_dart_cli-v9.9.9',
-          'prerelease': false,
-          'assets': <Map<String, dynamic>>[
-            <String, dynamic>{
-              'name': _assetName,
-              'browser_download_url': '$origin/assets/$_assetName',
-            },
-            <String, dynamic>{
-              'name': 'mcp-developer.SKILL.md',
-              'browser_download_url': '$origin/assets/mcp-developer.SKILL.md',
-            },
-          ],
-        },
-      ]));
+      request.response.write(
+        jsonEncode(<Map<String, dynamic>>[
+          <String, dynamic>{
+            'tag_name': 'mcp_dart_cli-v10.0.0-dev.1',
+            'prerelease': true,
+            'assets': <Map<String, dynamic>>[],
+          },
+          <String, dynamic>{
+            'tag_name': 'mcp_dart_cli-v9.9.9',
+            'prerelease': false,
+            'assets': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'name': _assetName,
+                'browser_download_url': '$origin/assets/$_assetName',
+              },
+              <String, dynamic>{
+                'name': 'mcp-developer.SKILL.md',
+                'browser_download_url': '$origin/assets/mcp-developer.SKILL.md',
+              },
+            ],
+          },
+        ]),
+      );
     } else if (request.uri.path == '/assets/$_assetName') {
       request.response.write('binary payload');
     } else if (request.uri.path == '/assets/mcp-developer.SKILL.md') {

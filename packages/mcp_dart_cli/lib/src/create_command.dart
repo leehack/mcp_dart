@@ -22,11 +22,12 @@ class CreateCommand extends Command<int> {
   CreateCommand({
     Logger? logger,
     @visibleForTesting MasonGeneratorFromBrick? generatorFromBrick,
-  })  : _logger = logger ?? Logger(),
-        _generatorFromBrick = generatorFromBrick ?? MasonGenerator.fromBrick {
+  }) : _logger = logger ?? Logger(),
+       _generatorFromBrick = generatorFromBrick ?? MasonGenerator.fromBrick {
     argParser.addOption(
       'template',
-      help: 'The template to use. Can be a local path, a Git URL '
+      help:
+          'The template to use. Can be a local path, a Git URL '
           '(url.git#ref:path), or a GitHub tree URL.',
       defaultsTo:
           'https://github.com/leehack/mcp_dart/tree/main/packages/templates/simple',
