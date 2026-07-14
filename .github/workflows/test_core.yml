@@ -169,6 +169,10 @@ jobs:
       - name: Install dependencies
         run: dart pub get
 
+      - name: Install CLI dependencies
+        working-directory: packages/mcp_dart_cli
+        run: dart pub get
+
       - name: Analyze
         run: dart analyze
 

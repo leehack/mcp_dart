@@ -1318,11 +1318,9 @@ void main() {
       final mcpServer = servers[sessionId];
       expect(mcpServer, isNotNull);
 
-      final streamFuture = openGetSse(sessionId);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      await sendServerNotification(mcpServer!, {'seq': 1});
-      await sendServerNotification(mcpServer, {'seq': 2});
-      final stream = await streamFuture.timeout(const Duration(seconds: 3));
+      final stream = await openGetSse(sessionId).timeout(
+        const Duration(seconds: 3),
+      );
       expect(stream.statusCode, HttpStatus.ok);
       expect(stream.headers.contentType?.mimeType, 'text/event-stream');
 
@@ -1331,6 +1329,12 @@ void main() {
       );
       addTearDown(lines.cancel);
 
+      final initialReady = await _readSseEvent(lines);
+      expect(initialReady.id, isNotNull);
+      expect(initialReady.data, isEmpty);
+
+      await sendServerNotification(mcpServer!, {'seq': 1});
+      await sendServerNotification(mcpServer, {'seq': 2});
       final first = await _readSseJsonEvent(lines);
       final second = await _readSseJsonEvent(lines);
       expect(first.id, isNotNull);
@@ -1338,7 +1342,10 @@ void main() {
       expect(first.json['params'], containsPair('seq', 1));
       expect(second.json['params'], containsPair('seq', 2));
 
-      final replay = await openGetSse(sessionId, lastEventId: first.id);
+      final replay = await openGetSse(
+        sessionId,
+        lastEventId: initialReady.id,
+      );
       expect(replay.statusCode, HttpStatus.ok);
       expect(replay.headers.contentType?.mimeType, 'text/event-stream');
       final replayLines = StreamIterator(
@@ -1346,11 +1353,22 @@ void main() {
       );
       addTearDown(replayLines.cancel);
 
-      final replayed = await _readSseJsonEvent(replayLines);
-      expect(replayed.id, second.id);
-      expect(replayed.json['params'], containsPair('seq', 2));
+      final replayedFirst = await _readSseJsonEvent(replayLines);
+      expect(replayedFirst.id, first.id);
+      expect(replayedFirst.json['params'], containsPair('seq', 1));
 
+      await sendServerNotification(mcpServer, {'seq': 'during-replay'});
+
+      final replayedSecond = await _readSseJsonEvent(replayLines);
+      expect(replayedSecond.id, second.id);
+      expect(replayedSecond.json['params'], containsPair('seq', 2));
+
+      // React immediately to the replayed JSON event. The transport must have
+      // attached the resumed response before this event became observable.
       await sendServerNotification(mcpServer, {'seq': 3});
+
+      final duringReplay = await _readSseJsonEvent(replayLines);
+      expect(duringReplay.json['params'], containsPair('seq', 'during-replay'));
       final replayThird = await _readSseJsonEvent(replayLines);
       expect(replayThird.json['params'], containsPair('seq', 3));
 

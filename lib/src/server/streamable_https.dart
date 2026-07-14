@@ -1191,29 +1191,50 @@ class StreamableHTTPServerTransport
       headers.forEach((key, value) {
         res.headers.set(key, value);
       });
-      await res.flush();
 
+      final primingEventId = await _eventStore.storeEvent(
+        streamId,
+        _ssePrimingMessage,
+      );
+      final replayBatch = BytesBuilder(copy: false);
       for (final event in replayedEvents) {
-        if (!await _writeSSEEvent(res, event.message, event.eventId)) {
-          onerror?.call(StateError("Failed to replay events"));
-          await _safeClose(res);
-          return;
-        }
+        replayBatch.add(_encodeSSEEvent(event.message, event.eventId));
       }
+      replayBatch.add(_encodeSSEPrimingEvent(primingEventId));
 
-      if (!await _primeSseStream(streamId, res)) {
-        await _safeClose(res);
-        return;
-      }
-
-      if (_isStandaloneSseStreamId(streamId)) {
+      final isStandaloneStream = _isStandaloneSseStreamId(streamId);
+      if (isStandaloneStream) {
         _addStandaloneSseResponse(streamId, res);
       } else {
         _streamMapping[streamId] = res;
         _detachedResumableStreamIds.remove(streamId);
       }
+
+      try {
+        // Queue the entire replay before the first await. A client can react as
+        // soon as the first replayed event arrives, so the resumed response
+        // must already be attached and later replay events must already be
+        // ordered ahead of any new live message.
+        res.add(replayBatch.takeBytes());
+        await res.flush();
+      } catch (error) {
+        if (isStandaloneStream) {
+          _removeStandaloneSseResponse(streamId, res);
+        } else if (identical(_streamMapping[streamId], res)) {
+          _streamMapping.remove(streamId);
+          _detachedResumableStreamIds.add(streamId);
+        }
+        onerror?.call(
+          error is Error
+              ? error
+              : StateError('Failed to replay events: $error'),
+        );
+        await _safeClose(res);
+        return;
+      }
+
       res.done.then((_) {
-        if (_isStandaloneSseStreamId(streamId)) {
+        if (isStandaloneStream) {
           _removeStandaloneSseResponse(streamId, res);
         } else if (identical(_streamMapping[streamId], res)) {
           _streamMapping.remove(streamId);
@@ -1267,20 +1288,26 @@ class StreamableHTTPServerTransport
     String? eventId,
   ]) async {
     try {
-      var eventData = "event: message\n";
-      // Include event ID if provided - this is important for resumability
-      if (eventId != null) {
-        _validateSseEventId(eventId);
-        eventData += "id: $eventId\n";
-      }
-      eventData += "data: ${jsonEncode(message.toJson())}\n\n";
-
-      res.add(utf8.encode(eventData));
+      res.add(_encodeSSEEvent(message, eventId));
       await res.flush();
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  List<int> _encodeSSEEvent(
+    JsonRpcMessage message, [
+    String? eventId,
+  ]) {
+    var eventData = "event: message\n";
+    // Include event ID if provided - this is important for resumability.
+    if (eventId != null) {
+      _validateSseEventId(eventId);
+      eventData += "id: $eventId\n";
+    }
+    eventData += "data: ${jsonEncode(message.toJson())}\n\n";
+    return utf8.encode(eventData);
   }
 
   Future<Socket> _detachSseSocket(
@@ -1333,19 +1360,21 @@ class StreamableHTTPServerTransport
     EventId eventId,
   ) async {
     try {
-      _validateSseEventId(eventId);
-      res.add(
-        utf8.encode(
-          'id: $eventId\n'
-          'retry: ${_sseRetryDelay.inMilliseconds}\n'
-          'data:\n\n',
-        ),
-      );
+      res.add(_encodeSSEPrimingEvent(eventId));
       await res.flush();
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  List<int> _encodeSSEPrimingEvent(EventId eventId) {
+    _validateSseEventId(eventId);
+    return utf8.encode(
+      'id: $eventId\n'
+      'retry: ${_sseRetryDelay.inMilliseconds}\n'
+      'data:\n\n',
+    );
   }
 
   Future<bool> _writeSSECommentToSocket(Socket socket) async {

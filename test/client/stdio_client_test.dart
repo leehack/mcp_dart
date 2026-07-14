@@ -13,7 +13,7 @@ void main() {
         (entry) => entry.key != 'MCP_DART_EXPLICIT_SENTINEL',
       );
       final parameters = StdioServerParameters(
-        command: io.Platform.executable,
+        command: io.Platform.resolvedExecutable,
         args: [
           'test/client/fixtures/stdio_environment_probe.dart',
           inheritedEntry.key,
