@@ -89,6 +89,8 @@ Merge the release PR to `main` only after this commit passes the complete gate.
 ## 4. Publish and verify `mcp_dart`
 
 1. Dispatch `Create Release` for `mcp_dart` from the merged `main` commit.
+   The workflow rejects stable versions dispatched from another ref or from a
+   stale `main` commit.
 2. Verify tag `v2.3.0`, the GitHub release, and the `Publish to pub.dev` workflow.
 3. Confirm pub.dev shows version `2.3.0`, correct `main` documentation links,
    and a successful package analysis.

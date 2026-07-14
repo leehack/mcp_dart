@@ -366,10 +366,10 @@ class ConformanceRunner {
           ),
           _ConformanceCase(
             suite: _specSuite,
-            name: 'stateless-http.omits-unsafe-numeric-parameter-headers',
+            name: 'stateless-http.omits-non-integer-parameter-headers',
             description:
-                'Mirrors finite numeric x-mcp-header values while omitting unsafe integers.',
-            check: _omitsUnsafeNumericParameterHeaders,
+                'Mirrors JavaScript-safe integer x-mcp-header values while omitting fractional and unsafe numbers.',
+            check: _omitsNonIntegerParameterHeaders,
           ),
           _ConformanceCase(
             suite: _specSuite,
@@ -2438,7 +2438,7 @@ Future<void> _validatesStatelessHttpParameterHeaders() async {
   }
 }
 
-Future<void> _omitsUnsafeNumericParameterHeaders() async {
+Future<void> _omitsNonIntegerParameterHeaders() async {
   final httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   final receivedHeaders = Completer<Map<String, String?>>();
   final responseMessage = Completer<JsonRpcMessage>();
@@ -2512,9 +2512,9 @@ Future<void> _omitsUnsafeNumericParameterHeaders() async {
         'Expected safe integer header 42, got ${headers['limit']}.',
       );
     }
-    if (headers['ratio'] != '1.5') {
+    if (headers['ratio'] != null) {
       throw StateError(
-        'Expected fractional number header 1.5, got '
+        'Expected fractional number header to be omitted, got '
         "${headers['ratio']}.",
       );
     }

@@ -5,6 +5,7 @@ import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/task_interfaces.dart';
+import 'package:mcp_dart/src/shared/tool_parameter_headers.dart';
 import 'package:mcp_dart/src/shared/tool_name_validation.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/shared/uri_template.dart';
@@ -1277,18 +1278,19 @@ class McpServer {
   ) {
     final inputSchema = tool.inputSchema ?? const ToolInputSchema();
     final properties = inputSchema.properties;
-    if (properties == null || properties.isEmpty) {
-      return inputSchema;
-    }
+    final reachabilityReason =
+        toolParameterHeaderReachabilityRejectionReason(inputSchema.toJson());
 
-    final ignoredReason = _collectToolParameterHeaderMappings(
-      toolName: tool.name,
-      properties: properties,
-      path: const [],
-      mappings: <String, String>{},
-      seenHeaders: <String>{},
-    );
-    if (ignoredReason == null) {
+    final ignoredReason = properties == null || properties.isEmpty
+        ? null
+        : _collectToolParameterHeaderMappings(
+            toolName: tool.name,
+            properties: properties,
+            path: const [],
+            mappings: <String, String>{},
+            seenHeaders: <String>{},
+          );
+    if (reachabilityReason == null && ignoredReason == null) {
       return inputSchema;
     }
 
@@ -1297,74 +1299,27 @@ class McpServer {
 
   ToolInputSchema _stripToolParameterHeaderMetadata(ToolInputSchema schema) {
     return JsonSchema.fromJson(
-      _stripToolParameterHeaderMetadataFromJson(schema.toJson()),
+      stripToolParameterHeaderAnnotations(schema.toJson()),
     ) as ToolInputSchema;
-  }
-
-  Map<String, dynamic> _stripToolParameterHeaderMetadataFromJson(
-    Map<String, dynamic> json,
-  ) {
-    final stripped = Map<String, dynamic>.from(json)..remove('x-mcp-header');
-
-    final properties = stripped['properties'];
-    if (properties is Map) {
-      final strippedProperties = <String, dynamic>{};
-      for (final entry in properties.entries) {
-        final propertyName = entry.key as String;
-        final propertyValue = entry.value;
-        strippedProperties[propertyName] = propertyValue is Map
-            ? _stripToolParameterHeaderMetadataFromJson(
-                Map<String, dynamic>.from(propertyValue),
-              )
-            : propertyValue;
-      }
-      stripped['properties'] = strippedProperties;
-    }
-
-    final items = stripped['items'];
-    if (items is Map) {
-      stripped['items'] = _stripToolParameterHeaderMetadataFromJson(
-        Map<String, dynamic>.from(items),
-      );
-    }
-
-    final additionalProperties = stripped['additionalProperties'];
-    if (additionalProperties is Map) {
-      stripped['additionalProperties'] =
-          _stripToolParameterHeaderMetadataFromJson(
-        Map<String, dynamic>.from(additionalProperties),
-      );
-    }
-
-    for (final keyword in const ['allOf', 'anyOf', 'oneOf']) {
-      final schemas = stripped[keyword];
-      if (schemas is List) {
-        stripped[keyword] = [
-          for (final schema in schemas)
-            if (schema is Map)
-              _stripToolParameterHeaderMetadataFromJson(
-                Map<String, dynamic>.from(schema),
-              )
-            else
-              schema,
-        ];
-      }
-    }
-
-    final notSchema = stripped['not'];
-    if (notSchema is Map) {
-      stripped['not'] = _stripToolParameterHeaderMetadataFromJson(
-        Map<String, dynamic>.from(notSchema),
-      );
-    }
-
-    return stripped;
   }
 
   Map<String, String> _toolParameterHeaderMappingsFor(
     _RegisteredToolImpl tool,
   ) {
-    final properties = tool.inputSchema?.properties;
+    final inputSchema = tool.inputSchema;
+    if (inputSchema != null) {
+      final reachabilityReason =
+          toolParameterHeaderReachabilityRejectionReason(inputSchema.toJson());
+      if (reachabilityReason != null) {
+        _logger.warn(
+          'Ignoring x-mcp-header mappings for tool "${tool.name}": '
+          '$reachabilityReason.',
+        );
+        return const {};
+      }
+    }
+
+    final properties = inputSchema?.properties;
     if (properties == null || properties.isEmpty) {
       return const {};
     }
@@ -1436,8 +1391,8 @@ class McpServer {
 
       if (!_isToolParameterHeaderPrimitive(entry.value)) {
         return 'Ignoring x-mcp-header mapping for tool "$toolName" parameter '
-            '"$parameterName": only string, number, integer, and boolean '
-            'schemas can be mirrored.';
+            '"$parameterName": only string, integer, and boolean schemas can '
+            'be mirrored.';
       }
 
       mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;
@@ -1472,7 +1427,6 @@ class McpServer {
 
   bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
     return schema is JsonString ||
-        schema is JsonNumber ||
         schema is JsonInteger ||
         schema is JsonBoolean;
   }

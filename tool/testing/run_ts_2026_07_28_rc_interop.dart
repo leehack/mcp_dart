@@ -187,6 +187,23 @@ Future<void> _exerciseDartClient(String url) async {
       throw StateError('Unexpected TS server info: ${serverInfo?.toJson()}');
     }
 
+    // Call before tools/list so the first attempt omits Mcp-Param-Region.
+    // The TypeScript server responds with HeaderMismatch; the Dart client must
+    // refresh tools/list, discover x-mcp-header, and retry exactly once.
+    const region = 'us-east1';
+    final headerRouted = await client
+        .callTool(
+          const CallToolRequest(
+            name: 'ts_header_routed',
+            arguments: {'region': region},
+          ),
+        )
+        .timeout(const Duration(seconds: 10));
+    final headerText = _firstText(headerRouted, 'ts_header_routed');
+    if (headerText != region) {
+      throw StateError('Unexpected ts_header_routed result: $headerText');
+    }
+
     final tools = await client.listTools().timeout(const Duration(seconds: 10));
     if (!tools.tools.any((tool) => tool.name == 'ts_echo')) {
       throw StateError(
@@ -199,6 +216,12 @@ Future<void> _exerciseDartClient(String url) async {
     )) {
       throw StateError(
         'TS server tools/list did not include ts_input_required_elicitation: '
+        '${tools.tools.map((tool) => tool.name).toList()}',
+      );
+    }
+    if (!tools.tools.any((tool) => tool.name == 'ts_header_routed')) {
+      throw StateError(
+        'TS server tools/list did not include ts_header_routed: '
         '${tools.tools.map((tool) => tool.name).toList()}',
       );
     }
@@ -238,6 +261,7 @@ Future<void> _exerciseDartClient(String url) async {
             'serverInfo': serverInfo?.toJson(),
             'toolCount': tools.tools.length,
             'echo': text,
+            'headerRefresh': headerText,
             'inputRequired': elicitationText,
           })}',
     );

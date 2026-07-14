@@ -33,8 +33,8 @@ dart run tool/testing/run_ts_2026_07_28_rc_interop.dart
 
 CI runs the official conformance gates in the core workflow. The
 `Run MCP 2026-07-28 Interop` workflow runs the TypeScript and Python SDK beta
-interop fixtures on relevant PRs, `dev/2026-07-28` pushes, and manual dispatch;
-a temporary default-branch monitor runs the release-branch fixtures daily.
+interop fixtures on relevant PRs and manual dispatch; a temporary
+default-branch monitor runs the release-branch fixtures daily.
 
 ## Matrix
 
@@ -59,7 +59,8 @@ a temporary default-branch monitor runs the release-branch fixtures daily.
   The current alpha.9 server and client suites pass with no expected failures;
   a local network-`$ref` security canary remains as regression coverage.
 - The reverse Dart 2026 client -> TypeScript SDK beta server path now covers
-  discovery, `tools/list`, `tools/call`, and a TypeScript-server
-  `input_required` elicitation retry. Broader reverse-path coverage for
-  subscriptions/listen, cacheable result fields, and other streaming/result
-  paths should follow as the TypeScript SDK beta server surface stabilizes.
+  discovery, `tools/list`, `tools/call`, one-time `HeaderMismatch` recovery,
+  and a TypeScript-server `input_required` elicitation retry. Broader
+  reverse-path coverage for subscriptions/listen, cacheable result fields, and
+  other streaming/result paths should follow as the TypeScript SDK beta server
+  surface stabilizes.

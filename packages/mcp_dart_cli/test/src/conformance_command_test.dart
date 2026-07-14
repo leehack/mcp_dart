@@ -66,7 +66,7 @@ void main() {
           'stateless-http.rejects-batch-payloads',
           'stateless-http.task-requests-require-name-header',
           'stateless-http.validates-parameter-headers',
-          'stateless-http.omits-unsafe-numeric-parameter-headers',
+          'stateless-http.omits-non-integer-parameter-headers',
           'stateless-http.encodes-parameter-header-values',
           'stateless-http.accepts-response-posts',
           'stateless-http.task-subscription-requires-client-capability',

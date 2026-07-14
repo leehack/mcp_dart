@@ -19,6 +19,9 @@
 - The CLI `inspect-client` harness now inspects both stateless
   `server/discover` clients and legacy `initialize` clients, including required
   per-request metadata and 2026 result envelopes.
+- Streamable HTTP clients now reject invalid or unreachable `x-mcp-header`
+  annotations and refresh `tools/list` once before retrying a tool call rejected
+  with `HeaderMismatch`.
 
 ### Platform support
 

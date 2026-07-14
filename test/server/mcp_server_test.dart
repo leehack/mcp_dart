@@ -183,7 +183,7 @@ void main() {
           properties: {
             'dryRun': JsonBoolean(mcpHeader: 'Dry-Run'),
             'region': JsonString(mcpHeader: 'Region'),
-            'ratio': JsonNumber(mcpHeader: 'Ratio'),
+            'count': JsonInteger(mcpHeader: 'Count'),
             'auth': JsonObject(
               properties: {
                 'tenant': JsonString(mcpHeader: 'Tenant'),
@@ -204,7 +204,7 @@ void main() {
             'header-tool': {
               'dryRun': 'Dry-Run',
               'region': 'Region',
-              'ratio': 'Ratio',
+              'count': 'Count',
               '/auth/tenant': 'Tenant',
             },
           },
@@ -223,7 +223,7 @@ void main() {
       final properties = inputSchema['properties'] as Map;
       final authProperties = (properties['auth'] as Map)['properties'] as Map;
       expect((properties['region'] as Map)['x-mcp-header'], 'Region');
-      expect((properties['ratio'] as Map)['x-mcp-header'], 'Ratio');
+      expect((properties['count'] as Map)['x-mcp-header'], 'Count');
       expect((authProperties['tenant'] as Map)['x-mcp-header'], 'Tenant');
     });
 
@@ -316,6 +316,15 @@ void main() {
         ),
         callback: (args, extra) async => const CallToolResult(content: []),
       );
+      server.registerTool(
+        'number-header-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {
+            'value': JsonNumber(mcpHeader: 'Value'),
+          },
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
 
       await server.connect(transport);
 
@@ -327,9 +336,15 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
-      final response = transport.sentMessages.last as JsonRpcResponse;
+      final message = transport.sentMessages.last;
+      if (message is JsonRpcError) {
+        fail(
+          'tools/list failed: ${message.error.message}\n${message.error.data}',
+        );
+      }
+      final response = message as JsonRpcResponse;
       final tools = response.result['tools'] as List;
-      expect(tools, hasLength(5));
+      expect(tools, hasLength(6));
       for (final tool in tools.cast<Map>()) {
         expect(_containsMcpHeader(tool['inputSchema']), isFalse);
       }
@@ -350,7 +365,6 @@ void main() {
           'properties': {
             'invalidArray': {
               'type': 'array',
-              'x-mcp-header': 'Invalid',
               'items': {
                 'type': 'string',
                 'x-mcp-header': 'Item',
@@ -399,6 +413,28 @@ void main() {
                 'flag': true,
               },
             },
+            'conditional': {
+              'if': {
+                'properties': {
+                  'region': {
+                    'type': 'string',
+                    'x-mcp-header': 'Conditional',
+                  },
+                },
+              },
+            },
+          },
+          r'$defs': {
+            'region': {
+              'type': 'string',
+              'x-mcp-header': 'Definition',
+            },
+          },
+          'patternProperties': {
+            '^region': {
+              'type': 'string',
+              'x-mcp-header': 'Pattern',
+            },
           },
         }),
         callback: (args, extra) async => const CallToolResult(content: []),
@@ -411,7 +447,13 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
-      final response = transport.sentMessages.last as JsonRpcResponse;
+      final message = transport.sentMessages.last;
+      if (message is JsonRpcError) {
+        fail(
+          'tools/list failed: ${message.error.message}\n${message.error.data}',
+        );
+      }
+      final response = message as JsonRpcResponse;
       final tools = response.result['tools'] as List;
       final tool = tools.single as Map;
       final inputSchema = tool['inputSchema'] as Map;
@@ -424,8 +466,10 @@ void main() {
       final oneOf = combined['oneOf'] as List;
       final literalData = properties['literalData'] as Map;
       final preservedAny = properties['preservedAny'] as Map;
+      final conditional = properties['conditional'] as Map;
+      final definitions = inputSchema[r'$defs'] as Map;
+      final patternProperties = inputSchema['patternProperties'] as Map;
 
-      expect(invalidArray.containsKey('x-mcp-header'), isFalse);
       expect(
         (invalidArray['items'] as Map).containsKey('x-mcp-header'),
         isFalse,
@@ -438,6 +482,19 @@ void main() {
       expect((anyOf[1] as Map).containsKey('x-mcp-header'), isFalse);
       expect((oneOf.single as Map).containsKey('x-mcp-header'), isFalse);
       expect((combined['not'] as Map).containsKey('x-mcp-header'), isFalse);
+      final ifProperties = (conditional['if'] as Map)['properties'] as Map;
+      expect(
+        (ifProperties['region'] as Map).containsKey('x-mcp-header'),
+        isFalse,
+      );
+      expect(
+        (definitions['region'] as Map).containsKey('x-mcp-header'),
+        isFalse,
+      );
+      expect(
+        (patternProperties['^region'] as Map).containsKey('x-mcp-header'),
+        isFalse,
+      );
       expect(
         (literalData['default'] as Map)['x-mcp-header'],
         'not schema metadata',

@@ -21,23 +21,6 @@ on:
       - '.github/workflows/interop_2026_07_28.yml'
       - 'pubspec.yaml'
       - 'pubspec.lock'
-  push:
-    branches:
-      - dev/2026-07-28
-    paths:
-      - 'lib/**'
-      - 'test/conformance/**'
-      - 'test/interop/test_dart_server.dart'
-      - 'test/interop/ts_2026_07_28_rc/**'
-      - 'test/interop/python_2026_07_28_rc/**'
-      - 'test/browser/mcp_2026_07_28_streamable_http_test.dart'
-      - 'tool/testing/run_ts_2026_07_28_rc_interop.dart'
-      - 'tool/testing/run_python_2026_07_28_rc_interop.dart'
-      - 'tool/testing/run_browser_2026_07_28_rc_interop.dart'
-      - '.github/workflows/interop_2026_07_28.yml'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-
 jobs:
   ts-2026-07-28-interop:
     runs-on: ubuntu-latest

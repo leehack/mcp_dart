@@ -890,14 +890,13 @@ class StreamableHttpClientTransport
       return value.toString();
     }
     if (value is double) {
-      if (!value.isFinite) {
+      if (!value.isFinite || value != value.truncateToDouble()) {
         return null;
       }
-      if (value == value.truncateToDouble() &&
-          (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger)) {
+      if (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger) {
         return null;
       }
-      return value.toString();
+      return value.toInt().toString();
     }
 
     return switch (value) {

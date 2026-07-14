@@ -5,6 +5,7 @@ import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/task_interfaces.dart';
+import 'package:mcp_dart/src/shared/tool_parameter_headers.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 
@@ -831,22 +832,39 @@ class McpClient extends Protocol {
   ) async {
     InputResponses? inputResponses;
     String? requestState;
+    var refreshedToolMetadata = false;
 
-    for (var attempt = 0; attempt <= _maxInputRequiredRetries; attempt++) {
-      final result = await request<BaseResultData>(
-        JsonRpcCallToolRequest(
-          id: -1,
-          params: CallToolRequest(
-            name: params.name,
-            arguments: params.arguments,
-            inputResponses:
-                attempt > 0 ? inputResponses : params.inputResponses,
-            requestState: attempt > 0 ? requestState : params.requestState,
-          ).toJson(),
-        ),
-        _parseToolCallResult,
-        options,
-      );
+    for (var attempt = 0; attempt <= _maxInputRequiredRetries;) {
+      final BaseResultData result;
+      try {
+        result = await request<BaseResultData>(
+          JsonRpcCallToolRequest(
+            id: -1,
+            params: CallToolRequest(
+              name: params.name,
+              arguments: params.arguments,
+              inputResponses:
+                  attempt > 0 ? inputResponses : params.inputResponses,
+              requestState: attempt > 0 ? requestState : params.requestState,
+            ).toJson(),
+          ),
+          _parseToolCallResult,
+          options,
+        );
+      } on McpError catch (error) {
+        if (!refreshedToolMetadata &&
+            error.code == ErrorCode.headerMismatch.value &&
+            transport is ToolParameterHeaderAwareTransport) {
+          refreshedToolMetadata = true;
+          _logger.debug(
+            'tools/call for "${params.name}" returned HeaderMismatch; '
+            'refreshing tools/list and retrying.',
+          );
+          await listTools(options: options);
+          continue;
+        }
+        rethrow;
+      }
 
       if (result is CallToolResult || result is CreateTaskExtensionResult) {
         return result;
@@ -871,6 +889,7 @@ class McpClient extends Protocol {
         options?.signal,
       );
       requestState = result.requestState;
+      attempt += 1;
     }
 
     throw StateError(
@@ -1619,6 +1638,12 @@ class McpClient extends Protocol {
 
   _ToolParameterHeaderValidation _validateToolParameterHeaders(Tool tool) {
     final inputSchema = tool.inputSchema;
+    final reachabilityReason =
+        toolParameterHeaderReachabilityRejectionReason(inputSchema.toJson());
+    if (reachabilityReason != null) {
+      return _ToolParameterHeaderValidation.invalid(reachabilityReason);
+    }
+
     final properties =
         inputSchema is JsonObject ? inputSchema.properties : null;
     if (properties == null || properties.isEmpty) {
@@ -1690,7 +1715,7 @@ class McpClient extends Protocol {
 
       if (!_isToolParameterHeaderPrimitive(entry.value)) {
         return 'parameter "$parameterName" uses x-mcp-header on a schema that '
-            'is not string, number, integer, or boolean';
+            'is not string, integer, or boolean';
       }
 
       mappings[_toolParameterHeaderSelector(parameterPath)] = rawHeader;
@@ -1725,7 +1750,6 @@ class McpClient extends Protocol {
 
   bool _isToolParameterHeaderPrimitive(JsonSchema schema) {
     return schema is JsonString ||
-        schema is JsonNumber ||
         schema is JsonInteger ||
         schema is JsonBoolean;
   }

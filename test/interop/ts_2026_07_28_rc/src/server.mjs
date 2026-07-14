@@ -40,6 +40,20 @@ function createInteropServer() {
   );
 
   server.registerTool(
+    'ts_header_routed',
+    {
+      description:
+        'Requires the Dart client to mirror an argument into an HTTP header.',
+      inputSchema: z.object({
+        region: z.string().meta({ 'x-mcp-header': 'Region' }),
+      }),
+    },
+    async ({ region }) => ({
+      content: [{ type: 'text', text: region }],
+    }),
+  );
+
+  server.registerTool(
     'ts_input_required_elicitation',
     {
       description: 'Exercises a TypeScript server input_required elicitation retry.',

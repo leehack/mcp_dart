@@ -54,10 +54,12 @@ bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
   request without sending `notifications/cancelled`.
 
 The runner also starts `src/server.mjs` with the TypeScript beta
-`createMcpHandler` entry and runs a Dart stable-profile client against it. That reverse
-path asserts `server/discover` negotiation, `tools/list`, `tools/call`, and a
-2026 `input_required` elicitation retry against the TypeScript beta server;
-failures are treated as interop failures.
+`createMcpHandler` entry and runs a Dart stable-profile client against it. That
+reverse path asserts `server/discover` negotiation, `tools/list`, `tools/call`,
+a one-time `HeaderMismatch` recovery that refreshes `tools/list` before retrying
+with the discovered `Mcp-Param-*` header, and a 2026 `input_required`
+elicitation retry against the TypeScript beta server. Failures are treated as
+interop failures.
 
 Keep this fixture anchored to the official draft/RC behavior rather than the
 TypeScript beta implementation alone. In particular, `x-mcp-header` tests use
@@ -65,9 +67,8 @@ only the draft-permitted primitive types: `string`, `integer`, and `boolean`.
 When TypeScript beta behavior conflicts with the draft, keep the draft as the
 assertion source and document the beta gap near the test.
 
-CI runs this fixture in the dedicated
-`Run MCP 2026-07-28 Interop` workflow for relevant PRs,
-`dev/2026-07-28` pushes, daily scheduled drift checks, and manual dispatch.
+CI runs this fixture in the dedicated `Run MCP 2026-07-28 Interop` workflow for
+relevant PRs, daily scheduled drift checks, and manual dispatch.
 Keep the fixture pinned to a published TypeScript SDK beta that exposes the
 2026 draft path and passes this runner; do not treat package publication alone
 as enough to re-pin without rerunning the interop check.

@@ -9,12 +9,18 @@ class MockTransport extends Transport
   ServerCapabilities serverCapabilities;
   List<Tool> advertisedTools;
   ToolParameterHeaderMappings toolParameterHeaderMappings = const {};
+  int headerMismatchResponsesRemaining;
+  int toolCallRequestCount = 0;
+  int toolListRequestCount = 0;
+  final bool useStatelessDiscovery;
 
   MockTransport({
     this.serverCapabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
     List<Tool>? advertisedTools,
+    this.headerMismatchResponsesRemaining = 0,
+    this.useStatelessDiscovery = false,
   }) : advertisedTools = advertisedTools ?? _defaultAdvertisedTools();
 
   @override
@@ -29,6 +35,22 @@ class MockTransport extends Transport
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
     sentMessages.add(message);
     if (message is JsonRpcRequest && message.method == Method.serverDiscover) {
+      if (useStatelessDiscovery) {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: DiscoverResult(
+              supportedVersions: const [stableProtocolVersion2026_07_28],
+              capabilities: serverCapabilities,
+              serverInfo:
+                  const Implementation(name: 'MockServer', version: '1.0.0'),
+              ttlMs: 0,
+              cacheScope: CacheScope.private,
+            ).toJson(),
+          ),
+        );
+        return;
+      }
       _respond(
         JsonRpcError(
           id: message.id,
@@ -53,14 +75,36 @@ class MockTransport extends Transport
       );
     } else if (message is JsonRpcRequest &&
         message.method == Method.toolsList) {
+      toolListRequestCount += 1;
       _respond(
         JsonRpcResponse(
           id: message.id,
-          result: ListToolsResult(tools: advertisedTools).toJson(),
+          result: {
+            if (useStatelessDiscovery) 'resultType': resultTypeComplete,
+            ...ListToolsResult(
+              tools: advertisedTools,
+              ttlMs: useStatelessDiscovery ? 0 : null,
+              cacheScope: useStatelessDiscovery ? CacheScope.private : null,
+            ).toJson(),
+          },
         ),
       );
     } else if (message is JsonRpcRequest &&
         message.method == Method.toolsCall) {
+      toolCallRequestCount += 1;
+      if (headerMismatchResponsesRemaining > 0) {
+        headerMismatchResponsesRemaining -= 1;
+        _respond(
+          JsonRpcError(
+            id: message.id,
+            error: const JsonRpcErrorData(
+              code: -32020,
+              message: 'Header mismatch',
+            ),
+          ),
+        );
+        return;
+      }
       final name = message.params?['name'];
       if (name == 'validated_tool') {
         _respond(
@@ -92,6 +136,16 @@ class MockTransport extends Transport
             id: message.id,
             result: CallToolResult.fromStructuredContent({'wrong': 'field'})
                 .toJson(),
+          ),
+        );
+      } else if (name == 'header_retry_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: {
+              if (useStatelessDiscovery) 'resultType': resultTypeComplete,
+              ...const CallToolResult(content: []).toJson(),
+            },
           ),
         );
       }
@@ -254,6 +308,49 @@ void main() {
               },
             },
           }),
+          Tool.fromJson({
+            'name': 'items_header',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'values': {
+                  'type': 'array',
+                  'items': {
+                    'type': 'string',
+                    'x-mcp-header': 'Item',
+                  },
+                },
+              },
+            },
+          }),
+          Tool.fromJson({
+            'name': 'composition_header',
+            'inputSchema': {
+              'type': 'object',
+              'allOf': [
+                {
+                  'properties': {
+                    'region': {
+                      'type': 'string',
+                      'x-mcp-header': 'Region',
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          Tool.fromJson({
+            'name': 'definition_header',
+            'inputSchema': {
+              'type': 'object',
+              r'$defs': {
+                'region': {
+                  'type': 'string',
+                  'x-mcp-header': 'Region',
+                },
+              },
+            },
+          }),
         ],
       );
 
@@ -262,7 +359,6 @@ void main() {
 
       expect(result.tools.map((tool) => tool.name), [
         'valid_headers',
-        'number_header',
       ]);
       expect(transport.toolParameterHeaderMappings, {
         'valid_headers': {
@@ -272,12 +368,73 @@ void main() {
           'count': 'Count',
           '/auth/tenant': 'Tenant',
         },
-        'number_header': {'ratio': 'Ratio'},
       });
       expect(
         warnings.where((message) => message.contains('Rejecting tool')),
-        hasLength(5),
+        hasLength(9),
       );
+    });
+
+    test('callTool refreshes tools/list once after HeaderMismatch', () async {
+      transport = MockTransport(
+        headerMismatchResponsesRemaining: 1,
+        useStatelessDiscovery: true,
+        advertisedTools: [
+          Tool(
+            name: 'header_retry_tool',
+            inputSchema: JsonSchema.object(
+              properties: {
+                'region': JsonSchema.string(mcpHeader: 'Region'),
+              },
+            ),
+          ),
+        ],
+      );
+
+      await client.connect(transport);
+      final result = await client.callTool(
+        const CallToolRequest(
+          name: 'header_retry_tool',
+          arguments: {'region': 'us-east1'},
+        ),
+      );
+
+      expect(result.content, isEmpty);
+      expect(transport.toolCallRequestCount, 2);
+      expect(transport.toolListRequestCount, 1);
+      expect(transport.toolParameterHeaderMappings, {
+        'header_retry_tool': {'region': 'Region'},
+      });
+    });
+
+    test('callTool does not loop on repeated HeaderMismatch', () async {
+      transport = MockTransport(
+        headerMismatchResponsesRemaining: 2,
+        useStatelessDiscovery: true,
+        advertisedTools: [
+          const Tool(
+            name: 'header_retry_tool',
+            inputSchema: ToolInputSchema(),
+          ),
+        ],
+      );
+
+      await client.connect(transport);
+
+      await expectLater(
+        client.callTool(
+          const CallToolRequest(name: 'header_retry_tool'),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.headerMismatch.value,
+          ),
+        ),
+      );
+      expect(transport.toolCallRequestCount, 2);
+      expect(transport.toolListRequestCount, 1);
     });
 
     test('validates tool output schema successfully', () async {
