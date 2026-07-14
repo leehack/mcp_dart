@@ -101,8 +101,8 @@ class ClientInspectorHarness {
     required this.maxRuntime,
     Stream<String>? clientLines,
     FutureOr<void> Function(String line)? writeLine,
-  })  : _clientLines = clientLines,
-        _writeLine = writeLine;
+  }) : _clientLines = clientLines,
+       _writeLine = writeLine;
 
   /// Report destination.
   final File reportFile;
@@ -150,7 +150,8 @@ class ClientInspectorHarness {
     _stopwatch.start();
     _maxTimer = Timer(maxRuntime, _finish);
 
-    final clientLines = _clientLines ??
+    final clientLines =
+        _clientLines ??
         stdin.transform(utf8.decoder).transform(const LineSplitter());
     _stdinSubscription = clientLines.listen(
       _handleLine,
@@ -570,53 +571,53 @@ class ClientInspectorHarness {
   }
 
   Map<String, dynamic> _toolsListResult() => <String, dynamic>{
-        'tools': <Map<String, dynamic>>[
-          <String, dynamic>{
-            'name': 'echo',
-            'title': 'Echo',
-            'description': 'Echoes a message so MCP clients can be inspected.',
-            'inputSchema': <String, dynamic>{
-              'type': 'object',
-              'properties': <String, dynamic>{
-                'message': <String, dynamic>{
-                  'type': 'string',
-                  'description': 'Message to echo.',
-                },
-              },
-              'required': <String>['message'],
-            },
-            'outputSchema': <String, dynamic>{
-              'type': 'object',
-              'properties': <String, dynamic>{
-                'message': <String, dynamic>{'type': 'string'},
-              },
-              'required': <String>['message'],
+    'tools': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'name': 'echo',
+        'title': 'Echo',
+        'description': 'Echoes a message so MCP clients can be inspected.',
+        'inputSchema': <String, dynamic>{
+          'type': 'object',
+          'properties': <String, dynamic>{
+            'message': <String, dynamic>{
+              'type': 'string',
+              'description': 'Message to echo.',
             },
           },
-        ],
-      };
+          'required': <String>['message'],
+        },
+        'outputSchema': <String, dynamic>{
+          'type': 'object',
+          'properties': <String, dynamic>{
+            'message': <String, dynamic>{'type': 'string'},
+          },
+          'required': <String>['message'],
+        },
+      },
+    ],
+  };
 
   Map<String, dynamic> _resourcesListResult() => <String, dynamic>{
-        'resources': <Map<String, dynamic>>[
-          <String, dynamic>{
-            'uri': 'inspector://status',
-            'name': 'Inspector Status',
-            'description': 'A resource exposed by the MCP client inspector.',
-            'mimeType': 'text/plain',
-          },
-        ],
-      };
+    'resources': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'uri': 'inspector://status',
+        'name': 'Inspector Status',
+        'description': 'A resource exposed by the MCP client inspector.',
+        'mimeType': 'text/plain',
+      },
+    ],
+  };
 
   Map<String, dynamic> _resourceTemplatesListResult() => <String, dynamic>{
-        'resourceTemplates': <Map<String, dynamic>>[
-          <String, dynamic>{
-            'uriTemplate': 'inspector://echo/{message}',
-            'name': 'Inspector Echo Resource',
-            'description': 'Parameterized test resource for MCP clients.',
-            'mimeType': 'text/plain',
-          },
-        ],
-      };
+    'resourceTemplates': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'uriTemplate': 'inspector://echo/{message}',
+        'name': 'Inspector Echo Resource',
+        'description': 'Parameterized test resource for MCP clients.',
+        'mimeType': 'text/plain',
+      },
+    ],
+  };
 
   Map<String, dynamic> _resourceReadResult(Object? params) {
     final paramsMap = params is Map ? params.cast<String, dynamic>() : null;
@@ -633,21 +634,21 @@ class ClientInspectorHarness {
   }
 
   Map<String, dynamic> _promptsListResult() => <String, dynamic>{
-        'prompts': <Map<String, dynamic>>[
+    'prompts': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'name': 'inspector-summary',
+        'title': 'Inspector Summary',
+        'description': 'Prompt exposed by the MCP client inspector.',
+        'arguments': <Map<String, dynamic>>[
           <String, dynamic>{
-            'name': 'inspector-summary',
-            'title': 'Inspector Summary',
-            'description': 'Prompt exposed by the MCP client inspector.',
-            'arguments': <Map<String, dynamic>>[
-              <String, dynamic>{
-                'name': 'topic',
-                'description': 'Topic to summarize.',
-                'required': false,
-              },
-            ],
+            'name': 'topic',
+            'description': 'Topic to summarize.',
+            'required': false,
           },
         ],
-      };
+      },
+    ],
+  };
 
   Map<String, dynamic> _promptGetResult(Object? params) {
     final paramsMap = params is Map ? params.cast<String, dynamic>() : null;

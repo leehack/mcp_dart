@@ -52,22 +52,23 @@ void main(List<String> arguments) async {
   }
 
   final logger = Logger();
-  final runner = CommandRunner<int>(
-    'mcp_dart',
-    'CLI for creating and managing MCP servers in Dart.',
-  )
-    ..addCommand(CreateCommand())
-    ..addCommand(ServeCommand())
-    ..addCommand(DoctorCommand())
-    ..addCommand(InspectCommand(logger: logger))
-    ..addCommand(InspectServerCommand(logger: logger))
-    ..addCommand(InspectClientCommand(logger: logger))
-    ..addCommand(ListToolsCommand(logger: logger))
-    ..addCommand(CallToolCommand(logger: logger))
-    ..addCommand(TraceCommand(logger: logger))
-    ..addCommand(ConformanceCommand(logger: logger))
-    ..addCommand(AgentSkillsCommand(logger: logger))
-    ..addCommand(UpdateCommand(logger: logger));
+  final runner =
+      CommandRunner<int>(
+          'mcp_dart',
+          'CLI for creating and managing MCP servers in Dart.',
+        )
+        ..addCommand(CreateCommand())
+        ..addCommand(ServeCommand())
+        ..addCommand(DoctorCommand())
+        ..addCommand(InspectCommand(logger: logger))
+        ..addCommand(InspectServerCommand(logger: logger))
+        ..addCommand(InspectClientCommand(logger: logger))
+        ..addCommand(ListToolsCommand(logger: logger))
+        ..addCommand(CallToolCommand(logger: logger))
+        ..addCommand(TraceCommand(logger: logger))
+        ..addCommand(ConformanceCommand(logger: logger))
+        ..addCommand(AgentSkillsCommand(logger: logger))
+        ..addCommand(UpdateCommand(logger: logger));
 
   try {
     final exitCode = await runner.run(arguments);

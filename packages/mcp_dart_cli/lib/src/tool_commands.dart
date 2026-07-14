@@ -72,8 +72,9 @@ class ListToolsCommand extends _ToolCommand {
 
     logger.info('Tools:');
     for (final tool in result.tools) {
-      logger
-          .info('  - ${tool.name}: ${tool.description ?? "(no description)"}');
+      logger.info(
+        '  - ${tool.name}: ${tool.description ?? "(no description)"}',
+      );
     }
   }
 }

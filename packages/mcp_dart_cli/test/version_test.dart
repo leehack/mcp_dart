@@ -16,7 +16,8 @@ void main() {
     expect(
       packageVersion,
       pubspecVersion,
-      reason: 'lib/src/version.dart does not match pubspec.yaml. '
+      reason:
+          'lib/src/version.dart does not match pubspec.yaml. '
           'Run "dart tool/update_version.dart" to update.',
     );
   });

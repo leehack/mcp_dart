@@ -44,30 +44,33 @@ void main() {
       ).called(1);
     });
 
-    test('json output stays parseable when server sends notifications',
-        () async {
-      final result = await Process.run(
-        'dart',
-        <String>[
-          'run',
-          'bin/mcp_dart.dart',
-          'list-tools',
-          '--json',
-          '--wait',
-          '50',
-          '--',
+    test(
+      'json output stays parseable when server sends notifications',
+      () async {
+        final result = await Process.run(
           'dart',
-          'run',
-          'test/fixtures/raw_stdio_server.dart',
-          '--notify-after-list',
-        ],
-        workingDirectory: Directory.current.path,
-      );
+          <String>[
+            'run',
+            'bin/mcp_dart.dart',
+            'list-tools',
+            '--json',
+            '--wait',
+            '50',
+            '--',
+            'dart',
+            'run',
+            'test/fixtures/raw_stdio_server.dart',
+            '--notify-after-list',
+          ],
+          workingDirectory: Directory.current.path,
+        );
 
-      expect(result.exitCode, equals(ExitCode.success.code));
-      final json = jsonDecode(result.stdout as String) as Map<String, dynamic>;
-      expect(json['tools'], isA<List<dynamic>>());
-    });
+        expect(result.exitCode, equals(ExitCode.success.code));
+        final json =
+            jsonDecode(result.stdout as String) as Map<String, dynamic>;
+        expect(json['tools'], isA<List<dynamic>>());
+      },
+    );
 
     test('json mode runs in-process with silent handlers', () async {
       final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
@@ -130,34 +133,37 @@ void main() {
       ).called(1);
     });
 
-    test('json output stays parseable when tool call sends notifications',
-        () async {
-      final result = await Process.run(
-        'dart',
-        <String>[
-          'run',
-          'bin/mcp_dart.dart',
-          'call-tool',
-          'echo',
-          '--json',
-          '--wait',
-          '50',
-          '--json-args',
-          '{"message":"hello"}',
-          '--',
+    test(
+      'json output stays parseable when tool call sends notifications',
+      () async {
+        final result = await Process.run(
           'dart',
-          'run',
-          'test/fixtures/raw_stdio_server.dart',
-          '--notify-after-call',
-        ],
-        workingDirectory: Directory.current.path,
-      );
+          <String>[
+            'run',
+            'bin/mcp_dart.dart',
+            'call-tool',
+            'echo',
+            '--json',
+            '--wait',
+            '50',
+            '--json-args',
+            '{"message":"hello"}',
+            '--',
+            'dart',
+            'run',
+            'test/fixtures/raw_stdio_server.dart',
+            '--notify-after-call',
+          ],
+          workingDirectory: Directory.current.path,
+        );
 
-      expect(result.exitCode, equals(ExitCode.success.code));
-      final json = jsonDecode(result.stdout as String) as Map<String, dynamic>;
-      final content = json['content'] as List<dynamic>;
-      expect((content.single as Map<String, dynamic>)['text'], equals('ok'));
-    });
+        expect(result.exitCode, equals(ExitCode.success.code));
+        final json =
+            jsonDecode(result.stdout as String) as Map<String, dynamic>;
+        final content = json['content'] as List<dynamic>;
+        expect((content.single as Map<String, dynamic>)['text'], equals('ok'));
+      },
+    );
 
     test('json mode runs in-process with silent handlers', () async {
       final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);

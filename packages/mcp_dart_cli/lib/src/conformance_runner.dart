@@ -51,12 +51,12 @@ class ConformanceCaseResult {
   });
 
   Map<String, dynamic> toJson() => {
-        'suite': suite,
-        'name': name,
-        'description': description,
-        'passed': passed,
-        if (diagnostic != null) 'diagnostic': diagnostic,
-      };
+    'suite': suite,
+    'name': name,
+    'description': description,
+    'passed': passed,
+    if (diagnostic != null) 'diagnostic': diagnostic,
+  };
 }
 
 /// Result of running a conformance suite.
@@ -72,12 +72,12 @@ class ConformanceSuiteResult {
   List<String> get caseNames => [for (final result in cases) result.name];
 
   Map<String, dynamic> toJson() => {
-        'passed': passed,
-        'total': total,
-        'passedCount': passedCount,
-        'failedCount': failedCount,
-        'cases': [for (final result in cases) result.toJson()],
-      };
+    'passed': passed,
+    'total': total,
+    'passedCount': passedCount,
+    'failedCount': failedCount,
+    'cases': [for (final result in cases) result.toJson()],
+  };
 }
 
 typedef _ConformanceCheck = Future<void> Function();
@@ -116,516 +116,516 @@ class ConformanceRunner {
   final List<_ConformanceCase> _specCases;
 
   ConformanceRunner()
-      : _fixtureCases = <_ConformanceCase>[
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-invalid-version',
-            description:
-                'Rejects JSON-RPC messages whose jsonrpc version is not 2.0.',
-            check: _rejectsInvalidJsonRpcVersion,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-malformed-message',
-            description:
-                'Rejects JSON-RPC envelopes without a method, result, or error member.',
-            check: _rejectsMalformedJsonRpcMessage,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-non-string-method',
-            description:
-                'Rejects JSON-RPC requests whose method member is not a string.',
-            check: _rejectsNonStringJsonRpcMethod,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-result-error-response',
-            description:
-                'Rejects JSON-RPC responses that include both result and error members.',
-            check: _rejectsResultErrorJsonRpcResponse,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-method-response-envelope',
-            description:
-                'Rejects JSON-RPC envelopes that combine request/notification method fields with response result or error fields.',
-            check: _rejectsMethodResponseJsonRpcEnvelope,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-malformed-error-object',
-            description:
-                'Rejects JSON-RPC error responses whose error member is malformed.',
-            check: _rejectsMalformedJsonRpcErrorObject,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-null-error-response-id',
-            description:
-                'Rejects JSON-RPC error responses whose id member is explicitly null.',
-            check: _rejectsNullJsonRpcErrorResponseId,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.accepts-omitted-error-response-id',
-            description:
-                'Parses and serializes JSON-RPC error responses that omit the optional id member.',
-            check: _acceptsOmittedJsonRpcErrorResponseId,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-null-params-member',
-            description:
-                'Rejects JSON-RPC request and notification envelopes whose params member is null.',
-            check: _rejectsNullJsonRpcParamsMember,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'tools-call.requires-params',
-            description:
-                'Rejects tools/call requests that omit the required params object.',
-            check: _requiresCallToolRequestParams,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.preserves-string-response-id',
-            description:
-                'Parses and serializes successful responses with string JSON-RPC IDs.',
-            check: _preservesStringResponseId,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.preserves-integer-response-id',
-            description:
-                'Parses and serializes successful responses with integer JSON-RPC IDs.',
-            check: _preservesIntegerResponseId,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.preserves-string-progress-token',
-            description:
-                'Parses and serializes progress notifications with string progress tokens.',
-            check: _preservesStringProgressToken,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.preserves-integer-progress-token',
-            description:
-                'Parses and serializes progress notifications with integer progress tokens.',
-            check: _preservesIntegerProgressToken,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'jsonrpc.rejects-fractional-ids-and-progress-tokens',
-            description:
-                'Rejects fractional JSON-RPC request IDs, response IDs, and progress tokens.',
-            check: _rejectsFractionalIdsAndProgressTokens,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'protocol-version.advertises-latest-2026-07-28',
-            description:
-                'Advertises MCP 2026-07-28 as the latest supported protocol version.',
-            check: _advertisesLatestProtocolVersion,
-          ),
-          _ConformanceCase(
-            suite: _fixtureSuite,
-            name: 'protocol-version.stable-profile-advertises-2026-07-28',
-            description:
-                'Advertises MCP 2026-07-28 from the default stable SDK profile.',
-            check: _stableProfileAdvertises2026ProtocolVersion,
-          ),
-        ],
-        _specCases = <_ConformanceCase>[
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'lifecycle.rejects-pre-initialize-request',
-            description:
-                'Rejects operation requests before the initialize handshake.',
-            check: _rejectsPreInitializeRequest,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'lifecycle.gates-until-initialized-notification',
-            description:
-                'Keeps normal operation requests gated until notifications/initialized is received.',
-            check: _gatesUntilInitializedNotification,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'lifecycle.does-not-cancel-initialize',
-            description:
-                'Does not send notifications/cancelled for initialize request cancellation.',
-            check: _doesNotCancelInitializeRequest,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'cancellation.requires-request-id',
-            description:
-                'Rejects notifications/cancelled payloads without a requestId.',
-            check: _requiresCancellationRequestId,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'server-discover.requires-request-meta',
-            description:
-                'Rejects server/discover requests that omit params._meta request metadata.',
-            check: _serverDiscoverRequiresRequestMeta,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'server-discover.returns-supported-capabilities',
-            description:
-                'Returns complete server/discover results with supported protocol versions.',
-            check: _serverDiscoverReturnsSupportedCapabilities,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'protocol-version.rejects-unsupported-stateless-version',
-            description:
-                'Rejects unsupported stateless protocol versions with supported/requested error data.',
-            check: _rejectsUnsupportedStatelessProtocolVersion,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless.requires-complete-request-meta',
-            description:
-                'Rejects 2026 stateless requests whose _meta omits required client identity or capability fields.',
-            check: _statelessRequestsRequireCompleteRequestMeta,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'protocol-version.http-modern-400-retries-discovery',
-            description:
-                'Retries server/discover with an advertised version after HTTP 400 UnsupportedProtocolVersion without falling back to initialize.',
-            check: _httpModernProtocolErrorsRetryDiscovery,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'capabilities.http-modern-400-does-not-fallback',
-            description:
-                'Surfaces HTTP 400 MissingRequiredClientCapability errors without falling back to initialize.',
-            check: _httpModernMissingCapabilityErrorsDoNotFallback,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'protocol-version.initialize-negotiates-stateful-version',
-            description:
-                'Keeps initialize negotiation on stateful MCP versions even when the latest stateless version is preferred.',
-            check: _initializeNegotiatesStatefulProtocolVersion,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'capabilities.stateless-does-not-infer-initialize-extensions',
-            description:
-                'Requires 2026 stateless requests to declare extension capabilities per request instead of inheriting initialize capabilities.',
-            check: _statelessDoesNotInferInitializeExtensions,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.rejects-mismatched-routing-headers',
-            description:
-                'Rejects 2026 Streamable HTTP requests whose routing headers disagree with the JSON-RPC body.',
-            check: _rejectsMismatchedStatelessHttpRoutingHeaders,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.requires-routing-headers',
-            description:
-                'Requires 2026 Streamable HTTP requests to include protocol and method routing headers.',
-            check: _requiresStatelessHttpRoutingHeaders,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.rejects-non-post-methods',
-            description:
-                'Returns HTTP 405 for 2026 stateless Streamable HTTP methods other than POST.',
-            check: _rejectsStatelessHttpNonPostMethods,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.rejects-batch-payloads',
-            description:
-                'Rejects 2026 stateless Streamable HTTP POST bodies that contain more than one JSON-RPC message.',
-            check: _rejectsStatelessHttpBatchPayloads,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.task-requests-require-name-header',
-            description:
-                'Requires 2026 task lifecycle requests to route with Mcp-Name task IDs.',
-            check: _taskRequestsRequireStatelessHttpNameHeader,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.validates-parameter-headers',
-            description:
-                'Requires and matches 2026 Mcp-Param routing headers for configured tool arguments.',
-            check: _validatesStatelessHttpParameterHeaders,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.omits-non-integer-parameter-headers',
-            description:
-                'Mirrors JavaScript-safe integer x-mcp-header values while omitting fractional and unsafe numbers.',
-            check: _omitsNonIntegerParameterHeaders,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.encodes-parameter-header-values',
-            description:
-                'Encodes non-plain 2026 Mcp-Param string header values while preserving plain strings.',
-            check: _encodesStatelessHttpParameterHeaderValues,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.accepts-response-posts',
-            description:
-                'Accepts 2026 JSON-RPC response POSTs without request-body metadata.',
-            check: _acceptsStatelessHttpResponsePosts,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.omits-session-header-after-initialize',
-            description:
-                'Omits Mcp-Session-Id on 2026 stateless responses even after stateful initialization.',
-            check: _statelessHttpOmitsSessionHeaderAfterInitialize,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-http.task-subscription-requires-client-capability',
-            description:
-                'Returns MissingRequiredClientCapability for stateless task subscriptions when the client did not advertise the task extension.',
-            check: _taskSubscriptionRequiresClientCapability,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless.related-task-uses-explicit-id-across-transports',
-            description:
-                'Processes related task operations across separate transports using explicit task IDs.',
-            check: _relatedTaskUsesExplicitIdAcrossTransports,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless.ignores-legacy-task-parameter',
-            description:
-                'Ignores legacy tools/call task parameters on 2026 stateless requests.',
-            check: _statelessIgnoresLegacyTaskParameter,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless-client.rejects-legacy-task-options',
-            description:
-                'Rejects legacy RequestOptions.task before sending 2026 stateless requests.',
-            check: _statelessClientRejectsLegacyTaskOptions,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless.adds-result-type-and-cache-defaults',
-            description:
-                'Adds 2026 complete resultType and cache defaults for all cacheable stateless results.',
-            check: _statelessAddsResultTypeAndCacheDefaults,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'tools-list.stateless-returns-deterministic-order',
-            description:
-                'Returns 2026 stateless tools/list results in deterministic name order.',
-            check: _statelessToolsListReturnsDeterministicOrder,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'tools-list.stateless-omits-legacy-execution',
-            description:
-                'Omits stable-only Tool.execution metadata from 2026 stateless tools/list results.',
-            check: _statelessToolsListOmitsLegacyExecution,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'resources.missing-resource-error-code-by-version',
-            description:
-                'Uses legacy ResourceNotFound for stable resource misses and InvalidParams for 2026 stateless resource misses.',
-            check: _missingResourceErrorCodeByVersion,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless.rejects-unrecognized-result-type',
-            description:
-                'Rejects 2026 stateless responses with unrecognized resultType values.',
-            check: _statelessRejectsUnrecognizedResultType,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'mrtr.input-required-supported-requests',
-            description:
-                'Allows input_required results on tools/call, prompts/get, and resources/read.',
-            check: _mrtrInputRequiredSupportedRequests,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'mrtr.rejects-unsupported-input-required-results',
-            description:
-                'Rejects input_required results on methods outside the MRTR allowlist.',
-            check: _mrtrRejectsUnsupportedInputRequiredResults,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'mrtr.input-requests-require-client-capabilities',
-            description:
-                'Rejects MRTR inputRequests whose client capabilities were not declared.',
-            check: _mrtrInputRequestsRequireClientCapabilities,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless.rejects-removed-core-rpcs',
-            description:
-                'Rejects initialize, ping, logging/setLevel, and resource subscription RPCs in stateless MCP.',
-            check: _rejectsRemovedStatelessCoreRpcs,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'stateless.rejects-removed-core-notifications',
-            description:
-                'Rejects initialized, roots/list_changed, and legacy task status notifications in stateless MCP.',
-            check: _rejectsRemovedStatelessCoreNotifications,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'logging.stateless-requires-request-log-level',
-            description:
-                'Sends stateless logging notifications only when the request opts in with io.modelcontextprotocol/logLevel.',
-            check: _statelessLoggingRequiresRequestLogLevel,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name:
-                'tasks-extension.lifecycle-methods-do-not-require-repeated-capability',
-            description:
-                'Does not reject task lifecycle requests solely because the request omits repeated task extension capability metadata.',
-            check: _taskLifecycleMethodsAllowResumedClientCapability,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'tasks-extension.task-store-uses-extension-result-shapes',
-            description:
-                'Serializes built-in task-store tasks/get and tasks/cancel responses in the MCP Tasks extension wire shape.',
-            check: _taskStoreUsesTaskExtensionResultShapes,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'tasks-extension.call-tool-result-cannot-spoof-task-result',
-            description:
-                'Rejects CallToolResult.extra attempts to spoof resultType task.',
-            check: _callToolResultCannotSpoofTaskResult,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'tasks-extension.task-result-requires-client-extension',
-            description:
-                'Rejects resultType task unless the tools/call request negotiated the tasks extension.',
-            check: _taskResultRequiresClientExtension,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'subscriptions-listen.task-ids-require-client-capability',
-            description:
-                'Rejects task-status subscriptions when the client did not advertise the task extension.',
-            check: _subscriptionTaskIdsRequireClientCapability,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'subscriptions-listen.requires-request-meta',
-            description:
-                'Rejects subscriptions/listen requests that omit params._meta request metadata.',
-            check: _subscriptionsListenRequiresRequestMeta,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name:
-                'subscriptions-listen.resource-subscriptions-require-capability',
-            description:
-                'Acknowledges resource subscriptions only when resources.subscribe is advertised.',
-            check: _subscriptionsListenRequiresResourceSubscribeCapability,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'subscriptions-acknowledged.rejects-wrapper-mismatch',
-            description:
-                'Rejects notifications/subscriptions/acknowledged wrappers with mismatched JSON-RPC constants.',
-            check: _subscriptionsAcknowledgedRejectsWrapperMismatch,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'capabilities.rejects-unnegotiated-sampling-tools',
-            description:
-                'Rejects sampling/createMessage tool-use when sampling.tools was not negotiated.',
-            check: _rejectsUnnegotiatedSamplingTools,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'capabilities.rejects-unnegotiated-sampling-context',
-            description:
-                'Rejects deprecated sampling includeContext values when sampling.context was not negotiated.',
-            check: _rejectsUnnegotiatedSamplingContext,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'capabilities.unadvertised-peer-methods-use-method-not-found',
-            description:
-                'Uses MethodNotFound for MCP methods whose peer capability was not advertised.',
-            check: _unadvertisedPeerMethodsUseMethodNotFound,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'capabilities.task-scoped-peer-methods-use-method-not-found',
-            description:
-                'Uses MethodNotFound for task-scoped MCP requests whose peer task capability was not advertised.',
-            check: _taskScopedPeerMethodsUseMethodNotFound,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'capabilities.stateless-omits-legacy-task-capabilities',
-            description:
-                'Omits legacy task and removed roots.listChanged capability fields from 2026 stateless metadata.',
-            check: _statelessOmitsLegacyTaskCapabilities,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'elicitation.rejects-invalid-form-url-union',
-            description:
-                'Rejects elicitation/create payloads that mix form and URL variants.',
-            check: _rejectsInvalidElicitationVariantPayload,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'elicitation.accepts-numeric-number-schema-keywords',
-            description:
-                'Accepts finite numeric default/minimum/maximum keywords in elicitation number schemas.',
-            check: _acceptsNumericElicitationNumberSchemaKeywords,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'tasks.strips-unnegotiated-related-task-metadata',
-            description:
-                'Strips related-task metadata from non-task tool calls when task augmentation was not negotiated.',
-            check: _stripsUnnegotiatedRelatedTaskMetadata,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'progress.rejects-malformed-progress-token',
-            description:
-                'Rejects progress notifications whose progressToken is not a string or integer.',
-            check: _rejectsMalformedProgressToken,
-          ),
-          _ConformanceCase(
-            suite: _specSuite,
-            name: 'progress.dispatches-integer-progress-token',
-            description:
-                'Dispatches progress notifications for integer progress tokens.',
-            check: _dispatchesIntegerProgressToken,
-          ),
-        ];
+    : _fixtureCases = <_ConformanceCase>[
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-invalid-version',
+          description:
+              'Rejects JSON-RPC messages whose jsonrpc version is not 2.0.',
+          check: _rejectsInvalidJsonRpcVersion,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-malformed-message',
+          description:
+              'Rejects JSON-RPC envelopes without a method, result, or error member.',
+          check: _rejectsMalformedJsonRpcMessage,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-non-string-method',
+          description:
+              'Rejects JSON-RPC requests whose method member is not a string.',
+          check: _rejectsNonStringJsonRpcMethod,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-result-error-response',
+          description:
+              'Rejects JSON-RPC responses that include both result and error members.',
+          check: _rejectsResultErrorJsonRpcResponse,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-method-response-envelope',
+          description:
+              'Rejects JSON-RPC envelopes that combine request/notification method fields with response result or error fields.',
+          check: _rejectsMethodResponseJsonRpcEnvelope,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-malformed-error-object',
+          description:
+              'Rejects JSON-RPC error responses whose error member is malformed.',
+          check: _rejectsMalformedJsonRpcErrorObject,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-null-error-response-id',
+          description:
+              'Rejects JSON-RPC error responses whose id member is explicitly null.',
+          check: _rejectsNullJsonRpcErrorResponseId,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.accepts-omitted-error-response-id',
+          description:
+              'Parses and serializes JSON-RPC error responses that omit the optional id member.',
+          check: _acceptsOmittedJsonRpcErrorResponseId,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-null-params-member',
+          description:
+              'Rejects JSON-RPC request and notification envelopes whose params member is null.',
+          check: _rejectsNullJsonRpcParamsMember,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'tools-call.requires-params',
+          description:
+              'Rejects tools/call requests that omit the required params object.',
+          check: _requiresCallToolRequestParams,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.preserves-string-response-id',
+          description:
+              'Parses and serializes successful responses with string JSON-RPC IDs.',
+          check: _preservesStringResponseId,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.preserves-integer-response-id',
+          description:
+              'Parses and serializes successful responses with integer JSON-RPC IDs.',
+          check: _preservesIntegerResponseId,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.preserves-string-progress-token',
+          description:
+              'Parses and serializes progress notifications with string progress tokens.',
+          check: _preservesStringProgressToken,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.preserves-integer-progress-token',
+          description:
+              'Parses and serializes progress notifications with integer progress tokens.',
+          check: _preservesIntegerProgressToken,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'jsonrpc.rejects-fractional-ids-and-progress-tokens',
+          description:
+              'Rejects fractional JSON-RPC request IDs, response IDs, and progress tokens.',
+          check: _rejectsFractionalIdsAndProgressTokens,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'protocol-version.advertises-latest-2026-07-28',
+          description:
+              'Advertises MCP 2026-07-28 as the latest supported protocol version.',
+          check: _advertisesLatestProtocolVersion,
+        ),
+        _ConformanceCase(
+          suite: _fixtureSuite,
+          name: 'protocol-version.stable-profile-advertises-2026-07-28',
+          description:
+              'Advertises MCP 2026-07-28 from the default stable SDK profile.',
+          check: _stableProfileAdvertises2026ProtocolVersion,
+        ),
+      ],
+      _specCases = <_ConformanceCase>[
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'lifecycle.rejects-pre-initialize-request',
+          description:
+              'Rejects operation requests before the initialize handshake.',
+          check: _rejectsPreInitializeRequest,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'lifecycle.gates-until-initialized-notification',
+          description:
+              'Keeps normal operation requests gated until notifications/initialized is received.',
+          check: _gatesUntilInitializedNotification,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'lifecycle.does-not-cancel-initialize',
+          description:
+              'Does not send notifications/cancelled for initialize request cancellation.',
+          check: _doesNotCancelInitializeRequest,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'cancellation.requires-request-id',
+          description:
+              'Rejects notifications/cancelled payloads without a requestId.',
+          check: _requiresCancellationRequestId,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'server-discover.requires-request-meta',
+          description:
+              'Rejects server/discover requests that omit params._meta request metadata.',
+          check: _serverDiscoverRequiresRequestMeta,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'server-discover.returns-supported-capabilities',
+          description:
+              'Returns complete server/discover results with supported protocol versions.',
+          check: _serverDiscoverReturnsSupportedCapabilities,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'protocol-version.rejects-unsupported-stateless-version',
+          description:
+              'Rejects unsupported stateless protocol versions with supported/requested error data.',
+          check: _rejectsUnsupportedStatelessProtocolVersion,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless.requires-complete-request-meta',
+          description:
+              'Rejects 2026 stateless requests whose _meta omits required client identity or capability fields.',
+          check: _statelessRequestsRequireCompleteRequestMeta,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'protocol-version.http-modern-400-retries-discovery',
+          description:
+              'Retries server/discover with an advertised version after HTTP 400 UnsupportedProtocolVersion without falling back to initialize.',
+          check: _httpModernProtocolErrorsRetryDiscovery,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'capabilities.http-modern-400-does-not-fallback',
+          description:
+              'Surfaces HTTP 400 MissingRequiredClientCapability errors without falling back to initialize.',
+          check: _httpModernMissingCapabilityErrorsDoNotFallback,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'protocol-version.initialize-negotiates-stateful-version',
+          description:
+              'Keeps initialize negotiation on stateful MCP versions even when the latest stateless version is preferred.',
+          check: _initializeNegotiatesStatefulProtocolVersion,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'capabilities.stateless-does-not-infer-initialize-extensions',
+          description:
+              'Requires 2026 stateless requests to declare extension capabilities per request instead of inheriting initialize capabilities.',
+          check: _statelessDoesNotInferInitializeExtensions,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.rejects-mismatched-routing-headers',
+          description:
+              'Rejects 2026 Streamable HTTP requests whose routing headers disagree with the JSON-RPC body.',
+          check: _rejectsMismatchedStatelessHttpRoutingHeaders,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.requires-routing-headers',
+          description:
+              'Requires 2026 Streamable HTTP requests to include protocol and method routing headers.',
+          check: _requiresStatelessHttpRoutingHeaders,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.rejects-non-post-methods',
+          description:
+              'Returns HTTP 405 for 2026 stateless Streamable HTTP methods other than POST.',
+          check: _rejectsStatelessHttpNonPostMethods,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.rejects-batch-payloads',
+          description:
+              'Rejects 2026 stateless Streamable HTTP POST bodies that contain more than one JSON-RPC message.',
+          check: _rejectsStatelessHttpBatchPayloads,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.task-requests-require-name-header',
+          description:
+              'Requires 2026 task lifecycle requests to route with Mcp-Name task IDs.',
+          check: _taskRequestsRequireStatelessHttpNameHeader,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.validates-parameter-headers',
+          description:
+              'Requires and matches 2026 Mcp-Param routing headers for configured tool arguments.',
+          check: _validatesStatelessHttpParameterHeaders,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.omits-non-integer-parameter-headers',
+          description:
+              'Mirrors JavaScript-safe integer x-mcp-header values while omitting fractional and unsafe numbers.',
+          check: _omitsNonIntegerParameterHeaders,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.encodes-parameter-header-values',
+          description:
+              'Encodes non-plain 2026 Mcp-Param string header values while preserving plain strings.',
+          check: _encodesStatelessHttpParameterHeaderValues,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.accepts-response-posts',
+          description:
+              'Accepts 2026 JSON-RPC response POSTs without request-body metadata.',
+          check: _acceptsStatelessHttpResponsePosts,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.omits-session-header-after-initialize',
+          description:
+              'Omits Mcp-Session-Id on 2026 stateless responses even after stateful initialization.',
+          check: _statelessHttpOmitsSessionHeaderAfterInitialize,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-http.task-subscription-requires-client-capability',
+          description:
+              'Returns MissingRequiredClientCapability for stateless task subscriptions when the client did not advertise the task extension.',
+          check: _taskSubscriptionRequiresClientCapability,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless.related-task-uses-explicit-id-across-transports',
+          description:
+              'Processes related task operations across separate transports using explicit task IDs.',
+          check: _relatedTaskUsesExplicitIdAcrossTransports,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless.ignores-legacy-task-parameter',
+          description:
+              'Ignores legacy tools/call task parameters on 2026 stateless requests.',
+          check: _statelessIgnoresLegacyTaskParameter,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless-client.rejects-legacy-task-options',
+          description:
+              'Rejects legacy RequestOptions.task before sending 2026 stateless requests.',
+          check: _statelessClientRejectsLegacyTaskOptions,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless.adds-result-type-and-cache-defaults',
+          description:
+              'Adds 2026 complete resultType and cache defaults for all cacheable stateless results.',
+          check: _statelessAddsResultTypeAndCacheDefaults,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'tools-list.stateless-returns-deterministic-order',
+          description:
+              'Returns 2026 stateless tools/list results in deterministic name order.',
+          check: _statelessToolsListReturnsDeterministicOrder,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'tools-list.stateless-omits-legacy-execution',
+          description:
+              'Omits stable-only Tool.execution metadata from 2026 stateless tools/list results.',
+          check: _statelessToolsListOmitsLegacyExecution,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'resources.missing-resource-error-code-by-version',
+          description:
+              'Uses legacy ResourceNotFound for stable resource misses and InvalidParams for 2026 stateless resource misses.',
+          check: _missingResourceErrorCodeByVersion,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless.rejects-unrecognized-result-type',
+          description:
+              'Rejects 2026 stateless responses with unrecognized resultType values.',
+          check: _statelessRejectsUnrecognizedResultType,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'mrtr.input-required-supported-requests',
+          description:
+              'Allows input_required results on tools/call, prompts/get, and resources/read.',
+          check: _mrtrInputRequiredSupportedRequests,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'mrtr.rejects-unsupported-input-required-results',
+          description:
+              'Rejects input_required results on methods outside the MRTR allowlist.',
+          check: _mrtrRejectsUnsupportedInputRequiredResults,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'mrtr.input-requests-require-client-capabilities',
+          description:
+              'Rejects MRTR inputRequests whose client capabilities were not declared.',
+          check: _mrtrInputRequestsRequireClientCapabilities,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless.rejects-removed-core-rpcs',
+          description:
+              'Rejects initialize, ping, logging/setLevel, and resource subscription RPCs in stateless MCP.',
+          check: _rejectsRemovedStatelessCoreRpcs,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'stateless.rejects-removed-core-notifications',
+          description:
+              'Rejects initialized, roots/list_changed, and legacy task status notifications in stateless MCP.',
+          check: _rejectsRemovedStatelessCoreNotifications,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'logging.stateless-requires-request-log-level',
+          description:
+              'Sends stateless logging notifications only when the request opts in with io.modelcontextprotocol/logLevel.',
+          check: _statelessLoggingRequiresRequestLogLevel,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name:
+              'tasks-extension.lifecycle-methods-do-not-require-repeated-capability',
+          description:
+              'Does not reject task lifecycle requests solely because the request omits repeated task extension capability metadata.',
+          check: _taskLifecycleMethodsAllowResumedClientCapability,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'tasks-extension.task-store-uses-extension-result-shapes',
+          description:
+              'Serializes built-in task-store tasks/get and tasks/cancel responses in the MCP Tasks extension wire shape.',
+          check: _taskStoreUsesTaskExtensionResultShapes,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'tasks-extension.call-tool-result-cannot-spoof-task-result',
+          description:
+              'Rejects CallToolResult.extra attempts to spoof resultType task.',
+          check: _callToolResultCannotSpoofTaskResult,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'tasks-extension.task-result-requires-client-extension',
+          description:
+              'Rejects resultType task unless the tools/call request negotiated the tasks extension.',
+          check: _taskResultRequiresClientExtension,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'subscriptions-listen.task-ids-require-client-capability',
+          description:
+              'Rejects task-status subscriptions when the client did not advertise the task extension.',
+          check: _subscriptionTaskIdsRequireClientCapability,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'subscriptions-listen.requires-request-meta',
+          description:
+              'Rejects subscriptions/listen requests that omit params._meta request metadata.',
+          check: _subscriptionsListenRequiresRequestMeta,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name:
+              'subscriptions-listen.resource-subscriptions-require-capability',
+          description:
+              'Acknowledges resource subscriptions only when resources.subscribe is advertised.',
+          check: _subscriptionsListenRequiresResourceSubscribeCapability,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'subscriptions-acknowledged.rejects-wrapper-mismatch',
+          description:
+              'Rejects notifications/subscriptions/acknowledged wrappers with mismatched JSON-RPC constants.',
+          check: _subscriptionsAcknowledgedRejectsWrapperMismatch,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'capabilities.rejects-unnegotiated-sampling-tools',
+          description:
+              'Rejects sampling/createMessage tool-use when sampling.tools was not negotiated.',
+          check: _rejectsUnnegotiatedSamplingTools,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'capabilities.rejects-unnegotiated-sampling-context',
+          description:
+              'Rejects deprecated sampling includeContext values when sampling.context was not negotiated.',
+          check: _rejectsUnnegotiatedSamplingContext,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'capabilities.unadvertised-peer-methods-use-method-not-found',
+          description:
+              'Uses MethodNotFound for MCP methods whose peer capability was not advertised.',
+          check: _unadvertisedPeerMethodsUseMethodNotFound,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'capabilities.task-scoped-peer-methods-use-method-not-found',
+          description:
+              'Uses MethodNotFound for task-scoped MCP requests whose peer task capability was not advertised.',
+          check: _taskScopedPeerMethodsUseMethodNotFound,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'capabilities.stateless-omits-legacy-task-capabilities',
+          description:
+              'Omits legacy task and removed roots.listChanged capability fields from 2026 stateless metadata.',
+          check: _statelessOmitsLegacyTaskCapabilities,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'elicitation.rejects-invalid-form-url-union',
+          description:
+              'Rejects elicitation/create payloads that mix form and URL variants.',
+          check: _rejectsInvalidElicitationVariantPayload,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'elicitation.accepts-numeric-number-schema-keywords',
+          description:
+              'Accepts finite numeric default/minimum/maximum keywords in elicitation number schemas.',
+          check: _acceptsNumericElicitationNumberSchemaKeywords,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'tasks.strips-unnegotiated-related-task-metadata',
+          description:
+              'Strips related-task metadata from non-task tool calls when task augmentation was not negotiated.',
+          check: _stripsUnnegotiatedRelatedTaskMetadata,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'progress.rejects-malformed-progress-token',
+          description:
+              'Rejects progress notifications whose progressToken is not a string or integer.',
+          check: _rejectsMalformedProgressToken,
+        ),
+        _ConformanceCase(
+          suite: _specSuite,
+          name: 'progress.dispatches-integer-progress-token',
+          description:
+              'Dispatches progress notifications for integer progress tokens.',
+          check: _dispatchesIntegerProgressToken,
+        ),
+      ];
 
   /// Runs one named conformance suite.
   Future<ConformanceSuiteResult> runSuite({
@@ -636,7 +636,8 @@ class ConformanceRunner {
       _fixtureSuite => runFixtureSuite(filter: filter),
       _specSuite => runSpecSuite(filter: filter),
       _allSuites => runAllSuites(filter: filter),
-      _ => throw ArgumentError.value(
+      _ =>
+        throw ArgumentError.value(
           suite,
           'suite',
           'Expected one of: ${conformanceSuiteNames.join(', ')}',
@@ -666,9 +667,10 @@ class ConformanceRunner {
     List<_ConformanceCase> cases, {
     String? filter,
   }) async {
-    final selectedCases = filter == null
-        ? cases
-        : cases.where((testCase) => testCase.name == filter).toList();
+    final selectedCases =
+        filter == null
+            ? cases
+            : cases.where((testCase) => testCase.name == filter).toList();
 
     final results = <ConformanceCaseResult>[];
     for (final testCase in selectedCases) {
@@ -759,76 +761,75 @@ _GeneratedJsonRpcFixture _generatedJsonRpcFixture(Random random, int index) {
 
   return switch (random.nextInt(6)) {
     0 => _GeneratedJsonRpcFixture(
-        name: 'fuzz.jsonrpc.invalid-version.$index',
-        description:
-            'Generated request with an invalid JSON-RPC version is rejected.',
-        message: <String, dynamic>{
-          'jsonrpc': '2.${random.nextInt(9) + 1}',
-          'id': random.nextBool() ? integerId : stringId,
-          'method': Method.ping,
-        },
-        expectation: _expectFormatExceptionForPayload,
-      ),
+      name: 'fuzz.jsonrpc.invalid-version.$index',
+      description:
+          'Generated request with an invalid JSON-RPC version is rejected.',
+      message: <String, dynamic>{
+        'jsonrpc': '2.${random.nextInt(9) + 1}',
+        'id': random.nextBool() ? integerId : stringId,
+        'method': Method.ping,
+      },
+      expectation: _expectFormatExceptionForPayload,
+    ),
     1 => _GeneratedJsonRpcFixture(
-        name: 'fuzz.jsonrpc.malformed-envelope.$index',
-        description:
-            'Generated JSON-RPC envelope without request/response members is rejected.',
-        message: <String, dynamic>{
-          'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? integerId : stringId,
-          'params': <String, dynamic>{'noise': random.nextInt(100)},
-        },
-        expectation: _expectFormatExceptionForPayload,
-      ),
+      name: 'fuzz.jsonrpc.malformed-envelope.$index',
+      description:
+          'Generated JSON-RPC envelope without request/response members is rejected.',
+      message: <String, dynamic>{
+        'jsonrpc': jsonRpcVersion,
+        'id': random.nextBool() ? integerId : stringId,
+        'params': <String, dynamic>{'noise': random.nextInt(100)},
+      },
+      expectation: _expectFormatExceptionForPayload,
+    ),
     2 => _GeneratedJsonRpcFixture(
-        name: 'fuzz.jsonrpc.request-id.$index',
-        description: 'Generated requests preserve string-or-integer IDs.',
-        message: <String, dynamic>{
-          'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? integerId : stringId,
-          'method': Method.ping,
-        },
-        expectation: _expectRequestIdRoundTrip,
-      ),
+      name: 'fuzz.jsonrpc.request-id.$index',
+      description: 'Generated requests preserve string-or-integer IDs.',
+      message: <String, dynamic>{
+        'jsonrpc': jsonRpcVersion,
+        'id': random.nextBool() ? integerId : stringId,
+        'method': Method.ping,
+      },
+      expectation: _expectRequestIdRoundTrip,
+    ),
     3 => _GeneratedJsonRpcFixture(
-        name: 'fuzz.jsonrpc.response-id.$index',
-        description: 'Generated responses preserve string-or-integer IDs.',
-        message: <String, dynamic>{
-          'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? integerId : stringId,
-          'result': <String, dynamic>{},
-        },
-        expectation: _expectResponseIdRoundTrip,
-      ),
+      name: 'fuzz.jsonrpc.response-id.$index',
+      description: 'Generated responses preserve string-or-integer IDs.',
+      message: <String, dynamic>{
+        'jsonrpc': jsonRpcVersion,
+        'id': random.nextBool() ? integerId : stringId,
+        'result': <String, dynamic>{},
+      },
+      expectation: _expectResponseIdRoundTrip,
+    ),
     4 => _GeneratedJsonRpcFixture(
-        name: 'fuzz.jsonrpc.progress-token.$index',
-        description:
-            'Generated progress notifications preserve string-or-integer progress tokens.',
-        message: <String, dynamic>{
-          'jsonrpc': jsonRpcVersion,
-          'method': Method.notificationsProgress,
-          'params': <String, dynamic>{
-            'progressToken': progressToken,
-            'progress': random.nextInt(10),
-            'total': 10,
-          },
+      name: 'fuzz.jsonrpc.progress-token.$index',
+      description:
+          'Generated progress notifications preserve string-or-integer progress tokens.',
+      message: <String, dynamic>{
+        'jsonrpc': jsonRpcVersion,
+        'method': Method.notificationsProgress,
+        'params': <String, dynamic>{
+          'progressToken': progressToken,
+          'progress': random.nextInt(10),
+          'total': 10,
         },
-        expectation: _expectProgressTokenRoundTrip,
-      ),
+      },
+      expectation: _expectProgressTokenRoundTrip,
+    ),
     _ => _GeneratedJsonRpcFixture(
-        name: 'fuzz.jsonrpc.error-id.$index',
-        description:
-            'Generated error responses preserve string-or-integer IDs.',
-        message: <String, dynamic>{
-          'jsonrpc': jsonRpcVersion,
-          'id': random.nextBool() ? integerId : stringId,
-          'error': <String, dynamic>{
-            'code': ErrorCode.invalidRequest.value,
-            'message': 'generated invalid request',
-          },
+      name: 'fuzz.jsonrpc.error-id.$index',
+      description: 'Generated error responses preserve string-or-integer IDs.',
+      message: <String, dynamic>{
+        'jsonrpc': jsonRpcVersion,
+        'id': random.nextBool() ? integerId : stringId,
+        'error': <String, dynamic>{
+          'code': ErrorCode.invalidRequest.value,
+          'message': 'generated invalid request',
         },
-        expectation: _expectErrorIdRoundTrip,
-      ),
+      },
+      expectation: _expectErrorIdRoundTrip,
+    ),
   };
 }
 
@@ -886,10 +887,11 @@ class _DiscoveringConformanceTransport extends Transport
     required this.toolsListResult,
     Map<String, dynamic>? capabilities,
     this.toolsCallResult,
-  }) : capabilities = capabilities ??
-            const <String, dynamic>{
-              'tools': <String, dynamic>{},
-            };
+  }) : capabilities =
+           capabilities ??
+           const <String, dynamic>{
+             'tools': <String, dynamic>{},
+           };
 
   final Map<String, dynamic> toolsListResult;
   final Map<String, dynamic> capabilities;
@@ -991,14 +993,15 @@ JsonRpcResponse _initializeResponse({
 }) {
   return JsonRpcResponse(
     id: id,
-    result: InitializeResult(
-      protocolVersion: stableProtocolVersion2025_11_25,
-      capabilities: capabilities,
-      serverInfo: const Implementation(
-        name: 'conformance-server',
-        version: '1.0.0',
-      ),
-    ).toJson(),
+    result:
+        InitializeResult(
+          protocolVersion: stableProtocolVersion2025_11_25,
+          capabilities: capabilities,
+          serverInfo: const Implementation(
+            name: 'conformance-server',
+            version: '1.0.0',
+          ),
+        ).toJson(),
   );
 }
 
@@ -1008,10 +1011,11 @@ Map<String, dynamic> _statelessRequestMeta({
 }) {
   return <String, dynamic>{
     _protocolVersionMetaKey: protocolVersion,
-    _clientInfoMetaKey: const Implementation(
-      name: 'conformance-client',
-      version: '1.0.0',
-    ).toJson(),
+    _clientInfoMetaKey:
+        const Implementation(
+          name: 'conformance-client',
+          version: '1.0.0',
+        ).toJson(),
     _clientCapabilitiesMetaKey: capabilities.toJson(
       omitLegacyTasks: isStatelessProtocolVersion(protocolVersion),
       omitLegacyRootsListChanged: isStatelessProtocolVersion(protocolVersion),
@@ -1042,10 +1046,11 @@ Future<void> _initializeClient(
   final connectFuture = client.connect(transport);
   await _settle();
 
-  final discoverRequests = transport.sentMessages
-      .whereType<JsonRpcRequest>()
-      .where((request) => request.method == _serverDiscoverMethod)
-      .toList();
+  final discoverRequests =
+      transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .where((request) => request.method == _serverDiscoverMethod)
+          .toList();
   for (final discoverRequest in discoverRequests) {
     transport.emit(
       JsonRpcError(
@@ -1061,10 +1066,11 @@ Future<void> _initializeClient(
     await _settle();
   }
 
-  final initializeRequests = transport.sentMessages
-      .whereType<JsonRpcRequest>()
-      .where((request) => request.method == Method.initialize)
-      .toList();
+  final initializeRequests =
+      transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .where((request) => request.method == Method.initialize)
+          .toList();
   if (initializeRequests.length != 1) {
     throw StateError('Expected client to send exactly one initialize request.');
   }
@@ -1169,7 +1175,8 @@ Future<void> _gatesUntilInitializedNotification() async {
 
   if (handlerCallCount != 1) {
     throw StateError(
-        'Tool handler did not run after initialized notification.');
+      'Tool handler did not run after initialized notification.',
+    );
   }
   _expectSingleErrorFreeResponse(transport.sentMessages, id: 102);
   await server.close();
@@ -1191,10 +1198,11 @@ Future<void> _doesNotCancelInitializeRequest() async {
   );
   await _settle();
 
-  final initializeRequests = transport.sentMessages
-      .whereType<JsonRpcRequest>()
-      .where((request) => request.method == Method.initialize)
-      .toList();
+  final initializeRequests =
+      transport.sentMessages
+          .whereType<JsonRpcRequest>()
+          .where((request) => request.method == Method.initialize)
+          .toList();
   if (initializeRequests.length != 1) {
     throw StateError(
       'Expected one initialize request, got ${initializeRequests.length}.',
@@ -1205,7 +1213,8 @@ Future<void> _doesNotCancelInitializeRequest() async {
   try {
     await requestFuture.timeout(const Duration(seconds: 1));
     throw StateError(
-        'Expected initialize request cancellation to fail locally.');
+      'Expected initialize request cancellation to fail locally.',
+    );
   } catch (error) {
     if (!error.toString().contains('cancel initialize')) {
       throw StateError(
@@ -1247,7 +1256,8 @@ Future<void> _requiresCancellationRequestId() async {
   }
 
   throw StateError(
-      'Expected CancelledNotification.toJson to require requestId.');
+    'Expected CancelledNotification.toJson to require requestId.',
+  );
 }
 
 Future<void> _serverDiscoverRequiresRequestMeta() async {
@@ -2184,9 +2194,11 @@ Future<void> _taskRequestsRequireStatelessHttpNameHeader() async {
     );
 
     final missingNameResponse = await missingNameRequest.close();
-    final missingNameBody = jsonDecode(
-      await utf8.decodeStream(missingNameResponse),
-    ) as Map<String, dynamic>;
+    final missingNameBody =
+        jsonDecode(
+              await utf8.decodeStream(missingNameResponse),
+            )
+            as Map<String, dynamic>;
 
     if (missingNameResponse.statusCode != HttpStatus.badRequest) {
       throw StateError(
@@ -2593,9 +2605,10 @@ Future<void> _encodesStatelessHttpParameterHeaderValues() async {
   String encodedHeaderValue(String value) =>
       '=?base64?${base64Encode(utf8.encode(value))}?=';
 
-  final nonAsciiGreeting = 'Hello, ${String.fromCharCodes(
-    const <int>[0x4e16, 0x754c],
-  )}';
+  final nonAsciiGreeting =
+      'Hello, ${String.fromCharCodes(
+        const <int>[0x4e16, 0x754c],
+      )}';
 
   try {
     await transport.send(
@@ -2745,14 +2758,15 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
         transport.send(
           JsonRpcResponse(
             id: message.id,
-            result: const InitializeResult(
-              protocolVersion: stableProtocolVersion2025_11_25,
-              capabilities: ServerCapabilities(),
-              serverInfo: Implementation(
-                name: 'conformance-server',
-                version: '1.0.0',
-              ),
-            ).toJson(),
+            result:
+                const InitializeResult(
+                  protocolVersion: stableProtocolVersion2025_11_25,
+                  capabilities: ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'conformance-server',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
           ),
         ),
       );
@@ -2824,8 +2838,9 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
     );
 
     final statelessResponse = await statelessRequest.close();
-    final responseBody = jsonDecode(await utf8.decodeStream(statelessResponse))
-        as Map<String, dynamic>;
+    final responseBody =
+        jsonDecode(await utf8.decodeStream(statelessResponse))
+            as Map<String, dynamic>;
     if (statelessResponse.statusCode != HttpStatus.ok) {
       throw StateError(
         'Expected stateless request to succeed, got '
@@ -3148,11 +3163,12 @@ Future<void> _statelessClientRejectsLegacyTaskOptions() async {
         '${error.code}: ${error.message}.',
       );
     }
-    final toolsCallRequests = transport.sentMessages
-        .skip(sentBeforeCall)
-        .whereType<JsonRpcRequest>()
-        .where((request) => request.method == Method.toolsCall)
-        .toList();
+    final toolsCallRequests =
+        transport.sentMessages
+            .skip(sentBeforeCall)
+            .whereType<JsonRpcRequest>()
+            .where((request) => request.method == Method.toolsCall)
+            .toList();
     if (toolsCallRequests.isNotEmpty) {
       throw StateError(
         'Expected no stateless tools/call request after legacy task option, '
@@ -3365,16 +3381,18 @@ Future<void> _statelessToolsListReturnsDeterministicOrder() async {
   if (tools is! List) {
     throw StateError('Expected tools/list result tools array, got $tools.');
   }
-  final names = tools.map((tool) {
-    if (tool is! Map) {
-      throw StateError('Expected tool object, got $tool.');
-    }
-    final name = tool['name'];
-    if (name is! String) {
-      throw StateError('Expected tool name string, got $tool.');
-    }
-    return name;
-  }).toList(growable: false);
+  final names = tools
+      .map((tool) {
+        if (tool is! Map) {
+          throw StateError('Expected tool object, got $tool.');
+        }
+        final name = tool['name'];
+        if (name is! String) {
+          throw StateError('Expected tool name string, got $tool.');
+        }
+        return name;
+      })
+      .toList(growable: false);
   const expectedNames = <String>['alpha', 'middle', 'zeta'];
   if (!_stringListEquals(names, expectedNames)) {
     throw StateError(
@@ -3741,37 +3759,37 @@ Future<void> _mrtrInputRequestsRequireClientCapabilities() async {
     (request, extra) async {
       final inputRequest = switch (request.callParams.name) {
         'needs-form' => InputRequest.elicit(
-            ElicitRequest.form(
-              message: 'Enter name',
-              requestedSchema: JsonSchema.object(
-                properties: <String, JsonSchema>{
-                  'name': JsonSchema.string(),
-                },
-                required: const <String>['name'],
-              ),
+          ElicitRequest.form(
+            message: 'Enter name',
+            requestedSchema: JsonSchema.object(
+              properties: <String, JsonSchema>{
+                'name': JsonSchema.string(),
+              },
+              required: const <String>['name'],
             ),
           ),
+        ),
         'needs-url' => InputRequest.elicit(
-            const ElicitRequest.url(
-              message: 'Open browser',
-              url: 'https://example.com/authorize',
-            ),
+          const ElicitRequest.url(
+            message: 'Open browser',
+            url: 'https://example.com/authorize',
           ),
+        ),
         'needs-roots' => InputRequest.listRoots(),
         'needs-sampling-tools' => InputRequest.createMessage(
-            const CreateMessageRequest(
-              messages: <SamplingMessage>[
-                SamplingMessage(
-                  role: SamplingMessageRole.user,
-                  content: SamplingTextContent(text: 'Search'),
-                ),
-              ],
-              maxTokens: 16,
-              tools: <Tool>[
-                Tool(name: 'lookup', inputSchema: JsonObject()),
-              ],
-            ),
+          const CreateMessageRequest(
+            messages: <SamplingMessage>[
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: SamplingTextContent(text: 'Search'),
+              ),
+            ],
+            maxTokens: 16,
+            tools: <Tool>[
+              Tool(name: 'lookup', inputSchema: JsonObject()),
+            ],
           ),
+        ),
         _ => throw StateError('Unknown tool ${request.callParams.name}'),
       };
 
@@ -4230,10 +4248,11 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
   );
   await _settle();
 
-  final loggingNotifications = transport.sentMessages
-      .whereType<JsonRpcNotification>()
-      .where((message) => message.method == Method.notificationsMessage)
-      .toList();
+  final loggingNotifications =
+      transport.sentMessages
+          .whereType<JsonRpcNotification>()
+          .where((message) => message.method == Method.notificationsMessage)
+          .toList();
   if (loggingNotifications.length != 1) {
     throw StateError(
       'Expected exactly one threshold-matching stateless log notification, got '
@@ -4435,14 +4454,15 @@ McpServerOptions _mcpServerOptionsWithTaskStore({
   // Keep this dynamic so mcp_dart_cli remains analyzable against the published
   // mcp_dart lower bound until this SDK branch is released.
   return Function.apply(
-    McpServerOptions.new,
-    const <Object?>[],
-    <Symbol, Object?>{
-      #capabilities: capabilities,
-      #taskStore: taskStore,
-      #protocol: McpProtocol.stable,
-    },
-  ) as McpServerOptions;
+        McpServerOptions.new,
+        const <Object?>[],
+        <Symbol, Object?>{
+          #capabilities: capabilities,
+          #taskStore: taskStore,
+          #protocol: McpProtocol.stable,
+        },
+      )
+      as McpServerOptions;
 }
 
 Future<void> _subscriptionTaskIdsRequireClientCapability() async {
@@ -5115,7 +5135,8 @@ Future<void> _acceptsNumericElicitationNumberSchemaKeywords() async {
   });
   if (parsed is! JsonRpcElicitRequest) {
     throw StateError(
-        'Expected JsonRpcElicitRequest, got ${parsed.runtimeType}.');
+      'Expected JsonRpcElicitRequest, got ${parsed.runtimeType}.',
+    );
   }
 
   _expectThrowsFormatException(
@@ -5188,7 +5209,8 @@ Future<void> _stripsUnnegotiatedRelatedTaskMetadata() async {
   if (receivedExtra!.meta?[relatedTaskMetadataKey] != null ||
       receivedExtra!.meta?.containsKey('relatedTask') == true) {
     throw StateError(
-        'Unnegotiated related-task metadata reached handler meta.');
+      'Unnegotiated related-task metadata reached handler meta.',
+    );
   }
   if (receivedExtra!.meta?['progressToken'] != 'progress-1') {
     throw StateError('Non-task request metadata was not preserved.');
@@ -5243,10 +5265,11 @@ Future<void> _dispatchesIntegerProgressToken() async {
   );
   await _settle();
 
-  final progressMessages = transport.sentMessages
-      .whereType<JsonRpcNotification>()
-      .where((message) => message.method == Method.notificationsProgress)
-      .toList();
+  final progressMessages =
+      transport.sentMessages
+          .whereType<JsonRpcNotification>()
+          .where((message) => message.method == Method.notificationsProgress)
+          .toList();
   if (progressMessages.length != 1) {
     throw StateError(
       'Expected one progress notification, got ${progressMessages.length}.',
@@ -5805,8 +5828,10 @@ void _expectProgressTokenRoundTrip(Map<String, dynamic> message) {
   }
   final token = message['params']['progressToken'];
   if (parsed.progressParams.progressToken != token) {
-    throw StateError('Expected progress token $token, got '
-        '${parsed.progressParams.progressToken}.');
+    throw StateError(
+      'Expected progress token $token, got '
+      '${parsed.progressParams.progressToken}.',
+    );
   }
   if (parsed.toJson()['params']['progressToken'] != token) {
     throw StateError('Expected serialized progress token to preserve $token.');
@@ -5841,7 +5866,10 @@ bool _mapsDeepEqual(Object? a, Object? b) {
 }
 
 void _expectIdRoundTrip(
-    RequestId actualId, Object expectedId, Map<String, dynamic> json) {
+  RequestId actualId,
+  Object expectedId,
+  Map<String, dynamic> json,
+) {
   if (actualId != expectedId) {
     throw StateError('Expected ID $expectedId, got $actualId.');
   }

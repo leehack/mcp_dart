@@ -6,8 +6,9 @@ Future<void> main(List<String> args) async {
   final notifyAfterCall = args.contains('--notify-after-call');
   final invalidOutputSchema = args.contains('--invalid-output-schema');
 
-  await for (final line
-      in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+  await for (final line in stdin
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())) {
     final decoded = jsonDecode(line);
     if (decoded is! Map) continue;
     final message = decoded.cast<String, dynamic>();
@@ -83,11 +84,13 @@ Future<void> main(List<String> args) async {
 }
 
 Future<void> _writeResponse(Object? id, Map<String, dynamic> result) async {
-  stdout.writeln(jsonEncode(<String, dynamic>{
-    'jsonrpc': '2.0',
-    'id': id,
-    'result': result,
-  }));
+  stdout.writeln(
+    jsonEncode(<String, dynamic>{
+      'jsonrpc': '2.0',
+      'id': id,
+      'result': result,
+    }),
+  );
   await stdout.flush();
 }
 
@@ -96,26 +99,30 @@ Future<void> _writeErrorResponse(
   int code,
   String message,
 ) async {
-  stdout.writeln(jsonEncode(<String, dynamic>{
-    'jsonrpc': '2.0',
-    'id': id,
-    'error': <String, dynamic>{
-      'code': code,
-      'message': message,
-    },
-  }));
+  stdout.writeln(
+    jsonEncode(<String, dynamic>{
+      'jsonrpc': '2.0',
+      'id': id,
+      'error': <String, dynamic>{
+        'code': code,
+        'message': message,
+      },
+    }),
+  );
   await stdout.flush();
 }
 
 Future<void> _writeLoggingNotification() async {
-  stdout.writeln(jsonEncode(<String, dynamic>{
-    'jsonrpc': '2.0',
-    'method': 'notifications/message',
-    'params': <String, dynamic>{
-      'level': 'info',
-      'logger': 'raw-fixture',
-      'data': 'notification noise',
-    },
-  }));
+  stdout.writeln(
+    jsonEncode(<String, dynamic>{
+      'jsonrpc': '2.0',
+      'method': 'notifications/message',
+      'params': <String, dynamic>{
+        'level': 'info',
+        'logger': 'raw-fixture',
+        'data': 'notification noise',
+      },
+    }),
+  );
   await stdout.flush();
 }

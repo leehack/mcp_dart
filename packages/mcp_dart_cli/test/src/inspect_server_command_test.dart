@@ -92,29 +92,32 @@ void main() {
       ).called(1);
     });
 
-    test('json output stays parseable when server sends notifications',
-        () async {
-      final result = await Process.run(
-        'dart',
-        <String>[
-          'run',
-          'bin/mcp_dart.dart',
-          'inspect-server',
-          '--json',
-          '--',
+    test(
+      'json output stays parseable when server sends notifications',
+      () async {
+        final result = await Process.run(
           'dart',
-          'run',
-          'test/fixtures/raw_stdio_server.dart',
-          '--notify-after-list',
-        ],
-        workingDirectory: Directory.current.path,
-      );
+          <String>[
+            'run',
+            'bin/mcp_dart.dart',
+            'inspect-server',
+            '--json',
+            '--',
+            'dart',
+            'run',
+            'test/fixtures/raw_stdio_server.dart',
+            '--notify-after-list',
+          ],
+          workingDirectory: Directory.current.path,
+        );
 
-      expect(result.exitCode, equals(ExitCode.success.code));
-      final json = jsonDecode(result.stdout as String) as Map<String, dynamic>;
-      expect(json['kind'], equals('server'));
-      expect(json['inventory'], isA<Map<String, dynamic>>());
-    });
+        expect(result.exitCode, equals(ExitCode.success.code));
+        final json =
+            jsonDecode(result.stdout as String) as Map<String, dynamic>;
+        expect(json['kind'], equals('server'));
+        expect(json['inventory'], isA<Map<String, dynamic>>());
+      },
+    );
 
     test('json mode runs in-process with silent handlers', () async {
       final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
@@ -162,39 +165,43 @@ void main() {
       );
     });
 
-    test('fails configured tool output schema checks on invalid output',
-        () async {
-      final report = await McpServerInspector(
-        logger: MockLogger(),
-        probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
-          'tools': <Map<String, dynamic>>[
-            <String, dynamic>{
-              'name': 'bad_structured',
-              'arguments': <String, dynamic>{'message': 'hello'},
-            },
-          ],
-        }),
-      ).inspect(
-        const ServerInspectionTarget(
-          command: 'dart',
-          serverArgs: <String>[
-            'run',
-            'test/fixtures/raw_stdio_server.dart',
-            '--invalid-output-schema',
-          ],
-          url: null,
-          env: <String, String>{},
-        ),
-      );
+    test(
+      'fails configured tool output schema checks on invalid output',
+      () async {
+        final report = await McpServerInspector(
+          logger: MockLogger(),
+          probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
+            'tools': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'name': 'bad_structured',
+                'arguments': <String, dynamic>{'message': 'hello'},
+              },
+            ],
+          }),
+        ).inspect(
+          const ServerInspectionTarget(
+            command: 'dart',
+            serverArgs: <String>[
+              'run',
+              'test/fixtures/raw_stdio_server.dart',
+              '--invalid-output-schema',
+            ],
+            url: null,
+            env: <String, String>{},
+          ),
+        );
 
-      expect(report.passed, isFalse);
-      final checksById = <String, InspectionCheck>{
-        for (final check in report.checks) check.id: check,
-      };
-      expect(checksById['tools.call.bad_structured']?.status, equals('fail'));
-      expect(checksById['tools.output-schema.bad_structured']?.status,
-          equals('fail'));
-    });
+        expect(report.passed, isFalse);
+        final checksById = <String, InspectionCheck>{
+          for (final check in report.checks) check.id: check,
+        };
+        expect(checksById['tools.call.bad_structured']?.status, equals('fail'));
+        expect(
+          checksById['tools.output-schema.bad_structured']?.status,
+          equals('fail'),
+        );
+      },
+    );
 
     test('silent handler mode can inspect a notifying server', () async {
       final report = await McpServerInspector(
@@ -278,48 +285,50 @@ void main() {
       }
     });
 
-    test('inspects a TypeScript SDK Streamable HTTP server in-process',
-        () async {
-      final tsServer = _typescriptServerFixture();
-      if (!_requireFile(tsServer, 'compiled TypeScript server fixture')) {
-        return;
-      }
+    test(
+      'inspects a TypeScript SDK Streamable HTTP server in-process',
+      () async {
+        final tsServer = _typescriptServerFixture();
+        if (!_requireFile(tsServer, 'compiled TypeScript server fixture')) {
+          return;
+        }
 
-      final port = await _findOpenPort();
-      final server = await _ManagedProcess.start('node', <String>[
-        tsServer.path,
-        '--transport',
-        'http',
-        '--port',
-        '$port',
-      ]);
-      addTearDown(server.stop);
-      final url = Uri.parse('http://127.0.0.1:$port/mcp');
-      await _waitForHttpEndpoint(url);
+        final port = await _findOpenPort();
+        final server = await _ManagedProcess.start('node', <String>[
+          tsServer.path,
+          '--transport',
+          'http',
+          '--port',
+          '$port',
+        ]);
+        addTearDown(server.stop);
+        final url = Uri.parse('http://127.0.0.1:$port/mcp');
+        await _waitForHttpEndpoint(url);
 
-      final report = await McpServerInspector(logger: MockLogger()).inspect(
-        ServerInspectionTarget(
-          command: null,
-          serverArgs: const <String>[],
-          url: url,
-          env: const <String, String>{},
-        ),
-      );
+        final report = await McpServerInspector(logger: MockLogger()).inspect(
+          ServerInspectionTarget(
+            command: null,
+            serverArgs: const <String>[],
+            url: url,
+            env: const <String, String>{},
+          ),
+        );
 
-      expect(report.passed, isTrue);
-      expect(report.metadata['transport'], equals('streamable-http'));
-      final checksById = <String, InspectionCheck>{
-        for (final check in report.checks) check.id: check,
-      };
-      for (final id in <String>[
-        'transport.streamable-http.session',
-        'transport.streamable-http.get-without-session',
-        'transport.streamable-http.bogus-session',
-        'transport.streamable-http.delete-session',
-      ]) {
-        expect(checksById[id]?.status, equals('pass'), reason: id);
-      }
-    });
+        expect(report.passed, isTrue);
+        expect(report.metadata['transport'], equals('streamable-http'));
+        final checksById = <String, InspectionCheck>{
+          for (final check in report.checks) check.id: check,
+        };
+        for (final id in <String>[
+          'transport.streamable-http.session',
+          'transport.streamable-http.get-without-session',
+          'transport.streamable-http.bogus-session',
+          'transport.streamable-http.delete-session',
+        ]) {
+          expect(checksById[id]?.status, equals('pass'), reason: id);
+        }
+      },
+    );
   });
 }
 
@@ -334,8 +343,9 @@ Directory _findRepoRoot(Directory start) {
   var current = start.absolute;
   while (current.path != current.parent.path) {
     if (File(p.join(current.path, 'AGENTS.md')).existsSync() &&
-        Directory(p.join(current.path, 'packages', 'mcp_dart_cli'))
-            .existsSync()) {
+        Directory(
+          p.join(current.path, 'packages', 'mcp_dart_cli'),
+        ).existsSync()) {
       return current;
     }
     current = current.parent;
@@ -360,12 +370,14 @@ Future<void> _waitForHttpEndpoint(Uri uri) async {
   for (var attempt = 0; attempt < 50; attempt += 1) {
     final client = HttpClient();
     try {
-      final request = await client.getUrl(uri).timeout(
+      final request = await client
+          .getUrl(uri)
+          .timeout(
             const Duration(milliseconds: 500),
           );
       final response = await request.close().timeout(
-            const Duration(milliseconds: 500),
-          );
+        const Duration(milliseconds: 500),
+      );
       await response.drain<void>();
       client.close(force: true);
       return;
@@ -393,10 +405,14 @@ class _ManagedProcess {
     List<String> arguments,
   ) async {
     final process = await Process.start(executable, arguments);
-    final stdoutSubscription = process.stdout.transform(utf8.decoder).listen(
+    final stdoutSubscription = process.stdout
+        .transform(utf8.decoder)
+        .listen(
           (_) {},
         );
-    final stderrSubscription = process.stderr.transform(utf8.decoder).listen(
+    final stderrSubscription = process.stderr
+        .transform(utf8.decoder)
+        .listen(
           (_) {},
         );
     return _ManagedProcess._(

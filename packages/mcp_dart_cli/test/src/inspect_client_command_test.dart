@@ -96,20 +96,17 @@ void main() {
       final tempDir = await Directory.systemTemp.createTemp('inspect_client_');
       addTearDown(() => tempDir.delete(recursive: true));
       final report = File('${tempDir.path}/report.json');
-      final process = await Process.start(
-          'dart',
-          <String>[
-            'run',
-            'bin/mcp_dart.dart',
-            'inspect-client',
-            '--report',
-            report.path,
-            '--idle-timeout-ms',
-            '50',
-            '--max-runtime-ms',
-            '1000',
-          ],
-          workingDirectory: Directory.current.path);
+      final process = await Process.start('dart', <String>[
+        'run',
+        'bin/mcp_dart.dart',
+        'inspect-client',
+        '--report',
+        report.path,
+        '--idle-timeout-ms',
+        '50',
+        '--max-runtime-ms',
+        '1000',
+      ], workingDirectory: Directory.current.path);
 
       process.stdin.writeln('{not json');
       await process.stdin.close();
@@ -127,20 +124,17 @@ void main() {
       final tempDir = await Directory.systemTemp.createTemp('inspect_client_');
       addTearDown(() => tempDir.delete(recursive: true));
       final report = File('${tempDir.path}/report.json');
-      final process = await Process.start(
-          'dart',
-          <String>[
-            'run',
-            'bin/mcp_dart.dart',
-            'inspect-client',
-            '--report',
-            report.path,
-            '--idle-timeout-ms',
-            '50',
-            '--max-runtime-ms',
-            '1000',
-          ],
-          workingDirectory: Directory.current.path);
+      final process = await Process.start('dart', <String>[
+        'run',
+        'bin/mcp_dart.dart',
+        'inspect-client',
+        '--report',
+        report.path,
+        '--idle-timeout-ms',
+        '50',
+        '--max-runtime-ms',
+        '1000',
+      ], workingDirectory: Directory.current.path);
 
       await process.stdin.close();
       await process.stdout.drain<void>();
@@ -387,8 +381,9 @@ void main() {
         (error['error'] as Map)['code'],
         ErrorCode.invalidParams.value,
       );
-      final removedMethodError =
-          responses.singleWhere((response) => response['id'] == 3);
+      final removedMethodError = responses.singleWhere(
+        (response) => response['id'] == 3,
+      );
       expect(
         (removedMethodError['error'] as Map)['code'],
         ErrorCode.methodNotFound.value,
@@ -505,16 +500,17 @@ void main() {
           );
 
         await _waitForOutputLines(outputLines, 9);
-        final probeRequests = outputLines
-            .map(jsonDecode)
-            .cast<Map<String, dynamic>>()
-            .where(
-              (message) =>
-                  message['method'] == Method.rootsList ||
-                  message['method'] == Method.samplingCreateMessage ||
-                  message['method'] == Method.elicitationCreate,
-            )
-            .toList();
+        final probeRequests =
+            outputLines
+                .map(jsonDecode)
+                .cast<Map<String, dynamic>>()
+                .where(
+                  (message) =>
+                      message['method'] == Method.rootsList ||
+                      message['method'] == Method.samplingCreateMessage ||
+                      message['method'] == Method.elicitationCreate,
+                )
+                .toList();
         expect(probeRequests, hasLength(3));
         for (final request in probeRequests) {
           final method = request['method'];
@@ -524,23 +520,23 @@ void main() {
               'id': request['id'],
               'result': switch (method) {
                 Method.rootsList => <String, dynamic>{
-                    'roots': <Map<String, dynamic>>[
-                      <String, dynamic>{'uri': 'file:///tmp', 'name': 'tmp'},
-                    ],
-                  },
+                  'roots': <Map<String, dynamic>>[
+                    <String, dynamic>{'uri': 'file:///tmp', 'name': 'tmp'},
+                  ],
+                },
                 Method.samplingCreateMessage => <String, dynamic>{
-                    'role': 'assistant',
-                    'content': <String, dynamic>{
-                      'type': 'text',
-                      'text': 'sampled',
-                    },
-                    'model': 'fixture',
-                    'stopReason': 'endTurn',
+                  'role': 'assistant',
+                  'content': <String, dynamic>{
+                    'type': 'text',
+                    'text': 'sampled',
                   },
+                  'model': 'fixture',
+                  'stopReason': 'endTurn',
+                },
                 _ => <String, dynamic>{
-                    'action': 'accept',
-                    'content': <String, dynamic>{'confirmed': true},
-                  },
+                  'action': 'accept',
+                  'content': <String, dynamic>{'confirmed': true},
+                },
               },
             }),
           );

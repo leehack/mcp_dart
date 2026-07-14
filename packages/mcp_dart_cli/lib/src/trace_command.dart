@@ -197,7 +197,8 @@ class StdioTraceProxy {
       _finish();
     });
 
-    final clientLines = _clientLines ??
+    final clientLines =
+        _clientLines ??
         stdin.transform(utf8.decoder).transform(const LineSplitter());
     _clientSubscription = clientLines.listen(
       (line) => _forwardClientToServer(line),
@@ -216,18 +217,18 @@ class StdioTraceProxy {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(
-      (line) => _forwardServerToClient(line),
-      onError: (Object error) {
-        _recordEvent(
-          direction: 'server_to_proxy',
-          raw: '',
-          extra: <String, dynamic>{'error': error.toString()},
+          (line) => _forwardServerToClient(line),
+          onError: (Object error) {
+            _recordEvent(
+              direction: 'server_to_proxy',
+              raw: '',
+              extra: <String, dynamic>{'error': error.toString()},
+            );
+            _finish();
+          },
+          onDone: _finish,
+          cancelOnError: false,
         );
-        _finish();
-      },
-      onDone: _finish,
-      cancelOnError: false,
-    );
     _serverStderrSubscription = _server!.stderr.listen((data) {
       stderr.add(data);
       _recordEvent(

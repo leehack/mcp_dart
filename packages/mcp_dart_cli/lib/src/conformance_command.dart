@@ -19,8 +19,8 @@ class ConformanceCommand extends Command<int> {
   final ConformanceRunner _runner;
 
   ConformanceCommand({Logger? logger, ConformanceRunner? runner})
-      : _logger = logger ?? Logger(),
-        _runner = runner ?? ConformanceRunner() {
+    : _logger = logger ?? Logger(),
+      _runner = runner ?? ConformanceRunner() {
     argParser
       ..addOption(
         'suite',
@@ -83,17 +83,19 @@ class ConformanceCommand extends Command<int> {
       );
     }
 
-    final result = fuzz
-        ? await _runner.runFuzzSuite(iterations: iterations)
-        : await _runner.runSuite(suite: suite, filter: filter);
+    final result =
+        fuzz
+            ? await _runner.runFuzzSuite(iterations: iterations)
+            : await _runner.runSuite(suite: suite, filter: filter);
     if (result.total == 0) {
       _logger.err('No conformance cases matched: $filter');
       return ExitCode.usage.code;
     }
 
     if (json) {
-      stdout
-          .writeln(const JsonEncoder.withIndent('  ').convert(result.toJson()));
+      stdout.writeln(
+        const JsonEncoder.withIndent('  ').convert(result.toJson()),
+      );
     } else {
       for (final testCase in result.cases) {
         final marker = testCase.passed ? '[✓]' : '[x]';

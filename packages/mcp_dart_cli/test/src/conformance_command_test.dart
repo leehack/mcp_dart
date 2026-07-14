@@ -9,38 +9,39 @@ class MockLogger extends Mock implements Logger {}
 
 void main() {
   group('ConformanceRunner', () {
-    test('fixture suite covers initial JSON-RPC and protocol-version cases',
-        () async {
-      final result = await ConformanceRunner().runFixtureSuite();
+    test(
+      'fixture suite covers initial JSON-RPC and protocol-version cases',
+      () async {
+        final result = await ConformanceRunner().runFixtureSuite();
 
-      expect(result.passed, isTrue);
-      expect(result.total, greaterThanOrEqualTo(5));
-      expect(
-        result.caseNames,
-        containsAll(<String>[
-          'jsonrpc.rejects-invalid-version',
-          'jsonrpc.rejects-malformed-message',
-          'jsonrpc.rejects-non-string-method',
-          'jsonrpc.rejects-result-error-response',
-          'jsonrpc.rejects-method-response-envelope',
-          'jsonrpc.rejects-malformed-error-object',
-          'jsonrpc.rejects-null-error-response-id',
-          'jsonrpc.accepts-omitted-error-response-id',
-          'jsonrpc.rejects-null-params-member',
-          'tools-call.requires-params',
-          'jsonrpc.preserves-string-response-id',
-          'jsonrpc.preserves-integer-response-id',
-          'jsonrpc.preserves-string-progress-token',
-          'jsonrpc.preserves-integer-progress-token',
-          'jsonrpc.rejects-fractional-ids-and-progress-tokens',
-          'protocol-version.advertises-latest-2026-07-28',
-          'protocol-version.stable-profile-advertises-2026-07-28',
-        ]),
-      );
-    });
+        expect(result.passed, isTrue);
+        expect(result.total, greaterThanOrEqualTo(5));
+        expect(
+          result.caseNames,
+          containsAll(<String>[
+            'jsonrpc.rejects-invalid-version',
+            'jsonrpc.rejects-malformed-message',
+            'jsonrpc.rejects-non-string-method',
+            'jsonrpc.rejects-result-error-response',
+            'jsonrpc.rejects-method-response-envelope',
+            'jsonrpc.rejects-malformed-error-object',
+            'jsonrpc.rejects-null-error-response-id',
+            'jsonrpc.accepts-omitted-error-response-id',
+            'jsonrpc.rejects-null-params-member',
+            'tools-call.requires-params',
+            'jsonrpc.preserves-string-response-id',
+            'jsonrpc.preserves-integer-response-id',
+            'jsonrpc.preserves-string-progress-token',
+            'jsonrpc.preserves-integer-progress-token',
+            'jsonrpc.rejects-fractional-ids-and-progress-tokens',
+            'protocol-version.advertises-latest-2026-07-28',
+            'protocol-version.stable-profile-advertises-2026-07-28',
+          ]),
+        );
+      },
+    );
 
-    test('spec suite covers high-risk wire cases across spec versions',
-        () async {
+    test('spec suite covers high-risk wire cases across spec versions', () async {
       final result = await ConformanceRunner().runSpecSuite();
 
       expect(result.passed, isTrue);
@@ -130,17 +131,19 @@ void main() {
       expect(result.caseNames, ['jsonrpc.preserves-string-response-id']);
     });
 
-    test('deterministic fuzz suite exercises generated JSON-RPC envelopes',
-        () async {
-      final result = await ConformanceRunner().runFuzzSuite(
-        iterations: 8,
-        seed: 101,
-      );
+    test(
+      'deterministic fuzz suite exercises generated JSON-RPC envelopes',
+      () async {
+        final result = await ConformanceRunner().runFuzzSuite(
+          iterations: 8,
+          seed: 101,
+        );
 
-      expect(result.passed, isTrue);
-      expect(result.total, 8);
-      expect(result.caseNames.first, startsWith('fuzz.jsonrpc.'));
-    });
+        expect(result.passed, isTrue);
+        expect(result.total, 8);
+        expect(result.caseNames.first, startsWith('fuzz.jsonrpc.'));
+      },
+    );
   });
 
   group('ConformanceCommand', () {
@@ -229,25 +232,30 @@ void main() {
       ]);
 
       expect(exitCode, ExitCode.usage.code);
-      verify(() => logger.err('--case cannot be combined with --fuzz.'))
-          .called(1);
+      verify(
+        () => logger.err('--case cannot be combined with --fuzz.'),
+      ).called(1);
     });
 
-    test('returns usage code when --suite is combined with fuzz mode',
-        () async {
-      final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
+    test(
+      'returns usage code when --suite is combined with fuzz mode',
+      () async {
+        final runner = CommandRunner<int>('mcp_dart', 'CLI')
+          ..addCommand(command);
 
-      final exitCode = await runner.run([
-        'conformance',
-        '--fuzz',
-        '--suite',
-        'spec',
-      ]);
+        final exitCode = await runner.run([
+          'conformance',
+          '--fuzz',
+          '--suite',
+          'spec',
+        ]);
 
-      expect(exitCode, ExitCode.usage.code);
-      verify(() => logger.err('--suite cannot be combined with --fuzz.'))
-          .called(1);
-    });
+        expect(exitCode, ExitCode.usage.code);
+        verify(
+          () => logger.err('--suite cannot be combined with --fuzz.'),
+        ).called(1);
+      },
+    );
 
     test('returns usage code when filter matches no cases', () async {
       final runner = CommandRunner<int>('mcp_dart', 'CLI')..addCommand(command);
@@ -259,8 +267,9 @@ void main() {
       ]);
 
       expect(exitCode, ExitCode.usage.code);
-      verify(() => logger.err('No conformance cases matched: missing.case'))
-          .called(1);
+      verify(
+        () => logger.err('No conformance cases matched: missing.case'),
+      ).called(1);
     });
   });
 }

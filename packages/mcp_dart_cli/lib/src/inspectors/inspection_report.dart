@@ -42,20 +42,20 @@ class InspectionReport {
 
   /// Converts this report to JSON.
   Map<String, dynamic> toJson() => {
-        'kind': kind,
-        'target': target,
-        'passed': passed,
-        'summary': <String, dynamic>{
-          'pass': passCount,
-          'info': infoCount,
-          'warning': warningCount,
-          'fail': failCount,
-          'total': checks.length,
-        },
-        if (metadata.isNotEmpty) 'metadata': metadata,
-        if (inventory.isNotEmpty) 'inventory': inventory,
-        'checks': checks.map((check) => check.toJson()).toList(),
-      };
+    'kind': kind,
+    'target': target,
+    'passed': passed,
+    'summary': <String, dynamic>{
+      'pass': passCount,
+      'info': infoCount,
+      'warning': warningCount,
+      'fail': failCount,
+      'total': checks.length,
+    },
+    if (metadata.isNotEmpty) 'metadata': metadata,
+    if (inventory.isNotEmpty) 'inventory': inventory,
+    'checks': checks.map((check) => check.toJson()).toList(),
+  };
 }
 
 /// One inspector finding.
@@ -82,11 +82,11 @@ class InspectionCheck {
 
   /// Converts this check to JSON.
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'status': status,
-        'message': message,
-        if (details != null && details!.isNotEmpty) 'details': details,
-      };
+    'id': id,
+    'status': status,
+    'message': message,
+    if (details != null && details!.isNotEmpty) 'details': details,
+  };
 }
 
 /// Builds inspector checks with consistent status strings.

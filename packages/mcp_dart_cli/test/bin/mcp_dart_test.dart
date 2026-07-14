@@ -19,7 +19,9 @@ void main() {
     test('skips any JSON mode to keep stdout machine-readable', () {
       expect(cli.shouldCheckForUpdate(['list-tools', '--json']), isFalse);
       expect(
-          cli.shouldCheckForUpdate(['call-tool', 'echo', '--json']), isFalse);
+        cli.shouldCheckForUpdate(['call-tool', 'echo', '--json']),
+        isFalse,
+      );
     });
 
     test('skips inspect-client because stdout is MCP protocol traffic', () {
