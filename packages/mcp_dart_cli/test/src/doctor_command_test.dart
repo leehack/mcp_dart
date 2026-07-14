@@ -11,9 +11,10 @@ import 'package:test/test.dart';
 class MockLogger extends Mock implements Logger {}
 
 class RecordingMcpClient extends McpClient {
-  RecordingMcpClient()
+  RecordingMcpClient({this.resourceTemplatesError})
     : super(const Implementation(name: 'doctor-test', version: '1.0.0'));
 
+  final Object? resourceTemplatesError;
   var toolCalls = 0;
   var resourceReads = 0;
   var promptGets = 0;
@@ -41,7 +42,13 @@ class RecordingMcpClient extends McpClient {
   Future<ListResourceTemplatesResult> listResourceTemplates({
     ListResourceTemplatesRequest? params,
     RequestOptions? options,
-  }) async => const ListResourceTemplatesResult(resourceTemplates: []);
+  }) async {
+    final error = resourceTemplatesError;
+    if (error != null) {
+      throw error;
+    }
+    return const ListResourceTemplatesResult(resourceTemplates: []);
+  }
 
   @override
   Future<ListPromptsResult> listPrompts({
@@ -146,6 +153,26 @@ dependencies:
         () => logger.success('[✓] Listed 0 resource templates'),
       ).called(1);
       verify(() => logger.success('[✓] Listed 0 prompts')).called(1);
+    });
+
+    test('attributes resource template inventory failures', () async {
+      final client = RecordingMcpClient(
+        resourceTemplatesError: StateError('templates unavailable'),
+      );
+
+      expect(await verifyAdvertisedInventory(client, logger), isFalse);
+      verify(() => logger.success('[✓] Listed 0 resources')).called(1);
+      verify(
+        () => logger.err(
+          '[x] Failed to list resource templates: '
+          'Bad state: templates unavailable',
+        ),
+      ).called(1);
+      verifyNever(
+        () => logger.err(
+          '[x] Failed to list resources: Bad state: templates unavailable',
+        ),
+      );
     });
   });
 }

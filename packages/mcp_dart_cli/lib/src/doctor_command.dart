@@ -162,13 +162,18 @@ Future<bool> verifyAdvertisedInventory(McpClient client, Logger logger) async {
     try {
       final resources = await client.listResources();
       logger.success('[✓] Listed ${resources.resources.length} resources');
+    } catch (e) {
+      logger.err('[x] Failed to list resources: $e');
+      allPassed = false;
+    }
 
+    try {
       final templates = await client.listResourceTemplates();
       logger.success(
         '[✓] Listed ${templates.resourceTemplates.length} resource templates',
       );
     } catch (e) {
-      logger.err('[x] Failed to list resources: $e');
+      logger.err('[x] Failed to list resource templates: $e');
       allPassed = false;
     }
   }
