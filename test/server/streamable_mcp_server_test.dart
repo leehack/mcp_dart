@@ -1823,6 +1823,39 @@ void main() {
       expect(res.headers['access-control-allow-credentials'], 'true');
     });
 
+    test('configured CORS origins are snapshotted at construction', () async {
+      await server.stop();
+
+      final configuredOrigins = {'http://localhost:5173'};
+      server = StreamableMcpServer(
+        serverFactory: (sid) =>
+            McpServer(const Implementation(name: 'CorsServer', version: '1.0')),
+        host: host,
+        port: port,
+        enableDnsRebindingProtection: false,
+        allowedOrigins: configuredOrigins,
+      );
+      configuredOrigins
+        ..clear()
+        ..add('https://untrusted.example');
+      await server.start();
+
+      final res = await postInitializeWithHeaders(
+        headers: const {'Origin': 'http://localhost:5173'},
+      );
+
+      expect(res.statusCode, HttpStatus.ok);
+      expect(
+        res.headers['access-control-allow-origin'],
+        'http://localhost:5173',
+      );
+      expect(res.headers['access-control-allow-credentials'], 'true');
+      expect(
+        () => server.allowedOrigins!.add('https://another.example'),
+        throwsUnsupportedError,
+      );
+    });
+
     test('public host requires an explicit origin for credentialed CORS',
         () async {
       await server.stop();

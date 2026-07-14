@@ -302,7 +302,8 @@ class StreamableMcpServer {
   /// [enableDnsRebindingProtection] is true, the same set also validates Origin
   /// headers. With protection enabled and no explicit allowlist, credentialed
   /// CORS is limited to loopback development requests; other allowed requests
-  /// receive wildcard CORS without credentials.
+  /// receive wildcard CORS without credentials. The provided set is copied at
+  /// construction and exposed as an unmodifiable configuration snapshot.
   final Set<String>? allowedOrigins;
 
   /// If true, reject unsupported `MCP-Protocol-Version` headers with HTTP 400.
@@ -319,6 +320,7 @@ class StreamableMcpServer {
   final Duration sseRetryDelay;
 
   final Set<String> _defaultDnsRebindingAllowedHosts;
+  final Set<String>? _normalizedCorsAllowedOrigins;
 
   HttpServer? _httpServer;
   final Map<String, StreamableHTTPServerTransport> _transports = {};
@@ -336,16 +338,25 @@ class StreamableMcpServer {
     this.oauthProtectedResource,
     this.enableDnsRebindingProtection = true,
     this.allowedHosts,
-    this.allowedOrigins,
+    Set<String>? allowedOrigins,
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
     this.enableJsonResponse = false,
     this.sseRetryDelay = const Duration(seconds: 1),
-  })  : _serverFactory = serverFactory,
+  })  : allowedOrigins = allowedOrigins == null
+            ? null
+            : Set<String>.unmodifiable(allowedOrigins),
+        _serverFactory = serverFactory,
         _defaultDnsRebindingAllowedHosts = {
           normalizeDnsHost(host),
           ...defaultDnsRebindingAllowedHosts,
-        } {
+        },
+        _normalizedCorsAllowedOrigins =
+            allowedOrigins == null || allowedOrigins.isEmpty
+                ? null
+                : Set<String>.unmodifiable(
+                    allowedOrigins.map(normalizeDnsOrigin).whereType<String>(),
+                  ) {
     if (sseRetryDelay.isNegative) {
       throw ArgumentError.value(
         sseRetryDelay,
@@ -1004,8 +1015,7 @@ class StreamableMcpServer {
       response.headers.set('Access-Control-Allow-Credentials', 'true');
     } else if (requestOrigin == null ||
         requestOrigin.isEmpty ||
-        allowedOrigins == null ||
-        allowedOrigins!.isEmpty) {
+        _normalizedCorsAllowedOrigins == null) {
       response.headers.set('Access-Control-Allow-Origin', '*');
     }
     response.headers
@@ -1023,15 +1033,13 @@ class StreamableMcpServer {
       return null;
     }
 
-    final configuredOrigins = allowedOrigins;
     final normalizedRequestOrigin = normalizeDnsOrigin(requestOrigin);
     if (normalizedRequestOrigin == null) {
       return null;
     }
 
-    if (configuredOrigins != null && configuredOrigins.isNotEmpty) {
-      final normalizedAllowedOrigins =
-          configuredOrigins.map(normalizeDnsOrigin).whereType<String>().toSet();
+    final normalizedAllowedOrigins = _normalizedCorsAllowedOrigins;
+    if (normalizedAllowedOrigins != null) {
       return normalizedAllowedOrigins.contains(normalizedRequestOrigin)
           ? requestOrigin
           : null;
