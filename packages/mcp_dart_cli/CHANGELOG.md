@@ -1,7 +1,7 @@
 ## 0.2.0-dev.2
 
 - Updated generated projects and inspection to use `mcp_dart ^2.3.0-dev.2`,
-  preferring MCP 2026 while retaining legacy fallback.
+  preferring MCP 2026-07-28 while retaining legacy fallback.
 - Raised the minimum Dart SDK to 3.7 and fixed Windows handling of prerelease
   dependency constraints.
 - Generated and CLI-served HTTP servers now bind to loopback by default; remote

@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'conformance_scenario_inventory.dart';
+
 const _defaultConformancePackage =
     '@modelcontextprotocol/conformance@0.2.0-alpha.9';
 const _defaultTimeout = Duration(seconds: 60);
 
 // The alpha conformance CLI can occasionally leak or stall server-initiated
-// elicitation state when the complete 2025 server suite is run in one process
+// elicitation state when the complete MCP 2025-11-25 server suite runs in one
+// process
 // on GitHub's Linux runners. Running each pinned scenario in a fresh
 // conformance process preserves coverage while isolating CLI-side state.
 const _serverScenarios = [
@@ -52,6 +55,16 @@ Future<void> main(List<String> args) async {
     return;
   }
 
+  final scenarios =
+      options.scenario == null ? _serverScenarios : [options.scenario!];
+  await verifyConformanceScenarioInventory(
+    conformancePackage: options.conformancePackage,
+    role: 'server',
+    specVersion: '2025-11-25',
+    expectedScenarios: scenarios,
+    requireExactMatch: options.scenario == null,
+  );
+
   final outputRoot = await _createOutputRoot(options.outputDir);
 
   Process? serverProcess;
@@ -76,7 +89,7 @@ Future<void> main(List<String> args) async {
       serverUrl = Uri.parse(options.url!);
     }
 
-    stdout.writeln('2025 conformance URL: $serverUrl');
+    stdout.writeln('MCP 2025-11-25 conformance URL: $serverUrl');
     stdout.writeln('Conformance package: ${options.conformancePackage}');
     stdout.writeln('Output: ${outputRoot.path}');
     stdout.writeln('');
@@ -268,7 +281,7 @@ Options:
   --output-dir <path>            Directory for conformance artifacts.
   --conformance-package <pkg>    Conformance npm package.
   --timeout-seconds <seconds>    Conformance command timeout.
-  --isolate-scenarios            Run each pinned 2025 scenario in a fresh
+  --isolate-scenarios            Run each pinned MCP 2025-11-25 scenario in a fresh
                                  conformance process.
   --help                         Show this help.
 ''');

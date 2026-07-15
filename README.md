@@ -6,20 +6,21 @@
 
 `mcp_dart` is a dual-era Dart and Flutter SDK for MCP clients, servers, and AI
 hosts. It implements the complete core client/server wire surface of the locked
-MCP `2026-07-28` release candidate, retains the MCP `2025-11-25` feature set,
-and negotiates supported earlier initialization-based versions.
+release candidate for the MCP 2026-07-28 specification, retains the MCP
+2025-11-25 feature set, and negotiates supported earlier initialization-based
+specifications.
 
 Here, core means the normative wire requirements assigned to client and server
 roles by the pinned release-candidate specification. It excludes optional MCP
-extensions, host UI behavior, an authorization-server implementation, and a
-general-purpose JSON Schema validation engine.
+extensions, host UI behavior, an authorization-server implementation, JSON
+Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
 > This prerelease coordinates `mcp_dart 2.3.0-dev.2` and
 > `mcp_dart_cli 0.2.0-dev.2`. All current official conformance scenarios
-> applicable to the SDK's core client/server roles pass for both MCP
-> `2025-11-25` and `2026-07-28`. This is prerelease evidence, not a
-> claim about the final specification, which has not shipped.
+> applicable to the SDK's core client/server roles pass for both the MCP
+> `2025-11-25` and MCP `2026-07-28` specifications. This is prerelease
+> evidence, not a claim about the final specification, which has not shipped.
 
 ## Preview requirements
 
@@ -40,7 +41,7 @@ Use the latest stable package for production projects:
 dart pub add mcp_dart
 ```
 
-### Evaluate the 2026 preview
+### Evaluate the MCP 2026-07-28 preview
 
 Select the prerelease explicitly:
 
@@ -68,15 +69,17 @@ commands.
 - MCP servers, clients, and host integrations with null-safe Dart APIs.
 - Core tools, resources, prompts, completion, elicitation, subscriptions,
   logging, roots, and sampling APIs with behavior selected for the negotiated
-  protocol era. MCP 2026 logging is retained for compatibility but is
+  protocol era. MCP 2026-07-28 logging is retained for compatibility but is
   deprecated upstream.
 - Stdio, Streamable HTTP, IO stream, and custom transports.
 - OAuth client discovery/PKCE hooks, server authentication callbacks, DNS
   rebinding protection, and strict Streamable HTTP validation.
 - A Tasks extension implementation, MCP Apps metadata helpers, and generic
   extension negotiation. Extensions are separate from core protocol coverage.
-- Automated 2025 and 2026 conformance, bidirectional TypeScript/Python
-  interoperability fixtures, and a real-browser Streamable HTTP smoke test.
+- Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, bidirectional
+  TypeScript/Python interoperability fixtures, real-browser transport tests,
+  a real Flutter Web service integration in Chrome, deterministic widget
+  tests, and an independent pinned JSON Schema Test Suite gate.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host
@@ -86,13 +89,13 @@ can manage multiple clients and servers.
 
 | Profile | Protocol behavior |
 | --- | --- |
-| `McpProtocol.stable` | Default dual-era profile: prefer `2026-07-28`, then fall back to initialization-based MCP |
-| `McpProtocol.legacy` | Initialization-era profile: negotiate `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`, or `2024-10-07` |
-| `McpProtocol.require2026` | Require `2026-07-28` and reject legacy initialization |
+| `McpProtocol.stable` | Default dual-era profile: prefer MCP 2026-07-28, then fall back to initialization-based MCP specifications |
+| `McpProtocol.legacy` | Initialization-era profile: negotiate the MCP 2025-11-25, MCP 2025-06-18, MCP 2025-03-26, MCP 2024-11-05, or MCP 2024-10-07 specification |
+| `McpProtocol.require2026` | Require MCP 2026-07-28 and reject legacy initialization |
 
 Use `stableProtocolVersion` for the official `2025-11-25` version,
-`previewProtocolVersion` for the 2026 preview, and `defaultProtocolVersion` for
-this SDK preview's preferred version.
+`previewProtocolVersion` for the MCP 2026-07-28 preview, and
+`defaultProtocolVersion` for this SDK preview's preferred version.
 `latestInitializationProtocolVersion` remains `2025-11-25` when the default
 profile falls back to the legacy lifecycle.
 
@@ -110,9 +113,9 @@ final strictPreviewServer = McpServer(
 );
 ```
 
-See the [2026 transition guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28.md)
-for fallback rules and 2026-only APIs, or run the
-[strict 2026 example](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28).
+See the [MCP 2026-07-28 transition guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28.md)
+for fallback rules and APIs specific to MCP 2026-07-28, or run the
+[strict MCP 2026-07-28 example](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28).
 
 ## Quick start with the CLI
 
@@ -154,7 +157,7 @@ for command options and scope.
 - Start: [getting started](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/getting-started.md), [server guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/server-guide.md), [client guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/client-guide.md), [quick reference](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/quick-reference.md)
 - Build: [tools](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/tools.md), [transports](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md), [examples](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/examples.md), [MCP Apps](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-apps.md)
 - Deploy: [Streamable HTTP security](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md#dns-rebinding-protection), [OAuth examples](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/authentication), [Flutter recipes](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/flutter-recipes.md)
-- Verify: [interop matrix](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/interoperability.md), [2025 coverage](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2025-11-25.md), [2026 preview coverage](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2026-07-28.md), [day-0 runbook](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-release-runbook.md)
+- Verify: [interop matrix](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/interoperability.md), [MCP 2025-11-25 coverage](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2025-11-25.md), [MCP 2026-07-28 preview coverage](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2026-07-28.md), [day-0 runbook](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-release-runbook.md)
 
 Standalone integration examples may declare newer Dart SDK requirements; check
 each example README before running it.

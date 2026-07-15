@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:mcp_dart/src/client/client.dart';
 import 'package:mcp_dart/src/client/streamable_https.dart';
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -38,6 +40,72 @@ class MockOAuthClientProvider implements OAuthClientProvider {
   }
 }
 
+class _BlockingOAuthClientProvider implements OAuthClientProvider {
+  final Completer<void> tokensRequested = Completer<void>();
+  final Completer<void> releaseTokens = Completer<void>();
+
+  @override
+  Future<OAuthTokens?> tokens() async {
+    if (!tokensRequested.isCompleted) {
+      tokensRequested.complete();
+    }
+    await releaseTokens.future;
+    return OAuthTokens(accessToken: 'test-access-token');
+  }
+
+  @override
+  Future<void> redirectToAuthorization() async {}
+}
+
+class _BlockingRedirectOAuthClientProvider implements OAuthClientProvider {
+  final Completer<void> redirectStarted = Completer<void>();
+  final Completer<void> releaseRedirect = Completer<void>();
+
+  @override
+  Future<OAuthTokens?> tokens() async =>
+      OAuthTokens(accessToken: 'test-access-token');
+
+  @override
+  Future<void> redirectToAuthorization() async {
+    if (!redirectStarted.isCompleted) {
+      redirectStarted.complete();
+    }
+    await releaseRedirect.future;
+  }
+}
+
+class _CancellationTestProtocol extends Protocol {
+  _CancellationTestProtocol() : super(const ProtocolOptions());
+
+  @override
+  void assertCapabilityForMethod(String method) {}
+
+  @override
+  void assertNotificationCapability(String method) {}
+
+  @override
+  void assertRequestHandlerCapability(String method) {}
+
+  @override
+  void assertTaskCapability(String method) {}
+
+  @override
+  void assertTaskHandlerCapability(String method) {}
+}
+
+Future<void> _waitUntil(
+  bool Function() predicate, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!predicate()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TimeoutException('Condition was not met within $timeout.');
+    }
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
 class DiscoveryOAuthClientProvider implements OAuthAuthorizationCodeProvider {
   @override
   final String clientId;
@@ -54,12 +122,16 @@ class DiscoveryOAuthClientProvider implements OAuthAuthorizationCodeProvider {
   OAuthTokens? storedTokens;
   Uri? authorizationUri;
   int legacyRedirects = 0;
+  final Future<void> Function(Uri authorizationUri)? onAuthorizationUrl;
+  final Future<void> Function(OAuthTokens tokens)? onSaveTokens;
 
   DiscoveryOAuthClientProvider({
     this.clientId = 'client-1',
     required this.redirectUri,
     this.clientSecret,
     this.scopes = const ['tools:read'],
+    this.onAuthorizationUrl,
+    this.onSaveTokens,
   });
 
   @override
@@ -73,10 +145,12 @@ class DiscoveryOAuthClientProvider implements OAuthAuthorizationCodeProvider {
   @override
   Future<void> redirectToAuthorizationUrl(Uri authorizationUri) async {
     this.authorizationUri = authorizationUri;
+    await onAuthorizationUrl?.call(authorizationUri);
   }
 
   @override
   Future<void> saveTokens(OAuthTokens tokens) async {
+    await onSaveTokens?.call(tokens);
     storedTokens = tokens;
   }
 }
@@ -1328,6 +1402,1425 @@ void main() {
       expect(capturedHeaders['name'], 'echo');
       expect(capturedHeaders['session'], isNull);
       expect(transport.sessionId, 'legacy-session');
+    });
+
+    test('stateless cancellation before headers sends no HTTP request',
+        () async {
+      var postRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        postRequests += 1;
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(id: 0, result: {}).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      final authProvider = _BlockingOAuthClientProvider();
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      final transportErrors = <Error>[];
+      transport.onerror = transportErrors.add;
+      final protocol = _CancellationTestProtocol();
+      addTearDown(protocol.close);
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      final requestFuture = protocol.request<EmptyResult>(
+        JsonRpcRequest(
+          id: -1,
+          method: 'test/before-headers',
+          meta: _statelessMeta(),
+        ),
+        EmptyResult.fromJson,
+        RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+        ),
+      );
+
+      await authProvider.tokensRequested.future.timeout(
+        const Duration(seconds: 5),
+      );
+      controller.abort('cancel before headers');
+      await expectLater(
+        requestFuture,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('cancel before headers'),
+          ),
+        ),
+      );
+
+      await _waitUntil(() => !transport.canCancelRequest(0));
+      expect(authProvider.releaseTokens.isCompleted, isFalse);
+      expect(postRequests, 0);
+
+      authProvider.releaseTokens.completeError(
+        StateError('late token lookup failure'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(transportErrors, isEmpty);
+    });
+
+    test('close interrupts stateless request while OAuth tokens never return',
+        () async {
+      var postRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        postRequests += 1;
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(id: 17, result: {}).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      final authProvider = _BlockingOAuthClientProvider();
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      await transport.start();
+
+      final sendExpectation = expectLater(
+        transport.send(
+          JsonRpcRequest(
+            id: 17,
+            method: 'test/close-before-headers',
+            meta: _statelessMeta(),
+          ),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await authProvider.tokensRequested.future.timeout(
+        const Duration(seconds: 5),
+      );
+
+      await transport.close().timeout(const Duration(seconds: 5));
+      await sendExpectation.timeout(const Duration(seconds: 5));
+      await _waitUntil(() => !transport.canCancelRequest(17));
+
+      expect(authProvider.releaseTokens.isCompleted, isFalse);
+      expect(postRequests, 0);
+    });
+
+    test('stateless cancellation interrupts an open 401 response body',
+        () async {
+      var postRequests = 0;
+      final challengeStarted = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        postRequests += 1;
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.unauthorized
+          ..bufferOutput = false
+          ..headers.set(
+            HttpHeaders.wwwAuthenticateHeader,
+            'Bearer realm="test"',
+          )
+          ..write('challenge body remains open');
+        await request.response.flush();
+        if (!challengeStarted.isCompleted) {
+          challengeStarted.complete();
+        }
+        try {
+          await request.response.done;
+        } catch (_) {
+          // Request cancellation closes the challenge response stream.
+        }
+      });
+
+      final authProvider = MockOAuthClientProvider();
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      final transportErrors = <Error>[];
+      transport.onerror = transportErrors.add;
+      await transport.start();
+
+      final sendExpectation = expectLater(
+        transport.send(
+          JsonRpcRequest(
+            id: 18,
+            method: 'test/cancel-401-body',
+            meta: _statelessMeta(),
+          ),
+        ),
+        throwsA(isA<http.RequestAbortedException>()),
+      );
+      await challengeStarted.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(Duration.zero);
+
+      await transport.cancelRequest(18);
+      await sendExpectation.timeout(const Duration(seconds: 5));
+      await _waitUntil(() => !transport.canCancelRequest(18));
+
+      expect(postRequests, 1);
+      expect(authProvider.didRedirectToAuthorization, isFalse);
+      expect(transportErrors, isEmpty);
+    });
+
+    test('stateless cancellation aborts a hanging OAuth discovery request',
+        () async {
+      var mcpRequests = 0;
+      var metadataRequests = 0;
+      final metadataStarted = Completer<void>();
+      final releaseMetadata = Completer<void>();
+      final metadataFinished = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseMetadata.isCompleted) {
+          releaseMetadata.complete();
+        }
+      });
+      final port = server.port;
+      server.listen((request) async {
+        switch (request.uri.path) {
+          case '/mcp':
+            mcpRequests += 1;
+            await request.drain<void>();
+            request.response
+              ..statusCode = HttpStatus.unauthorized
+              ..headers.set(
+                HttpHeaders.wwwAuthenticateHeader,
+                'Bearer resource_metadata="http://localhost:$port/metadata"',
+              );
+            await request.response.close();
+            break;
+          case '/metadata':
+            metadataRequests += 1;
+            request.response
+              ..statusCode = HttpStatus.ok
+              ..bufferOutput = false
+              ..headers.contentType = ContentType.json
+              ..write('{"resource":');
+            await request.response.flush();
+            if (!metadataStarted.isCompleted) {
+              metadataStarted.complete();
+            }
+            await releaseMetadata.future;
+            try {
+              request.response.write(
+                '"http://localhost:$port/mcp",'
+                '"authorization_servers":[]}',
+              );
+              await request.response.close();
+            } catch (_) {
+              // The guarded OAuth request is aborted with its MCP request.
+            } finally {
+              if (!metadataFinished.isCompleted) {
+                metadataFinished.complete();
+              }
+            }
+            break;
+          default:
+            request.response.statusCode = HttpStatus.notFound;
+            await request.response.close();
+        }
+      });
+
+      final authProvider = DiscoveryOAuthClientProvider(
+        redirectUri: Uri.parse('http://localhost/callback'),
+      );
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:$port/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      final transportErrors = <Error>[];
+      transport.onerror = transportErrors.add;
+      await transport.start();
+
+      final sendExpectation = expectLater(
+        transport.send(
+          JsonRpcRequest(
+            id: 19,
+            method: 'test/cancel-oauth-discovery',
+            meta: _statelessMeta(),
+          ),
+        ),
+        throwsA(isA<http.RequestAbortedException>()),
+      );
+      await metadataStarted.future.timeout(const Duration(seconds: 5));
+
+      await transport.cancelRequest(19);
+      await sendExpectation.timeout(const Duration(seconds: 5));
+      await _waitUntil(() => !transport.canCancelRequest(19));
+
+      expect(mcpRequests, 1);
+      expect(metadataRequests, 1);
+      expect(authProvider.authorizationUri, isNull);
+      expect(transportErrors, isEmpty);
+
+      releaseMetadata.complete();
+      await metadataFinished.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(Duration.zero);
+      expect(authProvider.authorizationUri, isNull);
+      expect(transportErrors, isEmpty);
+    });
+
+    test('close interrupts a request blocked in the 401 redirect callback',
+        () async {
+      var postRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        postRequests += 1;
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.unauthorized
+          ..headers.set(
+            HttpHeaders.wwwAuthenticateHeader,
+            'Bearer realm="test"',
+          );
+        await request.response.close();
+      });
+
+      final authProvider = _BlockingRedirectOAuthClientProvider();
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      await transport.start();
+
+      final sendExpectation = expectLater(
+        transport.send(
+          JsonRpcRequest(
+            id: 20,
+            method: 'test/close-oauth-redirect',
+            meta: _statelessMeta(),
+          ),
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await authProvider.redirectStarted.future.timeout(
+        const Duration(seconds: 5),
+      );
+
+      await transport.close().timeout(const Duration(seconds: 5));
+      await sendExpectation.timeout(const Duration(seconds: 5));
+      await _waitUntil(() => !transport.canCancelRequest(20));
+
+      expect(authProvider.releaseRedirect.isCompleted, isFalse);
+      expect(postRequests, 1);
+    });
+
+    test('concurrent cancelled OAuth redirects do not resurrect pending state',
+        () async {
+      final server = await _startOAuthServerWithOmittedTokenAuthMetadata();
+      addTearDown(() => server.close(force: true));
+      final redirectStarted = Completer<void>();
+      final redirectReleases = [Completer<void>(), Completer<void>()];
+      final redirectUris = <Uri>[];
+      final authProvider = DiscoveryOAuthClientProvider(
+        clientSecret: 'test-secret',
+        redirectUri: Uri.parse('http://localhost/callback'),
+        onAuthorizationUrl: (authorizationUri) async {
+          final index = redirectUris.length;
+          redirectUris.add(authorizationUri);
+          if (redirectUris.length == 2 && !redirectStarted.isCompleted) {
+            redirectStarted.complete();
+          }
+          await redirectReleases[index].future;
+        },
+      );
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      await transport.start();
+
+      Future<void> startRequest(int id) => expectLater(
+            transport.send(
+              JsonRpcRequest(
+                id: id,
+                method: 'test/concurrent-oauth-$id',
+                meta: _statelessMeta(),
+              ),
+            ),
+            throwsA(isA<http.RequestAbortedException>()),
+          );
+
+      final firstRequest = startRequest(21);
+      await _waitUntil(() => redirectUris.length == 1);
+      final secondRequest = startRequest(22);
+      await redirectStarted.future.timeout(const Duration(seconds: 5));
+
+      await transport.cancelRequest(21);
+      await firstRequest.timeout(const Duration(seconds: 5));
+      await transport.cancelRequest(22);
+      await secondRequest.timeout(const Duration(seconds: 5));
+      await _waitUntil(
+        () =>
+            !transport.canCancelRequest(21) && !transport.canCancelRequest(22),
+      );
+
+      // With no live pending flow this follows the compatibility auth path.
+      // A stale A or B pending flow would instead reject the missing state.
+      await transport.finishAuth('unused-code');
+
+      for (final release in redirectReleases) {
+        release.complete();
+      }
+      await Future<void>.delayed(Duration.zero);
+      await transport.finishAuth('unused-code');
+    });
+
+    test('redirect callback can finish authorization before returning',
+        () async {
+      var tokenRequests = 0;
+      final server = await _startOAuthServerWithOmittedTokenAuthMetadata(
+        onTokenRequest: (request) async {
+          tokenRequests += 1;
+          await request.drain<void>();
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType.json
+            ..write(jsonEncode({'access_token': 'reentrant-token'}));
+          await request.response.close();
+        },
+      );
+      addTearDown(() => server.close(force: true));
+      late StreamableHttpClientTransport oauthTransport;
+      late DiscoveryOAuthClientProvider authProvider;
+      authProvider = DiscoveryOAuthClientProvider(
+        clientSecret: 'test-secret',
+        redirectUri: Uri.parse('http://localhost/callback'),
+        onAuthorizationUrl: (authorizationUri) async {
+          await oauthTransport.finishAuth(
+            'reentrant-code',
+            state: authorizationUri.queryParameters['state'],
+          );
+        },
+      );
+      oauthTransport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      transport = oauthTransport;
+      await transport.start();
+
+      await expectLater(
+        transport.send(
+          JsonRpcRequest(
+            id: 23,
+            method: 'test/reentrant-finish-auth',
+            meta: _statelessMeta(),
+          ),
+        ),
+        throwsA(isA<UnauthorizedError>()),
+      );
+
+      expect(tokenRequests, 1);
+      expect(authProvider.storedTokens?.accessToken, 'reentrant-token');
+    });
+
+    test('close interrupts finishAuth while token response remains open',
+        () async {
+      final tokenStarted = Completer<void>();
+      final releaseToken = Completer<void>();
+      final tokenFinished = Completer<void>();
+      final server = await _startOAuthServerWithOmittedTokenAuthMetadata(
+        onTokenRequest: (request) async {
+          await request.drain<void>();
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..bufferOutput = false
+            ..headers.contentType = ContentType.json
+            ..write('{"access_token":');
+          await request.response.flush();
+          if (!tokenStarted.isCompleted) {
+            tokenStarted.complete();
+          }
+          await releaseToken.future;
+          try {
+            request.response.write('"late-token"}');
+            await request.response.close();
+          } catch (_) {
+            // Closing the transport aborts the token response body.
+          } finally {
+            if (!tokenFinished.isCompleted) {
+              tokenFinished.complete();
+            }
+          }
+        },
+      );
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseToken.isCompleted) {
+          releaseToken.complete();
+        }
+      });
+      final authProvider = DiscoveryOAuthClientProvider(
+        clientSecret: 'test-secret',
+        redirectUri: Uri.parse('http://localhost/callback'),
+      );
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      await transport.start();
+      await expectLater(
+        transport.send(
+          JsonRpcRequest(
+            id: 24,
+            method: 'test/prepare-token-close',
+            meta: _statelessMeta(),
+          ),
+        ),
+        throwsA(isA<UnauthorizedError>()),
+      );
+      final authorizationUri = authProvider.authorizationUri!;
+
+      final finishExpectation = expectLater(
+        transport.finishAuth(
+          'blocked-token-code',
+          state: authorizationUri.queryParameters['state'],
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await tokenStarted.future.timeout(const Duration(seconds: 5));
+
+      await transport.close().timeout(const Duration(seconds: 5));
+      await finishExpectation.timeout(const Duration(seconds: 5));
+      expect(releaseToken.isCompleted, isFalse);
+      expect(authProvider.storedTokens, isNull);
+
+      releaseToken.complete();
+      await tokenFinished.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(Duration.zero);
+      expect(authProvider.storedTokens, isNull);
+    });
+
+    test('close interrupts finishAuth while saveTokens never returns',
+        () async {
+      final saveStarted = Completer<void>();
+      final releaseSave = Completer<void>();
+      final server = await _startOAuthServerWithOmittedTokenAuthMetadata(
+        onTokenRequest: (request) async {
+          await request.drain<void>();
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType.json
+            ..write(jsonEncode({'access_token': 'unsaved-token'}));
+          await request.response.close();
+        },
+      );
+      addTearDown(() => server.close(force: true));
+      final authProvider = DiscoveryOAuthClientProvider(
+        clientSecret: 'test-secret',
+        redirectUri: Uri.parse('http://localhost/callback'),
+        onSaveTokens: (_) async {
+          if (!saveStarted.isCompleted) {
+            saveStarted.complete();
+          }
+          await releaseSave.future;
+        },
+      );
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = previewProtocolVersion;
+      await transport.start();
+      await expectLater(
+        transport.send(
+          JsonRpcRequest(
+            id: 25,
+            method: 'test/prepare-save-close',
+            meta: _statelessMeta(),
+          ),
+        ),
+        throwsA(isA<UnauthorizedError>()),
+      );
+      final authorizationUri = authProvider.authorizationUri!;
+
+      final finishExpectation = expectLater(
+        transport.finishAuth(
+          'blocked-save-code',
+          state: authorizationUri.queryParameters['state'],
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await saveStarted.future.timeout(const Duration(seconds: 5));
+
+      await transport.close().timeout(const Duration(seconds: 5));
+      await finishExpectation.timeout(const Duration(seconds: 5));
+      expect(releaseSave.isCompleted, isFalse);
+      expect(authProvider.storedTokens, isNull);
+
+      releaseSave.completeError(StateError('late save failure'));
+      await Future<void>.delayed(Duration.zero);
+      expect(authProvider.storedTokens, isNull);
+    });
+
+    test('close interrupts legacy GET before OAuth tokens return', () async {
+      var getRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.method == 'GET') {
+          getRequests += 1;
+        }
+        request.response.statusCode = HttpStatus.internalServerError;
+        await request.response.close();
+      });
+
+      final authProvider = _BlockingOAuthClientProvider();
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      final sendExpectation = expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 26, method: 'test/resume-blocked-token'),
+          resumptionToken: 'cursor-26',
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await authProvider.tokensRequested.future.timeout(
+        const Duration(seconds: 5),
+      );
+
+      await transport.close().timeout(const Duration(seconds: 5));
+      await sendExpectation.timeout(const Duration(seconds: 5));
+
+      expect(authProvider.releaseTokens.isCompleted, isFalse);
+      expect(getRequests, 0);
+    });
+
+    test('close interrupts legacy GET blocked in 401 redirect', () async {
+      var getRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.method == 'GET') {
+          getRequests += 1;
+        }
+        request.response
+          ..statusCode = HttpStatus.unauthorized
+          ..headers.set(
+            HttpHeaders.wwwAuthenticateHeader,
+            'Bearer realm="test"',
+          );
+        await request.response.close();
+      });
+
+      final authProvider = _BlockingRedirectOAuthClientProvider();
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      final sendExpectation = expectLater(
+        transport.send(
+          const JsonRpcRequest(id: 27, method: 'test/resume-blocked-redirect'),
+          resumptionToken: 'cursor-27',
+        ),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await authProvider.redirectStarted.future.timeout(
+        const Duration(seconds: 5),
+      );
+
+      await transport.close().timeout(const Duration(seconds: 5));
+      await sendExpectation.timeout(const Duration(seconds: 5));
+
+      expect(authProvider.releaseRedirect.isCompleted, isFalse);
+      expect(getRequests, 1);
+    });
+
+    test('close interrupts DELETE before OAuth tokens return', () async {
+      var deleteRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.method == 'DELETE') {
+          deleteRequests += 1;
+        }
+        request.response.statusCode = HttpStatus.ok;
+        await request.response.close();
+      });
+
+      final authProvider = _BlockingOAuthClientProvider();
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: StreamableHttpClientTransportOptions(
+          authProvider: authProvider,
+          sessionId: 'delete-session',
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      final terminationExpectation = expectLater(
+        transport.terminateSession(),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await authProvider.tokensRequested.future.timeout(
+        const Duration(seconds: 5),
+      );
+
+      await transport.close().timeout(const Duration(seconds: 5));
+      await terminationExpectation.timeout(const Duration(seconds: 5));
+
+      expect(authProvider.releaseTokens.isCompleted, isFalse);
+      expect(deleteRequests, 0);
+    });
+
+    test('close interrupts DELETE while its response body remains open',
+        () async {
+      final deleteStarted = Completer<void>();
+      final releaseDelete = Completer<void>();
+      final serverFinished = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseDelete.isCompleted) {
+          releaseDelete.complete();
+        }
+      });
+      server.listen((request) async {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..bufferOutput = false
+          ..write('open delete response');
+        await request.response.flush();
+        if (!deleteStarted.isCompleted) {
+          deleteStarted.complete();
+        }
+        await releaseDelete.future;
+        try {
+          await request.response.close();
+        } catch (_) {
+          // Closing the transport aborts the DELETE response body.
+        } finally {
+          if (!serverFinished.isCompleted) {
+            serverFinished.complete();
+          }
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+        opts: const StreamableHttpClientTransportOptions(
+          sessionId: 'delete-body-session',
+        ),
+      )..protocolVersion = stableProtocolVersion;
+      await transport.start();
+      final terminationExpectation = expectLater(
+        transport.terminateSession(),
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.connectionClosed.value,
+          ),
+        ),
+      );
+      await deleteStarted.future.timeout(const Duration(seconds: 5));
+
+      await transport.close().timeout(const Duration(seconds: 5));
+      await terminationExpectation.timeout(const Duration(seconds: 5));
+      expect(releaseDelete.isCompleted, isFalse);
+
+      releaseDelete.complete();
+      await serverFinished.future.timeout(const Duration(seconds: 5));
+    });
+
+    test(
+        'stateless SSE cancellation preserves a concurrent request and recovery',
+        () async {
+      var postRequests = 0;
+      var cancellationNotifications = 0;
+      final slowStreamReady = Completer<void>();
+      final progressReceived = Completer<void>();
+      final allowLateFrames = Completer<void>();
+      final lateFramesAttempted = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        postRequests += 1;
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        if (body['method'] == Method.notificationsCancelled) {
+          cancellationNotifications += 1;
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        }
+
+        if (body['method'] == 'test/slow') {
+          final params = body['params'] as Map<String, dynamic>;
+          final meta = params['_meta'] as Map<String, dynamic>;
+          final progressToken = meta['progressToken']!;
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..bufferOutput = false
+            ..headers.contentType = ContentType('text', 'event-stream')
+            ..write(
+              'data: ${jsonEncode(
+                JsonRpcProgressNotification(
+                  progressParams: ProgressNotification(
+                    progressToken: progressToken,
+                    progress: 1,
+                  ),
+                ).toJson(),
+              )}\n\n',
+            );
+          await request.response.flush();
+          if (!slowStreamReady.isCompleted) {
+            slowStreamReady.complete();
+          }
+          await allowLateFrames.future;
+          try {
+            request.response
+              ..write(
+                'data: ${jsonEncode(
+                  JsonRpcProgressNotification(
+                    progressParams: ProgressNotification(
+                      progressToken: progressToken,
+                      progress: 2,
+                    ),
+                  ).toJson(),
+                )}\n\n',
+              )
+              ..write(
+                'data: ${jsonEncode(
+                  JsonRpcResponse(
+                    id: body['id'] as int,
+                    result: const {'resultType': resultTypeComplete},
+                  ).toJson(),
+                )}\n\n',
+              );
+            await request.response.close();
+          } catch (_) {
+            // The cancelled response may already be closed by the client.
+          } finally {
+            if (!lateFramesAttempted.isCompleted) {
+              lateFramesAttempted.complete();
+            }
+          }
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: body['id'] as int,
+                result: const {'resultType': resultTypeComplete},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = previewProtocolVersion;
+      final transportErrors = <Error>[];
+      transport.onerror = transportErrors.add;
+      final protocol = _CancellationTestProtocol();
+      addTearDown(protocol.close);
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      final progressUpdates = <num>[];
+      final slowRequest = protocol.request<EmptyResult>(
+        JsonRpcRequest(
+          id: -1,
+          method: 'test/slow',
+          meta: _statelessMeta(),
+        ),
+        EmptyResult.fromJson,
+        RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+          onprogress: (progress) {
+            progressUpdates.add(progress.progress);
+            if (!progressReceived.isCompleted) {
+              progressReceived.complete();
+            }
+          },
+        ),
+      );
+      await slowStreamReady.future.timeout(const Duration(seconds: 5));
+      await progressReceived.future.timeout(const Duration(seconds: 5));
+      expect(progressUpdates, [1]);
+
+      final sibling = await protocol
+          .request<EmptyResult>(
+            JsonRpcRequest(
+              id: -1,
+              method: 'test/sibling',
+              meta: _statelessMeta(),
+            ),
+            EmptyResult.fromJson,
+            const RequestOptions(timeout: Duration(seconds: 5)),
+          )
+          .timeout(const Duration(seconds: 5));
+      expect(sibling, isA<EmptyResult>());
+
+      controller.abort('cancel SSE request');
+      await expectLater(
+        slowRequest,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('cancel SSE request'),
+          ),
+        ),
+      );
+      await _waitUntil(() => !transport.canCancelRequest(0));
+      allowLateFrames.complete();
+      await lateFramesAttempted.future.timeout(const Duration(seconds: 5));
+
+      final recovered = await protocol
+          .request<EmptyResult>(
+            JsonRpcRequest(
+              id: -1,
+              method: 'test/recovered',
+              meta: _statelessMeta(),
+            ),
+            EmptyResult.fromJson,
+            const RequestOptions(timeout: Duration(seconds: 5)),
+          )
+          .timeout(const Duration(seconds: 5));
+      expect(recovered, isA<EmptyResult>());
+      expect(postRequests, 3);
+      expect(cancellationNotifications, 0);
+      expect(transportErrors, isEmpty);
+      expect(progressUpdates, [1]);
+    });
+
+    test('stateless timeout aborts its active SSE response stream', () async {
+      var postRequests = 0;
+      var cancellationNotifications = 0;
+      final progressReceived = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        postRequests += 1;
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        if (body['method'] == Method.notificationsCancelled) {
+          cancellationNotifications += 1;
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        }
+
+        final params = body['params'] as Map<String, dynamic>;
+        final meta = params['_meta'] as Map<String, dynamic>;
+        final progressToken = meta['progressToken']!;
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..bufferOutput = false
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..write(
+            'data: ${jsonEncode(
+              JsonRpcProgressNotification(
+                progressParams: ProgressNotification(
+                  progressToken: progressToken,
+                  progress: 1,
+                ),
+              ).toJson(),
+            )}\n\n',
+          );
+        await request.response.flush();
+        try {
+          await request.response.done;
+        } catch (_) {
+          // The request timeout closes this response stream.
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = previewProtocolVersion;
+      final transportErrors = <Error>[];
+      transport.onerror = transportErrors.add;
+      final protocol = _CancellationTestProtocol();
+      addTearDown(protocol.close);
+      await protocol.connect(transport);
+
+      final request = protocol.request<EmptyResult>(
+        JsonRpcRequest(
+          id: -1,
+          method: 'test/timeout',
+          meta: _statelessMeta(),
+        ),
+        EmptyResult.fromJson,
+        RequestOptions(
+          timeout: const Duration(milliseconds: 250),
+          resetTimeoutOnProgress: true,
+          onprogress: (_) {
+            if (!progressReceived.isCompleted) {
+              progressReceived.complete();
+            }
+          },
+        ),
+      );
+      await progressReceived.future.timeout(const Duration(seconds: 5));
+
+      await expectLater(
+        request,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.requestTimeout.value,
+          ),
+        ),
+      );
+      await _waitUntil(() => !transport.canCancelRequest(0));
+      expect(postRequests, 1);
+      expect(cancellationNotifications, 0);
+      expect(transportErrors, isEmpty);
+    });
+
+    test('stateless subscription cancellation closes only its listen POST',
+        () async {
+      final observedMethods = <String>[];
+      var cancellationNotifications = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        final method = body['method'] as String;
+        observedMethods.add(method);
+
+        if (method == Method.notificationsCancelled) {
+          cancellationNotifications += 1;
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        }
+
+        if (method == Method.serverDiscover) {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType.json
+            ..write(
+              jsonEncode(
+                JsonRpcResponse(
+                  id: body['id'] as int,
+                  result: const DiscoverResult(
+                    supportedVersions: [previewProtocolVersion],
+                    capabilities: ServerCapabilities(
+                      tools: ServerCapabilitiesTools(listChanged: true),
+                    ),
+                    serverInfo: Implementation(
+                      name: 'subscription-test-server',
+                      version: '1.0.0',
+                    ),
+                    ttlMs: 0,
+                    cacheScope: CacheScope.private,
+                  ).toJson(),
+                ).toJson(),
+              ),
+            );
+          await request.response.close();
+          return;
+        }
+
+        if (method == Method.subscriptionsListen) {
+          final subscriptionId = body['id'] as int;
+          final acknowledged = JsonRpcSubscriptionsAcknowledgedNotification(
+            acknowledgedParams: const SubscriptionsAcknowledgedNotification(
+              notifications: SubscriptionFilter(toolsListChanged: true),
+            ),
+            meta: {McpMetaKey.subscriptionId: subscriptionId},
+          );
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..bufferOutput = false
+            ..headers.contentType = ContentType('text', 'event-stream')
+            ..write(
+              'data: ${jsonEncode(acknowledged.toJson())}\n\n',
+            );
+          await request.response.flush();
+          try {
+            await request.response.done;
+          } catch (_) {
+            // The subscription handle closes this request response stream.
+          }
+          return;
+        }
+
+        if (method == Method.toolsList) {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType.json
+            ..write(
+              jsonEncode(
+                JsonRpcResponse(
+                  id: body['id'] as int,
+                  result: {
+                    'resultType': resultTypeComplete,
+                    ...const ListToolsResult(tools: []).toJson(),
+                    'ttlMs': 0,
+                    'cacheScope': CacheScope.private,
+                  },
+                ).toJson(),
+              ),
+            );
+          await request.response.close();
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.badRequest;
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      );
+      final client = McpClient(
+        const Implementation(name: 'subscription-test', version: '1.0.0'),
+        options: const McpClientOptions(protocol: McpProtocol.require2026),
+      );
+      addTearDown(client.close);
+      await client.connect(transport);
+
+      final subscription = client.listenSubscriptions(
+        const SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(toolsListChanged: true),
+        ),
+      );
+      final acknowledged = await subscription.acknowledged.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(acknowledged.notifications.toolsListChanged, isTrue);
+
+      subscription.cancel('subscription complete');
+      await subscription.done.timeout(const Duration(seconds: 5));
+      await _waitUntil(
+        () => !transport.canCancelRequest(subscription.id),
+      );
+
+      final tools =
+          await client.listTools().timeout(const Duration(seconds: 5));
+      expect(tools.tools, isEmpty);
+      expect(cancellationNotifications, 0);
+      expect(observedMethods, [
+        Method.serverDiscover,
+        Method.subscriptionsListen,
+        Method.toolsList,
+      ]);
+    });
+
+    test('stateless terminal SSE response wins a later cancellation', () async {
+      var postRequests = 0;
+      var cancellationNotifications = 0;
+      final streamReady = Completer<void>();
+      final releaseTerminalResponse = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        postRequests += 1;
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        if (body['method'] == Method.notificationsCancelled) {
+          cancellationNotifications += 1;
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..bufferOutput = false
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..write(': request stream ready\n\n');
+        await request.response.flush();
+        if (!streamReady.isCompleted) {
+          streamReady.complete();
+        }
+        await releaseTerminalResponse.future;
+        request.response.write(
+          'data: ${jsonEncode(
+            JsonRpcResponse(
+              id: body['id'] as int,
+              result: const {'resultType': resultTypeComplete},
+            ).toJson(),
+          )}\n\n',
+        );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = previewProtocolVersion;
+      final transportErrors = <Error>[];
+      transport.onerror = transportErrors.add;
+      final protocol = _CancellationTestProtocol();
+      addTearDown(protocol.close);
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      final request = protocol.request<EmptyResult>(
+        JsonRpcRequest(
+          id: -1,
+          method: 'test/terminal-race',
+          meta: _statelessMeta(),
+        ),
+        EmptyResult.fromJson,
+        RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+        ),
+      );
+      await streamReady.future.timeout(const Duration(seconds: 5));
+      releaseTerminalResponse.complete();
+
+      expect(
+        await request.timeout(const Duration(seconds: 5)),
+        isA<EmptyResult>(),
+      );
+      controller.abort('too late');
+      await _waitUntil(() => !transport.canCancelRequest(0));
+
+      expect(postRequests, 1);
+      expect(cancellationNotifications, 0);
+      expect(transportErrors, isEmpty);
+    });
+
+    test('terminal SSE response closes an open body and drops same-chunk data',
+        () async {
+      final releaseBody = Completer<void>();
+      final serverFinished = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseBody.isCompleted) {
+          releaseBody.complete();
+        }
+      });
+      server.listen((request) async {
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        final terminal = JsonRpcResponse(
+          id: body['id'] as int,
+          result: const {'resultType': resultTypeComplete},
+        );
+        const lateNotification = JsonRpcNotification(
+          method: 'notifications/late-after-terminal',
+        );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..bufferOutput = false
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..write(
+            'data: ${jsonEncode(terminal.toJson())}\n\n'
+            'data: ${jsonEncode(lateNotification.toJson())}\n\n',
+          );
+        await request.response.flush();
+        await releaseBody.future;
+        try {
+          await request.response.close();
+        } catch (_) {
+          // Terminal response cleanup may already close the client stream.
+        } finally {
+          if (!serverFinished.isCompleted) {
+            serverFinished.complete();
+          }
+        }
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = previewProtocolVersion;
+      final messages = <JsonRpcMessage>[];
+      transport.onmessage = messages.add;
+      await transport.start();
+
+      await transport
+          .send(
+            JsonRpcRequest(
+              id: 28,
+              method: 'test/open-terminal-body',
+              meta: _statelessMeta(),
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(transport.canCancelRequest(28), isFalse);
+      expect(messages, hasLength(1));
+      expect(messages.single, isA<JsonRpcResponse>());
+
+      releaseBody.complete();
+      await serverFinished.future.timeout(const Duration(seconds: 5));
+    });
+
+    test('MCP 2025-11-25 cancellation retains its JSON-RPC notification',
+        () async {
+      final observedMethods = <String>[];
+      final requestStarted = Completer<void>();
+      final cancellationReceived = Completer<JsonRpcCancelledNotification>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        final body = jsonDecode(await utf8.decodeStream(request))
+            as Map<String, dynamic>;
+        final message = JsonRpcMessage.fromJson(body);
+        final method = switch (message) {
+          JsonRpcRequest(:final method) => method,
+          JsonRpcNotification(:final method) => method,
+          _ => '',
+        };
+        observedMethods.add(method);
+
+        if (message is JsonRpcCancelledNotification) {
+          if (!cancellationReceived.isCompleted) {
+            cancellationReceived.complete(message);
+          }
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        }
+
+        if (!requestStarted.isCompleted) {
+          requestStarted.complete();
+        }
+        await cancellationReceived.future;
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              JsonRpcResponse(
+                id: (message as JsonRpcRequest).id,
+                result: const {},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = stableProtocolVersion;
+      final protocol = _CancellationTestProtocol();
+      addTearDown(protocol.close);
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      final request = protocol.request<EmptyResult>(
+        const JsonRpcRequest(id: -1, method: 'test/legacy-cancel'),
+        EmptyResult.fromJson,
+        RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+        ),
+      );
+      await requestStarted.future.timeout(const Duration(seconds: 5));
+      controller.abort('legacy request cancelled');
+
+      await expectLater(
+        request,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('legacy request cancelled'),
+          ),
+        ),
+      );
+      final cancellation = await cancellationReceived.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(cancellation.cancelParams.requestId, 0);
+      expect(
+        cancellation.cancelParams.reason,
+        contains('legacy request cancelled'),
+      );
+      expect(observedMethods, [
+        'test/legacy-cancel',
+        Method.notificationsCancelled,
+      ]);
     });
 
     test('send derives 2026 stateless HTTP headers from nested metadata',

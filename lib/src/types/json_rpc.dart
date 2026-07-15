@@ -41,8 +41,8 @@ const latestProtocolVersion = stableProtocolVersion;
 /// High-level MCP protocol compatibility profiles.
 ///
 /// In the 2.3.0 preview, [McpClientOptions] and [McpServerOptions]
-/// default to [stable]. Use [legacy] to explicitly keep the 2025
-/// initialization flow, or [require2026] when a peer must support the
+/// default to [stable]. Use [legacy] to explicitly keep the MCP `2025-11-25`
+/// initialization flow, or [require2026] when a peer must support the MCP
 /// `2026-07-28` stateless protocol.
 enum McpProtocol {
   /// Default SDK compatibility behavior.
@@ -52,7 +52,7 @@ enum McpProtocol {
   /// peers.
   stable,
 
-  /// Legacy MCP behavior using the 2025 initialization flow.
+  /// Legacy behavior using the MCP `2025-11-25` initialization flow.
   ///
   /// This explicit compatibility profile targets MCP 2025-11-25 and earlier
   /// supported versions. It does not probe with `server/discover` by default.

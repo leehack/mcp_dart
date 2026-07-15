@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'conformance_scenario_inventory.dart';
+
 const _defaultConformancePackage =
     '@modelcontextprotocol/conformance@0.2.0-alpha.9';
 const _defaultTimeout = Duration(seconds: 30);
@@ -10,8 +12,9 @@ const _stableFixtureSpecVersion = '2025-11-25';
 
 // alpha.9's network-ref canary server has not adopted the draft protocol yet.
 // The security requirement is protocol-version independent, so run that exact
-// official canary against its newest supported fixture version. A local 2026
-// regression separately verifies that the draft Tool wire shape is preserved.
+// official canary against its newest supported fixture version. A local MCP
+// 2026-07-28 regression separately verifies that the draft Tool wire shape is
+// preserved.
 const _scenarioSpecVersionOverrides = {
   'json-schema-ref-no-deref': _stableFixtureSpecVersion,
 };
@@ -64,6 +67,14 @@ Future<void> main(List<String> args) async {
   final outputRoot = await _createOutputRoot(options.outputDir);
   final scenarios =
       options.scenario == null ? _draftClientScenarios : [options.scenario!];
+
+  await verifyConformanceScenarioInventory(
+    conformancePackage: options.conformancePackage,
+    role: 'client',
+    specVersion: _draftSpecVersion,
+    expectedScenarios: scenarios,
+    requireExactMatch: options.scenario == null,
+  );
 
   stdout.writeln('Conformance package: ${options.conformancePackage}');
   stdout.writeln('Output: ${outputRoot.path}');

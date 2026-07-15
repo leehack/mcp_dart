@@ -110,6 +110,14 @@ sealed class JsonSchema {
       return JsonAny.fromJson(json);
     }
 
+    // Preserve the exact wire schema whenever a typed convenience class would
+    // otherwise discard valid JSON Schema 2020-12 keywords. The validator can
+    // then evaluate the full schema while ordinary builder-created schemas keep
+    // their useful concrete Dart types.
+    if (_typedSchemaWouldLoseKeywords(json)) {
+      return JsonAny.fromJson(json);
+    }
+
     final conjunctiveSchema = _splitConjunctiveSchema(json);
     if (conjunctiveSchema != null) {
       return conjunctiveSchema;
@@ -283,6 +291,25 @@ sealed class JsonSchema {
       'integer',
       'boolean',
     }.contains(json['type']);
+  }
+
+  static bool _typedSchemaWouldLoseKeywords(Map<String, dynamic> json) {
+    final type = json['type'];
+    if (type is! String || type == 'object' || type == 'enum') {
+      return false;
+    }
+
+    final supportedKeys = switch (type) {
+      'string' => _jsonStringKeys,
+      'number' => _jsonNumberKeys,
+      'integer' => _jsonNumberKeys,
+      'boolean' => _jsonBooleanKeys,
+      'null' => _jsonNullKeys,
+      'array' => _jsonArrayKeys,
+      _ => const <String>{},
+    };
+    return json.keys.any((key) => !supportedKeys.contains(key)) ||
+        (type == 'array' && json['items'] is List);
   }
 
   static bool _hasOnlyAnnotationAnd(
@@ -541,6 +568,50 @@ sealed class JsonSchema {
     );
   }
 }
+
+const _jsonCommonTypedKeys = {
+  'default',
+  'description',
+  'title',
+  'type',
+};
+
+const _jsonStringKeys = {
+  ..._jsonCommonTypedKeys,
+  'enum',
+  'enumNames',
+  'format',
+  'maxLength',
+  'minLength',
+  'pattern',
+  'values',
+  'x-mcp-header',
+};
+
+const _jsonNumberKeys = {
+  ..._jsonCommonTypedKeys,
+  'exclusiveMaximum',
+  'exclusiveMinimum',
+  'maximum',
+  'minimum',
+  'multipleOf',
+  'x-mcp-header',
+};
+
+const _jsonBooleanKeys = {
+  ..._jsonCommonTypedKeys,
+  'x-mcp-header',
+};
+
+const _jsonNullKeys = _jsonCommonTypedKeys;
+
+const _jsonArrayKeys = {
+  ..._jsonCommonTypedKeys,
+  'items',
+  'maxItems',
+  'minItems',
+  'uniqueItems',
+};
 
 dynamic _jsonSchemaValue(JsonSchema schema) {
   final rawBooleanSubschema = schema._rawBooleanSubschema;

@@ -106,6 +106,103 @@ List<SamplingContent> _asSamplingContentBlocks(
   );
 }
 
+void _validateSamplingMessageSequence(
+  List<SamplingMessage> messages, {
+  required bool decoding,
+}) {
+  Never fail(String message) {
+    if (decoding) {
+      throw FormatException('CreateMessageRequest.messages: $message');
+    }
+    throw ArgumentError.value(
+      messages,
+      'messages',
+      'CreateMessageRequest.messages: $message',
+    );
+  }
+
+  List<SamplingContent> blocksAt(int index) {
+    try {
+      return messages[index].contentBlocks;
+    } on FormatException catch (error) {
+      fail('message $index has invalid content: ${error.message}');
+    }
+  }
+
+  for (var index = 0; index < messages.length; index++) {
+    final message = messages[index];
+    final blocks = blocksAt(index);
+    final toolUses = blocks.whereType<SamplingToolUseContent>().toList();
+    final toolResults = blocks.whereType<SamplingToolResultContent>().toList();
+
+    if (toolUses.isNotEmpty && message.role != SamplingMessageRole.assistant) {
+      fail('tool_use content at message $index must have the assistant role');
+    }
+    if (toolResults.isNotEmpty) {
+      if (message.role != SamplingMessageRole.user) {
+        fail('tool_result content at message $index must have the user role');
+      }
+      if (toolResults.length != blocks.length) {
+        fail(
+          'a user message containing tool_result content must contain only '
+          'tool results (message $index)',
+        );
+      }
+    }
+
+    if (toolUses.isEmpty) {
+      if (toolResults.isNotEmpty) {
+        if (index == 0) {
+          fail('tool results at message $index have no preceding tool uses');
+        }
+        final precedingBlocks = blocksAt(index - 1);
+        if (messages[index - 1].role != SamplingMessageRole.assistant ||
+            !precedingBlocks.any((block) => block is SamplingToolUseContent)) {
+          fail('tool results at message $index have no preceding tool uses');
+        }
+      }
+      continue;
+    }
+
+    if (index + 1 >= messages.length) {
+      fail('tool uses at message $index are missing their result message');
+    }
+
+    final resultMessage = messages[index + 1];
+    final resultBlocks = blocksAt(index + 1);
+    final results =
+        resultBlocks.whereType<SamplingToolResultContent>().toList();
+    if (resultMessage.role != SamplingMessageRole.user ||
+        results.isEmpty ||
+        results.length != resultBlocks.length) {
+      fail(
+        'tool uses at message $index must be followed immediately by a user '
+        'message containing only tool results',
+      );
+    }
+
+    final useIds = toolUses.map((toolUse) => toolUse.id).toList();
+    final resultIds = results.map((result) => result.toolUseId).toList();
+    if (useIds.toSet().length != useIds.length) {
+      fail('tool uses at message $index contain duplicate IDs');
+    }
+    if (resultIds.toSet().length != resultIds.length) {
+      fail('tool results at message ${index + 1} contain duplicate IDs');
+    }
+
+    final missing = useIds.toSet().difference(resultIds.toSet()).toList()
+      ..sort();
+    final unexpected = resultIds.toSet().difference(useIds.toSet()).toList()
+      ..sort();
+    if (missing.isNotEmpty || unexpected.isNotEmpty) {
+      fail(
+        'tool results at message ${index + 1} must match the preceding tool '
+        'use IDs exactly (missing: $missing, unexpected: $unexpected)',
+      );
+    }
+  }
+}
+
 dynamic _samplingMessageContentToJson(Object value) {
   if (value is List) {
     return _asSamplingContentBlocks(
@@ -774,10 +871,12 @@ class CreateMessageRequest {
     if (messages is! List) {
       throw const FormatException('CreateMessageRequest.messages is required');
     }
+    final parsedMessages = messages
+        .map((m) => SamplingMessage.fromJson(_asJsonObject(m)))
+        .toList();
+    _validateSamplingMessageSequence(parsedMessages, decoding: true);
     return CreateMessageRequest(
-      messages: messages
-          .map((m) => SamplingMessage.fromJson(_asJsonObject(m)))
-          .toList(),
+      messages: parsedMessages,
       task: task == null ? null : TaskCreation.fromJson(task),
       systemPrompt: readOptionalString(
         json['systemPrompt'],
@@ -816,6 +915,7 @@ class CreateMessageRequest {
 
   /// Converts to JSON.
   Map<String, dynamic> toJson({bool omitToolExecution = false}) {
+    _validateSamplingMessageSequence(messages, decoding: false);
     validateOptionalFiniteNumber(
       temperature,
       'CreateMessageRequest.temperature',

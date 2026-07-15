@@ -42,35 +42,52 @@ jobs:
         working-directory: packages/mcp_dart_cli
         run: dart pub get
 
-      - name: Check out pinned MCP 2026 specification source
+      - name: Check out pinned MCP 2026-07-28 specification source
         run: |
           SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_07_28_spec_ref.txt)"
           git clone --filter=blob:none --no-checkout https://github.com/modelcontextprotocol/modelcontextprotocol.git .dart_tool/mcp-spec
           git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
           git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
 
-      - name: Audit pinned MCP 2026 specification examples
+      - name: Audit pinned MCP 2026-07-28 specification examples
         run: >
           dart run tool/spec_example_audit.dart
           .dart_tool/mcp-spec/schema/draft/examples
 
-      - name: Audit pinned MCP 2026 specification document inventory
+      - name: Audit pinned MCP 2026-07-28 specification document inventory
         run: >
           dart run tool/spec_document_inventory_audit.dart
           .dart_tool/mcp-spec/docs/specification/draft
+
+      - name: Check out pinned JSON Schema Test Suite
+        run: |
+          SUITE_REF="$(tr -d '[:space:]' < tool/testing/json_schema_test_suite_ref.txt)"
+          git clone --filter=blob:none --no-checkout https://github.com/json-schema-org/JSON-Schema-Test-Suite.git .dart_tool/json-schema-test-suite
+          git -C .dart_tool/json-schema-test-suite fetch --depth=1 origin "$SUITE_REF"
+          git -C .dart_tool/json-schema-test-suite checkout --detach FETCH_HEAD
+
+      - name: Run official JSON Schema 2020-12 test suite
+        run: >
+          dart run tool/testing/run_json_schema_2020_12_suite.dart
+          .dart_tool/json-schema-test-suite/tests/draft2020-12
+
+      - name: Run official JSON Schema Draft 7 compatibility suite
+        run: >
+          dart run tool/testing/run_json_schema_draft7_suite.dart
+          .dart_tool/json-schema-test-suite/tests/draft7
 
       - name: Run MCP spec conformance gate
         working-directory: packages/mcp_dart_cli
         run: dart run bin/mcp_dart.dart conformance --suite all --json
 
-      - name: Run official MCP 2025 server conformance
+      - name: Run official MCP 2025-11-25 server conformance
         run: >
           dart run test/conformance/run_2025_server_conformance.dart
           --timeout-seconds 90
           --isolate-scenarios
           --output-dir .dart_tool/conformance/ci_2025_server
 
-      - name: Run official MCP 2025 client conformance
+      - name: Run official MCP 2025-11-25 client conformance
         run: >
           npx -y @modelcontextprotocol/conformance@0.2.0-alpha.9 client
           --command "dart run test/conformance/mcp_2026_07_28_client.dart"
@@ -129,6 +146,38 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: true
+
+  platform-smoke:
+    name: platform-smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Install CLI dependencies
+        working-directory: packages/mcp_dart_cli
+        run: dart pub get
+
+      - name: Analyze
+        run: dart analyze
+
+      - name: Run platform test suite
+        run: dart test --exclude-tags interop
 
   dart-examples:
     runs-on: ubuntu-latest
@@ -218,7 +267,10 @@ jobs:
 
       - name: Test
         working-directory: example/flutter_http_client
-        run: flutter test
+        run: flutter test --exclude-tags browser-e2e
+
+      - name: Run Flutter Web MCP service integration in real Chrome
+        run: dart run tool/testing/run_flutter_web_example_e2e.dart
 
       - name: Build release web bundle
         working-directory: example/flutter_http_client

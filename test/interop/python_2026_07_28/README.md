@@ -2,7 +2,8 @@
 
 This fixture verifies the MCP `2026-07-28` path in both directions
 against the official Python SDK `mcp==2.0.0b1` package. It is separate from the
-stable Python fixture, which continues to cover the released 2025 protocol.
+stable Python fixture, which continues to cover the released MCP 2025-11-25
+specification.
 
 ## Run
 
@@ -18,4 +19,4 @@ MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
 
 The runner checks Python client -> Dart server negotiation, `tools/list`, and
 `tools/call`, then checks Dart client -> Python server discovery, tool listing,
-and tool execution. Both paths must negotiate `2026-07-28`.
+and tool execution. Both paths must negotiate MCP 2026-07-28.

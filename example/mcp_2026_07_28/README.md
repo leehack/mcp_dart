@@ -1,6 +1,6 @@
 # MCP 2026-07-28 core example
 
-This pair requires the `2026-07-28` protocol instead of falling back to legacy
+This pair requires the MCP `2026-07-28` protocol instead of falling back to legacy
 initialization. The client starts the server over stdio, so one command runs the
 complete flow:
 
@@ -35,6 +35,6 @@ It demonstrates:
 The hard-coded elicitation response stands in for a host UI. Replace
 `client.onElicitRequest` with real user interaction in an application.
 
-This example covers the 2026 core protocol. Tasks and MCP Apps are optional MCP
+This example covers the MCP 2026-07-28 core protocol. Tasks and MCP Apps are optional MCP
 extensions; see the [examples guide](../../doc/examples.md) for MCP Apps
 examples and links to the Tasks-extension API guides.

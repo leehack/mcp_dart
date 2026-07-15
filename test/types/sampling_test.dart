@@ -988,6 +988,189 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
+
+    group('tool-use message sequence validation', () {
+      const toolUseA = SamplingToolUseContent(
+        id: 'call-a',
+        name: 'lookup',
+        input: {'query': 'a'},
+      );
+      const toolUseB = SamplingToolUseContent(
+        id: 'call-b',
+        name: 'lookup',
+        input: {'query': 'b'},
+      );
+      const resultA = SamplingToolResultContent(
+        toolUseId: 'call-a',
+        content: [TextContent(text: 'A')],
+      );
+      const resultB = SamplingToolResultContent(
+        toolUseId: 'call-b',
+        content: [TextContent(text: 'B')],
+      );
+
+      test('accepts exactly matched parallel tool uses and results', () {
+        final request = const CreateMessageRequestParams(
+          messages: [
+            SamplingMessage(
+              role: SamplingMessageRole.assistant,
+              content: [toolUseA, toolUseB],
+            ),
+            SamplingMessage(
+              role: SamplingMessageRole.user,
+              content: [resultB, resultA],
+            ),
+            SamplingMessage(
+              role: SamplingMessageRole.assistant,
+              content: SamplingTextContent(text: 'Done'),
+            ),
+          ],
+          maxTokens: 100,
+        );
+
+        expect(request.toJson()['messages'], hasLength(3));
+      });
+
+      test('rejects a user message that mixes tool results and text', () {
+        expect(
+          () => const CreateMessageRequestParams(
+            messages: [
+              SamplingMessage(
+                role: SamplingMessageRole.assistant,
+                content: toolUseA,
+              ),
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: [
+                  SamplingTextContent(text: 'Result:'),
+                  resultA,
+                ],
+              ),
+            ],
+            maxTokens: 100,
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('rejects missing, unexpected, and duplicate tool result IDs', () {
+        for (final results in <List<SamplingContent>>[
+          const [resultA],
+          const [
+            resultA,
+            SamplingToolResultContent(
+              toolUseId: 'call-extra',
+              content: [TextContent(text: 'extra')],
+            ),
+          ],
+          const [resultA, resultA],
+        ]) {
+          expect(
+            () => CreateMessageRequestParams(
+              messages: [
+                const SamplingMessage(
+                  role: SamplingMessageRole.assistant,
+                  content: [toolUseA, toolUseB],
+                ),
+                SamplingMessage(
+                  role: SamplingMessageRole.user,
+                  content: results,
+                ),
+              ],
+              maxTokens: 100,
+            ).toJson(),
+            throwsA(isA<ArgumentError>()),
+          );
+        }
+      });
+
+      test('reports mismatched tool IDs in sorted order', () {
+        expect(
+          () => const CreateMessageRequestParams(
+            messages: [
+              SamplingMessage(
+                role: SamplingMessageRole.assistant,
+                content: [toolUseB, toolUseA],
+              ),
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: [
+                  SamplingToolResultContent(
+                    toolUseId: 'call-z',
+                    content: [TextContent(text: 'z')],
+                  ),
+                  SamplingToolResultContent(
+                    toolUseId: 'call-c',
+                    content: [TextContent(text: 'c')],
+                  ),
+                ],
+              ),
+            ],
+            maxTokens: 100,
+          ).toJson(),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.message,
+              'message',
+              contains(
+                'missing: [call-a, call-b], '
+                'unexpected: [call-c, call-z]',
+              ),
+            ),
+          ),
+        );
+      });
+
+      test('rejects a tool use without an immediate result message', () {
+        expect(
+          () => const CreateMessageRequestParams(
+            messages: [
+              SamplingMessage(
+                role: SamplingMessageRole.assistant,
+                content: toolUseA,
+              ),
+              SamplingMessage(
+                role: SamplingMessageRole.assistant,
+                content: SamplingTextContent(text: 'continued'),
+              ),
+            ],
+            maxTokens: 100,
+          ).toJson(),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('rejects orphan and role-invalid tool blocks when decoding', () {
+        for (final messages in <List<Map<String, dynamic>>>[
+          [
+            {
+              'role': 'user',
+              'content': resultA.toJson(),
+            },
+          ],
+          [
+            {
+              'role': 'user',
+              'content': toolUseA.toJson(),
+            },
+          ],
+          [
+            {
+              'role': 'assistant',
+              'content': resultA.toJson(),
+            },
+          ],
+        ]) {
+          expect(
+            () => CreateMessageRequestParams.fromJson({
+              'messages': messages,
+              'maxTokens': 100,
+            }),
+            throwsA(isA<FormatException>()),
+          );
+        }
+      });
+    });
   });
 
   group('CreateMessageResult', () {

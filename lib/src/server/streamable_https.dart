@@ -193,6 +193,7 @@ class StreamableHTTPServerTransport
   final Map<String, HttpResponse> _streamMapping = {};
   final Set<StreamId> _standaloneSseStreamIds = {};
   final Map<StreamId, Set<HttpResponse>> _standaloneSseResponses = {};
+  final Map<HttpResponse, Future<void>> _responseWriteTails = Map.identity();
   final Set<StreamId> _ownedStreamIds = {};
   final Map<dynamic, String> _requestToStreamMapping = {};
   final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
@@ -1191,29 +1192,55 @@ class StreamableHTTPServerTransport
       headers.forEach((key, value) {
         res.headers.set(key, value);
       });
-      await res.flush();
 
+      final primingEventId = await _eventStore.storeEvent(
+        streamId,
+        _ssePrimingMessage,
+      );
+      final replayBatch = BytesBuilder(copy: false);
       for (final event in replayedEvents) {
-        if (!await _writeSSEEvent(res, event.message, event.eventId)) {
-          onerror?.call(StateError("Failed to replay events"));
-          await _safeClose(res);
-          return;
-        }
+        replayBatch.add(_encodeSSEEvent(event.message, event.eventId));
       }
+      replayBatch.add(_encodeSSEPrimingEvent(primingEventId));
 
-      if (!await _primeSseStream(streamId, res)) {
-        await _safeClose(res);
-        return;
-      }
-
-      if (_isStandaloneSseStreamId(streamId)) {
+      final isStandaloneStream = _isStandaloneSseStreamId(streamId);
+      if (isStandaloneStream) {
         _addStandaloneSseResponse(streamId, res);
       } else {
         _streamMapping[streamId] = res;
         _detachedResumableStreamIds.remove(streamId);
       }
+
+      try {
+        // Queue the entire replay before the first await. A client can react as
+        // soon as the first replayed event arrives, so the resumed response
+        // must already be attached and later replay events must already be
+        // ordered ahead of any new live message.
+        final replayWritten = await _enqueueSseWrite(
+          res,
+          replayBatch.takeBytes(),
+        );
+        if (!replayWritten) {
+          throw StateError('Failed to replay events');
+        }
+      } catch (error) {
+        if (isStandaloneStream) {
+          _removeStandaloneSseResponse(streamId, res);
+        } else if (identical(_streamMapping[streamId], res)) {
+          _streamMapping.remove(streamId);
+          _detachedResumableStreamIds.add(streamId);
+        }
+        onerror?.call(
+          error is Error
+              ? error
+              : StateError('Failed to replay events: $error'),
+        );
+        await _safeClose(res);
+        return;
+      }
+
       res.done.then((_) {
-        if (_isStandaloneSseStreamId(streamId)) {
+        if (isStandaloneStream) {
           _removeStandaloneSseResponse(streamId, res);
         } else if (identical(_streamMapping[streamId], res)) {
           _streamMapping.remove(streamId);
@@ -1245,10 +1272,24 @@ class StreamableHTTPServerTransport
 
   /// Safely closes an HTTP response, ignoring errors if client disconnected
   Future<void> _safeClose(HttpResponse res) async {
+    final pendingWrite = _responseWriteTails[res];
+    if (pendingWrite != null) {
+      try {
+        await pendingWrite.timeout(const Duration(milliseconds: 100));
+      } catch (_) {
+        // Continue closing even if an in-flight write is stuck or failed.
+      }
+    }
+
     try {
       await res.close().timeout(const Duration(milliseconds: 100));
     } catch (e) {
       // Ignore close errors - client may have already disconnected
+    } finally {
+      if (pendingWrite != null &&
+          identical(_responseWriteTails[res], pendingWrite)) {
+        _responseWriteTails.remove(res);
+      }
     }
   }
 
@@ -1267,20 +1308,63 @@ class StreamableHTTPServerTransport
     String? eventId,
   ]) async {
     try {
-      var eventData = "event: message\n";
-      // Include event ID if provided - this is important for resumability
-      if (eventId != null) {
-        _validateSseEventId(eventId);
-        eventData += "id: $eventId\n";
-      }
-      eventData += "data: ${jsonEncode(message.toJson())}\n\n";
-
-      res.add(utf8.encode(eventData));
-      await res.flush();
-      return true;
+      return await _enqueueSseWrite(res, _encodeSSEEvent(message, eventId));
     } catch (e) {
       return false;
     }
+  }
+
+  Future<bool> _enqueueSseWrite(HttpResponse res, List<int> bytes) {
+    final previousWrite = _responseWriteTails[res] ?? Future<void>.value();
+    final writeCompleted = Completer<void>();
+    final writeTail = writeCompleted.future;
+
+    // Install the tail before awaiting the previous write. A client may react
+    // as soon as bytes arrive, before the corresponding flush future completes.
+    _responseWriteTails[res] = writeTail;
+    return _performSseWrite(
+      res,
+      bytes,
+      previousWrite: previousWrite,
+      writeCompleted: writeCompleted,
+      writeTail: writeTail,
+    );
+  }
+
+  Future<bool> _performSseWrite(
+    HttpResponse res,
+    List<int> bytes, {
+    required Future<void> previousWrite,
+    required Completer<void> writeCompleted,
+    required Future<void> writeTail,
+  }) async {
+    try {
+      await previousWrite;
+      res.add(bytes);
+      await res.flush();
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      writeCompleted.complete();
+      if (identical(_responseWriteTails[res], writeTail)) {
+        _responseWriteTails.remove(res);
+      }
+    }
+  }
+
+  List<int> _encodeSSEEvent(
+    JsonRpcMessage message, [
+    String? eventId,
+  ]) {
+    var eventData = "event: message\n";
+    // Include event ID if provided - this is important for resumability.
+    if (eventId != null) {
+      _validateSseEventId(eventId);
+      eventData += "id: $eventId\n";
+    }
+    eventData += "data: ${jsonEncode(message.toJson())}\n\n";
+    return utf8.encode(eventData);
   }
 
   Future<Socket> _detachSseSocket(
@@ -1333,19 +1417,19 @@ class StreamableHTTPServerTransport
     EventId eventId,
   ) async {
     try {
-      _validateSseEventId(eventId);
-      res.add(
-        utf8.encode(
-          'id: $eventId\n'
-          'retry: ${_sseRetryDelay.inMilliseconds}\n'
-          'data:\n\n',
-        ),
-      );
-      await res.flush();
-      return true;
+      return await _enqueueSseWrite(res, _encodeSSEPrimingEvent(eventId));
     } catch (e) {
       return false;
     }
+  }
+
+  List<int> _encodeSSEPrimingEvent(EventId eventId) {
+    _validateSseEventId(eventId);
+    return utf8.encode(
+      'id: $eventId\n'
+      'retry: ${_sseRetryDelay.inMilliseconds}\n'
+      'data:\n\n',
+    );
   }
 
   Future<bool> _writeSSECommentToSocket(Socket socket) async {
@@ -1362,8 +1446,7 @@ class StreamableHTTPServerTransport
     try {
       final store = _eventStore;
       if (store == null) {
-        await res.flush();
-        return true;
+        return _enqueueSseWrite(res, const <int>[]);
       }
 
       final eventId = await store.storeEvent(streamId, _ssePrimingMessage);
@@ -1877,6 +1960,7 @@ class StreamableHTTPServerTransport
     _detachedResumableStreamIds.clear();
     _standaloneSseStreamIds.clear();
     _standaloneSseResponses.clear();
+    _responseWriteTails.clear();
     _ownedStreamIds.clear();
 
     // Clear any pending responses
@@ -2137,7 +2221,7 @@ class StreamableHTTPServerTransport
     return false;
   }
 
-  /// Checks if a message uses the stateless 2026 protocol metadata.
+  /// Checks if a message uses stateless MCP `2026-07-28` metadata.
   bool _isStatelessJsonRpcRequest(JsonRpcMessage message) {
     if (message is JsonRpcRequest) {
       final version = message.meta?[McpMetaKey.protocolVersion];

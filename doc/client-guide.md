@@ -187,7 +187,7 @@ until the final tool result is available.
 For legacy MCP `2025-11-25` task augmentation only, callers can pass task
 creation parameters through the `task` argument. That legacy path requires
 `tasks.requests.tools.call` plus tool `execution.taskSupport`; do not send the
-legacy argument on a 2026 extension session.
+legacy argument on an MCP 2026-07-28 extension session.
 
 ```dart
 final taskClient = TaskClient(client);
@@ -281,11 +281,11 @@ for (final content in result.contents) {
 }
 ```
 
-### Listen for Resource Updates (MCP 2026)
+### Listen for Resource Updates (MCP 2026-07-28)
 
-The default 2026 stateless profile uses `subscriptions/listen`. The returned
-handle exposes the required acknowledgment, filtered notification stream,
-graceful completion, and cancellation:
+The default MCP 2026-07-28 stateless profile uses `subscriptions/listen`. The
+returned handle exposes the required acknowledgment, filtered notification
+stream, graceful completion, and cancellation:
 
 ```dart
 final subscription = client.listenSubscriptions(
@@ -316,7 +316,8 @@ await listener.cancel();
 ### Subscribe to Resource Updates (MCP 2025-11-25)
 
 Legacy stateful peers use `resources/subscribe`, global notifications, and
-`resources/unsubscribe`. These methods are removed from the 2026 profile.
+`resources/unsubscribe`. These methods are removed from the MCP 2026-07-28
+profile.
 
 ```dart
 // Subscribe to changes
@@ -622,20 +623,20 @@ client.onListRoots = () async {
   );
 };
 
-// Legacy 2025-11-25 only; this notification is removed in MCP 2026.
+// MCP 2025-11-25 only; this notification is removed in MCP 2026-07-28.
 await client.sendRootsListChanged();
 ```
 
 ## Logging
 
-MCP 2026 deprecates protocol logging. The SDK retains these APIs for
+MCP 2026-07-28 deprecates protocol logging. The SDK retains these APIs for
 compatibility; new implementations should prefer server `stderr` for stdio or
 OpenTelemetry for structured observability.
 
-### Deprecated Request Logs (MCP 2026)
+### Deprecated Request Logs (MCP 2026-07-28)
 
-Logging is request-scoped in the 2026 profile. Set the minimum level on the
-operation that should emit logs:
+Logging is request-scoped in the MCP 2026-07-28 profile. Set the minimum level
+on the operation that should emit logs:
 
 ```dart
 final tools = await client.listTools(
@@ -647,7 +648,8 @@ Install the notification handler below before sending the request.
 
 ### Set Logging Level (MCP 2025-11-25)
 
-`logging/setLevel` is legacy-only and is rejected by 2026 stateless peers.
+`logging/setLevel` is legacy-only and is rejected by MCP 2026-07-28 stateless
+peers.
 
 ```dart
 // Set server's logging level
@@ -883,7 +885,7 @@ processResult(result);
 
 ### 3. Check Legacy Capabilities Before Use
 
-This `resources.subscribe` check applies only to MCP 2025-11-25. MCP 2026 uses
+This `resources.subscribe` check applies only to MCP 2025-11-25. MCP 2026-07-28 uses
 the `subscriptions/listen` flow shown earlier in this guide.
 
 ```dart

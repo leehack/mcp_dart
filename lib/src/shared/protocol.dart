@@ -97,7 +97,8 @@ class RequestOptions {
   /// rely on explicit cancellation or transport closure instead.
   final bool timeoutEnabled;
 
-  /// Minimum server log level requested for this 2026 stateless request.
+  /// Minimum server log level requested for this MCP 2026-07-28 stateless
+  /// request.
   ///
   /// This is serialized as `io.modelcontextprotocol/logLevel` in request
   /// metadata. Legacy peers use `logging/setLevel` instead.
@@ -2068,6 +2069,29 @@ abstract class Protocol {
 
       // MCP 2025-11-25 forbids clients from cancelling `initialize`.
       if (jsonrpcRequest.method == Method.initialize) {
+        completer.completeError(errorReason);
+        return;
+      }
+
+      final activeTransport = _transport;
+      final cancellationAwareTransport =
+          activeTransport is RequestCancellationAwareTransport
+              ? activeTransport as RequestCancellationAwareTransport
+              : null;
+      if (usesStatelessRequestShape && cancellationAwareTransport != null) {
+        // MCP 2026-07-28 cancels the matching HTTP request stream and removes
+        // protocol-level `notifications/cancelled`. If the transport no longer
+        // tracks this request, it has already settled from the transport's
+        // perspective; do not fall back to the removed legacy notification.
+        if (cancellationAwareTransport.canCancelRequest(messageId)) {
+          cancellationAwareTransport.cancelRequest(messageId).catchError((e) {
+            _onerror(
+              StateError(
+                "Failed to cancel transport request $messageId: $e",
+              ),
+            );
+          });
+        }
         completer.completeError(errorReason);
         return;
       }

@@ -5,7 +5,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 /// Legacy MCP SSE transport example.
 ///
 /// New servers should use Streamable HTTP. This example intentionally uses the
-/// 2025-era initialization profile because the SSE transport is deprecated.
+/// MCP 2025-11-25 initialization profile because the SSE transport is deprecated.
 Future<void> main() async {
   final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 3000;
   final allowedBrowserOrigin =

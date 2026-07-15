@@ -27,6 +27,7 @@ environment:
 dependencies:
   crypto: ^3.0.7
   http: ^1.5.0
+  json_schema: ^5.2.2
   meta: ^1.17.0
 
 dev_dependencies:

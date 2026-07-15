@@ -291,7 +291,7 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'stateless.requires-complete-request-meta',
           description:
-              'Rejects 2026 stateless requests whose _meta omits required client identity or capability fields.',
+              'Rejects MCP 2026-07-28 stateless requests whose _meta omits required client identity or capability fields.',
           check: _statelessRequestsRequireCompleteRequestMeta,
         ),
         _ConformanceCase(
@@ -319,49 +319,49 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'capabilities.stateless-does-not-infer-initialize-extensions',
           description:
-              'Requires 2026 stateless requests to declare extension capabilities per request instead of inheriting initialize capabilities.',
+              'Requires MCP 2026-07-28 stateless requests to declare extension capabilities per request instead of inheriting initialize capabilities.',
           check: _statelessDoesNotInferInitializeExtensions,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-http.rejects-mismatched-routing-headers',
           description:
-              'Rejects 2026 Streamable HTTP requests whose routing headers disagree with the JSON-RPC body.',
+              'Rejects MCP 2026-07-28 Streamable HTTP requests whose routing headers disagree with the JSON-RPC body.',
           check: _rejectsMismatchedStatelessHttpRoutingHeaders,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-http.requires-routing-headers',
           description:
-              'Requires 2026 Streamable HTTP requests to include protocol and method routing headers.',
+              'Requires MCP 2026-07-28 Streamable HTTP requests to include protocol and method routing headers.',
           check: _requiresStatelessHttpRoutingHeaders,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-http.rejects-non-post-methods',
           description:
-              'Returns HTTP 405 for 2026 stateless Streamable HTTP methods other than POST.',
+              'Returns HTTP 405 for MCP 2026-07-28 stateless Streamable HTTP methods other than POST.',
           check: _rejectsStatelessHttpNonPostMethods,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-http.rejects-batch-payloads',
           description:
-              'Rejects 2026 stateless Streamable HTTP POST bodies that contain more than one JSON-RPC message.',
+              'Rejects MCP 2026-07-28 stateless Streamable HTTP POST bodies that contain more than one JSON-RPC message.',
           check: _rejectsStatelessHttpBatchPayloads,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-http.task-requests-require-name-header',
           description:
-              'Requires 2026 task lifecycle requests to route with Mcp-Name task IDs.',
+              'Requires MCP 2026-07-28 task lifecycle requests to route with Mcp-Name task IDs.',
           check: _taskRequestsRequireStatelessHttpNameHeader,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-http.validates-parameter-headers',
           description:
-              'Requires and matches 2026 Mcp-Param routing headers for configured tool arguments.',
+              'Requires and matches MCP 2026-07-28 Mcp-Param routing headers for configured tool arguments.',
           check: _validatesStatelessHttpParameterHeaders,
         ),
         _ConformanceCase(
@@ -375,21 +375,21 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'stateless-http.encodes-parameter-header-values',
           description:
-              'Encodes non-plain 2026 Mcp-Param string header values while preserving plain strings.',
+              'Encodes non-plain MCP 2026-07-28 Mcp-Param string header values while preserving plain strings.',
           check: _encodesStatelessHttpParameterHeaderValues,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-http.accepts-response-posts',
           description:
-              'Accepts 2026 JSON-RPC response POSTs without request-body metadata.',
+              'Accepts MCP 2026-07-28 JSON-RPC response POSTs without request-body metadata.',
           check: _acceptsStatelessHttpResponsePosts,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-http.omits-session-header-after-initialize',
           description:
-              'Omits Mcp-Session-Id on 2026 stateless responses even after stateful initialization.',
+              'Omits Mcp-Session-Id on MCP 2026-07-28 stateless responses even after stateful initialization.',
           check: _statelessHttpOmitsSessionHeaderAfterInitialize,
         ),
         _ConformanceCase(
@@ -410,49 +410,49 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'stateless.ignores-legacy-task-parameter',
           description:
-              'Ignores legacy tools/call task parameters on 2026 stateless requests.',
+              'Ignores legacy tools/call task parameters on MCP 2026-07-28 stateless requests.',
           check: _statelessIgnoresLegacyTaskParameter,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless-client.rejects-legacy-task-options',
           description:
-              'Rejects legacy RequestOptions.task before sending 2026 stateless requests.',
+              'Rejects legacy RequestOptions.task before sending MCP 2026-07-28 stateless requests.',
           check: _statelessClientRejectsLegacyTaskOptions,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless.adds-result-type-and-cache-defaults',
           description:
-              'Adds 2026 complete resultType and cache defaults for all cacheable stateless results.',
+              'Adds MCP 2026-07-28 complete resultType and cache defaults for all cacheable stateless results.',
           check: _statelessAddsResultTypeAndCacheDefaults,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'tools-list.stateless-returns-deterministic-order',
           description:
-              'Returns 2026 stateless tools/list results in deterministic name order.',
+              'Returns MCP 2026-07-28 stateless tools/list results in deterministic name order.',
           check: _statelessToolsListReturnsDeterministicOrder,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'tools-list.stateless-omits-legacy-execution',
           description:
-              'Omits stable-only Tool.execution metadata from 2026 stateless tools/list results.',
+              'Omits stable-only Tool.execution metadata from MCP 2026-07-28 stateless tools/list results.',
           check: _statelessToolsListOmitsLegacyExecution,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'resources.missing-resource-error-code-by-version',
           description:
-              'Uses legacy ResourceNotFound for stable resource misses and InvalidParams for 2026 stateless resource misses.',
+              'Uses legacy ResourceNotFound for stable resource misses and InvalidParams for MCP 2026-07-28 stateless resource misses.',
           check: _missingResourceErrorCodeByVersion,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'stateless.rejects-unrecognized-result-type',
           description:
-              'Rejects 2026 stateless responses with unrecognized resultType values.',
+              'Rejects MCP 2026-07-28 stateless responses with unrecognized resultType values.',
           check: _statelessRejectsUnrecognizedResultType,
         ),
         _ConformanceCase(
@@ -587,7 +587,7 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'capabilities.stateless-omits-legacy-task-capabilities',
           description:
-              'Omits legacy task and removed roots.listChanged capability fields from 2026 stateless metadata.',
+              'Omits legacy task and removed roots.listChanged capability fields from MCP 2026-07-28 stateless metadata.',
           check: _statelessOmitsLegacyTaskCapabilities,
         ),
         _ConformanceCase(
@@ -1757,7 +1757,8 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
 Future<void> _statelessDoesNotInferInitializeExtensions() async {
   final transport = _ConformanceTransport();
   // Raw map parsing keeps this conformance case analyzable against the hosted
-  // CLI package lower bound while still exercising the 2026 wire behavior.
+  // CLI package lower bound while still exercising MCP 2026-07-28 wire
+  // behavior.
   // ignore: deprecated_member_use
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
@@ -4954,14 +4955,14 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
       statelessMeta[_clientCapabilitiesMetaKey] as Map<String, dynamic>;
   if (statelessCapabilities.containsKey('tasks')) {
     throw StateError(
-      'Expected 2026 request metadata to omit legacy tasks capability, got '
+      'Expected MCP 2026-07-28 request metadata to omit legacy tasks capability, got '
       '$statelessCapabilities.',
     );
   }
   final statelessRoots = statelessCapabilities['roots'];
   if (statelessRoots is! Map || statelessRoots.containsKey('listChanged')) {
     throw StateError(
-      'Expected 2026 request metadata to omit legacy roots.listChanged '
+      'Expected MCP 2026-07-28 request metadata to omit legacy roots.listChanged '
       'capability, got $statelessCapabilities.',
     );
   }
@@ -4969,7 +4970,7 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
   if (statelessExtensions is! Map ||
       statelessExtensions[_tasksExtensionId] is! Map) {
     throw StateError(
-      'Expected 2026 request metadata to retain tasks extension, got '
+      'Expected MCP 2026-07-28 request metadata to retain tasks extension, got '
       '$statelessCapabilities.',
     );
   }

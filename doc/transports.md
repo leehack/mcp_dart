@@ -204,9 +204,9 @@ MCP over HTTP, with optional Server-Sent Events responses. Best for:
 
 ### High-Level Streamable HTTP Server
 
-For a simplified dual-era setup, use `StreamableMcpServer`. It routes MCP 2026
-requests statelessly and manages sessions when a peer negotiates the MCP 2025
-initialization flow.
+For a simplified dual-era setup, use `StreamableMcpServer`. It routes MCP
+2026-07-28 requests statelessly and manages sessions when a peer negotiates the
+MCP 2025-11-25 initialization flow.
 
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
@@ -214,7 +214,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 void main() async {
   final server = StreamableMcpServer(
     serverFactory: (connectionId) {
-      // Called per stateless 2026 request or per legacy session.
+      // Called per stateless MCP 2026-07-28 request or per legacy session.
       return McpServer(
         Implementation(name: 'my-server', version: '1.0.0'),
         options: const McpServerOptions(protocol: McpProtocol.stable),
@@ -236,7 +236,7 @@ void main() async {
 
 This helper handles:
 - Creating an HTTP server
-- Stateless request routing for MCP 2026
+- Stateless request routing for MCP 2026-07-28
 - Sessions, event storage, and resumability for legacy MCP
 - Connecting the `McpServer` to the transport
 
@@ -555,13 +555,13 @@ final transport = StreamableHttpClientTransport(
 await client.connect(transport);
 ```
 
-### MCP 2025 and Earlier Session Management
+### MCP 2025-11-25 and Earlier Session Management
 
 The following session and replay controls apply only when the initialization-era
-flow is selected. Two default `McpProtocol.stable` peers negotiate MCP 2026 and
-therefore do not use protocol sessions, `MCP-Session-Id`, GET/DELETE session
-operations, or replay. Select `McpProtocol.legacy` explicitly when building a
-session-dependent deployment.
+flow is selected. Two default `McpProtocol.stable` peers negotiate MCP
+2026-07-28 and therefore do not use protocol sessions, `MCP-Session-Id`,
+GET/DELETE session operations, or replay. Select `McpProtocol.legacy`
+explicitly when building a session-dependent deployment.
 
 #### Stateful Sessions
 
@@ -1169,7 +1169,7 @@ final transport = StreamableHttpClientTransport(
 );
 ```
 
-**Problem**: MCP 2025/legacy session not resuming
+**Problem**: MCP 2025-11-25/legacy session not resuming
 
 ```dart
 final client = McpClient(

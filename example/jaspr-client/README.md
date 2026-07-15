@@ -2,9 +2,10 @@
 
 A modern, web-based MCP (Model Context Protocol) client built with [Jaspr](https://jaspr.site), demonstrating interactive MCP features like **elicitation** and **sampling**.
 
-> This example intentionally uses `McpProtocol.legacy` with MCP 2025-era core
+> This example intentionally uses `McpProtocol.legacy` with MCP 2025-11-25
+> initialization-era core
 > task augmentation so it can pair with `simple_task_interactive_server.dart`.
-> For the MCP 2026 `input_required` flow, see
+> For the MCP 2026-07-28 `input_required` flow, see
 > [`example/mcp_2026_07_28/`](../mcp_2026_07_28/).
 
 ## Features

@@ -178,7 +178,10 @@ void main() {
 
       expect(result.exitCode, 1);
       expect(result.stdout, contains('failures:'));
-      expect(result.stdout, contains('CallToolResult/missing-content.json'));
+      expect(
+        result.stdout,
+        contains(p.join('CallToolResult', 'missing-content.json')),
+      );
       expect(result.stdout, contains('CallToolResult.content is required'));
     });
   });

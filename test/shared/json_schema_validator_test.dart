@@ -825,6 +825,603 @@ void main() {
       });
     });
 
+    group('JSON Schema 2020-12 compliance', () {
+      test('uses 2020-12 when the schema does not declare a dialect', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'array',
+          'prefixItems': [
+            {'type': 'integer'},
+          ],
+          'items': false,
+        });
+
+        schema.validate([1]);
+        expect(
+          () => schema.validate(['1']),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate([1, 2]),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('accepts the declared 2020-12 dialect URI forms', () {
+        for (final dialect in const [
+          'https://json-schema.org/draft/2020-12/schema',
+          'https://json-schema.org/draft/2020-12/schema#',
+        ]) {
+          final schema = JsonSchema.fromJson({
+            r'$schema': dialect,
+            'type': 'string',
+          });
+
+          schema.validate('value');
+          expect(
+            () => schema.validate(1),
+            throwsA(isA<JsonSchemaValidationException>()),
+            reason: dialect,
+          );
+        }
+      });
+
+      test('uses declared Draft 7 tuple semantics for legacy schemas', () {
+        for (final dialect in const [
+          'http://json-schema.org/draft-07/schema#',
+          'http://json-schema.org/draft-07/schema',
+          'https://json-schema.org/draft-07/schema#',
+          'https://json-schema.org/draft-07/schema',
+        ]) {
+          final schema = JsonSchema.fromJson({
+            r'$schema': dialect,
+            'type': 'array',
+            'items': [
+              {'type': 'string'},
+              {'type': 'integer'},
+            ],
+            'additionalItems': false,
+          });
+
+          schema.validate(['value', 1]);
+          expect(
+            () => schema.validate([1, 'value']),
+            throwsA(isA<JsonSchemaValidationException>()),
+            reason: dialect,
+          );
+          expect(
+            () => schema.validate(['value', 1, true]),
+            throwsA(isA<JsonSchemaValidationException>()),
+            reason: dialect,
+          );
+        }
+
+        final defaultDialectSchema = JsonSchema.fromJson({
+          'type': 'array',
+          'items': [
+            {'type': 'string'},
+          ],
+        });
+        expect(
+          () => defaultDialectSchema.validate(['value']),
+          throwsA(
+            isA<JsonSchemaValidationException>().having(
+              (error) => error.message,
+              'message',
+              contains('Invalid JSON Schema schema'),
+            ),
+          ),
+        );
+      });
+
+      test('Draft 7 ignores unrecognized 2020-12 keywords independently', () {
+        final schemas = <String, Map<String, dynamic>>{
+          'prefixItems': {
+            'prefixItems': [false],
+          },
+          'unevaluatedItems': {
+            'unevaluatedItems': false,
+          },
+          r'$dynamicRef': {
+            r'$dynamicRef': r'#/$defs/rejected',
+            r'$defs': {'rejected': false},
+          },
+          'invalid schemas under unknown keywords': {
+            'prefixItems': [
+              {'enum': []},
+            ],
+            'unevaluatedItems': {'enum': []},
+            r'$defs': {
+              'invalid': {
+                r'$schema': 'https://example.com/unsupported',
+                'enum': [],
+              },
+            },
+          },
+        };
+
+        for (final value in schemas.values) {
+          final schema = JsonSchema.fromJson({
+            r'$schema': 'http://json-schema.org/draft-07/schema#',
+            'type': 'array',
+            ...value,
+          });
+          schema.validate([1, 2]);
+        }
+      });
+
+      test(r'Draft 7 resolves local $ref values through definitions', () {
+        final schema = JsonSchema.fromJson({
+          r'$schema': 'http://json-schema.org/draft-07/schema#',
+          'definitions': {
+            'positiveInteger': {
+              'type': 'integer',
+              'minimum': 1,
+            },
+          },
+          r'$ref': r'#/definitions/positiveInteger',
+        });
+
+        schema.validate(1);
+        expect(
+          () => schema.validate(0),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('2020-12 ignores invalid schemas under legacy unknown keywords', () {
+        final schema = JsonSchema.fromJson({
+          'definitions': {
+            'invalid': {'enum': []},
+          },
+          'additionalItems': {'enum': []},
+          'dependencies': {
+            'value': {'enum': []},
+          },
+        });
+
+        schema.validate('value');
+      });
+
+      test('rejects unsupported and malformed declared dialects clearly', () {
+        for (final dialect in const <Object>[
+          'http://json-schema.org/draft-06/schema#',
+          'https://example.com/custom-schema',
+          202012,
+        ]) {
+          final schema = JsonSchema.fromJson({
+            r'$schema': dialect,
+            'type': 'string',
+          });
+
+          expect(
+            () => schema.validate('value'),
+            throwsA(
+              isA<JsonSchemaValidationException>().having(
+                (error) => error.message,
+                'message',
+                contains('Unsupported JSON Schema dialect'),
+              ),
+            ),
+          );
+        }
+      });
+
+      test('rejects schemas that are invalid under 2020-12', () {
+        final schemas = [
+          JsonSchema.fromJson({
+            'type': 'string',
+            'minLength': -1,
+          }),
+          JsonSchema.fromJson({'enum': []}),
+          JsonSchema.fromJson({
+            'enum': [
+              {'nested': true},
+              {'nested': true},
+            ],
+          }),
+        ];
+
+        for (final schema in schemas) {
+          expect(
+            () => schema.validate('value'),
+            throwsA(
+              isA<JsonSchemaValidationException>().having(
+                (error) => error.message,
+                'message',
+                contains('Invalid JSON Schema schema'),
+              ),
+            ),
+          );
+        }
+      });
+
+      test(r'resolves local $ref values through $defs', () {
+        final schema = JsonSchema.fromJson({
+          r'$defs': {
+            'positiveInteger': {
+              'type': 'integer',
+              'minimum': 1,
+            },
+          },
+          'type': 'object',
+          'properties': {
+            'count': {r'$ref': r'#/$defs/positiveInteger'},
+          },
+          'required': ['count'],
+        });
+
+        schema.validate({'count': 1});
+        expect(
+          () => schema.validate({'count': 0}),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test(r'resolves escaped JSON Pointer tokens in local $ref values', () {
+        final schema = JsonSchema.fromJson({
+          r'$defs': {
+            'a/b~c': {'const': 'matched'},
+          },
+          r'$ref': r'#/$defs/a~1b~0c',
+        });
+
+        schema.validate('matched');
+        expect(
+          () => schema.validate('other'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test(r'resolves local $anchor references', () {
+        final schema = JsonSchema.fromJson({
+          r'$defs': {
+            'positiveInteger': {
+              r'$anchor': 'positiveInteger',
+              'type': 'integer',
+              'minimum': 1,
+            },
+          },
+          r'$ref': '#positiveInteger',
+        });
+
+        schema.validate(1);
+        expect(
+          () => schema.validate(0),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('resolves absolute references to in-document resources', () {
+        final rootResource = JsonSchema.fromJson({
+          r'$id': 'https://example.com/root-schema',
+          r'$defs': {
+            'positiveInteger': {
+              'type': 'integer',
+              'minimum': 1,
+            },
+          },
+          r'$ref': r'https://example.com/root-schema#/$defs/positiveInteger',
+        });
+        rootResource.validate(1);
+        expect(
+          () => rootResource.validate(0),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+
+        final embeddedResource = JsonSchema.fromJson({
+          r'$defs': {
+            'positiveInteger': {
+              r'$id': 'urn:example:positive-integer',
+              'type': 'integer',
+              'minimum': 1,
+            },
+          },
+          r'$ref': 'urn:example:positive-integer',
+        });
+        embeddedResource.validate(1);
+        expect(
+          () => embeddedResource.validate(0),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('evaluates if, then, and else branches', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'object',
+          'properties': {
+            'kind': {'type': 'string'},
+            'value': true,
+          },
+          'required': ['kind', 'value'],
+          'if': {
+            'properties': {
+              'kind': {'const': 'text'},
+            },
+            'required': ['kind'],
+          },
+          'then': {
+            'properties': {
+              'value': {'type': 'string', 'minLength': 2},
+            },
+          },
+          'else': {
+            'properties': {
+              'value': {'type': 'integer'},
+            },
+          },
+        });
+
+        schema.validate({'kind': 'text', 'value': 'ok'});
+        schema.validate({'kind': 'count', 'value': 2});
+        expect(
+          () => schema.validate({'kind': 'text', 'value': 2}),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate({'kind': 'count', 'value': '2'}),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('evaluates contains with minimum and maximum matches', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'array',
+          'contains': {'type': 'integer'},
+          'minContains': 2,
+          'maxContains': 2,
+        });
+
+        schema.validate([1, 'two', 3]);
+        expect(
+          () => schema.validate([1, 'two']),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate([1, 2, 3]),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('accepts mathematically integral JSON number counts', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'array',
+          'contains': {'type': 'integer'},
+          'minContains': 1.0,
+          'maxContains': 2.0,
+          'minItems': 1.0,
+          'maxItems': 3.0,
+        });
+
+        schema.validate([1]);
+        schema.validate([1, 2]);
+        expect(
+          () => schema.validate([]),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => schema.validate([1, 2, 3, 4]),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('treats content keywords as annotations', () {
+        final schema = JsonSchema.fromJson({
+          'contentEncoding': 'base64',
+          'contentMediaType': 'application/json',
+          'contentSchema': {
+            'type': 'object',
+            'required': ['value'],
+          },
+        });
+
+        schema.validate('not base64');
+        schema.validate(1);
+        schema.validate(null);
+      });
+
+      test(r'treats pointer $dynamicRef values like $ref', () {
+        final schema = JsonSchema.fromJson({
+          r'$defs': {
+            'value': {'type': 'integer'},
+          },
+          r'$dynamicRef': r'#/$defs/value',
+        });
+
+        schema.validate(1);
+        expect(
+          () => schema.validate('1'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('tracks evaluated properties across allOf', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'object',
+          'allOf': [
+            {
+              'properties': {
+                'name': {'type': 'string'},
+              },
+              'required': ['name'],
+            },
+          ],
+          'unevaluatedProperties': false,
+        });
+
+        schema.validate({'name': 'Ada'});
+        expect(
+          () => schema.validate({'name': 'Ada', 'extra': true}),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('tracks evaluated prefix items', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'array',
+          'prefixItems': [
+            {'type': 'string'},
+          ],
+          'unevaluatedItems': false,
+        });
+
+        schema.validate(['first']);
+        expect(
+          () => schema.validate(['first', 'extra']),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('tracks evaluated item locations independently when nested', () {
+        final schema = JsonSchema.fromJson({
+          'prefixItems': [
+            {
+              'prefixItems': [
+                true,
+                {'type': 'string'},
+              ],
+            },
+          ],
+          'unevaluatedItems': false,
+        });
+
+        schema.validate([
+          ['foo', 'bar'],
+        ]);
+        expect(
+          () => schema.validate([
+            ['foo', 'bar'],
+            'bar',
+          ]),
+          throwsA(
+            isA<JsonSchemaValidationException>().having(
+              (error) => error.path,
+              'path',
+              ['1'],
+            ),
+          ),
+        );
+      });
+
+      test('combines static prefix evaluations without leaking nested state',
+          () {
+        final schema = JsonSchema.fromJson({
+          'prefixItems': [
+            {
+              'prefixItems': [
+                true,
+                {'type': 'string'},
+              ],
+            },
+          ],
+          'allOf': [
+            {
+              'prefixItems': [
+                true,
+                {'type': 'integer'},
+              ],
+            },
+          ],
+          'unevaluatedItems': false,
+        });
+
+        schema.validate([
+          ['nested', 'value'],
+          2,
+        ]);
+        expect(
+          () => schema.validate([
+            ['nested', 'value'],
+            2,
+            'extra',
+          ]),
+          throwsA(
+            isA<JsonSchemaValidationException>().having(
+              (error) => error.path,
+              'path',
+              ['2'],
+            ),
+          ),
+        );
+      });
+
+      test('rejects external and relative references', () {
+        for (final reference in const [
+          'https://example.com/schema.json',
+          'http://127.0.0.1/schema.json',
+          '../schema.json',
+          r'schema.json#/$defs/value',
+        ]) {
+          final schema = JsonSchema.fromJson({r'$ref': reference});
+
+          expect(
+            () => schema.validate('value'),
+            throwsA(
+              isA<JsonSchemaValidationException>().having(
+                (error) => error.message,
+                'message',
+                allOf(contains(r'External $ref'), contains(reference)),
+              ),
+            ),
+          );
+        }
+      });
+
+      test(r'rejects external $dynamicRef values', () {
+        final schema = JsonSchema.fromJson({
+          r'$dynamicRef': 'https://example.com/schema.json#node',
+        });
+
+        expect(
+          () => schema.validate('value'),
+          throwsA(
+            isA<JsonSchemaValidationException>().having(
+              (error) => error.message,
+              'message',
+              contains(r'External $dynamicRef'),
+            ),
+          ),
+        );
+      });
+
+      test('bounds schema nesting depth', () {
+        Map<String, dynamic> schemaJson = {'type': 'string'};
+        for (var i = 0; i < 65; i++) {
+          schemaJson = {
+            'allOf': [schemaJson],
+          };
+        }
+        final schema = JsonSchema.fromJson(schemaJson);
+
+        expect(
+          () => schema.validate('value'),
+          throwsA(
+            isA<JsonSchemaValidationException>().having(
+              (error) => error.message,
+              'message',
+              contains('maximum depth'),
+            ),
+          ),
+        );
+      });
+
+      test('bounds the total number of subschemas', () {
+        final schema = JsonSchema.fromJson({
+          'allOf': List<bool>.filled(1024, true),
+        });
+
+        expect(
+          () => schema.validate('value'),
+          throwsA(
+            isA<JsonSchemaValidationException>().having(
+              (error) => error.message,
+              'message',
+              contains('maximum of 1024 subschemas'),
+            ),
+          ),
+        );
+      });
+    });
+
     group('complex validation from map (legacy support)', () {
       test('validates complex schema from map', () {
         final mapSchema = {"type": "string", "minLength": 3};

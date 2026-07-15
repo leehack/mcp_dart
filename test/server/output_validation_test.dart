@@ -161,6 +161,68 @@ void main() {
       );
     });
 
+    test('MCP 2026 calls enforce full 2020-12 output schemas', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.stable,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      mcpServer.registerTool(
+        'advanced_schema_tool',
+        outputJsonSchema: JsonSchema.fromJson({
+          r'$schema': 'https://json-schema.org/draft/2020-12/schema',
+          r'$defs': {
+            'name': {'type': 'string', 'minLength': 1},
+          },
+          'type': 'object',
+          'properties': {
+            'name': {r'$ref': r'#/$defs/name'},
+          },
+          'required': ['name'],
+          'unevaluatedProperties': false,
+        }),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent({
+            'name': 'Ada',
+            'unexpected': true,
+          });
+        },
+      );
+
+      await mcpServer.connect(transport);
+      transport.receiveMessage(
+        JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final listResponse = transport.sentMessages.last as JsonRpcResponse;
+      final tools = listResponse.result['tools'] as List<dynamic>;
+      final outputSchema =
+          (tools.single as Map<String, dynamic>)['outputSchema'] as Map;
+      expect(outputSchema[r'$defs'], isNotNull);
+      expect(outputSchema['unevaluatedProperties'], isFalse);
+
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 2,
+          params: const CallToolRequest(name: 'advanced_schema_tool').toJson(),
+          meta: _statelessMeta(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(
+        response.error.message,
+        contains('does not match its output schema'),
+      );
+    });
+
     test('stable tools/list omits non-object output schemas', () async {
       mcpServer.registerTool(
         'array_tool',

@@ -9,7 +9,7 @@
 ///
 /// Connect using an HTTP MCP client on http://localhost:3000/mcp
 ///
-/// This intentionally uses the 2025-era initialization flow. MCP 2026-07-28
+/// This intentionally uses the MCP 2025-11-25 initialization flow. MCP 2026-07-28
 /// returns `InputRequiredResult` instead; see `example/mcp_2026_07_28/`.
 library;
 

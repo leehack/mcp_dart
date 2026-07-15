@@ -131,6 +131,37 @@ class MockTransport implements Transport, RequestIdAwareTransport {
   }
 }
 
+class RequestCancellingMockTransport extends MockTransport
+    implements RequestCancellationAwareTransport {
+  final Set<RequestId> activeRequestIds = {};
+  final List<RequestId> cancelledRequestIds = [];
+
+  @override
+  Future<void> sendWithRequestId(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+  }) async {
+    if (message is JsonRpcRequest) {
+      activeRequestIds.add(message.id);
+    }
+    await super.sendWithRequestId(
+      message,
+      relatedRequestId: relatedRequestId,
+    );
+  }
+
+  @override
+  bool canCancelRequest(RequestId requestId) =>
+      activeRequestIds.contains(requestId);
+
+  @override
+  Future<void> cancelRequest(RequestId requestId) async {
+    if (activeRequestIds.remove(requestId)) {
+      cancelledRequestIds.add(requestId);
+    }
+  }
+}
+
 Future<void> waitForSentMessages(
   MockTransport transport,
   int count, {
@@ -2737,6 +2768,106 @@ void main() {
           reason: 'Should have sent a cancellation notification',
         );
       }
+    });
+
+    test('uses request-scoped transport cancellation without a notification',
+        () async {
+      final requestCancellingTransport = RequestCancellingMockTransport();
+      await protocol.connect(requestCancellingTransport);
+
+      final controller = BasicAbortController();
+      final requestFuture = protocol.request<TestResult>(
+        JsonRpcRequest(
+          id: 0,
+          method: 'test/method',
+          meta: buildProtocolRequestMeta(
+            protocolVersion: previewProtocolVersion,
+            clientInfo: const Implementation(
+              name: 'test-client',
+              version: '1.0.0',
+            ),
+            clientCapabilities: const ClientCapabilities(),
+          ),
+        ),
+        (json) => TestResult(value: json['value'] as String),
+        RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+        ),
+      );
+
+      expect(requestCancellingTransport.sentMessages, hasLength(1));
+      final sentRequest =
+          requestCancellingTransport.sentMessages.single as JsonRpcRequest;
+      controller.abort('User cancelled');
+
+      await expectLater(
+        requestFuture,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('User cancelled'),
+          ),
+        ),
+      );
+      expect(requestCancellingTransport.cancelledRequestIds, [sentRequest.id]);
+      expect(
+        requestCancellingTransport.sentMessages
+            .whereType<JsonRpcCancelledNotification>(),
+        isEmpty,
+      );
+    });
+
+    test(
+        'does not fall back to legacy notification when a stateless request is no longer cancellable',
+        () async {
+      final requestCancellingTransport = RequestCancellingMockTransport();
+      await protocol.connect(requestCancellingTransport);
+
+      final controller = BasicAbortController();
+      final requestFuture = protocol.request<TestResult>(
+        JsonRpcRequest(
+          id: 0,
+          method: 'test/method',
+          meta: buildProtocolRequestMeta(
+            protocolVersion: previewProtocolVersion,
+            clientInfo: const Implementation(
+              name: 'test-client',
+              version: '1.0.0',
+            ),
+            clientCapabilities: const ClientCapabilities(),
+          ),
+        ),
+        (json) => TestResult(value: json['value'] as String),
+        RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+        ),
+      );
+
+      expect(requestCancellingTransport.sentMessages, hasLength(1));
+      final sentRequest =
+          requestCancellingTransport.sentMessages.single as JsonRpcRequest;
+      expect(
+        requestCancellingTransport.activeRequestIds.remove(sentRequest.id),
+        isTrue,
+      );
+      controller.abort('User cancelled');
+
+      await expectLater(
+        requestFuture,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('User cancelled'),
+          ),
+        ),
+      );
+      expect(requestCancellingTransport.cancelledRequestIds, isEmpty);
+      expect(requestCancellingTransport.sentMessages, hasLength(1));
+      expect(
+        requestCancellingTransport.sentMessages
+            .whereType<JsonRpcCancelledNotification>(),
+        isEmpty,
+      );
     });
 
     test('does not send cancellation notification for initialize request',

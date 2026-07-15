@@ -800,11 +800,11 @@ server.registerPrompt(
 
 ## Long-running tasks
 
-MCP has two task protocols that are not wire-compatible. Use the 2026 extension
-for stateless peers and retain the 2025 API only when interoperating with a
-legacy peer.
+MCP has two task protocols that are not wire-compatible. Use the MCP 2026-07-28
+extension for stateless peers and retain the MCP 2025-11-25 API only when
+interoperating with a legacy peer.
 
-### MCP 2026 Tasks extension
+### MCP 2026-07-28 Tasks extension
 
 Declare `io.modelcontextprotocol/tasks` on both peers. Task creation is
 server-directed: a normal `tools/call` may return `CreateTaskExtensionResult`
@@ -878,7 +878,8 @@ server.server.setRequestHandler<JsonRpcCallToolRequest>(
 
 A complete service must also handle `tasks/update` and `tasks/cancel` for task
 input and cancellation; successful handlers return
-`TaskExtensionAcknowledgementResult`. The 2026 extension has no `tasks/list`,
+`TaskExtensionAcknowledgementResult`. The MCP 2026-07-28 extension has no
+`tasks/list`,
 `tasks/result`, or client-supplied `task` option. `McpClient.callTool()` polls
 `tasks/get` and returns the final `CallToolResult` transparently.
 
@@ -956,7 +957,7 @@ logger.warn('Rate limit approaching');
 logger.error('Database connection failed');
 ```
 
-MCP 2026 deprecates `notifications/message`. The SDK keeps
+MCP 2026-07-28 deprecates `notifications/message`. The SDK keeps
 `sendLoggingMessage` for compatibility, but new stdio servers should log to
 `stderr` and deployed services should prefer OpenTelemetry. Compatibility
 implementations must advertise the logging capability, honor the request's log

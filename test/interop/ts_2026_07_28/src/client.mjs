@@ -271,7 +271,7 @@ function parseSseFrames(buffer, messages) {
   }
 }
 
-async function collectSseMessages(response, expectedCount, label) {
+async function readSseMessagesKeepingReader(response, expectedCount, label) {
   assert(
     response.headers.get('content-type')?.includes('text/event-stream'),
     `${label} expected SSE response, got ${response.headers.get('content-type')}`,
@@ -284,34 +284,40 @@ async function collectSseMessages(response, expectedCount, label) {
   let buffer = '';
   const deadline = Date.now() + 5000;
 
-  try {
-    while (messages.length < expectedCount) {
-      const remainingMs = Math.max(1, deadline - Date.now());
-      const read = await Promise.race([
-        reader.read(),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`${label} timed out waiting for SSE`)),
-            remainingMs,
-          ),
+  while (messages.length < expectedCount) {
+    const remainingMs = Math.max(1, deadline - Date.now());
+    const read = await Promise.race([
+      reader.read(),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`${label} timed out waiting for SSE`)),
+          remainingMs,
         ),
-      ]);
-      if (read.done) {
-        break;
-      }
-      buffer = parseSseFrames(
-        buffer + decoder.decode(read.value, { stream: true }),
-        messages,
-      );
+      ),
+    ]);
+    if (read.done) {
+      break;
     }
-  } finally {
-    await reader.cancel().catch(() => {});
+    buffer = parseSseFrames(
+      buffer + decoder.decode(read.value, { stream: true }),
+      messages,
+    );
   }
 
   assert(
     messages.length >= expectedCount,
     `${label} expected ${expectedCount} SSE messages, got ${JSON.stringify(messages)}`,
   );
+  return { messages, reader };
+}
+
+async function collectSseMessages(response, expectedCount, label) {
+  const { messages, reader } = await readSseMessagesKeepingReader(
+    response,
+    expectedCount,
+    label,
+  );
+  await reader.cancel().catch(() => {});
   return messages;
 }
 
@@ -381,18 +387,26 @@ async function assertStreamCancellation(urlValue, client) {
     `stream cancellation expected HTTP 200, got ${response.status}`,
   );
 
-  await collectSseMessages(response, 1, 'stream cancellation startup');
-  controller.abort();
+  const { reader } = await readSseMessagesKeepingReader(
+    response,
+    1,
+    'stream cancellation startup',
+  );
+  try {
+    controller.abort();
 
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    const after = await cancellationCount(client);
-    if (after > before) {
-      return;
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const after = await cancellationCount(client);
+      if (after > before) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    throw new Error('AbortController cancellation was not observed by the Dart server');
+  } finally {
+    await reader.cancel().catch(() => {});
   }
-  throw new Error('stream cancellation was not observed by the Dart server');
 }
 
 async function assertProgressNotifications(client) {

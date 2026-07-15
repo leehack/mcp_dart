@@ -44,7 +44,7 @@ dart run example/streamable_https/client_streamable_https.dart
 and
 [client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/streamable_https/client_streamable_https.dart).
 
-## MCP 2025 and legacy compatibility
+## MCP 2025-11-25 and earlier compatibility
 
 The
 [interactive task client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/simple_task_interactive_client.dart)
@@ -68,12 +68,14 @@ intentionally demonstrate retained initialization-era behavior.
 
 ## Validation
 
-CI runs credential-free process smokes for stdio, strict MCP 2026, a Streamable
-HTTP tool flow against the high-level server, and representative legacy and MCP
-Apps paths. It tests and compiles the Anthropic, Gemini, and fetch packages,
-builds Flutter web, and builds the Jaspr production bundle. Live provider and
-OAuth calls require credentials or external services; interactive browser and
-native-device sessions remain manual.
+CI runs credential-free process smokes for stdio, strict MCP 2026-07-28, a
+Streamable HTTP tool flow against the high-level server, and representative
+legacy and MCP Apps paths. It tests and compiles the Anthropic, Gemini, and
+fetch packages, builds the Jaspr production bundle, and runs the Flutter Web
+service integration in Chrome through repeated tool requests, RPC-error
+recovery, and reconnect. Flutter widget tests cover the UI separately.
+Live provider and OAuth calls require credentials or external services; Jaspr
+browser and native-device sessions remain manual.
 
 See the complete
 [examples guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/examples.md)

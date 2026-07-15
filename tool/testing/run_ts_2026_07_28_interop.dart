@@ -104,7 +104,7 @@ Future<void> _runTsClientAgainstDartServer(
 
     if (clientExit != 0) {
       throw StateError(
-        'TypeScript 2026-07-28 client exited with $clientExit',
+        'TypeScript MCP 2026-07-28 client exited with $clientExit',
       );
     }
   } finally {
@@ -240,6 +240,71 @@ Future<void> _exerciseDartClient(String url) async {
       throw StateError('Unexpected ts_echo result: $text');
     }
 
+    final cancellationController = BasicAbortController();
+    final cancellationStreamStarted = Completer<void>();
+    final cancellationRequest = client.callTool(
+      const CallToolRequest(
+        name: 'ts_stream_cancellation',
+        arguments: {},
+      ),
+      options: RequestOptions(
+        signal: cancellationController.signal,
+        timeoutEnabled: false,
+        onprogress: (_) {
+          if (!cancellationStreamStarted.isCompleted) {
+            cancellationStreamStarted.complete();
+          }
+        },
+      ),
+    );
+    await cancellationStreamStarted.future.timeout(
+      const Duration(seconds: 10),
+    );
+    cancellationController.abort('Dart cancelled TS response stream');
+    try {
+      await cancellationRequest.timeout(const Duration(seconds: 10));
+      throw StateError('TS cancellation request unexpectedly completed');
+    } on Object catch (error) {
+      if (!error.toString().contains('Dart cancelled TS response stream')) {
+        rethrow;
+      }
+    }
+
+    var observedStreamCancellations = 0;
+    for (var attempt = 0;
+        attempt < 10 && observedStreamCancellations == 0;
+        attempt++) {
+      final status = await client
+          .callTool(
+            const CallToolRequest(
+              name: 'ts_stream_cancellation_status',
+              arguments: {},
+            ),
+          )
+          .timeout(const Duration(seconds: 10));
+      observedStreamCancellations = int.parse(
+        _firstText(status, 'ts_stream_cancellation_status'),
+      );
+    }
+    if (observedStreamCancellations == 0) {
+      throw StateError(
+        'TypeScript server did not observe the Dart response-stream abort',
+      );
+    }
+
+    const recoveryMessage = 'from Dart after stream cancellation';
+    final recovery = await client
+        .callTool(
+          const CallToolRequest(
+            name: 'ts_echo',
+            arguments: {'message': recoveryMessage},
+          ),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (_firstText(recovery, 'ts_echo recovery') != recoveryMessage) {
+      throw StateError('Dart client did not recover after TS cancellation');
+    }
+
     final elicitation = await client
         .callTool(
           const CallToolRequest(name: 'ts_input_required_elicitation'),
@@ -263,6 +328,8 @@ Future<void> _exerciseDartClient(String url) async {
             'echo': text,
             'headerRefresh': headerText,
             'inputRequired': elicitationText,
+            'streamCancellation': observedStreamCancellations,
+            'postCancellationRecovery': recoveryMessage,
           })}',
     );
   } finally {
