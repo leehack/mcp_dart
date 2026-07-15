@@ -1084,6 +1084,43 @@ void main() {
         }
       });
 
+      test('reports mismatched tool IDs in sorted order', () {
+        expect(
+          () => const CreateMessageRequestParams(
+            messages: [
+              SamplingMessage(
+                role: SamplingMessageRole.assistant,
+                content: [toolUseB, toolUseA],
+              ),
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: [
+                  SamplingToolResultContent(
+                    toolUseId: 'call-z',
+                    content: [TextContent(text: 'z')],
+                  ),
+                  SamplingToolResultContent(
+                    toolUseId: 'call-c',
+                    content: [TextContent(text: 'c')],
+                  ),
+                ],
+              ),
+            ],
+            maxTokens: 100,
+          ).toJson(),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.message,
+              'message',
+              contains(
+                'missing: [call-a, call-b], '
+                'unexpected: [call-c, call-z]',
+              ),
+            ),
+          ),
+        );
+      });
+
       test('rejects a tool use without an immediate result message', () {
         expect(
           () => const CreateMessageRequestParams(

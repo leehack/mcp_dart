@@ -190,13 +190,14 @@ void _validateSamplingMessageSequence(
       fail('tool results at message ${index + 1} contain duplicate IDs');
     }
 
-    final missing = useIds.toSet().difference(resultIds.toSet());
-    final unexpected = resultIds.toSet().difference(useIds.toSet());
+    final missing = useIds.toSet().difference(resultIds.toSet()).toList()
+      ..sort();
+    final unexpected = resultIds.toSet().difference(useIds.toSet()).toList()
+      ..sort();
     if (missing.isNotEmpty || unexpected.isNotEmpty) {
       fail(
         'tool results at message ${index + 1} must match the preceding tool '
-        'use IDs exactly (missing: ${missing.toList()}, unexpected: '
-        '${unexpected.toList()})',
+        'use IDs exactly (missing: $missing, unexpected: $unexpected)',
       );
     }
   }
