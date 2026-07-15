@@ -2817,6 +2817,59 @@ void main() {
       );
     });
 
+    test(
+        'does not fall back to legacy notification when a stateless request is no longer cancellable',
+        () async {
+      final requestCancellingTransport = RequestCancellingMockTransport();
+      await protocol.connect(requestCancellingTransport);
+
+      final controller = BasicAbortController();
+      final requestFuture = protocol.request<TestResult>(
+        JsonRpcRequest(
+          id: 0,
+          method: 'test/method',
+          meta: buildProtocolRequestMeta(
+            protocolVersion: previewProtocolVersion,
+            clientInfo: const Implementation(
+              name: 'test-client',
+              version: '1.0.0',
+            ),
+            clientCapabilities: const ClientCapabilities(),
+          ),
+        ),
+        (json) => TestResult(value: json['value'] as String),
+        RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+        ),
+      );
+
+      expect(requestCancellingTransport.sentMessages, hasLength(1));
+      final sentRequest =
+          requestCancellingTransport.sentMessages.single as JsonRpcRequest;
+      expect(
+        requestCancellingTransport.activeRequestIds.remove(sentRequest.id),
+        isTrue,
+      );
+      controller.abort('User cancelled');
+
+      await expectLater(
+        requestFuture,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('User cancelled'),
+          ),
+        ),
+      );
+      expect(requestCancellingTransport.cancelledRequestIds, isEmpty);
+      expect(requestCancellingTransport.sentMessages, hasLength(1));
+      expect(
+        requestCancellingTransport.sentMessages
+            .whereType<JsonRpcCancelledNotification>(),
+        isEmpty,
+      );
+    });
+
     test('does not send cancellation notification for initialize request',
         () async {
       await protocol.connect(transport);

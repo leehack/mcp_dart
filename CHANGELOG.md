@@ -8,9 +8,8 @@ MCP `2025-11-25` and earlier initialization compatibility.
 - Made `McpProtocol.stable` the default dual-era profile: prefer stateless
   `server/discover`, then fall back to legacy initialization. Use
   `McpProtocol.require2026` to reject legacy peers.
-- Removed `McpProtocol.preview2026`; added clearer preview, stable, and default
-  version constants, plus a separate initialization-version constant, while
-  retaining `latestProtocolVersion` as a deprecated stable-version alias.
+- Added clearer preview, stable, default, and initialization-version constants,
+  while retaining `latestProtocolVersion` as a deprecated stable-version alias.
 - Added and aligned MCP 2026-07-28 APIs for `input_required`, deprecated
   request-scoped logging compatibility, subscriptions, cache metadata,
   arbitrary structured tool output, routing headers, and the Tasks extension.
@@ -20,8 +19,37 @@ MCP `2025-11-25` and earlier initialization compatibility.
 - Upgraded built-in validation to JSON Schema Draft 2020-12 with declared
   Draft 7 compatibility and same-document references; unsafe external
   references remain blocked.
-- Raised the minimum Dart SDK to 3.5 and retained the web/WASM-safe default
-  export path alongside Dart IO exports.
+- Retained the web/WASM-safe default export path alongside Dart IO exports.
+
+### Breaking and compatibility notes
+
+- Removed `McpProtocol.preview2026`; `McpProtocol.stable` now provides its
+  dual-era fallback behavior. Use `McpProtocol.legacy` for the former
+  initialization-only default or `McpProtocol.require2026` for strict MCP
+  2026-07-28. The minimum Dart SDK is now 3.5.
+- Renamed `draftProtocolVersion2026_07_28` to `previewProtocolVersion`,
+  `latestDraftProtocolVersion` to `defaultProtocolVersion`, and
+  `stableProtocolVersion2025_11_25` to `latestInitializationProtocolVersion`
+  (or `stableProtocolVersion`). Replace `supportedProtocolVersionsWithDraft`
+  with `supportedProtocolVersions`; use `legacyProtocolVersions` for the former
+  legacy-only list.
+- Added cancellation members to `StartSseOptions`, and
+  `StreamableHttpClientTransport` now implements the new
+  `RequestCancellationAwareTransport` interface. Classes that directly
+  `implements` either concrete type must add the new members; normal callers,
+  subclasses, and custom `Transport` implementations remain source-compatible.
+- `CreateMessageRequest` now rejects invalid sampling tool-use/result roles,
+  ordering, and ID matches during parsing and serialization.
+- JSON Schema validation now follows Draft 2020-12 by default and declared
+  Draft 7, so outcomes and errors may differ. Unsupported dialects, custom
+  vocabularies, unresolved external references, schemas deeper than 64 levels,
+  and more than 1,024 subschemas are rejected. `JsonSchema.fromJson()` may
+  return `JsonAny`; the package now depends on `json_schema ^5.2.2`.
+- MCP 2026-07-28 cancellation closes only the matching Streamable HTTP POST
+  response stream, while MCP 2025-11-25 retains `notifications/cancelled`.
+- `StreamableHttpClientTransport` now rejects duplicate active stateless request
+  IDs, ends POST SSE streams at their terminal response, ignores trailing events
+  on that response, and interrupts pending OAuth/HTTP work when closed.
 
 ### Security
 

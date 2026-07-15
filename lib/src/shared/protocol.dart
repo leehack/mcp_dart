@@ -2079,6 +2079,10 @@ abstract class Protocol {
               ? activeTransport as RequestCancellationAwareTransport
               : null;
       if (usesStatelessRequestShape && cancellationAwareTransport != null) {
+        // MCP 2026-07-28 cancels the matching HTTP request stream and removes
+        // protocol-level `notifications/cancelled`. If the transport no longer
+        // tracks this request, it has already settled from the transport's
+        // perspective; do not fall back to the removed legacy notification.
         if (cancellationAwareTransport.canCancelRequest(messageId)) {
           cancellationAwareTransport.cancelRequest(messageId).catchError((e) {
             _onerror(

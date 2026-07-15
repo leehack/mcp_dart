@@ -66,7 +66,12 @@ abstract class RequestIdAwareTransport {
 /// POST response stream instead of sending `notifications/cancelled`. Other
 /// transports can omit it and retain protocol-level cancellation messages.
 abstract class RequestCancellationAwareTransport {
-  /// Whether [requestId] currently identifies a cancellable outgoing request.
+  /// Whether [requestId] currently identifies an active, cancellable outgoing
+  /// request.
+  ///
+  /// Returning false means the request is no longer active on this transport.
+  /// Callers must not substitute legacy protocol-level cancellation for
+  /// stateless MCP profiles.
   bool canCancelRequest(RequestId requestId);
 
   /// Cancels only the outgoing request identified by [requestId].
