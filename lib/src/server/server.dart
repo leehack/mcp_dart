@@ -5,6 +5,7 @@ import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
+import 'package:mcp_dart/src/types/validation.dart' show readOptionalJsonObject;
 
 final _logger = Logger("mcp_dart.server");
 
@@ -209,11 +210,12 @@ class Server extends Protocol {
       );
     }
 
+    final hasClientInfo = meta?.containsKey(McpMetaKey.clientInfo) == true;
     final clientInfo = meta?[McpMetaKey.clientInfo];
-    if (clientInfo is! Map) {
+    if (hasClientInfo && clientInfo is! Map) {
       return McpError(
         ErrorCode.invalidParams.value,
-        'Missing required request metadata: ${McpMetaKey.clientInfo}',
+        'Invalid stateless request metadata: ${McpMetaKey.clientInfo}',
       );
     }
 
@@ -226,7 +228,9 @@ class Server extends Protocol {
     }
 
     try {
-      Implementation.fromJson(clientInfo.cast<String, dynamic>());
+      if (hasClientInfo) {
+        Implementation.fromJson(clientInfo!.cast<String, dynamic>());
+      }
       ClientCapabilities.fromJson(clientCapabilities.cast<String, dynamic>());
     } catch (error) {
       return McpError(
@@ -937,6 +941,15 @@ class Server extends Protocol {
             : CacheScope.private,
       );
     }
+
+    final resultMeta = <String, dynamic>{
+      ...?readOptionalJsonObject(json['_meta'], 'Result._meta'),
+    };
+    // Handler-authored metadata intentionally wins, including an explicit null
+    // that configures this result as anonymous. Receivers treat malformed
+    // optional identity as anonymous rather than using it for behavior.
+    resultMeta.putIfAbsent(McpMetaKey.serverInfo, _serverInfo.toJson);
+    json['_meta'] = resultMeta;
 
     return json;
   }

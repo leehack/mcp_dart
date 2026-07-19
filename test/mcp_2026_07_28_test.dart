@@ -101,6 +101,8 @@ class DiscoveringClientTransport extends Transport
     this.capabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
+    this.discoverServerInfo =
+        const Implementation(name: 'server', version: '1.0.0'),
     this.toolsListResult = const {
       'resultType': resultTypeComplete,
       'tools': [],
@@ -114,6 +116,7 @@ class DiscoveringClientTransport extends Transport
   final List<String> unsupportedDiscoverProtocolVersions;
   final Object? unsupportedDiscoverData;
   final ServerCapabilities capabilities;
+  final Implementation? discoverServerInfo;
   final Map<String, dynamic> toolsListResult;
   final void Function(JsonRpcRequest request)? onRequest;
   final List<JsonRpcMessage> sentMessages = [];
@@ -162,7 +165,7 @@ class DiscoveringClientTransport extends Transport
           result: DiscoverResult(
             supportedVersions: discoverVersions,
             capabilities: capabilities,
-            serverInfo: const Implementation(name: 'server', version: '1.0.0'),
+            serverInfo: discoverServerInfo,
             ttlMs: 0,
             cacheScope: CacheScope.private,
           ).toJson(),
@@ -462,6 +465,54 @@ void main() {
       });
       expect(meta[McpMetaKey.clientCapabilities], <String, dynamic>{});
       expect(meta[McpMetaKey.logLevel], 'debug');
+    });
+
+    test('builds stateless request metadata without client identity', () {
+      final meta = buildProtocolRequestMeta(
+        protocolVersion: previewProtocolVersion,
+        clientCapabilities: const ClientCapabilities(),
+      );
+
+      expect(meta[McpMetaKey.protocolVersion], previewProtocolVersion);
+      expect(meta[McpMetaKey.clientCapabilities], <String, dynamic>{});
+      expect(meta, isNot(contains(McpMetaKey.clientInfo)));
+    });
+
+    test('response serialization preserves and merges result metadata', () {
+      const response = JsonRpcResponse(
+        id: 1,
+        result: {
+          '_meta': {
+            'com.example/result': true,
+            'com.example/shared': 'result',
+          },
+        },
+        meta: {
+          'com.example/response': true,
+          'com.example/shared': 'response',
+        },
+      );
+
+      final result = response.toJson()['result'] as Map<String, dynamic>;
+      expect(result['_meta'], {
+        'com.example/result': true,
+        'com.example/response': true,
+        'com.example/shared': 'response',
+      });
+
+      const emptyResponseMeta = JsonRpcResponse(id: 2, result: {}, meta: {});
+      expect(
+        emptyResponseMeta.toJson()['result'],
+        containsPair('_meta', <String, dynamic>{}),
+      );
+      const emptyResultMeta = JsonRpcResponse(
+        id: 3,
+        result: {'_meta': <String, dynamic>{}},
+      );
+      expect(
+        emptyResultMeta.toJson()['result'],
+        containsPair('_meta', <String, dynamic>{}),
+      );
     });
 
     test('rejects invalid 2026 request metadata keys during construction', () {
@@ -1217,15 +1268,86 @@ void main() {
         [previewProtocolVersion],
       );
       expect(resultJson['capabilities'], {'tools': <String, dynamic>{}});
+      expect(resultJson, isNot(contains('serverInfo')));
+      expect(resultJson['_meta'], {
+        McpMetaKey.serverInfo: {
+          'name': 'server',
+          'version': '1.0.0',
+        },
+      });
       expect(resultJson['ttlMs'], 1000);
       expect(resultJson['cacheScope'], CacheScope.public);
       final parsedResult = DiscoverResult.fromJson(resultJson);
+      expect(parsedResult.serverInfo?.name, 'server');
       expect(
         parsedResult.instructions,
         'Use the tools.',
       );
       expect(parsedResult.ttlMs, 1000);
       expect(parsedResult.cacheScope, CacheScope.public);
+
+      final identityFreeResult = DiscoverResult.fromJson({
+        'resultType': resultTypeComplete,
+        'supportedVersions': [previewProtocolVersion],
+        'capabilities': <String, dynamic>{},
+      });
+      expect(identityFreeResult.serverInfo, isNull);
+
+      final malformedIdentityResult = DiscoverResult.fromJson({
+        'resultType': resultTypeComplete,
+        'supportedVersions': [previewProtocolVersion],
+        'capabilities': <String, dynamic>{},
+        '_meta': {
+          McpMetaKey.serverInfo: 'malformed',
+          'com.example/trace': 'trace-1',
+        },
+      });
+      expect(malformedIdentityResult.serverInfo, isNull);
+      expect(malformedIdentityResult.toJson()['_meta'], {
+        'com.example/trace': 'trace-1',
+      });
+
+      final malformedMetadataDoesNotUseLegacyBody = DiscoverResult.fromJson({
+        'resultType': resultTypeComplete,
+        'supportedVersions': [previewProtocolVersion],
+        'capabilities': <String, dynamic>{},
+        '_meta': {McpMetaKey.serverInfo: 'malformed'},
+        'serverInfo': {'name': 'legacy-server', 'version': '1.0.0'},
+      });
+      expect(malformedMetadataDoesNotUseLegacyBody.serverInfo, isNull);
+
+      final explicitEmptyMeta = const DiscoverResult(
+        supportedVersions: [previewProtocolVersion],
+        capabilities: ServerCapabilities(),
+        meta: <String, dynamic>{},
+      ).toJson();
+      expect(explicitEmptyMeta, containsPair('_meta', <String, dynamic>{}));
+
+      // Temporary compatibility for the pinned TypeScript and Python beta
+      // fixtures. Remove once corrected SDK releases are pinned.
+      final legacyIdentity = DiscoverResult.fromJson({
+        'resultType': resultTypeComplete,
+        'supportedVersions': [previewProtocolVersion],
+        'capabilities': <String, dynamic>{},
+        'serverInfo': {'name': 'legacy-server', 'version': '1.0.0'},
+      });
+      expect(legacyIdentity.serverInfo?.name, 'legacy-server');
+
+      final handlerIdentity = const DiscoverResult(
+        supportedVersions: [previewProtocolVersion],
+        capabilities: ServerCapabilities(),
+        serverInfo: Implementation(name: 'configured', version: '1.0.0'),
+        meta: {
+          McpMetaKey.serverInfo: {
+            'name': 'handler',
+            'version': '2.0.0',
+          },
+        },
+      ).toJson();
+      expect(handlerIdentity['_meta'][McpMetaKey.serverInfo], {
+        'name': 'handler',
+        'version': '2.0.0',
+      });
     });
 
     test('stateless metadata omits legacy task capabilities', () {
@@ -1317,10 +1439,6 @@ void main() {
             }),
         () => DiscoverResult.fromJson({
               ...result,
-              'serverInfo': 'bad',
-            }),
-        () => DiscoverResult.fromJson({
-              ...result,
               'instructions': 1,
             }),
         () => DiscoverResult.fromJson({
@@ -1340,6 +1458,11 @@ void main() {
       ]) {
         expect(parse, throwsFormatException);
       }
+
+      expect(
+        DiscoverResult.fromJson({...result, 'serverInfo': 'bad'}).serverInfo,
+        isNull,
+      );
     });
 
     test('requires complete resultType on server/discover results', () {
@@ -2529,7 +2652,12 @@ void main() {
               ),
             ),
           );
-          return const EmptyResult();
+          return const EmptyResult(
+            meta: {
+              'com.example/trace': 'subscription-trace',
+              McpMetaKey.subscriptionId: 'handler-value',
+            },
+          );
         },
         (id, params, meta) => JsonRpcSubscriptionsListenRequest(
           id: id,
@@ -2572,8 +2700,12 @@ void main() {
       );
       final response = transport.sentMessages.last as JsonRpcResponse;
       expect(response.result['_meta'], {
+        'com.example/trace': 'subscription-trace',
         McpMetaKey.subscriptionId: 'sub-1',
+        McpMetaKey.serverInfo: {'name': 'server', 'version': '1.0.0'},
       });
+      final wireResult = response.toJson()['result'] as Map<String, dynamic>;
+      expect(wireResult['_meta'], response.result['_meta']);
     });
 
     test('server rejects subscription notifications before acknowledgment',
@@ -2792,6 +2924,14 @@ void main() {
       expect(tools['ttlMs'], 300000);
       expect(tools['cacheScope'], CacheScope.public);
 
+      for (final response in responses) {
+        expect(response.result['_meta'], {
+          'io.modelcontextprotocol/serverInfo': {
+            'name': 'server',
+            'version': '1.0.0',
+          },
+        });
+      }
       for (final response in responses.skip(1)) {
         expect(response.result['resultType'], resultTypeComplete);
         expect(response.result['ttlMs'], 0);
@@ -2945,8 +3085,13 @@ void main() {
       expect(responses[0].result['taskId'], 'task-1');
       expect(responses[0].result['ttlMs'], 60000);
       expect(responses[0].result, isNot(contains('ttl')));
-      expect(responses[1].result, {'resultType': resultTypeComplete});
-      expect(responses[2].result, {'resultType': resultTypeComplete});
+      for (final response in responses.skip(1)) {
+        expect(response.result['resultType'], resultTypeComplete);
+        expect(response.result['_meta'][McpMetaKey.serverInfo], {
+          'name': 'server',
+          'version': '1.0.0',
+        });
+      }
     });
 
     test('server task store uses task extension results for stateless requests',
@@ -3021,7 +3166,11 @@ void main() {
       expect(responses[0].result['result']['content'], [
         {'type': 'text', 'text': 'done'},
       ]);
-      expect(responses[1].result, {'resultType': resultTypeComplete});
+      expect(responses[1].result['resultType'], resultTypeComplete);
+      expect(responses[1].result['_meta'][McpMetaKey.serverInfo], {
+        'name': 'server',
+        'version': '1.0.0',
+      });
       expect(
         (await store.getTask(workingTask.taskId))?.status,
         TaskStatus.cancelled,
@@ -4340,7 +4489,11 @@ void main() {
         response.result['supportedVersions'],
         contains(previewProtocolVersion),
       );
-      expect(response.result['serverInfo']['name'], 'server');
+      expect(response.result, isNot(contains('serverInfo')));
+      expect(response.result['_meta'][McpMetaKey.serverInfo], {
+        'name': 'server',
+        'version': '1.0.0',
+      });
       expect(response.result['instructions'], 'Discovery instructions.');
     });
 
@@ -4384,10 +4537,184 @@ void main() {
       final response = transport.sentMessages.single as JsonRpcResponse;
       final tools = response.result['tools'] as List<dynamic>;
       expect(tools.single['name'], 'echo');
+      expect(response.result['_meta'], {
+        McpMetaKey.serverInfo: {
+          'name': 'server',
+          'version': '1.0.0',
+        },
+      });
       expect(receivedProtocolVersion, previewProtocolVersion);
       expect(receivedClientInfo?.name, 'client');
       expect(receivedClientInfo?.version, '1.0.0');
       expect(receivedClientCapabilities?.toJson(), isEmpty);
+    });
+
+    test('server preserves handler result metadata and identity', () async {
+      final server = Server(
+        const Implementation(name: 'configured', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.require2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcListToolsRequest>(
+        Method.toolsList,
+        (request, extra) async => const ListToolsResult(
+          tools: [],
+          meta: {
+            'com.example/trace': 'trace-1',
+            McpMetaKey.serverInfo: {
+              'name': 'handler',
+              'version': '2.0.0',
+            },
+          },
+        ),
+        (id, params, meta) => JsonRpcListToolsRequest(
+          id: id,
+          params: params,
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(JsonRpcListToolsRequest(id: 1, meta: _clientMeta()));
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['_meta'], {
+        'com.example/trace': 'trace-1',
+        McpMetaKey.serverInfo: {
+          'name': 'handler',
+          'version': '2.0.0',
+        },
+      });
+      final wireResult = response.toJson()['result'] as Map<String, dynamic>;
+      expect(wireResult['_meta'], response.result['_meta']);
+      await server.close();
+    });
+
+    test('legacy initialize keeps body identity without result metadata',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(protocol: McpProtocol.legacy),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcInitializeRequest(
+          id: 1,
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestInitializationProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'client', version: '1.0.0'),
+          ),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['serverInfo'], {
+        'name': 'server',
+        'version': '1.0.0',
+      });
+      expect(response.result, isNot(contains('_meta')));
+      final wireResult = response.toJson()['result'] as Map<String, dynamic>;
+      expect(wireResult, isNot(contains('_meta')));
+      await server.close();
+    });
+
+    test('server accepts stateless requests without client identity', () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.require2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      RequestHandlerExtra? receivedExtra;
+      server.setRequestHandler<JsonRpcListToolsRequest>(
+        Method.toolsList,
+        (request, extra) async {
+          receivedExtra = extra;
+          return const ListToolsResult(tools: []);
+        },
+        (id, params, meta) => JsonRpcListToolsRequest(
+          id: id,
+          params: params,
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        const JsonRpcListToolsRequest(
+          id: 'anonymous-client',
+          meta: {
+            McpMetaKey.protocolVersion: previewProtocolVersion,
+            McpMetaKey.clientCapabilities: <String, dynamic>{},
+          },
+        ),
+      );
+      await _pump();
+
+      expect(transport.sentMessages.single, isA<JsonRpcResponse>());
+      expect(receivedExtra?.clientInfo, isNull);
+      expect(receivedExtra?.clientCapabilities?.toJson(), isEmpty);
+      await server.close();
+    });
+
+    test('server rejects explicitly invalid stateless client identity metadata',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(protocol: McpProtocol.require2026),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      for (final clientInfo in <Object?>[
+        null,
+        'not-an-object',
+        <String, dynamic>{'name': 'missing-version'},
+      ]) {
+        transport.receive(
+          JsonRpcListToolsRequest(
+            id: 'invalid-${clientInfo.runtimeType}',
+            meta: {
+              McpMetaKey.protocolVersion: previewProtocolVersion,
+              McpMetaKey.clientCapabilities: <String, dynamic>{},
+              McpMetaKey.clientInfo: clientInfo,
+            },
+          ),
+        );
+        await _pump();
+
+        final response = transport.sentMessages.single as JsonRpcError;
+        expect(response.error.code, ErrorCode.invalidParams.value);
+        transport.sentMessages.clear();
+      }
+
+      transport.receive(
+        const JsonRpcListToolsRequest(
+          id: 'missing-capabilities',
+          meta: {
+            McpMetaKey.protocolVersion: previewProtocolVersion,
+          },
+        ),
+      );
+      await _pump();
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, contains(McpMetaKey.clientCapabilities));
+      await server.close();
     });
 
     test('stateless handlers receive request-local client metadata', () async {
@@ -4730,11 +5057,7 @@ void main() {
           McpMetaKey.protocolVersion: previewProtocolVersion,
           McpMetaKey.clientCapabilities: <String, dynamic>{},
         }),
-        isA<McpError>().having(
-          (error) => error.message,
-          'message',
-          contains(McpMetaKey.clientInfo),
-        ),
+        isNull,
       );
       expect(
         validateToolRequest({
@@ -5058,6 +5381,19 @@ void main() {
         'version': '1.0.0',
       });
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
+    });
+
+    test('client discovery succeeds without server identity', () async {
+      final transport = DiscoveringClientTransport(discoverServerInfo: null);
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(protocol: McpProtocol.require2026),
+      );
+
+      await client.connect(transport);
+
+      expect(client.getProtocolVersion(), previewProtocolVersion);
+      expect(client.getServerVersion(), isNull);
     });
 
     test('stateless client rejects legacy task request options before send',

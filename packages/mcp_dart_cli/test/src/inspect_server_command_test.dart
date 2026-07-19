@@ -140,6 +140,54 @@ void main() {
   });
 
   group('McpServerInspector', () {
+    test(
+      'stateless fixture stamps identity on every successful result',
+      () async {
+        final process = await Process.start(
+          Platform.resolvedExecutable,
+          <String>[
+            'run',
+            'test/fixtures/stateless_inventory_server.dart',
+          ],
+        );
+        final responsesFuture =
+            process.stdout
+                .transform(utf8.decoder)
+                .transform(const LineSplitter())
+                .take(2)
+                .map((line) => jsonDecode(line) as Map<String, dynamic>)
+                .toList();
+
+        for (final request in <Map<String, dynamic>>[
+          <String, dynamic>{
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': Method.serverDiscover,
+          },
+          <String, dynamic>{
+            'jsonrpc': '2.0',
+            'id': 2,
+            'method': Method.toolsList,
+          },
+        ]) {
+          process.stdin.writeln(jsonEncode(request));
+        }
+        await process.stdin.close();
+
+        final responses = await responsesFuture;
+        expect(await process.exitCode, isZero);
+        expect(responses, hasLength(2));
+        for (final response in responses) {
+          final result = (response['result'] as Map).cast<String, dynamic>();
+          final meta = (result['_meta'] as Map).cast<String, dynamic>();
+          expect(meta[McpMetaKey.serverInfo], <String, dynamic>{
+            'name': 'stateless-inventory-fixture',
+            'version': '1.0.0',
+          });
+        }
+      },
+    );
+
     test('normalizes and orders path issuer metadata probes like the SDK', () {
       final inspector = McpServerInspector(logger: MockLogger());
 
@@ -231,6 +279,29 @@ void main() {
       expect(checksById['base.ping']?.message, contains('no probe was sent'));
       expect(checksById['logging.request-scoped']?.status, 'info');
       expect(report.inventory, isNot(contains('toolCalls')));
+    });
+
+    test('accepts anonymous 2026 server identity', () async {
+      final report = await McpServerInspector(logger: MockLogger()).inspect(
+        const ServerInspectionTarget(
+          command: 'dart',
+          serverArgs: <String>[
+            'run',
+            'test/fixtures/stateless_inventory_server.dart',
+            '--anonymous',
+          ],
+          url: null,
+          env: <String, String>{},
+        ),
+      );
+
+      expect(report.passed, isTrue);
+      expect(report.metadata, isNot(contains('serverInfo')));
+      final serverInfoCheck = report.checks.singleWhere(
+        (check) => check.id == 'lifecycle.server-info',
+      );
+      expect(serverInfoCheck.status, 'info');
+      expect(serverInfoCheck.message, contains('optional'));
     });
 
     test(

@@ -63,8 +63,12 @@ and `--spec-version 2026-07-28`, and writes per-run artifacts under
 Expected failures live in `2026_07_28_expected_failures.txt`. When a scenario is
 fixed, remove it from that file so the baseline remains useful.
 
-As of `@modelcontextprotocol/conformance@0.2.0-alpha.9`, the full MCP 2026-07-28
-server suite has no expected failures against the Dart fixture.
+As of `@modelcontextprotocol/conformance@0.2.0-alpha.9`, the
+`server-stateless` scenario is expected to fail because that published referee
+predates spec PR #3002: it still requires request `clientInfo` and body
+`DiscoverResult.serverInfo`. The checked-in expected-failure entry must be
+removed when a published conformance package includes PR #403; latest-main
+verification is run separately against the final metadata shape.
 
 Run the current client baseline from the repository root:
 

@@ -98,12 +98,21 @@ dart run test/conformance/run_2026_07_28_server_conformance.dart \
 dart run test/conformance/run_2026_07_28_client_conformance.dart \
   --timeout-seconds 90
 cd test/interop/ts_2026_07_28 && npm ci && cd ../../..
-dart run tool/testing/run_ts_2026_07_28_interop.dart
+dart run tool/testing/run_ts_2026_07_28_interop.dart \
+  --direction=dart-to-ts
+dart run tool/testing/run_ts_2026_07_28_interop.dart \
+  --direction=ts-to-dart \
+  --expect-published-ts-client-gap
 python3 -m venv .dart_tool/python-2026-interop
 .dart_tool/python-2026-interop/bin/python -m pip install \
   -r test/interop/python_2026_07_28/requirements.txt
 MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
-  dart run tool/testing/run_python_2026_07_28_interop.dart
+  dart run tool/testing/run_python_2026_07_28_interop.dart \
+  --direction=dart-to-python
+MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
+  dart run tool/testing/run_python_2026_07_28_interop.dart \
+  --direction=python-to-dart \
+  --expect-published-python-client-gap
 dart run tool/testing/run_browser_2026_07_28_interop.dart
 dart run tool/testing/run_flutter_web_example_e2e.dart
 dart pub publish --dry-run

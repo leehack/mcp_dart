@@ -275,6 +275,12 @@ class McpServerInspector {
       if (serverInfo != null) {
         metadata['serverInfo'] = serverInfo.toJson();
         _checkImplementation(checks, serverInfo);
+      } else if (_usesStatelessProtocol(client)) {
+        checks.info(
+          'lifecycle.server-info',
+          'Server did not expose usable optional stateless serverInfo and is '
+              'anonymous.',
+        );
       } else {
         checks.fail(
           'lifecycle.server-info',

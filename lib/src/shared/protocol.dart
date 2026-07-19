@@ -1665,10 +1665,23 @@ abstract class Protocol {
           return;
         }
 
+        final serializedResult = serializeIncomingResult(request, result);
+        final serializedMeta = readOptionalJsonObject(
+          serializedResult['_meta'],
+          'Result._meta',
+        );
+        Map<String, dynamic>? responseMeta;
+        if (result.meta != null || serializedResult.containsKey('_meta')) {
+          responseMeta = <String, dynamic>{
+            ...?result.meta,
+            ...?serializedMeta,
+          };
+        }
+
         final response = JsonRpcResponse(
           id: request.id,
-          result: serializeIncomingResult(request, result),
-          meta: _mergeRelatedTaskMeta(result.meta, relatedTaskJson),
+          result: serializedResult,
+          meta: _mergeRelatedTaskMeta(responseMeta, relatedTaskJson),
         );
 
         if (relatedTaskId != null && _taskMessageQueue != null) {

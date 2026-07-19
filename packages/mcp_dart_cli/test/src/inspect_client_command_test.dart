@@ -232,6 +232,90 @@ void main() {
     );
 
     test(
+      'accepts anonymous stateless clients and stamps server identity',
+      () async {
+        final tempDir = await Directory.systemTemp.createTemp(
+          'client_harness_',
+        );
+        addTearDown(() => tempDir.delete(recursive: true));
+        final report = File('${tempDir.path}/report.json');
+        final clientLines = StreamController<String>();
+        final outputLines = <String>[];
+        final harness = ClientInspectorHarness(
+          reportFile: report,
+          idleTimeout: const Duration(milliseconds: 50),
+          maxRuntime: const Duration(seconds: 1),
+          clientLines: clientLines.stream,
+          writeLine: outputLines.add,
+        );
+        final meta = buildProtocolRequestMeta(
+          protocolVersion: previewProtocolVersion,
+          clientCapabilities: const ClientCapabilities(),
+        );
+
+        final runFuture = harness.run();
+        clientLines
+          ..add(
+            jsonEncode(
+              JsonRpcServerDiscoverRequest(id: 1, meta: meta).toJson(),
+            ),
+          )
+          ..add(
+            jsonEncode(
+              JsonRpcListToolsRequest(id: 2, meta: meta).toJson(),
+            ),
+          );
+        await clientLines.close();
+        await runFuture;
+
+        final responses =
+            outputLines.map(jsonDecode).cast<Map<String, dynamic>>().toList();
+        final discoverResponse = responses.singleWhere(
+          (response) => response['id'] == 1,
+        );
+        final toolsResponse = responses.singleWhere(
+          (response) => response['id'] == 2,
+        );
+        expect(discoverResponse, isNot(contains('error')));
+        expect(toolsResponse, isNot(contains('error')));
+
+        for (final response in <Map<String, dynamic>>[
+          discoverResponse,
+          toolsResponse,
+        ]) {
+          final result = response['result'] as Map<String, dynamic>;
+          final resultMeta = result['_meta'] as Map<String, dynamic>;
+          expect(
+            resultMeta[McpMetaKey.serverInfo],
+            allOf(
+              containsPair('name', 'mcp_dart_client_inspector'),
+              containsPair('version', isNotEmpty),
+            ),
+          );
+        }
+        expect(
+          discoverResponse['result'] as Map<String, dynamic>,
+          isNot(contains('serverInfo')),
+        );
+
+        final json =
+            jsonDecode(await report.readAsString()) as Map<String, dynamic>;
+        expect(json['passed'], isTrue);
+        final checks =
+            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        expect(
+          checks.singleWhere(
+            (check) => check['id'] == 'lifecycle.client-info',
+          ),
+          allOf(
+            containsPair('status', 'info'),
+            containsPair('message', contains('optional clientInfo')),
+          ),
+        );
+      },
+    );
+
+    test(
       'inspects a client handshake and observed operations in-process',
       () async {
         final tempDir = await Directory.systemTemp.createTemp(
@@ -331,7 +415,7 @@ void main() {
       },
     );
 
-    test('rejects stateless operations without per-request metadata', () async {
+    test('rejects invalid stateless operations', () async {
       final tempDir = await Directory.systemTemp.createTemp('client_harness_');
       addTearDown(() => tempDir.delete(recursive: true));
       final report = File('${tempDir.path}/report.json');
@@ -372,6 +456,19 @@ void main() {
             'method': Method.tasksList,
             'params': <String, dynamic>{'_meta': meta},
           }),
+        )
+        ..add(
+          jsonEncode(<String, dynamic>{
+            'jsonrpc': jsonRpcVersion,
+            'id': 4,
+            'method': Method.toolsList,
+            'params': <String, dynamic>{
+              '_meta': <String, dynamic>{
+                ...meta,
+                McpMetaKey.clientInfo: null,
+              },
+            },
+          }),
         );
       await clientLines.close();
       await runFuture;
@@ -388,6 +485,16 @@ void main() {
       expect(
         (removedMethodError['error'] as Map)['code'],
         ErrorCode.methodNotFound.value,
+      );
+      final invalidIdentityError = responses.singleWhere(
+        (response) => response['id'] == 4,
+      );
+      expect(
+        invalidIdentityError['error'] as Map,
+        allOf(
+          containsPair('code', ErrorCode.invalidParams.value),
+          containsPair('message', contains(McpMetaKey.clientInfo)),
+        ),
       );
       final json =
           jsonDecode(await report.readAsString()) as Map<String, dynamic>;

@@ -1355,8 +1355,12 @@ class DiscoverResult implements CacheableResultData {
   /// Capabilities the server supports.
   final ServerCapabilities capabilities;
 
-  /// Information about the server implementation.
-  final Implementation serverInfo;
+  /// Information about the server implementation, when advertised in result
+  /// metadata.
+  ///
+  /// `server/discover` identity is optional in MCP `2026-07-28` and is carried
+  /// by `_meta.io.modelcontextprotocol/serverInfo` rather than the result body.
+  final Implementation? serverInfo;
 
   /// Instructions describing how to use the server and its features.
   final String? instructions;
@@ -1377,7 +1381,7 @@ class DiscoverResult implements CacheableResultData {
     this.resultType = 'complete',
     required this.supportedVersions,
     required this.capabilities,
-    required this.serverInfo,
+    this.serverInfo,
     this.instructions,
     this.ttlMs,
     this.cacheScope,
@@ -1402,6 +1406,36 @@ class DiscoverResult implements CacheableResultData {
       );
     }
 
+    final meta = readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta');
+    Implementation? readServerInfo(Object? value, String fieldName) {
+      if (value == null) return null;
+      try {
+        return Implementation.fromJson(readJsonObject(value, fieldName));
+      } on FormatException {
+        // Server identity is optional, self-reported display metadata. Invalid
+        // identity must not change discovery or connection behavior.
+        return null;
+      }
+    }
+
+    final hasMetadataServerInfo =
+        meta?.containsKey(McpMetaKey.serverInfo) == true;
+    final metadataServerInfo = hasMetadataServerInfo
+        ? readServerInfo(
+            meta![McpMetaKey.serverInfo],
+            'DiscoverResult._meta.${McpMetaKey.serverInfo}',
+          )
+        : null;
+    final sanitizedMeta = hasMetadataServerInfo && metadataServerInfo == null
+        ? (<String, dynamic>{...meta!}..remove(McpMetaKey.serverInfo))
+        : meta;
+    final serverInfo = hasMetadataServerInfo
+        ? metadataServerInfo
+        // Temporary read compatibility until corrected TypeScript and Python
+        // SDK releases ship. Their pinned beta fixtures still send the
+        // pre-#3002 body field; Dart never emits it.
+        : readServerInfo(json['serverInfo'], 'DiscoverResult.serverInfo');
+
     return DiscoverResult(
       supportedVersions: [
         for (final version in supportedVersions)
@@ -1410,9 +1444,7 @@ class DiscoverResult implements CacheableResultData {
       capabilities: ServerCapabilities.fromJson(
         readJsonObject(json['capabilities'], 'DiscoverResult.capabilities'),
       ),
-      serverInfo: Implementation.fromJson(
-        readJsonObject(json['serverInfo'], 'DiscoverResult.serverInfo'),
-      ),
+      serverInfo: serverInfo,
       instructions: readOptionalString(
         json['instructions'],
         'DiscoverResult.instructions',
@@ -1422,7 +1454,7 @@ class DiscoverResult implements CacheableResultData {
         json['cacheScope'],
         'DiscoverResult.cacheScope',
       ),
-      meta: readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta'),
+      meta: sanitizedMeta,
     );
   }
 
@@ -1438,15 +1470,19 @@ class DiscoverResult implements CacheableResultData {
       );
     }
 
+    final resultMeta = <String, dynamic>{
+      if (serverInfo != null) McpMetaKey.serverInfo: serverInfo!.toJson(),
+      ...?readOptionalJsonObject(meta, 'DiscoverResult._meta'),
+    };
+
     return {
       'resultType': resultType,
       'supportedVersions': supportedVersions,
       'capabilities': capabilities.toJson(omitLegacyTasks: true),
-      'serverInfo': serverInfo.toJson(),
       if (instructions != null) 'instructions': instructions,
       if (ttlMs != null) 'ttlMs': ttlMs,
       if (cacheScope != null) 'cacheScope': cacheScope,
-      if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
+      if (meta != null || serverInfo != null) '_meta': resultMeta,
     };
   }
 }

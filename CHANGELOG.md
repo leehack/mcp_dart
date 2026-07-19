@@ -1,3 +1,15 @@
+## Unreleased
+
+### Changed
+
+- Aligned MCP `2026-07-28` identity with spec PR #3002: request
+  `clientInfo` is optional, servers stamp their identity by default in successful
+  stateless result `_meta["io.modelcontextprotocol/serverInfo"]` while preserving
+  handler-authored metadata, and
+  `server/discover` no longer emits body `serverInfo`. `DiscoverResult.serverInfo`
+  is now nullable, so callers must handle anonymous discovery. MCP `2025-11-25`
+  initialization remains unchanged.
+
 ## 2.3.0-dev.2
 
 This preview makes MCP `2026-07-28` the preferred protocol while preserving

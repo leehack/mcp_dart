@@ -373,7 +373,9 @@ void main() {
         'resultType': resultTypeComplete,
         'supportedVersions': [previewProtocolVersion],
         'capabilities': <String, dynamic>{},
-        'serverInfo': {'name': 'server', 'version': '1.0.0'},
+        '_meta': {
+          McpMetaKey.serverInfo: {'name': 'server', 'version': '1.0.0'},
+        },
       };
 
       for (final parse in <Object Function()>[
@@ -403,15 +405,19 @@ void main() {
             }),
         () => DiscoverResult.fromJson({
               ...discoverResult,
-              'serverInfo': 'bad',
-            }),
-        () => DiscoverResult.fromJson({
-              ...discoverResult,
               'instructions': 1,
             }),
       ]) {
         expect(parse, throwsA(isA<FormatException>()));
       }
+
+      expect(
+        DiscoverResult.fromJson({
+          ...discoverResult,
+          '_meta': {McpMetaKey.serverInfo: 'bad'},
+        }).serverInfo,
+        isNull,
+      );
     });
   });
 

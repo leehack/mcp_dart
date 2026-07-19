@@ -1,6 +1,7 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
 const PROTOCOL_VERSION = '2026-07-28';
+const SERVER_INFO_META_KEY = 'io.modelcontextprotocol/serverInfo';
 const CLIENT_INFO = { name: 'mcp-dart-ts-2026-07-28-client', version: '0.0.0' };
 
 function readArg(args, name) {
@@ -507,9 +508,18 @@ async function main() {
       discover.supportedVersions?.includes(PROTOCOL_VERSION),
       `server/discover did not advertise ${PROTOCOL_VERSION}: ${JSON.stringify(discover)}`,
     );
+    const discoverServerInfo = discover._meta?.[SERVER_INFO_META_KEY];
     assert(
-      discover.serverInfo?.name === 'dart-test-server',
-      `server/discover returned unexpected serverInfo: ${JSON.stringify(discover.serverInfo)}`,
+      discoverServerInfo?.name === 'dart-test-server',
+      `server/discover returned unexpected result metadata serverInfo: ${JSON.stringify(discoverServerInfo)}`,
+    );
+    assert(
+      !Object.hasOwn(discover, 'serverInfo'),
+      `server/discover must not return obsolete body serverInfo: ${JSON.stringify(discover)}`,
+    );
+    assert(
+      client.getServerVersion()?.name === 'dart-test-server',
+      `client did not retain result metadata serverInfo: ${JSON.stringify(client.getServerVersion())}`,
     );
 
     const tools = await client.listTools();

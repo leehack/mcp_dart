@@ -392,11 +392,12 @@ class ClientInspectorHarness {
       );
     }
 
+    final hasClientInfo = meta?.containsKey(McpMetaKey.clientInfo) == true;
     final clientInfo = meta?[McpMetaKey.clientInfo];
-    if (clientInfo is! Map) {
+    if (hasClientInfo && clientInfo is! Map) {
       return McpError(
         ErrorCode.invalidParams.value,
-        'Missing required request metadata: ${McpMetaKey.clientInfo}',
+        'Invalid stateless request metadata: ${McpMetaKey.clientInfo}',
       );
     }
     final clientCapabilities = meta?[McpMetaKey.clientCapabilities];
@@ -409,7 +410,9 @@ class ClientInspectorHarness {
     }
 
     try {
-      Implementation.fromJson(clientInfo.cast<String, dynamic>());
+      if (clientInfo is Map) {
+        Implementation.fromJson(clientInfo.cast<String, dynamic>());
+      }
       ClientCapabilities.fromJson(
         clientCapabilities.cast<String, dynamic>(),
       );
@@ -425,7 +428,8 @@ class ClientInspectorHarness {
 
   void _captureStatelessClientMetadata(Map<String, dynamic> meta) {
     _clientProtocolVersion = meta[McpMetaKey.protocolVersion] as String;
-    _clientInfo = (meta[McpMetaKey.clientInfo] as Map).cast<String, dynamic>();
+    final clientInfo = meta[McpMetaKey.clientInfo];
+    _clientInfo = clientInfo is Map ? clientInfo.cast<String, dynamic>() : null;
     _clientCapabilities =
         (meta[McpMetaKey.clientCapabilities] as Map).cast<String, dynamic>();
   }
@@ -695,10 +699,25 @@ class ClientInspectorHarness {
   }
 
   void _sendResult(Object? id, Map<String, dynamic> result) {
+    final wireResult = <String, dynamic>{...result};
+    if (_sawDiscover) {
+      final existingMeta = result['_meta'];
+      final resultMeta = <String, dynamic>{
+        if (existingMeta is Map) ...existingMeta.cast<String, dynamic>(),
+      };
+      resultMeta.putIfAbsent(
+        McpMetaKey.serverInfo,
+        () => <String, dynamic>{
+          'name': 'mcp_dart_client_inspector',
+          'version': cli_version.packageVersion,
+        },
+      );
+      wireResult['_meta'] = resultMeta;
+    }
     _send(<String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': id,
-      'result': result,
+      'result': wireResult,
     });
   }
 
@@ -980,6 +999,12 @@ class ClientInspectorHarness {
       _checks.pass(
         'lifecycle.client-info',
         'Client provided implementation name and version.',
+      );
+    } else if (stateless && _clientInfo == null) {
+      _checks.info(
+        'lifecycle.client-info',
+        'Client did not expose usable optional clientInfo metadata and is '
+            'anonymous.',
       );
     } else {
       _checks.fail(

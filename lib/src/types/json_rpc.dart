@@ -141,13 +141,15 @@ String? negotiateProtocolVersion(
   return null;
 }
 
-/// Standard MCP `_meta` keys used by the `2026-07-28` stateless request model.
+/// Standard MCP `_meta` keys used by the `2026-07-28` stateless request and
+/// result models.
 ///
 /// `_meta` itself is extensible; keys not defined by MCP remain application or
 /// extension metadata and are preserved on the wire.
 class McpMetaKey {
   static const protocolVersion = 'io.modelcontextprotocol/protocolVersion';
   static const clientInfo = 'io.modelcontextprotocol/clientInfo';
+  static const serverInfo = 'io.modelcontextprotocol/serverInfo';
   static const clientCapabilities =
       'io.modelcontextprotocol/clientCapabilities';
   static const logLevel = 'io.modelcontextprotocol/logLevel';
@@ -160,7 +162,7 @@ class McpMetaKey {
 /// request model.
 Map<String, dynamic> buildProtocolRequestMeta({
   required String protocolVersion,
-  required Implementation clientInfo,
+  Implementation? clientInfo,
   required ClientCapabilities clientCapabilities,
   Map<String, dynamic>? meta,
   Object? logLevel,
@@ -169,7 +171,7 @@ Map<String, dynamic> buildProtocolRequestMeta({
   return <String, dynamic>{
     ...?meta,
     McpMetaKey.protocolVersion: protocolVersion,
-    McpMetaKey.clientInfo: clientInfo.toJson(),
+    if (clientInfo != null) McpMetaKey.clientInfo: clientInfo.toJson(),
     McpMetaKey.clientCapabilities: clientCapabilities.toJson(
       omitLegacyTasks: isStatelessProtocolVersion(protocolVersion),
       omitLegacyRootsListChanged: isStatelessProtocolVersion(protocolVersion),
@@ -689,15 +691,30 @@ class JsonRpcResponse extends JsonRpcMessage {
   const JsonRpcResponse({required this.id, required this.result, this.meta});
 
   @override
-  Map<String, dynamic> toJson() => {
-        'jsonrpc': jsonrpc,
-        'id': _requestIdToJson(id, 'JsonRpcResponse.id'),
-        'result': <String, dynamic>{
-          ...readJsonObject(result, 'JsonRpcResponse.result'),
-          if (meta != null)
-            '_meta': readJsonObject(meta, 'JsonRpcResponse._meta'),
-        },
-      };
+  Map<String, dynamic> toJson() {
+    final resultJson = readJsonObject(result, 'JsonRpcResponse.result');
+    final resultMeta = readOptionalJsonObject(
+      resultJson['_meta'],
+      'JsonRpcResponse.result._meta',
+    );
+    final responseMeta =
+        meta == null ? null : readJsonObject(meta, 'JsonRpcResponse._meta');
+    final wireResult = Map<String, dynamic>.from(resultJson)..remove('_meta');
+    final wireMeta = <String, dynamic>{
+      ...?resultMeta,
+      ...?responseMeta,
+    };
+    final hasWireMeta = resultJson.containsKey('_meta') || meta != null;
+
+    return {
+      'jsonrpc': jsonrpc,
+      'id': _requestIdToJson(id, 'JsonRpcResponse.id'),
+      'result': <String, dynamic>{
+        ...wireResult,
+        if (hasWireMeta) '_meta': wireMeta,
+      },
+    };
+  }
 }
 // --- JSON-RPC Error ---
 

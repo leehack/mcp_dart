@@ -24,6 +24,32 @@ Future<void> main(List<String> args) async {
     return;
   }
 
+  final direction = args
+      .where((argument) => argument.startsWith('--direction='))
+      .map((argument) => argument.substring('--direction='.length))
+      .firstOrNull;
+  if (direction != null &&
+      direction != 'all' &&
+      direction != 'dart-to-ts' &&
+      direction != 'ts-to-dart') {
+    stderr.writeln(
+      'Invalid --direction. Use all, dart-to-ts, or ts-to-dart.',
+    );
+    exitCode = 64;
+    return;
+  }
+  final selectedDirection = direction ?? 'all';
+  final expectPublishedTsGap =
+      args.contains('--expect-published-ts-client-gap');
+  if (expectPublishedTsGap && selectedDirection == 'dart-to-ts') {
+    stderr.writeln(
+      '--expect-published-ts-client-gap requires the ts-to-dart direction '
+      '(or all).',
+    );
+    exitCode = 64;
+    return;
+  }
+
   if (!clientPackage.existsSync()) {
     stderr.writeln(
       'Missing TypeScript fixture dependencies. Run:\n'
@@ -44,15 +70,54 @@ Future<void> main(List<String> args) async {
   }
 
   try {
-    await _runTsClientAgainstDartServer(repoRoot, fixtureDir);
-    await _runDartClientAgainstTsServer(repoRoot, fixtureDir);
+    if (selectedDirection != 'ts-to-dart') {
+      await _runDartClientAgainstTsServer(repoRoot, fixtureDir);
+    }
+    if (selectedDirection != 'dart-to-ts') {
+      final result = await _runTsClientAgainstDartServer(repoRoot, fixtureDir);
+      if (expectPublishedTsGap) {
+        final isExpectedGap = result.exitCode != 0 &&
+            result.output.contains('ERA_NEGOTIATION_FAILED') &&
+            result.output.contains(
+              'server did not offer pinned protocol version 2026-07-28 '
+              'via server/discover',
+            );
+        if (!isExpectedGap) {
+          if (result.exitCode == 0) {
+            throw StateError(
+              'Published TypeScript client unexpectedly passed; remove the '
+              'temporary #2513 expected-gap handling.',
+            );
+          }
+          throw StateError(
+            'TypeScript client failed for an unexpected reason '
+            '(exit ${result.exitCode}).',
+          );
+        }
+        stdout.writeln(
+          '[expected-gap] Published TypeScript beta client predates spec #3002; '
+          'remove this expectation after TypeScript SDK #2513 is released.',
+        );
+      } else if (result.exitCode != 0) {
+        throw StateError(
+          'TypeScript 2026-07-28 client exited with ${result.exitCode}',
+        );
+      }
+    }
   } on Object catch (error) {
     stderr.writeln('TS 2026-07-28 interop failed: $error');
     exitCode = 1;
   }
 }
 
-Future<void> _runTsClientAgainstDartServer(
+class _TsClientRun {
+  const _TsClientRun(this.exitCode, this.output);
+
+  final int exitCode;
+  final String output;
+}
+
+Future<_TsClientRun> _runTsClientAgainstDartServer(
   Directory repoRoot,
   Directory fixtureDir,
 ) async {
@@ -81,6 +146,7 @@ Future<void> _runTsClientAgainstDartServer(
     ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[dart-server]');
+  late _TsClientRun result;
 
   try {
     final url = await serverUrl.future.timeout(
@@ -90,26 +156,139 @@ Future<void> _runTsClientAgainstDartServer(
       },
     );
 
+    await _assertDartDiscoveryWire(url);
+
     final client = await Process.start(
       'node',
       ['src/client.mjs', '--url', url],
       workingDirectory: fixtureDir.path,
     );
-    final clientStdout = _pipeLines(client.stdout, stdout, '[ts-client]');
-    final clientStderr = _pipeLines(client.stderr, stderr, '[ts-client]');
-    final clientExit = await client.exitCode.timeout(
-      const Duration(seconds: 30),
+    final clientOutput = StringBuffer();
+    final clientStdout = _pipeLines(
+      client.stdout,
+      stdout,
+      '[ts-client]',
+      onLine: clientOutput.writeln,
     );
-    await Future.wait([clientStdout, clientStderr]);
-
-    if (clientExit != 0) {
-      throw StateError(
-        'TypeScript MCP 2026-07-28 client exited with $clientExit',
+    final clientStderr = _pipeLines(
+      client.stderr,
+      stderr,
+      '[ts-client]',
+      onLine: clientOutput.writeln,
+    );
+    late int clientExit;
+    try {
+      clientExit = await client.exitCode.timeout(
+        const Duration(seconds: 30),
       );
+    } finally {
+      await _terminate(client);
+      await Future.wait([clientStdout, clientStderr]);
     }
+    result = _TsClientRun(clientExit, clientOutput.toString());
   } finally {
     await _terminate(server);
     await Future.wait([serverStdout, serverStderr]);
+  }
+
+  return result;
+}
+
+Future<void> _assertDartDiscoveryWire(String url) async {
+  final httpClient = HttpClient();
+  try {
+    final request = await httpClient.postUrl(Uri.parse(url));
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.acceptHeader,
+      'application/json, text/event-stream',
+    );
+    request.headers.set('MCP-Protocol-Version', previewProtocolVersion);
+    request.headers.set('Mcp-Method', Method.serverDiscover);
+    request.add(
+      utf8.encode(
+        jsonEncode({
+          'jsonrpc': '2.0',
+          'id': 'dart-discovery-wire-probe',
+          'method': Method.serverDiscover,
+          'params': {
+            '_meta': {
+              McpMetaKey.protocolVersion: previewProtocolVersion,
+              McpMetaKey.clientCapabilities: <String, dynamic>{},
+            },
+          },
+        }),
+      ),
+    );
+
+    final response = await request.close().timeout(
+          const Duration(seconds: 20),
+        );
+    final body = await response.transform(utf8.decoder).join();
+    if (response.statusCode != HttpStatus.ok) {
+      throw StateError(
+        'Dart server/discover wire probe returned HTTP '
+        '${response.statusCode}: $body',
+      );
+    }
+
+    final envelope = _decodeJsonOrSse(body);
+    final result = envelope is Map ? envelope['result'] : null;
+    if (result is! Map) {
+      throw StateError(
+        'Dart server/discover wire probe returned no result object: $body',
+      );
+    }
+    final supportedVersions = result['supportedVersions'];
+    if (supportedVersions is! List ||
+        !supportedVersions.contains(previewProtocolVersion)) {
+      throw StateError(
+        'Dart server/discover did not advertise $previewProtocolVersion: '
+        '$result',
+      );
+    }
+    if (result.containsKey('serverInfo')) {
+      throw StateError(
+        'Dart server/discover emitted obsolete body serverInfo: $result',
+      );
+    }
+    final meta = result['_meta'];
+    final serverInfo = meta is Map ? meta[McpMetaKey.serverInfo] : null;
+    if (serverInfo is! Map ||
+        serverInfo['name'] != 'dart-test-server' ||
+        serverInfo['version'] != '1.0.0') {
+      throw StateError(
+        'Dart server/discover omitted or malformed result metadata '
+        'serverInfo: $result',
+      );
+    }
+
+    stdout.writeln(
+      '[dart-server-probe] verified spec #3002 discovery wire shape',
+    );
+  } finally {
+    httpClient.close(force: true);
+  }
+}
+
+Object? _decodeJsonOrSse(String body) {
+  try {
+    return jsonDecode(body);
+  } on FormatException {
+    for (final line in const LineSplitter().convert(body)) {
+      if (!line.startsWith('data:')) continue;
+      final data = line.substring('data:'.length).trimLeft();
+      if (data.isEmpty) continue;
+      try {
+        return jsonDecode(data);
+      } on FormatException {
+        continue;
+      }
+    }
+    throw FormatException(
+      'Dart server/discover wire probe returned neither JSON nor JSON SSE data.',
+      body,
+    );
   }
 }
 
