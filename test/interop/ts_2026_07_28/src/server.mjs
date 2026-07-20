@@ -219,11 +219,13 @@ async function main() {
       const webResponse = await handler.fetch(webRequest);
       await writeWebResponse(webResponse, res);
     } catch (error) {
-      console.error(error);
-      if (!res.headersSent) {
-        res.writeHead(500);
+      console.error('TypeScript interop request failed', error);
+      if (res.headersSent) {
+        res.destroy();
+        return;
       }
-      res.end(String(error));
+      res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Internal Server Error');
     }
   });
 
