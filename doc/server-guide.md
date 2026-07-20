@@ -1067,9 +1067,13 @@ server.registerTool(
   callback: (args, extra) async {
     // Custom validation logic
     if (!_isValid(args)) {
-      throw McpError(
-        ErrorCode.invalidParams.value,
-        'Validation failed: ${_getValidationError(args)}',
+      return CallToolResult(
+        isError: true,
+        content: [
+          TextContent(
+            text: 'Validation failed: ${_getValidationError(args)}',
+          ),
+        ],
       );
     }
 

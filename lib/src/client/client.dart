@@ -1663,7 +1663,12 @@ class McpClient extends Protocol {
     final outputSchema = _cachedToolOutputSchemas[params.name];
     if (outputSchema != null && !result.isError) {
       try {
-        outputSchema.validate(result.structuredContentJson?.toJson());
+        if (!result.hasStructuredContent) {
+          throw const FormatException(
+            'structuredContent is required when outputSchema is declared',
+          );
+        }
+        outputSchema.validate(result.structuredContentJson!.toJson());
       } catch (e) {
         throw McpError(
           ErrorCode.invalidParams.value,

@@ -29,6 +29,12 @@
   consistently across Streamable HTTP, stdio, and custom transports.
 - Exported the JSON Schema validator through the public SDK barrel and retained
   Draft 2020-12 and declared Draft 7 validation.
+- Aligned registered-tool input validation with the MCP error taxonomy:
+  arguments that do not satisfy a tool's `inputSchema` now return a
+  `CallToolResult` with `isError: true`, allowing models to correct and retry
+  the call under MCP `2025-11-25` and `2026-07-28`. Under those versions,
+  invalid output from a locally registered tool now reports JSON-RPC
+  `internalError` instead of blaming client params.
 - Fixed registered tool, prompt, resource, and resource-template handles so
   `remove()` reliably unregisters them; resource and template renames now keep
   handle state and server indexes synchronized.
@@ -64,6 +70,32 @@
   deprecated and assumes the application validates the OAuth redirect. New
   integrations should call `finishAuthRedirect` with the returned `state` and
   optional issuer for validation before token exchange.
+- A schema-invalid `tools/call` now completes at the JSON-RPC level and returns
+  a tool error result instead of throwing `McpError(ErrorCode.invalidParams)`.
+  Clients that caught `invalidParams` for this case must inspect
+  `CallToolResult.isError`; unknown or unavailable tools, malformed requests,
+  and server failures remain JSON-RPC errors. Negotiated MCP `2025-06-18` and
+  earlier peers retain their frozen JSON-RPC `invalidParams` behavior,
+  including MCP `2024-10-07`. Legacy task-augmented calls also retain
+  `invalidParams` for pre-acceptance schema rejection; accepted task calls
+  still return `CreateTaskResult` and expose their final tool result through
+  `tasks/result`.
+- Malformed `tools/call` params now consistently return JSON-RPC
+  `invalidParams` instead of falling through to a generic `internalError`.
+- Under MCP `2025-11-25` and `2026-07-28`, an invalid registered input schema or
+  a successful tool result that omits or violates its registered output schema
+  returns JSON-RPC `internalError`; these are server-side contract failures,
+  not invalid client requests. MCP `2025-06-18` and earlier peers retain the
+  previous `invalidParams` code for both cases.
+- Clients now reject successful tool results that omit `structuredContent` when
+  the advertised `outputSchema` requires validation. An explicit JSON `null`
+  remains distinct and valid when the schema permits it.
+- Under MCP `2025-11-25`, task-mode negotiation now runs before input-schema
+  validation. A required task tool called without task augmentation returns
+  JSON-RPC `methodNotFound` as before. A task-forbidden tool called with
+  augmentation now returns `methodNotFound` instead of `invalidParams`; neither
+  path invokes the handler. MCP `2025-06-18` and earlier peers retain
+  `invalidParams`.
 
 ## 2.3.0-dev.2
 

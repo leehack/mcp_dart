@@ -150,6 +150,20 @@ class MockTransport extends Transport
             result: CallToolResult.fromStructuredArray([1, 'extra']).toJson(),
           ),
         );
+      } else if (name == 'missing_null_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: const CallToolResult(content: []).toJson(),
+          ),
+        );
+      } else if (name == 'explicit_null_tool') {
+        _respond(
+          JsonRpcResponse(
+            id: message.id,
+            result: CallToolResult.fromStructuredNull().toJson(),
+          ),
+        );
       } else if (name == 'broken_tool') {
         // Returns data that violates the schema (missing 'result')
         _respond(
@@ -244,6 +258,16 @@ class MockTransport extends Transport
           ],
           'items': false,
         }),
+      ),
+      Tool(
+        name: 'missing_null_tool',
+        inputSchema: const ToolInputSchema(),
+        outputSchema: JsonSchema.nullValue(),
+      ),
+      Tool(
+        name: 'explicit_null_tool',
+        inputSchema: const ToolInputSchema(),
+        outputSchema: JsonSchema.nullValue(),
       ),
       const Tool(
         name: 'task_required_tool',
@@ -708,6 +732,42 @@ void main() {
       );
 
       expect(result.structuredContentJson?.toJson(), equals(['alpha', 'beta']));
+    });
+
+    test('output schema rejects omitted structured content', () async {
+      await client.connect(transport);
+      await client.listTools();
+
+      expect(
+        () => client.callTool(
+          const CallToolRequest(name: 'missing_null_tool'),
+        ),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.invalidParams.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('Structured content does not match'),
+              ),
+        ),
+      );
+    });
+
+    test('output schema accepts explicit structured null', () async {
+      await client.connect(transport);
+      await client.listTools();
+
+      final result = await client.callTool(
+        const CallToolRequest(name: 'explicit_null_tool'),
+      );
+
+      expect(result.hasStructuredContent, isTrue);
+      expect(result.structuredContentJson?.toJson(), isNull);
     });
 
     test('throws when non-object tool output validation fails', () async {

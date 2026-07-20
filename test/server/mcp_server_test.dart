@@ -9,9 +9,14 @@ import 'package:test/test.dart';
 /// Mock transport for McpServer tests
 class McpServerTestTransport
     implements Transport, ToolParameterHeaderAwareTransport {
+  final String initializationProtocolVersion;
   final List<JsonRpcMessage> sentMessages = [];
   final List<ToolParameterHeaderMappings> toolParameterHeaderMappings = [];
   bool _closed = false;
+
+  McpServerTestTransport({
+    this.initializationProtocolVersion = latestInitializationProtocolVersion,
+  });
 
   @override
   String? get sessionId => 'test-session';
@@ -54,10 +59,11 @@ class McpServerTestTransport
     onmessage?.call(
       JsonRpcInitializeRequest(
         id: 0,
-        initParams: const InitializeRequest(
-          protocolVersion: latestInitializationProtocolVersion,
-          capabilities: ClientCapabilities(),
-          clientInfo: Implementation(name: 'test-client', version: '1.0.0'),
+        initParams: InitializeRequest(
+          protocolVersion: initializationProtocolVersion,
+          capabilities: const ClientCapabilities(),
+          clientInfo:
+              const Implementation(name: 'test-client', version: '1.0.0'),
         ),
       ),
     );
@@ -65,6 +71,21 @@ class McpServerTestTransport
     onmessage?.call(const JsonRpcInitializedNotification());
     await Future<void>.delayed(Duration.zero);
   }
+}
+
+Future<JsonRpcMessage> _receiveResponse(
+  McpServerTestTransport transport,
+  JsonRpcRequest request,
+) async {
+  final sentCount = transport.sentMessages.length;
+  transport.receiveMessage(request);
+  for (var attempt = 0; attempt < 100; attempt++) {
+    if (transport.sentMessages.length > sentCount) {
+      return transport.sentMessages.last;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw TimeoutException('No response received for request ${request.id}');
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
@@ -685,20 +706,361 @@ void main() {
       expect(args!['key'], equals('value'));
     });
 
-    test('tool call returns error for unknown tool', () async {
+    test('schema-invalid stable call returns an actionable tool error',
+        () async {
+      var callbackCalled = false;
+      server.registerTool(
+        'validated-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {'count': JsonInteger()},
+          required: ['count'],
+        ),
+        callback: (args, extra) async {
+          callbackCalled = true;
+          return const CallToolResult(content: []);
+        },
+      );
       await server.connect(transport);
 
-      // Call a non-existent tool
-      final callRequest = const JsonRpcCallToolRequest(
-        id: 1,
-        params: {'name': 'non-existent-tool'},
+      final message = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'stable-invalid',
+          params: {
+            'name': 'validated-tool',
+            'arguments': {'count': 'many'},
+          },
+          meta: {McpMetaKey.protocolVersion: '2025-06-18'},
+        ),
       );
-      transport.receiveMessage(callRequest);
 
-      await Future.delayed(const Duration(milliseconds: 100));
+      expect(message, isA<JsonRpcResponse>());
+      final response = message as JsonRpcResponse;
+      expect(response.id, 'stable-invalid');
+      expect(response.result.keys, unorderedEquals(['content', 'isError']));
+      final result = CallToolResult.fromJson(response.result);
+      expect(result.isError, isTrue);
+      expect(result.content.single, isA<TextContent>());
+      expect(
+        (result.content.single as TextContent).text,
+        allOf(
+          contains("Invalid arguments for tool 'validated-tool'"),
+          contains('count'),
+        ),
+      );
+      expect(callbackCalled, isFalse);
+    });
 
-      final response = transport.sentMessages.last;
-      expect(response, isA<JsonRpcError>());
+    test('schema-invalid stateless call returns a complete tool error',
+        () async {
+      var callbackCalled = false;
+      server.registerTool(
+        'validated-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {'count': JsonInteger()},
+          required: ['count'],
+        ),
+        callback: (args, extra) async {
+          callbackCalled = true;
+          return const CallToolResult(content: []);
+        },
+      );
+      await server.connect(transport);
+
+      final message = await _receiveResponse(
+        transport,
+        JsonRpcCallToolRequest(
+          id: 'stateless-invalid',
+          params: const {
+            'name': 'validated-tool',
+            'arguments': {'count': 'many'},
+          },
+          meta: _statelessMeta(),
+        ),
+      );
+
+      expect(message, isA<JsonRpcResponse>());
+      final response = message as JsonRpcResponse;
+      expect(response.id, 'stateless-invalid');
+      expect(response.result['resultType'], resultTypeComplete);
+      expect(response.result, isNot(contains('ttlMs')));
+      expect(response.result, isNot(contains('cacheScope')));
+      expect(
+        response.result['_meta']?[McpMetaKey.serverInfo],
+        {'name': 'test-server', 'version': '1.0.0'},
+      );
+      expect(CallToolResult.fromJson(response.result).isError, isTrue);
+      expect(callbackCalled, isFalse);
+    });
+
+    test('older negotiated versions retain invalidParams for schema failures',
+        () async {
+      for (final protocolVersion in const [
+        '2025-06-18',
+        '2025-03-26',
+        '2024-11-05',
+        '2024-10-07',
+      ]) {
+        final olderServer = McpServer(
+          const Implementation(name: 'test-server', version: '1.0.0'),
+        );
+        final olderTransport = McpServerTestTransport(
+          initializationProtocolVersion: protocolVersion,
+        );
+        var callbackCalled = false;
+        olderServer.registerTool(
+          'validated-tool',
+          inputSchema: const ToolInputSchema(
+            properties: {'count': JsonInteger()},
+            required: ['count'],
+          ),
+          callback: (args, extra) async {
+            callbackCalled = true;
+            return const CallToolResult(content: []);
+          },
+        );
+
+        try {
+          await olderServer.connect(olderTransport);
+          final message = await _receiveResponse(
+            olderTransport,
+            JsonRpcCallToolRequest(
+              id: protocolVersion,
+              params: const {
+                'name': 'validated-tool',
+                'arguments': {'count': 'many'},
+              },
+              meta: const {
+                McpMetaKey.protocolVersion: latestInitializationProtocolVersion,
+              },
+            ),
+          );
+
+          expect(message, isA<JsonRpcError>(), reason: protocolVersion);
+          final response = message as JsonRpcError;
+          expect(response.id, protocolVersion);
+          expect(response.error.code, ErrorCode.invalidParams.value);
+          expect(
+            response.error.message,
+            contains("Invalid arguments for tool 'validated-tool'"),
+          );
+          expect(callbackCalled, isFalse);
+        } finally {
+          await olderServer.close();
+        }
+      }
+    });
+
+    test('malformed tool arguments remain protocol errors', () async {
+      server.registerTool(
+        'validated-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      await server.connect(transport);
+
+      for (final request in [
+        const JsonRpcCallToolRequest(
+          id: 'stable-malformed',
+          params: {
+            'name': 'validated-tool',
+            'arguments': 'not-an-object',
+          },
+        ),
+        JsonRpcCallToolRequest(
+          id: 'stateless-malformed',
+          params: const {
+            'name': 'validated-tool',
+            'arguments': 'not-an-object',
+          },
+          meta: _statelessMeta(),
+        ),
+      ]) {
+        final message = await _receiveResponse(transport, request);
+        expect(message, isA<JsonRpcError>());
+        final response = message as JsonRpcError;
+        expect(response.id, request.id);
+        expect(response.error.code, ErrorCode.invalidParams.value);
+        expect(
+          response.error.message,
+          'Failed to parse params for request ${Method.toolsCall}',
+        );
+      }
+    });
+
+    test('unsupported registered input schema is a server error', () async {
+      var callbackCalled = false;
+      server.registerTool(
+        'invalid-schema-tool',
+        inputSchema: ToolInputSchema.fromJson({
+          r'$schema': 'https://example.com/unsupported-schema',
+          'type': 'object',
+        }),
+        callback: (args, extra) async {
+          callbackCalled = true;
+          return const CallToolResult(content: []);
+        },
+      );
+      await server.connect(transport);
+
+      final message = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'invalid-schema',
+          params: {'name': 'invalid-schema-tool', 'arguments': {}},
+        ),
+      );
+
+      expect(message, isA<JsonRpcError>());
+      final response = message as JsonRpcError;
+      expect(response.id, 'invalid-schema');
+      expect(response.error.code, ErrorCode.internalError.value);
+      expect(
+        response.error.message,
+        "Tool 'invalid-schema-tool' has an invalid or unsupported input schema.",
+      );
+      expect(callbackCalled, isFalse);
+    });
+
+    test('older protocols retain invalidParams for invalid input schemas',
+        () async {
+      final olderServer = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+      );
+      final olderTransport = McpServerTestTransport(
+        initializationProtocolVersion: '2025-06-18',
+      );
+      olderServer.registerTool(
+        'invalid-schema-tool',
+        inputSchema: ToolInputSchema.fromJson({
+          r'$schema': 'https://example.com/unsupported-schema',
+          'type': 'object',
+        }),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      try {
+        await olderServer.connect(olderTransport);
+        final message = await _receiveResponse(
+          olderTransport,
+          const JsonRpcCallToolRequest(
+            id: 'legacy-invalid-schema',
+            params: {'name': 'invalid-schema-tool', 'arguments': {}},
+          ),
+        );
+
+        expect(message, isA<JsonRpcError>());
+        expect(
+          (message as JsonRpcError).error.code,
+          ErrorCode.invalidParams.value,
+        );
+      } finally {
+        await olderServer.close();
+      }
+    });
+
+    test('reconnect refreshes negotiated input-validation behavior', () async {
+      final reconnectingServer = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+      );
+      reconnectingServer.registerTool(
+        'validated-tool',
+        inputSchema: const ToolInputSchema(
+          properties: {'count': JsonInteger()},
+          required: ['count'],
+        ),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      final olderTransport = McpServerTestTransport(
+        initializationProtocolVersion: '2025-06-18',
+      );
+      await reconnectingServer.connect(olderTransport);
+      final olderMessage = await _receiveResponse(
+        olderTransport,
+        const JsonRpcCallToolRequest(
+          id: 'before-reconnect',
+          params: {
+            'name': 'validated-tool',
+            'arguments': {'count': 'many'},
+          },
+        ),
+      );
+      expect(olderMessage, isA<JsonRpcError>());
+      await reconnectingServer.close();
+
+      final currentTransport = McpServerTestTransport();
+      try {
+        await reconnectingServer.connect(currentTransport);
+        final currentMessage = await _receiveResponse(
+          currentTransport,
+          const JsonRpcCallToolRequest(
+            id: 'after-reconnect',
+            params: {
+              'name': 'validated-tool',
+              'arguments': {'count': 'many'},
+            },
+          ),
+        );
+        expect(currentMessage, isA<JsonRpcResponse>());
+        expect(
+          CallToolResult.fromJson(
+            (currentMessage as JsonRpcResponse).result,
+          ).isError,
+          isTrue,
+        );
+      } finally {
+        await reconnectingServer.close();
+      }
+    });
+
+    test('tool call returns error for unknown tool', () async {
+      server.registerTool(
+        'known-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      await server.connect(transport);
+
+      for (final request in [
+        const JsonRpcCallToolRequest(
+          id: 'stable-unknown',
+          params: {'name': 'non-existent-tool'},
+        ),
+        JsonRpcCallToolRequest(
+          id: 'stateless-unknown',
+          params: const {'name': 'non-existent-tool'},
+          meta: _statelessMeta(),
+        ),
+      ]) {
+        final message = await _receiveResponse(transport, request);
+        expect(message, isA<JsonRpcError>());
+        final response = message as JsonRpcError;
+        expect(response.id, request.id);
+        expect(response.error.code, ErrorCode.invalidParams.value);
+        expect(response.error.message, "Tool 'non-existent-tool' not found");
+      }
+    });
+
+    test('disabled tool remains a protocol error', () async {
+      final registeredTool = server.registerTool(
+        'disabled-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      registeredTool.disable();
+      await server.connect(transport);
+
+      final message = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'disabled',
+          params: {'name': 'disabled-tool'},
+        ),
+      );
+
+      expect(message, isA<JsonRpcError>());
+      final response = message as JsonRpcError;
+      expect(response.id, 'disabled');
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.message, "Tool 'disabled-tool' is disabled");
     });
   });
 

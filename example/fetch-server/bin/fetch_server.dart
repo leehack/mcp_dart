@@ -52,20 +52,17 @@ void main(List<String> arguments) async {
       final startIndexValue = args['start_index'];
 
       if (url == null || url is! String || url.isEmpty) {
-        throw McpError(
-          ErrorCode.invalidParams.value,
+        return _toolInputError(
           'Missing or invalid "url" argument.',
         );
       }
       if (maxLengthValue != null && maxLengthValue is! int) {
-        throw McpError(
-          ErrorCode.invalidParams.value,
+        return _toolInputError(
           '"max_length" must be an integer.',
         );
       }
       if (startIndexValue != null && startIndexValue is! int) {
-        throw McpError(
-          ErrorCode.invalidParams.value,
+        return _toolInputError(
           '"start_index" must be an integer.',
         );
       }
@@ -73,22 +70,19 @@ void main(List<String> arguments) async {
       final maxLength = maxLengthValue as int? ?? 5000;
       final startIndex = startIndexValue as int? ?? 0;
       if (maxLength <= 0 || maxLength >= 1000000) {
-        throw McpError(
-          ErrorCode.invalidParams.value,
+        return _toolInputError(
           '"max_length" must be between 1 and 999999.',
         );
       }
       if (startIndex < 0) {
-        throw McpError(
-          ErrorCode.invalidParams.value,
+        return _toolInputError(
           '"start_index" must be zero or greater.',
         );
       }
 
       final uri = Uri.tryParse(url);
       if (uri == null) {
-        throw McpError(
-          ErrorCode.invalidParams.value,
+        return _toolInputError(
           'The "url" argument is not a valid URI.',
         );
       }
@@ -138,4 +132,11 @@ void main(List<String> arguments) async {
   final transport = StdioServerTransport();
   await server.connect(transport);
   stderr.writeln('Fetch MCP server running on stdio');
+}
+
+CallToolResult _toolInputError(String message) {
+  return CallToolResult(
+    isError: true,
+    content: [TextContent(text: message)],
+  );
 }

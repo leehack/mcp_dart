@@ -8,6 +8,8 @@ import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 import 'package:mcp_dart/src/types/validation.dart'
     show readJsonObject, readOptionalJsonObject;
 
+import 'server_protocol_state.dart';
+
 final _logger = Logger("mcp_dart.server");
 
 enum _ServerLifecycleState {
@@ -167,6 +169,7 @@ class Server extends Protocol {
   void _resetSessionState() {
     _clientCapabilities = null;
     _clientVersion = null;
+    writeServerProtocolVersion(this, null);
     _lifecycleState = _ServerLifecycleState.uninitialized;
     _loggingLevels.clear();
   }
@@ -531,6 +534,35 @@ class Server extends Protocol {
   }
 
   McpError? _validateRequestTaskSemantics(JsonRpcRequest request) {
+    if (request is JsonRpcCallToolRequest) {
+      try {
+        request.callParams;
+      } on FormatException {
+        return McpError(
+          ErrorCode.invalidParams.value,
+          'Failed to parse params for request ${Method.toolsCall}',
+        );
+      }
+
+      final validatesTaskAugmentation = !_isStatelessRequest(request) &&
+          readServerProtocolVersion(this) ==
+              latestInitializationProtocolVersion &&
+          _capabilities.tasks?.requests?.tools?.call != null &&
+          request.isTaskAugmented;
+      if (validatesTaskAugmentation) {
+        try {
+          if (request.taskParams == null) {
+            throw const FormatException('Task params must be an object');
+          }
+        } on FormatException {
+          return McpError(
+            ErrorCode.invalidParams.value,
+            'Failed to parse task params for request ${Method.toolsCall}',
+          );
+        }
+      }
+    }
+
     final removedMethodError = _validateStatelessTaskMethods(request);
     if (removedMethodError != null) {
       return removedMethodError;
@@ -740,6 +772,11 @@ class Server extends Protocol {
     if (_isStatelessRequest(request)) {
       return false;
     }
+    if (readServerProtocolVersion(this) ==
+            latestInitializationProtocolVersion &&
+        _capabilities.tasks?.requests?.tools?.call == null) {
+      return false;
+    }
     return request.isTaskAugmented;
   }
 
@@ -884,6 +921,7 @@ class Server extends Protocol {
         _lifecycleState == _ServerLifecycleState.initializing) {
       _clientCapabilities = null;
       _clientVersion = null;
+      writeServerProtocolVersion(this, null);
       _lifecycleState = _ServerLifecycleState.uninitialized;
     }
   }
@@ -1128,6 +1166,7 @@ class Server extends Protocol {
         : legacySupportedVersions.isNotEmpty
             ? legacySupportedVersions.first
             : defaultProtocolVersion;
+    writeServerProtocolVersion(this, protocolVersion);
 
     return InitializeResult(
       protocolVersion: protocolVersion,

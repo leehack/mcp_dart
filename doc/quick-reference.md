@@ -290,17 +290,22 @@ rules in the callback as well as describing inputs in the schema.
 ## Errors
 
 ```dart
+// API or business-logic failure
 return CallToolResult(
   isError: true,
   content: [TextContent(text: 'The requested record was not found.')],
 );
 
-throw McpError(
-  ErrorCode.invalidParams.value,
-  'Expected a non-empty query.',
+// Input validation failure
+return const CallToolResult(
+  isError: true,
+  content: [TextContent(text: 'Expected a non-empty query.')],
 );
 ```
 
+Use tool error results for input validation, API, and business-logic failures so
+the model can correct and retry. JSON-RPC errors are reserved for protocol-level
+problems such as malformed requests, unknown tools, and server failures.
 Common JSON-RPC codes are available through `ErrorCode`, including
 `parseError`, `invalidRequest`, `methodNotFound`, `invalidParams`, and
 `internalError`.

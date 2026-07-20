@@ -29,6 +29,15 @@ class JsonSchemaValidationException implements Exception {
       'JsonSchemaValidationException: $message (at ${path.join('/')})';
 }
 
+/// Package-internal classification for invalid schema definitions.
+///
+/// The public name permits use across the SDK's internal libraries and is
+/// hidden from the package barrel.
+final class JsonSchemaDefinitionException
+    extends JsonSchemaValidationException {
+  JsonSchemaDefinitionException._(super.message);
+}
+
 /// Adds standards-compliant JSON Schema validation to [JsonSchema].
 extension JsonSchemaValidation on JsonSchema {
   /// Validates [data] against this JSON Schema.
@@ -66,12 +75,12 @@ extension JsonSchemaValidation on JsonSchema {
     } on Object catch (error) {
       final unresolvedReference = guard.unresolvedReference(error);
       if (unresolvedReference != null) {
-        throw JsonSchemaValidationException(
+        throw JsonSchemaDefinitionException._(
           'External ${unresolvedReference.keyword} is unresolved: '
           '${unresolvedReference.value}',
         );
       }
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'Invalid JSON Schema schema: $error',
       );
     }
@@ -669,12 +678,12 @@ class _SchemaGuard {
 
   void _inspectSchema(Object? schema, int depth) {
     if (depth > _maxSchemaDepth) {
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'JSON Schema exceeds the maximum depth of $_maxSchemaDepth',
       );
     }
     if (++_subschemas > _maxSubschemas) {
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'JSON Schema exceeds the maximum of $_maxSubschemas subschemas',
       );
     }
@@ -731,7 +740,7 @@ class _SchemaGuard {
       return;
     }
     if (dialect is! String || !_supportedDialects.contains(dialect)) {
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'Unsupported JSON Schema dialect: $dialect',
       );
     }
@@ -750,14 +759,14 @@ class _SchemaGuard {
       return;
     }
     if (value is! List || value.isEmpty) {
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'Invalid JSON Schema schema: enum must be a non-empty array',
       );
     }
     for (var index = 0; index < value.length; index++) {
       for (var other = index + 1; other < value.length; other++) {
         if (_jsonEquals(value[index], value[other])) {
-          throw JsonSchemaValidationException(
+          throw JsonSchemaDefinitionException._(
             'Invalid JSON Schema schema: enum values must be unique',
           );
         }

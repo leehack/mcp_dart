@@ -419,15 +419,20 @@ server.registerTool(
     final a = args['a'] as num;
     final b = args['b'] as num;
 
+    // This business constraint is not expressed by the input schema.
+    if (op == 'divide' && b == 0) {
+      return const CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Cannot divide by zero.')],
+      );
+    }
+
     final result = switch (op) {
       'add' => a + b,
       'subtract' => a - b,
       'multiply' => a * b,
       'divide' => a / b,
-      _ => throw McpError(
-        ErrorCode.invalidParams.value,
-        'Invalid operation',
-      ),
+      _ => throw StateError('Operation was validated above'),
     };
 
     return CallToolResult(
@@ -503,13 +508,16 @@ await client.callTool(
   ),
 );
 
-// Incorrect call
-await client.callTool(
+// Incorrect call: the JSON-RPC request succeeds with a tool error result.
+final invalidResult = await client.callTool(
   CallToolRequest(
     name: 'greet',
     arguments: {'name': 123},  // ❌ Wrong type
   ),
 );
+if (invalidResult.isError) {
+  print('Correct the arguments and retry: ${invalidResult.toJson()}');
+}
 ```
 
 ### Request Timeout
