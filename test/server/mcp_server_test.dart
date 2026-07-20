@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/server.dart';
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -552,6 +553,81 @@ void main() {
       final response = transport.sentMessages.last as JsonRpcResponse;
       final tools = response.result['tools'] as List;
       expect(tools.first['description'], equals('Updated description'));
+    });
+
+    test('stateless tool handle preserves and updates its full API', () async {
+      final initialOutputSchema = JsonSchema.array(
+        items: JsonSchema.string(),
+      );
+      CallToolResult initialCallback(
+        Map<String, dynamic> args,
+        RequestHandlerExtra extra,
+      ) {
+        return CallToolResult.fromStructuredArray(['initial']);
+      }
+
+      final registeredTool = server.registerStatelessTool(
+        'stateless-tool',
+        outputJsonSchema: initialOutputSchema,
+        callback: initialCallback,
+      );
+
+      expect(registeredTool.outputJsonSchema, same(initialOutputSchema));
+      expect(registeredTool.outputSchema, isNull);
+      expect(registeredTool.statelessCallback, same(initialCallback));
+      expect(registeredTool.callback, isNull);
+
+      final updatedOutputSchema = JsonSchema.string();
+      CallToolResult updatedCallback(
+        Map<String, dynamic> args,
+        RequestHandlerExtra extra,
+      ) {
+        return CallToolResult.fromStructuredString('updated');
+      }
+
+      registeredTool.updateStateless(
+        description: 'Updated stateless tool',
+        outputJsonSchema: updatedOutputSchema,
+        callback: updatedCallback,
+      );
+
+      expect(registeredTool.description, 'Updated stateless tool');
+      expect(registeredTool.outputJsonSchema, same(updatedOutputSchema));
+      expect(registeredTool.statelessCallback, same(updatedCallback));
+      expect(
+        () => registeredTool.updateStateless(
+          outputJsonSchema: initialOutputSchema,
+          clearOutputSchema: true,
+        ),
+        throwsArgumentError,
+      );
+      expect(registeredTool.outputJsonSchema, same(updatedOutputSchema));
+
+      await server.connect(transport);
+      final listMessage = await _receiveResponse(
+        transport,
+        JsonRpcListToolsRequest(id: 10, meta: _statelessMeta()),
+      );
+      final listedTools =
+          (listMessage as JsonRpcResponse).result['tools'] as List;
+      expect(listedTools.single['description'], 'Updated stateless tool');
+      expect(listedTools.single['outputSchema']['type'], 'string');
+
+      final callMessage = await _receiveResponse(
+        transport,
+        JsonRpcCallToolRequest(
+          id: 11,
+          params: const CallToolRequest(name: 'stateless-tool').toJson(),
+          meta: _statelessMeta(),
+        ),
+      );
+      final result = CallToolResult.fromJson(
+        (callMessage as JsonRpcResponse).result,
+      );
+      expect(result.structuredContentJson?.asString, 'updated');
+
+      registeredTool.updateStateless(clearOutputSchema: true);
+      expect(registeredTool.outputJsonSchema, isNull);
     });
 
     test('registerTool rename rejects an occupied name', () {

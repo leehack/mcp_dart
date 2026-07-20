@@ -210,6 +210,25 @@ void main() {
       expect(taskCapabilities!.requests?.tools?.call, isNotNull);
     });
 
+    test('registerStatelessToolTask returns a full-schema handle', () {
+      final outputSchema = JsonSchema.array(items: JsonSchema.string());
+      final registeredTool = mcpServer.experimental.registerStatelessToolTask(
+        'stateless_task_tool',
+        outputJsonSchema: outputSchema,
+        handler: _ResultHandler(),
+      );
+
+      expect(registeredTool, isA<RegisteredStatelessTool>());
+      expect(registeredTool.outputJsonSchema, same(outputSchema));
+      expect(registeredTool.outputSchema, isNull);
+      expect(registeredTool.statelessCallback, isNull);
+      expect(registeredTool.callback, isA<InterfaceToolCallback>());
+
+      final updatedSchema = JsonSchema.string();
+      registeredTool.updateStateless(outputJsonSchema: updatedSchema);
+      expect(registeredTool.outputJsonSchema, same(updatedSchema));
+    });
+
     test('invalid task input is rejected before task acceptance', () async {
       final handler = _ResultHandler();
       mcpServer.experimental.registerToolTask(
@@ -242,6 +261,109 @@ void main() {
         contains("Invalid arguments for tool 'task_tool'"),
       );
       expect(handler.createTaskCalls, 0);
+    });
+
+    test('tasks/result validates the originating tool output schema', () async {
+      final handler = _ResultHandler();
+      mcpServer.experimental.registerToolTask(
+        'validated_task_tool',
+        outputSchema: ToolOutputSchema(
+          properties: {'result': JsonSchema.string()},
+          required: ['result'],
+        ),
+        handler: handler,
+      );
+      mcpServer.experimental.onTaskResult(
+        (taskId, extra) async =>
+            CallToolResult.fromStructuredContent({'wrong': 'field'}),
+      );
+
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final createResponse = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'create-validated-task',
+          params: {
+            'name': 'validated_task_tool',
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+      expect(createResponse, isA<JsonRpcResponse>());
+      expect(handler.createTaskCalls, 1);
+
+      final resultResponse = await _receiveResponse(
+        transport,
+        JsonRpcTaskResultRequest(
+          id: 'validated-task-result',
+          resultParams: const TaskResultRequest(taskId: 'task1'),
+          // Initialization-era metadata must not override the negotiated
+          // session version or downgrade modern error semantics.
+          meta: {McpMetaKey.protocolVersion: '2025-06-18'},
+        ),
+      );
+      expect(resultResponse, isA<JsonRpcError>());
+      final error = resultResponse as JsonRpcError;
+      expect(error.error.code, ErrorCode.internalError.value);
+      expect(
+        error.error.message,
+        "Tool 'validated_task_tool' returned structured content that does not match its output schema.",
+      );
+    });
+
+    test('tasks/result uses the schema captured when the task was accepted',
+        () async {
+      final handler = _ResultHandler();
+      final registeredTool = mcpServer.experimental.registerToolTask(
+        'snapshot_task_tool',
+        outputSchema: ToolOutputSchema(
+          properties: {'result': JsonSchema.string()},
+          required: ['result'],
+        ),
+        handler: handler,
+      );
+      mcpServer.experimental.onTaskResult(
+        (taskId, extra) async =>
+            CallToolResult.fromStructuredContent({'result': 'accepted'}),
+      );
+
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final createResponse = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'create-snapshot-task',
+          params: {
+            'name': 'snapshot_task_tool',
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+      expect(createResponse, isA<JsonRpcResponse>());
+
+      registeredTool.update(
+        name: 'renamed_snapshot_task_tool',
+        outputSchema: ToolOutputSchema(
+          properties: {'count': JsonSchema.integer()},
+          required: ['count'],
+        ),
+      );
+
+      final resultResponse = await _receiveResponse(
+        transport,
+        JsonRpcTaskResultRequest(
+          id: 'snapshot-task-result',
+          resultParams: const TaskResultRequest(taskId: 'task1'),
+        ),
+      );
+      expect(resultResponse, isA<JsonRpcResponse>());
+      final result = CallToolResult.fromJson(
+        (resultResponse as JsonRpcResponse).result,
+      );
+      expect(result.structuredContent, {'result': 'accepted'});
     });
 
     test('required task mode is checked before input schema', () async {

@@ -277,6 +277,11 @@ void main() {
       expect(checksById['base.ping']?.status, 'info');
       expect(checksById['base.ping']?.message, contains('no probe was sent'));
       expect(checksById['logging.request-scoped']?.status, 'info');
+      expect(checksById['tools.schema']?.status, 'pass');
+      final tools = report.inventory['tools'] as List<dynamic>;
+      final tool = tools.single as Map<String, dynamic>;
+      final outputSchema = tool['outputSchema'] as Map<String, dynamic>;
+      expect(outputSchema['type'], 'array');
       expect(report.inventory, isNot(contains('toolCalls')));
     });
 

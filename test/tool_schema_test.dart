@@ -234,6 +234,101 @@ void main() {
       expect(parsedNull.structuredContentJson?.toJson(), isNull);
     });
 
+    test('CallToolResult normalizes contradictory structured inputs', () {
+      final arrayResult = CallToolResult(
+        content: const [],
+        structuredContent: const {'legacy': true},
+        structuredContentJson: JsonValue.array(['canonical']),
+        hasStructuredContent: false,
+      );
+
+      expect(arrayResult.hasStructuredContent, isTrue);
+      expect(arrayResult.structuredContent, isNull);
+      expect(arrayResult.structuredContentJson?.toJson(), ['canonical']);
+      expect(arrayResult.toJson()['structuredContent'], ['canonical']);
+
+      final objectResult = CallToolResult(
+        content: const [],
+        structuredContent: const {'legacy': true},
+        structuredContentJson: JsonValue.object({'canonical': true}),
+        hasStructuredContent: false,
+      );
+
+      expect(objectResult.hasStructuredContent, isTrue);
+      expect(objectResult.structuredContent, {'canonical': true});
+      expect(
+        objectResult.structuredContentJson?.toJson(),
+        {'canonical': true},
+      );
+      expect(objectResult.toJson()['structuredContent'], {'canonical': true});
+
+      const legacyResult = CallToolResult(
+        content: [],
+        structuredContent: {'legacy': true},
+        hasStructuredContent: false,
+      );
+      expect(legacyResult.hasStructuredContent, isTrue);
+      expect(legacyResult.structuredContent, {'legacy': true});
+      expect(legacyResult.structuredContentJson?.toJson(), {'legacy': true});
+
+      const canonicalNullResult = CallToolResult(
+        content: [],
+        structuredContent: {'legacy': true},
+        structuredContentJson: JsonValue.nullValue,
+        hasStructuredContent: false,
+      );
+      expect(canonicalNullResult.hasStructuredContent, isTrue);
+      expect(canonicalNullResult.structuredContent, isNull);
+      expect(canonicalNullResult.structuredContentJson?.toJson(), isNull);
+      expect(
+        canonicalNullResult.toJson(),
+        containsPair('structuredContent', null),
+      );
+
+      const explicitNullResult = CallToolResult(
+        content: [],
+        hasStructuredContent: true,
+      );
+      expect(explicitNullResult.hasStructuredContent, isTrue);
+      expect(explicitNullResult.structuredContentJson?.toJson(), isNull);
+    });
+
+    test('CallToolResult extra cannot overwrite protocol fields', () {
+      for (final field in const [
+        'content',
+        'isError',
+        'structuredContent',
+        '_meta',
+      ]) {
+        final result = CallToolResult(
+          content: const [TextContent(text: 'canonical content')],
+          isError: true,
+          structuredContent: const {'result': 'validated'},
+          meta: const {'source': 'canonical'},
+          extra: {field: 'overridden'},
+        );
+
+        final json = result.toJson();
+        expect(
+          json[field],
+          isNot('overridden'),
+          reason: '$field must not replace its validated protocol value',
+        );
+        expect(json['content'], [
+          {'type': 'text', 'text': 'canonical content'},
+        ]);
+        expect(json['isError'], isTrue);
+        expect(json['structuredContent'], {'result': 'validated'});
+        expect(json['_meta'], {'source': 'canonical'});
+      }
+
+      final result = const CallToolResult(
+        content: [],
+        extra: {'vendor.example/status': 'ok'},
+      );
+      expect(result.toJson()['vendor.example/status'], 'ok');
+    });
+
     test('Tool JSON object fields reject non-JSON Dart map values', () {
       expect(
         () => Tool.fromJson({

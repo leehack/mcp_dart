@@ -15,6 +15,7 @@ class MockTransport extends Transport
   int toolListRequestCount = 0;
   final bool useStatelessDiscovery;
   final bool repeatToolListCursor;
+  final String initializationProtocolVersion;
 
   MockTransport({
     this.serverCapabilities = const ServerCapabilities(
@@ -25,6 +26,7 @@ class MockTransport extends Transport
     this.headerMismatchResponsesRemaining = 0,
     this.useStatelessDiscovery = false,
     this.repeatToolListCursor = false,
+    this.initializationProtocolVersion = latestInitializationProtocolVersion,
   }) : advertisedTools = advertisedTools ?? _defaultAdvertisedTools();
 
   @override
@@ -70,7 +72,7 @@ class MockTransport extends Transport
         JsonRpcResponse(
           id: message.id,
           result: InitializeResult(
-            protocolVersion: latestInitializationProtocolVersion,
+            protocolVersion: initializationProtocolVersion,
             capabilities: serverCapabilities,
             serverInfo:
                 const Implementation(name: 'MockServer', version: '1.0.0'),
@@ -124,44 +126,50 @@ class MockTransport extends Transport
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredContent({'result': 'success'})
-                .toJson(),
+            result: _toolResultJson(
+              CallToolResult.fromStructuredContent({'result': 'success'}),
+            ),
           ),
         );
       } else if (name == 'array_tool') {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result:
-                CallToolResult.fromStructuredArray(['alpha', 'beta']).toJson(),
+            result: _toolResultJson(
+              CallToolResult.fromStructuredArray(['alpha', 'beta']),
+            ),
           ),
         );
       } else if (name == 'broken_array_tool') {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredArray(['alpha', 1]).toJson(),
+            result: _toolResultJson(
+              CallToolResult.fromStructuredArray(['alpha', 1]),
+            ),
           ),
         );
       } else if (name == 'advanced_broken_tool') {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredArray([1, 'extra']).toJson(),
+            result: _toolResultJson(
+              CallToolResult.fromStructuredArray([1, 'extra']),
+            ),
           ),
         );
       } else if (name == 'missing_null_tool') {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: const CallToolResult(content: []).toJson(),
+            result: _toolResultJson(const CallToolResult(content: [])),
           ),
         );
       } else if (name == 'explicit_null_tool') {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredNull().toJson(),
+            result: _toolResultJson(CallToolResult.fromStructuredNull()),
           ),
         );
       } else if (name == 'broken_tool') {
@@ -169,33 +177,33 @@ class MockTransport extends Transport
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: CallToolResult.fromStructuredContent({'wrong': 'field'})
-                .toJson(),
+            result: _toolResultJson(
+              CallToolResult.fromStructuredContent({'wrong': 'field'}),
+            ),
           ),
         );
       } else if (name == 'header_retry_tool') {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: {
-              if (useStatelessDiscovery) 'resultType': resultTypeComplete,
-              ...const CallToolResult(content: []).toJson(),
-            },
+            result: _toolResultJson(const CallToolResult(content: [])),
           ),
         );
       } else {
         _respond(
           JsonRpcResponse(
             id: message.id,
-            result: {
-              if (useStatelessDiscovery) 'resultType': resultTypeComplete,
-              ...const CallToolResult(content: []).toJson(),
-            },
+            result: _toolResultJson(const CallToolResult(content: [])),
           ),
         );
       }
     }
   }
+
+  Map<String, dynamic> _toolResultJson(CallToolResult result) => {
+        if (useStatelessDiscovery) 'resultType': resultTypeComplete,
+        ...result.toJson(),
+      };
 
   void _respond(JsonRpcMessage message) {
     scheduleMicrotask(() {
@@ -724,6 +732,7 @@ void main() {
     });
 
     test('validates non-object tool output schemas successfully', () async {
+      transport = MockTransport(useStatelessDiscovery: true);
       await client.connect(transport);
       await client.listTools();
 
@@ -734,7 +743,41 @@ void main() {
       expect(result.structuredContentJson?.toJson(), equals(['alpha', 'beta']));
     });
 
+    test('legacy protocols ignore non-object output schemas and values',
+        () async {
+      for (final protocolVersion in const [
+        latestInitializationProtocolVersion,
+        '2025-06-18',
+      ]) {
+        transport = MockTransport(
+          initializationProtocolVersion: protocolVersion,
+        );
+        client = Client(
+          const Implementation(name: 'TestClient', version: '1.0.0'),
+          options: McpClientOptions(protocolVersion: protocolVersion),
+        );
+
+        await client.connect(transport);
+        await client.listTools();
+
+        final result = await client.callTool(
+          const CallToolRequest(name: 'broken_array_tool'),
+        );
+
+        expect(result.hasStructuredContent, isFalse, reason: protocolVersion);
+        expect(result.structuredContentJson, isNull, reason: protocolVersion);
+        expect(
+          (result.content.single as TextContent).text,
+          '["alpha",1]',
+          reason: protocolVersion,
+        );
+
+        await client.close();
+      }
+    });
+
     test('output schema rejects omitted structured content', () async {
+      transport = MockTransport(useStatelessDiscovery: true);
       await client.connect(transport);
       await client.listTools();
 
@@ -759,6 +802,7 @@ void main() {
     });
 
     test('output schema accepts explicit structured null', () async {
+      transport = MockTransport(useStatelessDiscovery: true);
       await client.connect(transport);
       await client.listTools();
 
@@ -771,6 +815,7 @@ void main() {
     });
 
     test('throws when non-object tool output validation fails', () async {
+      transport = MockTransport(useStatelessDiscovery: true);
       await client.connect(transport);
       await client.listTools();
 
@@ -789,6 +834,7 @@ void main() {
     });
 
     test('enforces 2020-12 keywords in advertised output schemas', () async {
+      transport = MockTransport(useStatelessDiscovery: true);
       await client.connect(transport);
       await client.listTools();
 

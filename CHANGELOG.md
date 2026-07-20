@@ -35,6 +35,15 @@
   the call under MCP `2025-11-25` and `2026-07-28`. Under those versions,
   invalid output from a locally registered tool now reports JSON-RPC
   `internalError` instead of blaming client params.
+- Hardened structured tool-result contracts across direct and task-backed
+  calls: output schemas are compiled before handler side effects, completed
+  task results use the immutable schema captured at acceptance whether polled
+  or notified, and stable clients retain only object-root structured content.
+- Made `mcp_dart inspect-server` apply protocol-specific tool schema rules so
+  MCP `2026-07-28` array and primitive output schemas inspect successfully.
+- Added the backward-compatible `RegisteredStatelessTool` handle so stateless
+  registrations can inspect and update any-root output schemas without
+  widening the existing `RegisteredTool` interface.
 - Fixed registered tool, prompt, resource, and resource-template handles so
   `remove()` reliably unregisters them; resource and template renames now keep
   handle state and server indexes synchronized.
@@ -89,13 +98,22 @@
   peers retain the previous `invalidParams` code for these cases.
 - Clients now reject successful tool results that omit `structuredContent` when
   the advertised `outputSchema` requires validation. An explicit JSON `null`
-  remains distinct and valid when the schema permits it.
+  remains distinct and valid when the schema permits it. MCP `2025-11-25` and
+  earlier clients ignore non-object output schemas and expose the result's
+  compatibility `content` without retaining non-object `structuredContent`;
+  MCP `2026-07-28` clients continue to validate and retain any JSON root.
 - Under MCP `2025-11-25`, task-mode negotiation now runs before input-schema
   validation. A required task tool called without task augmentation returns
   JSON-RPC `methodNotFound` as before. A task-forbidden tool called with
   augmentation now returns `methodNotFound` instead of `invalidParams`; neither
   path invokes the handler. MCP `2025-06-18` and earlier peers retain
   `invalidParams`.
+- `CallToolResult.extra` entries named `content`, `isError`, `_meta`, or
+  `structuredContent` are now ignored instead of replacing the corresponding
+  protocol fields. When contradictory `CallToolResult` or
+  `SamplingToolResultContent` constructor arguments are supplied, an explicit
+  structured value is authoritative and marks the field present; use the
+  dedicated parameters for protocol-owned values.
 
 ## 2.3.0-dev.2
 

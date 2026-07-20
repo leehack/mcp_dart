@@ -197,6 +197,12 @@ types. For an MCP 2026-07-28 callback that may return
 [transition guide](mcp-2026-07-28.md#apis-specific-to-mcp-2026-07-28) for the
 mapping and non-object output example.
 
+Use `registerStatelessTool` for a non-object output schema even when its
+callback always returns `CallToolResult`. Its `RegisteredStatelessTool` handle
+keeps the complete `outputJsonSchema` and stateless callback available for
+inspection and `updateStateless()` updates; the inherited `outputSchema` getter
+remains the object-rooted compatibility view.
+
 ### Simple Tool
 
 ```dart
@@ -819,7 +825,16 @@ Declare `io.modelcontextprotocol/tasks` on both peers. Task creation is
 server-directed: a normal `tools/call` may return `CreateTaskExtensionResult`
 only when that request's client capabilities include the extension. Store the
 task before returning it; the SDK verifies that the new ID is immediately
-resolvable through `tasks/get`.
+resolvable through `tasks/get`. High-level stateless tool registrations also
+validate completed task output from `tasks/get` and `notifications/tasks`
+against the schema captured at acceptance.
+
+Updating the tool registration later does not change an in-flight task's
+contract. The validation snapshot is discarded after a terminal result,
+cancellation, or server close. Low-level custom `tools/call` handlers remain
+responsible for their own output schema association. Give persisted tasks a
+finite `ttlMs` unless indefinite retention is intentional, and expire the
+application task/result record on the same schedule.
 
 The low-level handlers below show the minimum creation and polling shape:
 

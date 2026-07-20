@@ -683,9 +683,11 @@ class SamplingToolResultContent extends SamplingContent {
     bool? hasStructuredContent,
     this.isError,
     this.meta,
-  })  : hasStructuredContent = hasStructuredContent ??
-            (structuredContentJson != null || structuredContent != null),
-        _structuredContent = structuredContent,
+  })  : hasStructuredContent = structuredContentJson != null ||
+            structuredContent != null ||
+            (hasStructuredContent ?? false),
+        _structuredContent =
+            structuredContentJson == null ? structuredContent : null,
         _structuredContentValue = structuredContentJson,
         super(type: 'tool_result');
 

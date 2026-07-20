@@ -42,12 +42,27 @@ and custom vocabularies. Schema evaluation is bounded to a depth of 64 and
 1,024 subschemas. Keep external reference resolution and custom-vocabulary
 processing in application code when needed.
 
-MCP 2025-11-25 requires `inputSchema`; `outputSchema` remains optional. When
-present, both schema values must be object-root JSON Schema values. Use
-`JsonSchema.object(...)` or `JsonObject.fromJson(...)` at the root and put
-primitive values under named properties. Primitive root schemas such as
-`JsonSchema.string()` are rejected at the MCP wire boundary for tools and form
-elicitation.
+MCP 2025-11-25 requires `inputSchema`; `outputSchema` remains optional. Its
+structured tool values are object-rooted, so stable registrations use
+`JsonSchema.object(...)` or `JsonObject.fromJson(...)` at both schema roots and
+put primitive values under named properties. Primitive tool input schemas and
+primitive form-elicitation roots are rejected at the MCP wire boundary.
+
+When a client negotiates MCP `2025-11-25` or an earlier initialization-era
+version, it ignores non-object output schemas and does not retain non-object
+`structuredContent`; the result's compatibility `content` remains available.
+MCP `2026-07-28` clients validate and retain structured output with any JSON
+root.
+
+The Dart API reflects that spec difference while preserving the `2.2.2`
+surface. `ToolInputSchema` and the existing `registerTool(outputSchema:)`
+parameter are object-root compatibility types. `Tool.inputSchema` remains
+`JsonSchema`-typed so existing schema-parsing code still compiles, but parsing
+and serialization enforce its object root. `Tool.outputSchema` is broader
+because MCP `2026-07-28` permits any root; register those tools with
+`registerStatelessTool(outputJsonSchema:)` and inspect or update them through
+the returned `RegisteredStatelessTool`. This asymmetry is therefore intentional
+at the API boundary, not a difference in wire-field naming.
 
 ### Basic Types
 

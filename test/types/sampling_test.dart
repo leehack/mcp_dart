@@ -517,6 +517,73 @@ void main() {
         expect(nullJson['structuredContent'], isNull);
       });
 
+      test('normalizes contradictory structured inputs', () {
+        final arrayContent = SamplingToolResultContent(
+          toolUseId: 'res1',
+          content: const [],
+          structuredContent: const {'legacy': true},
+          structuredContentJson: JsonValue.array(['canonical']),
+          hasStructuredContent: false,
+        );
+
+        expect(arrayContent.hasStructuredContent, isTrue);
+        expect(arrayContent.structuredContent, isNull);
+        expect(arrayContent.structuredContentJson?.toJson(), ['canonical']);
+        expect(arrayContent.toJson()['structuredContent'], ['canonical']);
+
+        final objectContent = SamplingToolResultContent(
+          toolUseId: 'res2',
+          content: const [],
+          structuredContent: const {'legacy': true},
+          structuredContentJson: JsonValue.object({'canonical': true}),
+          hasStructuredContent: false,
+        );
+
+        expect(objectContent.hasStructuredContent, isTrue);
+        expect(objectContent.structuredContent, {'canonical': true});
+        expect(
+          objectContent.structuredContentJson?.toJson(),
+          {'canonical': true},
+        );
+        expect(
+          objectContent.toJson()['structuredContent'],
+          {'canonical': true},
+        );
+
+        const legacyContent = SamplingToolResultContent(
+          toolUseId: 'res3',
+          content: [],
+          structuredContent: {'legacy': true},
+          hasStructuredContent: false,
+        );
+        expect(legacyContent.hasStructuredContent, isTrue);
+        expect(legacyContent.structuredContent, {'legacy': true});
+        expect(legacyContent.structuredContentJson?.toJson(), {'legacy': true});
+
+        const canonicalNullContent = SamplingToolResultContent(
+          toolUseId: 'res4',
+          content: [],
+          structuredContent: {'legacy': true},
+          structuredContentJson: JsonValue.nullValue,
+          hasStructuredContent: false,
+        );
+        expect(canonicalNullContent.hasStructuredContent, isTrue);
+        expect(canonicalNullContent.structuredContent, isNull);
+        expect(canonicalNullContent.structuredContentJson?.toJson(), isNull);
+        expect(
+          canonicalNullContent.toJson(),
+          containsPair('structuredContent', null),
+        );
+
+        const explicitNullContent = SamplingToolResultContent(
+          toolUseId: 'res5',
+          content: [],
+          hasStructuredContent: true,
+        );
+        expect(explicitNullContent.hasStructuredContent, isTrue);
+        expect(explicitNullContent.structuredContentJson?.toJson(), isNull);
+      });
+
       test('fromJson parses correctly', () {
         final json = {
           'type': 'tool_result',

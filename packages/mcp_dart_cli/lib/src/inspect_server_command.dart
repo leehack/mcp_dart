@@ -446,7 +446,11 @@ class McpServerInspector {
         'tools.list',
         'tools/list returned ${result.tools.length} tools.',
       );
-      _checkTools(checks, result.tools);
+      _checkTools(
+        checks,
+        result.tools,
+        allowsAnyOutputRoot: _usesStatelessProtocol(client),
+      );
     } catch (error) {
       checks.fail(
         'tools.list',
@@ -455,7 +459,11 @@ class McpServerInspector {
     }
   }
 
-  void _checkTools(InspectionCheckBuilder checks, List<Tool> tools) {
+  void _checkTools(
+    InspectionCheckBuilder checks,
+    List<Tool> tools, {
+    required bool allowsAnyOutputRoot,
+  }) {
     final seen = <String>{};
     var hasFailures = false;
     var hasWarnings = false;
@@ -483,7 +491,9 @@ class McpServerInspector {
       }
 
       final outputSchema = tool.outputSchema?.toJson();
-      if (outputSchema != null && outputSchema['type'] != 'object') {
+      if (!allowsAnyOutputRoot &&
+          outputSchema != null &&
+          outputSchema['type'] != 'object') {
         hasFailures = true;
         checks.fail(
           'tools.output-schema',
@@ -504,7 +514,8 @@ class McpServerInspector {
     if (!hasFailures) {
       checks.pass(
         'tools.schema',
-        'All advertised tools have usable names and object schemas.',
+        'All advertised tools have usable names and protocol-compatible '
+            'schemas.',
       );
     }
     if (!hasWarnings) {

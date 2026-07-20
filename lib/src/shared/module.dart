@@ -6,7 +6,9 @@ library;
 
 export 'iostream.dart'; // Core server implementation for handling MCP logic.
 export 'json_schema/json_schema_validator.dart'
-    hide JsonSchemaDefinitionException; // JSON Schema validation.
+    hide
+        JsonSchemaDefinitionException,
+        compileJsonSchemaValidator; // JSON Schema validation.
 export 'protocol.dart'; // MCP protocol utilities for message serialization/deserialization.
 export 'transport.dart'; // Transport layer for server-client communication.
 export 'task_interfaces.dart'; // Task interfaces.

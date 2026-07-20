@@ -6,6 +6,7 @@ import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/types/validation.dart';
 import 'package:meta/meta.dart';
 
+import 'protocol_notification_validation.dart';
 import 'transport.dart';
 
 final _logger = Logger("mcp_dart.shared.protocol");
@@ -2367,6 +2368,7 @@ abstract class Protocol {
     if (_options.enforceStrictCapabilities) {
       assertNotificationCapability(notificationData.method);
     }
+    validateProtocolNotification(this, notificationData);
 
     Map<String, dynamic>? finalMeta = notificationData.meta;
     Map<String, dynamic>? finalParams = notificationData.params;

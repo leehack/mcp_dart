@@ -1653,12 +1653,13 @@ class McpClient extends Protocol {
     }
 
     final taskOrToolResult = await _requestResolvingToolCall(params, options);
-    final result = taskOrToolResult is CreateTaskExtensionResult
+    final rawResult = taskOrToolResult is CreateTaskExtensionResult
         ? await _resolveTaskExtensionToolResult(
             taskOrToolResult.task,
             options,
           )
         : taskOrToolResult as CallToolResult;
+    final result = _normalizeToolResultForProtocol(rawResult);
 
     final outputSchema = _cachedToolOutputSchemas[params.name];
     if (outputSchema != null && !result.isError) {
@@ -1678,6 +1679,34 @@ class McpClient extends Protocol {
     }
 
     return result;
+  }
+
+  CallToolResult _normalizeToolResultForProtocol(CallToolResult result) {
+    // Initialization-era MCP permits only object-root structured content.
+    // Preserve the text/content fallback from newer peers without exposing a
+    // 2026-only structured value through a legacy session.
+    if (_usesStatelessProtocol || !result.hasStructuredContent) {
+      return result;
+    }
+
+    final structuredContent = result.structuredContentJson?.toJson();
+    if (structuredContent is Map &&
+        structuredContent.keys.every((key) => key is String)) {
+      return result;
+    }
+
+    return CallToolResult(
+      content: result.content,
+      isError: result.isError,
+      meta: result.meta,
+      extra: result.extra,
+    );
+  }
+
+  bool _supportsToolOutputSchema(JsonSchema schema) {
+    // MCP 2026-07-28 allows any JSON root; initialization-era schemas describe
+    // object-root structured content only.
+    return _usesStatelessProtocol || schema.toJson()['type'] == 'object';
   }
 
   /// Sends a `tools/list` request to list available tools on the server.
@@ -1744,8 +1773,9 @@ class McpClient extends Protocol {
 
       validTools.add(tool);
 
-      if (tool.outputSchema != null) {
-        _cachedToolOutputSchemas[tool.name] = tool.outputSchema!;
+      final outputSchema = tool.outputSchema;
+      if (outputSchema != null && _supportsToolOutputSchema(outputSchema)) {
+        _cachedToolOutputSchemas[tool.name] = outputSchema;
       }
 
       if (tool.execution?.taskSupport == 'required') {
