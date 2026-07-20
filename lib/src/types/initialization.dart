@@ -1407,34 +1407,32 @@ class DiscoverResult implements CacheableResultData {
     }
 
     final meta = readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta');
-    Implementation? readServerInfo(Object? value, String fieldName) {
+    Implementation? readLegacyServerInfo(Object? value) {
       if (value == null) return null;
       try {
-        return Implementation.fromJson(readJsonObject(value, fieldName));
+        return Implementation.fromJson(
+          readJsonObject(value, 'DiscoverResult.serverInfo'),
+        );
       } on FormatException {
-        // Server identity is optional, self-reported display metadata. Invalid
-        // identity must not change discovery or connection behavior.
+        // Temporary read compatibility ignores malformed pre-#3002 body
+        // identity. The canonical metadata property remains strictly parsed.
         return null;
       }
     }
 
     final hasMetadataServerInfo =
         meta?.containsKey(McpMetaKey.serverInfo) == true;
-    final metadataServerInfo = hasMetadataServerInfo
-        ? readServerInfo(
-            meta![McpMetaKey.serverInfo],
-            'DiscoverResult._meta.${McpMetaKey.serverInfo}',
-          )
-        : null;
-    final sanitizedMeta = hasMetadataServerInfo && metadataServerInfo == null
-        ? (<String, dynamic>{...meta!}..remove(McpMetaKey.serverInfo))
-        : meta;
     final serverInfo = hasMetadataServerInfo
-        ? metadataServerInfo
+        ? Implementation.fromJson(
+            readJsonObject(
+              meta![McpMetaKey.serverInfo],
+              'DiscoverResult._meta.${McpMetaKey.serverInfo}',
+            ),
+          )
         // Temporary read compatibility until corrected TypeScript and Python
         // SDK releases ship. Their pinned beta fixtures still send the
         // pre-#3002 body field; Dart never emits it.
-        : readServerInfo(json['serverInfo'], 'DiscoverResult.serverInfo');
+        : readLegacyServerInfo(json['serverInfo']);
 
     return DiscoverResult(
       supportedVersions: [
@@ -1454,7 +1452,7 @@ class DiscoverResult implements CacheableResultData {
         json['cacheScope'],
         'DiscoverResult.cacheScope',
       ),
-      meta: sanitizedMeta,
+      meta: meta,
     );
   }
 
@@ -1472,8 +1470,26 @@ class DiscoverResult implements CacheableResultData {
 
     final resultMeta = <String, dynamic>{
       if (serverInfo != null) McpMetaKey.serverInfo: serverInfo!.toJson(),
-      ...?readOptionalJsonObject(meta, 'DiscoverResult._meta'),
     };
+    final jsonMeta = readOptionalJsonObject(meta, 'DiscoverResult._meta');
+    if (jsonMeta != null) {
+      resultMeta.addAll(jsonMeta);
+      if (jsonMeta.containsKey(McpMetaKey.serverInfo)) {
+        final metadataServerInfo = jsonMeta[McpMetaKey.serverInfo];
+        if (metadataServerInfo == null) {
+          // A null override represents an anonymous result. The optional
+          // property must be absent rather than encoded with a null value.
+          resultMeta.remove(McpMetaKey.serverInfo);
+        } else {
+          Implementation.fromJson(
+            readJsonObject(
+              metadataServerInfo,
+              'DiscoverResult._meta.${McpMetaKey.serverInfo}',
+            ),
+          );
+        }
+      }
+    }
 
     return {
       'resultType': resultType,

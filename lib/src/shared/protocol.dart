@@ -600,6 +600,19 @@ abstract class Protocol {
       return;
     }
 
+    final resultMeta = readOptionalJsonObject(
+      resultJson['_meta'],
+      'MCP stateless Result._meta',
+    );
+    if (resultMeta?.containsKey(McpMetaKey.serverInfo) == true) {
+      Implementation.fromJson(
+        readJsonObject(
+          resultMeta![McpMetaKey.serverInfo],
+          'MCP stateless Result._meta.${McpMetaKey.serverInfo}',
+        ),
+      );
+    }
+
     final resultType = resultJson['resultType'];
     if (resultType == null) {
       throw const FormatException(
@@ -1671,11 +1684,13 @@ abstract class Protocol {
           'Result._meta',
         );
         Map<String, dynamic>? responseMeta;
-        if (result.meta != null || serializedResult.containsKey('_meta')) {
-          responseMeta = <String, dynamic>{
-            ...?result.meta,
-            ...?serializedMeta,
-          };
+        if (serializedResult.containsKey('_meta')) {
+          // The serializer may validate or sanitize reserved metadata, so its
+          // output is authoritative. Falling back only when `_meta` was omitted
+          // preserves compatibility with older custom result implementations.
+          responseMeta = serializedMeta ?? <String, dynamic>{};
+        } else if (result.meta != null) {
+          responseMeta = readJsonObject(result.meta, 'Result._meta');
         }
 
         final response = JsonRpcResponse(

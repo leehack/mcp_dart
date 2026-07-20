@@ -1,0 +1,4 @@
+# Expected failures for the merged conformance PR #403 source.
+#
+# PR #403 includes the spec PR #3002 identity corrections, so the focused
+# server-stateless verification has no expected failures.

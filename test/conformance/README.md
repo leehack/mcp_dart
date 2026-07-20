@@ -60,15 +60,27 @@ response mode, runs the full MCP `2026-07-28` server scenario list from
 and `--spec-version 2026-07-28`, and writes per-run artifacts under
 `.dart_tool/conformance/2026_07_28/`.
 
-Expected failures live in `2026_07_28_expected_failures.txt`. When a scenario is
-fixed, remove it from that file so the baseline remains useful.
+Expected failures live in `2026_07_28_expected_failures.txt` as exact JSON
+diagnostics. The runner accepts only the complete pinned diagnostic set with
+exit code 1; a timeout, unreadable report, or different failure fails CI.
 
 As of `@modelcontextprotocol/conformance@0.2.0-alpha.9`, the
 `server-stateless` scenario is expected to fail because that published referee
 predates spec PR #3002: it still requires request `clientInfo` and body
-`DiscoverResult.serverInfo`. The checked-in expected-failure entry must be
-removed when a published conformance package includes PR #403; latest-main
-verification is run separately against the final metadata shape.
+`DiscoverResult.serverInfo`. The three checked-in diagnostics must be removed
+when a published conformance package includes PR #403.
+
+Until then, reproduce the corrected `server-stateless` check against the
+immutable merged PR #403 source:
+
+```bash
+dart run test/conformance/run_2026_07_28_server_conformance.dart \
+  --scenario server-stateless \
+  --conformance-package \
+    github:modelcontextprotocol/conformance#d1c0b9591786726d8a4bec05306eb103ba6894ff \
+  --expected-failures \
+    test/conformance/2026_07_28_post_3002_expected_failures.txt
+```
 
 Run the current client baseline from the repository root:
 

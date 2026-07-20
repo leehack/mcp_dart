@@ -478,6 +478,42 @@ void main() {
       expect(meta, isNot(contains(McpMetaKey.clientInfo)));
     });
 
+    test('typed client identity owns the reserved request metadata key', () {
+      for (final rawClientInfo in <Object?>[
+        null,
+        'malformed',
+        const {'name': 'raw-client', 'version': '1.0.0'},
+      ]) {
+        final callerMeta = <String, dynamic>{
+          McpMetaKey.clientInfo: rawClientInfo,
+          'com.example.trace/id': 'trace-1',
+        };
+        final meta = buildProtocolRequestMeta(
+          protocolVersion: previewProtocolVersion,
+          clientCapabilities: const ClientCapabilities(),
+          meta: callerMeta,
+        );
+
+        expect(meta, isNot(contains(McpMetaKey.clientInfo)));
+        expect(meta['com.example.trace/id'], 'trace-1');
+        expect(callerMeta[McpMetaKey.clientInfo], equals(rawClientInfo));
+      }
+
+      final meta = buildProtocolRequestMeta(
+        protocolVersion: previewProtocolVersion,
+        clientInfo: const Implementation(
+          name: 'typed-client',
+          version: '2.0.0',
+        ),
+        clientCapabilities: const ClientCapabilities(),
+        meta: const {McpMetaKey.clientInfo: 'malformed'},
+      );
+      expect(meta[McpMetaKey.clientInfo], {
+        'name': 'typed-client',
+        'version': '2.0.0',
+      });
+    });
+
     test('response serialization preserves and merges result metadata', () {
       const response = JsonRpcResponse(
         id: 1,
@@ -513,6 +549,27 @@ void main() {
         emptyResultMeta.toJson()['result'],
         containsPair('_meta', <String, dynamic>{}),
       );
+    });
+
+    test('response metadata wins after result metadata merge', () {
+      const response = JsonRpcResponse(
+        id: 1,
+        result: {
+          '_meta': {McpMetaKey.serverInfo: 'overridden-malformed-value'},
+        },
+        meta: {
+          McpMetaKey.serverInfo: {
+            'name': 'response-server',
+            'version': '2.0.0',
+          },
+        },
+      );
+
+      final result = response.toJson()['result'] as Map<String, dynamic>;
+      expect((result['_meta'] as Map)[McpMetaKey.serverInfo], {
+        'name': 'response-server',
+        'version': '2.0.0',
+      });
     });
 
     test('rejects invalid 2026 request metadata keys during construction', () {
@@ -1293,28 +1350,35 @@ void main() {
       });
       expect(identityFreeResult.serverInfo, isNull);
 
-      final malformedIdentityResult = DiscoverResult.fromJson({
-        'resultType': resultTypeComplete,
-        'supportedVersions': [previewProtocolVersion],
-        'capabilities': <String, dynamic>{},
-        '_meta': {
-          McpMetaKey.serverInfo: 'malformed',
-          'com.example/trace': 'trace-1',
-        },
-      });
-      expect(malformedIdentityResult.serverInfo, isNull);
-      expect(malformedIdentityResult.toJson()['_meta'], {
-        'com.example/trace': 'trace-1',
-      });
+      for (final malformedServerInfo in <Object?>[
+        null,
+        'malformed',
+        const {'name': 'missing-version'},
+      ]) {
+        expect(
+          () => DiscoverResult.fromJson({
+            'resultType': resultTypeComplete,
+            'supportedVersions': [previewProtocolVersion],
+            'capabilities': <String, dynamic>{},
+            '_meta': {
+              McpMetaKey.serverInfo: malformedServerInfo,
+              'com.example/trace': 'trace-1',
+            },
+          }),
+          throwsFormatException,
+        );
+      }
 
-      final malformedMetadataDoesNotUseLegacyBody = DiscoverResult.fromJson({
-        'resultType': resultTypeComplete,
-        'supportedVersions': [previewProtocolVersion],
-        'capabilities': <String, dynamic>{},
-        '_meta': {McpMetaKey.serverInfo: 'malformed'},
-        'serverInfo': {'name': 'legacy-server', 'version': '1.0.0'},
-      });
-      expect(malformedMetadataDoesNotUseLegacyBody.serverInfo, isNull);
+      expect(
+        () => DiscoverResult.fromJson({
+          'resultType': resultTypeComplete,
+          'supportedVersions': [previewProtocolVersion],
+          'capabilities': <String, dynamic>{},
+          '_meta': {McpMetaKey.serverInfo: 'malformed'},
+          'serverInfo': {'name': 'legacy-server', 'version': '1.0.0'},
+        }),
+        throwsFormatException,
+      );
 
       final explicitEmptyMeta = const DiscoverResult(
         supportedVersions: [previewProtocolVersion],
@@ -1348,6 +1412,33 @@ void main() {
         'name': 'handler',
         'version': '2.0.0',
       });
+
+      final anonymousOverride = const DiscoverResult(
+        supportedVersions: [previewProtocolVersion],
+        capabilities: ServerCapabilities(),
+        serverInfo: Implementation(name: 'configured', version: '1.0.0'),
+        meta: {
+          McpMetaKey.serverInfo: null,
+          'com.example/trace': 'trace-1',
+        },
+      ).toJson();
+      expect(anonymousOverride['_meta'], {
+        'com.example/trace': 'trace-1',
+      });
+
+      for (final malformedServerInfo in <Object>[
+        'malformed',
+        const <String, dynamic>{'name': 'missing-version'},
+      ]) {
+        expect(
+          () => DiscoverResult(
+            supportedVersions: const [previewProtocolVersion],
+            capabilities: const ServerCapabilities(),
+            meta: {McpMetaKey.serverInfo: malformedServerInfo},
+          ).toJson(),
+          throwsA(isA<FormatException>()),
+        );
+      }
     });
 
     test('stateless metadata omits legacy task capabilities', () {
@@ -4596,6 +4687,71 @@ void main() {
       await server.close();
     });
 
+    test('server omits anonymous handler identity from the wire', () async {
+      final server = Server(
+        const Implementation(name: 'configured', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.require2026,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      server.setRequestHandler<JsonRpcListToolsRequest>(
+        Method.toolsList,
+        (request, extra) async => const ListToolsResult(
+          tools: [],
+          meta: {
+            'com.example/trace': 'trace-1',
+            McpMetaKey.serverInfo: null,
+          },
+        ),
+        (id, params, meta) => JsonRpcListToolsRequest(
+          id: id,
+          params: params,
+          meta: meta,
+        ),
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(JsonRpcListToolsRequest(id: 1, meta: _clientMeta()));
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['_meta'], {
+        'com.example/trace': 'trace-1',
+      });
+      expect(response.meta, {
+        'com.example/trace': 'trace-1',
+      });
+      final wireResult = response.toJson()['result'] as Map<String, dynamic>;
+      expect(wireResult['_meta'], {
+        'com.example/trace': 'trace-1',
+      });
+      await server.close();
+    });
+
+    test('server rejects malformed handler identity before serialization', () {
+      final server = Server(
+        const Implementation(name: 'configured', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.require2026,
+        ),
+      );
+
+      expect(
+        () => server.serializeIncomingResult(
+          JsonRpcListToolsRequest(id: 1, meta: _clientMeta()),
+          const ListToolsResult(
+            tools: [],
+            meta: {McpMetaKey.serverInfo: 'malformed'},
+          ),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('legacy initialize keeps body identity without result metadata',
         () async {
       final server = Server(
@@ -6818,6 +6974,57 @@ void main() {
       );
     });
 
+    test('client rejects malformed identity on stateless non-discovery results',
+        () async {
+      for (final malformedServerInfo in <Object?>[
+        null,
+        'malformed',
+        const <String, dynamic>{'name': 'missing-version'},
+      ]) {
+        final transport = DiscoveringClientTransport(
+          toolsListResult: <String, dynamic>{
+            'resultType': resultTypeComplete,
+            'tools': const <dynamic>[],
+            'ttlMs': 0,
+            'cacheScope': CacheScope.private,
+            '_meta': <String, dynamic>{
+              McpMetaKey.serverInfo: malformedServerInfo,
+            },
+          },
+        );
+        final client = McpClient(
+          const Implementation(name: 'client', version: '1.0.0'),
+          options: const McpClientOptions(
+            protocol: McpProtocol.stable,
+            useServerDiscover: true,
+          ),
+        );
+
+        try {
+          await client.connect(transport);
+          await expectLater(
+            client.listTools(),
+            throwsA(
+              isA<McpError>()
+                  .having(
+                    (error) => error.code,
+                    'code',
+                    ErrorCode.internalError.value,
+                  )
+                  .having(
+                    (error) => error.message,
+                    'message',
+                    contains('Failed to parse result for ${Method.toolsList}'),
+                  ),
+            ),
+            reason: '$malformedServerInfo',
+          );
+        } finally {
+          await client.close();
+        }
+      }
+    });
+
     test('client rejects unrecognized stateless resultType values', () async {
       final transport = DiscoveringClientTransport(
         toolsListResult: const {
@@ -7111,6 +7318,38 @@ void main() {
       final result = await client.listTools();
       expect(client.getProtocolVersion(), latestInitializationProtocolVersion);
       expect(result.tools, isEmpty);
+    });
+
+    test('legacy client preserves opaque future reserved result metadata',
+        () async {
+      final transport = LegacyFallbackTransport(
+        toolsListResult: const {
+          'tools': <dynamic>[],
+          '_meta': <String, dynamic>{
+            McpMetaKey.serverInfo: null,
+          },
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+        options: const McpClientOptions(
+          protocol: McpProtocol.stable,
+          useServerDiscover: true,
+        ),
+      );
+
+      try {
+        await client.connect(transport);
+        final result = await client.listTools();
+
+        expect(
+          client.getProtocolVersion(),
+          latestInitializationProtocolVersion,
+        );
+        expect(result.meta, containsPair(McpMetaKey.serverInfo, null));
+      } finally {
+        await client.close();
+      }
     });
 
     test('client rejects discovery when no compatible version is offered',

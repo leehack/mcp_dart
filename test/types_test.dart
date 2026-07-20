@@ -412,11 +412,11 @@ void main() {
       }
 
       expect(
-        DiscoverResult.fromJson({
+        () => DiscoverResult.fromJson({
           ...discoverResult,
           '_meta': {McpMetaKey.serverInfo: 'bad'},
-        }).serverInfo,
-        isNull,
+        }),
+        throwsA(isA<FormatException>()),
       );
     });
   });

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'conformance_expected_failures.dart';
 import 'conformance_scenario_inventory.dart';
 
 const _defaultConformancePackage =
@@ -58,7 +59,7 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  final expectedFailures = await _readExpectedFailures(
+  final expectedFailures = await readExpectedConformanceFailures(
     options.expectedFailuresPath,
   );
   final outputRoot = await _createOutputRoot(options.outputDir);
@@ -122,13 +123,15 @@ Future<void> main(List<String> args) async {
     final unexpectedFailures = results
         .where(
           (result) =>
-              !result.passed && !expectedFailures.contains(result.scenario),
+              !result.passed && !_isExpectedFailure(result, expectedFailures),
         )
         .toList();
     final unexpectedPasses = results
         .where(
           (result) =>
-              result.passed && expectedFailures.contains(result.scenario),
+              result.passed &&
+              _expectedForScenario(result.scenario, expectedFailures)
+                  .isNotEmpty,
         )
         .toList();
 
@@ -142,6 +145,7 @@ Future<void> main(List<String> args) async {
       stdout.writeln('Unexpected failures:');
       for (final result in unexpectedFailures) {
         stdout.writeln('  - ${result.scenario} (${result.status})');
+        _printExpectationMismatch(result, expectedFailures);
       }
     }
     if (unexpectedPasses.isNotEmpty) {
@@ -162,23 +166,6 @@ Future<void> main(List<String> args) async {
   }
 
   exit(exitCode);
-}
-
-Future<Set<String>> _readExpectedFailures(String path) async {
-  final file = File(path);
-  if (!await file.exists()) {
-    return const {};
-  }
-
-  final entries = <String>{};
-  for (final line in await file.readAsLines()) {
-    final trimmed = line.trim();
-    if (trimmed.isEmpty || trimmed.startsWith('#')) {
-      continue;
-    }
-    entries.add(trimmed);
-  }
-  return entries;
 }
 
 Future<Directory> _createOutputRoot(String? outputDir) async {
@@ -252,7 +239,10 @@ Future<_ScenarioResult> _runScenario({
   required String conformancePackage,
   required Duration timeout,
 }) async {
-  final outputDir = Directory('${outputRoot.path}/${_sanitize(scenario)}');
+  final outputDir = Directory(
+    '${outputRoot.path}/${_sanitize(scenario)}/'
+    'run-${DateTime.now().toUtc().microsecondsSinceEpoch}',
+  );
   await outputDir.create(recursive: true);
 
   final process = await Process.start(
@@ -290,12 +280,24 @@ Future<_ScenarioResult> _runScenario({
   try {
     final code = await process.exitCode.timeout(timeout);
     await Future.wait([stdoutDone, stderrDone]);
+    var failureDiagnostics = const <ConformanceFailureDiagnostic>[];
+    String? diagnosticReadError;
+    try {
+      failureDiagnostics = await readConformanceFailureDiagnostics(
+        outputDirectory: outputDir,
+        scenario: scenario,
+      );
+    } on Object catch (error) {
+      diagnosticReadError = '$error';
+    }
     return _ScenarioResult(
       scenario: scenario,
       exitCode: code,
       timedOut: false,
       stdout: stdoutBuffer.toString(),
       stderr: stderrBuffer.toString(),
+      failureDiagnostics: failureDiagnostics,
+      diagnosticReadError: diagnosticReadError,
     );
   } on TimeoutException {
     process.kill(ProcessSignal.sigkill);
@@ -306,20 +308,26 @@ Future<_ScenarioResult> _runScenario({
       timedOut: true,
       stdout: stdoutBuffer.toString(),
       stderr: stderrBuffer.toString(),
+      failureDiagnostics: const [],
+      diagnosticReadError: null,
     );
   }
 }
 
 void _printScenarioResult(
   _ScenarioResult result,
-  Set<String> expectedFailures,
+  List<ConformanceFailureDiagnostic> expectedFailures,
 ) {
-  final expected = expectedFailures.contains(result.scenario);
+  final expected = _expectedForScenario(
+    result.scenario,
+    expectedFailures,
+  ).isNotEmpty;
+  final matchedExpectation = _isExpectedFailure(result, expectedFailures);
   final marker = result.passed
       ? expected
           ? 'UNEXPECTED PASS'
           : 'PASS'
-      : expected
+      : matchedExpectation
           ? 'EXPECTED ${result.status.toUpperCase()}'
           : 'FAIL';
   stdout.writeln('${marker.padRight(18)} ${result.scenario}');
@@ -328,25 +336,92 @@ void _printScenarioResult(
 Future<void> _writeSummary(
   Directory outputRoot,
   List<_ScenarioResult> results,
-  Set<String> expectedFailures,
+  List<ConformanceFailureDiagnostic> expectedFailures,
   String conformancePackage,
 ) async {
   final summary = {
     'package': conformancePackage,
-    'expectedFailures': expectedFailures.toList()..sort(),
+    'expectedFailures': [
+      for (final failure in expectedFailures) failure.toJson(),
+    ],
     'results': [
       for (final result in results)
         {
           'scenario': result.scenario,
           'status': result.status,
           'exitCode': result.exitCode,
-          'expectedFailure': expectedFailures.contains(result.scenario),
+          'expectedFailure': _isExpectedFailure(result, expectedFailures),
+          'failureDiagnostics': [
+            for (final failure in result.failureDiagnostics) failure.toJson(),
+          ],
+          if (result.diagnosticReadError != null)
+            'diagnosticReadError': result.diagnosticReadError,
         },
     ],
   };
   await File('${outputRoot.path}/summary.json').writeAsString(
     const JsonEncoder.withIndent('  ').convert(summary),
   );
+}
+
+List<ConformanceFailureDiagnostic> _expectedForScenario(
+  String scenario,
+  Iterable<ConformanceFailureDiagnostic> expectedFailures,
+) {
+  return expectedFailures
+      .where((failure) => failure.scenario == scenario)
+      .toList();
+}
+
+bool _isExpectedFailure(
+  _ScenarioResult result,
+  Iterable<ConformanceFailureDiagnostic> expectedFailures,
+) {
+  return isExpectedConformanceFailure(
+    timedOut: result.timedOut,
+    exitCode: result.exitCode,
+    diagnosticReadError: result.diagnosticReadError,
+    expected: _expectedForScenario(result.scenario, expectedFailures),
+    actual: result.failureDiagnostics,
+  );
+}
+
+void _printExpectationMismatch(
+  _ScenarioResult result,
+  Iterable<ConformanceFailureDiagnostic> expectedFailures,
+) {
+  final expected = _expectedForScenario(result.scenario, expectedFailures);
+  if (expected.isEmpty) {
+    return;
+  }
+  if (result.timedOut) {
+    stdout.writeln('      expected failures never permit a timeout');
+    return;
+  }
+  if (result.exitCode != 1) {
+    stdout.writeln(
+      '      expected conformance exit 1, got ${result.exitCode}',
+    );
+    return;
+  }
+  if (result.diagnosticReadError != null) {
+    stdout.writeln(
+      '      could not read conformance diagnostics: '
+      '${result.diagnosticReadError}',
+    );
+    return;
+  }
+
+  final comparison = compareConformanceFailures(
+    expected,
+    result.failureDiagnostics,
+  );
+  for (final diagnostic in comparison.missing) {
+    stdout.writeln('      missing expected: ${diagnostic.description}');
+  }
+  for (final diagnostic in comparison.unexpected) {
+    stdout.writeln('      unexpected: ${diagnostic.description}');
+  }
 }
 
 String _sanitize(String value) {
@@ -367,6 +442,8 @@ class _ScenarioResult {
   final bool timedOut;
   final String stdout;
   final String stderr;
+  final List<ConformanceFailureDiagnostic> failureDiagnostics;
+  final String? diagnosticReadError;
 
   const _ScenarioResult({
     required this.scenario,
@@ -374,6 +451,8 @@ class _ScenarioResult {
     required this.timedOut,
     required this.stdout,
     required this.stderr,
+    required this.failureDiagnostics,
+    required this.diagnosticReadError,
   });
 
   bool get passed => !timedOut && exitCode == 0;

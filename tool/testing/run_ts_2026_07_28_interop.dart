@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+import 'mcp_2026_07_28_discovery_wire_probe.dart';
+
 Future<void> main(List<String> args) async {
   final repoRoot = Directory.current;
   final fixtureDir = Directory('test/interop/ts_2026_07_28');
@@ -156,7 +158,10 @@ Future<_TsClientRun> _runTsClientAgainstDartServer(
       },
     );
 
-    await _assertDartDiscoveryWire(url);
+    await assertDartMcp20260728DiscoveryWire(url);
+    stdout.writeln(
+      '[dart-server-probe] verified anonymous spec #3002 discovery wire shape',
+    );
 
     final client = await Process.start(
       'node',
@@ -192,104 +197,6 @@ Future<_TsClientRun> _runTsClientAgainstDartServer(
   }
 
   return result;
-}
-
-Future<void> _assertDartDiscoveryWire(String url) async {
-  final httpClient = HttpClient();
-  try {
-    final request = await httpClient.postUrl(Uri.parse(url));
-    request.headers.contentType = ContentType.json;
-    request.headers.set(
-      HttpHeaders.acceptHeader,
-      'application/json, text/event-stream',
-    );
-    request.headers.set('MCP-Protocol-Version', previewProtocolVersion);
-    request.headers.set('Mcp-Method', Method.serverDiscover);
-    request.add(
-      utf8.encode(
-        jsonEncode({
-          'jsonrpc': '2.0',
-          'id': 'dart-discovery-wire-probe',
-          'method': Method.serverDiscover,
-          'params': {
-            '_meta': {
-              McpMetaKey.protocolVersion: previewProtocolVersion,
-              McpMetaKey.clientCapabilities: <String, dynamic>{},
-            },
-          },
-        }),
-      ),
-    );
-
-    final response = await request.close().timeout(
-          const Duration(seconds: 20),
-        );
-    final body = await response.transform(utf8.decoder).join();
-    if (response.statusCode != HttpStatus.ok) {
-      throw StateError(
-        'Dart server/discover wire probe returned HTTP '
-        '${response.statusCode}: $body',
-      );
-    }
-
-    final envelope = _decodeJsonOrSse(body);
-    final result = envelope is Map ? envelope['result'] : null;
-    if (result is! Map) {
-      throw StateError(
-        'Dart server/discover wire probe returned no result object: $body',
-      );
-    }
-    final supportedVersions = result['supportedVersions'];
-    if (supportedVersions is! List ||
-        !supportedVersions.contains(previewProtocolVersion)) {
-      throw StateError(
-        'Dart server/discover did not advertise $previewProtocolVersion: '
-        '$result',
-      );
-    }
-    if (result.containsKey('serverInfo')) {
-      throw StateError(
-        'Dart server/discover emitted obsolete body serverInfo: $result',
-      );
-    }
-    final meta = result['_meta'];
-    final serverInfo = meta is Map ? meta[McpMetaKey.serverInfo] : null;
-    if (serverInfo is! Map ||
-        serverInfo['name'] != 'dart-test-server' ||
-        serverInfo['version'] != '1.0.0') {
-      throw StateError(
-        'Dart server/discover omitted or malformed result metadata '
-        'serverInfo: $result',
-      );
-    }
-
-    stdout.writeln(
-      '[dart-server-probe] verified spec #3002 discovery wire shape',
-    );
-  } finally {
-    httpClient.close(force: true);
-  }
-}
-
-Object? _decodeJsonOrSse(String body) {
-  try {
-    return jsonDecode(body);
-  } on FormatException {
-    for (final line in const LineSplitter().convert(body)) {
-      if (!line.startsWith('data:')) continue;
-      final data = line.substring('data:'.length).trimLeft();
-      if (data.isEmpty) continue;
-      try {
-        return jsonDecode(data);
-      } on FormatException {
-        continue;
-      }
-    }
-    throw FormatException(
-      'Dart server/discover wire probe returned neither JSON nor JSON SSE data.',
-      body,
-    );
-  }
 }
 
 Future<void> _runDartClientAgainstTsServer(

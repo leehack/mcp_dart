@@ -5,7 +5,8 @@ import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
-import 'package:mcp_dart/src/types/validation.dart' show readOptionalJsonObject;
+import 'package:mcp_dart/src/types/validation.dart'
+    show readJsonObject, readOptionalJsonObject;
 
 final _logger = Logger("mcp_dart.server");
 
@@ -945,10 +946,28 @@ class Server extends Protocol {
     final resultMeta = <String, dynamic>{
       ...?readOptionalJsonObject(json['_meta'], 'Result._meta'),
     };
-    // Handler-authored metadata intentionally wins, including an explicit null
-    // that configures this result as anonymous. Receivers treat malformed
-    // optional identity as anonymous rather than using it for behavior.
-    resultMeta.putIfAbsent(McpMetaKey.serverInfo, _serverInfo.toJson);
+    final handlerMeta = readOptionalJsonObject(result.meta, 'Result._meta');
+    final hasHandlerServerInfo =
+        handlerMeta?.containsKey(McpMetaKey.serverInfo) == true;
+    if (hasHandlerServerInfo || resultMeta.containsKey(McpMetaKey.serverInfo)) {
+      final serverInfo = hasHandlerServerInfo
+          ? handlerMeta![McpMetaKey.serverInfo]
+          : resultMeta[McpMetaKey.serverInfo];
+      if (serverInfo == null) {
+        // An anonymous result omits the optional identity property. JSON null
+        // is not a valid Implementation value.
+        resultMeta.remove(McpMetaKey.serverInfo);
+      } else {
+        final serverInfoJson = readJsonObject(
+          serverInfo,
+          'Result._meta.${McpMetaKey.serverInfo}',
+        );
+        Implementation.fromJson(serverInfoJson);
+        resultMeta[McpMetaKey.serverInfo] = serverInfoJson;
+      }
+    } else {
+      resultMeta[McpMetaKey.serverInfo] = _serverInfo.toJson();
+    }
     json['_meta'] = resultMeta;
 
     return json;

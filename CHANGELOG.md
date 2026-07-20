@@ -2,13 +2,16 @@
 
 ### Changed
 
-- Aligned MCP `2026-07-28` identity with spec PR #3002: request
-  `clientInfo` is optional, servers stamp their identity by default in successful
-  stateless result `_meta["io.modelcontextprotocol/serverInfo"]` while preserving
-  handler-authored metadata, and
-  `server/discover` no longer emits body `serverInfo`. `DiscoverResult.serverInfo`
-  is now nullable, so callers must handle anonymous discovery. MCP `2025-11-25`
-  initialization remains unchanged.
+- Aligned MCP `2026-07-28` identity with spec PR #3002: client identity is
+  optional, and servers stamp validated identity in successful stateless result
+  `_meta` by default instead of the discovery body. A handler `null` omits the
+  optional key; received canonical `null` or malformed identities are rejected.
+
+### Breaking and compatibility notes
+
+- `DiscoverResult.serverInfo` is now nullable because MCP `2026-07-28` permits
+  anonymous servers. Check for `null` before reading identity fields. MCP
+  `2025-11-25` behavior is unchanged.
 
 ## 2.3.0-dev.2
 

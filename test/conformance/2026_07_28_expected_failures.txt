@@ -1,10 +1,12 @@
 # Expected failures for @modelcontextprotocol/conformance@0.2.0-alpha.9
 # against the full 2026-07-28/DRAFT server suite.
 #
-# Keep this list scenario-based so the baseline is easy to review. The runner
-# fails on an unexpected pass, forcing stale entries to be removed.
+# Each non-comment line is one exact JSON diagnostic. The runner requires the
+# complete failure set to match, so timeouts and unrelated regressions fail CI.
 #
 # alpha.9 predates spec PR #3002 / conformance PR #403. Its server-stateless
 # scenario still rejects omitted clientInfo and requires body
 # DiscoverResult.serverInfo instead of result _meta server identity.
-server-stateless
+{"scenario":"server-stateless","checkId":"sep-2575-request-meta-invalid-missing-client-info","status":"FAILURE","errorMessage":"Expected error code -32602, got undefined","fieldIssue":"missing-client-info"}
+{"scenario":"server-stateless","checkId":"sep-2575-http-server-meta-invalid-400","status":"FAILURE","errorMessage":"Expected HTTP 400 Bad Request, got status code 200","fieldIssue":"missing-client-info"}
+{"scenario":"server-stateless","checkId":"sep-2575-server-implements-discover","status":"FAILURE","errorMessage":"Missing mandatory fields in discover response setup"}

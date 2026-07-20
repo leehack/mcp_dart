@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+import 'mcp_2026_07_28_discovery_wire_probe.dart';
+
 Future<void> main(List<String> args) async {
   final repoRoot = Directory.current;
   final fixtureDir = Directory('test/interop/python_2026_07_28');
@@ -130,6 +132,11 @@ Future<_PythonClientRun> _runPythonClientAgainstDartServer(
         throw TimeoutException('Timed out waiting for Dart server URL');
       },
     );
+    await assertDartMcp20260728DiscoveryWire(url);
+    stdout.writeln(
+      '[dart-server-probe] verified anonymous spec #3002 discovery wire shape',
+    );
+
     final client = await Process.start(
       python,
       ['client.py', '--url', url],

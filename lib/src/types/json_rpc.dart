@@ -158,8 +158,10 @@ class McpMetaKey {
   const McpMetaKey._();
 }
 
-/// Builds request metadata required by the `2026-07-28` stateless
-/// request model.
+/// Builds request metadata for the `2026-07-28` stateless request model.
+///
+/// [clientInfo] is recommended by MCP but may be omitted for an anonymous
+/// client. Protocol version and client capabilities remain required.
 Map<String, dynamic> buildProtocolRequestMeta({
   required String protocolVersion,
   Implementation? clientInfo,
@@ -167,9 +169,12 @@ Map<String, dynamic> buildProtocolRequestMeta({
   Map<String, dynamic>? meta,
   Object? logLevel,
 }) {
-  validateRequestMeta(meta, validateKeys: true);
+  final requestMeta = <String, dynamic>{
+    ...?validateRequestMeta(meta, validateKeys: true),
+  }..remove(McpMetaKey.clientInfo);
+
   return <String, dynamic>{
-    ...?meta,
+    ...requestMeta,
     McpMetaKey.protocolVersion: protocolVersion,
     if (clientInfo != null) McpMetaKey.clientInfo: clientInfo.toJson(),
     McpMetaKey.clientCapabilities: clientCapabilities.toJson(
