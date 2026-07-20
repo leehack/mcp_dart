@@ -943,10 +943,15 @@ class Server extends Protocol {
       );
     }
 
-    final resultMeta = <String, dynamic>{
-      ...?readOptionalJsonObject(json['_meta'], 'Result._meta'),
-    };
     final handlerMeta = readOptionalJsonObject(result.meta, 'Result._meta');
+    final serializedMeta =
+        readOptionalJsonObject(json['_meta'], 'Result._meta');
+    final resultMeta = <String, dynamic>{
+      // Older custom results may expose metadata only through `meta`. Fall
+      // back to it only when the serializer omitted `_meta`; explicit wire
+      // metadata remains authoritative.
+      ...?(json.containsKey('_meta') ? serializedMeta : handlerMeta),
+    };
     final hasHandlerServerInfo =
         handlerMeta?.containsKey(McpMetaKey.serverInfo) == true;
     if (hasHandlerServerInfo || resultMeta.containsKey(McpMetaKey.serverInfo)) {

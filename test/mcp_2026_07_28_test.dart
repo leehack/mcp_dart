@@ -312,6 +312,20 @@ class CompletedTaskHandler extends CancelTaskResultHandler {
       );
 }
 
+class LegacyMetadataResult implements BaseResultData {
+  @override
+  final Map<String, dynamic>? meta;
+  final Map<String, dynamic>? serializedMeta;
+
+  const LegacyMetadataResult({this.meta, this.serializedMeta});
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'tools': <dynamic>[],
+        if (serializedMeta != null) '_meta': serializedMeta,
+      };
+}
+
 Map<String, dynamic> _clientMeta({
   String? protocolVersion,
   Implementation clientInfo = const Implementation(
@@ -328,6 +342,20 @@ Map<String, dynamic> _clientMeta({
     clientCapabilities: clientCapabilities,
     meta: meta,
     logLevel: logLevel,
+  );
+}
+
+Map<String, dynamic> _serializeStatelessResult(
+  BaseResultData result, {
+  JsonRpcRequest? request,
+}) {
+  final server = Server(
+    const Implementation(name: 'configured', version: '1.0.0'),
+    options: const McpServerOptions(protocol: McpProtocol.require2026),
+  );
+  return server.serializeIncomingResult(
+    request ?? JsonRpcListToolsRequest(id: 1, meta: _clientMeta()),
+    result,
   );
 }
 
@@ -4685,6 +4713,89 @@ void main() {
       final wireResult = response.toJson()['result'] as Map<String, dynamic>;
       expect(wireResult['_meta'], response.result['_meta']);
       await server.close();
+    });
+
+    test('server preserves metadata from legacy custom results', () {
+      final result = _serializeStatelessResult(
+        const LegacyMetadataResult(
+          meta: {'com.example/trace': 'trace-1'},
+        ),
+      );
+
+      expect(result['_meta'], {
+        'com.example/trace': 'trace-1',
+        McpMetaKey.serverInfo: {
+          'name': 'configured',
+          'version': '1.0.0',
+        },
+      });
+    });
+
+    test('explicit serialized metadata is authoritative for custom results',
+        () {
+      final result = _serializeStatelessResult(
+        const LegacyMetadataResult(
+          meta: {
+            'com.example/handler-only': true,
+            'com.example/shared': 'handler',
+          },
+          serializedMeta: {
+            'com.example/serialized-only': true,
+            'com.example/shared': 'serialized',
+          },
+        ),
+      );
+
+      expect(result['_meta'], {
+        'com.example/shared': 'serialized',
+        'com.example/serialized-only': true,
+        McpMetaKey.serverInfo: {
+          'name': 'configured',
+          'version': '1.0.0',
+        },
+      });
+    });
+
+    test('legacy custom subscription metadata survives owned metadata', () {
+      final result = _serializeStatelessResult(
+        const LegacyMetadataResult(
+          meta: {
+            'com.example/trace': 'trace-1',
+            McpMetaKey.subscriptionId: 'handler-value',
+          },
+        ),
+        request: JsonRpcSubscriptionsListenRequest(
+          id: 'sub-1',
+          listenParams: const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(toolsListChanged: true),
+          ),
+          meta: _clientMeta(),
+        ),
+      );
+
+      expect(result['_meta'], {
+        'com.example/trace': 'trace-1',
+        McpMetaKey.subscriptionId: 'sub-1',
+        McpMetaKey.serverInfo: {
+          'name': 'configured',
+          'version': '1.0.0',
+        },
+      });
+    });
+
+    test('legacy custom anonymous identity preserves sibling metadata', () {
+      final result = _serializeStatelessResult(
+        const LegacyMetadataResult(
+          meta: {
+            'com.example/trace': 'trace-1',
+            McpMetaKey.serverInfo: null,
+          },
+        ),
+      );
+
+      expect(result['_meta'], {
+        'com.example/trace': 'trace-1',
+      });
     });
 
     test('server omits anonymous handler identity from the wire', () async {

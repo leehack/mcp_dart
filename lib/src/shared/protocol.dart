@@ -1285,12 +1285,17 @@ abstract class Protocol {
       return resultJson;
     }
 
+    final serializedMeta = readOptionalJsonObject(
+      resultJson['_meta'],
+      'SubscriptionsListenResult._meta',
+    );
     final meta = <String, dynamic>{
-      ...readOptionalJsonObject(
-            resultJson['_meta'],
-            'SubscriptionsListenResult._meta',
-          ) ??
-          const <String, dynamic>{},
+      ...?(resultJson.containsKey('_meta')
+          ? serializedMeta
+          : readOptionalJsonObject(
+              result.meta,
+              'SubscriptionsListenResult.meta',
+            )),
       McpMetaKey.subscriptionId: request.id,
     };
     return <String, dynamic>{
