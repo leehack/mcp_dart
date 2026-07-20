@@ -35,6 +35,15 @@ updates:
     groups:
       npm-dependencies:
         group-by: dependency-name
+    ignore:
+      # Keep compile-time Node APIs aligned with the Node 24 CI baseline.
+      - dependency-name: '@types/node'
+        update-types:
+          - version-update:semver-major
+      # Remove once typescript-eslint officially supports TypeScript 7.
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: pip
     directories:
