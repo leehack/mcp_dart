@@ -3,7 +3,8 @@
 These examples are runnable from a repository checkout or the published
 package archive. The default SDK profile prefers MCP `2026-07-28` and falls
 back to initialization-era peers; strict and legacy examples opt into one era
-explicitly.
+explicitly. On body-only transports such as stdio, a silent discovery probe is
+bounded to five seconds before fallback.
 
 Run these commands from the package root.
 
@@ -15,6 +16,12 @@ The client starts its paired server and exercises `server/discover`,
 ```bash
 dart run example/mcp_2026_07_28/client.dart
 ```
+
+The paired server uses `registerStatelessTool` for the multi-round
+`input_required` result. Use `registerStatelessPrompt`,
+`registerStatelessResource`, and `registerStatelessResourceTemplate` for the
+same MCP 2026-07-28 result shape on those primitives; existing `register*`
+callbacks retain their 2.2-compatible result types.
 
 [Client source](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_2026_07_28/client.dart)
 and

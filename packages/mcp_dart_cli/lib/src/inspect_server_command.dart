@@ -5,8 +5,6 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:mason/mason.dart';
 import 'package:mcp_dart/mcp_dart.dart' hide Logger;
-// ignore: implementation_imports
-import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:meta/meta.dart';
 
 import 'inspectors/inspection_report.dart';

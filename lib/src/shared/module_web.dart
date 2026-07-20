@@ -4,8 +4,8 @@
 /// with web-compatible alternatives.
 library;
 
-// export 'json_schema_validator.dart'; // JSON Schema validator. (Removed)
 export 'iostream.dart'; // Stream/sink transport without dart:io dependencies.
+export 'json_schema/json_schema_validator.dart'; // JSON Schema validation.
 export 'protocol.dart'; // MCP protocol utilities for message serialization/deserialization.
 export 'task_interfaces.dart'; // Task interfaces.
 export 'transport.dart'; // Transport layer for server-client communication.

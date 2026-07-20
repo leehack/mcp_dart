@@ -188,6 +188,15 @@ For a complete example, see [MCP Apps guide](mcp-apps.md).
 
 Tools allow clients to execute actions through your server.
 
+The existing `registerTool`, `registerPrompt`, `registerResource`, and
+`registerResourceTemplate` APIs retain their `mcp_dart 2.2.2` callback result
+types. For an MCP 2026-07-28 callback that may return
+`InputRequiredResult`, use the additive `registerStatelessTool`,
+`registerStatelessPrompt`, `registerStatelessResource`, or
+`registerStatelessResourceTemplate` counterpart. See the
+[transition guide](mcp-2026-07-28.md#apis-specific-to-mcp-2026-07-28) for the
+mapping and non-object output example.
+
 ### Simple Tool
 
 ```dart

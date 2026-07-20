@@ -16,11 +16,13 @@ extensions, host UI behavior, an authorization-server implementation, JSON
 Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
-> This prerelease coordinates `mcp_dart 2.3.0-dev.2` and
-> `mcp_dart_cli 0.2.0-dev.2`. All current official conformance scenarios
-> applicable to the SDK's core client/server roles pass for both the MCP
-> `2025-11-25` and MCP `2026-07-28` specifications. This is prerelease
-> evidence, not a claim about the final specification, which has not shipped.
+> The latest published prerelease coordinates `mcp_dart 2.3.0-dev.2` and
+> `mcp_dart_cli 0.2.0-dev.2`. Current source passes the official alpha.9 MCP
+> `2026-07-28` client suite, including all 25 authorization scenarios. Its
+> server suite has three exact expected diagnostics because the published
+> referee predates spec PR #3002; merged conformance PR #403 semantics pass
+> locally. This is prerelease evidence, not a claim about the final
+> specification, which has not shipped.
 
 ## Preview requirements
 
@@ -29,9 +31,10 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 | `mcp_dart 2.3.0-dev.2` | 3.5 |
 | `mcp_dart_cli 0.2.0-dev.2` | 3.7 |
 
-The current unreleased CLI source targets Dart 3.12. The published dev.2 CLI
-retains its declared Dart 3.7 minimum, while the SDK and SDK-only generated
-projects remain compatible with Dart 3.5.
+The current unreleased SDK source and SDK-only generated projects lower the
+minimum to Dart 3.4. The current unreleased CLI source targets Dart 3.12.
+Published dev.2 packages retain their declared Dart 3.5 SDK and Dart 3.7 CLI
+minimums.
 
 Install Dart from [dart.dev](https://dart.dev/get-dart).
 
@@ -54,10 +57,12 @@ dependencies:
   mcp_dart: ^2.3.0-dev.2
 ```
 
-The remainder of this README describes dev.2. Production-channel users should
-follow the documentation for the version resolved in their own `pubspec.lock`.
-Package channels are separate from protocol profiles: `McpProtocol.stable`
-names the SDK's default compatibility policy, not package or wire-spec maturity.
+The installation snippets remain pinned to dev.2 until the next coordinated
+packages are published; current-source sections also describe unreleased
+release-readiness fixes. Production-channel users should follow the
+documentation for the version resolved in their own `pubspec.lock`. Package
+channels are separate from protocol profiles: `McpProtocol.stable` names the
+SDK's default compatibility policy, not package or wire-spec maturity.
 
 Prerelease packages are published in order: SDK first, then CLI. Verify the
 requested version is available on pub.dev before installing the CLI or creating
@@ -80,10 +85,11 @@ commands.
   rebinding protection, and strict Streamable HTTP validation.
 - A Tasks extension implementation, MCP Apps metadata helpers, and generic
   extension negotiation. Extensions are separate from core protocol coverage.
-- Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, bidirectional
-  TypeScript/Python interoperability fixtures, real-browser transport tests,
-  a real Flutter Web service integration in Chrome, deterministic widget
-  tests, and an independent pinned JSON Schema Test Suite gate.
+- Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, published
+  TypeScript/Python server interoperability, exact expected-gap checks for
+  their pre-#3002 beta clients, real-browser transport tests, a real Flutter
+  Web service integration in Chrome, deterministic widget tests, and an
+  independent pinned JSON Schema Test Suite gate.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host
@@ -93,7 +99,7 @@ can manage multiple clients and servers.
 
 | Profile | Protocol behavior |
 | --- | --- |
-| `McpProtocol.stable` | Default dual-era profile: prefer MCP 2026-07-28, then fall back to initialization-based MCP specifications |
+| `McpProtocol.stable` | Default dual-era profile: prefer MCP 2026-07-28, then fall back to initialization-based MCP specifications; body-only discovery probes are bounded to 5 seconds |
 | `McpProtocol.legacy` | Initialization-era profile: negotiate the MCP 2025-11-25, MCP 2025-06-18, MCP 2025-03-26, MCP 2024-11-05, or MCP 2024-10-07 specification |
 | `McpProtocol.require2026` | Require MCP 2026-07-28 and reject legacy initialization |
 
@@ -101,7 +107,10 @@ Use `stableProtocolVersion` for the official `2025-11-25` version,
 `previewProtocolVersion` for the MCP 2026-07-28 preview, and
 `defaultProtocolVersion` for this SDK preview's preferred version.
 `latestInitializationProtocolVersion` remains `2025-11-25` when the default
-profile falls back to the legacy lifecycle.
+profile falls back to the legacy lifecycle. For compatibility,
+`latestProtocolVersion` and `supportedProtocolVersions` retain their mcp_dart
+2.2 initialization-era values; use `allSupportedProtocolVersions` for the
+dual-era list.
 
 Select a profile only when you need to constrain negotiation:
 

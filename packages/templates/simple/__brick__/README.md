@@ -4,7 +4,8 @@ A Model Context Protocol (MCP) server created with `mcp_dart`.
 
 The generated server uses the default dual-era profile: it prefers MCP
 2026-07-28 discovery and retains MCP 2025-11-25 and earlier initialization
-fallback. Select `McpProtocol.require2026` or
+fallback. On body-only transports such as stdio, a silent discovery probe is
+bounded to five seconds. Select `McpProtocol.require2026` or
 `McpProtocol.legacy` in `lib/mcp/mcp.dart` when a deployment must require one
 era.
 

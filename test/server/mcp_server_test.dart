@@ -525,6 +525,23 @@ void main() {
       expect(tools.first['description'], equals('Updated description'));
     });
 
+    test('registerTool rename rejects an occupied name', () {
+      final first = server.registerTool(
+        'first-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      server.registerTool(
+        'second-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      expect(
+        () => first.update(name: 'second-tool'),
+        throwsArgumentError,
+      );
+      expect(first.name, 'first-tool');
+    });
+
     test('registerTool can be disabled and enabled', () async {
       final registeredTool = server.registerTool(
         'toggleable-tool',
@@ -577,10 +594,9 @@ void main() {
       var tools = response.result['tools'] as List;
       expect(tools.length, equals(1));
 
-      // Disable the tool (remove() has a bug, so use disable())
-      registeredTool.disable();
+      registeredTool.remove();
 
-      // Request tool list - should be empty since disabled
+      // Request tool list - should be empty after removal.
       final request2 = const JsonRpcListToolsRequest(id: 2);
       transport.receiveMessage(request2);
       await Future.delayed(const Duration(milliseconds: 100));
@@ -588,6 +604,53 @@ void main() {
       response = transport.sentMessages.last as JsonRpcResponse;
       tools = response.result['tools'] as List;
       expect(tools, isEmpty);
+    });
+
+    test('a stale tool handle cannot remove a replacement registration',
+        () async {
+      final stale = server.registerTool(
+        'replaceable-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      stale.remove();
+      server.registerTool(
+        'replaceable-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      stale.remove();
+
+      await server.connect(transport);
+      transport.receiveMessage(const JsonRpcListToolsRequest(id: 1));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      expect(tools.single['name'], 'replaceable-tool');
+    });
+
+    test('a removed tool handle cannot resurrect itself by renaming', () async {
+      final stale = server.registerTool(
+        'replaceable-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      stale.remove();
+      server.registerTool(
+        'replaceable-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      expect(
+        () => stale.update(name: 'resurrected-tool'),
+        throwsStateError,
+      );
+
+      await server.connect(transport);
+      transport.receiveMessage(const JsonRpcListToolsRequest(id: 1));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      final tools = response.result['tools'] as List;
+      expect(tools.single['name'], 'replaceable-tool');
     });
 
     test('tool call invokes callback with arguments', () async {
@@ -770,6 +833,116 @@ void main() {
       expect(resources.length, equals(1));
     });
 
+    test('registerResource can update its URI and be removed', () async {
+      final registeredResource = server.registerResource(
+        'Mutable Resource',
+        'test://old',
+        null,
+        (uri, extra) async => ReadResourceResult(
+          contents: [
+            TextResourceContents(uri: uri.toString(), text: 'content'),
+          ],
+        ),
+      );
+      registeredResource.update(uri: 'test://new');
+
+      await server.connect(transport);
+      transport.receiveMessage(JsonRpcListResourcesRequest(id: 1));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      var response = transport.sentMessages.last as JsonRpcResponse;
+      var resources = response.result['resources'] as List;
+      expect(resources.single['uri'], 'test://new');
+
+      registeredResource.remove();
+      transport.receiveMessage(JsonRpcListResourcesRequest(id: 2));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      response = transport.sentMessages.last as JsonRpcResponse;
+      resources = response.result['resources'] as List;
+      expect(resources, isEmpty);
+    });
+
+    test('resource and template renames reject occupied keys', () {
+      final firstResource = server.registerResource(
+        'First Resource',
+        'test://first',
+        null,
+        (uri, extra) async => const ReadResourceResult(contents: []),
+      );
+      server.registerResource(
+        'Second Resource',
+        'test://second',
+        null,
+        (uri, extra) async => const ReadResourceResult(contents: []),
+      );
+      expect(
+        () => firstResource.update(
+          title: 'Mutated title',
+          uri: 'test://second',
+        ),
+        throwsArgumentError,
+      );
+      expect(firstResource.title, isNull);
+
+      final firstTemplate = server.registerResourceTemplate(
+        'first-template',
+        ResourceTemplateRegistration(
+          'test://first/{id}',
+          listCallback: (extra) => const ListResourcesResult(resources: []),
+        ),
+        null,
+        (uri, variables, extra) async => const ReadResourceResult(contents: []),
+      );
+      server.registerResourceTemplate(
+        'second-template',
+        ResourceTemplateRegistration(
+          'test://second/{id}',
+          listCallback: (extra) => const ListResourcesResult(resources: []),
+        ),
+        null,
+        (uri, variables, extra) async => const ReadResourceResult(contents: []),
+      );
+      expect(
+        () => firstTemplate.update(
+          name: 'second-template',
+          title: 'Mutated title',
+        ),
+        throwsArgumentError,
+      );
+      expect(firstTemplate.title, isNull);
+    });
+
+    test('registerResourceTemplate can update its name and be removed',
+        () async {
+      final registeredTemplate = server.registerResourceTemplate(
+        'old-template',
+        ResourceTemplateRegistration(
+          'test://{id}',
+          listCallback: (extra) => const ListResourcesResult(resources: []),
+        ),
+        null,
+        (uri, variables, extra) async => const ReadResourceResult(contents: []),
+      );
+      registeredTemplate.update(name: 'new-template');
+
+      await server.connect(transport);
+      transport.receiveMessage(JsonRpcListResourceTemplatesRequest(id: 1));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      var response = transport.sentMessages.last as JsonRpcResponse;
+      var templates = response.result['resourceTemplates'] as List;
+      expect(templates.single['name'], 'new-template');
+
+      registeredTemplate.remove();
+      transport.receiveMessage(JsonRpcListResourceTemplatesRequest(id: 2));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      response = transport.sentMessages.last as JsonRpcResponse;
+      templates = response.result['resourceTemplates'] as List;
+      expect(templates, isEmpty);
+    });
+
     test('read resource returns content', () async {
       server.registerResource(
         'Readable Resource',
@@ -949,6 +1122,38 @@ void main() {
       expect(prompts.length, equals(1));
     });
 
+    test('registerPrompt rename rejects an occupied name', () {
+      final first = server.registerPrompt(
+        'first-prompt',
+        callback: (args, extra) async => const GetPromptResult(messages: []),
+      );
+      server.registerPrompt(
+        'second-prompt',
+        callback: (args, extra) async => const GetPromptResult(messages: []),
+      );
+
+      expect(
+        () => first.update(name: 'second-prompt'),
+        throwsArgumentError,
+      );
+      expect(first.name, 'first-prompt');
+    });
+
+    test('registerPrompt can be removed', () async {
+      final registeredPrompt = server.registerPrompt(
+        'removable-prompt',
+        callback: (args, extra) async => const GetPromptResult(messages: []),
+      );
+
+      await server.connect(transport);
+      registeredPrompt.remove();
+      transport.receiveMessage(JsonRpcListPromptsRequest(id: 1));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      expect(response.result['prompts'], isEmpty);
+    });
+
     test('get prompt invokes callback with arguments', () async {
       server.registerPrompt(
         'callable-prompt',
@@ -982,6 +1187,29 @@ void main() {
       final response = transport.sentMessages.last as JsonRpcResponse;
       final messages = response.result['messages'] as List;
       expect(messages.first['content']['text'], contains('french'));
+    });
+
+    test('get prompt passes a typed empty map when arguments are omitted',
+        () async {
+      server.registerPrompt(
+        'no-arguments-prompt',
+        callback: (args, extra) async {
+          expect(args, isA<Map<String, dynamic>>());
+          expect(args, isEmpty);
+          return const GetPromptResult(messages: []);
+        },
+      );
+
+      await server.connect(transport);
+      transport.receiveMessage(
+        JsonRpcGetPromptRequest(
+          id: 3,
+          getParams: const GetPromptRequestParams(name: 'no-arguments-prompt'),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
     });
   });
 

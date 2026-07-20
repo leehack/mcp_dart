@@ -12,8 +12,11 @@ void main() {
       latestInitializationProtocolVersion,
     );
     expect(legacyProtocolVersions.first, latestInitializationProtocolVersion);
+    expect(allSupportedProtocolVersions.first, defaultProtocolVersion);
 
     // ignore: deprecated_member_use_from_same_package
-    expect(latestProtocolVersion, stableProtocolVersion);
+    expect(latestProtocolVersion, latestInitializationProtocolVersion);
+    // ignore: deprecated_member_use_from_same_package
+    expect(supportedProtocolVersions, legacyProtocolVersions);
   });
 }

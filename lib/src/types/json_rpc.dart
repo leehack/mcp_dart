@@ -31,12 +31,15 @@ const stableProtocolVersion = latestInitializationProtocolVersion;
 /// legacy initialization fallback.
 const defaultProtocolVersion = previewProtocolVersion;
 
-/// The latest officially stable MCP protocol version supported.
+/// The newest MCP version that uses the `initialize` lifecycle.
 ///
-/// Use [defaultProtocolVersion] when selecting the SDK preview's preferred
-/// wire version.
-@Deprecated('Use stableProtocolVersion or defaultProtocolVersion instead.')
-const latestProtocolVersion = stableProtocolVersion;
+/// This preserves the value published by mcp_dart 2.2. Use
+/// [defaultProtocolVersion] for the 2.3 default profile.
+@Deprecated(
+  'Use latestInitializationProtocolVersion for initialize, or '
+  'defaultProtocolVersion for the default profile.',
+)
+const latestProtocolVersion = latestInitializationProtocolVersion;
 
 /// High-level MCP protocol compatibility profiles.
 ///
@@ -75,7 +78,7 @@ enum McpProtocol {
   /// Protocol versions this profile advertises or accepts.
   List<String> get supportedVersions {
     return switch (this) {
-      McpProtocol.stable => supportedProtocolVersions,
+      McpProtocol.stable => allSupportedProtocolVersions,
       McpProtocol.legacy => legacyProtocolVersions,
       McpProtocol.require2026 => statelessProtocolVersions,
     };
@@ -102,7 +105,7 @@ enum McpProtocol {
       supportedVersions.any(isStatelessProtocolVersion);
 }
 
-/// Model Context Protocol versions retained for compatibility with older peers.
+/// Model Context Protocol versions retained for initialization compatibility.
 const legacyProtocolVersions = [
   latestInitializationProtocolVersion,
   "2025-06-18",
@@ -111,8 +114,18 @@ const legacyProtocolVersions = [
   "2024-10-07",
 ];
 
-/// Protocol versions supported by the 2.3.0 preview.
-const supportedProtocolVersions = [
+/// Initialization-lifecycle protocol versions supported by mcp_dart.
+///
+/// This preserves the public value published by mcp_dart 2.2. Use
+/// [allSupportedProtocolVersions] for the 2.3 default compatibility profile.
+@Deprecated(
+  'Use legacyProtocolVersions for initialize, or '
+  'allSupportedProtocolVersions for the default profile.',
+)
+const supportedProtocolVersions = legacyProtocolVersions;
+
+/// Protocol versions supported by the 2.3 default compatibility profile.
+const allSupportedProtocolVersions = [
   defaultProtocolVersion,
   ...legacyProtocolVersions,
 ];
@@ -130,7 +143,7 @@ bool isStatelessProtocolVersion(String version) =>
 /// Selects the first locally preferred version supported by a peer.
 String? negotiateProtocolVersion(
   Iterable<String> peerSupportedVersions, {
-  Iterable<String> localSupportedVersions = supportedProtocolVersions,
+  Iterable<String> localSupportedVersions = allSupportedProtocolVersions,
 }) {
   final peerVersions = peerSupportedVersions.toSet();
   for (final version in localSupportedVersions) {

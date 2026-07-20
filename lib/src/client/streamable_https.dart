@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
+import 'package:mcp_dart/src/client/oauth_client_platform.dart'
+    as oauth_platform;
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 
@@ -19,6 +21,8 @@ const _defaultStreamableHttpReconnectionOptions =
 
 const int _maxSafeHeaderInteger = 9007199254740991;
 const int _minSafeHeaderInteger = -9007199254740991;
+final Expando<String> _preRegisteredOAuthProviderIssuers =
+    Expando<String>('pre-registered OAuth provider issuer');
 
 /// Error thrown for Streamable HTTP issues
 class StreamableHttpError extends Error {
@@ -48,41 +52,36 @@ class StartSseOptions {
   /// so that response can be associated with the new resumed request.
   final dynamic replayMessageId;
 
-  /// The originating request ID for a request-scoped SSE response.
-  ///
-  /// Unlike [replayMessageId], this does not rewrite wire messages. It only
-  /// tracks completion and supplies the ID if the stream must later resume.
-  final RequestId? requestMessageId;
-
-  /// Completes the originating send after its terminal response is dispatched.
-  final void Function()? onTerminalResponse;
-
-  /// Fails the originating send when its response stream cannot resume.
-  final void Function(Error error)? onRequestStreamEnd;
-
-  /// Whether the originating request was cancelled through its HTTP stream.
-  final bool Function()? isRequestCancelled;
-
-  /// Completes when the originating request is explicitly cancelled.
-  final Future<void>? requestCancellationTrigger;
-
   /// Whether to attempt reconnection when the stream closes.
   /// Default is true.
   final bool shouldReconnect;
-
-  /// Whether JSON-RPC requests received on this stream should be rejected.
-  final bool rejectServerRequests;
 
   const StartSseOptions({
     this.resumptionToken,
     this.onResumptionToken,
     this.replayMessageId,
+    this.shouldReconnect = true,
+  });
+}
+
+class _StartSseOptions extends StartSseOptions {
+  final RequestId? requestMessageId;
+  final void Function()? onTerminalResponse;
+  final void Function(Error error)? onRequestStreamEnd;
+  final bool Function()? isRequestCancelled;
+  final Future<void>? requestCancellationTrigger;
+  final bool rejectServerRequests;
+
+  const _StartSseOptions({
+    super.resumptionToken,
+    super.onResumptionToken,
+    super.replayMessageId,
     this.requestMessageId,
     this.onTerminalResponse,
     this.onRequestStreamEnd,
     this.isRequestCancelled,
     this.requestCancellationTrigger,
-    this.shouldReconnect = true,
+    super.shouldReconnect,
     this.rejectServerRequests = false,
   });
 }
@@ -286,16 +285,16 @@ typedef OAuthUriValidator = bool Function(
 class StreamableHttpClientTransportOptions {
   /// An OAuth client provider to use for authentication.
   ///
-  /// When an `authProvider` is specified and the connection is started:
-  /// 1. The connection is attempted with any existing access token from the `authProvider`.
-  /// 2. If the access token has expired, the `authProvider` is used to refresh the token.
-  /// 3. If token refresh fails or no access token exists, and auth is required,
-  ///    `OAuthClientProvider.redirectToAuthorization` is called, and an `UnauthorizedError`
-  ///    will be thrown from `connect`/`start`.
+  /// Before each request, the transport asks the provider for its current
+  /// tokens. The provider is responsible for returning a refreshed usable token
+  /// when needed. If no token exists, or the server rejects it, an
+  /// `OAuthAuthorizationCodeProvider` can be used for discovery and an
+  /// authorization redirect. The request then throws `UnauthorizedError`.
   ///
   /// After the user has finished authorizing via their user agent, and is redirected
-  /// back to the MCP client application, call `StreamableHttpClientTransport.finishAuth`
-  /// with the authorization code before retrying the connection.
+  /// back to the MCP client application, call
+  /// `StreamableHttpClientTransport.finishAuthRedirect` with the authorization
+  /// code and returned state before retrying the request.
   ///
   /// If an `authProvider` is not provided, and auth is required, an `UnauthorizedError`
   /// will be thrown.
@@ -355,6 +354,8 @@ class StreamableHttpClientTransport
   bool _isClosed = false;
   _PendingOAuthAuthorization? _pendingOAuthAuthorization;
   Object? _pendingOAuthAuthorizationOwner;
+  String? _preRegisteredClientIssuer;
+  String? _authorizationServerIssuer;
   final Map<String, _OAuthClientRegistration> _oauthRegistrations = {};
   final Set<String> _oauthRequestedScopes = {};
   final Map<RequestId, _RequestCancellation> _requestCancellations = {};
@@ -394,9 +395,8 @@ class StreamableHttpClientTransport
     if (statusCode != 403) {
       return false;
     }
-    final challenge =
-        OAuthBearerChallengeParameters.fromHeader(headers['www-authenticate']);
-    return challenge?.error == 'insufficient_scope';
+    return _parseOAuthBearerChallenges(headers['www-authenticate'])
+        .any((challenge) => challenge.error == 'insufficient_scope');
   }
 
   Future<void> _handleAuthorizationRequired(
@@ -409,8 +409,19 @@ class StreamableHttpClientTransport
       throw UnauthorizedError('Authentication required');
     }
 
-    final challenge = OAuthBearerChallengeParameters.fromHeader(
-      response.headers['www-authenticate'],
+    final authenticateHeader = response.headers['www-authenticate'];
+    final bearerChallenges = _parseOAuthBearerChallenges(authenticateHeader);
+    OAuthBearerChallengeParameters? challenge;
+    if (response.statusCode == 403) {
+      for (final candidate in bearerChallenges) {
+        if (candidate.error == 'insufficient_scope') {
+          challenge = candidate;
+          break;
+        }
+      }
+    }
+    challenge ??= OAuthBearerChallengeParameters.fromHeader(
+      authenticateHeader,
     );
     await _drainAuthorizationResponse(response, requestGuard);
 
@@ -500,19 +511,22 @@ class StreamableHttpClientTransport
     OAuthBearerChallengeParameters? challenge, {
     _RequestOperationGuard? requestGuard,
   }) async {
-    final protectedResourceMetadata = await _discoverProtectedResourceMetadata(
+    _validateOAuthRedirectUri(provider.redirectUri);
+    final protectedResourceDiscovery = await _discoverProtectedResourceMetadata(
       challenge,
       requestGuard: requestGuard,
     );
-    final authorizationServerUri =
-        protectedResourceMetadata.authorizationServers.isEmpty
+    final protectedResourceMetadata = protectedResourceDiscovery.document;
+    final authorizationServerIdentifier =
+        protectedResourceDiscovery.authorizationServerIdentifiers.isEmpty
             ? null
-            : protectedResourceMetadata.authorizationServers.first;
-    if (authorizationServerUri == null) {
+            : protectedResourceDiscovery.authorizationServerIdentifiers.first;
+    if (authorizationServerIdentifier == null) {
       throw UnauthorizedError(
         'Protected resource metadata did not include authorization_servers',
       );
     }
+    final authorizationServerUri = Uri.parse(authorizationServerIdentifier);
     _validateOAuthUri(
       authorizationServerUri,
       OAuthEndpointKind.authorizationServer,
@@ -521,8 +535,10 @@ class StreamableHttpClientTransport
     final authorizationServerMetadata =
         await _discoverAuthorizationServerMetadata(
       authorizationServerUri,
+      issuerIdentifier: authorizationServerIdentifier,
       requestGuard: requestGuard,
     );
+    _authorizationServerIssuer = authorizationServerIdentifier;
     final authorizationEndpoint =
         authorizationServerMetadata.authorizationEndpoint;
     final tokenEndpoint = authorizationServerMetadata.tokenEndpoint;
@@ -547,6 +563,7 @@ class StreamableHttpClientTransport
     final clientRegistration = await _resolveOAuthClientRegistration(
       provider,
       authorizationServerMetadata,
+      issuerIdentifier: authorizationServerIdentifier,
       requestGuard: requestGuard,
     );
     _validateOAuthClientRegistration(clientRegistration);
@@ -590,7 +607,7 @@ class StreamableHttpClientTransport
       tokenEndpointAuthMethod: clientRegistration.tokenEndpointAuthMethod,
       redirectUri: provider.redirectUri,
       resource: protectedResourceMetadata.resource,
-      issuer: authorizationServerMetadata.issuer.toString(),
+      issuer: authorizationServerIdentifier,
       state: state,
       scope: scope,
       authorizationResponseIssParameterSupported: authorizationServerMetadata
@@ -643,13 +660,37 @@ class StreamableHttpClientTransport
   Future<_OAuthClientRegistration> _resolveOAuthClientRegistration(
     OAuthAuthorizationCodeProvider provider,
     OAuthAuthorizationServerMetadataDocument authorizationServerMetadata, {
+    required String issuerIdentifier,
     _RequestOperationGuard? requestGuard,
   }) async {
-    final issuerKey = authorizationServerMetadata.issuer.toString();
-    if (authorizationServerMetadata.clientIdMetadataDocumentSupported == true &&
-        _isClientIdMetadataDocumentUri(provider.clientId)) {
+    final providerClientId = provider.clientId;
+    if (providerClientId.isNotEmpty) {
+      if (authorizationServerMetadata.clientIdMetadataDocumentSupported ==
+              true &&
+          provider.clientSecret == null &&
+          _isClientIdMetadataDocumentUri(providerClientId)) {
+        return _OAuthClientRegistration(
+          clientId: providerClientId,
+          clientSecret: null,
+          tokenEndpointAuthMethod: _selectTokenEndpointAuthMethod(
+            authorizationServerMetadata,
+            null,
+          ),
+        );
+      }
+
+      final boundIssuer = _preRegisteredClientIssuer ??
+          _preRegisteredOAuthProviderIssuers[provider];
+      if (boundIssuer != null && boundIssuer != issuerIdentifier) {
+        throw UnauthorizedError(
+          'Pre-registered OAuth client credentials are bound to authorization '
+          'server "$boundIssuer" and cannot be reused for "$issuerIdentifier"',
+        );
+      }
+      _preRegisteredClientIssuer = issuerIdentifier;
+      _preRegisteredOAuthProviderIssuers[provider] = issuerIdentifier;
       return _OAuthClientRegistration(
-        clientId: provider.clientId,
+        clientId: providerClientId,
         clientSecret: provider.clientSecret,
         tokenEndpointAuthMethod: _selectTokenEndpointAuthMethod(
           authorizationServerMetadata,
@@ -661,7 +702,7 @@ class StreamableHttpClientTransport
     final registrationEndpoint =
         authorizationServerMetadata.registrationEndpoint;
     if (registrationEndpoint != null) {
-      final existingRegistration = _oauthRegistrations[issuerKey];
+      final existingRegistration = _oauthRegistrations[issuerIdentifier];
       if (existingRegistration != null) {
         return existingRegistration;
       }
@@ -676,17 +717,15 @@ class StreamableHttpClientTransport
         ),
       );
       requestGuard?.check();
-      _oauthRegistrations[issuerKey] = registration;
+      _oauthRegistrations[issuerIdentifier] = registration;
       return registration;
     }
 
-    return _OAuthClientRegistration(
-      clientId: provider.clientId,
-      clientSecret: provider.clientSecret,
-      tokenEndpointAuthMethod: _selectTokenEndpointAuthMethod(
-        authorizationServerMetadata,
-        provider.clientSecret,
-      ),
+    throw UnauthorizedError(
+      'No OAuth client registration is available for authorization server '
+      '"$issuerIdentifier"; configure a pre-registered client ID, use a valid '
+      'Client ID Metadata Document URL, or enable Dynamic Client Registration '
+      'on the server',
     );
   }
 
@@ -697,7 +736,10 @@ class StreamableHttpClientTransport
     return uri != null &&
         uri.scheme == 'https' &&
         uri.host.isNotEmpty &&
-        uri.pathSegments.any((segment) => segment.isNotEmpty);
+        uri.userInfo.isEmpty &&
+        uri.fragment.isEmpty &&
+        uri.pathSegments.any((segment) => segment.isNotEmpty) &&
+        !uri.pathSegments.any((segment) => segment == '.' || segment == '..');
   }
 
   Future<_OAuthClientRegistration> _registerOAuthClient(
@@ -724,11 +766,12 @@ class StreamableHttpClientTransport
           'Accept': 'application/json',
         },
         body: jsonEncode({
-          'client_name': provider.clientId,
+          'client_name':
+              provider.clientId.isEmpty ? 'mcp_dart' : provider.clientId,
           'redirect_uris': [provider.redirectUri.toString()],
           'grant_types': ['authorization_code', 'refresh_token'],
           'response_types': ['code'],
-          'application_type': 'native',
+          'application_type': _oauthApplicationType(provider.redirectUri),
           'token_endpoint_auth_method': tokenEndpointAuthMethod,
         }),
         abortTrigger: requestGuard?.abortTrigger,
@@ -840,7 +883,7 @@ class StreamableHttpClientTransport
     }
   }
 
-  Future<OAuthProtectedResourceMetadataDocument>
+  Future<_DiscoveredProtectedResourceMetadata>
       _discoverProtectedResourceMetadata(
     OAuthBearerChallengeParameters? challenge, {
     _RequestOperationGuard? requestGuard,
@@ -897,8 +940,7 @@ class StreamableHttpClientTransport
     ];
   }
 
-  Future<OAuthProtectedResourceMetadataDocument>
-      _fetchProtectedResourceMetadata(
+  Future<_DiscoveredProtectedResourceMetadata> _fetchProtectedResourceMetadata(
     Uri uri, {
     _RequestOperationGuard? requestGuard,
   }) async {
@@ -929,7 +971,12 @@ class StreamableHttpClientTransport
         'Protected-resource metadata resource does not match server URL',
       );
     }
-    return metadata;
+    return _DiscoveredProtectedResourceMetadata(
+      document: metadata,
+      authorizationServerIdentifiers: List<String>.unmodifiable(
+        (json['authorization_servers'] as List).cast<String>(),
+      ),
+    );
   }
 
   bool _isProtectedResourceForEndpoint(Uri resource) {
@@ -950,6 +997,7 @@ class StreamableHttpClientTransport
   Future<OAuthAuthorizationServerMetadataDocument>
       _discoverAuthorizationServerMetadata(
     Uri issuer, {
+    required String issuerIdentifier,
     _RequestOperationGuard? requestGuard,
   }) async {
     _validateOAuthUri(issuer, OAuthEndpointKind.authorizationServer);
@@ -957,16 +1005,17 @@ class StreamableHttpClientTransport
     for (final uri in _authorizationServerMetadataCandidates(issuer)) {
       requestGuard?.check();
       try {
-        final metadata = await _fetchAuthorizationServerMetadata(
+        final discoveredMetadata = await _fetchAuthorizationServerMetadata(
           uri,
           requestGuard: requestGuard,
         );
-        if (metadata.issuer.toString() != issuer.toString()) {
+        if (discoveredMetadata.issuerIdentifier != issuerIdentifier) {
           throw UnauthorizedError(
-            'Authorization-server metadata issuer does not match $issuer',
+            'Authorization-server metadata issuer does not exactly match '
+            '"$issuerIdentifier"',
           );
         }
-        return metadata;
+        return discoveredMetadata.document;
       } catch (error) {
         requestGuard?.check();
         errors.add(error);
@@ -1022,7 +1071,7 @@ class StreamableHttpClientTransport
         path: path,
       );
 
-  Future<OAuthAuthorizationServerMetadataDocument>
+  Future<_DiscoveredAuthorizationServerMetadata>
       _fetchAuthorizationServerMetadata(
     Uri uri, {
     _RequestOperationGuard? requestGuard,
@@ -1071,7 +1120,10 @@ class StreamableHttpClientTransport
         OAuthEndpointKind.registrationEndpoint,
       );
     }
-    return metadata;
+    return _DiscoveredAuthorizationServerMetadata(
+      document: metadata,
+      issuerIdentifier: json['issuer'] as String,
+    );
   }
 
   Future<OAuthTokens> _exchangeAuthorizationCode(
@@ -1152,12 +1204,14 @@ class StreamableHttpClientTransport
       throw UnauthorizedError('Token response did not include access_token');
     }
 
-    final tokens = OAuthAuthorizationCodeTokens(
+    final tokens = OAuthIssuerBoundAuthorizationCodeTokens(
       accessToken: accessToken,
       refreshToken: json['refresh_token'] as String?,
       tokenType: json['token_type'] as String? ?? 'Bearer',
       expiresIn: _parseExpiresIn(json['expires_in']),
-      scope: json['scope'] as String?,
+      scope: json['scope'] as String? ?? pendingAuthorization.scope,
+      authorizationServerIssuer: pendingAuthorization.issuer,
+      resource: pendingAuthorization.resource,
     );
     await _runRequestOperation(
       requestGuard,
@@ -1259,6 +1313,27 @@ class StreamableHttpClientTransport
     );
   }
 
+  String _oauthApplicationType(Uri redirectUri) =>
+      oauth_platform.oauthClientApplicationType == 'web' &&
+              !_isLoopbackHost(redirectUri.host)
+          ? 'web'
+          : 'native';
+
+  void _validateOAuthRedirectUri(Uri uri) {
+    final scheme = uri.scheme.toLowerCase();
+    final isHttps = scheme == 'https' && uri.host.isNotEmpty;
+    final isLoopbackHttp =
+        scheme == 'http' && uri.host.isNotEmpty && _isLoopbackHost(uri.host);
+    if ((!isHttps && !isLoopbackHttp) ||
+        uri.userInfo.isNotEmpty ||
+        uri.fragment.isNotEmpty) {
+      throw UnauthorizedError(
+        'OAuth redirect URI must use HTTPS or loopback HTTP and must not '
+        'contain user information or a fragment',
+      );
+    }
+  }
+
   void _validateOAuthUri(Uri uri, OAuthEndpointKind endpointKind) {
     final scheme = uri.scheme.toLowerCase();
     if ((scheme != 'http' && scheme != 'https') ||
@@ -1313,7 +1388,11 @@ class StreamableHttpClientTransport
   }
 
   String _basicAuthorizationHeader(String clientId, String clientSecret) {
-    final credentials = base64Encode(utf8.encode('$clientId:$clientSecret'));
+    final encodedClientId = Uri.encodeQueryComponent(clientId);
+    final encodedClientSecret = Uri.encodeQueryComponent(clientSecret);
+    final credentials = base64Encode(
+      utf8.encode('$encodedClientId:$encodedClientSecret'),
+    );
     return 'Basic $credentials';
   }
 
@@ -1354,6 +1433,21 @@ class StreamableHttpClientTransport
     final headers = <String, String>{};
 
     if (tokens != null) {
+      if (tokens is OAuthIssuerBoundAuthorizationCodeTokens) {
+        if (!_isProtectedResourceForEndpoint(tokens.resource)) {
+          throw UnauthorizedError(
+            'OAuth access token is bound to a different protected resource',
+          );
+        }
+        final selectedIssuer = _authorizationServerIssuer;
+        if (selectedIssuer != null &&
+            selectedIssuer != tokens.authorizationServerIssuer) {
+          throw UnauthorizedError(
+            'OAuth access token is bound to authorization server '
+            '"${tokens.authorizationServerIssuer}", not "$selectedIssuer"',
+          );
+        }
+      }
       headers["Authorization"] = "Bearer ${tokens.accessToken}";
     }
 
@@ -1643,7 +1737,7 @@ class StreamableHttpClientTransport
   }
 
   Future<void> _startOrAuthSse(
-    StartSseOptions options, {
+    _StartSseOptions options, {
     int? sessionGeneration,
     int reconnectionAttempt = 0,
   }) async {
@@ -1870,7 +1964,7 @@ class StreamableHttpClientTransport
   /// @param options The SSE connection options
   /// @param attemptCount Current reconnection attempt count for this specific stream
   void _scheduleReconnection(
-    StartSseOptions options, [
+    _StartSseOptions options, [
     int attemptCount = 0,
     int? retryDelayMs,
     int? sessionGeneration,
@@ -1990,7 +2084,7 @@ class StreamableHttpClientTransport
 
   void _handleSseStream(
     http.StreamedResponse stream,
-    StartSseOptions options, {
+    _StartSseOptions options, {
     required bool isReconnectable,
     int reconnectionAttempt = 0,
   }) {
@@ -2156,6 +2250,9 @@ class StreamableHttpClientTransport
             'for ${responseId ?? 'a null ID'}.',
           );
           _reportError(error);
+          if (options.rejectServerRequests) {
+            return;
+          }
         }
 
         try {
@@ -2204,7 +2301,7 @@ class StreamableHttpClientTransport
       if (_abortController != null && !_abortController!.isClosed) {
         try {
           _scheduleReconnection(
-            StartSseOptions(
+            _StartSseOptions(
               resumptionToken: eventId,
               onResumptionToken: onResumptionToken,
               replayMessageId: replayMessageId ?? requestMessageId,
@@ -2437,18 +2534,48 @@ class StreamableHttpClientTransport
     _abortController = StreamController<bool>.broadcast();
   }
 
-  /// Call this method after the user has finished authorizing via their user agent and is redirected
-  /// back to the MCP client application. This will exchange the authorization code for an access token,
-  /// enabling the next connection attempt to successfully auth.
+  /// Exchanges an authorization code using the legacy v2.2.2 callback shape.
+  ///
+  /// This method cannot validate the authorization response's `state` or
+  /// issuer. It is retained for source and runtime compatibility with callers
+  /// that validate the redirect independently. New integrations should use
+  /// [finishAuthRedirect].
+  @Deprecated(
+    'Use finishAuthRedirect to validate the authorization state and issuer.',
+  )
+  Future<void> finishAuth(String authorizationCode) {
+    return _finishAuth(authorizationCode);
+  }
+
+  /// Validates an OAuth authorization redirect and exchanges its code.
+  ///
+  /// Pass the exact [state] returned by the authorization server and its
+  /// optional [issuer]. The transport rejects a missing or mismatched value
+  /// before contacting the token endpoint.
+  Future<void> finishAuthRedirect(
+    String authorizationCode, {
+    required String state,
+    String? issuer,
+  }) {
+    return _finishAuth(
+      authorizationCode,
+      state: state,
+      issuer: issuer,
+      validateRedirect: true,
+    );
+  }
+
+  /// Exchanges an authorization code for an access token.
   ///
   /// Closing the transport interrupts this future. Provider callbacks that
   /// have already started cannot be forcibly stopped, so provider
   /// implementations remain responsible for suppressing their own late side
   /// effects after cancellation.
-  Future<void> finishAuth(
+  Future<void> _finishAuth(
     String authorizationCode, {
     String? state,
     String? issuer,
+    bool validateRedirect = false,
   }) async {
     if (_authProvider == null) {
       throw UnauthorizedError("No auth provider");
@@ -2478,11 +2605,13 @@ class StreamableHttpClientTransport
       final pendingAuthorizationOwner = _pendingOAuthAuthorizationOwner;
       if (authProvider is OAuthAuthorizationCodeProvider &&
           pendingAuthorization != null) {
-        _validateOAuthAuthorizationRedirect(
-          pendingAuthorization,
-          state: state,
-          issuer: issuer,
-        );
+        if (validateRedirect) {
+          _validateOAuthAuthorizationRedirect(
+            pendingAuthorization,
+            state: state,
+            issuer: issuer,
+          );
+        }
         await _exchangeAuthorizationCode(
           authProvider,
           authorizationCode,
@@ -2622,7 +2751,7 @@ class StreamableHttpClientTransport
         // If we have a last event ID, we need to reconnect the SSE stream
         final replayId = message is JsonRpcRequest ? message.id : null;
         await _startOrAuthSse(
-          StartSseOptions(
+          _StartSseOptions(
             resumptionToken: resumptionToken,
             replayMessageId: replayId,
             onResumptionToken: onResumptionToken,
@@ -2687,6 +2816,9 @@ class StreamableHttpClientTransport
       }
 
       final headers = _commonHeadersWithTokens(tokens);
+      if (tokens is OAuthAuthorizationCodeTokens) {
+        _oauthRequestedScopes.addAll(_splitOAuthScopes(tokens.scope));
+      }
       requestGuard.check();
       headers.addAll(_headersForMessage(message));
       final protocolVersion = _protocolVersion ?? _protocolVersionFrom(message);
@@ -2809,11 +2941,19 @@ class StreamableHttpClientTransport
 
           await requestGuard.run(() => Future<void>.delayed(Duration.zero));
 
+          if (isStatelessRequest && message is JsonRpcRequest) {
+            throw McpError(
+              ErrorCode.invalidRequest.value,
+              'A stateless MCP request requires a terminal JSON-RPC response; '
+              'the server returned HTTP 202.',
+            );
+          }
+
           // if the accepted notification is initialized, we start the SSE stream
           // if it's supported by the server
           if (_isInitializedNotification(message)) {
             // Start without a lastEventId since this is a fresh connection
-            _startOrAuthSse(const StartSseOptions()).catchError((err) {
+            _startOrAuthSse(const _StartSseOptions()).catchError((err) {
               _reportError(err);
             });
           }
@@ -2822,7 +2962,7 @@ class StreamableHttpClientTransport
 
         // Start SSE if this was the initialized notification, even if 200 OK
         if (_isInitializedNotification(message)) {
-          _startOrAuthSse(const StartSseOptions()).catchError((err) {
+          _startOrAuthSse(const _StartSseOptions()).catchError((err) {
             _reportError(err);
           });
         }
@@ -2832,14 +2972,16 @@ class StreamableHttpClientTransport
 
         // Check the response type
         final contentType = response.headers['content-type'];
+        final responseMediaType =
+            contentType?.split(';').first.trim().toLowerCase();
 
         if (hasRequests) {
-          if (contentType?.contains('text/event-stream') ?? false) {
+          if (responseMediaType == 'text/event-stream') {
             // Handle SSE stream responses for requests
             final requestStreamCompletion = Completer<void>();
             _handleSseStream(
               response,
-              StartSseOptions(
+              _StartSseOptions(
                 onResumptionToken: onResumptionToken,
                 requestMessageId: message.id,
                 onTerminalResponse: () {
@@ -2861,7 +3003,7 @@ class StreamableHttpClientTransport
               isReconnectable: false,
             );
             await requestStreamCompletion.future;
-          } else if (contentType?.contains('application/json') ?? false) {
+          } else if (responseMediaType == 'application/json') {
             // For non-streaming servers, we might get direct JSON responses
             final jsonStr = await requestGuard.run(
               () => response.stream.transform(utf8.decoder).join(),
@@ -2869,6 +3011,13 @@ class StreamableHttpClientTransport
             final data = jsonDecode(jsonStr);
 
             if (data is List) {
+              if (isStatelessRequest) {
+                throw McpError(
+                  ErrorCode.invalidRequest.value,
+                  'MCP $protocolVersion does not support JSON-RPC batch '
+                  'responses.',
+                );
+              }
               for (final item in data) {
                 final msg = JsonRpcMessage.fromJson(item);
                 _dispatchReceivedMessage(
@@ -2878,6 +3027,20 @@ class StreamableHttpClientTransport
               }
             } else {
               final msg = JsonRpcMessage.fromJson(data);
+              if (isStatelessRequest) {
+                final responseId = switch (msg) {
+                  JsonRpcResponse(:final id) => id,
+                  JsonRpcError(:final id) => id,
+                  _ => null,
+                };
+                if (responseId != message.id) {
+                  throw McpError(
+                    ErrorCode.invalidRequest.value,
+                    'Request ${message.id} received a direct response for '
+                    '${responseId ?? 'a null ID'}.',
+                  );
+                }
+              }
               _dispatchReceivedMessage(
                 msg,
                 rejectServerRequests: isStatelessRequest,
@@ -2923,8 +3086,20 @@ class StreamableHttpClientTransport
       return false;
     }
 
+    Object? decoded;
     try {
-      final decoded = jsonDecode(body);
+      decoded = jsonDecode(body);
+    } catch (_) {
+      return false;
+    }
+    if (decoded is List && rejectServerRequests) {
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        'Stateless MCP does not support JSON-RPC batch responses.',
+      );
+    }
+
+    try {
       final responseCandidates = decoded is List ? decoded : [decoded];
       var dispatched = false;
 
@@ -3115,7 +3290,13 @@ abstract class OAuthClientProvider {
 
 /// Optional OAuth provider interface for first-class MCP authorization-code flow.
 abstract class OAuthAuthorizationCodeProvider implements OAuthClientProvider {
-  /// OAuth client id.
+  /// OAuth client ID.
+  ///
+  /// A non-empty value is treated as pre-registered client information and
+  /// takes priority over Dynamic Client Registration. When the authorization
+  /// server advertises Client ID Metadata Documents, a conforming HTTPS
+  /// metadata-document URL is used as such. Return an empty string only to
+  /// request deprecated Dynamic Client Registration.
   String get clientId;
 
   /// Redirect URI registered for the client.
@@ -3153,13 +3334,17 @@ class OAuthBearerChallengeParameters {
   factory OAuthBearerChallengeParameters.fromParameters(
     Map<String, String> parameters,
   ) {
+    final normalizedParameters = <String, String>{
+      for (final entry in parameters.entries)
+        entry.key.toLowerCase(): entry.value,
+    };
     final knownKeys = {
       'resource_metadata',
       'scope',
       'error',
       'error_description',
     };
-    final resourceMetadata = parameters['resource_metadata'];
+    final resourceMetadata = normalizedParameters['resource_metadata'];
     Uri? parsedResourceMetadata;
     if (resourceMetadata != null) {
       final uri = Uri.tryParse(resourceMetadata);
@@ -3169,11 +3354,14 @@ class OAuthBearerChallengeParameters {
     }
     return OAuthBearerChallengeParameters(
       resourceMetadata: parsedResourceMetadata,
-      scope: parameters['scope'],
-      error: parameters['error'],
-      errorDescription: parameters['error_description'],
-      additionalParameters: Map<String, String>.from(parameters)
-        ..removeWhere((key, value) => knownKeys.contains(key)),
+      scope: normalizedParameters['scope'],
+      error: normalizedParameters['error'],
+      errorDescription: normalizedParameters['error_description'],
+      additionalParameters: Map<String, String>.fromEntries(
+        parameters.entries.where(
+          (entry) => !knownKeys.contains(entry.key.toLowerCase()),
+        ),
+      ),
     );
   }
 
@@ -3182,15 +3370,14 @@ class OAuthBearerChallengeParameters {
       return null;
     }
 
-    final trimmed = header.trim();
-    if (!trimmed.toLowerCase().startsWith('bearer')) {
+    final challenges = _parseOAuthBearerChallenges(header);
+    if (challenges.isEmpty) {
       return null;
     }
-
-    final parameters = _parseAuthenticateParameters(
-      trimmed.substring('bearer'.length).trim(),
+    return challenges.firstWhere(
+      (challenge) => challenge.resourceMetadata != null,
+      orElse: () => challenges.first,
     );
-    return OAuthBearerChallengeParameters.fromParameters(parameters);
   }
 }
 
@@ -3215,17 +3402,43 @@ class OAuthProtectedResourceMetadataDocument {
   ) {
     final resource = json['resource'];
     final authorizationServers = json['authorization_servers'];
-    if (resource is! String || authorizationServers is! List) {
+    if (resource is! String ||
+        resource.isEmpty ||
+        authorizationServers is! List ||
+        authorizationServers.isEmpty) {
       throw const FormatException(
-        'Protected-resource metadata requires resource and authorization_servers.',
+        'Protected-resource metadata requires resource and at least one '
+        'authorization_servers entry.',
       );
+    }
+    final resourceUri = Uri.tryParse(resource);
+    if (!_isAbsoluteHttpUriWithoutUserInfoOrFragment(resourceUri)) {
+      throw const FormatException(
+        'Protected-resource metadata resource must be an absolute HTTP(S) URI '
+        'without user information or a fragment.',
+      );
+    }
+    final parsedAuthorizationServers = <Uri>[];
+    for (final value in authorizationServers) {
+      if (value is! String || value.isEmpty) {
+        throw const FormatException(
+          'Protected-resource metadata authorization_servers entries must be '
+          'non-empty URI strings.',
+        );
+      }
+      final uri = Uri.tryParse(value);
+      if (!_isAbsoluteHttpUriWithoutUserInfoOrFragment(uri)) {
+        throw const FormatException(
+          'Protected-resource metadata authorization_servers entries must be '
+          'absolute HTTP(S) URIs without user information or fragments.',
+        );
+      }
+      parsedAuthorizationServers.add(uri!);
     }
 
     return OAuthProtectedResourceMetadataDocument(
-      resource: Uri.parse(resource),
-      authorizationServers: authorizationServers
-          .map((value) => Uri.parse(value as String))
-          .toList(),
+      resource: resourceUri!,
+      authorizationServers: parsedAuthorizationServers,
       bearerMethodsSupported:
           (json['bearer_methods_supported'] as List?)?.cast<String>(),
       scopesSupported: (json['scopes_supported'] as List?)?.cast<String>(),
@@ -3270,16 +3483,28 @@ class OAuthAuthorizationServerMetadataDocument {
     Map<String, dynamic> json,
   ) {
     final issuer = json['issuer'];
-    if (issuer is! String) {
+    final issuerUri = issuer is String ? Uri.tryParse(issuer) : null;
+    if (issuer is! String ||
+        issuer.isEmpty ||
+        !_isAbsoluteHttpUriWithoutUserInfoOrFragment(issuerUri)) {
       throw const FormatException(
-        'Authorization-server metadata requires issuer.',
+        'Authorization-server metadata requires an absolute HTTP(S) issuer '
+        'without user information or a fragment.',
       );
     }
 
     final authorizationEndpoint = json['authorization_endpoint'];
     final tokenEndpoint = json['token_endpoint'];
+    final clientIdMetadataDocumentSupported =
+        json['client_id_metadata_document_supported'];
+    if (clientIdMetadataDocumentSupported != null &&
+        clientIdMetadataDocumentSupported is! bool) {
+      throw const FormatException(
+        'client_id_metadata_document_supported must be a boolean.',
+      );
+    }
     return OAuthAuthorizationServerMetadataDocument(
-      issuer: Uri.parse(issuer),
+      issuer: issuerUri!,
       authorizationEndpoint: authorizationEndpoint is String
           ? Uri.parse(authorizationEndpoint)
           : null,
@@ -3293,7 +3518,7 @@ class OAuthAuthorizationServerMetadataDocument {
           (json['token_endpoint_auth_methods_supported'] as List?)
               ?.cast<String>(),
       clientIdMetadataDocumentSupported:
-          json['client_id_metadata_document_supported'] as bool?,
+          clientIdMetadataDocumentSupported as bool?,
       authorizationResponseIssParameterSupported:
           json['authorization_response_iss_parameter_supported'] as bool?,
       additionalFields: Map<String, dynamic>.from(json)
@@ -3362,6 +3587,32 @@ class OAuthAuthorizationCodeTokens extends OAuthTokens {
   });
 }
 
+/// Authorization-code tokens bound to their issuing authorization server and
+/// protected resource.
+///
+/// Providers should persist these fields together with the token values. The
+/// transport uses them to prevent credentials from being reused after a
+/// protected resource migrates to a different authorization server.
+class OAuthIssuerBoundAuthorizationCodeTokens
+    extends OAuthAuthorizationCodeTokens {
+  /// Exact issuer identifier from validated authorization-server metadata.
+  final String authorizationServerIssuer;
+
+  /// Protected resource for which the access token was requested.
+  final Uri resource;
+
+  /// Creates authorization-code tokens bound to an issuer and resource.
+  OAuthIssuerBoundAuthorizationCodeTokens({
+    required super.accessToken,
+    super.refreshToken,
+    super.tokenType,
+    super.expiresIn,
+    super.scope,
+    required this.authorizationServerIssuer,
+    required this.resource,
+  });
+}
+
 class _PendingOAuthAuthorization {
   final Uri tokenEndpoint;
   final String codeVerifier;
@@ -3400,6 +3651,26 @@ class _PreparedOAuthAuthorization {
   });
 }
 
+class _DiscoveredProtectedResourceMetadata {
+  final OAuthProtectedResourceMetadataDocument document;
+  final List<String> authorizationServerIdentifiers;
+
+  const _DiscoveredProtectedResourceMetadata({
+    required this.document,
+    required this.authorizationServerIdentifiers,
+  });
+}
+
+class _DiscoveredAuthorizationServerMetadata {
+  final OAuthAuthorizationServerMetadataDocument document;
+  final String issuerIdentifier;
+
+  const _DiscoveredAuthorizationServerMetadata({
+    required this.document,
+    required this.issuerIdentifier,
+  });
+}
+
 class _OAuthClientRegistration {
   final String clientId;
   final String? clientSecret;
@@ -3410,6 +3681,103 @@ class _OAuthClientRegistration {
     required this.clientSecret,
     required this.tokenEndpointAuthMethod,
   });
+}
+
+bool _isAbsoluteHttpUriWithoutUserInfoOrFragment(Uri? uri) =>
+    uri != null &&
+    (uri.scheme == 'http' || uri.scheme == 'https') &&
+    uri.host.isNotEmpty &&
+    uri.userInfo.isEmpty &&
+    uri.fragment.isEmpty;
+
+List<OAuthBearerChallengeParameters> _parseOAuthBearerChallenges(
+  String? header,
+) {
+  if (header == null || header.trim().isEmpty) {
+    return const [];
+  }
+
+  final challenges = <OAuthBearerChallengeParameters>[];
+  String? currentScheme;
+  final currentParts = <String>[];
+  final parameterPrefix = RegExp(
+    r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+\s*=",
+  );
+  final challengePrefix = RegExp(
+    r"^([!#$%&'*+\-.^_`|~0-9A-Za-z]+)(?:\s+(.*))?$",
+    dotAll: true,
+  );
+
+  void finishChallenge() {
+    if (currentScheme?.toLowerCase() == 'bearer') {
+      challenges.add(
+        OAuthBearerChallengeParameters.fromParameters(
+          _parseAuthenticateParameters(currentParts.join(', ')),
+        ),
+      );
+    }
+    currentScheme = null;
+    currentParts.clear();
+  }
+
+  for (final rawSegment in _splitAuthenticateHeaderSegments(header)) {
+    final segment = rawSegment.trim();
+    if (segment.isEmpty) {
+      continue;
+    }
+    if (parameterPrefix.hasMatch(segment)) {
+      if (currentScheme != null) {
+        currentParts.add(segment);
+      }
+      continue;
+    }
+
+    final match = challengePrefix.firstMatch(segment);
+    if (match == null) {
+      continue;
+    }
+    finishChallenge();
+    currentScheme = match.group(1);
+    final challengeValue = match.group(2)?.trim();
+    if (challengeValue?.isNotEmpty == true) {
+      currentParts.add(challengeValue!);
+    }
+  }
+  finishChallenge();
+  return challenges;
+}
+
+List<String> _splitAuthenticateHeaderSegments(String header) {
+  final segments = <String>[];
+  final current = StringBuffer();
+  var quoted = false;
+  var escaped = false;
+  for (final codeUnit in header.codeUnits) {
+    final char = String.fromCharCode(codeUnit);
+    if (escaped) {
+      current.write(char);
+      escaped = false;
+      continue;
+    }
+    if (quoted && char == '\\') {
+      current.write(char);
+      escaped = true;
+      continue;
+    }
+    if (char == '"') {
+      quoted = !quoted;
+      current.write(char);
+      continue;
+    }
+    if (char == ',' && !quoted) {
+      segments.add(current.toString());
+      current.clear();
+      continue;
+    }
+    current.write(char);
+  }
+  segments.add(current.toString());
+  return segments;
 }
 
 Map<String, String> _parseAuthenticateParameters(String input) {

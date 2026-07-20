@@ -59,7 +59,7 @@ For MCP discovery managed by the transport, implement
 `OAuthAuthorizationCodeProvider`. `StreamableHttpClientTransport` can then
 discover protected-resource and authorization-server metadata, build the PKCE
 request, and exchange the callback code through
-`finishAuth(code, state: returnedState)`. Cross-origin authorization servers
+`finishAuthRedirect(code, state: returnedState)`. Cross-origin authorization servers
 must be approved with a narrow `oauthUriValidator`; see the
 [transport guide](../../doc/transports.md#streamable-http-authentication).
 

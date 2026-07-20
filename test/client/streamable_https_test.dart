@@ -1800,12 +1800,14 @@ void main() {
 
       // With no live pending flow this follows the compatibility auth path.
       // A stale A or B pending flow would instead reject the missing state.
+      // ignore: deprecated_member_use_from_same_package
       await transport.finishAuth('unused-code');
 
       for (final release in redirectReleases) {
         release.complete();
       }
       await Future<void>.delayed(Duration.zero);
+      // ignore: deprecated_member_use_from_same_package
       await transport.finishAuth('unused-code');
     });
 
@@ -1830,9 +1832,9 @@ void main() {
         clientSecret: 'test-secret',
         redirectUri: Uri.parse('http://localhost/callback'),
         onAuthorizationUrl: (authorizationUri) async {
-          await oauthTransport.finishAuth(
+          await oauthTransport.finishAuthRedirect(
             'reentrant-code',
-            state: authorizationUri.queryParameters['state'],
+            state: authorizationUri.queryParameters['state']!,
           );
         },
       );
@@ -1920,9 +1922,9 @@ void main() {
       final authorizationUri = authProvider.authorizationUri!;
 
       final finishExpectation = expectLater(
-        transport.finishAuth(
+        transport.finishAuthRedirect(
           'blocked-token-code',
-          state: authorizationUri.queryParameters['state'],
+          state: authorizationUri.queryParameters['state']!,
         ),
         throwsA(
           isA<McpError>().having(
@@ -1990,9 +1992,9 @@ void main() {
       final authorizationUri = authProvider.authorizationUri!;
 
       final finishExpectation = expectLater(
-        transport.finishAuth(
+        transport.finishAuthRedirect(
           'blocked-save-code',
-          state: authorizationUri.queryParameters['state'],
+          state: authorizationUri.queryParameters['state']!,
         ),
         throwsA(
           isA<McpError>().having(
@@ -3228,6 +3230,80 @@ void main() {
         messages.whereType<JsonRpcResponse>().map((message) => message.id),
         [999, 1],
       );
+    });
+
+    test('stateless SSE drops mismatched response IDs before dispatch',
+        () async {
+      final mismatchSent = Completer<void>();
+      final releaseMatchingResponse = Completer<void>();
+      final protocolError = Completer<Error>();
+      final messages = <JsonRpcMessage>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      addTearDown(() {
+        if (!releaseMatchingResponse.isCompleted) {
+          releaseMatchingResponse.complete();
+        }
+      });
+      server.listen((request) async {
+        await request.drain<void>();
+        final mismatchedResponse = jsonEncode(
+          const JsonRpcResponse(
+            id: 999,
+            result: {'mismatched': true},
+          ).toJson(),
+        );
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('text', 'event-stream')
+          ..bufferOutput = false
+          ..write('data: $mismatchedResponse\n\n');
+        await request.response.flush();
+        if (!mismatchSent.isCompleted) {
+          mismatchSent.complete();
+        }
+
+        await releaseMatchingResponse.future;
+        final matchingResponse = jsonEncode(
+          const JsonRpcResponse(
+            id: 1,
+            result: {'matched': true},
+          ).toJson(),
+        );
+        request.response.write('data: $matchingResponse\n\n');
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = defaultProtocolVersion;
+      await transport.start();
+      transport
+        ..onmessage = messages.add
+        ..onerror = (error) {
+          if (!protocolError.isCompleted) {
+            protocolError.complete(error);
+          }
+        };
+
+      var sendSettled = false;
+      final sendFuture = transport
+          .send(const JsonRpcRequest(id: 1, method: 'test/correlate'))
+          .whenComplete(() => sendSettled = true);
+      await mismatchSent.future.timeout(const Duration(seconds: 5));
+      final error = await protocolError.future.timeout(
+        const Duration(seconds: 5),
+      );
+
+      expect(sendSettled, isFalse);
+      expect(messages, isEmpty);
+      expect(error, isA<McpError>());
+      expect((error as McpError).code, ErrorCode.invalidRequest.value);
+
+      releaseMatchingResponse.complete();
+      await sendFuture.timeout(const Duration(seconds: 5));
+      expect(messages.single, isA<JsonRpcResponse>());
+      expect((messages.single as JsonRpcResponse).id, 1);
     });
 
     test('interrupted stateful POST SSE streams reconnect', () async {
@@ -4679,7 +4755,7 @@ void main() {
         request.response
           ..statusCode = HttpStatus.ok
           ..headers.contentType = ContentType.json
-          ..write(jsonEncode([serverRequest.toJson()]));
+          ..write(jsonEncode(serverRequest.toJson()));
         await request.response.close();
       });
 
@@ -4688,27 +4764,244 @@ void main() {
       )..protocolVersion = previewProtocolVersion;
       await transport.start();
 
-      final errorCompleter = Completer<Error>();
       final messages = <JsonRpcMessage>[];
-      transport
-        ..onmessage = messages.add
-        ..onerror = (error) {
-          if (!errorCompleter.isCompleted) {
-            errorCompleter.complete(error);
-          }
-        };
+      transport.onmessage = messages.add;
+
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+        ),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.invalidRequest.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('direct response'),
+              ),
+        ),
+      );
+      expect(messages, isEmpty);
+    });
+
+    test('stateless JSON rejects successful response batches', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode([
+              const JsonRpcResponse(
+                id: 1,
+                result: {'tools': []},
+              ).toJson(),
+            ]),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = defaultProtocolVersion;
+      await transport.start();
+      final messages = <JsonRpcMessage>[];
+      transport.onmessage = messages.add;
+
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+        ),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.invalidRequest.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('batch responses'),
+              ),
+        ),
+      );
+      expect(messages, isEmpty);
+    });
+
+    test('stateless JSON rejects error response batches', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.badRequest
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode([
+              const JsonRpcError(
+                id: 1,
+                error: JsonRpcErrorData(
+                  code: -32000,
+                  message: 'failed',
+                ),
+              ).toJson(),
+            ]),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = defaultProtocolVersion;
+      await transport.start();
+      final messages = <JsonRpcMessage>[];
+      transport.onmessage = messages.add;
+
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+        ),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.invalidRequest.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('batch responses'),
+              ),
+        ),
+      );
+      expect(messages, isEmpty);
+    });
+
+    test('stateless JSON rejects a response for another request ID', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 2,
+                result: {'tools': []},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = defaultProtocolVersion;
+      await transport.start();
+      final messages = <JsonRpcMessage>[];
+      transport.onmessage = messages.add;
+
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+        ),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.invalidRequest.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                allOf(contains('Request 1'), contains('response for 2')),
+              ),
+        ),
+      );
+      expect(messages, isEmpty);
+    });
+
+    test('POST accepts a mixed-case JSON media type with parameters', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.set(
+            HttpHeaders.contentTypeHeader,
+            'Application/JSON; charset=utf-8',
+          )
+          ..write(
+            jsonEncode(
+              const JsonRpcResponse(
+                id: 1,
+                result: {'tools': []},
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = defaultProtocolVersion;
+      await transport.start();
+      final response = Completer<JsonRpcMessage>();
+      transport.onmessage = response.complete;
 
       await transport.send(
         JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
       );
-
-      final error = await errorCompleter.future.timeout(
-        const Duration(seconds: 5),
+      expect(
+        await response.future.timeout(const Duration(seconds: 5)),
+        isA<JsonRpcResponse>(),
       );
-      expect(error, isA<McpError>());
-      expect((error as McpError).code, ErrorCode.invalidRequest.value);
-      expect(error.message, contains('inputRequests'));
-      expect(messages, isEmpty);
+    });
+
+    test('stateless requests fail immediately when POST returns 202', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+      });
+
+      transport = StreamableHttpClientTransport(
+        Uri.parse('http://localhost:${server.port}/mcp'),
+      )..protocolVersion = defaultProtocolVersion;
+      await transport.start();
+
+      await expectLater(
+        transport.send(
+          JsonRpcListToolsRequest(id: 1, meta: _statelessMeta()),
+        ),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.invalidRequest.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('HTTP 202'),
+              ),
+        ),
+      );
     });
 
     test('send mirrors mapped tool parameters into 2026 stateless headers',
@@ -5385,6 +5678,24 @@ void main() {
         expect(challenge?.error, 'insufficient_scope');
       });
 
+      test('parses case-insensitive Bearer parameters among challenges', () {
+        final challenge = OAuthBearerChallengeParameters.fromHeader(
+          'Basic realm="legacy", bEaReR '
+          'RESOURCE_METADATA="https://mcp.example/oauth-resource", '
+          'SCOPE="tools:read,tools:write", ERROR="insufficient_scope", '
+          'X-Vendor="keep-me", '
+          'DPoP realm="future"',
+        );
+
+        expect(
+          challenge?.resourceMetadata.toString(),
+          'https://mcp.example/oauth-resource',
+        );
+        expect(challenge?.scope, 'tools:read,tools:write');
+        expect(challenge?.error, 'insufficient_scope');
+        expect(challenge?.additionalParameters, {'X-Vendor': 'keep-me'});
+      });
+
       test('ignores invalid bearer challenge resource metadata', () {
         final challenge = OAuthBearerChallengeParameters.fromHeader(
           r'Bearer resource_metadata="http://[", scope="tools:read"',
@@ -5399,15 +5710,31 @@ void main() {
         'http://client.example/client.json',
         'https://client.example',
         'https://client.example/',
+        'https://user@client.example/client.json',
+        'https://client.example/client.json#fragment',
+        'https://client.example/a/../client.json',
       ]) {
-        test('does not treat $clientId as a client ID metadata document',
-            () async {
+        test('treats non-CIMD client ID $clientId as pre-registered', () async {
           await expectClientRegistrationSelection(
             clientId: clientId,
-            expectsDynamicRegistration: true,
+            expectsDynamicRegistration: false,
           );
         });
       }
+
+      test('uses pre-registration before advertised DCR', () async {
+        await expectClientRegistrationSelection(
+          clientId: 'pre-registered-client',
+          expectsDynamicRegistration: false,
+        );
+      });
+
+      test('uses DCR only when the provider has no client ID', () async {
+        await expectClientRegistrationSelection(
+          clientId: '',
+          expectsDynamicRegistration: true,
+        );
+      });
 
       test('uses an HTTPS client ID with a path as a metadata document',
           () async {
@@ -5737,6 +6064,7 @@ void main() {
         });
 
         final authProvider = DiscoveryOAuthClientProvider(
+          clientId: '',
           redirectUri: Uri.parse('http://localhost/callback'),
           clientSecret: 'configured-secret',
         );
@@ -5767,6 +6095,7 @@ void main() {
           registrationRequest?['token_endpoint_auth_method'],
           'client_secret_post',
         );
+        expect(registrationRequest?['application_type'], 'native');
         expect(authProvider.authorizationUri, isNull);
         expect(tokenRequests, 0);
       });
@@ -5821,9 +6150,9 @@ void main() {
 
         final authorizationUri = authProvider.authorizationUri;
         expect(authorizationUri, isNotNull);
-        await oauthTransport.finishAuth(
+        await oauthTransport.finishAuthRedirect(
           'auth-code',
-          state: authorizationUri!.queryParameters['state'],
+          state: authorizationUri!.queryParameters['state']!,
         );
 
         expect(tokenRequests, 1);
@@ -5966,7 +6295,6 @@ void main() {
                     'refresh_token': 'refresh-token',
                     'token_type': 'Bearer',
                     'expires_in': 3600.0,
-                    'scope': 'tools:read',
                   }),
                 );
               await request.response.close();
@@ -6017,7 +6345,7 @@ void main() {
         expect(authProvider.legacyRedirects, 0);
 
         await expectLater(
-          oauthTransport.finishAuth('auth-code'),
+          oauthTransport.finishAuthRedirect('auth-code', state: ''),
           throwsA(
             isA<UnauthorizedError>().having(
               (error) => error.message,
@@ -6029,7 +6357,10 @@ void main() {
         expect(tokenExchangeSeen, isFalse);
 
         await expectLater(
-          oauthTransport.finishAuth('auth-code', state: 'wrong-state'),
+          oauthTransport.finishAuthRedirect(
+            'auth-code',
+            state: 'wrong-state',
+          ),
           throwsA(
             isA<UnauthorizedError>().having(
               (error) => error.message,
@@ -6040,9 +6371,9 @@ void main() {
         );
         expect(tokenExchangeSeen, isFalse);
 
-        await oauthTransport.finishAuth(
+        await oauthTransport.finishAuthRedirect(
           'auth-code',
-          state: authorizationUri.queryParameters['state'],
+          state: authorizationUri.queryParameters['state']!,
         );
         expect(tokenExchangeSeen, isTrue);
         expect(authProvider.storedTokens?.accessToken, 'exchanged-token');
@@ -6071,7 +6402,10 @@ void main() {
 
         // Calling finishAuth without authProvider should throw
         expect(
-          () async => await transport.finishAuth('test-code'),
+          () async => await transport.finishAuthRedirect(
+            'test-code',
+            state: 'unused-state',
+          ),
           throwsA(isA<UnauthorizedError>()),
         );
       });

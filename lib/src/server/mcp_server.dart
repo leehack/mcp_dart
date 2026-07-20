@@ -160,14 +160,19 @@ class CompletableField {
 }
 
 /// Function signature for a tool implementation.
-typedef ToolFunction = FutureOr<BaseResultData> Function(
+typedef ToolFunction = FutureOr<CallToolResult> Function(
   Map<String, dynamic> args,
   RequestHandlerExtra extra,
 );
 
-/// Legacy callback signature for the deprecated [McpServer.tool] helper.
-@Deprecated('Use ToolFunction with registerTool instead')
-typedef LegacyToolCallback = FutureOr<BaseResultData> Function({
+/// MCP 2026-07-28 tool callback that may request additional client input.
+typedef StatelessToolFunction = FutureOr<BaseResultData> Function(
+  Map<String, dynamic> args,
+  RequestHandlerExtra extra,
+);
+
+/// Legacy callback signature for tools (deprecated style).
+typedef LegacyToolCallback = FutureOr<CallToolResult> Function({
   Map<String, dynamic>? args,
   RequestHandlerExtra? extra,
 });
@@ -188,7 +193,13 @@ final class InterfaceToolCallback extends ToolCallback {
 }
 
 /// Callback signature for prompts.
-typedef PromptCallback = FutureOr<BaseResultData> Function(
+typedef PromptCallback = FutureOr<GetPromptResult> Function(
+  Map<String, dynamic>? args,
+  RequestHandlerExtra? extra,
+);
+
+/// MCP 2026-07-28 prompt callback that may request additional client input.
+typedef StatelessPromptCallback = FutureOr<BaseResultData> Function(
   Map<String, dynamic>? args,
   RequestHandlerExtra? extra,
 );
@@ -227,13 +238,27 @@ typedef ListResourcesCallback = FutureOr<ListResourcesResult> Function(
 );
 
 /// Callback to read a specific resource.
-typedef ReadResourceCallback = FutureOr<BaseResultData> Function(
+typedef ReadResourceCallback = FutureOr<ReadResourceResult> Function(
+  Uri uri,
+  RequestHandlerExtra extra,
+);
+
+/// MCP 2026-07-28 resource callback that may request additional client input.
+typedef StatelessReadResourceCallback = FutureOr<BaseResultData> Function(
   Uri uri,
   RequestHandlerExtra extra,
 );
 
 /// Callback to read a resource template.
-typedef ReadResourceTemplateCallback = FutureOr<BaseResultData> Function(
+typedef ReadResourceTemplateCallback = FutureOr<ReadResourceResult> Function(
+  Uri uri,
+  TemplateVariables variables,
+  RequestHandlerExtra extra,
+);
+
+/// MCP 2026-07-28 template callback that may request additional client input.
+typedef StatelessReadResourceTemplateCallback = FutureOr<BaseResultData>
+    Function(
   Uri uri,
   TemplateVariables variables,
   RequestHandlerExtra extra,
@@ -391,14 +416,39 @@ class _RegisteredResourceImpl implements RegisteredResource {
   String name;
   @override
   String? title;
-  final String uri;
+  String uri;
   @override
   ResourceMetadata? metadata;
   @override
   Map<String, dynamic>? meta;
   final ImageContent? icon; // Kept for legacy compatibility
+  ReadResourceCallback? _legacyReadCallback;
+  StatelessReadResourceCallback _statelessReadCallback;
+
   @override
-  ReadResourceCallback readCallback;
+  ReadResourceCallback get readCallback {
+    final legacyReadCallback = _legacyReadCallback;
+    if (legacyReadCallback != null) {
+      return legacyReadCallback;
+    }
+    return (uri, extra) async {
+      final result = await Future.value(_statelessReadCallback(uri, extra));
+      if (result is ReadResourceResult) {
+        return result;
+      }
+      throw StateError(
+        'The stateless resource callback returned InputRequiredResult. '
+        'The v2.2.2 readCallback view can only return ReadResourceResult.',
+      );
+    };
+  }
+
+  FutureOr<BaseResultData> invokeReadCallback(
+    Uri uri,
+    RequestHandlerExtra extra,
+  ) =>
+      _statelessReadCallback(uri, extra);
+
   @override
   bool enabled = true;
 
@@ -412,8 +462,14 @@ class _RegisteredResourceImpl implements RegisteredResource {
     this.metadata,
     this.meta,
     this.icon,
-    required this.readCallback,
-  });
+    ReadResourceCallback? readCallback,
+    StatelessReadResourceCallback? statelessReadCallback,
+  })  : assert(
+          readCallback != null || statelessReadCallback != null,
+          'A resource read callback is required.',
+        ),
+        _legacyReadCallback = readCallback,
+        _statelessReadCallback = statelessReadCallback ?? readCallback!;
 
   Resource toResource() {
     return Resource(
@@ -435,7 +491,15 @@ class _RegisteredResourceImpl implements RegisteredResource {
   void disable() => update(enabled: false);
 
   @override
-  void remove() => update(uri: null);
+  void remove() {
+    if (_server._removeRegistration(
+      _server._registeredResources,
+      uri,
+      this,
+    )) {
+      _server.sendResourceListChanged();
+    }
+  }
 
   @override
   void update({
@@ -448,19 +512,20 @@ class _RegisteredResourceImpl implements RegisteredResource {
     bool? enabled,
   }) {
     if (uri != null && uri != this.uri) {
-      _server._registeredResources.remove(this.uri);
+      final oldUri = this.uri;
+      _server._updateResourceUri(oldUri, uri, this);
+      this.uri = uri;
     }
-
     if (name != null) this.name = name;
     if (title != null) this.title = title;
     if (metadata != null) this.metadata = metadata;
     if (meta != null) this.meta = meta;
-    if (callback != null) readCallback = callback;
+    if (callback != null) {
+      _legacyReadCallback = callback;
+      _statelessReadCallback = callback;
+    }
     if (enabled != null) this.enabled = enabled;
 
-    if (uri != null && uri != this.uri) {
-      _server._updateResourceUri(this.uri, uri, this);
-    }
     _server.sendResourceListChanged();
   }
 }
@@ -507,7 +572,7 @@ abstract class RegisteredResourceTemplate {
 }
 
 class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
-  final String name;
+  String name;
   @override
   ResourceTemplateRegistration resourceTemplate;
   @override
@@ -516,8 +581,37 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
   ResourceMetadata? metadata;
   @override
   Map<String, dynamic>? meta;
+  ReadResourceTemplateCallback? _legacyReadCallback;
+  StatelessReadResourceTemplateCallback _statelessReadCallback;
+
   @override
-  ReadResourceTemplateCallback readCallback;
+  ReadResourceTemplateCallback get readCallback {
+    final legacyReadCallback = _legacyReadCallback;
+    if (legacyReadCallback != null) {
+      return legacyReadCallback;
+    }
+    return (uri, variables, extra) async {
+      final result = await Future.value(
+        _statelessReadCallback(uri, variables, extra),
+      );
+      if (result is ReadResourceResult) {
+        return result;
+      }
+      throw StateError(
+        'The stateless resource template callback returned '
+        'InputRequiredResult. The v2.2.2 readCallback view can only return '
+        'ReadResourceResult.',
+      );
+    };
+  }
+
+  FutureOr<BaseResultData> invokeReadCallback(
+    Uri uri,
+    TemplateVariables variables,
+    RequestHandlerExtra extra,
+  ) =>
+      _statelessReadCallback(uri, variables, extra);
+
   @override
   bool enabled = true;
 
@@ -530,8 +624,14 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
     required this.resourceTemplate,
     this.metadata,
     this.meta,
-    required this.readCallback,
-  });
+    ReadResourceTemplateCallback? readCallback,
+    StatelessReadResourceTemplateCallback? statelessReadCallback,
+  })  : assert(
+          readCallback != null || statelessReadCallback != null,
+          'A resource template read callback is required.',
+        ),
+        _legacyReadCallback = readCallback,
+        _statelessReadCallback = statelessReadCallback ?? readCallback!;
 
   ResourceTemplate toResourceTemplate() {
     return ResourceTemplate(
@@ -551,7 +651,15 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
   void disable() => update(enabled: false);
 
   @override
-  void remove() => update(name: null);
+  void remove() {
+    if (_server._removeRegistration(
+      _server._registeredResourceTemplates,
+      name,
+      this,
+    )) {
+      _server.sendResourceListChanged();
+    }
+  }
 
   @override
   void update({
@@ -564,18 +672,20 @@ class _RegisteredResourceTemplateImpl implements RegisteredResourceTemplate {
     bool? enabled,
   }) {
     if (name != null && name != this.name) {
-      _server._registeredResourceTemplates.remove(this.name);
+      final oldName = this.name;
+      _server._updateResourceTemplateName(oldName, name, this);
+      this.name = name;
     }
     if (title != null) this.title = title;
     if (template != null) resourceTemplate = template;
     if (metadata != null) this.metadata = metadata;
     if (meta != null) this.meta = meta;
-    if (callback != null) readCallback = callback;
+    if (callback != null) {
+      _legacyReadCallback = callback;
+      _statelessReadCallback = callback;
+    }
     if (enabled != null) this.enabled = enabled;
 
-    if (name != null && name != this.name) {
-      _server._updateResourceTemplateName(this.name, name, this);
-    }
     _server.sendResourceListChanged();
   }
 }
@@ -594,18 +704,8 @@ abstract class RegisteredTool {
   /// The input schema for the tool.
   ToolInputSchema? get inputSchema;
 
-  /// The object-root output schema for stable MCP `2025-11-25` tool results.
-  ///
-  /// MCP `2026-07-28` allows non-object JSON Schema roots. Use
-  /// [outputJsonSchema] for that wire-level schema.
+  /// The output schema for the tool.
   ToolOutputSchema? get outputSchema;
-
-  /// The wire-level output schema for this tool.
-  ///
-  /// This may be any JSON Schema when the server is using the explicit
-  /// MCP `2026-07-28` profile. Stable MCP `2025-11-25` callers only
-  /// receive this schema when it has an object root.
-  JsonSchema? get outputJsonSchema;
 
   /// Annotations for the tool.
   ToolAnnotations? get annotations;
@@ -635,7 +735,6 @@ abstract class RegisteredTool {
     String? description,
     ToolInputSchema? inputSchema,
     ToolOutputSchema? outputSchema,
-    JsonSchema? outputJsonSchema,
     ToolAnnotations? annotations,
     ToolExecution? execution,
     ToolCallback? callback,
@@ -661,6 +760,7 @@ class _RegisteredToolImpl implements RegisteredTool {
   ToolExecution? execution;
   @override
   ToolCallback? callback;
+  StatelessToolFunction? statelessCallback;
   @override
   bool enabled = true;
 
@@ -678,6 +778,7 @@ class _RegisteredToolImpl implements RegisteredTool {
     this.meta,
     this.execution,
     required this.callback,
+    this.statelessCallback,
   }) : _outputJsonSchema = outputJsonSchema {
     _server._registeredTools[name] = this;
   }
@@ -691,9 +792,6 @@ class _RegisteredToolImpl implements RegisteredTool {
     return null;
   }
 
-  @override
-  JsonSchema? get outputJsonSchema => _outputJsonSchema;
-
   Tool toTool({
     bool includeExecution = true,
     ToolInputSchema? inputSchemaOverride,
@@ -705,7 +803,8 @@ class _RegisteredToolImpl implements RegisteredTool {
       description: description,
       inputSchema:
           inputSchemaOverride ?? inputSchema ?? const ToolInputSchema(),
-      outputSchema: _outputSchemaForProtocol(outputJsonSchema, protocolVersion),
+      outputSchema:
+          _outputSchemaForProtocol(_outputJsonSchema, protocolVersion),
       annotations: annotations,
       icon: icon,
       icons: _iconsFromLegacyImage(icon),
@@ -721,7 +820,15 @@ class _RegisteredToolImpl implements RegisteredTool {
   void disable() => update(enabled: false);
 
   @override
-  void remove() => update(name: null);
+  void remove() {
+    if (_server._removeRegistration(
+      _server._registeredTools,
+      name,
+      this,
+    )) {
+      _server.sendToolListChanged();
+    }
+  }
 
   @override
   void update({
@@ -730,36 +837,28 @@ class _RegisteredToolImpl implements RegisteredTool {
     String? description,
     ToolInputSchema? inputSchema,
     ToolOutputSchema? outputSchema,
-    JsonSchema? outputJsonSchema,
     ToolAnnotations? annotations,
     ToolExecution? execution,
     ToolCallback? callback,
     bool? enabled,
   }) {
     if (name != null && name != this.name) {
-      _server._registeredTools.remove(this.name);
-    }
-
-    if (name != null) {
       validateAndWarnToolName(name);
+      _server._updateToolName(this.name, name, this);
       this.name = name;
     }
     if (title != null) this.title = title;
     if (description != null) this.description = description;
     if (inputSchema != null) this.inputSchema = inputSchema;
-    final nextOutputJsonSchema =
-        _resolveToolOutputJsonSchema(outputSchema, outputJsonSchema);
-    if (nextOutputJsonSchema != null) {
-      _outputJsonSchema = nextOutputJsonSchema;
-    }
+    if (outputSchema != null) _outputJsonSchema = outputSchema;
     if (annotations != null) this.annotations = annotations;
     if (execution != null) this.execution = execution;
-    if (callback != null) this.callback = callback;
+    if (callback != null) {
+      this.callback = callback;
+      statelessCallback = null;
+    }
     if (enabled != null) this.enabled = enabled;
 
-    if (name != null) {
-      _server._registeredTools[name] = this;
-    }
     _server.sendToolListChanged();
   }
 }
@@ -811,7 +910,7 @@ class _RegisteredPromptImpl implements RegisteredPrompt {
   @override
   Map<String, PromptArgumentDefinition>? argsSchemaDefinition;
   final ImageContent? icon;
-  PromptCallback? callback;
+  StatelessPromptCallback? callback;
   @override
   bool enabled = true;
 
@@ -852,7 +951,15 @@ class _RegisteredPromptImpl implements RegisteredPrompt {
   void disable() => update(enabled: false);
 
   @override
-  void remove() => update(name: null);
+  void remove() {
+    if (_server._removeRegistration(
+      _server._registeredPrompts,
+      name,
+      this,
+    )) {
+      _server.sendPromptListChanged();
+    }
+  }
 
   @override
   void update({
@@ -864,18 +971,15 @@ class _RegisteredPromptImpl implements RegisteredPrompt {
     bool? enabled,
   }) {
     if (name != null && name != this.name) {
-      _server._registeredPrompts.remove(this.name);
+      _server._updatePromptName(this.name, name, this);
+      this.name = name;
     }
-    if (name != null) this.name = name;
     if (title != null) this.title = title;
     if (description != null) this.description = description;
     if (argsSchema != null) argsSchemaDefinition = argsSchema;
     if (callback != null) this.callback = callback;
     if (enabled != null) this.enabled = enabled;
 
-    if (name != null) {
-      _server._registeredPrompts[name] = this;
-    }
     _server.sendPromptListChanged();
   }
 }
@@ -888,6 +992,57 @@ class ExperimentalMcpServerTasks {
 
   /// Registers a task-based tool with a config object and handler.
   RegisteredTool registerToolTask(
+    String name, {
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    ToolOutputSchema? outputSchema,
+    ToolAnnotations? annotations,
+    Map<String, dynamic>? meta,
+    ToolExecution? execution,
+    required ToolTaskHandler handler,
+  }) {
+    return _registerToolTask(
+      name,
+      title: title,
+      description: description,
+      inputSchema: inputSchema,
+      outputSchema: outputSchema,
+      annotations: annotations,
+      meta: meta,
+      execution: execution,
+      handler: handler,
+    );
+  }
+
+  /// Registers a task-based tool with an arbitrary MCP 2026-07-28 output schema.
+  RegisteredTool registerStatelessToolTask(
+    String name, {
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    ToolOutputSchema? outputSchema,
+    JsonSchema? outputJsonSchema,
+    ToolAnnotations? annotations,
+    Map<String, dynamic>? meta,
+    ToolExecution? execution,
+    required ToolTaskHandler handler,
+  }) {
+    return _registerToolTask(
+      name,
+      title: title,
+      description: description,
+      inputSchema: inputSchema,
+      outputSchema: outputSchema,
+      outputJsonSchema: outputJsonSchema,
+      annotations: annotations,
+      meta: meta,
+      execution: execution,
+      handler: handler,
+    );
+  }
+
+  RegisteredTool _registerToolTask(
     String name, {
     String? title,
     String? description,
@@ -1187,16 +1342,26 @@ class McpServer {
   }
 
   /// Sends a logging message to the client, if connected.
-  ///
-  /// For stateless MCP requests, pass [requestMeta] from
-  /// [RequestHandlerExtra.meta] so log notifications honor the request-scoped
-  /// `io.modelcontextprotocol/logLevel` opt-in.
   Future<void> sendLoggingMessage(
     LoggingMessageNotification params, {
     String? sessionId,
-    Map<String, dynamic>? requestMeta,
   }) async {
     return server.sendLoggingMessage(
+      params,
+      sessionId: sessionId,
+    );
+  }
+
+  /// Sends a request-scoped logging message for stateless MCP.
+  ///
+  /// Pass [requestMeta] from [RequestHandlerExtra.meta] so the notification
+  /// honors the request's `io.modelcontextprotocol/logLevel` opt-in.
+  Future<void> sendStatelessLoggingMessage(
+    LoggingMessageNotification params, {
+    String? sessionId,
+    required Map<String, dynamic>? requestMeta,
+  }) async {
+    return server.sendStatelessLoggingMessage(
       params,
       sessionId: sessionId,
       requestMeta: requestMeta,
@@ -1216,8 +1381,13 @@ class McpServer {
     String newUri,
     _RegisteredResourceImpl resource,
   ) {
-    _registeredResources.remove(oldUri);
-    _registeredResources[newUri] = resource;
+    _replaceRegistrationKey(
+      _registeredResources,
+      oldUri,
+      newUri,
+      resource,
+      'Resource URI',
+    );
   }
 
   void _updateResourceTemplateName(
@@ -1225,8 +1395,71 @@ class McpServer {
     String newName,
     _RegisteredResourceTemplateImpl template,
   ) {
-    _registeredResourceTemplates.remove(oldName);
-    _registeredResourceTemplates[newName] = template;
+    _replaceRegistrationKey(
+      _registeredResourceTemplates,
+      oldName,
+      newName,
+      template,
+      'Resource template name',
+    );
+  }
+
+  void _updateToolName(
+    String oldName,
+    String newName,
+    _RegisteredToolImpl tool,
+  ) {
+    _replaceRegistrationKey(
+      _registeredTools,
+      oldName,
+      newName,
+      tool,
+      'Tool name',
+    );
+  }
+
+  void _updatePromptName(
+    String oldName,
+    String newName,
+    _RegisteredPromptImpl prompt,
+  ) {
+    _replaceRegistrationKey(
+      _registeredPrompts,
+      oldName,
+      newName,
+      prompt,
+      'Prompt name',
+    );
+  }
+
+  void _replaceRegistrationKey<T>(
+    Map<String, T> registrations,
+    String oldKey,
+    String newKey,
+    T registration,
+    String label,
+  ) {
+    if (!identical(registrations[oldKey], registration)) {
+      throw StateError('$label registration is no longer active.');
+    }
+    final existing = registrations[newKey];
+    if (existing != null && !identical(existing, registration)) {
+      throw ArgumentError("$label '$newKey' is already registered.");
+    }
+    registrations.remove(oldKey);
+    registrations[newKey] = registration;
+  }
+
+  bool _removeRegistration<T>(
+    Map<String, T> registrations,
+    String key,
+    T registration,
+  ) {
+    if (!identical(registrations[key], registration)) {
+      return false;
+    }
+    registrations.remove(key);
+    return true;
   }
 
   void sendResourceListChanged() {
@@ -1602,6 +1835,10 @@ class McpServer {
     server.setRequestHandler<JsonRpcCallToolRequest>(
       Method.toolsCall,
       (request, extra) async {
+        final capabilityError = _validateToolClientCapabilities(request);
+        if (capabilityError != null) {
+          throw capabilityError;
+        }
         final toolName = request.callParams.name;
         final toolArgs = request.callParams.arguments;
         final registeredTool = _registeredTools[toolName];
@@ -1691,19 +1928,23 @@ class McpServer {
                 "Tool '$toolName' does not support task augmentation (taskSupport: 'forbidden')",
               );
             }
-            final FunctionToolCallback toolCallback =
-                registeredTool.callback as FunctionToolCallback;
-            result = await toolCallback.function(
-              toolArgs,
-              extra,
-            );
+            final statelessCallback = registeredTool.statelessCallback;
+            if (statelessCallback != null) {
+              result = await statelessCallback(toolArgs, extra);
+            } else {
+              final callback = registeredTool.callback;
+              if (callback is! FunctionToolCallback) {
+                throw StateError("No callback found for tool '$toolName'");
+              }
+              result = await callback.function(toolArgs, extra);
+            }
           }
 
-          if (registeredTool.outputJsonSchema != null &&
+          if (registeredTool._outputJsonSchema != null &&
               result is CallToolResult) {
             if (result.isError != true) {
               try {
-                registeredTool.outputJsonSchema!.validate(
+                registeredTool._outputJsonSchema!.validate(
                   result.structuredContentJson?.toJson(),
                 );
               } catch (error, stackTrace) {
@@ -1928,13 +2169,17 @@ class McpServer {
               "Resource disabled: $uriString",
             );
           }
-          return await Future.value(fixed.readCallback(uri, extra));
+          return await Future.value(
+            fixed.invokeReadCallback(uri, extra),
+          );
         }
         for (final entry in _registeredResourceTemplates.values) {
           if (!entry.enabled) continue;
           final vars = entry.resourceTemplate.uriTemplate.match(uriString);
           if (vars != null) {
-            return await Future.value(entry.readCallback(uri, vars, extra));
+            return await Future.value(
+              entry.invokeReadCallback(uri, vars, extra),
+            );
           }
         }
         final protocolVersion = extra.meta?[McpMetaKey.protocolVersion];
@@ -2001,13 +2246,13 @@ class McpServer {
         }
 
         try {
-          dynamic parsedArgs = args ?? {};
-          if (registered.argsSchemaDefinition != null) {
-            parsedArgs = _validatePromptArgs(
-              Map<String, dynamic>.from(parsedArgs),
-              registered.argsSchemaDefinition!,
-            );
-          }
+          final rawArgs = args ?? <String, dynamic>{};
+          final parsedArgs = registered.argsSchemaDefinition == null
+              ? rawArgs
+              : _validatePromptArgs(
+                  Map<String, dynamic>.from(rawArgs),
+                  registered.argsSchemaDefinition!,
+                );
           if (registered.callback != null) {
             return await Future.value(registered.callback!(parsedArgs, extra));
           } else {
@@ -2109,6 +2354,33 @@ class McpServer {
     return resource;
   }
 
+  /// Registers an MCP 2026-07-28 resource that may request additional input.
+  RegisteredResource registerStatelessResource(
+    String name,
+    String uri,
+    ResourceMetadata? metadata,
+    StatelessReadResourceCallback readCallback, {
+    String? title,
+    Map<String, dynamic>? meta,
+  }) {
+    if (_registeredResources.containsKey(uri)) {
+      throw ArgumentError("Resource URI '$uri' already registered.");
+    }
+    final resource = _RegisteredResourceImpl(
+      this,
+      name: name,
+      title: title,
+      uri: uri,
+      metadata: metadata,
+      meta: meta,
+      statelessReadCallback: readCallback,
+    );
+    _registeredResources[uri] = resource;
+    _ensureResourceHandlersInitialized();
+    sendResourceListChanged();
+    return resource;
+  }
+
   /// Registers a resource template.
   ///
   /// [name] is the unique name for this template registration.
@@ -2144,15 +2416,42 @@ class McpServer {
     return resourceTemplate;
   }
 
+  /// Registers an MCP 2026-07-28 resource template with multi-round reads.
+  RegisteredResourceTemplate registerStatelessResourceTemplate(
+    String name,
+    ResourceTemplateRegistration template,
+    ResourceMetadata? metadata,
+    StatelessReadResourceTemplateCallback readCallback, {
+    String? title,
+    Map<String, dynamic>? meta,
+  }) {
+    if (_registeredResourceTemplates.containsKey(name)) {
+      throw ArgumentError(
+        "Resource template name '$name' already registered.",
+      );
+    }
+    final resourceTemplate = _RegisteredResourceTemplateImpl(
+      this,
+      name: name,
+      title: title,
+      resourceTemplate: template,
+      metadata: metadata,
+      meta: meta,
+      statelessReadCallback: readCallback,
+    );
+    _registeredResourceTemplates[name] = resourceTemplate;
+    _ensureResourceHandlersInitialized();
+    sendResourceListChanged();
+    return resourceTemplate;
+  }
+
   /// Registers a tool.
   ///
   /// [name] is the unique name of the tool.
   /// [title] is a human-readable title.
   /// [description] explains what the tool does.
   /// [inputSchema] defines the expected arguments.
-  /// [outputSchema] defines the stable object-root result structure.
-  /// [outputJsonSchema] defines an MCP `2026-07-28` result structure
-  /// whose JSON Schema root may be any valid JSON Schema type.
+  /// [outputSchema] defines the result structure.
   /// [annotations] provides additional metadata.
   /// [callback] is the function executed when the tool is called.
   RegisteredTool registerTool(
@@ -2161,10 +2460,38 @@ class McpServer {
     String? description,
     ToolInputSchema? inputSchema,
     ToolOutputSchema? outputSchema,
-    JsonSchema? outputJsonSchema,
     ToolAnnotations? annotations,
     Map<String, dynamic>? meta,
     required ToolFunction callback,
+  }) {
+    return _registerTool(
+      name,
+      title: title,
+      description: description,
+      inputSchema: inputSchema,
+      outputSchema: outputSchema,
+      annotations: annotations,
+      meta: meta,
+      execution: const ToolExecution(taskSupport: 'forbidden'),
+      callback: FunctionToolCallback(callback),
+    );
+  }
+
+  /// Registers an MCP 2026-07-28 tool that may return multi-round results.
+  ///
+  /// Use this instead of [registerTool] when [callback] can return an
+  /// [InputRequiredResult]. Callbacks that always return [CallToolResult] should
+  /// continue to use [registerTool].
+  RegisteredTool registerStatelessTool(
+    String name, {
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    ToolOutputSchema? outputSchema,
+    JsonSchema? outputJsonSchema,
+    ToolAnnotations? annotations,
+    Map<String, dynamic>? meta,
+    required StatelessToolFunction callback,
   }) {
     return _registerTool(
       name,
@@ -2176,7 +2503,7 @@ class McpServer {
       annotations: annotations,
       meta: meta,
       execution: const ToolExecution(taskSupport: 'forbidden'),
-      callback: FunctionToolCallback(callback),
+      statelessCallback: callback,
     );
   }
 
@@ -2191,8 +2518,12 @@ class McpServer {
     ToolAnnotations? annotations,
     Map<String, dynamic>? meta,
     ToolExecution? execution,
-    required ToolCallback callback,
+    ToolCallback? callback,
+    StatelessToolFunction? statelessCallback,
   }) {
+    if (callback == null && statelessCallback == null) {
+      throw ArgumentError('A tool callback is required.');
+    }
     if (_registeredTools.containsKey(name)) {
       throw ArgumentError("Tool name '$name' already registered.");
     }
@@ -2209,6 +2540,7 @@ class McpServer {
       meta: meta,
       execution: execution,
       callback: callback,
+      statelessCallback: statelessCallback,
     );
     _registeredTools[name] = tool;
     _ensureToolHandlersInitialized();
@@ -2229,6 +2561,34 @@ class McpServer {
     String? description,
     Map<String, PromptArgumentDefinition>? argsSchema,
     required PromptCallback callback,
+  }) {
+    if (_registeredPrompts.containsKey(name)) {
+      throw ArgumentError("Prompt name '$name' already registered.");
+    }
+    final prompt = _RegisteredPromptImpl(
+      this,
+      name: name,
+      title: title,
+      description: description,
+      argsSchemaDefinition: argsSchema,
+      callback: callback,
+    );
+    _registeredPrompts[name] = prompt;
+    _ensurePromptHandlersInitialized();
+    sendPromptListChanged();
+    return prompt;
+  }
+
+  /// Registers an MCP 2026-07-28 prompt that may request additional input.
+  ///
+  /// Use this instead of [registerPrompt] when [callback] can return an
+  /// [InputRequiredResult].
+  RegisteredPrompt registerStatelessPrompt(
+    String name, {
+    String? title,
+    String? description,
+    Map<String, PromptArgumentDefinition>? argsSchema,
+    required StatelessPromptCallback callback,
   }) {
     if (_registeredPrompts.containsKey(name)) {
       throw ArgumentError("Prompt name '$name' already registered.");

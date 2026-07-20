@@ -203,7 +203,10 @@ void main() {
 
       // finishAuth without authProvider should throw
       expect(
-        () async => await transport.finishAuth('code'),
+        () async => await transport.finishAuthRedirect(
+          'code',
+          state: 'unused-state',
+        ),
         throwsA(isA<UnauthorizedError>()),
       );
     });

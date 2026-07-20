@@ -603,7 +603,10 @@ class _ConformanceOAuthProvider implements OAuthAuthorizationCodeProvider {
     if (scenario == 'auth/basic-cimd') {
       return _clientMetadataDocumentUrl;
     }
-    return 'mcp-dart-conformance-client';
+    // An empty ID explicitly selects deprecated Dynamic Client Registration.
+    // Supplying a non-empty ID means the credentials are pre-registered and
+    // must take priority over CIMD and DCR.
+    return '';
   }
 
   @override
@@ -808,9 +811,9 @@ class _RawOAuthClient {
 
   Future<void> _finishAuth() async {
     final redirect = authProvider.takeRedirect();
-    await transport.finishAuth(
+    await transport.finishAuthRedirect(
       redirect.code,
-      state: redirect.state,
+      state: redirect.state!,
       issuer: redirect.issuer,
     );
   }

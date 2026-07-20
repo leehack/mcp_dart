@@ -390,11 +390,14 @@ back to the endpoint/root well-known protected-resource paths when needed,
 discovers OAuth Authorization Server Metadata or OpenID Connect Discovery
 metadata, builds a PKCE S256 authorization URL with the MCP `resource`
 parameter, and exchanges the authorization code with `code_verifier` and
-`resource` when `finishAuth(code, state: callbackState)` is called. Always read
-the returned `state` from the callback URI and pass it back; the transport
-rejects missing or mismatched state before contacting the token endpoint. If
-authorization-server metadata advertises the authorization response `iss`
-parameter, pass the callback's `iss` value through `issuer:` as well.
+`resource` when
+`finishAuthRedirect(code, state: callbackState, issuer: callbackIssuer)` is
+called. Always read the returned `state` from the callback URI and pass it back;
+the transport rejects missing or mismatched state before contacting the token
+endpoint. If authorization-server metadata advertises the authorization
+response `iss` parameter, pass the callback's `iss` value through `issuer:` as
+well. The deprecated `finishAuth(code)` method is retained for v2.2.2
+compatibility only and assumes the application validated the redirect itself.
 
 OAuth discovery is same-origin by default. Loopback MCP endpoints may discover
 other loopback endpoints for local development. For a separate production
@@ -411,12 +414,41 @@ final transport = StreamableHttpClientTransport(
 );
 ```
 
+Client registration is resolved in this order:
+
+1. Use configured client information when `clientId` is non-empty. An ordinary
+   value is treated as a pre-registered client. When the authorization server
+   advertises Client ID Metadata Document support, a secretless, conforming
+   HTTPS metadata-document URL is treated as CIMD.
+2. Use deprecated Dynamic Client Registration only when `clientId` is empty
+   and the authorization server publishes a registration endpoint.
+3. Fail authorization when neither form is available.
+
+Pre-registered credentials and dynamic registrations are bound to the exact
+authorization-server issuer that supplied them. Providers whose secretless
+client ID is itself a URL should avoid an ambiguous CIMD-shaped URL unless they
+intend the authorization server to treat it as a Client ID Metadata Document.
+
 The transport rejects user information, fragments, non-HTTP(S) URLs, and
-non-loopback plaintext HTTP. OAuth metadata, registration, and token requests
-do not follow redirects automatically. The exchanged value passed to
-`saveTokens` is an `OAuthAuthorizationCodeTokens` instance, so providers that
-want `tokenType`, `expiresIn`, or granted `scope` can read them by type-checking
-that subtype while older `OAuthTokens` implementations stay source-compatible.
+non-loopback plaintext HTTP. A client redirect URI must use HTTPS, except that
+HTTP is allowed for loopback hosts. OAuth metadata, registration, and token
+requests do not follow redirects automatically. The authorization-server
+metadata `issuer` must exactly match the raw selected issuer identifier; URI
+normalization does not make a different issuer equivalent.
+
+The exchanged value passed to `saveTokens` is an
+`OAuthIssuerBoundAuthorizationCodeTokens` instance. Providers should persist
+its `authorizationServerIssuer` and `resource` together with the access and
+refresh tokens, `tokenType`, `expiresIn`, and granted `scope`. The transport
+checks those bindings before reusing the token and unions a persisted granted
+scope with scopes from a later `insufficient_scope` challenge. If the token
+endpoint omits `scope`, the transport persists the requested scope as the
+effective scope. Legacy providers may continue to return a plain `OAuthTokens`
+for source compatibility, but that older shape cannot prove issuer/resource
+binding after an authorization-server migration. Migrate persisted
+authorization-code credentials to the issuer-bound subtype before relying on
+that protection.
+
 Authorization server metadata must explicitly advertise
 `code_challenge_methods_supported` with `S256`; missing metadata is treated as
 no PKCE support and the transport refuses the authorization-code flow.
@@ -430,6 +462,9 @@ covered by
 [`test/example/oauth_client_example_test.dart`](../test/example/oauth_client_example_test.dart)
 with a local token endpoint, and the client transport discovery path is covered
 by [`test/client/streamable_https_test.dart`](../test/client/streamable_https_test.dart).
+MCP 2026-07-28 authorization edge cases are covered by
+[`test/client/oauth_2026_compliance_test.dart`](../test/client/oauth_2026_compliance_test.dart);
+the official alpha.9 client suite passes all 25 authorization scenarios.
 The first-class OAuth protected-resource helper is covered by
 [`test/server/streamable_mcp_server_test.dart`](../test/server/streamable_mcp_server_test.dart)
 and the official TypeScript SDK OAuth interop path in

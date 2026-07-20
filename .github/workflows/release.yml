@@ -25,11 +25,15 @@ jobs:
         id: set-config
         run: |
           if [ "${{ inputs.package }}" = "mcp_dart" ]; then
-            echo "working_directory=." >> "$GITHUB_OUTPUT"
-            echo "tag_prefix=v" >> "$GITHUB_OUTPUT"
+            {
+              echo "working_directory=."
+              echo "tag_prefix=v"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "working_directory=packages/mcp_dart_cli" >> "$GITHUB_OUTPUT"
-            echo "tag_prefix=mcp_dart_cli-v" >> "$GITHUB_OUTPUT"
+            {
+              echo "working_directory=packages/mcp_dart_cli"
+              echo "tag_prefix=mcp_dart_cli-v"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Get version from pubspec.yaml
@@ -46,12 +50,16 @@ jobs:
         run: |
           VERSION="${{ steps.get-version.outputs.version }}"
           if [[ "$VERSION" == *-* ]]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "make_latest=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "prerelease=true"
+              echo "make_latest=false"
+            } >> "$GITHUB_OUTPUT"
             echo "📦 Release type: prerelease"
           else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "make_latest=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "prerelease=false"
+              echo "make_latest=true"
+            } >> "$GITHUB_OUTPUT"
             echo "📦 Release type: stable"
           fi
 
@@ -87,6 +95,30 @@ jobs:
           else
             echo "✅ Stable release source matches origin/$DEFAULT_BRANCH."
           fi
+
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+
+      - name: Prepare release candidate
+        id: publish-dir
+        run: |
+          if [ "${{ inputs.package }}" = "mcp_dart_cli" ]; then
+            PUBLISH_ROOT="$RUNNER_TEMP/mcp_dart_publish"
+            rm -rf "$PUBLISH_ROOT"
+            mkdir -p "$PUBLISH_ROOT"
+            rsync -a --exclude .git --exclude .dart_tool --exclude pubspec.lock ./ "$PUBLISH_ROOT/"
+            rm -f "$PUBLISH_ROOT/packages/mcp_dart_cli/pubspec_overrides.yaml"
+            echo "working_directory=$PUBLISH_ROOT/packages/mcp_dart_cli" >> "$GITHUB_OUTPUT"
+          else
+            echo "working_directory=." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install release dependencies
+        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+        run: dart pub get
+
+      - name: Validate release before creating tag
+        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+        run: dart pub publish --dry-run
 
       - name: Resolve release tag
         id: create-tag

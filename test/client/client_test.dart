@@ -246,6 +246,42 @@ void main() {
       );
     });
 
+    test('silent legacy stream fallback is bounded', () async {
+      final silentTransport = SilentLegacyTransport(
+        initializeResult: InitializeResult(
+          protocolVersion: latestInitializationProtocolVersion,
+          capabilities: mockServerCapabilities,
+          serverInfo:
+              const Implementation(name: 'TestServer', version: '2.0.0'),
+        ),
+      );
+      client = McpClient(
+        clientInfo,
+        options: const McpClientOptions(
+          legacyDiscoveryTimeout: Duration(milliseconds: 20),
+        ),
+      );
+
+      final stopwatch = Stopwatch()..start();
+      await client.connect(silentTransport);
+      stopwatch.stop();
+
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
+      expect(client.getProtocolVersion(), latestInitializationProtocolVersion);
+      expect(
+        silentTransport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .map((message) => message.method),
+        [Method.serverDiscover, Method.initialize],
+      );
+      expect(
+        silentTransport.sentMessages
+            .whereType<JsonRpcNotification>()
+            .map((message) => message.method),
+        [Method.notificationsCancelled, Method.notificationsInitialized],
+      );
+    });
+
     test('connect throws if server returns unsupported protocol version',
         () async {
       transport.mockInitializeResponse = InitializeResult(
@@ -927,6 +963,40 @@ class MockTransport extends Transport {
   void receiveMessage(JsonRpcMessage message) {
     if (_onmessage != null) {
       _onmessage!(message);
+    }
+  }
+}
+
+class SilentLegacyTransport extends Transport {
+  SilentLegacyTransport({required this.initializeResult});
+
+  final InitializeResult initializeResult;
+  final List<JsonRpcMessage> sentMessages = [];
+
+  @override
+  String? get sessionId => null;
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> close() async {
+    onclose?.call();
+  }
+
+  @override
+  Future<void> send(
+    JsonRpcMessage message, {
+    int? relatedRequestId,
+  }) async {
+    sentMessages.add(message);
+    if (message is JsonRpcRequest && message.method == Method.initialize) {
+      onmessage?.call(
+        JsonRpcResponse(
+          id: message.id,
+          result: initializeResult.toJson(),
+        ),
+      );
     }
   }
 }

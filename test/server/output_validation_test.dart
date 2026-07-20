@@ -96,7 +96,7 @@ void main() {
           ),
         ),
       );
-      mcpServer.registerTool(
+      mcpServer.registerStatelessTool(
         'array_tool',
         outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
@@ -131,7 +131,7 @@ void main() {
           ),
         ),
       );
-      mcpServer.registerTool(
+      mcpServer.registerStatelessTool(
         'invalid_array_tool',
         outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
@@ -171,7 +171,7 @@ void main() {
           ),
         ),
       );
-      mcpServer.registerTool(
+      mcpServer.registerStatelessTool(
         'advanced_schema_tool',
         outputJsonSchema: JsonSchema.fromJson({
           r'$schema': 'https://json-schema.org/draft/2020-12/schema',
@@ -224,7 +224,7 @@ void main() {
     });
 
     test('stable tools/list omits non-object output schemas', () async {
-      mcpServer.registerTool(
+      mcpServer.registerStatelessTool(
         'array_tool',
         outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
@@ -256,7 +256,7 @@ void main() {
           ),
         ),
       );
-      mcpServer.registerTool(
+      mcpServer.registerStatelessTool(
         'array_tool',
         outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
@@ -284,7 +284,7 @@ void main() {
     });
 
     test('stable tool calls omit non-object structured content', () async {
-      mcpServer.registerTool(
+      mcpServer.registerStatelessTool(
         'array_tool',
         outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {

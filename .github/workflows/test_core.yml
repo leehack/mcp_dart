@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   minimum-sdk:
-    name: minimum SDK (Dart 3.5.0)
+    name: minimum SDK (Dart 3.4.0)
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +21,7 @@ jobs:
       - name: Set up minimum supported Dart
         uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
         with:
-          sdk: 3.5.0
+          sdk: 3.4.0
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -44,6 +44,100 @@ jobs:
 
       - name: Run minimum-SDK test suite
         run: dart test
+
+  api-compatibility:
+    name: public API compatibility (mcp_dart 2.2.2)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+        with:
+          sdk: stable
+
+      - name: Install API compatibility checker
+        run: dart pub global activate dart_apitool 0.23.1
+
+      - name: Compare public API with mcp_dart 2.2.2
+        run: |
+          mkdir -p "$RUNNER_TEMP/mcp_dart_api"
+          git archive HEAD lib pubspec.yaml analysis_options.yaml |
+            tar -x -C "$RUNNER_TEMP/mcp_dart_api"
+          set +e
+          dart-apitool diff \
+            --old pub://mcp_dart/2.2.2 \
+            --new "$RUNNER_TEMP/mcp_dart_api" \
+            --version-check-mode onlyBreakingChanges \
+            --ignore-prerelease \
+            --no-analyze-platform-constraints \
+            --report-format json \
+            --report-file-path "$RUNNER_TEMP/mcp_dart_api_report.json"
+          API_TOOL_STATUS=$?
+          set -e
+
+          if [ ! -s "$RUNNER_TEMP/mcp_dart_api_report.json" ]; then
+            echo "dart_apitool failed without producing an API report."
+            exit "$API_TOOL_STATUS"
+          fi
+
+          # dart_apitool 0.23.1 misclassifies these four newly added optional
+          # static-factory parameters as required. Allow only that exact set;
+          # compile fixtures cover the corresponding public call shapes.
+          if ! jq -e '
+            def changes($path):
+              if type == "object" and has("changeDescription") then
+                [{
+                  path: ($path | join(" > ")),
+                  code: .changeCode,
+                  description: .changeDescription
+                }]
+              elif type == "object" and has("children") then
+                . as $node
+                | [.children[] | changes($path + [($node.label // "")])]
+                | add
+              else
+                []
+              end;
+            (.report.breakingChanges | changes([]) | sort_by(.path)) as $actual
+            | ($actual | length == 0)
+              or $actual == [
+                {
+                  path: "BREAKING CHANGES > Class JsonSchema > Method boolean",
+                  code: "CE02",
+                  description: "Parameter \"mcpHeader\" added (required)"
+                },
+                {
+                  path: "BREAKING CHANGES > Class JsonSchema > Method integer",
+                  code: "CE02",
+                  description: "Parameter \"mcpHeader\" added (required)"
+                },
+                {
+                  path: "BREAKING CHANGES > Class JsonSchema > Method number",
+                  code: "CE02",
+                  description: "Parameter \"mcpHeader\" added (required)"
+                },
+                {
+                  path: "BREAKING CHANGES > Class JsonSchema > Method string",
+                  code: "CE02",
+                  description: "Parameter \"mcpHeader\" added (required)"
+                }
+              ]
+          ' "$RUNNER_TEMP/mcp_dart_api_report.json"; then
+            jq '.report.breakingChanges' \
+              "$RUNNER_TEMP/mcp_dart_api_report.json"
+            exit 1
+          fi
+
+          if [ "$API_TOOL_STATUS" -ne 0 ] &&
+            jq -e '
+              (.report.breakingChanges.children // []) | length == 0
+            ' "$RUNNER_TEMP/mcp_dart_api_report.json" >/dev/null; then
+            echo "dart_apitool failed despite reporting no breaking changes."
+            exit "$API_TOOL_STATUS"
+          fi
 
   test:
     runs-on: ubuntu-latest

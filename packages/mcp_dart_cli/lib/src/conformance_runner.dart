@@ -4196,14 +4196,14 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
   server.setRequestHandler<JsonRpcListToolsRequest>(
     Method.toolsList,
     (request, extra) async {
-      await server.sendLoggingMessage(
+      await server.sendStatelessLoggingMessage(
         const LoggingMessageNotification(
           level: LoggingLevel.debug,
           data: 'below-threshold',
         ),
         requestMeta: extra.meta,
       );
-      await server.sendLoggingMessage(
+      await server.sendStatelessLoggingMessage(
         const LoggingMessageNotification(
           level: LoggingLevel.warning,
           data: 'threshold-match',
@@ -5734,10 +5734,10 @@ Future<void> _advertisesLatestProtocolVersion() async {
       'got $defaultProtocolVersion.',
     );
   }
-  if (supportedProtocolVersions.first != defaultProtocolVersion) {
+  if (allSupportedProtocolVersions.first != defaultProtocolVersion) {
     throw StateError('Expected defaultProtocolVersion to be advertised first.');
   }
-  if (!supportedProtocolVersions.contains(
+  if (!allSupportedProtocolVersions.contains(
     latestInitializationProtocolVersion,
   )) {
     throw StateError(

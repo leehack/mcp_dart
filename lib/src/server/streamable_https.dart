@@ -356,7 +356,7 @@ class StreamableHTTPServerTransport
     }
 
     final requestedVersion = versionHeader.trim();
-    if (supportedProtocolVersions.contains(requestedVersion)) {
+    if (allSupportedProtocolVersions.contains(requestedVersion)) {
       return true;
     }
 
@@ -368,7 +368,7 @@ class StreamableHTTPServerTransport
       id: _requestIdFromParsedBody(parsedBody),
       data: {
         'requested': requestedVersion,
-        'supported': supportedProtocolVersions,
+        'supported': allSupportedProtocolVersions,
       },
     );
     return false;

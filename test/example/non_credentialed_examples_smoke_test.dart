@@ -509,7 +509,7 @@ Object get _cliSdkSkip {
   return isSupported
       ? false
       : 'mcp_dart_cli requires Dart 3.12 or later; '
-          'the root SDK also supports Dart 3.5 through 3.11.';
+          'the root SDK also supports Dart 3.4 through 3.11.';
 }
 
 Future<void> _expectBrowserCorsPolicy(String script) async {
