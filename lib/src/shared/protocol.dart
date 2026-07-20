@@ -600,6 +600,19 @@ abstract class Protocol {
       return;
     }
 
+    final resultMeta = readOptionalJsonObject(
+      resultJson['_meta'],
+      'MCP stateless Result._meta',
+    );
+    if (resultMeta?.containsKey(McpMetaKey.serverInfo) == true) {
+      Implementation.fromJson(
+        readJsonObject(
+          resultMeta![McpMetaKey.serverInfo],
+          'MCP stateless Result._meta.${McpMetaKey.serverInfo}',
+        ),
+      );
+    }
+
     final resultType = resultJson['resultType'];
     if (resultType == null) {
       throw const FormatException(
@@ -1272,12 +1285,17 @@ abstract class Protocol {
       return resultJson;
     }
 
+    final serializedMeta = readOptionalJsonObject(
+      resultJson['_meta'],
+      'SubscriptionsListenResult._meta',
+    );
     final meta = <String, dynamic>{
-      ...readOptionalJsonObject(
-            resultJson['_meta'],
-            'SubscriptionsListenResult._meta',
-          ) ??
-          const <String, dynamic>{},
+      ...?(resultJson.containsKey('_meta')
+          ? serializedMeta
+          : readOptionalJsonObject(
+              result.meta,
+              'SubscriptionsListenResult.meta',
+            )),
       McpMetaKey.subscriptionId: request.id,
     };
     return <String, dynamic>{
@@ -1665,10 +1683,25 @@ abstract class Protocol {
           return;
         }
 
+        final serializedResult = serializeIncomingResult(request, result);
+        final serializedMeta = readOptionalJsonObject(
+          serializedResult['_meta'],
+          'Result._meta',
+        );
+        Map<String, dynamic>? responseMeta;
+        if (serializedResult.containsKey('_meta')) {
+          // The serializer may validate or sanitize reserved metadata, so its
+          // output is authoritative. Falling back only when `_meta` was omitted
+          // preserves compatibility with older custom result implementations.
+          responseMeta = serializedMeta ?? <String, dynamic>{};
+        } else if (result.meta != null) {
+          responseMeta = readJsonObject(result.meta, 'Result._meta');
+        }
+
         final response = JsonRpcResponse(
           id: request.id,
-          result: serializeIncomingResult(request, result),
-          meta: _mergeRelatedTaskMeta(result.meta, relatedTaskJson),
+          result: serializedResult,
+          meta: _mergeRelatedTaskMeta(responseMeta, relatedTaskJson),
         );
 
         if (relatedTaskId != null && _taskMessageQueue != null) {

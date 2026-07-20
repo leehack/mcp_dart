@@ -1,3 +1,8 @@
+## Unreleased
+
+- Inspection recognizes stateless clients that skip optional discovery, accepts
+  omitted client/server identity, and emits server identity in result `_meta`.
+
 ## 0.2.0-dev.2
 
 - Updated generated projects and inspection to use `mcp_dart ^2.3.0-dev.2`,

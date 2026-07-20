@@ -150,6 +150,8 @@ class ClientInspectorHarness {
   String? _clientProtocolVersion;
   String? _firstMethod;
   bool _sawAnyMessage = false;
+  bool _observedStatelessRequest = false;
+  bool _validatedStatelessRequest = false;
   bool _sawDiscover = false;
   bool _sawInitialize = false;
   bool _sawInitialized = false;
@@ -265,7 +267,8 @@ class ClientInspectorHarness {
     if (method == Method.initialize) {
       _sawInitialize = true;
     }
-    if (_sawDiscover && method != Method.serverDiscover) {
+    if (_isStatelessRequest(method, parsedRequest)) {
+      _observedStatelessRequest = true;
       final metadataError = _validateStatelessRequestMetadata(parsedRequest);
       if (metadataError != null) {
         _recordStatelessMetadataError(method, metadataError);
@@ -277,6 +280,10 @@ class ClientInspectorHarness {
         );
         return;
       }
+      if (!_validatedStatelessRequest) {
+        _captureStatelessClientMetadata(parsedRequest.meta!);
+      }
+      _validatedStatelessRequest = true;
       if (_statelessRemovedRequestMethods.contains(method)) {
         _statelessRemovedMethods.add(method);
         _sendError(
@@ -336,21 +343,15 @@ class ClientInspectorHarness {
     }
   }
 
-  void _handleDiscover(JsonRpcRequest request) {
-    final metadataError = _validateStatelessRequestMetadata(request);
-    if (metadataError != null) {
-      _recordStatelessMetadataError(Method.serverDiscover, metadataError);
-      _sendError(
-        request.id,
-        metadataError.code,
-        metadataError.message,
-        data: metadataError.data,
-      );
-      return;
+  bool _isStatelessRequest(String method, JsonRpcRequest request) {
+    if (method == Method.serverDiscover || _validatedStatelessRequest) {
+      return true;
     }
+    return request.meta?.containsKey(McpMetaKey.protocolVersion) == true;
+  }
 
+  void _handleDiscover(JsonRpcRequest request) {
     _sawDiscover = true;
-    _captureStatelessClientMetadata(request.meta!);
     _sendResult(
       request.id,
       const DiscoverResult(
@@ -392,11 +393,12 @@ class ClientInspectorHarness {
       );
     }
 
+    final hasClientInfo = meta?.containsKey(McpMetaKey.clientInfo) == true;
     final clientInfo = meta?[McpMetaKey.clientInfo];
-    if (clientInfo is! Map) {
+    if (hasClientInfo && clientInfo is! Map) {
       return McpError(
         ErrorCode.invalidParams.value,
-        'Missing required request metadata: ${McpMetaKey.clientInfo}',
+        'Invalid stateless request metadata: ${McpMetaKey.clientInfo}',
       );
     }
     final clientCapabilities = meta?[McpMetaKey.clientCapabilities];
@@ -409,7 +411,9 @@ class ClientInspectorHarness {
     }
 
     try {
-      Implementation.fromJson(clientInfo.cast<String, dynamic>());
+      if (clientInfo is Map) {
+        Implementation.fromJson(clientInfo.cast<String, dynamic>());
+      }
       ClientCapabilities.fromJson(
         clientCapabilities.cast<String, dynamic>(),
       );
@@ -425,7 +429,8 @@ class ClientInspectorHarness {
 
   void _captureStatelessClientMetadata(Map<String, dynamic> meta) {
     _clientProtocolVersion = meta[McpMetaKey.protocolVersion] as String;
-    _clientInfo = (meta[McpMetaKey.clientInfo] as Map).cast<String, dynamic>();
+    final clientInfo = meta[McpMetaKey.clientInfo];
+    _clientInfo = clientInfo is Map ? clientInfo.cast<String, dynamic>() : null;
     _clientCapabilities =
         (meta[McpMetaKey.clientCapabilities] as Map).cast<String, dynamic>();
   }
@@ -466,7 +471,8 @@ class ClientInspectorHarness {
   }
 
   void _handleNotification(Map<String, dynamic> notification, String method) {
-    if (_sawDiscover && _statelessRemovedNotificationMethods.contains(method)) {
+    if (_validatedStatelessRequest &&
+        _statelessRemovedNotificationMethods.contains(method)) {
       _statelessRemovedMethods.add(method);
     }
     if (method == Method.notificationsInitialized) {
@@ -574,7 +580,7 @@ class ClientInspectorHarness {
     Map<String, dynamic> result, {
     bool cacheable = false,
   }) {
-    if (!_sawDiscover) {
+    if (!_validatedStatelessRequest) {
       _sendResult(id, result);
       return;
     }
@@ -695,10 +701,25 @@ class ClientInspectorHarness {
   }
 
   void _sendResult(Object? id, Map<String, dynamic> result) {
+    final wireResult = <String, dynamic>{...result};
+    if (_validatedStatelessRequest) {
+      final existingMeta = result['_meta'];
+      final resultMeta = <String, dynamic>{
+        if (existingMeta is Map) ...existingMeta.cast<String, dynamic>(),
+      };
+      resultMeta.putIfAbsent(
+        McpMetaKey.serverInfo,
+        () => <String, dynamic>{
+          'name': 'mcp_dart_client_inspector',
+          'version': cli_version.packageVersion,
+        },
+      );
+      wireResult['_meta'] = resultMeta;
+    }
     _send(<String, dynamic>{
       'jsonrpc': jsonRpcVersion,
       'id': id,
-      'result': result,
+      'result': wireResult,
     });
   }
 
@@ -776,7 +797,7 @@ class ClientInspectorHarness {
       );
     }
 
-    if (_observedMethods.contains(Method.serverDiscover)) {
+    if (_observedStatelessProtocol) {
       _checkStatelessLifecycle();
     } else {
       _checkLegacyLifecycle();
@@ -815,28 +836,41 @@ class ClientInspectorHarness {
     );
   }
 
-  void _checkStatelessLifecycle() {
-    if (_firstMethod == Method.serverDiscover) {
-      _checks.pass(
-        'lifecycle.discover-first',
-        'Client sent server/discover before other MCP methods.',
-      );
-    } else {
-      _checks.fail(
-        'lifecycle.discover-first',
-        'Client did not send server/discover as its first MCP method.',
-      );
-    }
+  bool get _observedStatelessProtocol => _observedStatelessRequest;
 
-    if (_sawDiscover) {
-      _checks.pass(
-        'lifecycle.discover',
-        'Client completed the stateless server/discover handshake.',
-      );
+  void _checkStatelessLifecycle() {
+    if (_observedMethods.contains(Method.serverDiscover)) {
+      if (_firstMethod == Method.serverDiscover) {
+        _checks.pass(
+          'lifecycle.discover-first',
+          'Client sent server/discover before other MCP methods.',
+        );
+      } else {
+        _checks.fail(
+          'lifecycle.discover-first',
+          'Client did not send server/discover as its first MCP method.',
+        );
+      }
+
+      if (_sawDiscover) {
+        _checks.pass(
+          'lifecycle.discover',
+          'Client completed the stateless server/discover handshake.',
+        );
+      } else {
+        _checks.fail(
+          'lifecycle.discover',
+          'Client did not complete a valid server/discover handshake.',
+        );
+      }
     } else {
-      _checks.fail(
+      _checks.info(
+        'lifecycle.discover-first',
+        'Client used stateless MCP without optional server/discover.',
+      );
+      _checks.info(
         'lifecycle.discover',
-        'Client did not complete a valid server/discover handshake.',
+        'Client skipped the optional server/discover handshake.',
       );
     }
 
@@ -864,7 +898,7 @@ class ClientInspectorHarness {
       );
     }
 
-    if (_statelessMetadataErrors.isEmpty && _sawDiscover) {
+    if (_statelessMetadataErrors.isEmpty && _validatedStatelessRequest) {
       _checks.pass(
         'lifecycle.stateless-request-metadata',
         'Client supplied required metadata on stateless requests.',
@@ -937,13 +971,13 @@ class ClientInspectorHarness {
   }
 
   void _checkClientMetadata() {
-    final stateless = _observedMethods.contains(Method.serverDiscover);
+    final stateless = _observedStatelessProtocol;
 
     if (_clientProtocolVersion == null || _clientProtocolVersion!.isEmpty) {
       _checks.fail(
         'lifecycle.protocol-version',
         stateless
-            ? 'server/discover request protocol metadata is missing.'
+            ? 'Stateless request protocol metadata is missing or invalid.'
             : 'initialize.params.protocolVersion is missing.',
       );
     } else if (stateless && _clientProtocolVersion == previewProtocolVersion) {
@@ -980,6 +1014,12 @@ class ClientInspectorHarness {
       _checks.pass(
         'lifecycle.client-info',
         'Client provided implementation name and version.',
+      );
+    } else if (stateless && _clientInfo == null) {
+      _checks.info(
+        'lifecycle.client-info',
+        'Client did not expose usable optional clientInfo metadata and is '
+            'anonymous.',
       );
     } else {
       _checks.fail(
@@ -1045,7 +1085,7 @@ class ClientInspectorHarness {
   }
 
   void _checkActiveProbes() {
-    if (_sawDiscover) {
+    if (_observedStatelessProtocol) {
       _checkStatelessClientCapability(
         capability: 'roots',
         id: 'client.roots.list',

@@ -20,6 +20,8 @@ on:
       - 'tool/testing/run_ts_2026_07_28_interop.dart'
       - 'tool/testing/run_python_2026_07_28_interop.dart'
       - 'tool/testing/run_browser_2026_07_28_interop.dart'
+      - 'tool/testing/bounded_response_body.dart'
+      - 'tool/testing/mcp_2026_07_28_discovery_wire_probe.dart'
       - '.github/workflows/interop_2026_07_28.yml'
       - 'pubspec.yaml'
       - 'pubspec.lock'
@@ -34,6 +36,8 @@ on:
       - 'tool/testing/run_ts_2026_07_28_interop.dart'
       - 'tool/testing/run_python_2026_07_28_interop.dart'
       - 'tool/testing/run_browser_2026_07_28_interop.dart'
+      - 'tool/testing/bounded_response_body.dart'
+      - 'tool/testing/mcp_2026_07_28_discovery_wire_probe.dart'
       - '.github/workflows/interop_2026_07_28.yml'
       - 'pubspec.yaml'
       - 'pubspec.lock'
@@ -62,8 +66,16 @@ jobs:
         working-directory: test/interop/ts_2026_07_28
         run: npm ci
 
-      - name: Run TypeScript 2026-07-28 interop fixture
-        run: dart run tool/testing/run_ts_2026_07_28_interop.dart
+      - name: Run Dart client against published TypeScript beta server
+        run: >-
+          dart run tool/testing/run_ts_2026_07_28_interop.dart
+          --direction=dart-to-ts
+
+      - name: Verify known published TypeScript beta client gap
+        run: >-
+          dart run tool/testing/run_ts_2026_07_28_interop.dart
+          --direction=ts-to-dart
+          --expect-published-ts-client-gap
 
   python-2026-07-28-interop:
     runs-on: ubuntu-latest
@@ -90,10 +102,20 @@ jobs:
           python -m pip install
           -r test/interop/python_2026_07_28/requirements.txt
 
-      - name: Run Python 2026-07-28 interop fixture
+      - name: Run Dart client against published Python beta server
         env:
           MCP_PYTHON: python
-        run: dart run tool/testing/run_python_2026_07_28_interop.dart
+        run: >-
+          dart run tool/testing/run_python_2026_07_28_interop.dart
+          --direction=dart-to-python
+
+      - name: Verify known published Python beta client gap
+        env:
+          MCP_PYTHON: python
+        run: >-
+          dart run tool/testing/run_python_2026_07_28_interop.dart
+          --direction=python-to-dart
+          --expect-published-python-client-gap
 
   browser-2026-07-28-interop:
     runs-on: ubuntu-latest

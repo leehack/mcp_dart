@@ -1355,8 +1355,12 @@ class DiscoverResult implements CacheableResultData {
   /// Capabilities the server supports.
   final ServerCapabilities capabilities;
 
-  /// Information about the server implementation.
-  final Implementation serverInfo;
+  /// Information about the server implementation, when advertised in result
+  /// metadata.
+  ///
+  /// `server/discover` identity is optional in MCP `2026-07-28` and is carried
+  /// by `_meta.io.modelcontextprotocol/serverInfo` rather than the result body.
+  final Implementation? serverInfo;
 
   /// Instructions describing how to use the server and its features.
   final String? instructions;
@@ -1377,7 +1381,7 @@ class DiscoverResult implements CacheableResultData {
     this.resultType = 'complete',
     required this.supportedVersions,
     required this.capabilities,
-    required this.serverInfo,
+    this.serverInfo,
     this.instructions,
     this.ttlMs,
     this.cacheScope,
@@ -1402,6 +1406,34 @@ class DiscoverResult implements CacheableResultData {
       );
     }
 
+    final meta = readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta');
+    Implementation? readLegacyServerInfo(Object? value) {
+      if (value == null) return null;
+      try {
+        return Implementation.fromJson(
+          readJsonObject(value, 'DiscoverResult.serverInfo'),
+        );
+      } on FormatException {
+        // Temporary read compatibility ignores malformed pre-#3002 body
+        // identity. The canonical metadata property remains strictly parsed.
+        return null;
+      }
+    }
+
+    final hasMetadataServerInfo =
+        meta?.containsKey(McpMetaKey.serverInfo) == true;
+    final serverInfo = hasMetadataServerInfo
+        ? Implementation.fromJson(
+            readJsonObject(
+              meta![McpMetaKey.serverInfo],
+              'DiscoverResult._meta.${McpMetaKey.serverInfo}',
+            ),
+          )
+        // Temporary read compatibility until corrected TypeScript and Python
+        // SDK releases ship. Their pinned beta fixtures still send the
+        // pre-#3002 body field; Dart never emits it.
+        : readLegacyServerInfo(json['serverInfo']);
+
     return DiscoverResult(
       supportedVersions: [
         for (final version in supportedVersions)
@@ -1410,9 +1442,7 @@ class DiscoverResult implements CacheableResultData {
       capabilities: ServerCapabilities.fromJson(
         readJsonObject(json['capabilities'], 'DiscoverResult.capabilities'),
       ),
-      serverInfo: Implementation.fromJson(
-        readJsonObject(json['serverInfo'], 'DiscoverResult.serverInfo'),
-      ),
+      serverInfo: serverInfo,
       instructions: readOptionalString(
         json['instructions'],
         'DiscoverResult.instructions',
@@ -1422,7 +1452,7 @@ class DiscoverResult implements CacheableResultData {
         json['cacheScope'],
         'DiscoverResult.cacheScope',
       ),
-      meta: readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta'),
+      meta: meta,
     );
   }
 
@@ -1438,15 +1468,37 @@ class DiscoverResult implements CacheableResultData {
       );
     }
 
+    final resultMeta = <String, dynamic>{
+      if (serverInfo != null) McpMetaKey.serverInfo: serverInfo!.toJson(),
+    };
+    final jsonMeta = readOptionalJsonObject(meta, 'DiscoverResult._meta');
+    if (jsonMeta != null) {
+      resultMeta.addAll(jsonMeta);
+      if (jsonMeta.containsKey(McpMetaKey.serverInfo)) {
+        final metadataServerInfo = jsonMeta[McpMetaKey.serverInfo];
+        if (metadataServerInfo == null) {
+          // A null override represents an anonymous result. The optional
+          // property must be absent rather than encoded with a null value.
+          resultMeta.remove(McpMetaKey.serverInfo);
+        } else {
+          Implementation.fromJson(
+            readJsonObject(
+              metadataServerInfo,
+              'DiscoverResult._meta.${McpMetaKey.serverInfo}',
+            ),
+          );
+        }
+      }
+    }
+
     return {
       'resultType': resultType,
       'supportedVersions': supportedVersions,
       'capabilities': capabilities.toJson(omitLegacyTasks: true),
-      'serverInfo': serverInfo.toJson(),
       if (instructions != null) 'instructions': instructions,
       if (ttlMs != null) 'ttlMs': ttlMs,
       if (cacheScope != null) 'cacheScope': cacheScope,
-      if (meta != null) '_meta': readJsonObject(meta, 'DiscoverResult._meta'),
+      if (meta != null || serverInfo != null) '_meta': resultMeta,
     };
   }
 }

@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 
+import 'mcp_2026_07_28_discovery_wire_probe.dart';
+
 Future<void> main(List<String> args) async {
   final repoRoot = Directory.current;
   final fixtureDir = Directory('test/interop/ts_2026_07_28');
@@ -19,6 +21,32 @@ Future<void> main(List<String> args) async {
   if (!File('pubspec.yaml').existsSync() || !fixtureDir.existsSync()) {
     stderr.writeln(
       'Run this command from the mcp_dart repository root.',
+    );
+    exitCode = 64;
+    return;
+  }
+
+  final direction = args
+      .where((argument) => argument.startsWith('--direction='))
+      .map((argument) => argument.substring('--direction='.length))
+      .firstOrNull;
+  if (direction != null &&
+      direction != 'all' &&
+      direction != 'dart-to-ts' &&
+      direction != 'ts-to-dart') {
+    stderr.writeln(
+      'Invalid --direction. Use all, dart-to-ts, or ts-to-dart.',
+    );
+    exitCode = 64;
+    return;
+  }
+  final selectedDirection = direction ?? 'all';
+  final expectPublishedTsGap =
+      args.contains('--expect-published-ts-client-gap');
+  if (expectPublishedTsGap && selectedDirection == 'dart-to-ts') {
+    stderr.writeln(
+      '--expect-published-ts-client-gap requires the ts-to-dart direction '
+      '(or all).',
     );
     exitCode = 64;
     return;
@@ -44,15 +72,54 @@ Future<void> main(List<String> args) async {
   }
 
   try {
-    await _runTsClientAgainstDartServer(repoRoot, fixtureDir);
-    await _runDartClientAgainstTsServer(repoRoot, fixtureDir);
+    if (selectedDirection != 'ts-to-dart') {
+      await _runDartClientAgainstTsServer(repoRoot, fixtureDir);
+    }
+    if (selectedDirection != 'dart-to-ts') {
+      final result = await _runTsClientAgainstDartServer(repoRoot, fixtureDir);
+      if (expectPublishedTsGap) {
+        final isExpectedGap = result.exitCode != 0 &&
+            result.output.contains('ERA_NEGOTIATION_FAILED') &&
+            result.output.contains(
+              'server did not offer pinned protocol version 2026-07-28 '
+              'via server/discover',
+            );
+        if (!isExpectedGap) {
+          if (result.exitCode == 0) {
+            throw StateError(
+              'Published TypeScript client unexpectedly passed; remove the '
+              'temporary #2513 expected-gap handling.',
+            );
+          }
+          throw StateError(
+            'TypeScript client failed for an unexpected reason '
+            '(exit ${result.exitCode}).',
+          );
+        }
+        stdout.writeln(
+          '[expected-gap] Published TypeScript beta client predates spec #3002; '
+          'remove this expectation after TypeScript SDK #2513 is released.',
+        );
+      } else if (result.exitCode != 0) {
+        throw StateError(
+          'TypeScript 2026-07-28 client exited with ${result.exitCode}',
+        );
+      }
+    }
   } on Object catch (error) {
     stderr.writeln('TS 2026-07-28 interop failed: $error');
     exitCode = 1;
   }
 }
 
-Future<void> _runTsClientAgainstDartServer(
+class _TsClientRun {
+  const _TsClientRun(this.exitCode, this.output);
+
+  final int exitCode;
+  final String output;
+}
+
+Future<_TsClientRun> _runTsClientAgainstDartServer(
   Directory repoRoot,
   Directory fixtureDir,
 ) async {
@@ -81,6 +148,7 @@ Future<void> _runTsClientAgainstDartServer(
     ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[dart-server]');
+  late _TsClientRun result;
 
   try {
     final url = await serverUrl.future.timeout(
@@ -90,27 +158,45 @@ Future<void> _runTsClientAgainstDartServer(
       },
     );
 
+    await assertDartMcp20260728DiscoveryWire(url);
+    stdout.writeln(
+      '[dart-server-probe] verified anonymous spec #3002 discovery wire shape',
+    );
+
     final client = await Process.start(
       'node',
       ['src/client.mjs', '--url', url],
       workingDirectory: fixtureDir.path,
     );
-    final clientStdout = _pipeLines(client.stdout, stdout, '[ts-client]');
-    final clientStderr = _pipeLines(client.stderr, stderr, '[ts-client]');
-    final clientExit = await client.exitCode.timeout(
-      const Duration(seconds: 30),
+    final clientOutput = StringBuffer();
+    final clientStdout = _pipeLines(
+      client.stdout,
+      stdout,
+      '[ts-client]',
+      onLine: clientOutput.writeln,
     );
-    await Future.wait([clientStdout, clientStderr]);
-
-    if (clientExit != 0) {
-      throw StateError(
-        'TypeScript MCP 2026-07-28 client exited with $clientExit',
+    final clientStderr = _pipeLines(
+      client.stderr,
+      stderr,
+      '[ts-client]',
+      onLine: clientOutput.writeln,
+    );
+    late int clientExit;
+    try {
+      clientExit = await client.exitCode.timeout(
+        const Duration(seconds: 30),
       );
+    } finally {
+      await _terminate(client);
+      await Future.wait([clientStdout, clientStderr]);
     }
+    result = _TsClientRun(clientExit, clientOutput.toString());
   } finally {
     await _terminate(server);
     await Future.wait([serverStdout, serverStderr]);
   }
+
+  return result;
 }
 
 Future<void> _runDartClientAgainstTsServer(

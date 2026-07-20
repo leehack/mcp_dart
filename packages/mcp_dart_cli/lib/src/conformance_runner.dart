@@ -13,6 +13,7 @@ const String _previewProtocolVersion = '2026-07-28';
 const String _protocolVersionMetaKey =
     'io.modelcontextprotocol/protocolVersion';
 const String _clientInfoMetaKey = 'io.modelcontextprotocol/clientInfo';
+const String _serverInfoMetaKey = 'io.modelcontextprotocol/serverInfo';
 const String _clientCapabilitiesMetaKey =
     'io.modelcontextprotocol/clientCapabilities';
 const String _resultTypeComplete = 'complete';
@@ -291,7 +292,7 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'stateless.requires-complete-request-meta',
           description:
-              'Rejects MCP 2026-07-28 stateless requests whose _meta omits required client identity or capability fields.',
+              'Accepts MCP 2026-07-28 stateless requests without optional client identity while requiring client capabilities.',
           check: _statelessRequestsRequireCompleteRequestMeta,
         ),
         _ConformanceCase(
@@ -921,9 +922,11 @@ class _DiscoveringConformanceTransport extends Transport
               _previewProtocolVersion,
             ],
             'capabilities': capabilities,
-            'serverInfo': const <String, dynamic>{
-              'name': 'conformance-server',
-              'version': '1.0.0',
+            '_meta': const <String, dynamic>{
+              _serverInfoMetaKey: <String, dynamic>{
+                'name': 'conformance-server',
+                'version': '1.0.0',
+              },
             },
             'ttlMs': 0,
             'cacheScope': _cacheScopePrivate,
@@ -1348,9 +1351,15 @@ Future<void> _serverDiscoverReturnsSupportedCapabilities() async {
       'Expected server/discover to include $_previewProtocolVersion.',
     );
   }
-  final serverInfo = result['serverInfo'];
+  final resultMeta = result['_meta'];
+  final serverInfo = resultMeta is Map ? resultMeta[_serverInfoMetaKey] : null;
   if (serverInfo is! Map || serverInfo['name'] != 'server') {
-    throw StateError('Expected server/discover to include server identity.');
+    throw StateError(
+      'Expected server/discover to include server identity in result metadata.',
+    );
+  }
+  if (result.containsKey('serverInfo')) {
+    throw StateError('server/discover must not emit body serverInfo.');
   }
   if (result['instructions'] != 'Conformance server.') {
     throw StateError('Expected server/discover to include instructions.');
@@ -1394,28 +1403,6 @@ Future<void> _rejectsUnsupportedStatelessProtocolVersion() async {
 }
 
 Future<void> _statelessRequestsRequireCompleteRequestMeta() async {
-  final scenarios = <({String id, Map<String, dynamic> meta, String missing})>[
-    (
-      id: 'missing-client-info',
-      meta: <String, dynamic>{
-        _protocolVersionMetaKey: _previewProtocolVersion,
-        _clientCapabilitiesMetaKey: <String, dynamic>{},
-      },
-      missing: _clientInfoMetaKey,
-    ),
-    (
-      id: 'missing-client-capabilities',
-      meta: <String, dynamic>{
-        _protocolVersionMetaKey: _previewProtocolVersion,
-        _clientInfoMetaKey: <String, dynamic>{
-          'name': 'client',
-          'version': '1.0.0',
-        },
-      },
-      missing: _clientCapabilitiesMetaKey,
-    ),
-  ];
-
   final transport = _ConformanceTransport();
   final server = McpServer(
     const Implementation(name: 'server', version: '1.0.0'),
@@ -1425,23 +1412,43 @@ Future<void> _statelessRequestsRequireCompleteRequestMeta() async {
   );
 
   await server.connect(transport);
-  for (final scenario in scenarios) {
-    transport.emit(
-      JsonRpcListToolsRequest(
-        id: scenario.id,
-        meta: scenario.meta,
-      ),
-    );
-    await _settle();
+  transport.emit(
+    const JsonRpcRequest(
+      id: 'missing-client-info',
+      method: _serverDiscoverMethod,
+      meta: <String, dynamic>{
+        _protocolVersionMetaKey: _previewProtocolVersion,
+        _clientCapabilitiesMetaKey: <String, dynamic>{},
+      },
+    ),
+  );
+  await _settle();
+  _expectSingleErrorFreeResponse(
+    transport.sentMessages,
+    id: 'missing-client-info',
+  );
+  transport.sentMessages.clear();
 
-    _expectSingleError(
-      transport.sentMessages,
-      id: scenario.id,
-      code: ErrorCode.invalidParams.value,
-      messageContains: scenario.missing,
-    );
-    transport.sentMessages.clear();
-  }
+  transport.emit(
+    const JsonRpcRequest(
+      id: 'missing-client-capabilities',
+      method: _serverDiscoverMethod,
+      meta: <String, dynamic>{
+        _protocolVersionMetaKey: _previewProtocolVersion,
+        _clientInfoMetaKey: <String, dynamic>{
+          'name': 'client',
+          'version': '1.0.0',
+        },
+      },
+    ),
+  );
+  await _settle();
+  _expectSingleError(
+    transport.sentMessages,
+    id: 'missing-client-capabilities',
+    code: ErrorCode.invalidParams.value,
+    messageContains: _clientCapabilitiesMetaKey,
+  );
   await server.close();
 }
 
@@ -1500,9 +1507,11 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
                     'capabilities': <String, dynamic>{
                       'tools': <String, dynamic>{},
                     },
-                    'serverInfo': <String, dynamic>{
-                      'name': 'modern-http-server',
-                      'version': '1.0.0',
+                    '_meta': <String, dynamic>{
+                      _serverInfoMetaKey: <String, dynamic>{
+                        'name': 'modern-http-server',
+                        'version': '1.0.0',
+                      },
                     },
                     'ttlMs': 0,
                     'cacheScope': _cacheScopePrivate,
@@ -4425,11 +4434,17 @@ Future<void> _taskStoreUsesTaskExtensionResultShapes() async {
       transport.sentMessages,
       id: 'task-store-cancel',
     );
-    if (cancelResponse.result.length != 1 ||
-        cancelResponse.result['resultType'] != _resultTypeComplete) {
+    final cancelResult = cancelResponse.result;
+    final cancelMeta = cancelResult['_meta'];
+    final cancelServerInfo =
+        cancelMeta is Map ? cancelMeta[_serverInfoMetaKey] : null;
+    if (cancelResult.length != 2 ||
+        cancelResult['resultType'] != _resultTypeComplete ||
+        cancelServerInfo is! Map ||
+        cancelServerInfo['name'] != 'server') {
       throw StateError(
-        'Expected built-in tasks/cancel to acknowledge with complete result, '
-        'got ${cancelResponse.result}.',
+        'Expected built-in tasks/cancel to acknowledge with complete result '
+        'and server identity metadata, got $cancelResult.',
       );
     }
     final cancelledTask = await store.getTask(workingTask.taskId);

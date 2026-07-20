@@ -6,10 +6,10 @@ path against the official TypeScript SDK work in progress.
 It is intentionally separate from `test/interop/ts`, which tracks the published
 stable TypeScript SDK and MCP 2025-11-25 behavior. The fixture pins published
 `@modelcontextprotocol/client@2.0.0-beta.4` and
-`@modelcontextprotocol/server@2.0.0-beta.4` packages. The TypeScript client path
-is a draft-aligned smoke check against the Dart MCP 2026-07-28 server. The
-reverse Dart client path is a draft-aligned smoke check against the TypeScript
-beta server.
+`@modelcontextprotocol/server@2.0.0-beta.4` packages. Dart client to TypeScript
+server passes against that pin. The published TypeScript client predates spec
+PR #3002, so its reverse direction records the exact negotiation gap while a
+TypeScript SDK #2513 preview is used for forward-looking bidirectional checks.
 
 ## Run
 
@@ -19,11 +19,37 @@ From the repository root:
 cd test/interop/ts_2026_07_28
 npm ci
 cd ../../..
-dart run tool/testing/run_ts_2026_07_28_interop.dart
+dart run tool/testing/run_ts_2026_07_28_interop.dart \
+  --direction=dart-to-ts
+dart run tool/testing/run_ts_2026_07_28_interop.dart \
+  --direction=ts-to-dart \
+  --expect-published-ts-client-gap
 ```
 
-The runner starts `test/conformance/mcp_2026_07_28_server.dart`, waits for its
-bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
+The published-beta reverse path first probes
+`test/conformance/mcp_2026_07_28_server.dart` directly and requires
+`server/discover` to advertise `2026-07-28`, omit body `serverInfo`, and expose
+identity in `_meta["io.modelcontextprotocol/serverInfo"]`. It then accepts only the
+known beta.4 `ERA_NEGOTIATION_FAILED` message. An unexpected pass or any other
+failure is an error.
+
+Install the TypeScript SDK #2513 preview artifact without changing the checked-in
+beta.4 pin, then run the reverse path without the expected-gap flag:
+
+```bash
+(
+  fixture=test/interop/ts_2026_07_28
+  trap 'npm --prefix "$fixture" ci' EXIT
+  npm --prefix "$fixture" install --no-save --package-lock=false \
+    https://pkg.pr.new/@modelcontextprotocol/client@2513
+  dart run tool/testing/run_ts_2026_07_28_interop.dart \
+    --direction=ts-to-dart
+)
+```
+
+The `EXIT` trap restores the published beta.4 fixture even if the preview run
+fails. With the preview,
+`src/client.mjs` asserts:
 
 - TypeScript client negotiation selects MCP 2026-07-28.
 - `server/discover` advertises MCP 2026-07-28 and exposes cache metadata through
@@ -54,9 +80,9 @@ bound local URL, and then runs `src/client.mjs` against it. The fixture asserts:
   server observes cancellation without `notifications/cancelled`, and a
   follow-up status call succeeds.
 
-The runner also starts `src/server.mjs` with the TypeScript beta
+The Dart-to-TypeScript direction starts `src/server.mjs` with the TypeScript beta
 `createMcpHandler` entry and runs a Dart stable-profile client against it. That
-reverse path asserts `server/discover` negotiation, `tools/list`, `tools/call`,
+direction asserts `server/discover` negotiation, `tools/list`, `tools/call`,
 a one-time `HeaderMismatch` recovery that refreshes `tools/list` before retrying
 with the discovered `Mcp-Param-*` header, an MCP 2026-07-28 `input_required`
 elicitation retry, request-stream cancellation observed through the TypeScript
@@ -72,5 +98,7 @@ assertion source and document the beta gap near the test.
 CI runs this fixture in the dedicated `Run MCP 2026-07-28 Interop` workflow for
 relevant PRs, daily scheduled drift checks, and manual dispatch.
 Keep the fixture pinned to a published TypeScript SDK beta that exposes the
-MCP 2026-07-28 draft path and passes this runner; do not treat package
-publication alone as enough to re-pin without rerunning the interop check.
+MCP 2026-07-28 draft path. Do not restore obsolete Dart body output to make an
+older peer pass, and do not treat package publication alone as enough to re-pin
+without rerunning both explicit directions and removing stale expected-gap
+handling.

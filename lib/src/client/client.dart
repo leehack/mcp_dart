@@ -555,8 +555,12 @@ class McpClient extends Protocol {
 
     versionedTransport?.protocolVersion = negotiatedProtocolVersion;
 
+    final discoveredServer = result.serverInfo;
+    final serverDescription = discoveredServer == null
+        ? 'unknown'
+        : '${discoveredServer.name} ${discoveredServer.version}';
     _logger.debug(
-      "MCP Server Discovered. Server: ${result.serverInfo.name} ${result.serverInfo.version}, Protocol: $negotiatedProtocolVersion",
+      "MCP Server Discovered. Server: $serverDescription, Protocol: $negotiatedProtocolVersion",
     );
 
     return result;

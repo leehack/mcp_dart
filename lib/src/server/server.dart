@@ -5,6 +5,8 @@ import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
+import 'package:mcp_dart/src/types/validation.dart'
+    show readJsonObject, readOptionalJsonObject;
 
 final _logger = Logger("mcp_dart.server");
 
@@ -209,11 +211,12 @@ class Server extends Protocol {
       );
     }
 
+    final hasClientInfo = meta?.containsKey(McpMetaKey.clientInfo) == true;
     final clientInfo = meta?[McpMetaKey.clientInfo];
-    if (clientInfo is! Map) {
+    if (hasClientInfo && clientInfo is! Map) {
       return McpError(
         ErrorCode.invalidParams.value,
-        'Missing required request metadata: ${McpMetaKey.clientInfo}',
+        'Invalid stateless request metadata: ${McpMetaKey.clientInfo}',
       );
     }
 
@@ -226,7 +229,9 @@ class Server extends Protocol {
     }
 
     try {
-      Implementation.fromJson(clientInfo.cast<String, dynamic>());
+      if (hasClientInfo) {
+        Implementation.fromJson(clientInfo!.cast<String, dynamic>());
+      }
       ClientCapabilities.fromJson(clientCapabilities.cast<String, dynamic>());
     } catch (error) {
       return McpError(
@@ -937,6 +942,38 @@ class Server extends Protocol {
             : CacheScope.private,
       );
     }
+
+    final handlerMeta = readOptionalJsonObject(result.meta, 'Result._meta');
+    final serializedMeta =
+        readOptionalJsonObject(json['_meta'], 'Result._meta');
+    final resultMeta = <String, dynamic>{
+      // Older custom results may expose metadata only through `meta`. Fall
+      // back to it only when the serializer omitted `_meta`; explicit wire
+      // metadata remains authoritative.
+      ...?(json.containsKey('_meta') ? serializedMeta : handlerMeta),
+    };
+    final hasHandlerServerInfo =
+        handlerMeta?.containsKey(McpMetaKey.serverInfo) == true;
+    if (hasHandlerServerInfo || resultMeta.containsKey(McpMetaKey.serverInfo)) {
+      final serverInfo = hasHandlerServerInfo
+          ? handlerMeta![McpMetaKey.serverInfo]
+          : resultMeta[McpMetaKey.serverInfo];
+      if (serverInfo == null) {
+        // An anonymous result omits the optional identity property. JSON null
+        // is not a valid Implementation value.
+        resultMeta.remove(McpMetaKey.serverInfo);
+      } else {
+        final serverInfoJson = readJsonObject(
+          serverInfo,
+          'Result._meta.${McpMetaKey.serverInfo}',
+        );
+        Implementation.fromJson(serverInfoJson);
+        resultMeta[McpMetaKey.serverInfo] = serverInfoJson;
+      }
+    } else {
+      resultMeta[McpMetaKey.serverInfo] = _serverInfo.toJson();
+    }
+    json['_meta'] = resultMeta;
 
     return json;
   }

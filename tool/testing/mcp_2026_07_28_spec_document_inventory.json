@@ -4,7 +4,7 @@
   "documents": {
     "architecture/index.mdx": {
       "scope": "Architecture and role context for the SDK client and server implementations.",
-      "sha256": "b3afbaa496cac959446ef7b137875350e0fe15bda425f7378cfb3a3f473b06b0",
+      "sha256": "00f3acefa150501311ff91bc3b4c278a6d6cf93e2aca566876a1221d0b6e338e",
       "evidence": [
         "lib/src/client/client.dart",
         "lib/src/server/server.dart"
@@ -46,7 +46,7 @@
     },
     "basic/index.mdx": {
       "scope": "Core JSON-RPC, stateless request metadata, result, error, and JSON Schema rules.",
-      "sha256": "37362008bccb4e6975df12b299f487527d61f7eafa261ef45b8160241442d1f2",
+      "sha256": "6b4f006a59842877eec7c401f1cb69d7199996e879afb9b3a16baf9667da8aa1",
       "evidence": [
         "lib/src/types/json_rpc.dart",
         "test/mcp_2026_07_28_test.dart",
@@ -72,7 +72,7 @@
     },
     "basic/patterns/mrtr.mdx": {
       "scope": "Core multi-round-trip input_required request and retry behavior.",
-      "sha256": "8eb86c86dd02a0abdbdf2fcc069662fe6600e9226248c6de50c95fe34fe9e2d5",
+      "sha256": "4c5666ff2f20980dcbaf24314bfa0ee460f2b45496cd27ccd7fbc6b4678880bf",
       "evidence": [
         "lib/src/types/json_rpc.dart",
         "test/mcp_2026_07_28_test.dart",
@@ -100,7 +100,7 @@
     },
     "basic/transports/index.mdx": {
       "scope": "Transport requirements shared by stdio and Streamable HTTP.",
-      "sha256": "df831894db607b5247c37d368e10a9e593b4c61002797d826fa430bc7fb90d50",
+      "sha256": "23ef5932869304b6f6d18ebe7e50ab98b2cecdece4ea5c2cd4320b15ccba937d",
       "evidence": [
         "lib/src/shared/transport.dart",
         "test/shared/transport_api_compatibility_test.dart"
@@ -108,7 +108,7 @@
     },
     "basic/transports/stdio.mdx": {
       "scope": "Stdio framing, process lifecycle, discovery probing, and legacy fallback.",
-      "sha256": "5aa46804a0e84ae84b4463acb1593dc5c7f90bfeaf013a7a393d1f9dc2b44e0b",
+      "sha256": "0e2b9315a1adc04107539ab9eed6591c9ac1861e543b2127f4716cffec22ced1",
       "evidence": [
         "lib/src/shared/stdio.dart",
         "test/integration/stdio_integration_test.dart",
@@ -136,7 +136,7 @@
     },
     "changelog.mdx": {
       "scope": "Authoritative 2025-to-2026 change inventory used to audit the SDK release delta.",
-      "sha256": "805c1569063741297d5e0777a4b31cbd65d3bd514e7856fd2ab974365722fa5d",
+      "sha256": "ae3b479c1a985ce073a3ce04c49471c6874d0ce3a141b4f8d64be43cc8cad9c6",
       "evidence": [
         "doc/spec-coverage-2026-07-28.md",
         "test/mcp_2026_07_28_test.dart"
@@ -187,7 +187,7 @@
     },
     "schema.mdx": {
       "scope": "Authoritative generated wire schema and its official machine-readable examples.",
-      "sha256": "b9c02d8d20a481187b0722325b564b5d1f5d5b0837a85f218659311553f6ad6e",
+      "sha256": "0ef01bddba15370b4b3df6781f64a0e09cbbf0e1815ceef45bd44375da18fcc9",
       "evidence": [
         "tool/spec_example_audit.dart",
         "test/tool/spec_example_audit_test.dart",
@@ -196,7 +196,7 @@
     },
     "server/discover.mdx": {
       "scope": "Required server/discover request, result, cache metadata, and capability advertisement.",
-      "sha256": "b9861bb66ca8505ff0a034247d6a065a2887fb156bb5dba35be7dbd8dfb56ae0",
+      "sha256": "668398cfdce5312a288fca3dc8e98ac1ddae363fe97a93d06afb4324f01f99fa",
       "evidence": [
         "lib/src/types/initialization.dart",
         "lib/src/server/server.dart",
@@ -213,7 +213,7 @@
     },
     "server/prompts.mdx": {
       "scope": "Prompt listing, retrieval, arguments, content, cache metadata, and list-change delivery.",
-      "sha256": "c5be28262bab8095704557f522c8f4d4084f283b7b57cfd65b9bcde4113b5817",
+      "sha256": "45402a66fc4556c73adeadb5283f167f5856c3a3eb83a1c2243bf4b6960b8b64",
       "evidence": [
         "lib/src/types/prompts.dart",
         "test/server/mcp_test.dart",
@@ -222,7 +222,7 @@
     },
     "server/resources.mdx": {
       "scope": "Resource and template listing, reads, errors, cache metadata, and subscription-delivered changes.",
-      "sha256": "ad88ba936b2da3f0a42a084d4a73bc69e31899adc7a8f0705c4ca4fb6cfe190d",
+      "sha256": "ae6bf2f2a065adb39b5906a5b1b70ae29fb8591249423a6309f085154304996d",
       "evidence": [
         "lib/src/types/resources.dart",
         "test/types/resources_test.dart",
@@ -232,7 +232,7 @@
     },
     "server/tools.mdx": {
       "scope": "Tool listing and invocation, JSON Schema 2020-12, structured output, deterministic ordering, headers, and MRTR.",
-      "sha256": "d31ad9c707486b2e1e9754167ae10c9bc990dd3af73ecdf00c414362cae8e8c1",
+      "sha256": "bc1408732947112ce6c69916d62518206c324e780aa9abf55242e300aceca01f",
       "evidence": [
         "lib/src/types/tools.dart",
         "test/tool_schema_test.dart",
@@ -251,7 +251,7 @@
     },
     "server/utilities/completion.mdx": {
       "scope": "Completion capability, request, result, reference, argument, and pagination-limit behavior.",
-      "sha256": "45812345a0e6b81b5a72dc98195485fec5d96063cd30c9b213df23b1d94e27a9",
+      "sha256": "7f0814fad2248e9931b7226cfb1e2437b02fdd75e3af05ddd1776ab194d5fa07",
       "evidence": [
         "lib/src/types/completion.dart",
         "test/server/mcp_test.dart",
@@ -269,7 +269,7 @@
     },
     "server/utilities/pagination.mdx": {
       "scope": "Cursor request and nextCursor result behavior for paginated core list methods.",
-      "sha256": "c484dcd9349d1953aac65002242bb4da64c6d7d038f4f5f0a937920b1f9163a9",
+      "sha256": "e67040d4c77e1b86dfa8efd61e445e88b574611bed5f66729e3b5267b9eec981",
       "evidence": [
         "test/types/resources_test.dart",
         "test/types_test.dart",
