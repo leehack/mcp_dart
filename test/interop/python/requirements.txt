@@ -1,2 +1,2 @@
-mcp>=1.22.0,<2
-mcp-server-time==2026.1.26
+mcp>=1.23.0,<2
+mcp-server-time==2026.7.10

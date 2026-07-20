@@ -26,7 +26,10 @@ function hasFlag(args: string[], name: string): boolean {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = readArg(args, '--server-command');
-  const activeClientCapabilities = hasFlag(args, '--active-client-capabilities');
+  const activeClientCapabilities = hasFlag(
+    args,
+    '--active-client-capabilities'
+  );
   if (!command) {
     throw new Error('--server-command is required');
   }

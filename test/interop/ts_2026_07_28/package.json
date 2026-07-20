@@ -8,9 +8,9 @@
     "client": "node src/client.mjs"
   },
   "dependencies": {
-    "@cfworker/json-schema": "4.1.1",
     "@modelcontextprotocol/client": "2.0.0-beta.4",
-    "@modelcontextprotocol/server": "2.0.0-beta.4"
+    "@modelcontextprotocol/server": "2.0.0-beta.4",
+    "zod": "4.4.3"
   },
   "engines": {
     "node": ">=20"

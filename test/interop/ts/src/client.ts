@@ -208,8 +208,7 @@ function assertIconList(value: unknown, label: string): void {
 
 async function assertRawDartServerWireShapes(client: Client): Promise<void> {
   const capabilities = client.getServerCapabilities() as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (capabilities) {
     assertNoField(capabilities, 'elicitation', 'server capabilities');
     const taskCapabilities = capabilities.tasks;
@@ -238,10 +237,7 @@ async function assertRawDartServerWireShapes(client: Client): Promise<void> {
       );
     }
     if (tool.outputSchema !== undefined) {
-      requireRecord(
-        tool.outputSchema,
-        'raw tool outputSchema'
-      );
+      requireRecord(tool.outputSchema, 'raw tool outputSchema');
     }
   }
 
@@ -640,7 +636,8 @@ async function main() {
       sampleMultiBlocks = JSON.parse(sampleMultiText);
     } catch (error) {
       throw new Error(
-        `sample_llm multi-block failed to parse JSON output: ${error}`
+        `sample_llm multi-block failed to parse JSON output: ${error}`,
+        { cause: error }
       );
     }
 

@@ -141,7 +141,7 @@ Future<_PostSseResult> _postJsonForSseEvent(
 }
 
 void main() {
-  // Use compiled JS client for reliability (avoids npx tsx issues in CI)
+  // Use the compiled JS client for deterministic CI execution.
   final tsClientPath =
       p.join(Directory.current.path, 'test/interop/ts/dist/client.js');
   final tsLifecycleClientPath = p.join(
