@@ -146,8 +146,8 @@ void main() {
       final json =
           jsonDecode(await report.readAsString()) as Map<String, dynamic>;
       expect(json['passed'], isFalse);
-      final checks =
-          (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final checks = (json['checks'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
       expect(checks, contains(containsPair('id', 'client.connected')));
     });
   });
@@ -210,8 +210,8 @@ void main() {
             Method.toolsCall,
           ]),
         );
-        final checks =
-            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        final checks = (json['checks'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         for (final id in <String>[
           'lifecycle.discover-first',
           'lifecycle.discover',
@@ -268,8 +268,10 @@ void main() {
         await clientLines.close();
         await runFuture;
 
-        final responses =
-            outputLines.map(jsonDecode).cast<Map<String, dynamic>>().toList();
+        final responses = outputLines
+            .map(jsonDecode)
+            .cast<Map<String, dynamic>>()
+            .toList();
         final discoverResponse = responses.singleWhere(
           (response) => response['id'] == 1,
         );
@@ -301,8 +303,8 @@ void main() {
         final json =
             jsonDecode(await report.readAsString()) as Map<String, dynamic>;
         expect(json['passed'], isTrue);
-        final checks =
-            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        final checks = (json['checks'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         expect(
           checks.singleWhere(
             (check) => check['id'] == 'lifecycle.client-info',
@@ -386,8 +388,8 @@ void main() {
             containsPair('version', '1.0.0'),
           ),
         );
-        final checks =
-            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        final checks = (json['checks'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         expect(
           checks,
           isNot(
@@ -490,8 +492,8 @@ void main() {
         final json =
             jsonDecode(await report.readAsString()) as Map<String, dynamic>;
         expect(json['passed'], isFalse);
-        final checks =
-            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        final checks = (json['checks'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         final checkIds = checks.map((check) => check['id']).toSet();
         expect(
           checkIds,
@@ -631,8 +633,8 @@ void main() {
         final json =
             jsonDecode(await report.readAsString()) as Map<String, dynamic>;
         expect(json['passed'], isTrue);
-        final checks =
-            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        final checks = (json['checks'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         expect(checks.where((check) => check['status'] == 'fail'), isEmpty);
         expect(
           checks.map((check) => check['id']),
@@ -730,8 +732,8 @@ void main() {
       final json =
           jsonDecode(await report.readAsString()) as Map<String, dynamic>;
       expect(json['passed'], isFalse);
-      final checks =
-          (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final checks = (json['checks'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
       expect(
         checks.singleWhere(
           (check) => check['id'] == 'lifecycle.stateless-request-metadata',
@@ -840,17 +842,16 @@ void main() {
           );
 
         await _waitForOutputLines(outputLines, 9);
-        final probeRequests =
-            outputLines
-                .map(jsonDecode)
-                .cast<Map<String, dynamic>>()
-                .where(
-                  (message) =>
-                      message['method'] == Method.rootsList ||
-                      message['method'] == Method.samplingCreateMessage ||
-                      message['method'] == Method.elicitationCreate,
-                )
-                .toList();
+        final probeRequests = outputLines
+            .map(jsonDecode)
+            .cast<Map<String, dynamic>>()
+            .where(
+              (message) =>
+                  message['method'] == Method.rootsList ||
+                  message['method'] == Method.samplingCreateMessage ||
+                  message['method'] == Method.elicitationCreate,
+            )
+            .toList();
         expect(probeRequests, hasLength(3));
         for (final request in probeRequests) {
           final method = request['method'];
@@ -887,8 +888,8 @@ void main() {
         final json =
             jsonDecode(await report.readAsString()) as Map<String, dynamic>;
         expect(json['passed'], isTrue);
-        final checks =
-            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        final checks = (json['checks'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         for (final id in <String>[
           'resources.list',
           'prompts.list',
@@ -961,8 +962,8 @@ void main() {
       final metadata = json['metadata'] as Map<String, dynamic>;
       expect(metadata['activeProbesEnabled'], isFalse);
       expect(metadata['activeProbes'], isEmpty);
-      final checks =
-          (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final checks = (json['checks'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
       expect(
         checks.singleWhere((check) => check['id'] == 'client.roots.list'),
         allOf(
@@ -1002,8 +1003,8 @@ void main() {
         final json =
             jsonDecode(await report.readAsString()) as Map<String, dynamic>;
         expect(json['passed'], isFalse);
-        final checks =
-            (json['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+        final checks = (json['checks'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         expect(
           checks.singleWhere((check) => check['id'] == 'jsonrpc.well-formed'),
           containsPair('status', 'fail'),

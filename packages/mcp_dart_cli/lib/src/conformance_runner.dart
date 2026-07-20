@@ -637,12 +637,11 @@ class ConformanceRunner {
       _fixtureSuite => runFixtureSuite(filter: filter),
       _specSuite => runSpecSuite(filter: filter),
       _allSuites => runAllSuites(filter: filter),
-      _ =>
-        throw ArgumentError.value(
-          suite,
-          'suite',
-          'Expected one of: ${conformanceSuiteNames.join(', ')}',
-        ),
+      _ => throw ArgumentError.value(
+        suite,
+        'suite',
+        'Expected one of: ${conformanceSuiteNames.join(', ')}',
+      ),
     };
   }
 
@@ -668,10 +667,9 @@ class ConformanceRunner {
     List<_ConformanceCase> cases, {
     String? filter,
   }) async {
-    final selectedCases =
-        filter == null
-            ? cases
-            : cases.where((testCase) => testCase.name == filter).toList();
+    final selectedCases = filter == null
+        ? cases
+        : cases.where((testCase) => testCase.name == filter).toList();
 
     final results = <ConformanceCaseResult>[];
     for (final testCase in selectedCases) {
@@ -996,15 +994,14 @@ JsonRpcResponse _initializeResponse({
 }) {
   return JsonRpcResponse(
     id: id,
-    result:
-        InitializeResult(
-          protocolVersion: latestInitializationProtocolVersion,
-          capabilities: capabilities,
-          serverInfo: const Implementation(
-            name: 'conformance-server',
-            version: '1.0.0',
-          ),
-        ).toJson(),
+    result: InitializeResult(
+      protocolVersion: latestInitializationProtocolVersion,
+      capabilities: capabilities,
+      serverInfo: const Implementation(
+        name: 'conformance-server',
+        version: '1.0.0',
+      ),
+    ).toJson(),
   );
 }
 
@@ -1014,11 +1011,10 @@ Map<String, dynamic> _statelessRequestMeta({
 }) {
   return <String, dynamic>{
     _protocolVersionMetaKey: protocolVersion,
-    _clientInfoMetaKey:
-        const Implementation(
-          name: 'conformance-client',
-          version: '1.0.0',
-        ).toJson(),
+    _clientInfoMetaKey: const Implementation(
+      name: 'conformance-client',
+      version: '1.0.0',
+    ).toJson(),
     _clientCapabilitiesMetaKey: capabilities.toJson(
       omitLegacyTasks: isStatelessProtocolVersion(protocolVersion),
       omitLegacyRootsListChanged: isStatelessProtocolVersion(protocolVersion),
@@ -1049,11 +1045,10 @@ Future<void> _initializeClient(
   final connectFuture = client.connect(transport);
   await _settle();
 
-  final discoverRequests =
-      transport.sentMessages
-          .whereType<JsonRpcRequest>()
-          .where((request) => request.method == _serverDiscoverMethod)
-          .toList();
+  final discoverRequests = transport.sentMessages
+      .whereType<JsonRpcRequest>()
+      .where((request) => request.method == _serverDiscoverMethod)
+      .toList();
   for (final discoverRequest in discoverRequests) {
     transport.emit(
       JsonRpcError(
@@ -1069,11 +1064,10 @@ Future<void> _initializeClient(
     await _settle();
   }
 
-  final initializeRequests =
-      transport.sentMessages
-          .whereType<JsonRpcRequest>()
-          .where((request) => request.method == Method.initialize)
-          .toList();
+  final initializeRequests = transport.sentMessages
+      .whereType<JsonRpcRequest>()
+      .where((request) => request.method == Method.initialize)
+      .toList();
   if (initializeRequests.length != 1) {
     throw StateError('Expected client to send exactly one initialize request.');
   }
@@ -1201,11 +1195,10 @@ Future<void> _doesNotCancelInitializeRequest() async {
   );
   await _settle();
 
-  final initializeRequests =
-      transport.sentMessages
-          .whereType<JsonRpcRequest>()
-          .where((request) => request.method == Method.initialize)
-          .toList();
+  final initializeRequests = transport.sentMessages
+      .whereType<JsonRpcRequest>()
+      .where((request) => request.method == Method.initialize)
+      .toList();
   if (initializeRequests.length != 1) {
     throw StateError(
       'Expected one initialize request, got ${initializeRequests.length}.',
@@ -1227,8 +1220,9 @@ Future<void> _doesNotCancelInitializeRequest() async {
   }
   await _settle();
 
-  final cancellations =
-      transport.sentMessages.whereType<JsonRpcCancelledNotification>().toList();
+  final cancellations = transport.sentMessages
+      .whereType<JsonRpcCancelledNotification>()
+      .toList();
   if (cancellations.isNotEmpty) {
     throw StateError(
       'Expected no cancellation notification for initialize, got $cancellations.',
@@ -1473,8 +1467,9 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
         if (method == _serverDiscoverMethod) {
           final params = body['params'];
           final meta = params is Map ? params['_meta'] : null;
-          final requestedVersion =
-              meta is Map ? meta[_protocolVersionMetaKey] : null;
+          final requestedVersion = meta is Map
+              ? meta[_protocolVersionMetaKey]
+              : null;
 
           if (requestedVersion == '1900-01-01') {
             request.response.statusCode = HttpStatus.badRequest;
@@ -2765,15 +2760,14 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
         transport.send(
           JsonRpcResponse(
             id: message.id,
-            result:
-                const InitializeResult(
-                  protocolVersion: latestInitializationProtocolVersion,
-                  capabilities: ServerCapabilities(),
-                  serverInfo: Implementation(
-                    name: 'conformance-server',
-                    version: '1.0.0',
-                  ),
-                ).toJson(),
+            result: const InitializeResult(
+              protocolVersion: latestInitializationProtocolVersion,
+              capabilities: ServerCapabilities(),
+              serverInfo: Implementation(
+                name: 'conformance-server',
+                version: '1.0.0',
+              ),
+            ).toJson(),
           ),
         ),
       );
@@ -3100,7 +3094,7 @@ Future<void> _statelessIgnoresLegacyTaskParameter() async {
         'id': id,
         'method': Method.toolsCall,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3170,12 +3164,11 @@ Future<void> _statelessClientRejectsLegacyTaskOptions() async {
         '${error.code}: ${error.message}.',
       );
     }
-    final toolsCallRequests =
-        transport.sentMessages
-            .skip(sentBeforeCall)
-            .whereType<JsonRpcRequest>()
-            .where((request) => request.method == Method.toolsCall)
-            .toList();
+    final toolsCallRequests = transport.sentMessages
+        .skip(sentBeforeCall)
+        .whereType<JsonRpcRequest>()
+        .where((request) => request.method == Method.toolsCall)
+        .toList();
     if (toolsCallRequests.isNotEmpty) {
       throw StateError(
         'Expected no stateless tools/call request after legacy task option, '
@@ -3217,7 +3210,7 @@ Future<void> _statelessAddsResultTypeAndCacheDefaults() async {
         'id': id,
         'method': Method.toolsList,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3230,7 +3223,7 @@ Future<void> _statelessAddsResultTypeAndCacheDefaults() async {
         'id': id,
         'method': Method.promptsList,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3245,7 +3238,7 @@ Future<void> _statelessAddsResultTypeAndCacheDefaults() async {
         'id': id,
         'method': Method.resourcesList,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3260,7 +3253,7 @@ Future<void> _statelessAddsResultTypeAndCacheDefaults() async {
         'id': id,
         'method': Method.resourcesTemplatesList,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3277,7 +3270,7 @@ Future<void> _statelessAddsResultTypeAndCacheDefaults() async {
         'id': id,
         'method': Method.resourcesRead,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3624,7 +3617,7 @@ Future<void> _mrtrInputRequiredSupportedRequests() async {
         'id': id,
         'method': Method.toolsCall,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3638,7 +3631,7 @@ Future<void> _mrtrInputRequiredSupportedRequests() async {
         'id': id,
         'method': Method.promptsGet,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3652,7 +3645,7 @@ Future<void> _mrtrInputRequiredSupportedRequests() async {
         'id': id,
         'method': Method.resourcesRead,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3812,7 +3805,7 @@ Future<void> _mrtrInputRequestsRequireClientCapabilities() async {
         'id': id,
         'method': Method.toolsCall,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -3957,7 +3950,7 @@ Future<void> _callToolResultCannotSpoofTaskResult() async {
         'id': id,
         'method': Method.toolsCall,
         'params': params,
-        if (meta != null) '_meta': meta,
+        '_meta': ?meta,
       },
     ),
   );
@@ -4255,11 +4248,10 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
   );
   await _settle();
 
-  final loggingNotifications =
-      transport.sentMessages
-          .whereType<JsonRpcNotification>()
-          .where((message) => message.method == Method.notificationsMessage)
-          .toList();
+  final loggingNotifications = transport.sentMessages
+      .whereType<JsonRpcNotification>()
+      .where((message) => message.method == Method.notificationsMessage)
+      .toList();
   if (loggingNotifications.length != 1) {
     throw StateError(
       'Expected exactly one threshold-matching stateless log notification, got '
@@ -4274,8 +4266,9 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
       '$loggingParams.',
     );
   }
-  final responses =
-      transport.sentMessages.whereType<JsonRpcResponse>().toList();
+  final responses = transport.sentMessages
+      .whereType<JsonRpcResponse>()
+      .toList();
   _expectSingleErrorFreeResponse(responses, id: 'with-log-level');
 
   await server.close();
@@ -4436,8 +4429,9 @@ Future<void> _taskStoreUsesTaskExtensionResultShapes() async {
     );
     final cancelResult = cancelResponse.result;
     final cancelMeta = cancelResult['_meta'];
-    final cancelServerInfo =
-        cancelMeta is Map ? cancelMeta[_serverInfoMetaKey] : null;
+    final cancelServerInfo = cancelMeta is Map
+        ? cancelMeta[_serverInfoMetaKey]
+        : null;
     if (cancelResult.length != 2 ||
         cancelResult['resultType'] != _resultTypeComplete ||
         cancelServerInfo is! Map ||
@@ -5277,11 +5271,10 @@ Future<void> _dispatchesIntegerProgressToken() async {
   );
   await _settle();
 
-  final progressMessages =
-      transport.sentMessages
-          .whereType<JsonRpcNotification>()
-          .where((message) => message.method == Method.notificationsProgress)
-          .toList();
+  final progressMessages = transport.sentMessages
+      .whereType<JsonRpcNotification>()
+      .where((message) => message.method == Method.notificationsProgress)
+      .toList();
   if (progressMessages.length != 1) {
     throw StateError(
       'Expected one progress notification, got ${progressMessages.length}.',
@@ -5297,8 +5290,9 @@ Future<void> _dispatchesIntegerProgressToken() async {
     throw StateError('Expected progress values to be preserved.');
   }
 
-  final responses =
-      transport.sentMessages.whereType<JsonRpcResponse>().toList();
+  final responses = transport.sentMessages
+      .whereType<JsonRpcResponse>()
+      .toList();
   _expectSingleErrorFreeResponse(responses, id: 104);
   await server.close();
 }

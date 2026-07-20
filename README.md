@@ -29,6 +29,10 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 | `mcp_dart 2.3.0-dev.2` | 3.5 |
 | `mcp_dart_cli 0.2.0-dev.2` | 3.7 |
 
+The current unreleased CLI source targets Dart 3.12. The published dev.2 CLI
+retains its declared Dart 3.7 minimum, while the SDK and SDK-only generated
+projects remain compatible with Dart 3.5.
+
 Install Dart from [dart.dev](https://dart.dev/get-dart).
 
 ## Installation

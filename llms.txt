@@ -7,6 +7,7 @@
 - CLI preview: `0.2.0-dev.2`
 - SDK minimum: Dart 3.5
 - CLI preview minimum: Dart 3.7
+- Unreleased CLI source minimum: Dart 3.12
 - Repository: https://github.com/leehack/mcp_dart
 - Package: https://pub.dev/packages/mcp_dart
 - License: MIT

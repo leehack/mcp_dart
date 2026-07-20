@@ -20,7 +20,7 @@
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/server-filesystem": "2026.7.10",
     "@types/express": "^5.0.6",
-    "@types/node": "^20.19.43",
+    "@types/node": "^24.13.3",
     "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.6",

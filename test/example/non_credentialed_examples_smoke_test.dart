@@ -503,12 +503,13 @@ Object get _cliSdkSkip {
   final match = RegExp(r'^(\d+)\.(\d+)').firstMatch(Platform.version);
   final major = int.tryParse(match?.group(1) ?? '');
   final minor = int.tryParse(match?.group(2) ?? '');
-  final isSupported =
-      major != null && minor != null && (major > 3 || major == 3 && minor >= 7);
+  final isSupported = major != null &&
+      minor != null &&
+      (major > 3 || major == 3 && minor >= 12);
   return isSupported
       ? false
-      : 'mcp_dart_cli requires Dart 3.7 or later; '
-          'the root SDK also supports Dart 3.5 and 3.6.';
+      : 'mcp_dart_cli requires Dart 3.12 or later; '
+          'the root SDK also supports Dart 3.5 through 3.11.';
 }
 
 Future<void> _expectBrowserCorsPolicy(String script) async {

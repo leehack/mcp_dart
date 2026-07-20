@@ -108,10 +108,9 @@ class ClientInspectorHarness {
     required this.idleTimeout,
     required this.maxRuntime,
     this.activeProbes = false,
-    Stream<String>? clientLines,
-    FutureOr<void> Function(String line)? writeLine,
-  }) : _clientLines = clientLines,
-       _writeLine = writeLine;
+    this._clientLines,
+    this._writeLine,
+  });
 
   /// Report destination.
   final File reportFile;
@@ -431,8 +430,8 @@ class ClientInspectorHarness {
     _clientProtocolVersion = meta[McpMetaKey.protocolVersion] as String;
     final clientInfo = meta[McpMetaKey.clientInfo];
     _clientInfo = clientInfo is Map ? clientInfo.cast<String, dynamic>() : null;
-    _clientCapabilities =
-        (meta[McpMetaKey.clientCapabilities] as Map).cast<String, dynamic>();
+    _clientCapabilities = (meta[McpMetaKey.clientCapabilities] as Map)
+        .cast<String, dynamic>();
   }
 
   void _recordStatelessMetadataError(String method, McpError error) {
@@ -449,8 +448,8 @@ class ClientInspectorHarness {
     final params = request['params'];
     if (params is Map<String, dynamic>) {
       _clientProtocolVersion = params['protocolVersion'] as String?;
-      _clientCapabilities =
-          (params['capabilities'] as Map?)?.cast<String, dynamic>();
+      _clientCapabilities = (params['capabilities'] as Map?)
+          ?.cast<String, dynamic>();
       _clientInfo = (params['clientInfo'] as Map?)?.cast<String, dynamic>();
     }
 
@@ -563,8 +562,9 @@ class ClientInspectorHarness {
     }
 
     final arguments = paramsMap?['arguments'];
-    final argumentMap =
-        arguments is Map ? arguments.cast<String, dynamic>() : null;
+    final argumentMap = arguments is Map
+        ? arguments.cast<String, dynamic>()
+        : null;
     final message = argumentMap?['message']?.toString() ?? '';
     _sendCompleteResult(id, <String, dynamic>{
       'content': <Map<String, dynamic>>[
@@ -676,8 +676,9 @@ class ClientInspectorHarness {
   Map<String, dynamic> _promptGetResult(Object? params) {
     final paramsMap = params is Map ? params.cast<String, dynamic>() : null;
     final arguments = paramsMap?['arguments'];
-    final argumentMap =
-        arguments is Map ? arguments.cast<String, dynamic>() : null;
+    final argumentMap = arguments is Map
+        ? arguments.cast<String, dynamic>()
+        : null;
     final topic = argumentMap?['topic']?.toString() ?? 'MCP client behavior';
     return <String, dynamic>{
       'description': 'Inspector prompt for $topic.',
@@ -735,7 +736,7 @@ class ClientInspectorHarness {
       'error': <String, dynamic>{
         'code': code,
         'message': message,
-        if (data != null) 'data': data,
+        'data': ?data,
       },
     });
   }
@@ -823,8 +824,8 @@ class ClientInspectorHarness {
       inventory: <String, dynamic>{
         'serverHarness': <String, dynamic>{
           'tools': (_toolsListResult()['tools'] as List).cast<dynamic>(),
-          'resources':
-              (_resourcesListResult()['resources'] as List).cast<dynamic>(),
+          'resources': (_resourcesListResult()['resources'] as List)
+              .cast<dynamic>(),
           'resourceTemplates':
               (_resourceTemplatesListResult()['resourceTemplates'] as List)
                   .cast<dynamic>(),
@@ -998,10 +999,10 @@ class ClientInspectorHarness {
         'lifecycle.protocol-version',
         stateless
             ? 'Client requested unsupported stateless protocol version '
-                '$_clientProtocolVersion.'
+                  '$_clientProtocolVersion.'
             : 'Client requested unsupported initialization protocol version '
-                '$_clientProtocolVersion; inspector negotiated '
-                '$latestInitializationProtocolVersion.',
+                  '$_clientProtocolVersion; inspector negotiated '
+                  '$latestInitializationProtocolVersion.',
       );
     }
 

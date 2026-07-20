@@ -21,11 +21,10 @@ class UpdateCommand extends Command<int> {
     required Logger logger,
     PubUpdater? pubUpdater,
     GitHubBinaryUpdater? binaryUpdater,
-    String currentVersion = packageVersion,
+    this._currentVersion = packageVersion,
   }) : _logger = logger,
        _pubUpdater = pubUpdater ?? PubUpdater(),
-       _binaryUpdater = binaryUpdater ?? GitHubBinaryUpdater(logger: logger),
-       _currentVersion = currentVersion {
+       _binaryUpdater = binaryUpdater ?? GitHubBinaryUpdater(logger: logger) {
     argParser.addOption(
       'install-dir',
       help:
@@ -96,11 +95,10 @@ class UpdateCommand extends Command<int> {
 class GitHubBinaryUpdater {
   /// Creates an updater for standalone binaries.
   GitHubBinaryUpdater({
-    required Logger logger,
+    required this._logger,
     HttpClient? httpClient,
     Uri? releasesUri,
-  }) : _logger = logger,
-       _httpClient = httpClient ?? HttpClient(),
+  }) : _httpClient = httpClient ?? HttpClient(),
        _releasesUri =
            releasesUri ??
            Uri.https(
@@ -219,11 +217,10 @@ class GitHubBinaryUpdater {
       if (assetsJson is! List) {
         throw FormatException('GitHub release $tag did not include assets.');
       }
-      final assets =
-          assetsJson
-              .whereType<Map<String, dynamic>>()
-              .map(_ReleaseAsset.fromJson)
-              .toList();
+      final assets = assetsJson
+          .whereType<Map<String, dynamic>>()
+          .map(_ReleaseAsset.fromJson)
+          .toList();
       return _CliRelease(tag: tag, assets: assets);
     }
 

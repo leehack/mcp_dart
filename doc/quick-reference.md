@@ -15,7 +15,8 @@ dependencies:
 import 'package:mcp_dart/mcp_dart.dart';
 ```
 
-The SDK requires Dart 3.5 or later. The dev.2 CLI requires Dart 3.7 or later.
+The SDK requires Dart 3.5 or later. The published dev.2 CLI requires Dart 3.7
+or later; the current unreleased CLI source targets Dart 3.12.
 
 ## Protocol profile
 

@@ -5,7 +5,7 @@ import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 
 /// Manages client-side handlers for server notifications and requests.
 class InspectHandlers {
-  InspectHandlers(this._logger, {bool silent = false}) : _silent = silent;
+  InspectHandlers(this._logger, {this._silent = false});
 
   final Logger _logger;
   final bool _silent;

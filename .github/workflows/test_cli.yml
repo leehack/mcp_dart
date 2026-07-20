@@ -39,7 +39,7 @@ on:
 
 jobs:
   minimum-sdk:
-    name: minimum SDK (Dart 3.7.0)
+    name: minimum SDK (Dart 3.12.0)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,7 +52,7 @@ jobs:
       - name: Set up minimum supported Dart
         uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
         with:
-          sdk: 3.7.0
+          sdk: 3.12.0
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

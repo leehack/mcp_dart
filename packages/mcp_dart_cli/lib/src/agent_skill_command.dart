@@ -29,8 +29,7 @@ class AgentSkillsCommand extends Command<int> {
 }
 
 class _PrintAgentSkillCommand extends Command<int> {
-  _PrintAgentSkillCommand({required AgentSkillLoader skillLoader})
-    : _skillLoader = skillLoader;
+  _PrintAgentSkillCommand({required this._skillLoader});
 
   final AgentSkillLoader _skillLoader;
 
@@ -49,10 +48,9 @@ class _PrintAgentSkillCommand extends Command<int> {
 
 class _InstallAgentSkillCommand extends Command<int> {
   _InstallAgentSkillCommand({
-    required Logger logger,
-    required AgentSkillLoader skillLoader,
-  }) : _logger = logger,
-       _skillLoader = skillLoader {
+    required this._logger,
+    required this._skillLoader,
+  }) {
     argParser
       ..addOption(
         'target',

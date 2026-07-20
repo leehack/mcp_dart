@@ -5,11 +5,14 @@ regression-testing spec-compatible MCP servers and clients in any language.
 
 ## Installation
 
-With Dart 3.7 or later, install the stable CLI:
+Install the stable CLI with a Dart SDK allowed by that release:
 
 ```bash
 dart pub global activate mcp_dart_cli
 ```
+
+The current unreleased source targets Dart 3.12. The published
+`0.2.0-dev.2` preview retains its Dart 3.7 minimum.
 
 Install the coordinated MCP `2026-07-28` preview explicitly:
 

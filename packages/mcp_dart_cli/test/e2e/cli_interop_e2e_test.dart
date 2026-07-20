@@ -437,8 +437,8 @@ void main() {
       expect(report['kind'], equals('client'));
       expect(report['passed'], isTrue);
       final metadata = report['metadata'] as Map<String, dynamic>;
-      final observed =
-          (metadata['observedMethods'] as List<dynamic>).cast<String>();
+      final observed = (metadata['observedMethods'] as List<dynamic>)
+          .cast<String>();
       expect(
         observed,
         containsAll([
@@ -449,8 +449,8 @@ void main() {
           'prompts/list',
         ]),
       );
-      final checks =
-          (report['checks'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final checks = (report['checks'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
       for (final id in [
         'client.roots.list',
         'client.sampling.create-message',
@@ -528,8 +528,8 @@ void main() {
       expect(report['kind'], equals('client'));
       expect(report['passed'], isTrue);
       final metadata = report['metadata'] as Map<String, dynamic>;
-      final observed =
-          (metadata['observedMethods'] as List<dynamic>).cast<String>();
+      final observed = (metadata['observedMethods'] as List<dynamic>)
+          .cast<String>();
       expect(
         observed,
         containsAll([
@@ -615,12 +615,11 @@ Future<void> _prepareDartFixture(Directory fixture) async {
 }
 
 Future<String?> _pythonWithMcpSdk() async {
-  for (final candidate
-      in [
-        Platform.environment['PYTHON'],
-        'python3',
-        'python',
-      ].whereType<String>()) {
+  for (final candidate in [
+    Platform.environment['PYTHON'],
+    'python3',
+    'python',
+  ].whereType<String>()) {
     final ProcessResult result;
     try {
       result = await Process.run(
@@ -645,10 +644,9 @@ Future<String?> _pythonWithMcpSdk() async {
 
 Future<File> _pythonConsoleScript(String python, String scriptName) async {
   final pythonFile = File(python);
-  final siblingNames =
-      Platform.isWindows
-          ? <String>['$scriptName.exe', '$scriptName.cmd', scriptName]
-          : <String>[scriptName];
+  final siblingNames = Platform.isWindows
+      ? <String>['$scriptName.exe', '$scriptName.cmd', scriptName]
+      : <String>[scriptName];
   for (final siblingName in siblingNames) {
     final candidate = File(p.join(pythonFile.parent.path, siblingName));
     if (candidate.existsSync()) {
@@ -723,10 +721,9 @@ bool _requireFile(File file, String description) {
 }
 
 void _expectChecksPass(Map<String, dynamic> report, List<String> ids) {
-  final checks =
-      (report['checks'] as List<dynamic>)
-          .map((check) => (check as Map).cast<String, dynamic>())
-          .toList();
+  final checks = (report['checks'] as List<dynamic>)
+      .map((check) => (check as Map).cast<String, dynamic>())
+      .toList();
   for (final id in ids) {
     expect(
       checks,

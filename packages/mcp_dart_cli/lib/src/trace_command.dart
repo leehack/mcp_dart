@@ -118,8 +118,8 @@ class StdioTraceProxy {
     required this.reportFile,
     required this.maxRuntime,
     required this.pretty,
-    Stream<String>? clientLines,
-  }) : _clientLines = clientLines;
+    this._clientLines,
+  });
 
   /// Proxied server executable.
   final String command;
@@ -315,7 +315,7 @@ class StdioTraceProxy {
       'tMs': _stopwatch.elapsedMilliseconds,
       'direction': direction,
       'raw': raw,
-      if (extra != null) ...extra,
+      ...?extra,
     };
     final trimmed = raw.trim();
     if (trimmed.isNotEmpty &&
@@ -362,8 +362,9 @@ class StdioTraceProxy {
       'events': _events,
     };
     await reportFile.parent.create(recursive: true);
-    final encoder =
-        pretty ? const JsonEncoder.withIndent('  ') : const JsonEncoder();
+    final encoder = pretty
+        ? const JsonEncoder.withIndent('  ')
+        : const JsonEncoder();
     await reportFile.writeAsString(encoder.convert(report));
   }
 }
