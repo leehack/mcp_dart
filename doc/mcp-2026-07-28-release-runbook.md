@@ -51,6 +51,14 @@ does not replace the final-spec delta review or authorize a stable release.
 5. Update the official conformance package and the published TypeScript and
    Python SDK fixtures only after each candidate passes locally in both
    supported directions.
+6. Sweep every release-facing surface, including `README.md`, `llms.txt`,
+   `CHANGELOG.md`, `example/example.md`, `doc/`, the CLI README/changelog/docs,
+   generated templates, package metadata, and public API examples. Remove
+   prerelease claims only when the final tag supports them, and keep known
+   peer/referee gaps explicit.
+7. Confirm the final conformance runner defaults, expected-failure manifests,
+   SDK fixture pins, dated spec paths, and document/example inventories all
+   point at the same reviewed release inputs.
 
 The release is blocked if the final tag is unavailable, the pinned example
 audit is not complete, or an official suite needs an unexplained expected
@@ -122,8 +130,13 @@ Confirm the final repository's dated schema layout before running this command;
 do not substitute `schema/draft`, which may advance to the next protocol after
 the release tag. Update CI and any pinned audit helpers to the same dated path.
 
-Also run the nested example and CLI validation already enforced by CI. The
-release PR must have all required checks green and no unresolved review thread.
+Also run the nested example and CLI validation already enforced by CI. Require
+the Dart 3.4 minimum-SDK lane and the `dart_apitool` comparison against
+published `mcp_dart 2.2.2` to pass, including the checked-in compile fixtures
+for interfaces and callbacks. Review any ignored requiredness diagnostics
+instead of treating the compatibility tool configuration as blanket approval.
+The release PR must have all required checks green and no unresolved review
+thread.
 
 ## 3. Prepare stable SDK metadata
 
@@ -140,6 +153,11 @@ On the final release-prep commit:
   `legacyProtocolVersions.first` at `2025-11-25`. Run the profile regression
   tests to prove `McpProtocol.legacy` never sends a stateless version through
   `initialize`.
+- Preserve the mcp_dart 2.2 values of deprecated `latestProtocolVersion` and
+  `supportedProtocolVersions`. Keep the former aliased to
+  `latestInitializationProtocolVersion` and the latter to
+  `legacyProtocolVersions`; promote `allSupportedProtocolVersions`, not either
+  compatibility alias, to the final version.
 - Stop presenting `previewProtocolVersion` as the preferred public name. Keep
   it only as a deprecated alias of `stableProtocolVersion` for prerelease
   adopters, and update examples to use the stable/default constants.
@@ -148,7 +166,10 @@ On the final release-prep commit:
 - Keep migration and compatibility notes explicit: `McpProtocol.stable`
   selects the current stable protocol while legacy profiles remain opt-in.
 - Run `dart pub publish --dry-run` again from a clean checkout of the exact
-  release commit.
+  release commit. Do not create the release tag until this succeeds.
+- Verify the tag-triggered publish workflow rejects an SDK or CLI tag whose
+  version does not match the selected package `pubspec.yaml`. The release
+  workflow derives its candidate tag from that same package version.
 
 Merge the release PR to `main` only after this commit passes the complete gate.
 

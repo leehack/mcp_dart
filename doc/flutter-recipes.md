@@ -153,7 +153,7 @@ For OAuth-protected remote servers, keep the OAuth flow outside widget code:
 1. Create an `OAuthClientProvider` implementation or reuse one of the patterns in [`example/authentication/`](../example/authentication/). For MCP OAuth discovery, also implement `OAuthAuthorizationCodeProvider` so the transport can build the authorization URL and token exchange from server metadata.
 2. Store tokens through a platform-appropriate secure storage layer.
 3. Pass the provider to `StreamableHttpClientTransportOptions(authProvider: ...)`. If the authorization server uses a different origin, also supply a narrow `oauthUriValidator` that accepts only its expected HTTPS host.
-4. Extract the authorization `code` and `state` from the browser/deep-link callback, then call `await transport.finishAuth(code, state: state, issuer: iss);`. Pass `iss` when the callback includes it. Missing or mismatched state is rejected before token exchange. If you disposed the transport after the failed attempt, recreate it with the same `authProvider` first.
+4. Extract the authorization `code` and `state` from the browser/deep-link callback, then call `await transport.finishAuthRedirect(code, state: state, issuer: iss);`. Pass `iss` when the callback includes it. Missing or mismatched state is rejected before token exchange. If you disposed the transport after the failed attempt, recreate it with the same `authProvider` first.
 
 For local development, a loopback callback can be convenient. For production mobile apps, prefer platform deep links/universal links and PKCE.
 

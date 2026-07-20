@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Development now targets Dart 3.12; the SDK and SDK-only generated projects
+  support Dart 3.4.
 - Inspection recognizes stateless clients that skip optional discovery, accepts
   omitted client/server identity, and emits server identity in result `_meta`.
 

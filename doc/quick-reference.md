@@ -15,12 +15,17 @@ dependencies:
 import 'package:mcp_dart/mcp_dart.dart';
 ```
 
-The SDK requires Dart 3.5 or later. The dev.2 CLI requires Dart 3.7 or later.
+The published dev.2 SDK requires Dart 3.5 or later. The current unreleased SDK
+source lowers the next 2.3 release floor to Dart 3.4. The published dev.2 CLI
+requires Dart 3.7 or later; the current unreleased CLI source targets Dart
+3.12.
 
 ## Protocol profile
 
 The 2.3.0 preview defaults to `McpProtocol.stable`: try MCP `2026-07-28`
-preview, then fall back to legacy initialization when needed.
+preview, then fall back to legacy initialization when needed. Body-only
+discovery probes are bounded to five seconds; HTTP retains its normal request
+timeout.
 
 ```dart
 const legacyClientOptions = McpClientOptions(protocol: McpProtocol.legacy);

@@ -15,9 +15,13 @@ const _maxSubschemas = 1024;
 
 /// Exception thrown when a JSON Schema is invalid or instance validation fails.
 class JsonSchemaValidationException implements Exception {
+  /// Human-readable validation failure.
   final String message;
+
+  /// JSON Pointer segments locating the failing instance value.
   final List<String> path;
 
+  /// Creates a validation exception with an optional instance [path].
   JsonSchemaValidationException(this.message, [this.path = const []]);
 
   @override

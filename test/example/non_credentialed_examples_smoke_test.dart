@@ -421,7 +421,7 @@ void main() {
       expect(result.output, contains('MCP server integration works!'));
     });
 
-    test('CLI inspect invokes completions demo over stdio', () async {
+    _cliTest('CLI inspect invokes completions demo over stdio', () async {
       final result = await _runDart([
         'run',
         'packages/mcp_dart_cli/bin/mcp_dart.dart',
@@ -440,7 +440,8 @@ void main() {
       expect(result.output, contains('Echo: smoke'));
     });
 
-    test('CLI inspect lists MCP Apps metadata server capabilities', () async {
+    _cliTest('CLI inspect lists MCP Apps metadata server capabilities',
+        () async {
       final result = await _runDart([
         'run',
         'packages/mcp_dart_cli/bin/mcp_dart.dart',
@@ -457,7 +458,7 @@ void main() {
       expect(result.output, isNot(contains('Failed to list capabilities')));
     });
 
-    test('CLI inspect invokes MCP Apps helper server tool and resource',
+    _cliTest('CLI inspect invokes MCP Apps helper server tool and resource',
         () async {
       final toolResult = await _runDart([
         'run',
@@ -492,6 +493,23 @@ void main() {
       expect(resourceResult.output, contains('ui://weather/dashboard.html'));
     });
   });
+}
+
+void _cliTest(String description, Future<void> Function() body) {
+  test(description, body, skip: _cliSdkSkip);
+}
+
+Object get _cliSdkSkip {
+  final match = RegExp(r'^(\d+)\.(\d+)').firstMatch(Platform.version);
+  final major = int.tryParse(match?.group(1) ?? '');
+  final minor = int.tryParse(match?.group(2) ?? '');
+  final isSupported = major != null &&
+      minor != null &&
+      (major > 3 || major == 3 && minor >= 12);
+  return isSupported
+      ? false
+      : 'mcp_dart_cli requires Dart 3.12 or later; '
+          'the root SDK also supports Dart 3.4 through 3.11.';
 }
 
 Future<void> _expectBrowserCorsPolicy(String script) async {

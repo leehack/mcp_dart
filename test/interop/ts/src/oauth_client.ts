@@ -87,7 +87,9 @@ class TestOAuthProvider implements OAuthClientProvider {
       throw new Error('Missing code_challenge');
     }
     if (params.get('response_type') !== 'code') {
-      throw new Error(`Unexpected response_type: ${params.get('response_type')}`);
+      throw new Error(
+        `Unexpected response_type: ${params.get('response_type')}`
+      );
     }
     if (params.get('client_id') !== 'ts-oauth-client') {
       throw new Error(`Unexpected client_id: ${params.get('client_id')}`);

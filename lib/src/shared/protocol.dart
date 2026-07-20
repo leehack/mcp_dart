@@ -1916,7 +1916,7 @@ abstract class Protocol {
     JsonRpcRequest requestData,
     T Function(Map<String, dynamic> resultJson) resultFactory, [
     RequestOptions? options,
-    RequestId? relatedRequestId,
+    int? relatedRequestId,
   ]) {
     return _requestWithRequestId(
       requestData,
@@ -2115,7 +2115,7 @@ abstract class Protocol {
         // MCP 2026-07-28 cancels the matching HTTP request stream and removes
         // protocol-level `notifications/cancelled`. If the transport no longer
         // tracks this request, it has already settled from the transport's
-        // perspective; do not fall back to the removed legacy notification.
+        // perspective; do not fall back to the legacy notification.
         if (cancellationAwareTransport.canCancelRequest(messageId)) {
           cancellationAwareTransport.cancelRequest(messageId).catchError((e) {
             _onerror(
@@ -2135,6 +2135,9 @@ abstract class Protocol {
           requestId: messageId,
           reason: cancelReason,
         ),
+        meta: usesStatelessRequestShape
+            ? Map<String, dynamic>.from(jsonrpcRequest.meta ?? const {})
+            : null,
       );
 
       // If related to a task, we might need to queue cancellation too?
@@ -2343,7 +2346,7 @@ abstract class Protocol {
   Future<void> notification(
     JsonRpcNotification notificationData, {
     RelatedTaskMetadata? relatedTask,
-    RequestId? relatedRequestId,
+    int? relatedRequestId,
   }) {
     return _notificationWithRequestId(
       notificationData,

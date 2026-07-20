@@ -6,9 +6,8 @@ Future<void> main(List<String> args) async {
   final notifyAfterCall = args.contains('--notify-after-call');
   final invalidOutputSchema = args.contains('--invalid-output-schema');
 
-  await for (final line in stdin
-      .transform(utf8.decoder)
-      .transform(const LineSplitter())) {
+  await for (final line
+      in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final decoded = jsonDecode(line);
     if (decoded is! Map) continue;
     final message = decoded.cast<String, dynamic>();

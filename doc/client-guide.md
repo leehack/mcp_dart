@@ -65,8 +65,11 @@ final client = McpClient(
 Clients in the 2.3.0 preview use `McpProtocol.stable` by default, which
 prefers MCP `2026-07-28` negotiation. The default client probes with
 `server/discover`, sends stateless request metadata for a compatible peer, and
-falls back to legacy `initialize` when discovery is unavailable. Select the
-legacy profile explicitly when a deployment must use only MCP `2025-11-25`
+falls back to legacy `initialize` when discovery is unavailable. On body-only
+transports such as stdio, a silent discovery probe is bounded to five seconds;
+HTTP transports retain their normal request timeout because an HTTP timeout
+indicates an outage rather than a legacy peer. Select the legacy profile
+explicitly when a deployment must skip discovery and use only MCP `2025-11-25`
 and earlier behavior:
 
 ```dart

@@ -5,8 +5,6 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:mason/mason.dart';
 import 'package:mcp_dart/mcp_dart.dart' hide Logger;
-// ignore: implementation_imports
-import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:meta/meta.dart';
 
 import 'inspectors/inspection_report.dart';
@@ -657,8 +655,9 @@ class McpServerInspector {
       final result = await client.listResources(
         options: const RequestOptions(timeout: Duration(seconds: 5)),
       );
-      inventory['resources'] =
-          result.resources.map((resource) => resource.toJson()).toList();
+      inventory['resources'] = result.resources
+          .map((resource) => resource.toJson())
+          .toList();
       checks.pass(
         'resources.list',
         'resources/list returned ${result.resources.length} resources.',
@@ -683,10 +682,9 @@ class McpServerInspector {
       final result = await client.listResourceTemplates(
         options: const RequestOptions(timeout: Duration(seconds: 5)),
       );
-      inventory['resourceTemplates'] =
-          result.resourceTemplates
-              .map((template) => template.toJson())
-              .toList();
+      inventory['resourceTemplates'] = result.resourceTemplates
+          .map((template) => template.toJson())
+          .toList();
       checks.pass(
         'resources.templates.list',
         'resources/templates/list returned ${result.resourceTemplates.length} templates.',
@@ -938,8 +936,9 @@ class McpServerInspector {
       final result = await client.listPrompts(
         options: const RequestOptions(timeout: Duration(seconds: 5)),
       );
-      inventory['prompts'] =
-          result.prompts.map((prompt) => prompt.toJson()).toList();
+      inventory['prompts'] = result.prompts
+          .map((prompt) => prompt.toJson())
+          .toList();
       checks.pass(
         'prompts.list',
         'prompts/list returned ${result.prompts.length} prompts.',
@@ -1226,10 +1225,9 @@ class McpServerInspector {
       usesTasksExtension
           ? 'Server advertises the $mcpTasksExtensionId extension.'
           : 'Server advertises legacy tasks.',
-      details:
-          usesTasksExtension
-              ? capabilities!.extensions![mcpTasksExtensionId]
-              : taskCapabilities!.toJson(),
+      details: usesTasksExtension
+          ? capabilities!.extensions![mcpTasksExtensionId]
+          : taskCapabilities!.toJson(),
     );
 
     final taskConfig = probeConfig.task;
@@ -1312,13 +1310,14 @@ class McpServerInspector {
 
     final messages = <Map<String, dynamic>>[];
     try {
-      await for (final message in TaskClient(client)
-          .callToolStream(
-            taskTool.name,
-            taskArguments,
-            task: usesTasksExtension ? null : taskParams,
-          )
-          .timeout(const Duration(seconds: 10))) {
+      await for (final message
+          in TaskClient(client)
+              .callToolStream(
+                taskTool.name,
+                taskArguments,
+                task: usesTasksExtension ? null : taskParams,
+              )
+              .timeout(const Duration(seconds: 10))) {
         messages.add(_taskStreamMessageToJson(message));
         if (message is TaskErrorMessage) {
           throw message.error;
@@ -1375,11 +1374,9 @@ class McpServerInspector {
               }
               return message is TaskCreatedMessage;
             },
-            orElse:
-                () =>
-                    throw StateError(
-                      'Task probe for ${taskTool.name} completed without creating a task.',
-                    ),
+            orElse: () => throw StateError(
+              'Task probe for ${taskTool.name} completed without creating a task.',
+            ),
           );
       final created = (createdMessage as TaskCreatedMessage).task;
       final cancelled = await taskClient.cancelTaskWithResult(
@@ -1424,10 +1421,9 @@ class McpServerInspector {
     Tool taskTool,
     List<Map<String, dynamic>> messages,
   ) {
-    final taskMessages =
-        messages
-            .where((message) => message['task'] is Map<String, dynamic>)
-            .toList();
+    final taskMessages = messages
+        .where((message) => message['task'] is Map<String, dynamic>)
+        .toList();
     if (taskMessages.isEmpty) {
       checks.info(
         'tasks.lifecycle',
@@ -1440,13 +1436,12 @@ class McpServerInspector {
       'tasks.lifecycle.created',
       'Task probe for ${taskTool.name} created a task.',
     );
-    final statuses =
-        taskMessages
-            .map(
-              (message) => (message['task'] as Map<String, dynamic>)['status'],
-            )
-            .whereType<String>()
-            .toList();
+    final statuses = taskMessages
+        .map(
+          (message) => (message['task'] as Map<String, dynamic>)['status'],
+        )
+        .whereType<String>()
+        .toList();
     final terminalStatuses = {'completed', 'failed', 'cancelled'};
     if (statuses.isNotEmpty && terminalStatuses.contains(statuses.last)) {
       checks.pass(
@@ -1749,10 +1744,9 @@ class McpServerInspector {
     Map<String, dynamic> metadata,
   ) async {
     final headers = response['headers'];
-    final authenticate =
-        headers is Map<String, dynamic>
-            ? headers[HttpHeaders.wwwAuthenticateHeader]
-            : null;
+    final authenticate = headers is Map<String, dynamic>
+        ? headers[HttpHeaders.wwwAuthenticateHeader]
+        : null;
     if (response['statusCode'] != 401) {
       checks.info(
         'authorization.www-authenticate',
@@ -1935,10 +1929,9 @@ class McpServerInspector {
   /// Returns MCP authorization-server metadata probes in priority order.
   @visibleForTesting
   List<Uri> authorizationServerMetadataCandidates(Uri issuer) {
-    final pathPrefix =
-        issuer.path.endsWith('/')
-            ? issuer.path.substring(0, issuer.path.length - 1)
-            : issuer.path;
+    final pathPrefix = issuer.path.endsWith('/')
+        ? issuer.path.substring(0, issuer.path.length - 1)
+        : issuer.path;
     Uri discoveryUri(String path) => Uri(
       scheme: issuer.scheme,
       userInfo: issuer.userInfo,
@@ -2040,7 +2033,7 @@ class McpServerInspector {
             if (response.headers.value(name) != null)
               name: response.headers.value(name),
         },
-        if (body != null) 'body': body,
+        'body': ?body,
       };
     } catch (error) {
       return <String, dynamic>{
@@ -2100,32 +2093,29 @@ class InspectionProbeConfig {
   /// Parses a JSON probe configuration.
   factory InspectionProbeConfig.fromJson(Map<String, dynamic> json) {
     return InspectionProbeConfig(
-      toolCalls:
-          _readObjectList(json['tools']).map(ToolCallProbe.fromJson).toList(),
-      resource:
-          json['resource'] is Map
-              ? ResourceProbe.fromJson(
-                (json['resource'] as Map).cast<String, dynamic>(),
-              )
-              : null,
-      prompt:
-          json['prompt'] is Map
-              ? PromptProbe.fromJson(
-                (json['prompt'] as Map).cast<String, dynamic>(),
-              )
-              : null,
-      completion:
-          json['completion'] is Map
-              ? CompletionProbe.fromJson(
-                (json['completion'] as Map).cast<String, dynamic>(),
-              )
-              : null,
-      task:
-          json['task'] is Map
-              ? TaskProbe.fromJson(
-                (json['task'] as Map).cast<String, dynamic>(),
-              )
-              : null,
+      toolCalls: _readObjectList(
+        json['tools'],
+      ).map(ToolCallProbe.fromJson).toList(),
+      resource: json['resource'] is Map
+          ? ResourceProbe.fromJson(
+              (json['resource'] as Map).cast<String, dynamic>(),
+            )
+          : null,
+      prompt: json['prompt'] is Map
+          ? PromptProbe.fromJson(
+              (json['prompt'] as Map).cast<String, dynamic>(),
+            )
+          : null,
+      completion: json['completion'] is Map
+          ? CompletionProbe.fromJson(
+              (json['completion'] as Map).cast<String, dynamic>(),
+            )
+          : null,
+      task: json['task'] is Map
+          ? TaskProbe.fromJson(
+              (json['task'] as Map).cast<String, dynamic>(),
+            )
+          : null,
     );
   }
 }

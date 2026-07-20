@@ -83,10 +83,9 @@ class ConformanceCommand extends Command<int> {
       );
     }
 
-    final result =
-        fuzz
-            ? await _runner.runFuzzSuite(iterations: iterations)
-            : await _runner.runSuite(suite: suite, filter: filter);
+    final result = fuzz
+        ? await _runner.runFuzzSuite(iterations: iterations)
+        : await _runner.runSuite(suite: suite, filter: filter);
     if (result.total == 0) {
       _logger.err('No conformance cases matched: $filter');
       return ExitCode.usage.code;

@@ -5,8 +5,10 @@
 
 - SDK preview: `2.3.0-dev.2`
 - CLI preview: `0.2.0-dev.2`
-- SDK minimum: Dart 3.5
+- Published SDK preview minimum: Dart 3.5
+- Unreleased SDK source minimum: Dart 3.4
 - CLI preview minimum: Dart 3.7
+- Unreleased CLI source minimum: Dart 3.12
 - Repository: https://github.com/leehack/mcp_dart
 - Package: https://pub.dev/packages/mcp_dart
 - License: MIT
@@ -17,13 +19,14 @@ The 2.3.0 preview implements the complete core client/server wire surface of
 the locked MCP `2026-07-28` release candidate, retains the MCP `2025-11-25`
 feature set, and negotiates supported earlier initialization versions. Core
 means the normative wire requirements assigned to client and server roles by
-the pinned preview specification; it excludes optional extensions, host UI behavior, an
-authorization-server implementation, and a general-purpose JSON Schema
-validation engine. All current official conformance scenarios applicable to
-the SDK's core client/server roles pass for MCP 2025-11-25 and MCP 2026-07-28.
-This is
-prerelease evidence, not a claim about the not-yet-published final
-specification.
+the pinned preview specification; it excludes optional extensions, host UI
+behavior, an authorization-server implementation, JSON Schema external
+reference resolution, and custom JSON Schema vocabularies. The official
+alpha.9 MCP 2026-07-28 client suite passes against current source, including
+all 25 authorization scenarios. Its server suite has three exact expected
+diagnostics because the published referee predates spec PR #3002; merged
+conformance PR #403 semantics pass locally. This is prerelease evidence, not a
+claim about the not-yet-published final specification.
 
 Use the latest stable SDK for production:
 
@@ -48,7 +51,8 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 - `McpProtocol.stable` (default dual-era profile): prefer MCP 2026-07-28
   stateless discovery, then fall back to legacy initialization when the peer is
-  legacy-only.
+  legacy-only. On body-only transports such as stdio, the discovery probe is
+  bounded to 5 seconds; HTTP retains its normal request timeout.
 - `McpProtocol.legacy` (initialization-era profile): negotiate MCP 2025-11-25
   or an earlier supported initialization-era version.
 - `McpProtocol.require2026`: require the MCP 2026-07-28 stateless protocol.
@@ -229,16 +233,16 @@ https://github.com/leehack/mcp_dart/tree/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_
 
 - Root Dart analyzer and unit/integration tests.
 - Official MCP 2025-11-25 server/client conformance paths.
-- MCP 2026-07-28 server and client conformance alpha suites.
-- Bidirectional published TypeScript SDK beta interop.
-- Bidirectional published Python SDK beta interop.
+- MCP 2026-07-28 alpha.9 client coverage, including all 25 authorization
+  scenarios, plus exactly three stale expected server diagnostics.
+- Published TypeScript and Python SDK beta server interop, with exact
+  expected-gap checks for their pre-#3002 clients.
 - Real Chrome cross-origin Streamable HTTP smoke coverage.
 - Checked-in spec example audit pinned to an upstream commit.
 
 Do not infer final MCP 2026-07-28 coverage from those gates. On the official
-spec tag,
-diff schemas, examples, conformance, and normative prose; then rerun the full
-day-0 release gate.
+spec tag, diff schemas, examples, conformance, and normative prose; then rerun
+the full day-0 release gate.
 
 Evidence and runbooks:
 

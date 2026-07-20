@@ -11,6 +11,8 @@ import 'package:mcp_dart/src/types.dart';
 
 final _logger = Logger("mcp_dart.client");
 
+const _defaultLegacyDiscoveryTimeout = Duration(seconds: 5);
+
 /// Options for configuring the MCP [McpClient].
 class McpClientOptions extends ProtocolOptions {
   /// Capabilities to advertise as being supported by this client.
@@ -95,6 +97,14 @@ class McpClientOptions extends ProtocolOptions {
         protocol.allowLegacyInitializationFallbackByDefault;
   }
 
+  final Duration _legacyDiscoveryTimeout;
+
+  /// Creates MCP client options.
+  ///
+  /// [legacyDiscoveryTimeout] bounds the initial `server/discover` probe on
+  /// body-only transports such as stdio. HTTP transports retain the normal
+  /// request timeout because an HTTP discovery timeout indicates an outage,
+  /// not a legacy peer.
   const McpClientOptions({
     super.enforceStrictCapabilities,
     this.capabilities,
@@ -102,9 +112,11 @@ class McpClientOptions extends ProtocolOptions {
     String? protocolVersion,
     bool? useServerDiscover,
     bool? allowLegacyInitializationFallback,
+    Duration legacyDiscoveryTimeout = _defaultLegacyDiscoveryTimeout,
   })  : _protocolVersion = protocolVersion,
         _useServerDiscover = useServerDiscover,
-        _allowLegacyInitializationFallback = allowLegacyInitializationFallback;
+        _allowLegacyInitializationFallback = allowLegacyInitializationFallback,
+        _legacyDiscoveryTimeout = legacyDiscoveryTimeout;
 }
 
 /// Deprecated alias for [McpClientOptions].
@@ -230,6 +242,7 @@ class McpClient extends Protocol {
   final String _preferredProtocolVersion;
   final bool _useServerDiscover;
   final bool _allowLegacyInitializationFallback;
+  final Duration _legacyDiscoveryTimeout;
   String? _instructions;
   Future<void>? _sessionRefresh;
   String? _negotiatedProtocolVersion;
@@ -281,6 +294,8 @@ class McpClient extends Protocol {
             ? false
             : options?.allowLegacyInitializationFallback ??
                 McpProtocol.stable.allowLegacyInitializationFallbackByDefault,
+        _legacyDiscoveryTimeout =
+            options?._legacyDiscoveryTimeout ?? _defaultLegacyDiscoveryTimeout,
         super(options) {
     // Register elicit handler if any elicitation mode is advertised.
     if (_capabilities.elicitation != null) {
@@ -514,6 +529,9 @@ class McpClient extends Protocol {
             ? activeTransport as ProtocolVersionAwareTransport
             : null;
     versionedTransport?.protocolVersion = protocolVersion;
+    final discoveryOptions = versionedTransport == null
+        ? RequestOptions(timeout: _legacyDiscoveryTimeout)
+        : null;
 
     final result = await super.request<DiscoverResult>(
       JsonRpcServerDiscoverRequest(
@@ -525,6 +543,7 @@ class McpClient extends Protocol {
         ),
       ),
       (json) => DiscoverResult.fromJson(json),
+      discoveryOptions,
     );
 
     final negotiatedProtocolVersion = negotiateProtocolVersion(
@@ -666,7 +685,7 @@ class McpClient extends Protocol {
     JsonRpcRequest requestData,
     T Function(Map<String, dynamic> resultJson) resultFactory, [
     RequestOptions? options,
-    RequestId? relatedRequestId,
+    int? relatedRequestId,
   ]) async {
     _assertStatelessRequestAllowed(requestData.method);
 
@@ -1108,7 +1127,7 @@ class McpClient extends Protocol {
   Future<void> notification(
     JsonRpcNotification notificationData, {
     RelatedTaskMetadata? relatedTask,
-    RequestId? relatedRequestId,
+    int? relatedRequestId,
   }) async {
     _assertStatelessNotificationAllowed(notificationData.method);
     await super.notification(

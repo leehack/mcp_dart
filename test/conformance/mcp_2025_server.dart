@@ -539,7 +539,6 @@ Future<void> _sendLog(
       data: message,
     ),
     sessionId: extra.sessionId,
-    requestMeta: extra.meta,
   );
 }
 

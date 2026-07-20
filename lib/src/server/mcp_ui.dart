@@ -91,13 +91,27 @@ RegisteredTool registerAppTool(
 ) {
   final normalizedMeta = _normalizeAppToolMeta(config.meta);
 
+  final outputJsonSchema = config.outputJsonSchema;
+  if (outputJsonSchema != null) {
+    return server.registerStatelessTool(
+      name,
+      title: config.title,
+      description: config.description,
+      inputSchema: config.inputSchema,
+      outputSchema: config.outputSchema,
+      outputJsonSchema: outputJsonSchema,
+      annotations: config.annotations,
+      meta: normalizedMeta,
+      callback: callback,
+    );
+  }
+
   return server.registerTool(
     name,
     title: config.title,
     description: config.description,
     inputSchema: config.inputSchema,
     outputSchema: config.outputSchema,
-    outputJsonSchema: config.outputJsonSchema,
     annotations: config.annotations,
     meta: normalizedMeta,
     callback: callback,

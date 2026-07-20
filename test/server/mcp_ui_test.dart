@@ -74,7 +74,7 @@ void main() {
     });
 
     test('registerAppTool fills legacy ui/resourceUri metadata', () async {
-      registerAppTool(
+      final registeredTool = registerAppTool(
         server,
         'weather',
         const McpUiAppToolConfig(
@@ -87,6 +87,8 @@ void main() {
         ),
         (args, extra) async => const CallToolResult(content: []),
       );
+
+      expect(registeredTool.callback, isA<FunctionToolCallback>());
 
       await server.connect(transport);
 

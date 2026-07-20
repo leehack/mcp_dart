@@ -508,7 +508,7 @@ void main() {
       expect(response.result['value'], 'nested-ok');
     });
 
-    test('public request preserves string relatedRequestId', () async {
+    test('public request preserves integer relatedRequestId', () async {
       await protocol.connect(transport);
 
       final requestFuture = protocol
@@ -516,14 +516,14 @@ void main() {
             const JsonRpcRequest(id: 0, method: 'test/method'),
             (json) => TestResult(value: json['value'] as String),
             const RequestOptions(timeout: Duration(seconds: 1)),
-            'parent-req-1',
+            17,
           )
           .timeout(const Duration(seconds: 5));
 
       await waitForSentMessages(transport, 1);
 
       expect(transport.sentMessages[0], isA<JsonRpcRequest>());
-      expect(transport.relatedRequestIds[0], 'parent-req-1');
+      expect(transport.relatedRequestIds[0], 17);
 
       final request = transport.sentMessages[0] as JsonRpcRequest;
       transport.receiveMessage(
@@ -2768,6 +2768,57 @@ void main() {
           reason: 'Should have sent a cancellation notification',
         );
       }
+    });
+
+    test('modern body-only cancellation carries the request envelope',
+        () async {
+      await protocol.connect(transport);
+
+      final controller = BasicAbortController();
+      final requestFuture = protocol.request<TestResult>(
+        JsonRpcRequest(
+          id: 0,
+          method: 'test/method',
+          meta: buildProtocolRequestMeta(
+            protocolVersion: previewProtocolVersion,
+            clientInfo: const Implementation(
+              name: 'test-client',
+              version: '1.0.0',
+            ),
+            clientCapabilities: const ClientCapabilities(),
+          ),
+        ),
+        (json) => TestResult(value: json['value'] as String),
+        RequestOptions(
+          signal: controller.signal,
+          timeoutEnabled: false,
+        ),
+      );
+
+      controller.abort('User cancelled');
+      await expectLater(
+        requestFuture,
+        throwsA(
+          predicate<Object?>(
+            (error) => error.toString().contains('User cancelled'),
+          ),
+        ),
+      );
+
+      final cancellation = transport.sentMessages
+          .whereType<JsonRpcCancelledNotification>()
+          .single;
+      expect(
+        cancellation.meta?[McpMetaKey.protocolVersion],
+        previewProtocolVersion,
+      );
+      expect(
+        cancellation.meta?[McpMetaKey.clientInfo],
+        const Implementation(
+          name: 'test-client',
+          version: '1.0.0',
+        ).toJson(),
+      );
     });
 
     test('uses request-scoped transport cancellation without a notification',

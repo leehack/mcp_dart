@@ -3,18 +3,16 @@ import 'dart:io';
 
 Future<void> main(List<String> args) async {
   final anonymous = args.contains('--anonymous');
-  final Map<String, dynamic>? resultMeta =
-      anonymous
-          ? null
-          : <String, dynamic>{
-            'io.modelcontextprotocol/serverInfo': <String, dynamic>{
-              'name': 'stateless-inventory-fixture',
-              'version': '1.0.0',
-            },
-          };
-  await for (final line in stdin
-      .transform(utf8.decoder)
-      .transform(const LineSplitter())) {
+  final Map<String, dynamic>? resultMeta = anonymous
+      ? null
+      : <String, dynamic>{
+          'io.modelcontextprotocol/serverInfo': <String, dynamic>{
+            'name': 'stateless-inventory-fixture',
+            'version': '1.0.0',
+          },
+        };
+  await for (final line
+      in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final decoded = jsonDecode(line);
     if (decoded is! Map) continue;
     final message = decoded.cast<String, dynamic>();
@@ -32,7 +30,7 @@ Future<void> main(List<String> args) async {
             'tools': <String, dynamic>{},
             'logging': <String, dynamic>{},
           },
-          if (resultMeta != null) '_meta': resultMeta,
+          '_meta': ?resultMeta,
         });
         break;
       case 'tools/list':
@@ -41,7 +39,7 @@ Future<void> main(List<String> args) async {
           'ttlMs': 0,
           'cacheScope': 'private',
           'tools': <Map<String, dynamic>>[],
-          if (resultMeta != null) '_meta': resultMeta,
+          '_meta': ?resultMeta,
         });
         break;
       case 'ping':

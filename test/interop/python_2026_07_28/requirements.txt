@@ -1,1 +1,3 @@
 mcp==2.0.0b2
+mcp-types==2.0.0b2
+uvicorn==0.51.0

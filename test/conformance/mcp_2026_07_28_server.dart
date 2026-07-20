@@ -139,7 +139,7 @@ void _registerAlpha8StatelessDiagnostics(McpServer server) {
     description:
         'Attempts request-scoped logging for the stateless log-level diagnostic',
     callback: (args, extra) async {
-      await server.sendLoggingMessage(
+      await server.sendStatelessLoggingMessage(
         const LoggingMessageNotification(
           level: LoggingLevel.info,
           data: 'log-level diagnostic',
@@ -217,7 +217,7 @@ void _registerStreamDiagnostics(McpServer server) {
 }
 
 void _registerInputRequiredDiagnostics(McpServer server) {
-  server.registerTool(
+  server.registerStatelessTool(
     'test_input_required_result_elicitation',
     description: 'Exercises an elicitation InputRequiredResult retry flow',
     callback: (args, extra) async {
@@ -239,7 +239,7 @@ void _registerInputRequiredDiagnostics(McpServer server) {
     },
   );
 
-  server.registerTool(
+  server.registerStatelessTool(
     'test_input_required_result_sampling',
     description: 'Exercises a sampling InputRequiredResult retry flow',
     callback: (args, extra) async {
@@ -259,7 +259,7 @@ void _registerInputRequiredDiagnostics(McpServer server) {
     },
   );
 
-  server.registerTool(
+  server.registerStatelessTool(
     'test_input_required_result_list_roots',
     description: 'Exercises a roots/list InputRequiredResult retry flow',
     callback: (args, extra) async {
@@ -276,7 +276,7 @@ void _registerInputRequiredDiagnostics(McpServer server) {
     },
   );
 
-  server.registerTool(
+  server.registerStatelessTool(
     'test_input_required_result_request_state',
     description: 'Exercises requestState echo validation',
     callback: (args, extra) async {
@@ -300,7 +300,7 @@ void _registerInputRequiredDiagnostics(McpServer server) {
     },
   );
 
-  server.registerTool(
+  server.registerStatelessTool(
     'test_input_required_result_multiple_inputs',
     description: 'Exercises multiple simultaneous InputRequiredResult requests',
     callback: (args, extra) async {
@@ -331,7 +331,7 @@ void _registerInputRequiredDiagnostics(McpServer server) {
     },
   );
 
-  server.registerTool(
+  server.registerStatelessTool(
     'test_input_required_result_multi_round',
     description: 'Exercises a multi-round InputRequiredResult flow',
     callback: (args, extra) async {
@@ -393,7 +393,7 @@ void _registerInputRequiredDiagnostics(McpServer server) {
     },
   );
 
-  server.registerTool(
+  server.registerStatelessTool(
     'test_input_required_result_tampered_state',
     description: 'Rejects modified requestState values',
     callback: (args, extra) async {
@@ -417,7 +417,7 @@ void _registerInputRequiredDiagnostics(McpServer server) {
     },
   );
 
-  server.registerTool(
+  server.registerStatelessTool(
     'test_input_required_result_capabilities',
     description: 'Only emits input requests supported by client capabilities',
     callback: (args, extra) async {
@@ -447,7 +447,7 @@ void _registerInputRequiredDiagnostics(McpServer server) {
     },
   );
 
-  server.registerPrompt(
+  server.registerStatelessPrompt(
     'test_input_required_result_prompt',
     description: 'Exercises InputRequiredResult from prompts/get',
     callback: (args, extra) async {

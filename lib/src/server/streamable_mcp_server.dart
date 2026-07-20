@@ -736,7 +736,7 @@ class StreamableMcpServer {
     final version = versionHeader.trim();
     return isStatelessProtocolVersion(version) ||
         strictProtocolVersionHeaderValidation &&
-            !supportedProtocolVersions.contains(version);
+            !allSupportedProtocolVersions.contains(version);
   }
 
   bool _isStatelessRequest(HttpRequest request, dynamic body) {
@@ -748,7 +748,7 @@ class StreamableMcpServer {
       return version != null &&
           (isStatelessProtocolVersion(version) ||
               strictProtocolVersionHeaderValidation &&
-                  !supportedProtocolVersions.contains(version));
+                  !allSupportedProtocolVersions.contains(version));
     }
     if (body is List) {
       return body.whereType<Map<String, dynamic>>().any((item) {
@@ -756,7 +756,7 @@ class StreamableMcpServer {
         return version != null &&
             (isStatelessProtocolVersion(version) ||
                 strictProtocolVersionHeaderValidation &&
-                    !supportedProtocolVersions.contains(version));
+                    !allSupportedProtocolVersions.contains(version));
       });
     }
     return false;

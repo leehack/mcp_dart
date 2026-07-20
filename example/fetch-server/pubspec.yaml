@@ -12,5 +12,6 @@ dependencies:
   http: ^1.0.0
 
 dev_dependencies:
-  lints: ^2.0.0
+  # Dart 3.5 resolves lints 5.0; Dart 3.8+ can use the latest lints 6 release.
+  lints: ">=5.0.0 <7.0.0"
   test: ^1.25.15

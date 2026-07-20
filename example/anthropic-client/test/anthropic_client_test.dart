@@ -141,10 +141,11 @@ void main() {
       },
       toolApprover: _approveAll,
       toolLister: _listNamedTools(['first', 'second']),
-      toolCaller: (request) async => mcp_dart.CallToolResult(
-        content: [mcp_dart.TextContent(text: request.name)],
-        isError: request.name == 'second',
-      ),
+      toolCaller:
+          (request) async => mcp_dart.CallToolResult(
+            content: [mcp_dart.TextContent(text: request.name)],
+            isError: request.name == 'second',
+          ),
     );
     await client.processQuery('Run both');
 
@@ -347,14 +348,15 @@ void main() {
       toolLister: (_) async {
         refreshes++;
         return mcp_dart.ListToolsResult(
-          tools: refreshes == 1
-              ? [
-                  const mcp_dart.Tool(
-                    name: 'revoked',
-                    inputSchema: mcp_dart.JsonObject(),
-                  ),
-                ]
-              : const [],
+          tools:
+              refreshes == 1
+                  ? [
+                    const mcp_dart.Tool(
+                      name: 'revoked',
+                      inputSchema: mcp_dart.JsonObject(),
+                    ),
+                  ]
+                  : const [],
         );
       },
       messageGenerator: (request) async {
@@ -430,8 +432,9 @@ void main() {
       mcp_dart.McpClient(
         const mcp_dart.Implementation(name: 'test', version: '1.0.0'),
       ),
-      toolLister: (_) async =>
-          const mcp_dart.ListToolsResult(tools: [], nextCursor: 'repeated'),
+      toolLister:
+          (_) async =>
+              const mcp_dart.ListToolsResult(tools: [], nextCursor: 'repeated'),
     );
 
     await expectLater(
@@ -738,22 +741,23 @@ void main() {
       },
       toolApprover: _approveAll,
       toolLister: _listNamedTools(['typed']),
-      toolCaller: (_) async => mcp_dart.CallToolResult(
-        content: const [
-          mcp_dart.TextContent(
-            text: 'plain text',
-            meta: {'textSecret': 'sentinel-text-meta'},
+      toolCaller:
+          (_) async => mcp_dart.CallToolResult(
+            content: const [
+              mcp_dart.TextContent(
+                text: 'plain text',
+                meta: {'textSecret': 'sentinel-text-meta'},
+              ),
+              mcp_dart.ImageContent(
+                data: 'AQ==',
+                mimeType: 'image/png',
+                meta: {'imageSecret': 'sentinel-image-meta'},
+              ),
+            ],
+            structuredContentJson: mcp_dart.JsonValue.array([1, 2]),
+            meta: const {'resultSecret': 'sentinel-result-meta'},
+            extra: const {'vendorSecret': 'sentinel-extra'},
           ),
-          mcp_dart.ImageContent(
-            data: 'AQ==',
-            mimeType: 'image/png',
-            meta: {'imageSecret': 'sentinel-image-meta'},
-          ),
-        ],
-        structuredContentJson: mcp_dart.JsonValue.array([1, 2]),
-        meta: const {'resultSecret': 'sentinel-result-meta'},
-        extra: const {'vendorSecret': 'sentinel-extra'},
-      ),
     );
     await client.processQuery('Return typed content');
 
@@ -860,20 +864,21 @@ void main() {
       mcp_dart.McpClient(
         const mcp_dart.Implementation(name: 'test', version: '1.0.0'),
       ),
-      messageGenerator: (_) async => _message([
-        {
-          'type': 'tool_use',
-          'id': 'call_closed',
-          'name': 'closed',
-          'input': <String, dynamic>{},
-        },
-        {
-          'type': 'tool_use',
-          'id': 'call_not_reached',
-          'name': 'not_reached',
-          'input': <String, dynamic>{},
-        },
-      ]),
+      messageGenerator:
+          (_) async => _message([
+            {
+              'type': 'tool_use',
+              'id': 'call_closed',
+              'name': 'closed',
+              'input': <String, dynamic>{},
+            },
+            {
+              'type': 'tool_use',
+              'id': 'call_not_reached',
+              'name': 'not_reached',
+              'input': <String, dynamic>{},
+            },
+          ]),
       toolApprover: _approveAll,
       toolLister: _listNamedTools(['closed', 'not_reached']),
       toolCaller: (request) async {
@@ -909,14 +914,15 @@ void main() {
       mcp_dart.McpClient(
         const mcp_dart.Implementation(name: 'test', version: '1.0.0'),
       ),
-      messageGenerator: (_) async => _message([
-        {
-          'type': 'tool_use',
-          'id': 'incomplete_call',
-          'name': 'dangerous',
-          'input': {'partial': true},
-        },
-      ], stopReason: 'max_tokens'),
+      messageGenerator:
+          (_) async => _message([
+            {
+              'type': 'tool_use',
+              'id': 'incomplete_call',
+              'name': 'dangerous',
+              'input': {'partial': true},
+            },
+          ], stopReason: 'max_tokens'),
       toolApprover: (_, _) async {
         approvalRequested = true;
         return true;
@@ -952,8 +958,8 @@ void main() {
         mcp_dart.McpClient(
           const mcp_dart.Implementation(name: 'test', version: '1.0.0'),
         ),
-        messageGenerator: (_) async =>
-            _message(const [], stopReason: 'refusal'),
+        messageGenerator:
+            (_) async => _message(const [], stopReason: 'refusal'),
         toolLister: _listTools(const []),
       );
 

@@ -1593,8 +1593,6 @@ class Server extends Protocol {
         break;
     }
 
-    // Note: Schema validation of the result is omitted as no JSON Schema validator is available.
-
     final req = JsonRpcElicitRequest(id: -1, elicitParams: params);
     final result = await request<ElicitResult>(
       req,
@@ -1656,11 +1654,27 @@ class Server extends Protocol {
   }
 
   /// Sends a `notifications/message` (logging) notification to the client.
-  ///
-  /// For stateless MCP requests, pass [requestMeta] from
-  /// [RequestHandlerExtra.meta] so log notifications honor the request-scoped
-  /// `io.modelcontextprotocol/logLevel` opt-in.
   Future<void> sendLoggingMessage(
+    LoggingMessageNotification params, {
+    String? sessionId,
+  }) {
+    return _sendLoggingMessage(params, sessionId: sessionId);
+  }
+
+  /// Sends a request-scoped logging notification for stateless MCP.
+  Future<void> sendStatelessLoggingMessage(
+    LoggingMessageNotification params, {
+    String? sessionId,
+    required Map<String, dynamic>? requestMeta,
+  }) {
+    return _sendLoggingMessage(
+      params,
+      sessionId: sessionId,
+      requestMeta: requestMeta,
+    );
+  }
+
+  Future<void> _sendLoggingMessage(
     LoggingMessageNotification params, {
     String? sessionId,
     Map<String, dynamic>? requestMeta,

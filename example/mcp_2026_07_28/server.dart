@@ -82,7 +82,7 @@ Future<void> main() async {
     ),
   );
 
-  server.registerTool(
+  server.registerStatelessTool(
     'personalized_greeting',
     description: 'Collect a name, then return a personalized greeting.',
     inputSchema: JsonSchema.object(properties: {}),

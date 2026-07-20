@@ -818,6 +818,14 @@ class JsonInteger extends JsonSchema {
   final num? _multipleOf;
   final num? _defaultValue;
 
+  /// The stable Dart API value for the JSON Schema `default` annotation.
+  ///
+  /// This remains a field for source compatibility with mcp_dart 2.2.
+  /// Parsed fractional values are preserved by [defaultValueJson] and expose
+  /// `null` here because they are not valid integer defaults.
+  @override
+  final int? defaultValue;
+
   /// The stable Dart API value for the JSON Schema `minimum` constraint.
   ///
   /// This is `null` when a parsed wire schema uses a fractional numeric value.
@@ -889,11 +897,12 @@ class JsonInteger extends JsonSchema {
         _exclusiveMaximum = exclusiveMaximum,
         _multipleOf = multipleOf,
         _defaultValue = defaultValue,
+        defaultValue = defaultValue,
         _hasDefault = defaultValue != null,
         _hasMcpHeader = mcpHeader != null,
         _rawMcpHeader = mcpHeader;
 
-  const JsonInteger._({
+  JsonInteger._({
     num? minimum,
     num? maximum,
     num? exclusiveMinimum,
@@ -912,12 +921,10 @@ class JsonInteger extends JsonSchema {
         _exclusiveMaximum = exclusiveMaximum,
         _multipleOf = multipleOf,
         _defaultValue = defaultValue,
+        defaultValue = _integerApiValue(defaultValue),
         _hasDefault = hasDefault,
         _hasMcpHeader = hasMcpHeader,
         _rawMcpHeader = rawMcpHeader;
-
-  @override
-  int? get defaultValue => _integerApiValue(_defaultValue);
 
   factory JsonInteger.fromJson(Map<String, dynamic> json) {
     final rawMcpHeader = json['x-mcp-header'];

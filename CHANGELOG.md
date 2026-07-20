@@ -2,16 +2,68 @@
 
 ### Changed
 
+- Preserved the `2.2.2` registration, callback, logging, request metadata, and
+  `StartSseOptions` APIs, with additive `registerStatelessTool`,
+  `registerStatelessPrompt`, `registerStatelessResource`, and
+  `registerStatelessResourceTemplate` helpers for MCP `2026-07-28` multi-round
+  results.
+- Preserved the `2.2.2` values of `latestProtocolVersion` and
+  `supportedProtocolVersions`; use `defaultProtocolVersion` and
+  `allSupportedProtocolVersions` for the dual-era default profile.
+- Bounded silent `server/discover` probes to five seconds on body-only
+  transports before legacy fallback. HTTP discovery keeps its normal request
+  timeout, and `McpProtocol.legacy` remains the exact initialization-only
+  opt-in.
 - Aligned MCP `2026-07-28` identity with spec PR #3002: client identity is
   optional, and servers stamp validated identity in successful stateless result
   `_meta` by default instead of the discovery body. A handler `null` omits the
   optional key; received canonical `null` or malformed identities are rejected.
+- Hardened OAuth discovery and authorization-code flows with exact issuer
+  matching, safe redirect URIs, client registration priority, challenge
+  parsing, token-endpoint authentication, issuer/resource-bound tokens, and
+  persisted scope accumulation.
+- Rejected MCP `2026-07-28` JSON-RPC response batches, mismatched
+  request-scoped response IDs, and non-terminal HTTP `202` request responses
+  before dispatch, while retaining MCP `2025-11-25` compatibility.
+- Enforced tool `io.modelcontextprotocol/requiredClientCapabilities` metadata
+  consistently across Streamable HTTP, stdio, and custom transports.
+- Exported the JSON Schema validator through the public SDK barrel and retained
+  Draft 2020-12 and declared Draft 7 validation.
+- Fixed registered tool, prompt, resource, and resource-template handles so
+  `remove()` reliably unregisters them; resource and template renames now keep
+  handle state and server indexes synchronized.
+- Lowered the unreleased SDK minimum to Dart 3.4 and added a public API
+  compatibility gate against `mcp_dart 2.2.2`.
+
+### Validation and documentation
+
+- The official alpha.9 MCP `2026-07-28` client suite passes, including all 25
+  authorization scenarios. Its three stale `server-stateless` diagnostics are
+  matched exactly while post-#3002 conformance semantics pass locally.
+- Published TypeScript and Python beta servers interoperate through the
+  temporary legacy discovery-body read fallback; their pre-#3002 client
+  directions remain explicit expected gaps.
 
 ### Breaking and compatibility notes
 
 - `DiscoverResult.serverInfo` is now nullable because MCP `2026-07-28` permits
   anonymous servers. Check for `null` before reading identity fields. MCP
   `2025-11-25` behavior is unchanged.
+- `mcp_dart 2.3` requires Dart 3.4 or newer; the CLI continues to require Dart
+  3.12. Dart 3.4 is the lowest version supported by the current runtime
+  dependency set.
+- OAuth providers with a non-empty `clientId` now use that value as
+  pre-registered client information (or a Client ID Metadata Document when
+  advertised and eligible). To opt into deprecated Dynamic Client
+  Registration, return an empty `clientId`.
+- OAuth discovery and token endpoints on another origin now require an
+  explicit `oauthUriValidator`; client redirect URIs must use HTTPS or loopback
+  HTTP. Protected-resource and authorization-server metadata factories also
+  reject malformed or incomplete documents that v2.2.2 accepted.
+- The exact v2.2.2 `finishAuth(String)` override remains available but is
+  deprecated and assumes the application validates the OAuth redirect. New
+  integrations should call `finishAuthRedirect` with the returned `state` and
+  optional issuer for validation before token exchange.
 
 ## 2.3.0-dev.2
 
@@ -60,8 +112,9 @@ MCP `2025-11-25` and earlier initialization compatibility.
   vocabularies, unresolved external references, schemas deeper than 64 levels,
   and more than 1,024 subschemas are rejected. `JsonSchema.fromJson()` may
   return `JsonAny`; the package now depends on `json_schema ^5.2.2`.
-- MCP 2026-07-28 cancellation closes only the matching Streamable HTTP POST
-  response stream, while MCP 2025-11-25 retains `notifications/cancelled`.
+- MCP 2026-07-28 per-request Streamable HTTP cancellation closes only the
+  matching POST response stream. Body-only transports and MCP 2025-11-25
+  retain `notifications/cancelled`.
 - `StreamableHttpClientTransport` now rejects duplicate active stateless request
   IDs, ends POST SSE streams at their terminal response, ignores trailing events
   on that response, and interrupts pending OAuth/HTTP work when closed.
@@ -81,10 +134,10 @@ MCP `2025-11-25` and earlier initialization compatibility.
 
 ### Validation and documentation
 
-- All current official MCP 2025-11-25 and MCP 2026-07-28 conformance scenarios
-  applicable to the SDK's core client/server roles pass, with bidirectional
-  TypeScript/Python interop, real Chrome transport coverage, a Flutter Web
-  service integration, and widget tests. A pinned JSON Schema Test Suite gate
+- Added official MCP 2025-11-25 and MCP 2026-07-28 conformance gates,
+  published TypeScript/Python interoperability fixtures with explicit
+  expected peer gaps, real Chrome transport coverage, a Flutter Web service
+  integration, and widget tests. A pinned JSON Schema Test Suite gate
   independently exercises the supported Draft 2020-12 and Draft 7 validation
   surfaces.
 - Added a strict MCP 2026-07-28 example, retained labeled legacy examples,

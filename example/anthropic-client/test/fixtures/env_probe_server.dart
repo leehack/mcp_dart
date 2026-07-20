@@ -38,8 +38,9 @@ Future<void> main(List<String> args) async {
   server.registerTool(
     'environment_probe',
     inputSchema: JsonSchema.object(),
-    callback: (_, _) async =>
-        const CallToolResult(content: [TextContent(text: 'ok')]),
+    callback:
+        (_, _) async =>
+            const CallToolResult(content: [TextContent(text: 'ok')]),
   );
   await server.connect(StdioServerTransport());
 }

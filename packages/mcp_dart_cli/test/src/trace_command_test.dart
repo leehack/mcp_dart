@@ -235,8 +235,8 @@ void main() {
             jsonDecode(await report.readAsString()) as Map<String, dynamic>;
         expect(json['passed'], isTrue);
         expect(json['serverExitCode'], equals(0));
-        final events =
-            (json['events'] as List<dynamic>).cast<Map<String, dynamic>>();
+        final events = (json['events'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         expect(
           events.map((event) => event['direction']),
           contains('server_to_client'),

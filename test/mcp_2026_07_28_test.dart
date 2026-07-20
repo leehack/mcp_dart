@@ -430,7 +430,7 @@ void main() {
         contains(previewProtocolVersion),
       );
       expect(
-        supportedProtocolVersions,
+        allSupportedProtocolVersions,
         contains(previewProtocolVersion),
       );
       expect(statelessProtocolVersions, [previewProtocolVersion]);
@@ -3529,6 +3529,46 @@ void main() {
       expect(allowedError, isNull);
     });
 
+    test('stateless tools/call enforces required capabilities on stdio shapes',
+        () async {
+      var callbackInvoked = false;
+      final server = McpServer(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.stable,
+        ),
+      );
+      addTearDown(server.close);
+      server.registerTool(
+        'needs_sampling',
+        meta: const {
+          'io.modelcontextprotocol/requiredClientCapabilities': ['sampling'],
+        },
+        callback: (args, extra) {
+          callbackInvoked = true;
+          return const CallToolResult(content: [TextContent(text: 'ok')]);
+        },
+      );
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcCallToolRequest(
+          id: 'call-stdio',
+          params: const CallToolRequest(name: 'needs_sampling').toJson(),
+          meta: _clientMeta(),
+        ),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcError;
+      expect(
+        response.error.code,
+        ErrorCode.missingRequiredClientCapability.value,
+      );
+      expect(callbackInvoked, isFalse);
+    });
+
     test('stateless tools/call ignores legacy task parameter', () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
@@ -4100,7 +4140,7 @@ void main() {
           protocol: McpProtocol.stable,
         ),
       );
-      server.registerTool(
+      server.registerStatelessTool(
         'needs_input',
         callback: (args, extra) {
           final response = extra.inputResponses?['profile'];
@@ -4336,7 +4376,7 @@ void main() {
           protocol: McpProtocol.stable,
         ),
       );
-      server.registerPrompt(
+      server.registerStatelessPrompt(
         'needs_input',
         callback: (args, extra) =>
             const InputRequiredResult(requestState: 'prompt-state'),
@@ -4365,7 +4405,7 @@ void main() {
           protocol: McpProtocol.stable,
         ),
       );
-      server.registerResource(
+      server.registerStatelessResource(
         'needs_input',
         'memory://needs-input',
         null,
@@ -5533,14 +5573,14 @@ void main() {
       server.setRequestHandler<JsonRpcListToolsRequest>(
         Method.toolsList,
         (request, extra) async {
-          await server.sendLoggingMessage(
+          await server.sendStatelessLoggingMessage(
             const LoggingMessageNotification(
               level: LoggingLevel.debug,
               data: 'skip',
             ),
             requestMeta: extra.meta,
           );
-          await server.sendLoggingMessage(
+          await server.sendStatelessLoggingMessage(
             const LoggingMessageNotification(
               level: LoggingLevel.warning,
               data: 'emit',
@@ -5591,7 +5631,7 @@ void main() {
       server.setRequestHandler<JsonRpcListToolsRequest>(
         Method.toolsList,
         (request, extra) async {
-          await server.sendLoggingMessage(
+          await server.sendStatelessLoggingMessage(
             const LoggingMessageNotification(
               level: LoggingLevel.error,
               data: 'skip',
@@ -7626,7 +7666,7 @@ void main() {
           ErrorCode.unsupportedProtocolVersion.value,
           'Unsupported protocol version',
           const {
-            'supported': supportedProtocolVersions,
+            'supported': allSupportedProtocolVersions,
             'requested': previewProtocolVersion,
           },
         ),

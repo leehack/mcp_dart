@@ -150,13 +150,12 @@ void main() {
             'test/fixtures/stateless_inventory_server.dart',
           ],
         );
-        final responsesFuture =
-            process.stdout
-                .transform(utf8.decoder)
-                .transform(const LineSplitter())
-                .take(2)
-                .map((line) => jsonDecode(line) as Map<String, dynamic>)
-                .toList();
+        final responsesFuture = process.stdout
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .take(2)
+            .map((line) => jsonDecode(line) as Map<String, dynamic>)
+            .toList();
 
         for (final request in <Map<String, dynamic>>[
           <String, dynamic>{
@@ -307,28 +306,29 @@ void main() {
     test(
       'fails configured tool output schema checks on invalid output',
       () async {
-        final report = await McpServerInspector(
-          logger: MockLogger(),
-          probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
-            'tools': <Map<String, dynamic>>[
-              <String, dynamic>{
-                'name': 'bad_structured',
-                'arguments': <String, dynamic>{'message': 'hello'},
-              },
-            ],
-          }),
-        ).inspect(
-          const ServerInspectionTarget(
-            command: 'dart',
-            serverArgs: <String>[
-              'run',
-              'test/fixtures/raw_stdio_server.dart',
-              '--invalid-output-schema',
-            ],
-            url: null,
-            env: <String, String>{},
-          ),
-        );
+        final report =
+            await McpServerInspector(
+              logger: MockLogger(),
+              probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
+                'tools': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'name': 'bad_structured',
+                    'arguments': <String, dynamic>{'message': 'hello'},
+                  },
+                ],
+              }),
+            ).inspect(
+              const ServerInspectionTarget(
+                command: 'dart',
+                serverArgs: <String>[
+                  'run',
+                  'test/fixtures/raw_stdio_server.dart',
+                  '--invalid-output-schema',
+                ],
+                url: null,
+                env: <String, String>{},
+              ),
+            );
 
         expect(report.passed, isFalse);
         final checksById = <String, InspectionCheck>{
@@ -343,21 +343,22 @@ void main() {
     );
 
     test('silent handler mode can inspect a notifying server', () async {
-      final report = await McpServerInspector(
-        logger: MockLogger(),
-        silentHandlers: true,
-      ).inspect(
-        const ServerInspectionTarget(
-          command: 'dart',
-          serverArgs: <String>[
-            'run',
-            'test/fixtures/raw_stdio_server.dart',
-            '--notify-after-list',
-          ],
-          url: null,
-          env: <String, String>{},
-        ),
-      );
+      final report =
+          await McpServerInspector(
+            logger: MockLogger(),
+            silentHandlers: true,
+          ).inspect(
+            const ServerInspectionTarget(
+              command: 'dart',
+              serverArgs: <String>[
+                'run',
+                'test/fixtures/raw_stdio_server.dart',
+                '--notify-after-list',
+              ],
+              url: null,
+              env: <String, String>{},
+            ),
+          );
 
       expect(report.passed, isTrue);
     });
@@ -368,43 +369,44 @@ void main() {
         return;
       }
 
-      final report = await McpServerInspector(
-        logger: MockLogger(),
-        probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
-          'tools': <Map<String, dynamic>>[
-            <String, dynamic>{
-              'name': 'structured_echo',
-              'arguments': <String, dynamic>{'message': 'configured probe'},
-            },
-          ],
-          'resource': <String, dynamic>{'uri': 'resource://test'},
-          'prompt': <String, dynamic>{
-            'name': 'greeting',
-            'arguments': <String, dynamic>{'language': 'English'},
-          },
-          'completion': <String, dynamic>{
-            'prompt': 'greeting',
-            'argument': 'language',
-            'value': 'E',
-          },
-          'task': <String, dynamic>{
-            'tool': 'long_running',
-            'arguments': <String, dynamic>{'duration': 20},
-            'ttl': 60000,
-          },
-        }),
-      ).inspect(
-        ServerInspectionTarget(
-          command: 'node',
-          serverArgs: <String>[
-            tsServer.path,
-            '--transport',
-            'stdio',
-          ],
-          url: null,
-          env: const <String, String>{},
-        ),
-      );
+      final report =
+          await McpServerInspector(
+            logger: MockLogger(),
+            probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
+              'tools': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'name': 'structured_echo',
+                  'arguments': <String, dynamic>{'message': 'configured probe'},
+                },
+              ],
+              'resource': <String, dynamic>{'uri': 'resource://test'},
+              'prompt': <String, dynamic>{
+                'name': 'greeting',
+                'arguments': <String, dynamic>{'language': 'English'},
+              },
+              'completion': <String, dynamic>{
+                'prompt': 'greeting',
+                'argument': 'language',
+                'value': 'E',
+              },
+              'task': <String, dynamic>{
+                'tool': 'long_running',
+                'arguments': <String, dynamic>{'duration': 20},
+                'ttl': 60000,
+              },
+            }),
+          ).inspect(
+            ServerInspectionTarget(
+              command: 'node',
+              serverArgs: <String>[
+                tsServer.path,
+                '--transport',
+                'stdio',
+              ],
+              url: null,
+              env: const <String, String>{},
+            ),
+          );
 
       expect(report.passed, isTrue);
       final checksById = <String, InspectionCheck>{

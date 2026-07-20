@@ -38,6 +38,59 @@ on:
       - '.github/workflows/test_cli.yml'
 
 jobs:
+  minimum-sdk:
+    name: minimum SDK (Dart 3.12.0)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/mcp_dart_cli
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up minimum supported Dart
+        uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+        with:
+          sdk: 3.12.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install TS interop dependencies
+        working-directory: test/interop/ts
+        run: npm ci
+
+      - name: Build TS interop fixtures
+        working-directory: test/interop/ts
+        run: npm run build
+
+      - name: Install Python interop dependencies
+        working-directory: .
+        run: python -m pip install -r test/interop/python/requirements.txt
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Analyze at minimum SDK
+        run: dart analyze
+
+      - name: Compile and smoke-test CLI
+        run: |
+          mkdir -p .dart_tool/minimum-sdk
+          dart compile exe bin/mcp_dart.dart -o .dart_tool/minimum-sdk/mcp_dart
+          .dart_tool/minimum-sdk/mcp_dart --version
+
+      - name: Run minimum-SDK test suite
+        run: dart test
+
   test:
     runs-on: ubuntu-latest
     defaults:
@@ -46,20 +99,20 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Dart
-        uses: dart-lang/setup-dart@v1
+        uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
         with:
           sdk: stable
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
 
@@ -89,7 +142,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          dart pub global activate coverage
+          dart pub global activate coverage 1.15.1
           dart pub global run coverage:test_with_coverage
 
       - name: Run MCP spec conformance gate
@@ -101,7 +154,7 @@ jobs:
 
       - name: Run pana (package analysis)
         run: |
-          dart pub global activate pana
+          dart pub global activate pana 0.23.14
           set +e
           dart pub global run pana --json --no-warning --exit-code-threshold 0 > pana_output.json
           PANA_EXIT=$?
@@ -134,7 +187,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]' }}
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: packages/mcp_dart_cli/coverage/lcov.info

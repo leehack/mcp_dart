@@ -8,7 +8,8 @@ Please review these guidelines before making changes to ensure consistency and q
 `mcp_dart` is a Dart implementation of the Model Context Protocol (MCP) SDK.
 It enables building MCP servers and clients to connect AI applications with external tools and resources.
 
-- **SDK Version**: Dart ^3.5.0
+- **SDK Version**: Dart ^3.4.0
+- **CLI Version**: Dart ^3.12.0
 - **Main Entry**: `lib/mcp_dart.dart`
 - **Core Logic**: `lib/src/`
 - **Tests**: `test/` (mirrors `lib/` structure)
@@ -72,7 +73,8 @@ Adhere strictly to the following conventions.
   in docs or comments where useful.
 
 ### General
-- **Dart Version**: Use features compatible with Dart 3.5+ (records, patterns, etc. if applicable).
+- **Dart Version**: Keep root SDK code compatible with Dart 3.4+. CLI-only code
+  may use Dart 3.12 features.
 - **Formatting**: Always run `dart format .` before submitting.
 - **Comments**: Use `///` for public API documentation (classes, methods).
 - **Trailing Commas**: Required. This helps `dart format` produce cleaner diffs.

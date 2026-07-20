@@ -53,8 +53,9 @@ class CreateCommand extends Command<int> {
       final firstArg = argResults!.rest.first;
       if (_isValidPackageName(firstArg)) {
         packageName = firstArg;
-        projectPath =
-            argResults!.rest.length > 1 ? argResults!.rest[1] : packageName;
+        projectPath = argResults!.rest.length > 1
+            ? argResults!.rest[1]
+            : packageName;
       } else {
         projectPath = firstArg;
         packageName = _sanitizePackageName(

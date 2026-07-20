@@ -12,7 +12,7 @@ jobs:
     permissions:
       id-token: write # Required for authentication using OIDC
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Determine package from tag
         id: package-info
@@ -21,19 +21,36 @@ jobs:
           echo "🏷️ Processing tag: $TAG"
           
           if [[ "$TAG" == mcp_dart_cli-v* ]]; then
-            echo "working_directory=packages/mcp_dart_cli" >> "$GITHUB_OUTPUT"
-            echo "package=mcp_dart_cli" >> "$GITHUB_OUTPUT"
+            {
+              echo "working_directory=packages/mcp_dart_cli"
+              echo "package=mcp_dart_cli"
+              echo "tag_version=${TAG#mcp_dart_cli-v}"
+            } >> "$GITHUB_OUTPUT"
             echo "📦 Package: mcp_dart_cli"
           elif [[ "$TAG" == v* ]]; then
-            echo "working_directory=." >> "$GITHUB_OUTPUT"
-            echo "package=mcp_dart" >> "$GITHUB_OUTPUT"
+            {
+              echo "working_directory=."
+              echo "package=mcp_dart"
+              echo "tag_version=${TAG#v}"
+            } >> "$GITHUB_OUTPUT"
             echo "📦 Package: mcp_dart"
           else
             echo "❌ Unknown tag format: $TAG"
             exit 1
           fi
 
-      - uses: dart-lang/setup-dart@v1
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+
+      - name: Verify tag matches package version
+        working-directory: ${{ steps.package-info.outputs.working_directory }}
+        run: |
+          PACKAGE_VERSION=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)
+          TAG_VERSION="${{ steps.package-info.outputs.tag_version }}"
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ Tag version $TAG_VERSION does not match pubspec version $PACKAGE_VERSION."
+            exit 1
+          fi
+          echo "✅ Tag and pubspec both identify version $PACKAGE_VERSION."
 
       - name: Prepare nested package publish directory
         id: publish-dir

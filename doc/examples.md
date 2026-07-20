@@ -44,10 +44,19 @@ dart run example/mcp_2026_07_28/client.dart
 - String-root output schema and structured tool result
 - A process smoke test in `test/example/non_credentialed_examples_smoke_test.dart`
 
+The server uses `registerStatelessTool` because its callback can return
+`InputRequiredResult`. The additive `registerStatelessPrompt`,
+`registerStatelessResource`, and `registerStatelessResourceTemplate` APIs
+provide the same multi-round result option for other primitives. Existing
+`registerTool`, `registerPrompt`, `registerResource`, and
+`registerResourceTemplate` callbacks retain their `2.2.2` result shapes.
+
 ## Default dual-era examples
 
 These examples use `McpProtocol.stable`, explicitly or by default. Compatible
-peers negotiate MCP 2026-07-28; older peers use initialization fallback.
+peers negotiate MCP 2026-07-28; older peers use initialization fallback. On
+body-only transports such as stdio, a silent discovery probe is bounded to
+five seconds.
 
 ### Stdio Server and Client
 

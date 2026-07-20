@@ -87,8 +87,9 @@ class ServeCommand extends Command<int> {
     await generateRunnerScript(dotDartToolDir, packageName);
     final runnerFile = File(p.join(dotDartToolDir.path, 'runner.dart'));
 
-    final args =
-        argResults!.arguments.where((arg) => arg != '--watch').toList();
+    final args = argResults!.arguments
+        .where((arg) => arg != '--watch')
+        .toList();
 
     Process? process;
     bool isRestarting = false;
@@ -109,10 +110,9 @@ class ServeCommand extends Command<int> {
       process = await Process.start(
         'dart',
         ['run', runnerFile.path, ...args],
-        mode:
-            transport == 'stdio'
-                ? ProcessStartMode.inheritStdio
-                : ProcessStartMode.normal,
+        mode: transport == 'stdio'
+            ? ProcessStartMode.inheritStdio
+            : ProcessStartMode.normal,
       );
       if (transport == 'http') {
         process!.stdout.transform(utf8.decoder).listen(stdout.write);
