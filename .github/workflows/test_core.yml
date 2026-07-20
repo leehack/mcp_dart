@@ -367,7 +367,7 @@ jobs:
         run: dart analyze
 
       - name: Install Jaspr CLI
-        run: dart pub global activate jaspr_cli 0.22.3
+        run: dart pub global activate jaspr_cli 0.23.2
 
       - name: Build production bundle
         working-directory: example/jaspr-client
