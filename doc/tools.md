@@ -378,11 +378,11 @@ with their eventual `CallToolResult` available through `tasks/result`.
 
 If a successful handler result does not satisfy the tool's registered
 `outputSchema`, or omits required `structuredContent`, the SDK returns JSON-RPC
-`internalError` under MCP `2025-11-25` and `2026-07-28`. An input schema the SDK
-cannot compile is reported through the same server-error channel. These are
-server-side contract failures, not invalid client requests. MCP `2025-06-18`
-and earlier peers retain the historical `invalidParams` code for both cases.
-An output schema that accepts JSON `null` still requires the
+`internalError` under MCP `2025-11-25` and `2026-07-28`. An input or output
+schema the SDK cannot compile is reported through the same server-error
+channel. These are server-side contract failures, not invalid client requests.
+MCP `2025-06-18` and earlier peers retain the historical `invalidParams` code
+for these cases. An output schema that accepts JSON `null` still requires the
 `structuredContent` key; return `CallToolResult.fromStructuredNull()` rather
 than omitting structured content.
 

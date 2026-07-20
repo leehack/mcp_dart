@@ -411,6 +411,40 @@ void main() {
       );
     });
 
+    test('invalid output schema is reported as a server contract error',
+        () async {
+      mcpServer.registerTool(
+        'invalid_output_schema_tool',
+        outputSchema: JsonObject.fromJson({
+          r'$schema': 'https://example.com/unsupported-schema',
+          'type': 'object',
+        }),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent({});
+        },
+      );
+
+      await mcpServer.connect(transport);
+      await _sendInit(transport);
+
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 2,
+          params: const CallToolRequest(
+            name: 'invalid_output_schema_tool',
+          ).toJson(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.internalError.value);
+      expect(
+        response.error.message,
+        "Tool 'invalid_output_schema_tool' has an invalid or unsupported output schema.",
+      );
+    });
+
     test('older protocols retain invalidParams for invalid output', () async {
       mcpServer.registerTool(
         'legacy_invalid_tool',
@@ -436,6 +470,40 @@ void main() {
 
       final response = transport.sentMessages.last as JsonRpcError;
       expect(response.error.code, ErrorCode.invalidParams.value);
+    });
+
+    test('older protocols classify invalid output schemas as invalidParams',
+        () async {
+      mcpServer.registerTool(
+        'legacy_invalid_output_schema_tool',
+        outputSchema: JsonObject.fromJson({
+          r'$schema': 'https://example.com/unsupported-schema',
+          'type': 'object',
+        }),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent({});
+        },
+      );
+
+      await mcpServer.connect(transport);
+      await _sendInit(transport, protocolVersion: '2025-06-18');
+
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 2,
+          params: const CallToolRequest(
+            name: 'legacy_invalid_output_schema_tool',
+          ).toJson(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(
+        response.error.message,
+        "Tool 'legacy_invalid_output_schema_tool' has an invalid or unsupported output schema.",
+      );
     });
 
     test('invalid type in output fails validation', () async {

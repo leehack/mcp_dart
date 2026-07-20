@@ -82,11 +82,11 @@
   `tasks/result`.
 - Malformed `tools/call` params now consistently return JSON-RPC
   `invalidParams` instead of falling through to a generic `internalError`.
-- Under MCP `2025-11-25` and `2026-07-28`, an invalid registered input schema or
-  a successful tool result that omits or violates its registered output schema
-  returns JSON-RPC `internalError`; these are server-side contract failures,
-  not invalid client requests. MCP `2025-06-18` and earlier peers retain the
-  previous `invalidParams` code for both cases.
+- Under MCP `2025-11-25` and `2026-07-28`, an invalid registered input or output
+  schema, or a successful tool result that omits or violates its registered
+  output schema, returns JSON-RPC `internalError`; these are server-side
+  contract failures, not invalid client requests. MCP `2025-06-18` and earlier
+  peers retain the previous `invalidParams` code for these cases.
 - Clients now reject successful tool results that omit `structuredContent` when
   the advertised `outputSchema` requires validation. An explicit JSON `null`
   remains distinct and valid when the schema permits it.

@@ -2016,6 +2016,17 @@ class McpServer {
                 registeredTool._outputJsonSchema!.validate(
                   result.structuredContentJson!.toJson(),
                 );
+              } on JsonSchemaDefinitionException catch (error, stackTrace) {
+                _logger.error(
+                  "Invalid output schema for tool '$toolName': "
+                  '$error\n$stackTrace',
+                );
+                throw McpError(
+                  _usesModernToolValidationSemantics(protocolVersion)
+                      ? ErrorCode.internalError.value
+                      : ErrorCode.invalidParams.value,
+                  "Tool '$toolName' has an invalid or unsupported output schema.",
+                );
               } catch (error, stackTrace) {
                 _logger.error(
                   "Output validation failed for tool '$toolName': "
