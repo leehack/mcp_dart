@@ -80,8 +80,16 @@ Future<JsonRpcMessage> _receiveResponse(
   final sentCount = transport.sentMessages.length;
   transport.receiveMessage(request);
   for (var attempt = 0; attempt < 100; attempt++) {
-    if (transport.sentMessages.length > sentCount) {
-      return transport.sentMessages.last;
+    for (var index = transport.sentMessages.length - 1;
+        index >= sentCount;
+        index--) {
+      final message = transport.sentMessages[index];
+      if (message case JsonRpcResponse(:final id) when id == request.id) {
+        return message;
+      }
+      if (message case JsonRpcError(:final id) when id == request.id) {
+        return message;
+      }
     }
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
