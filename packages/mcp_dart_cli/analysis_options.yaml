@@ -3,6 +3,11 @@ include: package:lints/recommended.yaml
 analyzer:
   exclude:
     - lib/src/bricks/**/__brick__/**
+  errors:
+    # Dart 3.7 predates formatter.trailing_commas; newer SDKs no longer
+    # recognize the compatibility diagnostic used to silence that warning.
+    unrecognized_error_code: ignore
+    unsupported_option_without_values: ignore
 
 formatter:
   trailing_commas: preserve

@@ -48,7 +48,8 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^6.0.0
+  # Dart 3.7 resolves flutter_lints 5; Dart 3.8+ can use flutter_lints 6.
+  flutter_lints: ">=5.0.0 <7.0.0"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

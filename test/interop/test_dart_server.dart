@@ -100,7 +100,7 @@ McpServer createServer({McpServerOptions? options}) {
   );
 
   // Exercises legacy icon compatibility while preserving stable `icons` output.
-  // ignore: deprecated_member_use
+  // ignore: deprecated_member_use, deprecated_member_use_from_same_package
   server.resource(
     'Legacy Icon Resource',
     'resource://legacy-icon',
@@ -142,7 +142,7 @@ McpServer createServer({McpServerOptions? options}) {
   );
 
   // Exercises legacy prompt icon compatibility while preserving stable `icons`.
-  // ignore: deprecated_member_use
+  // ignore: deprecated_member_use, deprecated_member_use_from_same_package
   server.prompt(
     'legacy_icon_prompt',
     description: 'Prompt with icon metadata',

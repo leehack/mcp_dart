@@ -4,9 +4,7 @@ McpServer createMcpServer() {
   final server = McpServer(
     const Implementation(name: 'cli-e2e-dart-server', version: '1.0.0'),
     options: const McpServerOptions(
-      capabilities: ServerCapabilities(
-        tools: ServerCapabilitiesTools(),
-      ),
+      capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
     ),
   );
 
@@ -14,9 +12,7 @@ McpServer createMcpServer() {
     'echo',
     description: 'Echoes text.',
     inputSchema: JsonSchema.object(
-      properties: {
-        'message': JsonSchema.string(),
-      },
+      properties: {'message': JsonSchema.string()},
       required: ['message'],
     ),
     callback: (args, extra) async {
