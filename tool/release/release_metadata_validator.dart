@@ -916,17 +916,22 @@ List<String> _activeDartRunArguments(String workflow, String toolPath) {
   final arguments = <String>[];
   final command = RegExp(
     '(?:^|\\n|;|&&|\\|\\|)[ \\t]*dart[ \\t]+run[ \\t]+'
-    '${RegExp.escape(toolPath)}[ \\t\\r\\n]+'
+    '${_portableCommandPathPattern(toolPath)}[ \\t\\r\\n]+'
     r'''("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)''',
   );
   for (final script in _yamlRunScripts(workflow)) {
     final uncommented = _stripShellComments(script);
     for (final match in command.allMatches(uncommented)) {
-      arguments.add(_unquote(match.group(1)) ?? '');
+      arguments.add(
+        (_unquote(match.group(1)) ?? '').replaceAll(r'\', '/'),
+      );
     }
   }
   return arguments;
 }
+
+String _portableCommandPathPattern(String path) =>
+    path.split('/').map(RegExp.escape).join(r'[/\\]');
 
 List<String> _activeNpxConformanceVersions(String workflow) {
   final versions = <String>[];
@@ -962,7 +967,7 @@ List<String> _exactRequirementVersions(String source, String packageName) {
 
 List<String> _yamlRunScripts(String source) {
   final scripts = <String>[];
-  final lines = source.split('\n');
+  final lines = const LineSplitter().convert(source);
   final runKey = RegExp(r'^([ ]*)run:[ \t]*(.*)$');
   final blockIndicator = RegExp(r'^[>|][+-]?(?:[ \t]+#.*)?$');
 

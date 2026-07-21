@@ -2629,7 +2629,8 @@ void main() {
         () async {
       await server.stop();
       final serverCreated = Completer<void>();
-      var handlerCalls = 0;
+      var shutdownStarted = false;
+      var lateHandlerCalls = 0;
       server = StreamableMcpServer(
         serverFactory: (sessionId) {
           if (!serverCreated.isCompleted) {
@@ -2645,7 +2646,9 @@ void main() {
           mcpServer.server.setRequestHandler<JsonRpcRequest>(
             'test/stop-race',
             (request, extra) async {
-              handlerCalls++;
+              if (shutdownStarted) {
+                lateHandlerCalls++;
+              }
               return const EmptyResult();
             },
             (id, params, meta) => JsonRpcRequest(
@@ -2689,10 +2692,14 @@ void main() {
       await socket.flush();
       await serverCreated.future.timeout(const Duration(seconds: 3));
 
+      // A fast platform may enter the handler before the test resumes from
+      // serverCreated; that is not work starting after shutdown. Only count
+      // dispatch that begins after stop() is invoked below.
+      shutdownStarted = true;
       await server.stop().timeout(const Duration(seconds: 3));
       await Future<void>.delayed(const Duration(milliseconds: 20));
 
-      expect(handlerCalls, 0);
+      expect(lateHandlerCalls, 0);
     });
 
     test('completed stateless transports leave the active stop set', () async {

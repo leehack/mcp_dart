@@ -95,6 +95,59 @@ void main() {
     expect(result.isPrerelease, isFalse);
   });
 
+  test('accepts active Core workflow commands with CRLF line endings', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final workflow = File(
+      '${fixture.path}/.github/workflows/test_core.yml',
+    );
+    workflow.writeAsStringSync(
+      const LineSplitter().convert(workflow.readAsStringSync()).join('\r\n'),
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(result.errors, isEmpty);
+  });
+
+  test('accepts active Core audit commands with Windows path separators', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final workflow = File(
+      '${fixture.path}/.github/workflows/test_core.yml',
+    );
+    workflow.writeAsStringSync(
+      workflow
+          .readAsStringSync()
+          .replaceAll(
+            'tool/spec_example_audit.dart',
+            r'tool\spec_example_audit.dart',
+          )
+          .replaceAll(
+            '.dart_tool/mcp-spec/schema/2026-07-28/examples',
+            r'.dart_tool\mcp-spec\schema\2026-07-28\examples',
+          )
+          .replaceAll(
+            'tool/spec_document_inventory_audit.dart',
+            r'tool\spec_document_inventory_audit.dart',
+          )
+          .replaceAll(
+            '.dart_tool/mcp-spec/docs/specification/2026-07-28',
+            r'.dart_tool\mcp-spec\docs\specification\2026-07-28',
+          ),
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(result.errors, isEmpty);
+  });
+
   test('rejects a published-client gap allowance on any release surface', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
