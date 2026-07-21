@@ -38,7 +38,20 @@ Future<void> main(List<String> args) async {
           'resultType': 'complete',
           'ttlMs': 0,
           'cacheScope': 'private',
-          'tools': <Map<String, dynamic>>[],
+          'tools': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'name': 'list_items',
+              'description': 'Returns a list of items.',
+              'inputSchema': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{},
+              },
+              'outputSchema': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+            },
+          ],
           '_meta': ?resultMeta,
         });
         break;

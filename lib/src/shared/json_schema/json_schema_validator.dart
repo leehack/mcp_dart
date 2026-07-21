@@ -29,6 +29,71 @@ class JsonSchemaValidationException implements Exception {
       'JsonSchemaValidationException: $message (at ${path.join('/')})';
 }
 
+/// Package-internal classification for invalid schema definitions.
+///
+/// The public name permits use across the SDK's internal libraries and is
+/// hidden from the package barrel.
+final class JsonSchemaDefinitionException
+    extends JsonSchemaValidationException {
+  JsonSchemaDefinitionException._(super.message);
+}
+
+/// Compiles [schema] and returns a reusable instance validator.
+///
+/// This SDK-internal helper is hidden from the package barrels. Compilation
+/// performs all schema-definition checks before the returned function validates
+/// an instance, which lets callers reject invalid contracts before invoking
+/// side-effecting application code.
+void Function(dynamic) compileJsonSchemaValidator(JsonSchema schema) {
+  final schemaValue = schema.toJsonValue();
+  final schemaVersion = _schemaVersionFor(schemaValue);
+  final guard = _SchemaGuard(schemaVersion)..inspect(schemaValue);
+  final normalizedSchema = _normalizeDialectIdentifiers(
+    schemaValue,
+    schemaVersion,
+  );
+  _LocalResourceReferences.rewrite(
+    normalizedSchema,
+    rewriteDynamicReferences:
+        schemaVersion == standards.SchemaVersion.draft2020_12,
+  );
+
+  final standards.JsonSchema compiledSchema;
+  try {
+    compiledSchema = standards.JsonSchema.create(
+      normalizedSchema,
+      schemaVersion: schemaVersion,
+    );
+  } on Object catch (error) {
+    final unresolvedReference = guard.unresolvedReference(error);
+    if (unresolvedReference != null) {
+      throw JsonSchemaDefinitionException._(
+        'External ${unresolvedReference.keyword} is unresolved: '
+        '${unresolvedReference.value}',
+      );
+    }
+    throw JsonSchemaDefinitionException._(
+      'Invalid JSON Schema schema: $error',
+    );
+  }
+
+  return (dynamic data) {
+    final result = compiledSchema.validate(data);
+    if (result.isValid) {
+      if (schemaVersion == standards.SchemaVersion.draft2020_12) {
+        _validateUnevaluatedItemLocations(normalizedSchema, data, const []);
+      }
+      return;
+    }
+
+    final error = result.errors.first;
+    throw JsonSchemaValidationException(
+      error.message,
+      _jsonPointerSegments(error.instancePath),
+    );
+  };
+}
+
 /// Adds standards-compliant JSON Schema validation to [JsonSchema].
 extension JsonSchemaValidation on JsonSchema {
   /// Validates [data] against this JSON Schema.
@@ -44,52 +109,7 @@ extension JsonSchemaValidation on JsonSchema {
   /// including `$dynamicRef`. Unresolved references outside the supplied
   /// document are rejected; validation never performs network I/O.
   void validate(dynamic data) {
-    final schemaValue = toJsonValue();
-    final schemaVersion = _schemaVersionFor(schemaValue);
-    final guard = _SchemaGuard(schemaVersion)..inspect(schemaValue);
-    final normalizedSchema = _normalizeDialectIdentifiers(
-      schemaValue,
-      schemaVersion,
-    );
-    _LocalResourceReferences.rewrite(
-      normalizedSchema,
-      rewriteDynamicReferences:
-          schemaVersion == standards.SchemaVersion.draft2020_12,
-    );
-
-    final standards.JsonSchema compiledSchema;
-    try {
-      compiledSchema = standards.JsonSchema.create(
-        normalizedSchema,
-        schemaVersion: schemaVersion,
-      );
-    } on Object catch (error) {
-      final unresolvedReference = guard.unresolvedReference(error);
-      if (unresolvedReference != null) {
-        throw JsonSchemaValidationException(
-          'External ${unresolvedReference.keyword} is unresolved: '
-          '${unresolvedReference.value}',
-        );
-      }
-      throw JsonSchemaValidationException(
-        'Invalid JSON Schema schema: $error',
-      );
-    }
-
-    final result = compiledSchema.validate(data);
-    if (result.isValid) {
-      if (schemaVersion != standards.SchemaVersion.draft2020_12) {
-        return;
-      }
-      _validateUnevaluatedItemLocations(normalizedSchema, data, const []);
-      return;
-    }
-
-    final error = result.errors.first;
-    throw JsonSchemaValidationException(
-      error.message,
-      _jsonPointerSegments(error.instancePath),
-    );
+    compileJsonSchemaValidator(this)(data);
   }
 }
 
@@ -669,12 +689,12 @@ class _SchemaGuard {
 
   void _inspectSchema(Object? schema, int depth) {
     if (depth > _maxSchemaDepth) {
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'JSON Schema exceeds the maximum depth of $_maxSchemaDepth',
       );
     }
     if (++_subschemas > _maxSubschemas) {
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'JSON Schema exceeds the maximum of $_maxSubschemas subschemas',
       );
     }
@@ -731,7 +751,7 @@ class _SchemaGuard {
       return;
     }
     if (dialect is! String || !_supportedDialects.contains(dialect)) {
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'Unsupported JSON Schema dialect: $dialect',
       );
     }
@@ -750,14 +770,14 @@ class _SchemaGuard {
       return;
     }
     if (value is! List || value.isEmpty) {
-      throw JsonSchemaValidationException(
+      throw JsonSchemaDefinitionException._(
         'Invalid JSON Schema schema: enum must be a non-empty array',
       );
     }
     for (var index = 0; index < value.length; index++) {
       for (var other = index + 1; other < value.length; other++) {
         if (_jsonEquals(value[index], value[other])) {
-          throw JsonSchemaValidationException(
+          throw JsonSchemaDefinitionException._(
             'Invalid JSON Schema schema: enum values must be unique',
           );
         }

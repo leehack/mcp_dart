@@ -3,12 +3,22 @@ import 'dart:async';
 import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/protocol_notification_validation.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 import 'package:mcp_dart/src/types/validation.dart'
     show readJsonObject, readOptionalJsonObject;
 
+import 'server_protocol_state.dart';
+
 final _logger = Logger("mcp_dart.server");
+
+void _validateServerNotification(
+  Object protocol,
+  JsonRpcNotification notification,
+) {
+  (protocol as Server)._validateOutgoingNotification(notification);
+}
 
 enum _ServerLifecycleState {
   uninitialized,
@@ -114,6 +124,7 @@ class Server extends Protocol {
         _supportedVersions =
             options?.supportedVersions ?? McpProtocol.stable.supportedVersions,
         super(options) {
+    writeProtocolNotificationValidator(this, _validateServerNotification);
     setRequestHandler<JsonRpcServerDiscoverRequest>(
       Method.serverDiscover,
       (request, extra) async => _onDiscover(),
@@ -167,8 +178,10 @@ class Server extends Protocol {
   void _resetSessionState() {
     _clientCapabilities = null;
     _clientVersion = null;
+    writeServerProtocolVersion(this, null);
     _lifecycleState = _ServerLifecycleState.uninitialized;
     _loggingLevels.clear();
+    clearServerTaskOutputValidators(this);
   }
 
   McpError _unsupportedProtocolVersionError(String requestedVersion) {
@@ -531,6 +544,35 @@ class Server extends Protocol {
   }
 
   McpError? _validateRequestTaskSemantics(JsonRpcRequest request) {
+    if (request is JsonRpcCallToolRequest) {
+      try {
+        request.callParams;
+      } on FormatException {
+        return McpError(
+          ErrorCode.invalidParams.value,
+          'Failed to parse params for request ${Method.toolsCall}',
+        );
+      }
+
+      final validatesTaskAugmentation = !_isStatelessRequest(request) &&
+          readServerProtocolVersion(this) ==
+              latestInitializationProtocolVersion &&
+          _capabilities.tasks?.requests?.tools?.call != null &&
+          request.isTaskAugmented;
+      if (validatesTaskAugmentation) {
+        try {
+          if (request.taskParams == null) {
+            throw const FormatException('Task params must be an object');
+          }
+        } on FormatException {
+          return McpError(
+            ErrorCode.invalidParams.value,
+            'Failed to parse task params for request ${Method.toolsCall}',
+          );
+        }
+      }
+    }
+
     final removedMethodError = _validateStatelessTaskMethods(request);
     if (removedMethodError != null) {
       return removedMethodError;
@@ -563,7 +605,16 @@ class Server extends Protocol {
       return true;
     }
     if (result is CreateTaskExtensionResult && _isStatelessRequest(request)) {
-      await _validateTaskCreationResult(result, request, extra);
+      try {
+        await _validateTaskCreationResult(result, request, extra);
+      } catch (_) {
+        removeServerTaskOutputValidator(
+          this,
+          extra.sessionId,
+          result.task.taskId,
+        );
+        rethrow;
+      }
       return true;
     }
 
@@ -644,6 +695,20 @@ class Server extends Protocol {
           meta: request.meta,
         ),
         extra,
+      );
+    } on ServerTaskOutputValidationError {
+      rethrow;
+    } on McpError catch (error, stackTrace) {
+      _logger.error(
+        'Failed to resolve task ${result.task.taskId} with tasks/get while '
+        'validating ${request.method}: $error\n$stackTrace',
+      );
+      throw McpError(
+        ErrorCode.invalidParams.value,
+        'Invalid ${request.method} result: CreateTaskExtensionResult taskId '
+        '${result.task.taskId} must be resolvable by tasks/get before '
+        'returning.',
+        {'taskId': result.task.taskId},
       );
     } catch (error, stackTrace) {
       _logger.error(
@@ -726,6 +791,48 @@ class Server extends Protocol {
     };
   }
 
+  void _validateTaskExtensionToolResult(
+    BaseResultData result,
+    JsonRpcRequest request,
+    RequestHandlerExtra extra,
+  ) {
+    if (!_isStatelessRequest(request) ||
+        request is! JsonRpcGetTaskRequest ||
+        result is! GetTaskExtensionResult) {
+      return;
+    }
+
+    final task = result.task;
+    if (task.status == TaskStatus.failed ||
+        task.status == TaskStatus.cancelled) {
+      removeServerTaskOutputValidator(
+        this,
+        extra.sessionId,
+        task.taskId,
+      );
+      return;
+    }
+    if (task.status != TaskStatus.completed) {
+      return;
+    }
+
+    final validator = readServerTaskOutputValidator(
+      this,
+      extra.sessionId,
+      task.taskId,
+    );
+    if (validator != null) {
+      validator(task.result!);
+      // Completed task results are immutable, so the captured schema contract
+      // is no longer needed after the final result validates successfully.
+      removeServerTaskOutputValidator(
+        this,
+        extra.sessionId,
+        task.taskId,
+      );
+    }
+  }
+
   String _expectedTaskExtensionResult(String method) {
     return switch (method) {
       Method.tasksGet => 'GetTaskExtensionResult',
@@ -738,6 +845,11 @@ class Server extends Protocol {
 
   bool _isLegacyTaskAugmentedRequest(JsonRpcCallToolRequest request) {
     if (_isStatelessRequest(request)) {
+      return false;
+    }
+    if (readServerProtocolVersion(this) ==
+            latestInitializationProtocolVersion &&
+        _capabilities.tasks?.requests?.tools?.call == null) {
       return false;
     }
     return request.isTaskAugmented;
@@ -884,6 +996,7 @@ class Server extends Protocol {
         _lifecycleState == _ServerLifecycleState.initializing) {
       _clientCapabilities = null;
       _clientVersion = null;
+      writeServerProtocolVersion(this, null);
       _lifecycleState = _ServerLifecycleState.uninitialized;
     }
   }
@@ -1095,6 +1208,14 @@ class Server extends Protocol {
             "Invalid ${request.method} result for MCP Tasks extension: Expected ${_expectedTaskExtensionResult(request.method)}",
           );
         }
+        _validateTaskExtensionToolResult(result, request, extra);
+        if (request is JsonRpcCancelTaskRequest) {
+          removeServerTaskOutputValidator(
+            this,
+            extra.sessionId,
+            request.cancelParams.taskId,
+          );
+        }
         return result;
       }
 
@@ -1128,6 +1249,7 @@ class Server extends Protocol {
         : legacySupportedVersions.isNotEmpty
             ? legacySupportedVersions.first
             : defaultProtocolVersion;
+    writeServerProtocolVersion(this, protocolVersion);
 
     return InitializeResult(
       protocolVersion: protocolVersion,
@@ -1300,6 +1422,31 @@ class Server extends Protocol {
         _logger.warn(
           "assertNotificationCapability called for unknown server-sent notification method: $method",
         );
+    }
+  }
+
+  void _validateOutgoingNotification(JsonRpcNotification notification) {
+    if (notification.method != Method.notificationsTasks) {
+      return;
+    }
+
+    final taskNotification = notification is JsonRpcTaskNotification
+        ? notification
+        : JsonRpcTaskNotification.fromJson(notification.toJson());
+    final task = taskNotification.task;
+    if (task.status == TaskStatus.failed ||
+        task.status == TaskStatus.cancelled) {
+      removeServerTaskOutputValidator(this, null, task.taskId);
+      return;
+    }
+    if (task.status != TaskStatus.completed) {
+      return;
+    }
+
+    final validator = readServerTaskOutputValidator(this, null, task.taskId);
+    if (validator != null) {
+      validator(task.result!);
+      removeServerTaskOutputValidator(this, null, task.taskId);
     }
   }
 

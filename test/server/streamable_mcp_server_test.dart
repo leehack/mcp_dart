@@ -471,6 +471,67 @@ void main() {
       expect(message['error']['message'], contains('missing_tool'));
     });
 
+    test('returns JSON tool errors for stateless input validation', () async {
+      var callbackCalled = false;
+      await server.stop();
+      server = StreamableMcpServer(
+        serverFactory: (sessionId) {
+          final mcpServer = McpServer(
+            const Implementation(name: 'JsonStatelessServer', version: '1.0.0'),
+            options: const McpServerOptions(
+              protocol: McpProtocol.stable,
+            ),
+          );
+          mcpServer.registerStatelessTool(
+            'validated_tool',
+            inputSchema: const ToolInputSchema(
+              properties: {'count': JsonInteger()},
+              required: ['count'],
+            ),
+            callback: (args, extra) async {
+              callbackCalled = true;
+              return const CallToolResult(content: []);
+            },
+          );
+          return mcpServer;
+        },
+        host: host,
+        port: port,
+        enableJsonResponse: true,
+      );
+      await server.start();
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          JsonRpcCallToolRequest(
+            id: 'invalid-input',
+            params: const {
+              'name': 'validated_tool',
+              'arguments': {'count': 'many'},
+            },
+            meta: statelessMeta(),
+          ).toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': previewProtocolVersion,
+          'Mcp-Method': Method.toolsCall,
+          'Mcp-Name': 'validated_tool',
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers['content-type'], startsWith('application/json'));
+      final message = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(message, isNot(contains('error')));
+      expect(message['id'], 'invalid-input');
+      expect(message['result']['resultType'], resultTypeComplete);
+      expect(message['result']['isError'], isTrue);
+      expect(callbackCalled, isFalse);
+    });
+
     test('rejects unsupported stateless version before session routing',
         () async {
       await server.stop();

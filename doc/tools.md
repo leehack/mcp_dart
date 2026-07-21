@@ -42,11 +42,27 @@ and custom vocabularies. Schema evaluation is bounded to a depth of 64 and
 1,024 subschemas. Keep external reference resolution and custom-vocabulary
 processing in application code when needed.
 
-MCP 2025-11-25 requires both `inputSchema` and `outputSchema` on a `Tool` to be
-object-root JSON Schema values. Use `JsonSchema.object(...)` or
-`JsonObject.fromJson(...)` at the root and put primitive values under named
-properties. Primitive root schemas such as `JsonSchema.string()` are rejected at
-the MCP wire boundary for tools and form elicitation.
+MCP 2025-11-25 requires `inputSchema`; `outputSchema` remains optional. Its
+structured tool values are object-rooted, so stable registrations use
+`JsonSchema.object(...)` or `JsonObject.fromJson(...)` at both schema roots and
+put primitive values under named properties. Primitive tool input schemas and
+primitive form-elicitation roots are rejected at the MCP wire boundary.
+
+When a client negotiates MCP `2025-11-25` or an earlier initialization-era
+version, it ignores non-object output schemas and does not retain non-object
+`structuredContent`; the result's compatibility `content` remains available.
+MCP `2026-07-28` clients validate and retain structured output with any JSON
+root.
+
+The Dart API reflects that spec difference while preserving the `2.2.2`
+surface. `ToolInputSchema` and the existing `registerTool(outputSchema:)`
+parameter are object-root compatibility types. `Tool.inputSchema` remains
+`JsonSchema`-typed so existing schema-parsing code still compiles, but parsing
+and serialization enforce its object root. `Tool.outputSchema` is broader
+because MCP `2026-07-28` permits any root; register those tools with
+`registerStatelessTool(outputJsonSchema:)` and inspect or update them through
+the returned `RegisteredStatelessTool`. This asymmetry is therefore intentional
+at the API boundary, not a difference in wire-field naming.
 
 ### Basic Types
 
@@ -363,7 +379,27 @@ server.registerTool(
 
 For deliverable tool-domain failures such as permission denials, return a tool
 result with `isError: true` instead of using JSON-RPC structural error codes.
-Reserve `McpError`/`ErrorCode` for protocol-level failures or invalid arguments.
+Use the same result shape for recoverable input and business-rule validation.
+Reserve `McpError`/`ErrorCode` for protocol-level failures such as malformed
+requests, unknown tools, or server failures.
+
+The built-in `inputSchema` rejection uses this error-result behavior for MCP
+`2025-11-25` and newer. When the server negotiates MCP `2025-06-18` or an
+earlier frozen specification, including MCP `2024-10-07`, schema-invalid
+arguments retain the historical JSON-RPC `invalidParams` response.
+Task-augmented calls also reject schema-invalid arguments as `invalidParams`
+before task acceptance; accepted calls must first return `CreateTaskResult`,
+with their eventual `CallToolResult` available through `tasks/result`.
+
+If a successful handler result does not satisfy the tool's registered
+`outputSchema`, or omits required `structuredContent`, the SDK returns JSON-RPC
+`internalError` under MCP `2025-11-25` and `2026-07-28`. An input or output
+schema the SDK cannot compile is reported through the same server-error
+channel. These are server-side contract failures, not invalid client requests.
+MCP `2025-06-18` and earlier peers retain the historical `invalidParams` code
+for these cases. An output schema that accepts JSON `null` still requires the
+`structuredContent` key; return `CallToolResult.fromStructuredNull()` rather
+than omitting structured content.
 
 ```dart
 server.registerTool(
@@ -393,9 +429,11 @@ server.registerTool(
   callback: (args, extra) async {
     // Custom business logic validation
     if (!isValid(args)) {
-      throw McpError(
-        ErrorCode.invalidParams.value,
-        'Validation failed: ${getErrors(args)}',
+      return CallToolResult(
+        isError: true,
+        content: [
+          TextContent(text: 'Validation failed: ${getErrors(args)}'),
+        ],
       );
     }
 
@@ -773,7 +811,10 @@ inputSchema: JsonSchema.object(
 callback: (args, extra) async {
   final count = args['count'] as int;
   if (count < 1 || count > 100) {
-    throw McpError(ErrorCode.invalidParams.value, 'Count out of range');
+    return const CallToolResult(
+      isError: true,
+      content: [TextContent(text: 'Count must be between 1 and 100.')],
+    );
   }
   ...
 }

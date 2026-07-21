@@ -45,23 +45,67 @@ class MockTransport extends Transport {
   }
 }
 
+Future<JsonRpcMessage> _receiveResponse(
+  MockTransport transport,
+  JsonRpcRequest request,
+) async {
+  transport.receiveMessage(request);
+  for (var attempt = 0; attempt < 100; attempt++) {
+    for (final message in transport.sentMessages.reversed) {
+      if (message case JsonRpcResponse(:final id) when id == request.id) {
+        return message;
+      }
+      if (message case JsonRpcError(:final id) when id == request.id) {
+        return message;
+      }
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw TimeoutException('No response received for request ${request.id}');
+}
+
+Future<void> _initializeServer(
+  MockTransport transport, {
+  String protocolVersion = latestInitializationProtocolVersion,
+}) async {
+  final response = await _receiveResponse(
+    transport,
+    JsonRpcInitializeRequest(
+      id: 'initialize-$protocolVersion',
+      initParams: InitializeRequestParams(
+        protocolVersion: protocolVersion,
+        capabilities: const ClientCapabilities(),
+        clientInfo: const Implementation(
+          name: 'TestClient',
+          version: '1.0.0',
+        ),
+      ),
+    ),
+  );
+  expect(response, isA<JsonRpcResponse>());
+  await Future<void>.delayed(Duration.zero);
+}
+
 class _ResultHandler extends CancelTaskResultHandler {
+  var createTaskCalls = 0;
   var cancelWithResultCalls = 0;
 
   @override
   Future<CreateTaskResult> createTask(
     Map<String, dynamic>? args,
     RequestHandlerExtra? extra,
-  ) async =>
-      const CreateTaskResult(
-        task: Task(
-          taskId: 'task1',
-          status: TaskStatus.working,
-          createdAt: '2026-05-14T10:00:00Z',
-          lastUpdatedAt: '2026-05-14T10:00:00Z',
-          ttl: null,
-        ),
-      );
+  ) async {
+    createTaskCalls++;
+    return const CreateTaskResult(
+      task: Task(
+        taskId: 'task1',
+        status: TaskStatus.working,
+        createdAt: '2026-05-14T10:00:00Z',
+        lastUpdatedAt: '2026-05-14T10:00:00Z',
+        ttl: null,
+      ),
+    );
+  }
 
   @override
   Future<Task> getTask(String taskId, RequestHandlerExtra? extra) async => Task(
@@ -164,6 +208,400 @@ void main() {
       final taskCapabilities = mcpServer.server.getCapabilities().tasks;
       expect(taskCapabilities, isNotNull);
       expect(taskCapabilities!.requests?.tools?.call, isNotNull);
+    });
+
+    test('registerStatelessToolTask returns a full-schema handle', () {
+      final outputSchema = JsonSchema.array(items: JsonSchema.string());
+      final registeredTool = mcpServer.experimental.registerStatelessToolTask(
+        'stateless_task_tool',
+        outputJsonSchema: outputSchema,
+        handler: _ResultHandler(),
+      );
+
+      expect(registeredTool, isA<RegisteredStatelessTool>());
+      expect(registeredTool.outputJsonSchema, same(outputSchema));
+      expect(registeredTool.outputSchema, isNull);
+      expect(registeredTool.statelessCallback, isNull);
+      expect(registeredTool.callback, isA<InterfaceToolCallback>());
+
+      final updatedSchema = JsonSchema.string();
+      registeredTool.updateStateless(outputJsonSchema: updatedSchema);
+      expect(registeredTool.outputJsonSchema, same(updatedSchema));
+    });
+
+    test('invalid task input is rejected before task acceptance', () async {
+      final handler = _ResultHandler();
+      mcpServer.experimental.registerToolTask(
+        'task_tool',
+        inputSchema: const ToolInputSchema(
+          properties: {'count': JsonInteger()},
+          required: ['count'],
+        ),
+        handler: handler,
+      );
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final response = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'invalid-task-input',
+          params: {
+            'name': 'task_tool',
+            'arguments': {'count': 'many'},
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+      expect(response, isA<JsonRpcError>());
+      final error = response as JsonRpcError;
+      expect(error.error.code, ErrorCode.invalidParams.value);
+      expect(
+        error.error.message,
+        contains("Invalid arguments for tool 'task_tool'"),
+      );
+      expect(handler.createTaskCalls, 0);
+    });
+
+    test('tasks/result validates the originating tool output schema', () async {
+      final handler = _ResultHandler();
+      mcpServer.experimental.registerToolTask(
+        'validated_task_tool',
+        outputSchema: ToolOutputSchema(
+          properties: {'result': JsonSchema.string()},
+          required: ['result'],
+        ),
+        handler: handler,
+      );
+      mcpServer.experimental.onTaskResult(
+        (taskId, extra) async =>
+            CallToolResult.fromStructuredContent({'wrong': 'field'}),
+      );
+
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final createResponse = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'create-validated-task',
+          params: {
+            'name': 'validated_task_tool',
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+      expect(createResponse, isA<JsonRpcResponse>());
+      expect(handler.createTaskCalls, 1);
+
+      final resultResponse = await _receiveResponse(
+        transport,
+        JsonRpcTaskResultRequest(
+          id: 'validated-task-result',
+          resultParams: const TaskResultRequest(taskId: 'task1'),
+          // Initialization-era metadata must not override the negotiated
+          // session version or downgrade modern error semantics.
+          meta: {McpMetaKey.protocolVersion: '2025-06-18'},
+        ),
+      );
+      expect(resultResponse, isA<JsonRpcError>());
+      final error = resultResponse as JsonRpcError;
+      expect(error.error.code, ErrorCode.internalError.value);
+      expect(
+        error.error.message,
+        "Tool 'validated_task_tool' returned structured content that does not match its output schema.",
+      );
+    });
+
+    test('tasks/result uses the schema captured when the task was accepted',
+        () async {
+      final handler = _ResultHandler();
+      final registeredTool = mcpServer.experimental.registerToolTask(
+        'snapshot_task_tool',
+        outputSchema: ToolOutputSchema(
+          properties: {'result': JsonSchema.string()},
+          required: ['result'],
+        ),
+        handler: handler,
+      );
+      mcpServer.experimental.onTaskResult(
+        (taskId, extra) async =>
+            CallToolResult.fromStructuredContent({'result': 'accepted'}),
+      );
+
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final createResponse = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'create-snapshot-task',
+          params: {
+            'name': 'snapshot_task_tool',
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+      expect(createResponse, isA<JsonRpcResponse>());
+
+      registeredTool.update(
+        name: 'renamed_snapshot_task_tool',
+        outputSchema: ToolOutputSchema(
+          properties: {'count': JsonSchema.integer()},
+          required: ['count'],
+        ),
+      );
+
+      final resultResponse = await _receiveResponse(
+        transport,
+        JsonRpcTaskResultRequest(
+          id: 'snapshot-task-result',
+          resultParams: const TaskResultRequest(taskId: 'task1'),
+        ),
+      );
+      expect(resultResponse, isA<JsonRpcResponse>());
+      final result = CallToolResult.fromJson(
+        (resultResponse as JsonRpcResponse).result,
+      );
+      expect(result.structuredContent, {'result': 'accepted'});
+    });
+
+    test('unexpected transport close clears captured task output schemas',
+        () async {
+      final oldContractHandler = _ResultHandler();
+      final freshTaskHandler = _ResultHandler();
+      mcpServer.experimental.registerToolTask(
+        'old_contract_task',
+        outputSchema: ToolOutputSchema(
+          properties: {'result': JsonSchema.string()},
+          required: ['result'],
+        ),
+        handler: oldContractHandler,
+      );
+      mcpServer.experimental.registerToolTask(
+        'fresh_task',
+        handler: freshTaskHandler,
+      );
+      mcpServer.experimental.onTaskResult(
+        (taskId, extra) async =>
+            CallToolResult.fromStructuredContent({'count': 1}),
+      );
+
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final firstCreateResponse = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'create-task-before-disconnect',
+          params: {
+            'name': 'old_contract_task',
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+      expect(firstCreateResponse, isA<JsonRpcResponse>());
+      expect(oldContractHandler.createTaskCalls, 1);
+
+      // Simulate the transport closing independently of McpServer.close().
+      // Both handlers deliberately return task1, so the fresh schema-free task
+      // would pick up the previous session's validator if it leaked.
+      await transport.close();
+      expect(mcpServer.isConnected, isFalse);
+
+      final reconnectedTransport = MockTransport();
+      try {
+        await mcpServer.connect(reconnectedTransport);
+        await _initializeServer(reconnectedTransport);
+
+        final secondCreateResponse = await _receiveResponse(
+          reconnectedTransport,
+          const JsonRpcCallToolRequest(
+            id: 'create-task-after-reconnect',
+            params: {
+              'name': 'fresh_task',
+              'task': {'ttl': 60000},
+            },
+          ),
+        );
+        expect(secondCreateResponse, isA<JsonRpcResponse>());
+        expect(freshTaskHandler.createTaskCalls, 1);
+
+        final resultResponse = await _receiveResponse(
+          reconnectedTransport,
+          JsonRpcTaskResultRequest(
+            id: 'task-result-after-reconnect',
+            resultParams: const TaskResultRequest(taskId: 'task1'),
+          ),
+        );
+        expect(resultResponse, isA<JsonRpcResponse>());
+        final result = CallToolResult.fromJson(
+          (resultResponse as JsonRpcResponse).result,
+        );
+        expect(result.structuredContent, {'count': 1});
+      } finally {
+        await mcpServer.close();
+      }
+    });
+
+    test('required task mode is checked before input schema', () async {
+      final handler = _ResultHandler();
+      mcpServer.experimental.registerToolTask(
+        'task_tool',
+        inputSchema: const ToolInputSchema(
+          properties: {'count': JsonInteger()},
+          required: ['count'],
+        ),
+        handler: handler,
+      );
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final response = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'missing-task-mode',
+          params: {
+            'name': 'task_tool',
+            'arguments': {'count': 'many'},
+          },
+        ),
+      );
+      expect(response, isA<JsonRpcError>());
+      final error = response as JsonRpcError;
+      expect(error.error.code, ErrorCode.methodNotFound.value);
+      expect(
+        error.error.message,
+        contains("requires task augmentation (taskSupport: 'required')"),
+      );
+      expect(handler.createTaskCalls, 0);
+    });
+
+    test('forbidden task mode returns methodNotFound', () async {
+      mcpServer.experimental.registerToolTask(
+        'task_tool',
+        inputSchema: const ToolInputSchema(),
+        handler: _ResultHandler(),
+      );
+      var callbackCalled = false;
+      mcpServer.registerTool(
+        'regular_tool',
+        inputSchema: const ToolInputSchema(
+          properties: {'count': JsonInteger()},
+          required: ['count'],
+        ),
+        callback: (args, extra) async {
+          callbackCalled = true;
+          return const CallToolResult(content: []);
+        },
+      );
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final response = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'forbidden-task-mode',
+          params: {
+            'name': 'regular_tool',
+            'arguments': {'count': 'many'},
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+      expect(response, isA<JsonRpcError>());
+      final error = response as JsonRpcError;
+      expect(error.error.code, ErrorCode.methodNotFound.value);
+      expect(
+        error.error.message,
+        contains(
+          "does not support task augmentation (taskSupport: 'forbidden')",
+        ),
+      );
+      expect(callbackCalled, isFalse);
+    });
+
+    test('server without task capability ignores task augmentation', () async {
+      var callbackCalled = false;
+      mcpServer.registerTool(
+        'regular_tool',
+        callback: (args, extra) async {
+          callbackCalled = true;
+          return const CallToolResult(content: []);
+        },
+      );
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final response = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'ignored-task-mode',
+          params: {
+            'name': 'regular_tool',
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+
+      expect(response, isA<JsonRpcResponse>());
+      expect(callbackCalled, isTrue);
+    });
+
+    test('malformed negotiated task metadata is invalidParams', () async {
+      final handler = _ResultHandler();
+      mcpServer.experimental.registerToolTask(
+        'task_tool',
+        inputSchema: const ToolInputSchema(),
+        handler: handler,
+      );
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final response = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'malformed-task-mode',
+          params: {'name': 'task_tool', 'task': 'not-an-object'},
+        ),
+      );
+
+      expect(response, isA<JsonRpcError>());
+      final error = response as JsonRpcError;
+      expect(error.error.code, ErrorCode.invalidParams.value);
+      expect(error.error.message, contains('Failed to parse task params'));
+      expect(handler.createTaskCalls, 0);
+    });
+
+    test('older protocols retain forbidden-task invalidParams', () async {
+      mcpServer.experimental.registerToolTask(
+        'task_tool',
+        inputSchema: const ToolInputSchema(),
+        handler: _ResultHandler(),
+      );
+      mcpServer.registerTool(
+        'regular_tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      await mcpServer.connect(transport);
+      await _initializeServer(transport, protocolVersion: '2025-06-18');
+
+      final response = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'legacy-forbidden-task-mode',
+          params: {
+            'name': 'regular_tool',
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+
+      expect(response, isA<JsonRpcError>());
+      expect(
+        (response as JsonRpcError).error.code,
+        ErrorCode.invalidParams.value,
+      );
     });
 
     test('registerToolTask duplicate does not mutate capabilities', () {

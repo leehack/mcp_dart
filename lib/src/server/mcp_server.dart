@@ -12,6 +12,7 @@ import 'package:mcp_dart/src/shared/uri_template.dart';
 import 'package:mcp_dart/src/types.dart';
 
 import 'server.dart';
+import 'server_protocol_state.dart';
 import 'tasks.dart';
 
 final _logger = Logger("mcp_dart.server.mcp");
@@ -53,6 +54,34 @@ List<McpIcon>? _iconsFromLegacyImage(ImageContent? image) {
 bool _isStateless2026Request(String? protocolVersion) =>
     protocolVersion != null && isStatelessProtocolVersion(protocolVersion);
 
+bool _usesModernToolValidationSemantics(String? protocolVersion) =>
+    protocolVersion == latestInitializationProtocolVersion ||
+    _isStateless2026Request(protocolVersion);
+
+bool _usesStableTaskNegotiation(String? protocolVersion) =>
+    protocolVersion == latestInitializationProtocolVersion;
+
+String? _protocolVersionForToolCall(
+  JsonRpcCallToolRequest request,
+  String? negotiatedProtocolVersion,
+) =>
+    _protocolVersionForRequest(
+      request.meta,
+      negotiatedProtocolVersion,
+    );
+
+String? _protocolVersionForRequest(
+  Map<String, dynamic>? meta,
+  String? negotiatedProtocolVersion,
+) {
+  final requestProtocolVersion = meta?[McpMetaKey.protocolVersion];
+  if (requestProtocolVersion is String &&
+      _isStateless2026Request(requestProtocolVersion)) {
+    return requestProtocolVersion;
+  }
+  return negotiatedProtocolVersion;
+}
+
 bool _isStableStructuredContentValue(Object? value) {
   if (value is Map<String, dynamic>) {
     return true;
@@ -90,6 +119,112 @@ JsonSchema? _resolveToolOutputJsonSchema(
     );
   }
   return outputJsonSchema ?? outputSchema;
+}
+
+int _toolOutputValidationErrorCode(String? protocolVersion) =>
+    _usesModernToolValidationSemantics(protocolVersion)
+        ? ErrorCode.internalError.value
+        : ErrorCode.invalidParams.value;
+
+void Function(dynamic)? _compileToolOutputValidator(
+  JsonSchema? outputSchema,
+  String toolName,
+  String? protocolVersion,
+) {
+  if (outputSchema == null) {
+    return null;
+  }
+
+  try {
+    return compileJsonSchemaValidator(outputSchema);
+  } on JsonSchemaDefinitionException catch (error, stackTrace) {
+    _logger.error(
+      "Invalid output schema for tool '$toolName': $error\n$stackTrace",
+    );
+    throw McpError(
+      _toolOutputValidationErrorCode(protocolVersion),
+      "Tool '$toolName' has an invalid or unsupported output schema.",
+    );
+  }
+}
+
+final class _TaskOutputValidationSnapshot {
+  final String toolName;
+  final void Function(dynamic) validateOutput;
+
+  const _TaskOutputValidationSnapshot({
+    required this.toolName,
+    required this.validateOutput,
+  });
+}
+
+void _validateToolOutputResult(
+  CallToolResult result,
+  void Function(dynamic)? validateOutput,
+  String toolName,
+  String? protocolVersion,
+) {
+  if (validateOutput == null || result.isError) {
+    return;
+  }
+
+  final errorCode = _toolOutputValidationErrorCode(protocolVersion);
+  if (!result.hasStructuredContent) {
+    throw McpError(
+      errorCode,
+      "Tool '$toolName' did not return structuredContent required by its "
+      'output schema.',
+    );
+  }
+
+  try {
+    validateOutput(result.structuredContentJson!.toJson());
+  } catch (error, stackTrace) {
+    _logger.error(
+      "Output validation failed for tool '$toolName': $error\n$stackTrace",
+    );
+    throw McpError(
+      errorCode,
+      "Tool '$toolName' returned structured content that does not match its "
+      'output schema.',
+    );
+  }
+}
+
+ServerTaskOutputValidator _taskOutputValidator(
+  void Function(dynamic) validateOutput,
+  String toolName,
+  String? protocolVersion,
+) {
+  return (resultJson) {
+    final CallToolResult result;
+    try {
+      result = CallToolResult.fromJson(resultJson);
+    } catch (error, stackTrace) {
+      _logger.error(
+        "Invalid completed task result for tool '$toolName': "
+        '$error\n$stackTrace',
+      );
+      throw ServerTaskOutputValidationError(
+        _toolOutputValidationErrorCode(protocolVersion),
+        "Tool '$toolName' returned an invalid completed task result.",
+      );
+    }
+    try {
+      _validateToolOutputResult(
+        result,
+        validateOutput,
+        toolName,
+        protocolVersion,
+      );
+    } on McpError catch (error) {
+      throw ServerTaskOutputValidationError(
+        error.code,
+        error.message,
+        error.data,
+      );
+    }
+  };
 }
 
 CallToolResult _toolResultForProtocol(
@@ -705,6 +840,10 @@ abstract class RegisteredTool {
   ToolInputSchema? get inputSchema;
 
   /// The output schema for the tool.
+  ///
+  /// This is the object-root compatibility view. For a stateless registration
+  /// with a non-object schema it returns `null`; use
+  /// [RegisteredStatelessTool.outputJsonSchema] for the complete schema.
   ToolOutputSchema? get outputSchema;
 
   /// Annotations for the tool.
@@ -742,7 +881,40 @@ abstract class RegisteredTool {
   });
 }
 
-class _RegisteredToolImpl implements RegisteredTool {
+/// A registered MCP 2026-07-28 tool with access to its stateless-only surface.
+///
+/// This additive subtype preserves the existing [RegisteredTool] contract while
+/// exposing output schemas with non-object roots. Task-backed registrations also
+/// use this handle; their [statelessCallback] is `null` because their callback is
+/// represented by [RegisteredTool.callback] as an [InterfaceToolCallback].
+abstract class RegisteredStatelessTool extends RegisteredTool {
+  /// The complete output schema, including non-object MCP 2026-07-28 roots.
+  JsonSchema? get outputJsonSchema;
+
+  /// The stateless function callback, or `null` for task-backed registrations.
+  StatelessToolFunction? get statelessCallback;
+
+  /// Updates MCP 2026-07-28 tool configuration without narrowing its schema.
+  ///
+  /// Set [clearOutputSchema] to remove the advertised output schema. It cannot
+  /// be combined with [outputJsonSchema]. A task-backed registration may update
+  /// its schema and common metadata through this method, but its handler remains
+  /// available through [RegisteredTool.callback].
+  void updateStateless({
+    String? name,
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    JsonSchema? outputJsonSchema,
+    bool clearOutputSchema = false,
+    ToolAnnotations? annotations,
+    ToolExecution? execution,
+    StatelessToolFunction? callback,
+    bool? enabled,
+  });
+}
+
+class _RegisteredToolImpl implements RegisteredStatelessTool {
   @override
   String name;
   @override
@@ -760,6 +932,7 @@ class _RegisteredToolImpl implements RegisteredTool {
   ToolExecution? execution;
   @override
   ToolCallback? callback;
+  @override
   StatelessToolFunction? statelessCallback;
   @override
   bool enabled = true;
@@ -791,6 +964,9 @@ class _RegisteredToolImpl implements RegisteredTool {
     }
     return null;
   }
+
+  @override
+  JsonSchema? get outputJsonSchema => _outputJsonSchema;
 
   Tool toTool({
     bool includeExecution = true,
@@ -842,6 +1018,71 @@ class _RegisteredToolImpl implements RegisteredTool {
     ToolCallback? callback,
     bool? enabled,
   }) {
+    _update(
+      name: name,
+      title: title,
+      description: description,
+      inputSchema: inputSchema,
+      outputJsonSchema: outputSchema,
+      annotations: annotations,
+      execution: execution,
+      legacyCallback: callback,
+      enabled: enabled,
+    );
+  }
+
+  @override
+  void updateStateless({
+    String? name,
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    JsonSchema? outputJsonSchema,
+    bool clearOutputSchema = false,
+    ToolAnnotations? annotations,
+    ToolExecution? execution,
+    StatelessToolFunction? callback,
+    bool? enabled,
+  }) {
+    if (callback != null && this.callback is InterfaceToolCallback) {
+      throw StateError(
+        'A task-backed tool callback cannot be replaced with a stateless '
+        'function. Update its InterfaceToolCallback through update() instead.',
+      );
+    }
+    _update(
+      name: name,
+      title: title,
+      description: description,
+      inputSchema: inputSchema,
+      outputJsonSchema: outputJsonSchema,
+      clearOutputSchema: clearOutputSchema,
+      annotations: annotations,
+      execution: execution,
+      newStatelessCallback: callback,
+      enabled: enabled,
+    );
+  }
+
+  void _update({
+    String? name,
+    String? title,
+    String? description,
+    ToolInputSchema? inputSchema,
+    JsonSchema? outputJsonSchema,
+    bool clearOutputSchema = false,
+    ToolAnnotations? annotations,
+    ToolExecution? execution,
+    ToolCallback? legacyCallback,
+    StatelessToolFunction? newStatelessCallback,
+    bool? enabled,
+  }) {
+    if (clearOutputSchema && outputJsonSchema != null) {
+      throw ArgumentError(
+        'clearOutputSchema cannot be combined with outputJsonSchema.',
+        'clearOutputSchema',
+      );
+    }
     if (name != null && name != this.name) {
       validateAndWarnToolName(name);
       _server._updateToolName(this.name, name, this);
@@ -850,12 +1091,20 @@ class _RegisteredToolImpl implements RegisteredTool {
     if (title != null) this.title = title;
     if (description != null) this.description = description;
     if (inputSchema != null) this.inputSchema = inputSchema;
-    if (outputSchema != null) _outputJsonSchema = outputSchema;
+    if (clearOutputSchema) {
+      _outputJsonSchema = null;
+    } else if (outputJsonSchema != null) {
+      _outputJsonSchema = outputJsonSchema;
+    }
     if (annotations != null) this.annotations = annotations;
     if (execution != null) this.execution = execution;
-    if (callback != null) {
-      this.callback = callback;
+    if (legacyCallback != null) {
+      callback = legacyCallback;
       statelessCallback = null;
+    }
+    if (newStatelessCallback != null) {
+      callback = null;
+      statelessCallback = newStatelessCallback;
     }
     if (enabled != null) this.enabled = enabled;
 
@@ -991,6 +1240,9 @@ class ExperimentalMcpServerTasks {
   ExperimentalMcpServerTasks(this._server);
 
   /// Registers a task-based tool with a config object and handler.
+  ///
+  /// Schema-invalid arguments are rejected before task acceptance, so
+  /// [ToolTaskHandler.createTask] is not invoked and no task is created.
   RegisteredTool registerToolTask(
     String name, {
     String? title,
@@ -1016,7 +1268,7 @@ class ExperimentalMcpServerTasks {
   }
 
   /// Registers a task-based tool with an arbitrary MCP 2026-07-28 output schema.
-  RegisteredTool registerStatelessToolTask(
+  RegisteredStatelessTool registerStatelessToolTask(
     String name, {
     String? title,
     String? description,
@@ -1042,7 +1294,7 @@ class ExperimentalMcpServerTasks {
     );
   }
 
-  RegisteredTool _registerToolTask(
+  _RegisteredToolImpl _registerToolTask(
     String name, {
     String? title,
     String? description,
@@ -1202,6 +1454,25 @@ class ExperimentalMcpServerTasks {
   }
 }
 
+// Keep the high-level facade's session-scoped state aligned with Protocol's
+// transport lifecycle without widening the deprecated Server public API.
+// ignore: deprecated_member_use_from_same_package
+final class _McpServerProtocol extends Server {
+  final void Function() _onConnectionClosedCallback;
+
+  _McpServerProtocol(
+    super.serverInfo, {
+    super.options,
+    required void Function() onConnectionClosed,
+  }) : _onConnectionClosedCallback = onConnectionClosed;
+
+  @override
+  void onConnectionClosed() {
+    super.onConnectionClosed();
+    _onConnectionClosedCallback();
+  }
+}
+
 /// High-level Model Context Protocol (MCP) server API.
 ///
 /// This class provides a set of high-level methods to register resources, tools,
@@ -1214,6 +1485,11 @@ class McpServer {
   final Map<String, _RegisteredResourceTemplateImpl>
       _registeredResourceTemplates = {};
   final Map<String, _RegisteredToolImpl> _registeredTools = {};
+  // Keep only the immutable validation contract captured when a task is
+  // accepted. This avoids retaining mutable registration handles or changing
+  // in-flight tasks when a tool is updated; terminal validation removes it.
+  final Map<(String?, String), _TaskOutputValidationSnapshot>
+      _taskOutputValidationsById = {};
   final Map<String, _RegisteredPromptImpl> _registeredPrompts = {};
 
   bool _resourceHandlersInitialized = false;
@@ -1235,8 +1511,11 @@ class McpServer {
 
   /// Creates an [McpServer] instance.
   McpServer(Implementation serverInfo, {McpServerOptions? options}) {
-    // ignore: deprecated_member_use_from_same_package
-    server = Server(serverInfo, options: options);
+    server = _McpServerProtocol(
+      serverInfo,
+      options: options,
+      onConnectionClosed: _taskOutputValidationsById.clear,
+    );
   }
 
   /// Connects the server to a communication [transport].
@@ -1258,7 +1537,12 @@ class McpServer {
 
   /// Closes the server connection.
   Future<void> close() async {
-    await server.close();
+    try {
+      await server.close();
+    } finally {
+      _taskOutputValidationsById.clear();
+      clearServerTaskOutputValidators(server);
+    }
   }
 
   /// Checks if the server is connected to a transport.
@@ -1739,6 +2023,7 @@ class McpServer {
             "Task cancellation callback must return a cancelled task",
           );
         }
+        _taskOutputValidationsById.remove((extra.sessionId, task.taskId));
         return task;
       },
       (id, params, meta) => JsonRpcCancelTaskRequest.fromJson({
@@ -1755,7 +2040,12 @@ class McpServer {
         Method.tasksGet,
         (request, extra) async {
           final taskId = request.getParams.taskId;
-          return await Future.value(_getTaskCallback!(taskId, extra));
+          final task = await Future.value(_getTaskCallback!(taskId, extra));
+          if (task.status == TaskStatus.failed ||
+              task.status == TaskStatus.cancelled) {
+            _taskOutputValidationsById.remove((extra.sessionId, taskId));
+          }
+          return task;
         },
         (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
           'jsonrpc': jsonRpcVersion,
@@ -1772,10 +2062,29 @@ class McpServer {
         Method.tasksResult,
         (request, extra) async {
           final taskId = request.resultParams.taskId;
+          final taskKey = (extra.sessionId, taskId);
+          final validationSnapshot = _taskOutputValidationsById[taskKey];
+          final protocolVersion = _protocolVersionForRequest(
+            request.meta,
+            readServerProtocolVersion(server),
+          );
           final result = await Future.value(
             _taskResultCallback!(taskId, extra),
           );
-          return _withRelatedTaskMeta(result, taskId);
+          final resultWithMeta = _withRelatedTaskMeta(result, taskId);
+          if (validationSnapshot != null) {
+            _validateToolOutputResult(
+              resultWithMeta,
+              validationSnapshot.validateOutput,
+              validationSnapshot.toolName,
+              protocolVersion,
+            );
+            // Terminal task results are immutable. Once the final result has
+            // passed its captured contract, repeated retrieval needs no
+            // registration state.
+            _taskOutputValidationsById.remove(taskKey);
+          }
+          return _toolResultForProtocol(resultWithMeta, protocolVersion);
         },
         (id, params, meta) => JsonRpcTaskResultRequest.fromJson({
           'jsonrpc': jsonRpcVersion,
@@ -1839,8 +2148,24 @@ class McpServer {
         if (capabilityError != null) {
           throw capabilityError;
         }
-        final toolName = request.callParams.name;
-        final toolArgs = request.callParams.arguments;
+        final callParams = request.callParams;
+        final toolName = callParams.name;
+        final toolArgs = callParams.arguments;
+        final protocolVersion = _protocolVersionForToolCall(
+          request,
+          readServerProtocolVersion(server),
+        );
+        final isStatelessRequest = _isStateless2026Request(protocolVersion);
+        final hasTaskAugmentation =
+            !isStatelessRequest && request.isTaskAugmented;
+        final advertisesTaskAugmentedToolCalls =
+            server.getCapabilities().tasks?.requests?.tools?.call != null;
+        // MCP 2025-11-25 requires receivers without the negotiated capability
+        // to ignore task augmentation. Older frozen peers retain the SDK's
+        // historical interpretation of a present task member.
+        final isTaskRequest = hasTaskAugmentation &&
+            (!_usesStableTaskNegotiation(protocolVersion) ||
+                advertisesTaskAugmentedToolCalls);
         final registeredTool = _registeredTools[toolName];
         if (registeredTool == null) {
           throw McpError(
@@ -1855,61 +2180,85 @@ class McpServer {
           );
         }
 
+        final taskSupport =
+            registeredTool.execution?.taskSupport ?? 'forbidden';
+        final isTaskHandler = registeredTool.callback is InterfaceToolCallback;
+
+        if ((taskSupport == 'required' || taskSupport == 'optional') &&
+            !isTaskHandler) {
+          throw McpError(
+            ErrorCode.internalError.value,
+            "Tool '$toolName' has taskSupport '$taskSupport' but was not registered with registerToolTask",
+          );
+        }
+        if (taskSupport == 'required' &&
+            !isTaskRequest &&
+            !isStatelessRequest) {
+          throw McpError(
+            ErrorCode.methodNotFound.value,
+            "Tool '$toolName' requires task augmentation (taskSupport: 'required')",
+          );
+        }
+        if (taskSupport == 'forbidden' && isTaskRequest) {
+          throw McpError(
+            _usesStableTaskNegotiation(protocolVersion)
+                ? ErrorCode.methodNotFound.value
+                : ErrorCode.invalidParams.value,
+            "Tool '$toolName' does not support task augmentation (taskSupport: 'forbidden')",
+          );
+        }
+
         // Validate arguments against schema
         if (registeredTool.inputSchema != null) {
           try {
             registeredTool.inputSchema!.validate(toolArgs);
-          } catch (e) {
+          } on JsonSchemaDefinitionException catch (error, stackTrace) {
+            _logger.error(
+              "Invalid input schema for tool '$toolName': "
+              '$error\n$stackTrace',
+            );
+            if (!_usesModernToolValidationSemantics(protocolVersion)) {
+              throw McpError(
+                ErrorCode.invalidParams.value,
+                "Invalid arguments for tool '$toolName': $error",
+              );
+            }
             throw McpError(
-              ErrorCode.invalidParams.value,
-              "Invalid arguments for tool '$toolName': $e",
+              ErrorCode.internalError.value,
+              "Tool '$toolName' has an invalid or unsupported input schema.",
+            );
+          } on JsonSchemaValidationException catch (error) {
+            final message = "Invalid arguments for tool '$toolName': $error";
+            // A legacy task request cannot return its underlying tool result
+            // until after a task has been accepted. Reject invalid input before
+            // invoking createTask so accepted calls retain CreateTaskResult.
+            if (!_usesModernToolValidationSemantics(protocolVersion) ||
+                isTaskRequest) {
+              throw McpError(
+                ErrorCode.invalidParams.value,
+                message,
+              );
+            }
+            return _toolResultForProtocol(
+              CallToolResult(
+                content: [TextContent(text: message)],
+                isError: true,
+              ),
+              protocolVersion,
             );
           }
         }
 
+        final validateOutput = _compileToolOutputValidator(
+          registeredTool._outputJsonSchema,
+          toolName,
+          protocolVersion,
+        );
+
         try {
-          final protocolVersion = request.meta?[McpMetaKey.protocolVersion];
-          final isStatelessRequest = protocolVersion is String &&
-              isStatelessProtocolVersion(protocolVersion);
-          final isTaskRequest = !isStatelessRequest && request.isTaskAugmented;
-          final taskSupport =
-              registeredTool.execution?.taskSupport ?? 'forbidden';
-
-          final isTaskHandler =
-              registeredTool.callback is InterfaceToolCallback;
-
-          // Validate task hint configuration
-          if ((taskSupport == 'required' || taskSupport == 'optional') &&
-              !isTaskHandler) {
-            throw McpError(
-              ErrorCode.internalError.value,
-              "Tool '$toolName' has taskSupport '$taskSupport' but was not registered with registerToolTask",
-            );
-          }
-
           dynamic result;
-          if (taskSupport == 'required') {
+          if (taskSupport == 'required' || taskSupport == 'optional') {
             if (!isTaskRequest) {
-              if (isStatelessRequest) {
-                result = await _handleAutomaticTaskPolling(
-                  registeredTool,
-                  toolArgs,
-                  extra,
-                );
-              } else {
-                throw McpError(
-                  ErrorCode.methodNotFound.value,
-                  "Tool '$toolName' requires task augmentation (taskSupport: 'required')",
-                );
-              }
-            } else {
-              final InterfaceToolCallback taskHandler =
-                  registeredTool.callback as InterfaceToolCallback;
-              result = await taskHandler.handler.createTask(toolArgs, extra);
-            }
-          } else if (taskSupport == 'optional') {
-            if (!isTaskRequest) {
-              // Ensure we have a task handler for automatic polling (checked above, but safe cast)
               result = await _handleAutomaticTaskPolling(
                 registeredTool,
                 toolArgs,
@@ -1918,16 +2267,21 @@ class McpServer {
             } else {
               final InterfaceToolCallback taskHandler =
                   registeredTool.callback as InterfaceToolCallback;
-              result = await taskHandler.handler.createTask(toolArgs, extra);
+              final taskResult =
+                  await taskHandler.handler.createTask(toolArgs, extra);
+              if (validateOutput != null) {
+                _taskOutputValidationsById[(
+                  extra.sessionId,
+                  taskResult.task.taskId
+                )] = _TaskOutputValidationSnapshot(
+                  toolName: toolName,
+                  validateOutput: validateOutput,
+                );
+              }
+              result = taskResult;
             }
           } else {
             // taskSupport is 'forbidden' or not specified
-            if (isTaskRequest) {
-              throw McpError(
-                ErrorCode.invalidParams.value,
-                "Tool '$toolName' does not support task augmentation (taskSupport: 'forbidden')",
-              );
-            }
             final statelessCallback = registeredTool.statelessCallback;
             if (statelessCallback != null) {
               result = await statelessCallback(toolArgs, extra);
@@ -1940,31 +2294,48 @@ class McpServer {
             }
           }
 
-          if (registeredTool._outputJsonSchema != null &&
-              result is CallToolResult) {
-            if (result.isError != true) {
-              try {
-                registeredTool._outputJsonSchema!.validate(
-                  result.structuredContentJson?.toJson(),
-                );
-              } catch (error, stackTrace) {
-                _logger.error(
-                  "Output validation failed for tool '$toolName': "
-                  '$error\n$stackTrace',
-                );
-                throw McpError(
-                  ErrorCode.invalidParams.value,
-                  "Tool '$toolName' returned structured content that does not "
-                  'match its output schema.',
-                );
+          if (result is CallToolResult) {
+            _validateToolOutputResult(
+              result,
+              validateOutput,
+              toolName,
+              protocolVersion,
+            );
+          }
+
+          if (result is CreateTaskExtensionResult &&
+              validateOutput != null &&
+              _isStateless2026Request(protocolVersion)) {
+            final taskValidator = _taskOutputValidator(
+              validateOutput,
+              toolName,
+              protocolVersion,
+            );
+            writeServerTaskOutputValidator(
+              server,
+              extra.sessionId,
+              result.task.taskId,
+              taskValidator,
+            );
+            try {
+              if (result.task.status == TaskStatus.completed &&
+                  result.task.result != null) {
+                taskValidator(result.task.result!);
               }
+            } catch (_) {
+              removeServerTaskOutputValidator(
+                server,
+                extra.sessionId,
+                result.task.taskId,
+              );
+              rethrow;
             }
           }
 
           if (result is CallToolResult) {
             return _toolResultForProtocol(
               result,
-              protocolVersion is String ? protocolVersion : null,
+              protocolVersion,
             );
           }
 
@@ -2450,8 +2821,13 @@ class McpServer {
   /// [name] is the unique name of the tool.
   /// [title] is a human-readable title.
   /// [description] explains what the tool does.
-  /// [inputSchema] defines the expected arguments.
-  /// [outputSchema] defines the result structure.
+  /// [inputSchema] defines the expected arguments. For normal tool calls,
+  /// arguments that do not match it skip [callback] and, for MCP `2025-11-25`
+  /// and newer, produce a [CallToolResult] with `isError: true`. Frozen MCP
+  /// `2025-06-18` and earlier peers retain JSON-RPC `invalidParams`
+  /// compatibility. Unknown tools and malformed `tools/call` requests remain
+  /// JSON-RPC errors.
+  /// [outputSchema] defines the stable object-root result structure.
   /// [annotations] provides additional metadata.
   /// [callback] is the function executed when the tool is called.
   RegisteredTool registerTool(
@@ -2477,12 +2853,18 @@ class McpServer {
     );
   }
 
-  /// Registers an MCP 2026-07-28 tool that may return multi-round results.
+  /// Registers an MCP 2026-07-28 tool with stateless-only capabilities.
   ///
   /// Use this instead of [registerTool] when [callback] can return an
-  /// [InputRequiredResult]. Callbacks that always return [CallToolResult] should
-  /// continue to use [registerTool].
-  RegisteredTool registerStatelessTool(
+  /// [InputRequiredResult] or when the tool has a non-object [outputJsonSchema].
+  /// A callback that always returns [CallToolResult] can continue to use
+  /// [registerTool] when its output schema is object-rooted.
+  ///
+  /// Arguments that do not satisfy [inputSchema] skip [callback] and return a
+  /// [CallToolResult] with `isError: true`. A successful [CallToolResult] that
+  /// does not satisfy [outputSchema] or [outputJsonSchema] produces JSON-RPC
+  /// `internalError` because it violates the server's advertised contract.
+  RegisteredStatelessTool registerStatelessTool(
     String name, {
     String? title,
     String? description,
@@ -2508,7 +2890,7 @@ class McpServer {
   }
 
   /// Internal registration method.
-  RegisteredTool _registerTool(
+  _RegisteredToolImpl _registerTool(
     String name, {
     String? title,
     String? description,
@@ -2762,7 +3144,8 @@ class McpServer {
         completion: CompletionResultData(values: [], hasMore: false),
       );
 
-  /// Handles automatic task polling for tools with taskSupport 'optional'.
+  /// Handles automatic task polling for task-backed tools invoked without
+  /// legacy task augmentation.
   Future<CallToolResult> _handleAutomaticTaskPolling(
     _RegisteredToolImpl tool,
     Map<String, dynamic>? args,

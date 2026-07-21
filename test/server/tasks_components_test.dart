@@ -248,6 +248,42 @@ void main() {
       );
     });
 
+    test('handle preserves explicit null structured content', () async {
+      final task = await store.createTask(
+        const TaskCreationParams(),
+        123,
+        {'name': 'test_tool'},
+        'session1',
+      );
+
+      final future = handler.handle(task.taskId);
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      await store.storeTaskResult(
+        task.taskId,
+        TaskStatus.completed,
+        const CallToolResult(
+          content: [TextContent(text: 'null')],
+          structuredContentJson: JsonValue.nullValue,
+          hasStructuredContent: true,
+          meta: {'source': 'handler'},
+        ),
+      );
+
+      final result = await future;
+      expect(result.hasStructuredContent, isTrue);
+      expect(result.structuredContentJson, JsonValue.nullValue);
+      expect(result.meta?['source'], 'handler');
+      expect(
+        result.meta?[relatedTaskMetadataKey]?['taskId'],
+        task.taskId,
+      );
+      expect(
+        result.meta?[legacyRelatedTaskMetadataKey]?['taskId'],
+        task.taskId,
+      );
+    });
+
     test('handle processes queued requests (elicit)', () async {
       final task = await store.createTask(
         const TaskCreationParams(),

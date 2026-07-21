@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/server.dart';
+import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -152,13 +153,343 @@ void main() {
       final response = transport.sentMessages.last;
       expect(response, isA<JsonRpcError>());
       final errorResponse = response as JsonRpcError;
-      expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
+      expect(errorResponse.error.code, equals(ErrorCode.internalError.value));
       expect(
         errorResponse.error.message,
         equals(
           "Tool 'invalid_array_tool' returned structured content that does not match its output schema.",
         ),
       );
+    });
+
+    test('MCP 2026 completed task output uses its accepted schema snapshot',
+        () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.stable,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      final registeredTool = mcpServer.registerStatelessTool(
+        'task_array_tool',
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
+        callback: (args, extra) async => const CreateTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'output-task',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+      );
+
+      var taskReads = 0;
+      mcpServer.server.setRequestHandler<JsonRpcGetTaskRequest>(
+        Method.tasksGet,
+        (request, extra) async {
+          taskReads++;
+          if (taskReads == 1) {
+            return const GetTaskExtensionResult(
+              task: TaskExtensionTask(
+                taskId: 'output-task',
+                status: TaskStatus.working,
+                createdAt: '2026-07-28T00:00:00Z',
+                lastUpdatedAt: '2026-07-28T00:00:00Z',
+                ttlMs: null,
+              ),
+            );
+          }
+          return GetTaskExtensionResult(
+            task: TaskExtensionTask(
+              taskId: 'output-task',
+              status: TaskStatus.completed,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:01:00Z',
+              ttlMs: null,
+              result: CallToolResult.fromStructuredArray([1]).toJson(),
+            ),
+          );
+        },
+        (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.tasksGet,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+
+      await mcpServer.connect(transport);
+      final statelessMeta = _statelessMeta()
+        ..[McpMetaKey.clientCapabilities] = const ClientCapabilities(
+          extensions: {mcpTasksExtensionId: {}},
+        ).toJson();
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 'create-output-task',
+          params: const CallToolRequest(name: 'task_array_tool').toJson(),
+          meta: statelessMeta,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+      expect(taskReads, 1);
+
+      // Updating the registration must not change an already accepted task's
+      // output contract or the name used in its diagnostics.
+      registeredTool.updateStateless(
+        name: 'renamed_task_array_tool',
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.integer()),
+      );
+      transport.sentMessages.clear();
+      transport.receiveMessage(
+        JsonRpcGetTaskRequest(
+          id: 'read-output-task',
+          getParams: const GetTaskRequest(taskId: 'output-task'),
+          meta: _statelessMeta(),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.internalError.value);
+      expect(
+        response.error.message,
+        "Tool 'task_array_tool' returned structured content that does not match its output schema.",
+      );
+    });
+
+    test('MCP 2026 rejects invalid output in an immediately completed task',
+        () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.stable,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      mcpServer.registerStatelessTool(
+        'immediate_task_tool',
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
+        callback: (args, extra) async => CreateTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'immediate-output-task',
+            status: TaskStatus.completed,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+            result: CallToolResult.fromStructuredArray([1]).toJson(),
+          ),
+        ),
+      );
+      mcpServer.server.setRequestHandler<JsonRpcGetTaskRequest>(
+        Method.tasksGet,
+        (request, extra) async => const GetTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'immediate-output-task',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.tasksGet,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+
+      await mcpServer.connect(transport);
+      final statelessMeta = _statelessMeta()
+        ..[McpMetaKey.clientCapabilities] = const ClientCapabilities(
+          extensions: {mcpTasksExtensionId: {}},
+        ).toJson();
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 'create-completed-output-task',
+          params: const CallToolRequest(name: 'immediate_task_tool').toJson(),
+          meta: statelessMeta,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.internalError.value);
+      expect(
+        response.error.message,
+        "Tool 'immediate_task_tool' returned structured content that does not match its output schema.",
+      );
+    });
+
+    test('MCP 2026 validates completed task notification output', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.stable,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+      late RequestHandlerExtra toolExtra;
+      mcpServer.registerStatelessTool(
+        'notified_task_tool',
+        outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
+        callback: (args, extra) async {
+          toolExtra = extra;
+          return const CreateTaskExtensionResult(
+            task: TaskExtensionTask(
+              taskId: 'notified-output-task',
+              status: TaskStatus.working,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:00:00Z',
+              ttlMs: null,
+            ),
+          );
+        },
+      );
+      mcpServer.server.setRequestHandler<JsonRpcGetTaskRequest>(
+        Method.tasksGet,
+        (request, extra) async => const GetTaskExtensionResult(
+          task: TaskExtensionTask(
+            taskId: 'notified-output-task',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'id': id,
+          'method': Method.tasksGet,
+          'params': params,
+          if (meta != null) '_meta': meta,
+        }),
+      );
+
+      await mcpServer.connect(transport);
+      final statelessMeta = _statelessMeta()
+        ..[McpMetaKey.clientCapabilities] = const ClientCapabilities(
+          extensions: {mcpTasksExtensionId: {}},
+        ).toJson();
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 'create-notified-output-task',
+          params: const CallToolRequest(name: 'notified_task_tool').toJson(),
+          meta: statelessMeta,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+
+      transport.sentMessages.clear();
+      await expectLater(
+        toolExtra.sendNotification(
+          JsonRpcTaskNotification(
+            task: TaskExtensionTask(
+              taskId: 'notified-output-task',
+              status: TaskStatus.completed,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:01:00Z',
+              ttlMs: null,
+              result: CallToolResult.fromStructuredArray([1]).toJson(),
+            ),
+          ),
+        ),
+        throwsA(
+          isA<McpError>()
+              .having(
+                (error) => error.code,
+                'code',
+                ErrorCode.internalError.value,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains("Tool 'notified_task_tool'"),
+              ),
+        ),
+      );
+      expect(transport.sentMessages, isEmpty);
+    });
+
+    test('nullable output schema rejects omitted structured content', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.stable,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      mcpServer.registerStatelessTool(
+        'missing_null_tool',
+        outputJsonSchema: JsonSchema.nullValue(),
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+
+      await mcpServer.connect(transport);
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 2,
+          params: const CallToolRequest(name: 'missing_null_tool').toJson(),
+          meta: _statelessMeta(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.internalError.value);
+      expect(
+        response.error.message,
+        "Tool 'missing_null_tool' did not return structuredContent required by its output schema.",
+      );
+    });
+
+    test('nullable output schema accepts explicit structured null', () async {
+      mcpServer = McpServer(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.stable,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      mcpServer.registerStatelessTool(
+        'explicit_null_tool',
+        outputJsonSchema: JsonSchema.nullValue(),
+        callback: (args, extra) async => CallToolResult.fromStructuredNull(),
+      );
+
+      await mcpServer.connect(transport);
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 2,
+          params: const CallToolRequest(name: 'explicit_null_tool').toJson(),
+          meta: _statelessMeta(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.last as JsonRpcResponse;
+      expect(response.result, contains('structuredContent'));
+      expect(response.result['structuredContent'], isNull);
     });
 
     test('MCP 2026 calls enforce full 2020-12 output schemas', () async {
@@ -216,7 +547,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final response = transport.sentMessages.last as JsonRpcError;
-      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(response.error.code, ErrorCode.internalError.value);
       expect(
         response.error.message,
         contains('does not match its output schema'),
@@ -337,13 +668,114 @@ void main() {
       final response = transport.sentMessages.last;
       expect(response, isA<JsonRpcError>());
       final errorResponse = response as JsonRpcError;
-      expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
+      expect(errorResponse.error.code, equals(ErrorCode.internalError.value));
       expect(
         errorResponse.error.message,
         equals(
           "Tool 'invalid_tool' returned structured content that does not match its output schema.",
         ),
       );
+    });
+
+    test('invalid output schema is reported as a server contract error',
+        () async {
+      var handlerInvoked = false;
+      mcpServer.registerTool(
+        'invalid_output_schema_tool',
+        outputSchema: JsonObject.fromJson({
+          r'$schema': 'https://example.com/unsupported-schema',
+          'type': 'object',
+        }),
+        callback: (args, extra) async {
+          handlerInvoked = true;
+          return CallToolResult.fromStructuredContent({});
+        },
+      );
+
+      await mcpServer.connect(transport);
+      await _sendInit(transport);
+
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 2,
+          params: const CallToolRequest(
+            name: 'invalid_output_schema_tool',
+          ).toJson(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.internalError.value);
+      expect(
+        response.error.message,
+        "Tool 'invalid_output_schema_tool' has an invalid or unsupported output schema.",
+      );
+      expect(handlerInvoked, isFalse);
+    });
+
+    test('older protocols retain invalidParams for invalid output', () async {
+      mcpServer.registerTool(
+        'legacy_invalid_tool',
+        outputSchema: JsonObject(
+          properties: {'result': JsonSchema.string()},
+          required: ['result'],
+        ),
+        callback: (args, extra) async {
+          return CallToolResult.fromStructuredContent({'wrong': 'value'});
+        },
+      );
+
+      await mcpServer.connect(transport);
+      await _sendInit(transport, protocolVersion: '2025-06-18');
+
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 2,
+          params: const CallToolRequest(name: 'legacy_invalid_tool').toJson(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+    });
+
+    test('older protocols classify invalid output schemas as invalidParams',
+        () async {
+      var handlerInvoked = false;
+      mcpServer.registerTool(
+        'legacy_invalid_output_schema_tool',
+        outputSchema: JsonObject.fromJson({
+          r'$schema': 'https://example.com/unsupported-schema',
+          'type': 'object',
+        }),
+        callback: (args, extra) async {
+          handlerInvoked = true;
+          return CallToolResult.fromStructuredContent({});
+        },
+      );
+
+      await mcpServer.connect(transport);
+      await _sendInit(transport, protocolVersion: '2025-06-18');
+
+      transport.receiveMessage(
+        JsonRpcCallToolRequest(
+          id: 2,
+          params: const CallToolRequest(
+            name: 'legacy_invalid_output_schema_tool',
+          ).toJson(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.last as JsonRpcError;
+      expect(response.error.code, ErrorCode.invalidParams.value);
+      expect(
+        response.error.message,
+        "Tool 'legacy_invalid_output_schema_tool' has an invalid or unsupported output schema.",
+      );
+      expect(handlerInvoked, isFalse);
     });
 
     test('invalid type in output fails validation', () async {
@@ -375,7 +807,7 @@ void main() {
       final response = transport.sentMessages.last;
       expect(response, isA<JsonRpcError>());
       final errorResponse = response as JsonRpcError;
-      expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
+      expect(errorResponse.error.code, equals(ErrorCode.internalError.value));
       expect(
         errorResponse.error.message,
         equals(
@@ -434,7 +866,7 @@ void main() {
           required: ['result'],
         ),
         callback: (args, extra) async {
-          // Returning unstructured content means structuredContent is {}
+          // Returning unstructured content omits structuredContent entirely.
           return const CallToolResult(
             content: [TextContent(text: 'text result')],
           );
@@ -454,11 +886,11 @@ void main() {
       final response = transport.sentMessages.last;
       expect(response, isA<JsonRpcError>());
       final errorResponse = response as JsonRpcError;
-      expect(errorResponse.error.code, equals(ErrorCode.invalidParams.value));
+      expect(errorResponse.error.code, equals(ErrorCode.internalError.value));
       expect(
         errorResponse.error.message,
         equals(
-          "Tool 'unstructured_tool' returned structured content that does not match its output schema.",
+          "Tool 'unstructured_tool' did not return structuredContent required by its output schema.",
         ),
       );
     });
@@ -472,13 +904,16 @@ Map<String, dynamic> _statelessMeta() => {
       McpMetaKey.clientCapabilities: const ClientCapabilities().toJson(),
     };
 
-Future<void> _sendInit(MockTransport transport) async {
+Future<void> _sendInit(
+  MockTransport transport, {
+  String protocolVersion = latestInitializationProtocolVersion,
+}) async {
   final initRequest = JsonRpcInitializeRequest(
     id: 1,
-    initParams: const InitializeRequestParams(
-      protocolVersion: latestInitializationProtocolVersion,
-      capabilities: ClientCapabilities(),
-      clientInfo: Implementation(name: 'TestClient', version: '1.0.0'),
+    initParams: InitializeRequestParams(
+      protocolVersion: protocolVersion,
+      capabilities: const ClientCapabilities(),
+      clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
     ),
   );
   transport.receiveMessage(initRequest);

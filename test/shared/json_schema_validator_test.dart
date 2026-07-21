@@ -1,6 +1,6 @@
-import 'package:test/test.dart';
 import 'package:mcp_dart/src/shared/json_schema/json_schema.dart';
 import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('JsonSchemaValidationException', () {
@@ -8,11 +8,65 @@ void main() {
       final exception = JsonSchemaValidationException('test error', ['a', 'b']);
       expect(exception.toString(), contains('test error'));
       expect(exception.toString(), contains('a/b'));
+      expect(exception, isNot(isA<JsonSchemaDefinitionException>()));
     });
 
     test('handles empty path', () {
       final exception = JsonSchemaValidationException('error', []);
       expect(exception.toString(), contains('error'));
+    });
+
+    test('distinguishes schema configuration errors', () {
+      final schema = JsonSchema.fromJson({
+        r'$schema': 'https://example.com/unsupported-schema',
+        'type': 'object',
+      });
+
+      expect(
+        () => schema.validate({}),
+        throwsA(
+          isA<JsonSchemaDefinitionException>().having(
+            (error) => error.message,
+            'message',
+            contains('Unsupported JSON Schema dialect'),
+          ),
+        ),
+      );
+    });
+
+    test('classifies schema compiler failures as definition errors', () {
+      final schema = JsonSchema.fromJson({
+        'type': 'string',
+        'minLength': -1,
+      });
+
+      expect(
+        () => schema.validate('value'),
+        throwsA(
+          isA<JsonSchemaDefinitionException>().having(
+            (error) => error.message,
+            'message',
+            contains('Invalid JSON Schema schema'),
+          ),
+        ),
+      );
+    });
+
+    test('classifies unresolved references as definition errors', () {
+      final schema = JsonSchema.fromJson({
+        r'$ref': 'https://example.com/missing-schema',
+      });
+
+      expect(
+        () => schema.validate({}),
+        throwsA(
+          isA<JsonSchemaDefinitionException>().having(
+            (error) => error.message,
+            'message',
+            contains(r'External $ref is unresolved'),
+          ),
+        ),
+      );
     });
   });
 

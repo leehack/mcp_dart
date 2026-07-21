@@ -791,19 +791,26 @@ Future<CallToolResult?> callToolSafely(
   Map<String, dynamic> args,
 ) async {
   try {
-    return await client.callTool(
+    final result = await client.callTool(
       CallToolRequest(
         name: toolName,
         arguments: args,
       ),
     );
+    if (result.isError) {
+      print('Tool rejected the call: ${result.toJson()}');
+    }
+    return result;
   } on McpError catch (e) {
     switch (ErrorCode.fromValue(e.code)) {
       case ErrorCode.methodNotFound:
-        print('Tool not found: $toolName');
+        print('Method or requested tool mode unavailable: ${e.message}');
         break;
       case ErrorCode.invalidParams:
-        print('Invalid parameters for $toolName: ${e.message}');
+        print(
+          'Malformed request, unavailable tool, or legacy input rejection: '
+          '${e.message}',
+        );
         break;
       case ErrorCode.requestTimeout:
         print('Tool call timed out');

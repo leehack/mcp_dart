@@ -3541,6 +3541,10 @@ void main() {
       addTearDown(server.close);
       server.registerTool(
         'needs_sampling',
+        inputSchema: const ToolInputSchema(
+          properties: {'count': JsonInteger()},
+          required: ['count'],
+        ),
         meta: const {
           'io.modelcontextprotocol/requiredClientCapabilities': ['sampling'],
         },
@@ -3555,7 +3559,10 @@ void main() {
       transport.receive(
         JsonRpcCallToolRequest(
           id: 'call-stdio',
-          params: const CallToolRequest(name: 'needs_sampling').toJson(),
+          params: const CallToolRequest(
+            name: 'needs_sampling',
+            arguments: {'count': 'many'},
+          ).toJson(),
           meta: _clientMeta(),
         ),
       );
@@ -3569,7 +3576,8 @@ void main() {
       expect(callbackInvoked, isFalse);
     });
 
-    test('stateless tools/call ignores legacy task parameter', () async {
+    test('stateless tools/call ignores malformed legacy task parameter',
+        () async {
       final server = McpServer(
         const Implementation(name: 'server', version: '1.0.0'),
         options: const McpServerOptions(
@@ -3590,7 +3598,7 @@ void main() {
           id: 'call-1',
           params: {
             ...const CallToolRequest(name: 'echo').toJson(),
-            'task': {'ttl': 1000},
+            'task': 'not-an-object',
           },
           meta: _clientMeta(),
         ),

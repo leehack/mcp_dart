@@ -147,6 +147,85 @@ void main() {
       );
     });
 
+    test('legacy task immediate results hide non-object structured data',
+        () async {
+      mockClient.protocolVersion = latestInitializationProtocolVersion;
+      mockClient.listedTools = const [
+        Tool(
+          name: 'simple-tool',
+          inputSchema: ToolInputSchema(),
+          execution: ToolExecution(taskSupport: 'optional'),
+        ),
+      ];
+      mockClient.mockResponse(Method.toolsCall, {
+        'content': [
+          {'type': 'text', 'text': '["legacy fallback"]'},
+        ],
+        'structuredContent': ['newer', 'value'],
+        'isError': true,
+        '_meta': {'traceId': 'immediate-trace'},
+        'vendor.example/status': 'preserved',
+      });
+
+      final events = await taskClient.callToolStream(
+        'simple-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      final result =
+          (events.single as TaskResultMessage).result as CallToolResult;
+      expect(result.hasStructuredContent, isFalse);
+      expect(result.structuredContentJson, isNull);
+      expect(result.isError, isTrue);
+      expect(result.meta, {'traceId': 'immediate-trace'});
+      expect(result.extra, {'vendor.example/status': 'preserved'});
+      expect(
+        (result.content.single as TextContent).text,
+        '["legacy fallback"]',
+      );
+      expect(result.toJson(), {
+        'content': [
+          {'type': 'text', 'text': '["legacy fallback"]'},
+        ],
+        'isError': true,
+        '_meta': {'traceId': 'immediate-trace'},
+        'vendor.example/status': 'preserved',
+      });
+      expect(mockClient.requests.map((request) => request.method), [
+        Method.toolsList,
+        Method.toolsCall,
+      ]);
+    });
+
+    test('stateless immediate results preserve non-object structured data',
+        () async {
+      mockClient.protocolVersion = previewProtocolVersion;
+      mockClient.mockResponse(Method.toolsCall, {
+        'content': [
+          {'type': 'text', 'text': '["fallback"]'},
+        ],
+        'structuredContent': ['stateless', 'value'],
+        '_meta': {'traceId': 'stateless-trace'},
+        'vendor.example/status': 'preserved',
+      });
+
+      final events =
+          await taskClient.callToolStream('simple-tool', {}).toList();
+
+      expect(events, hasLength(1));
+      final result =
+          (events.single as TaskResultMessage).result as CallToolResult;
+      expect(result.hasStructuredContent, isTrue);
+      expect(
+        result.structuredContentJson?.toJson(),
+        ['stateless', 'value'],
+      );
+      expect(result.meta, {'traceId': 'stateless-trace'});
+      expect(result.extra, {'vendor.example/status': 'preserved'});
+    });
+
     test('callToolStream delegates 2026 task extension tools to callTool',
         () async {
       mockClient.protocolVersion = previewProtocolVersion;
@@ -202,8 +281,38 @@ void main() {
       expect(mockClient.requests, isEmpty);
     });
 
+    test('callToolStream rejects legacy task parameter in stateless sessions',
+        () async {
+      mockClient.protocolVersion = previewProtocolVersion;
+      mockClient.serverCapabilities = const ServerCapabilities(
+        tools: ServerCapabilitiesTools(),
+      );
+
+      final events = await taskClient.callToolStream(
+        'ordinary-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TaskErrorMessage>());
+      expect(
+        (events.single as TaskErrorMessage).error.toString(),
+        contains('legacy task request parameter'),
+      );
+      expect(mockClient.requests, isEmpty);
+    });
+
     test('callToolStream handles long-running task workflow', () async {
       final taskId = 'task-123';
+      mockClient.protocolVersion = latestInitializationProtocolVersion;
+      mockClient.listedTools = const [
+        Tool(
+          name: 'long-tool',
+          inputSchema: ToolInputSchema(),
+          execution: ToolExecution(taskSupport: 'optional'),
+        ),
+      ];
 
       // 1. Initial call returns a task
       mockClient.mockResponse('tools/call', {
@@ -259,7 +368,11 @@ void main() {
         ],
       });
 
-      final stream = taskClient.callToolStream('long-tool', {});
+      final stream = taskClient.callToolStream(
+        'long-tool',
+        {},
+        task: {'ttl': 60000},
+      );
 
       // We expect:
       // 1. TaskCreatedMessage
@@ -397,6 +510,127 @@ void main() {
         Method.toolsCall,
       ]);
       expect(mockClient.requests.last.params?['task'], {'ttl': 1000});
+    });
+
+    test('callToolStream validates completed task results', () async {
+      mockClient.listedTools = [
+        Tool(
+          name: 'validated-task-tool',
+          inputSchema: const ToolInputSchema(),
+          outputSchema: ToolOutputSchema(
+            properties: {'result': JsonSchema.string()},
+            required: ['result'],
+          ),
+          execution: const ToolExecution(taskSupport: 'optional'),
+        ),
+      ];
+      mockClient.mockResponse('tools/call', {
+        'task': {
+          'taskId': 'task-validated',
+          'status': 'completed',
+          'createdAt': '2026-05-14T10:00:00Z',
+          'lastUpdatedAt': '2026-05-14T10:01:00Z',
+          'ttl': null,
+        },
+      });
+      mockClient.mockResponse('tasks/result', {
+        'content': [
+          {'type': 'text', 'text': '{"wrong":"field"}'},
+        ],
+        'structuredContent': {'wrong': 'field'},
+      });
+
+      final events = await taskClient.callToolStream(
+        'validated-task-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(2));
+      expect(events.first, isA<TaskCreatedMessage>());
+      expect(events.last, isA<TaskErrorMessage>());
+      expect(
+        (events.last as TaskErrorMessage).error,
+        isA<McpError>()
+            .having(
+              (error) => error.code,
+              'code',
+              ErrorCode.invalidParams.value,
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('Structured content does not match'),
+            ),
+      );
+      expect(mockClient.requests.map((request) => request.method), [
+        Method.toolsList,
+        Method.toolsCall,
+        Method.tasksResult,
+      ]);
+    });
+
+    test('initialization-era deferred results hide non-object structured data',
+        () async {
+      mockClient.protocolVersion = latestInitializationProtocolVersion;
+      mockClient.listedTools = const [
+        Tool(
+          name: 'legacy-task-tool',
+          inputSchema: ToolInputSchema(),
+          execution: ToolExecution(taskSupport: 'optional'),
+        ),
+      ];
+      mockClient.mockResponse(Method.toolsCall, {
+        'task': {
+          'taskId': 'task-legacy-result',
+          'status': 'completed',
+          'createdAt': '2026-05-14T10:00:00Z',
+          'lastUpdatedAt': '2026-05-14T10:01:00Z',
+          'ttl': null,
+        },
+      });
+      mockClient.mockResponse(Method.tasksResult, {
+        'content': [
+          {'type': 'text', 'text': '["legacy task fallback"]'},
+        ],
+        'structuredContent': ['newer', 'task', 'value'],
+        'isError': true,
+        '_meta': {'traceId': 'deferred-trace'},
+        'vendor.example/status': 'preserved',
+      });
+
+      final events = await taskClient.callToolStream(
+        'legacy-task-tool',
+        {},
+        task: {'ttl': 1000},
+      ).toList();
+
+      expect(events, hasLength(2));
+      expect(events.first, isA<TaskCreatedMessage>());
+      final result =
+          (events.last as TaskResultMessage).result as CallToolResult;
+      expect(result.hasStructuredContent, isFalse);
+      expect(result.structuredContentJson, isNull);
+      expect(result.isError, isTrue);
+      expect(result.meta, {'traceId': 'deferred-trace'});
+      expect(result.extra, {'vendor.example/status': 'preserved'});
+      expect(
+        (result.content.single as TextContent).text,
+        '["legacy task fallback"]',
+      );
+      expect(result.toJson(), {
+        'content': [
+          {'type': 'text', 'text': '["legacy task fallback"]'},
+        ],
+        'isError': true,
+        '_meta': {'traceId': 'deferred-trace'},
+        'vendor.example/status': 'preserved',
+      });
+      expect(mockClient.requests.map((request) => request.method), [
+        Method.toolsList,
+        Method.toolsCall,
+        Method.tasksResult,
+      ]);
     });
 
     test('callToolStream finds task-capable tools on later list pages',

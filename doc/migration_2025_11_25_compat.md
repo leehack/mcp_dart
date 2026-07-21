@@ -53,8 +53,10 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
   `url`, and `elicitationId`.
 - Form elicitation schemas must now be object-root schemas whose properties are
   primitive string, number, integer, boolean, enum, or multiselect schemas.
-- Tool `inputSchema` and `outputSchema` values must serialize as root JSON
-  objects. Non-object root schemas now fail at parse/serialization boundaries.
+- Tool inputs and MCP 2025-11-25 structured outputs are object-rooted. A
+  non-object `inputSchema` fails at parse/serialization boundaries; stable
+  client/server compatibility paths omit or ignore MCP `2026-07-28`-only
+  non-object output schemas and structured values.
 - Stable metadata serializers no longer emit legacy singular `icon` fields,
   `ResourceAnnotations.title`, `ToolAnnotations.priority`, or
   `ToolAnnotations.audience`. Those fields still parse into deprecated Dart

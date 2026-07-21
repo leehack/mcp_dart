@@ -7,7 +7,10 @@ import 'json_value.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
-/// Legacy alias for [JsonObject] used as tool input schema.
+/// Object-root JSON Schema used for tool input.
+///
+/// MCP `2026-07-28` continues to require `type: "object"` at the input schema
+/// root while allowing the full JSON Schema 2020-12 vocabulary.
 typedef ToolInputSchema = JsonObject;
 
 /// Legacy alias for object-root tool output schemas.
@@ -180,9 +183,17 @@ class Tool {
   final String? description;
 
   /// JSON Schema defining the tool's input parameters.
+  ///
+  /// This remains [JsonSchema]-typed for source compatibility, but MCP always
+  /// requires an object root. [Tool.fromJson] and [toJson] enforce that wire
+  /// invariant; use [ToolInputSchema] or `JsonSchema.object(...)` when building
+  /// new values.
   final JsonSchema inputSchema;
 
   /// JSON Schema defining the tool's structured output.
+  ///
+  /// Initialization-era MCP uses an object root. MCP `2026-07-28` permits any
+  /// JSON root, which is why this field is broader than [ToolInputSchema].
   final JsonSchema? outputSchema;
 
   /// Optional additional properties describing the tool.
@@ -417,6 +428,13 @@ class CallToolRequest {
 
 /// The server's response to a [CallToolRequest].
 class CallToolResult implements BaseResultData {
+  static const _protocolFields = {
+    'content',
+    'isError',
+    '_meta',
+    'structuredContent',
+  };
+
   /// The content of the result.
   final List<Content> content;
 
@@ -461,6 +479,11 @@ class CallToolResult implements BaseResultData {
   final Map<String, dynamic>? meta;
 
   /// Additional properties merged into the result object.
+  ///
+  /// Protocol-owned fields such as `content`, `isError`, `structuredContent`,
+  /// and `_meta` must be provided through their corresponding constructor
+  /// parameters rather than this map. Conflicting entries here are ignored so
+  /// extension data cannot replace the validated protocol values.
   final Map<String, dynamic>? extra;
 
   const CallToolResult({
@@ -471,10 +494,12 @@ class CallToolResult implements BaseResultData {
     bool? hasStructuredContent,
     this.meta,
     this.extra,
-  })  : _structuredContent = structuredContent,
+  })  : _structuredContent =
+            structuredContentJson == null ? structuredContent : null,
         _structuredContentValue = structuredContentJson,
-        hasStructuredContent = hasStructuredContent ??
-            (structuredContentJson != null || structuredContent != null);
+        hasStructuredContent = structuredContentJson != null ||
+            structuredContent != null ||
+            (hasStructuredContent ?? false);
 
   /// Creates a result from a list of content items.
   factory CallToolResult.fromContent(List<Content> content) {
@@ -483,9 +508,9 @@ class CallToolResult implements BaseResultData {
 
   /// Creates a result from object-root structured content.
   ///
-  /// Automatically populates [content] with a JSON-serialized version of
-  /// [content] for backward compatibility with clients that do not support
-  /// [structuredContent].
+  /// Automatically populates [content] with a JSON-serialized version of the
+  /// structured value for backward compatibility with clients that do not
+  /// support [structuredContent].
   factory CallToolResult.fromStructuredContent(Map<String, dynamic> content) {
     return CallToolResult.fromStructuredValue(JsonValue.object(content));
   }
@@ -529,9 +554,8 @@ class CallToolResult implements BaseResultData {
   }
 
   factory CallToolResult.fromJson(Map<String, dynamic> json) {
-    final knownKeys = {'content', 'isError', '_meta', 'structuredContent'};
     final extra = Map<String, dynamic>.from(json)
-      ..removeWhere((key, value) => knownKeys.contains(key));
+      ..removeWhere((key, value) => _protocolFields.contains(key));
     final content = json['content'];
     if (content is! List) {
       throw const FormatException('CallToolResult.content is required');
@@ -557,17 +581,25 @@ class CallToolResult implements BaseResultData {
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'content': content.map((e) => e.toJson()).toList(),
-        if (isError) 'isError': isError,
-        if (hasStructuredContent)
-          'structuredContent': readJsonValue(
-            structuredContentJson?.toJson(),
-            'CallToolResult.structuredContent',
-          ),
-        if (meta != null) '_meta': readJsonObject(meta, 'CallToolResult._meta'),
-        if (extra != null) ...readJsonObject(extra, 'CallToolResult.extra'),
-      };
+  Map<String, dynamic> toJson() {
+    final extraJson = extra == null
+        ? null
+        : (Map<String, dynamic>.from(
+            readJsonObject(extra, 'CallToolResult.extra'),
+          )..removeWhere((key, value) => _protocolFields.contains(key)));
+
+    return {
+      'content': content.map((e) => e.toJson()).toList(),
+      if (isError) 'isError': isError,
+      if (hasStructuredContent)
+        'structuredContent': readJsonValue(
+          structuredContentJson?.toJson(),
+          'CallToolResult.structuredContent',
+        ),
+      if (meta != null) '_meta': readJsonObject(meta, 'CallToolResult._meta'),
+      if (extraJson != null) ...extraJson,
+    };
+  }
 }
 
 /// Notification from server indicating the list of available tools has changed.

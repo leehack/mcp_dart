@@ -200,7 +200,7 @@ void main() {
       const Implementation(name: 'compatibility-test', version: '1.0.0'),
     );
 
-    server.registerStatelessTool(
+    final RegisteredStatelessTool tool = server.registerStatelessTool(
       'multi_round_tool',
       callback: (args, extra) =>
           const InputRequiredResult(requestState: 'tool-state'),
@@ -227,6 +227,7 @@ void main() {
           const InputRequiredResult(requestState: 'template-state'),
     );
 
+    expect(tool, isA<RegisteredTool>());
     expect(resource, isA<RegisteredResource>());
     expect(resourceTemplate, isA<RegisteredResourceTemplate>());
   });

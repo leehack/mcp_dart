@@ -131,6 +131,8 @@ class TaskResultHandler {
         return CallToolResult(
           content: toolResult.content,
           isError: toolResult.isError,
+          structuredContentJson: toolResult.structuredContentJson,
+          hasStructuredContent: toolResult.hasStructuredContent,
           meta: meta,
           extra: toolResult.extra,
         );
