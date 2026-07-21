@@ -89,8 +89,10 @@ void validateJsonSchemaDefinition(
 
 /// Validates [value] as data against the selected canonical meta-schema.
 ///
-/// Meta-schema `format` keywords are annotations, so URI and regular-expression
-/// syntax is deliberately not asserted in this mode.
+/// Draft 2020-12's default meta-schema uses `format-annotation`, so URI and
+/// regular-expression syntax is not asserted for that dialect. This SDK opts
+/// into Draft 7 `format` assertions and applies them to its canonical
+/// meta-schema as well.
 void validateJsonMetaSchemaInstance(
   Object? value,
   JsonSchemaDialect dialect,

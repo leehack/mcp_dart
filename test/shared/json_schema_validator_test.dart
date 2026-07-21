@@ -70,6 +70,63 @@ void main() {
         ),
       );
     });
+
+    test('distinguishes unresolved local references from external ones', () {
+      void expectLocalReferenceError(
+        Map<String, Object?> definition,
+        String keyword,
+        String reference,
+      ) {
+        final schema = JsonSchema.fromJson(definition);
+        final expectedMessage = 'Local $keyword is unresolved';
+
+        expect(
+          () => schema.validate({}),
+          throwsA(
+            isA<JsonSchemaDefinitionException>()
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains(expectedMessage),
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains(reference),
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  isNot(contains('External $keyword')),
+                ),
+          ),
+        );
+      }
+
+      for (final reference in const [r'#/$defs/missing', r'#/~2invalid']) {
+        expectLocalReferenceError(
+          {r'$ref': reference},
+          r'$ref',
+          reference,
+        );
+      }
+
+      const absoluteReference = r'https://example.test/root#/$defs/missing';
+      expectLocalReferenceError(
+        {
+          r'$id': 'https://example.test/root',
+          r'$ref': absoluteReference,
+        },
+        r'$ref',
+        absoluteReference,
+      );
+
+      expectLocalReferenceError(
+        {r'$dynamicRef': '#missing'},
+        r'$dynamicRef',
+        '#missing',
+      );
+    });
   });
 
   group('JsonSchemaValidation', () {
@@ -1014,6 +1071,37 @@ void main() {
             for (var index = 0; index < 1100; index++) '$index': true,
           },
         });
+      });
+
+      test('Draft 7 canonical meta-schema asserts supported formats', () {
+        final metaSchema = JsonSchema.fromJson({
+          r'$schema': 'http://json-schema.org/draft-07/schema#',
+          r'$ref': 'http://json-schema.org/draft-07/schema#',
+        });
+
+        metaSchema.validate({
+          r'$schema': 'https://example.com/custom',
+          r'$id': 'relative/path',
+          r'$ref': '#/definitions/value',
+          'pattern': r'^[a-z]+$',
+          'patternProperties': {r'^[a-z]+$': true},
+        });
+
+        for (final invalidSchema in [
+          {r'$schema': 'not a uri'},
+          {r'$id': 'not a uri'},
+          {r'$ref': 'not a uri'},
+          {'pattern': '['},
+          {
+            'patternProperties': {'[': true},
+          },
+        ]) {
+          expect(
+            () => metaSchema.validate(invalidSchema),
+            throwsA(isA<JsonSchemaValidationException>()),
+            reason: '$invalidSchema',
+          );
+        }
       });
 
       test(r'resolves canonical meta-schema fragment $ref values', () {

@@ -321,7 +321,7 @@ final class _Compiler {
     while (true) {
       final previousNodeCount = _nodes.length;
       final previousReferenceCount = _references.length;
-      (String, String)? unresolved;
+      (_Node, String, String)? unresolved;
       for (var index = 0; index < _nodes.length; index++) {
         final node = _nodes[index];
         final map = node.map;
@@ -332,17 +332,34 @@ final class _Compiler {
         for (final keyword in keywords) {
           final value = map[keyword];
           if (value is String && _resolve(node, value) == null) {
-            unresolved ??= (keyword, value);
+            unresolved ??= (node, keyword, value);
           }
         }
       }
       if (unresolved == null) return;
       if (_nodes.length == previousNodeCount &&
           _references.length == previousReferenceCount) {
+        final (node, keyword, reference) = unresolved;
         throw JsonSchemaEngineException(
-          'External ${unresolved.$1} is unresolved: ${unresolved.$2}',
+          _unresolvedReferenceMessage(node, keyword, reference),
         );
       }
+    }
+  }
+
+  String _unresolvedReferenceMessage(
+    _Node from,
+    String keyword,
+    String reference,
+  ) {
+    try {
+      final base = _withoutFragment(from.base.resolve(reference));
+      final isLocal = _resources.containsKey(base.toString()) ||
+          _metaSchemaDialect(base) != null;
+      return '${isLocal ? 'Local' : 'External'} $keyword is unresolved: '
+          '$reference';
+    } on FormatException {
+      return '$keyword is unresolved: $reference';
     }
   }
 
