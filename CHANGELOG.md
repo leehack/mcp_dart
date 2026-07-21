@@ -26,6 +26,15 @@
   optional, and servers stamp validated identity in successful stateless result
   `_meta` by default instead of the discovery body. A handler `null` omits the
   optional key; received canonical `null` or malformed identities are rejected.
+- Applied era-aware MCP `2026-07-28` capability parsing: known capability
+  members must be JSON objects, removed legacy names remain valid open-ended
+  capability data, and legacy initialization boolean compatibility is unchanged.
+- Hardened raw JSON-RPC decoding by requiring IDs for built-in request methods,
+  validating `tools/list` cursors before dispatch, and enforcing 2026 request
+  metadata under `params._meta` while preserving legacy metadata and extension
+  notifications.
+- Required the logging notification `data` member on parsed wire messages while
+  continuing to accept its valid explicit JSON `null` value.
 - Hardened OAuth discovery and authorization-code flows with exact issuer
   matching, safe redirect URIs, client registration priority, challenge
   parsing, token-endpoint authentication, issuer/resource-bound tokens, and
@@ -70,9 +79,10 @@
 - Enforced one in-scope acknowledgment and boundary-safe resource and
   sub-resource URI matching for every `subscriptions/listen` request, buffered
   a bounded number of early events until the first listener attaches, and made
-  stateless stdio clients recover bounded repeated child exits while restoring
-  acknowledged subscriptions without replaying ordinary requests. Changed
-  replay filters are exposed through
+  stateless stdio clients recover bounded repeated child exits and broken
+  process pipes, with TERM-to-KILL cleanup, while restoring acknowledged
+  subscriptions without replaying ordinary requests. Changed replay filters are
+  exposed through
   `McpSubscription.acknowledgmentChanges`.
 - Isolated concurrent Streamable HTTP POSTs even when independent clients reuse
   a JSON-RPC request ID, and promoted JSON-preferred responses to SSE whenever

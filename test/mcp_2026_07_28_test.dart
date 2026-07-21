@@ -191,6 +191,7 @@ class DiscoveringClientTransport extends Transport
     this.capabilities = const ServerCapabilities(
       tools: ServerCapabilitiesTools(),
     ),
+    this.discoverCapabilitiesJson,
     this.discoverServerInfo =
         const Implementation(name: 'server', version: '1.0.0'),
     this.toolsListResult = const {
@@ -206,6 +207,7 @@ class DiscoveringClientTransport extends Transport
   final List<String> unsupportedDiscoverProtocolVersions;
   final Object? unsupportedDiscoverData;
   final ServerCapabilities capabilities;
+  final Map<String, dynamic>? discoverCapabilitiesJson;
   final Implementation? discoverServerInfo;
   final Map<String, dynamic> toolsListResult;
   final void Function(JsonRpcRequest request)? onRequest;
@@ -249,18 +251,17 @@ class DiscoveringClientTransport extends Transport
         return;
       }
 
-      onmessage?.call(
-        JsonRpcResponse(
-          id: message.id,
-          result: DiscoverResult(
-            supportedVersions: discoverVersions,
-            capabilities: capabilities,
-            serverInfo: discoverServerInfo,
-            ttlMs: 0,
-            cacheScope: CacheScope.private,
-          ).toJson(),
-        ),
-      );
+      final result = DiscoverResult(
+        supportedVersions: discoverVersions,
+        capabilities: capabilities,
+        serverInfo: discoverServerInfo,
+        ttlMs: 0,
+        cacheScope: CacheScope.private,
+      ).toJson();
+      if (discoverCapabilitiesJson != null) {
+        result['capabilities'] = discoverCapabilitiesJson;
+      }
+      onmessage?.call(JsonRpcResponse(id: message.id, result: result));
       return;
     }
 
@@ -803,6 +804,22 @@ void main() {
         'name': 'client',
         'version': '1.0.0',
       });
+    });
+
+    test('valid params metadata ignores a malformed top-level fallback', () {
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 'tools',
+        'method': Method.toolsList,
+        '_meta': 'unrelated-extension-value',
+        'params': {'_meta': _clientMeta()},
+      });
+
+      expect(parsed, isA<JsonRpcListToolsRequest>());
+      expect(
+        (parsed as JsonRpcListToolsRequest).meta?[McpMetaKey.protocolVersion],
+        previewProtocolVersion,
+      );
     });
 
     test('preserves integer request ids and progress tokens', () {
@@ -1735,6 +1752,85 @@ void main() {
       );
     });
 
+    test('server/discover requires object-valued core capabilities', () {
+      final result = {
+        'resultType': resultTypeComplete,
+        'supportedVersions': [previewProtocolVersion],
+        'capabilities': <String, dynamic>{},
+      };
+
+      for (final capability in <String>{
+        'experimental',
+        'logging',
+        'completions',
+        'prompts',
+        'resources',
+        'tools',
+        'extensions',
+      }) {
+        for (final malformedValue in <Object?>[true, false, null, const []]) {
+          expect(
+            () => DiscoverResult.fromJson({
+              ...result,
+              'capabilities': {capability: malformedValue},
+            }),
+            throwsFormatException,
+            reason: '$capability must be an object when present',
+          );
+        }
+      }
+    });
+
+    test('server/discover preserves additional capability JSON values', () {
+      final parsed = DiscoverResult.fromJson({
+        'resultType': resultTypeComplete,
+        'supportedVersions': [previewProtocolVersion],
+        'capabilities': {
+          'tools': <String, dynamic>{},
+          'completions': {'listChanged': 'future-value'},
+          'tasks': ['future-task-shape'],
+          'elicitation': 'future-elicitation-shape',
+          'com.example/booleanCapability': true,
+          'com.example/listCapability': ['fast', 1],
+        },
+      });
+
+      expect(parsed.capabilities.tools, isNotNull);
+      expect(parsed.capabilities.completions, isNotNull);
+      expect(parsed.capabilities.additionalCapabilities, {
+        'tasks': ['future-task-shape'],
+        'elicitation': 'future-elicitation-shape',
+        'com.example/booleanCapability': true,
+        'com.example/listCapability': ['fast', 1],
+      });
+      expect(parsed.toJson()['capabilities'], {
+        'tools': <String, dynamic>{},
+        'completions': <String, dynamic>{},
+        'tasks': ['future-task-shape'],
+        'elicitation': 'future-elicitation-shape',
+        'com.example/booleanCapability': true,
+        'com.example/listCapability': ['fast', 1],
+      });
+    });
+
+    test('legacy initialize retains boolean capability compatibility', () {
+      final parsed = InitializeResult.fromJson({
+        'protocolVersion': latestInitializationProtocolVersion,
+        'capabilities': {
+          'completions': true,
+          'prompts': false,
+          'resources': true,
+          'tools': true,
+        },
+        'serverInfo': {'name': 'legacy-server', 'version': '1.0.0'},
+      });
+
+      expect(parsed.capabilities.completions, isNotNull);
+      expect(parsed.capabilities.prompts, isNull);
+      expect(parsed.capabilities.resources, isNotNull);
+      expect(parsed.capabilities.tools, isNotNull);
+    });
+
     test('requires complete resultType on server/discover results', () {
       final validResult = const DiscoverResult(
         supportedVersions: [previewProtocolVersion],
@@ -2047,6 +2143,7 @@ void main() {
               'level': 'info',
               'data': Object(),
             }),
+        () => LoggingMessageNotification.fromJson({'level': 'info'}),
         () => JsonRpcLoggingMessageNotification.fromJson({
               'jsonrpc': '1.0',
               'method': Method.notificationsMessage,
@@ -6137,6 +6234,37 @@ void main() {
       expect(response.result['instructions'], 'Discovery instructions.');
     });
 
+    test('server discovery emits open capabilities with legacy names',
+        () async {
+      final server = Server(
+        const Implementation(name: 'server', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.require2026,
+          capabilities: ServerCapabilities(
+            tasks: ServerCapabilitiesTasks(list: true),
+            additionalCapabilities: {
+              'tasks': ['future-task-shape'],
+              'elicitation': 'future-elicitation-shape',
+            },
+          ),
+        ),
+      );
+      addTearDown(server.close);
+      final transport = RecordingTransport();
+      await server.connect(transport);
+
+      transport.receive(
+        JsonRpcServerDiscoverRequest(id: 'discover', meta: _clientMeta()),
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.result['capabilities'], {
+        'tasks': ['future-task-shape'],
+        'elicitation': 'future-elicitation-shape',
+      });
+    });
+
     test('server requires stateless metadata after server/discover', () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),
@@ -7207,6 +7335,44 @@ void main() {
         isNull,
       );
 
+      const statelessCapabilityJson = <String, dynamic>{
+        'roots': {'listChanged': 'future-value'},
+        'elicitation': {
+          'form': {'applyDefaults': 'future-value'},
+        },
+        'tasks': ['future-task-shape'],
+      };
+      expect(
+        validateToolRequest({
+          McpMetaKey.protocolVersion: previewProtocolVersion,
+          McpMetaKey.clientCapabilities: statelessCapabilityJson,
+        }),
+        isNull,
+      );
+      final statelessCapabilities =
+          ClientCapabilities.fromStatelessJson(statelessCapabilityJson);
+      expect(statelessCapabilities.roots?.listChanged, isNull);
+      expect(
+        statelessCapabilities.elicitation?.form?.applyDefaults,
+        isNull,
+      );
+      expect(statelessCapabilities.additionalCapabilities, {
+        'tasks': ['future-task-shape'],
+      });
+      expect(
+        statelessCapabilities.toJson(
+          omitLegacyTasks: true,
+          omitLegacyRootsListChanged: true,
+        ),
+        {
+          'roots': <String, dynamic>{},
+          'elicitation': {
+            'form': <String, dynamic>{},
+          },
+          'tasks': ['future-task-shape'],
+        },
+      );
+
       // Keep the long-standing public parser compatibility; strict object
       // markers are enforced only at the 2026 stateless wire boundary above.
       final legacyCapabilities = ClientCapabilities.fromJson({
@@ -7582,6 +7748,61 @@ void main() {
         'version': '1.0.0',
       });
       expect(listRequest.meta?[McpMetaKey.clientCapabilities], {});
+    });
+
+    test(
+      'stable client rejects malformed discovery capabilities without fallback',
+      () async {
+        final transport = DiscoveringClientTransport(
+          discoverCapabilitiesJson: const {'tools': true},
+        );
+        final client = McpClient(
+          const Implementation(name: 'client', version: '1.0.0'),
+        );
+
+        await expectLater(
+          client.connect(transport),
+          throwsA(
+            isA<McpError>()
+                .having(
+                  (error) => error.code,
+                  'code',
+                  ErrorCode.internalError.value,
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  'Failed to parse result for ${Method.serverDiscover}',
+                ),
+          ),
+        );
+        expect(
+          transport.sentMessages.whereType<JsonRpcRequest>().map(
+                (message) => message.method,
+              ),
+          [Method.serverDiscover],
+        );
+      },
+    );
+
+    test('stable client accepts additional discovery capability values',
+        () async {
+      final transport = DiscoveringClientTransport(
+        discoverCapabilitiesJson: const {
+          'tools': <String, dynamic>{},
+          'com.example/futureCapability': true,
+        },
+      );
+      final client = McpClient(
+        const Implementation(name: 'client', version: '1.0.0'),
+      );
+      addTearDown(client.close);
+
+      await client.connect(transport);
+
+      expect(client.getServerCapabilities()?.additionalCapabilities, {
+        'com.example/futureCapability': true,
+      });
     });
 
     test('client discovery succeeds without server identity', () async {

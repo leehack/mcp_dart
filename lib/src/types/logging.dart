@@ -92,19 +92,26 @@ class LoggingMessageNotification {
 
   factory LoggingMessageNotification.fromJson(
     Map<String, dynamic> json,
-  ) =>
-      LoggingMessageNotification(
-        level: readRequiredEnumValue(
-          json['level'],
-          LoggingLevel.values,
-          'LoggingMessageNotification.level',
-        ),
-        logger: readOptionalString(
-          json['logger'],
-          'LoggingMessageNotification.logger',
-        ),
-        data: readJsonValue(json['data'], 'LoggingMessageNotification.data'),
+  ) {
+    if (!json.containsKey('data')) {
+      throw const FormatException(
+        'LoggingMessageNotification.data is required',
       );
+    }
+
+    return LoggingMessageNotification(
+      level: readRequiredEnumValue(
+        json['level'],
+        LoggingLevel.values,
+        'LoggingMessageNotification.level',
+      ),
+      logger: readOptionalString(
+        json['logger'],
+        'LoggingMessageNotification.logger',
+      ),
+      data: readJsonValue(json['data'], 'LoggingMessageNotification.data'),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'level': level.name,

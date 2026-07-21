@@ -8,6 +8,18 @@ import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
 
+final _stdioRecoveryTimeout = io.Platform.isWindows
+    ? const Duration(seconds: 30)
+    : const Duration(seconds: 10);
+
+void _stdioRecoveryTest(String description, Future<void> Function() body) {
+  test(
+    description,
+    body,
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
+}
+
 void main() {
   group('StdioClientTransport', () {
     test('can launch a child without inheriting the parent environment',
@@ -427,7 +439,7 @@ void main() {
             await firstNotification.timeout(const Duration(seconds: 10)),
             isTrue,
           );
-          expect(launchCountFile.readAsStringSync(), '1');
+          expect(_stdioFixtureLaunchCount(launchCountFile), 1);
 
           final restartedNotification = notifications.moveNext();
           await client.notification(
@@ -438,7 +450,7 @@ void main() {
             await restartedNotification.timeout(const Duration(seconds: 10)),
             isTrue,
           );
-          expect(launchCountFile.readAsStringSync(), '2');
+          expect(_stdioFixtureLaunchCount(launchCountFile), 2);
           expect(closeCount, 0);
           expect(client.isConnected, isTrue);
 
@@ -452,7 +464,7 @@ void main() {
             ),
             isTrue,
           );
-          expect(launchCountFile.readAsStringSync(), '3');
+          expect(_stdioFixtureLaunchCount(launchCountFile), 3);
           expect(errors, hasLength(2));
           expect(
             errors.every(
@@ -472,7 +484,7 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 300));
 
           expect(closeCount, 1);
-          expect(launchCountFile.readAsStringSync(), '3');
+          expect(_stdioFixtureLaunchCount(launchCountFile), 3);
         } finally {
           await transport.close();
           await temporaryDirectory.delete(recursive: true);
@@ -598,7 +610,8 @@ void main() {
       }
     });
 
-    test('settles a discovery retry lost during modern child recovery',
+    _stdioRecoveryTest(
+        'settles a discovery retry lost during modern child recovery',
         () async {
       final harness = await _RawRecoveryHarness.start(
         replayBehavior: 'modern-discovery-error-exit-after-retry',
@@ -880,7 +893,7 @@ void main() {
       }
     });
 
-    test(
+    _stdioRecoveryTest(
         'a smaller replay acknowledgment updates one subscription without closing siblings',
         () async {
       final temporaryDirectory =
@@ -931,7 +944,7 @@ void main() {
         await Future.wait([
           narrowed.acknowledged,
           sibling.acknowledged,
-        ]).timeout(const Duration(seconds: 10));
+        ]).timeout(_stdioRecoveryTimeout);
         expect(await narrowedNotifications.moveNext(), isTrue);
         expect(await siblingNotifications.moveNext(), isTrue);
 
@@ -943,7 +956,7 @@ void main() {
         );
 
         expect(
-          await changedAcknowledgment.timeout(const Duration(seconds: 10)),
+          await changedAcknowledgment.timeout(_stdioRecoveryTimeout),
           isTrue,
         );
         expect(
@@ -952,7 +965,7 @@ void main() {
         );
 
         expect(
-          await narrowedReplay.timeout(const Duration(seconds: 10)),
+          await narrowedReplay.timeout(_stdioRecoveryTimeout),
           isTrue,
         );
         expect(
@@ -960,14 +973,14 @@ void main() {
           isA<JsonRpcResourceListChangedNotification>(),
         );
         expect(
-          await siblingReplay.timeout(const Duration(seconds: 10)),
+          await siblingReplay.timeout(_stdioRecoveryTimeout),
           isTrue,
         );
         expect(
           siblingNotifications.current,
           isA<JsonRpcResourceListChangedNotification>(),
         );
-        expect(launchCountFile.readAsStringSync(), '2');
+        expect(_stdioFixtureLaunchCount(launchCountFile), 2);
         expect(client.isConnected, isTrue);
         expect(
           errors.where(
@@ -977,7 +990,7 @@ void main() {
         );
 
         final resources =
-            await client.listResources().timeout(const Duration(seconds: 10));
+            await client.listResources().timeout(_stdioRecoveryTimeout);
         expect(resources.resources, isEmpty);
 
         narrowed.cancel();
@@ -1126,6 +1139,28 @@ void main() {
         await harness.dispose();
       }
     });
+
+    test(
+      'escalates termination when a broken-stdin child ignores SIGTERM',
+      () => _expectBrokenStdinRecovery(
+        'closed-stdin-ignore-sigterm-after-restart',
+      ),
+      skip: io.Platform.isWindows
+          ? 'POSIX signal resistance is not available on Windows.'
+          : false,
+      timeout: const Timeout(Duration(seconds: 60)),
+    );
+
+    test(
+      'restarts a broken-stdin child that handles SIGTERM with exit zero',
+      () => _expectBrokenStdinRecovery(
+        'closed-stdin-exit-zero-on-sigterm-after-restart',
+      ),
+      skip: io.Platform.isWindows
+          ? 'POSIX signal handling is not available on Windows.'
+          : false,
+      timeout: const Timeout(Duration(seconds: 60)),
+    );
 
     test('stateless mode rejects direct JSON-RPC response writes', () async {
       final harness = await _RawRecoveryHarness.start();
@@ -1418,7 +1453,7 @@ void main() {
 
         await closed.future.timeout(const Duration(seconds: 10));
         await Future<void>.delayed(const Duration(milliseconds: 300));
-        expect(launchCountFile.readAsStringSync(), '1');
+        expect(_stdioFixtureLaunchCount(launchCountFile), 1);
       } finally {
         await transport.close();
         await temporaryDirectory.delete(recursive: true);
@@ -1551,7 +1586,7 @@ void main() {
 
         await closed.future.timeout(const Duration(seconds: 10));
         await Future<void>.delayed(const Duration(milliseconds: 300));
-        expect(launchCountFile.readAsStringSync(), '1');
+        expect(_stdioFixtureLaunchCount(launchCountFile), 1);
         expect(client.isConnected, isFalse);
       } finally {
         await transport.close();
@@ -1608,7 +1643,7 @@ void main() {
             await client.listResources().timeout(const Duration(seconds: 10));
 
         expect(resources.resources, isEmpty);
-        expect(launchCountFile.readAsStringSync(), '2');
+        expect(_stdioFixtureLaunchCount(launchCountFile), 2);
         expect(client.isConnected, isTrue);
         expect(
           errors.any(
@@ -1697,7 +1732,7 @@ void main() {
         await closed.future.timeout(const Duration(seconds: 10));
         await Future<void>.delayed(const Duration(milliseconds: 100));
 
-        expect(launchCountFile.readAsStringSync(), '1');
+        expect(_stdioFixtureLaunchCount(launchCountFile), 1);
         expect(
           errors.where(
             (error) => error.toString().contains('request was not replayed'),
@@ -1836,6 +1871,67 @@ void main() {
   });
 }
 
+Future<void> _expectBrokenStdinRecovery(String replayBehavior) async {
+  final harness = await _RawRecoveryHarness.start(
+    replayBehavior: replayBehavior,
+    bootstrapSubscription: false,
+  );
+  const clientInfo = Implementation(
+    name: 'broken-stdin-recovery-client',
+    version: '1.0.0',
+  );
+  final meta = buildProtocolRequestMeta(
+    protocolVersion: previewProtocolVersion,
+    clientInfo: clientInfo,
+    clientCapabilities: const ClientCapabilities(),
+  );
+  try {
+    final discovery = harness._nextMessage();
+    await harness.transport.send(
+      JsonRpcServerDiscoverRequest(id: 1, meta: meta),
+    );
+    expect(await discovery, isA<JsonRpcResponse>());
+
+    await harness.transport.send(
+      const JsonRpcNotification(method: 'fixture/crash'),
+    );
+    await harness.waitForLaunchCount(2);
+    await harness.waitForMarker('.stdin-closed');
+
+    await expectLater(
+      harness.transport.send(
+        JsonRpcSubscriptionsListenRequest(
+          id: 2,
+          listenParams: const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(
+              resourcesListChanged: true,
+            ),
+          ),
+          meta: meta,
+        ),
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    await harness.waitForLaunchCount(3);
+    final response = harness._nextMessage();
+    await harness.transport.send(
+      JsonRpcRequest(
+        id: 3,
+        method: Method.resourcesList,
+        meta: meta,
+      ),
+    );
+    expect(
+      await response.timeout(_stdioRecoveryTimeout),
+      isA<JsonRpcResponse>().having((message) => message.id, 'id', 3),
+    );
+    expect(harness.closeCount, 0);
+  } finally {
+    await harness.dispose();
+  }
+}
+
 class _RawRecoveryHarness {
   final io.Directory temporaryDirectory;
   final io.File launchCountFile;
@@ -1954,26 +2050,11 @@ class _RawRecoveryHarness {
 
   Stream<Error> get errors => _errors.stream;
 
-  int get launchCount {
-    for (var attempt = 0; attempt < 100; attempt++) {
-      if (launchCountFile.existsSync()) {
-        final value = launchCountFile.readAsStringSync().trim();
-        if (value.isNotEmpty) {
-          // A non-empty malformed counter is a fixture failure, not a
-          // transient write window, so intentionally let int.parse throw.
-          return int.parse(value);
-        }
-      }
-      io.sleep(const Duration(milliseconds: 1));
-    }
-    throw StateError(
-      'Stdio fixture launch counter ${launchCountFile.path} remained missing '
-      'or empty after 100 ms.',
-    );
-  }
+  int get launchCount => _stdioFixtureLaunchCount(launchCountFile);
 
   Future<void> waitForLaunchCount(int expected) async {
-    for (var attempt = 0; attempt < 1000; attempt++) {
+    final stopwatch = Stopwatch()..start();
+    while (stopwatch.elapsed < _stdioRecoveryTimeout) {
       if (launchCount >= expected) {
         return;
       }
@@ -2002,4 +2083,17 @@ class _RawRecoveryHarness {
     await _errors.close();
     await temporaryDirectory.delete(recursive: true);
   }
+}
+
+int _stdioFixtureLaunchCount(io.File markerPrefix) {
+  final pathPrefix = '${markerPrefix.path}.launch-';
+  return markerPrefix.parent
+      .listSync(followLinks: false)
+      .whereType<io.File>()
+      .where((file) {
+    if (!file.path.startsWith(pathPrefix)) {
+      return false;
+    }
+    return int.tryParse(file.path.substring(pathPrefix.length)) != null;
+  }).length;
 }

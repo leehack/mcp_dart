@@ -524,6 +524,67 @@ void main() {
       expect(response['error']['message'], 'Invalid params');
     });
 
+    test('reports invalid params for a malformed tools/list cursor', () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = receivedMessages.add;
+
+      await transport.start();
+
+      stdin.addString(
+        '${jsonEncode({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'bad-tools-cursor',
+              'method': Method.toolsList,
+              'params': {'cursor': 42},
+            })}\n',
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(receivedMessages, isEmpty);
+      final response = jsonDecode(stdout.writtenData.single) as Map;
+      expect(response['id'], 'bad-tools-cursor');
+      expect(response['error']['code'], ErrorCode.invalidParams.value);
+      expect(response['error']['message'], 'Invalid params');
+    });
+
+    test('drops request-only methods without ids and keeps extensions',
+        () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      final receivedErrors = <Error>[];
+      transport
+        ..onmessage = receivedMessages.add
+        ..onerror = receivedErrors.add;
+
+      await transport.start();
+
+      stdin.addString(
+        '${jsonEncode({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.toolsList,
+            })}\n',
+      );
+      stdin.addString(
+        '${jsonEncode({
+              'jsonrpc': jsonRpcVersion,
+              'method': 'notifications/vendor/custom',
+              'params': {'extension': true},
+            })}\n',
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        receivedMessages.single,
+        isA<JsonRpcNotification>().having(
+          (message) => message.method,
+          'method',
+          'notifications/vendor/custom',
+        ),
+      );
+      expect(receivedErrors, hasLength(1));
+      expect(receivedErrors.single.toString(), contains('requires an id'));
+      expect(stdout.writtenData, isEmpty);
+    });
+
     test('does not respond to a malformed notification and keeps draining',
         () async {
       final receivedMessages = <JsonRpcMessage>[];
@@ -777,6 +838,121 @@ void main() {
       );
       expect((receivedMessages[1] as JsonRpcPingRequest).id, 2);
       expect((receivedMessages[1] as JsonRpcPingRequest).progressToken, 3);
+    });
+
+    test('rejects top-level-only 2026 request metadata', () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      final receivedErrors = <Error>[];
+      final topLevelOnly = {
+        'jsonrpc': jsonRpcVersion,
+        'id': 'top-level-only',
+        'method': Method.toolsList,
+        '_meta': {
+          McpMetaKey.protocolVersion: previewProtocolVersion,
+          McpMetaKey.clientCapabilities: <String, dynamic>{},
+        },
+      };
+      final paramsNested = {
+        'jsonrpc': jsonRpcVersion,
+        'id': 'params-nested',
+        'method': Method.toolsList,
+        'params': {
+          '_meta': {
+            McpMetaKey.protocolVersion: previewProtocolVersion,
+            McpMetaKey.clientCapabilities: <String, dynamic>{},
+          },
+        },
+      };
+      transport
+        ..onmessage = receivedMessages.add
+        ..onerror = receivedErrors.add;
+
+      expect(
+        () => JsonRpcMessage.fromJson(topLevelOnly),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('params._meta'),
+          ),
+        ),
+      );
+      expect(
+        JsonRpcListToolsRequest.fromJson(topLevelOnly).meta,
+        topLevelOnly['_meta'],
+        reason: 'Typed factories also parse Protocol.setRequestHandler input '
+            'after raw wire placement has already been validated.',
+      );
+      expect(
+        JsonRpcMessage.fromJson(paramsNested),
+        isA<JsonRpcListToolsRequest>(),
+      );
+      expect(
+        JsonRpcListToolsRequest.fromJson(paramsNested),
+        isA<JsonRpcListToolsRequest>(),
+      );
+
+      await transport.start();
+
+      stdin.addString('${jsonEncode(topLevelOnly)}\n');
+      stdin.addString('${jsonEncode(paramsNested)}\n');
+
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        receivedMessages.single,
+        isA<JsonRpcListToolsRequest>().having(
+          (request) => request.id,
+          'id',
+          'params-nested',
+        ),
+      );
+      expect(receivedErrors, hasLength(1));
+      expect(receivedErrors.single.toString(), contains('params._meta'));
+
+      final response = jsonDecode(stdout.writtenData.single) as Map;
+      expect(response['id'], 'top-level-only');
+      expect(response['error']['code'], ErrorCode.invalidParams.value);
+      expect(response['error']['message'], 'Invalid params');
+    });
+
+    test('legacy parsers accept top-level request metadata', () {
+      final legacyJson = {
+        'jsonrpc': jsonRpcVersion,
+        'id': 'legacy-top-level',
+        'method': Method.toolsList,
+        '_meta': {
+          McpMetaKey.protocolVersion: latestInitializationProtocolVersion,
+          'progressToken': 'legacy-progress',
+        },
+      };
+      final typed = JsonRpcListToolsRequest.fromJson(legacyJson);
+      final generic = JsonRpcMessage.fromJson(legacyJson);
+
+      for (final parsed in [typed, generic as JsonRpcListToolsRequest]) {
+        expect(parsed.meta, {
+          McpMetaKey.protocolVersion: latestInitializationProtocolVersion,
+          'progressToken': 'legacy-progress',
+        });
+        expect(parsed.progressToken, 'legacy-progress');
+      }
+    });
+
+    test('request metadata placement does not change notifications', () {
+      final parsed = JsonRpcMessage.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'method': 'notifications/custom',
+        '_meta': {
+          McpMetaKey.protocolVersion: previewProtocolVersion,
+          'custom': true,
+        },
+      });
+
+      expect(parsed, isA<JsonRpcNotification>());
+      expect((parsed as JsonRpcNotification).meta, {
+        McpMetaKey.protocolVersion: previewProtocolVersion,
+        'custom': true,
+      });
     });
 
     test('calls onclose when stdin closes', () async {

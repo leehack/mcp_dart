@@ -704,6 +704,17 @@ class StreamableHTTPServerTransport
     return null;
   }
 
+  String? _topLevelMetadataProtocolVersion(
+    Map<String, dynamic> messageJson,
+  ) {
+    final meta = messageJson['_meta'];
+    if (meta is Map) {
+      final version = meta[McpMetaKey.protocolVersion];
+      return version is String ? version : null;
+    }
+    return null;
+  }
+
   RequestId? _requestIdFromParsedBody(dynamic parsedBody) {
     if (parsedBody is! Map || !parsedBody.containsKey('id')) {
       return null;
@@ -771,6 +782,31 @@ class StreamableHTTPServerTransport
     final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
     return metadataVersion != null &&
         isStatelessProtocolVersion(metadataVersion);
+  }
+
+  String? _rawMissingStatelessProtocolHeader(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    if (!_hasValidJsonRpcRequestEnvelope(messageJson)) {
+      return null;
+    }
+
+    final protocolHeader = req.headers.value('mcp-protocol-version')?.trim();
+    if (protocolHeader != null && protocolHeader.isNotEmpty) {
+      return null;
+    }
+
+    // Top-level metadata is not valid MCP 2026 request metadata. Retain it
+    // only as an early transport-era hint so a missing mandatory header gets
+    // the stable header diagnostic before typed parsing rejects placement.
+    final metadataVersion = _nestedMetadataProtocolVersion(messageJson) ??
+        _topLevelMetadataProtocolVersion(messageJson);
+    if (metadataVersion != null &&
+        isStatelessProtocolVersion(metadataVersion)) {
+      return 'MCP-Protocol-Version header is required';
+    }
+    return null;
   }
 
   String? _rawStatelessRequestMetadataError(
@@ -1978,6 +2014,19 @@ class StreamableHTTPServerTransport
           final messageJson = rawItem is Map<String, dynamic>
               ? rawItem
               : rawItem.cast<String, dynamic>();
+          final rawMissingProtocolHeader = rawMessages.length == 1
+              ? _rawMissingStatelessProtocolHeader(req, messageJson)
+              : null;
+          if (rawMissingProtocolHeader != null) {
+            await _writeJsonRpcErrorResponse(
+              req.response,
+              httpStatus: HttpStatus.badRequest,
+              errorCode: ErrorCode.headerMismatch,
+              id: _rawRequestId(messageJson),
+              message: 'Header mismatch: $rawMissingProtocolHeader',
+            );
+            return;
+          }
           final rawMetadataError = rawMessages.length == 1
               ? _rawStatelessRequestMetadataError(req, messageJson)
               : null;

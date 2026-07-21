@@ -1574,7 +1574,7 @@ class McpServer {
       );
     }
 
-    final clientCapabilities = ClientCapabilities.fromJson(
+    final clientCapabilities = ClientCapabilities.fromStatelessJson(
       clientCapabilitiesValue.cast<String, dynamic>(),
     );
     final missingCapabilities = requiredCapabilities

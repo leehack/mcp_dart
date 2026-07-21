@@ -313,11 +313,12 @@ Then dispatch `Create Release` for `mcp_dart_cli`, verify the
 release assets for every supported platform. If the binary workflow must be
 dispatched manually, supply the release tag; both build and asset jobs verify
 and check out that exact tag before attaching files.
-`Create Release` and the tag-triggered publish workflow each repeat an
-override-free dependency resolution from a clean candidate, downgrade to and
-verify the declared minimum hosted SDK, run the non-interop CLI tests and
-analysis, and compile and smoke-test the binary. Both gates therefore exercise
-the already-published minimum SDK rather than the monorepo checkout or a newer
+The standalone build matrix removes the monorepo override and verifies the
+declared minimum hosted SDK before compiling each platform binary. `Create
+Release` and the tag-triggered publish workflow each repeat that override-free
+resolution from a clean candidate, then run the non-interop CLI tests,
+analysis, compilation, and smoke test. All three gates therefore exercise the
+already-published minimum SDK rather than the monorepo checkout or a newer
 compatible 2.3.x release.
 
 ## 6. Public day-0 verification

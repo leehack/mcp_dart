@@ -191,12 +191,19 @@ void main() {
       expect(params.data, isA<Map>());
     });
 
-    test('fromJson handles missing optional fields', () {
-      final json = {'level': 'debug'};
+    test('fromJson handles missing optional logger and explicit null data', () {
+      final json = {'level': 'debug', 'data': null};
       final params = LoggingMessageNotificationParams.fromJson(json);
       expect(params.level, equals(LoggingLevel.debug));
       expect(params.logger, isNull);
       expect(params.data, isNull);
+    });
+
+    test('fromJson rejects missing required data', () {
+      expect(
+        () => LoggingMessageNotificationParams.fromJson({'level': 'debug'}),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('toJson serializes required fields', () {
@@ -310,6 +317,7 @@ void main() {
         'method': 'notifications/message',
         'params': {
           'level': 'debug',
+          'data': null,
           '_meta': {'contextId': 'ctx-123'},
         },
       };
@@ -337,6 +345,17 @@ void main() {
       };
       expect(
         () => JsonRpcLoggingMessageNotification.fromJson(json),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('generic parser rejects missing required data', () {
+      expect(
+        () => JsonRpcMessage.fromJson({
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.notificationsMessage,
+          'params': {'level': 'info'},
+        }),
         throwsA(isA<FormatException>()),
       );
     });

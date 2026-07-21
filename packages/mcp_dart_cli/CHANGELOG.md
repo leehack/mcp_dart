@@ -7,6 +7,8 @@
 - The built-in conformance gate now verifies that a legacy task store can
   coexist with the independent MCP Tasks extension without being treated as
   its persistence adapter.
+- Standalone release binaries now compile against the declared minimum hosted
+  SDK instead of the monorepo dependency override.
 
 ## 0.2.0-dev.2
 

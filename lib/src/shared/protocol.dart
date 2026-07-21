@@ -215,9 +215,12 @@ class RequestHandlerExtra {
     if (value == null) {
       return null;
     }
-    return ClientCapabilities.fromJson(
-      readJsonObject(value, 'RequestHandlerExtra.clientCapabilities'),
-    );
+    final json =
+        readJsonObject(value, 'RequestHandlerExtra.clientCapabilities');
+    final version = protocolVersion;
+    return version != null && isStatelessProtocolVersion(version)
+        ? ClientCapabilities.fromStatelessJson(json)
+        : ClientCapabilities.fromJson(json);
   }
 
   /// Information about a validated access token.

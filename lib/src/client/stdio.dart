@@ -132,6 +132,19 @@ class StdioClientTransport
   /// Shared completion for transport cleanup initiated by process failure.
   Future<void>? _finishClosedFuture;
 
+  /// Shared bounded termination work for each child process.
+  ///
+  /// A broken stdin can be observed before the child exits. Recovery must
+  /// still escalate past SIGTERM when a live child ignores it, while the
+  /// process-exit callback remains the sole owner of restart classification.
+  final Map<io.Process, Future<void>> _processStopFutures = {};
+
+  /// Children whose unusable stdin requires recovery regardless of exit code.
+  ///
+  /// A child may handle SIGTERM and exit zero, but that is not a clean idle
+  /// shutdown when recovery was forced by a broken transport pipe.
+  final Set<io.Process> _recoveryTerminations = {};
+
   /// Prevents a child that immediately crashes after restart from looping.
   /// A valid message or a new stateless request arms recovery again.
   bool _restartArmed = false;
@@ -232,6 +245,7 @@ class StdioClientTransport
     _pendingDiscoveryRequests.clear();
     _pendingStatelessRequests.clear();
     _activeSubscriptions.clear();
+    _recoveryTerminations.clear();
     _openStderrStream();
     try {
       await _spawnProcess();
@@ -711,6 +725,7 @@ class StdioClientTransport
     int? exitCode,
     Error? exitError,
   }) {
+    final recoveryForced = _recoveryTerminations.remove(process);
     if (!identical(_process, process)) {
       return;
     }
@@ -723,8 +738,10 @@ class StdioClientTransport
 
     final hasActiveProtocolWork =
         _pendingStatelessRequests.isNotEmpty || _activeSubscriptions.isNotEmpty;
-    final exitedUnexpectedly =
-        exitError != null || exitCode != 0 || hasActiveProtocolWork;
+    final exitedUnexpectedly = recoveryForced ||
+        exitError != null ||
+        exitCode != 0 ||
+        hasActiveProtocolWork;
     final canRestart = exitedUnexpectedly &&
         _serverParams.restartOnUnexpectedExit &&
         _protocolMode == _StdioProtocolMode.stateless &&
@@ -896,7 +913,7 @@ class StdioClientTransport
           'StdioClientTransport: Replay write failed; deferring recovery to '
           'the replacement process exit: $restartError',
         );
-        replacement.kill(io.ProcessSignal.sigterm);
+        _terminateForRecovery(replacement);
         return;
       }
       _reportError(restartError);
@@ -1047,7 +1064,7 @@ class StdioClientTransport
           // A broken stdin makes the current child unusable. Its exit callback
           // owns recovery so this failed send cannot race an explicit close
           // that would suppress the restart.
-          currentProcess.kill(io.ProcessSignal.sigterm);
+          _terminateForRecovery(currentProcess);
         } else {
           unawaited(close());
         }
@@ -1162,12 +1179,48 @@ class StdioClientTransport
     }
   }
 
-  Future<void> _stopProcess(io.Process process) async {
+  void _terminateForRecovery(io.Process process) {
+    _recoveryTerminations.add(process);
+    unawaited(
+      _stopProcess(process).catchError((Object error, StackTrace stackTrace) {
+        if (identical(_process, process) && !_closing) {
+          _reportError(
+            StateError(
+              'Failed to terminate unusable stdio server process '
+              '${process.pid}: $error\n$stackTrace',
+            ),
+          );
+        }
+      }),
+    );
+  }
+
+  Future<void> _stopProcess(io.Process process) {
+    final activeStop = _processStopFutures[process];
+    if (activeStop != null) {
+      return activeStop;
+    }
+
+    late final Future<void> stopFuture;
+    stopFuture = _stopProcessImpl(process).whenComplete(() {
+      if (identical(_processStopFutures[process], stopFuture)) {
+        _processStopFutures.remove(process);
+      }
+    });
+    _processStopFutures[process] = stopFuture;
+    return stopFuture;
+  }
+
+  Future<void> _stopProcessImpl(io.Process process) async {
     _logger.debug(
       "StdioClientTransport: Closing process stdin (PID: ${process.pid})...",
     );
     try {
-      await process.stdin.close();
+      await process.stdin.close().timeout(const Duration(milliseconds: 250));
+    } on TimeoutException {
+      _logger.debug(
+        "StdioClientTransport: Timed out closing process stdin.",
+      );
     } catch (error) {
       _logger.debug(
         "StdioClientTransport: Error closing process stdin: $error",
@@ -1229,6 +1282,7 @@ class StdioClientTransport
     _pendingDiscoveryRequests.clear();
     _pendingStatelessRequests.clear();
     _activeSubscriptions.clear();
+    _recoveryTerminations.clear();
     _restartClock.stop();
     _recentUnexpectedRestarts.clear();
 

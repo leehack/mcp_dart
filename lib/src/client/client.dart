@@ -713,6 +713,13 @@ class McpClient extends Protocol {
       return message.contains('Server not initialized');
     }
 
+    if (error.code == ErrorCode.internalError.value &&
+        message == 'Failed to parse result for ${Method.serverDiscover}') {
+      // A JSON-RPC success response to server/discover identifies a modern
+      // peer even when its result violates the stateless result schema.
+      return false;
+    }
+
     // Legacy servers use implementation-defined JSON-RPC errors for unknown
     // requests before initialize. The compatibility rules intentionally do not
     // key fallback to one particular generic error code.

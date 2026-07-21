@@ -1249,21 +1249,21 @@ void main() {
 
       expect(response.statusCode, HttpStatus.badRequest);
       final body = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
       expect(
         body['error']['message'],
         contains('MCP-Protocol-Version header is required'),
       );
     });
 
-    test('keeps top-level metadata as stateless detection fallback', () async {
+    test('uses top-level metadata only as missing-header fallback', () async {
+      final request = const JsonRpcListToolsRequest(id: 12).toJson()
+        ..['_meta'] = const {
+          McpMetaKey.protocolVersion: previewProtocolVersion,
+        };
       final response = await http.post(
         Uri.parse(baseUrl),
-        body: jsonEncode(
-          const JsonRpcListToolsRequest(id: 12).toJson()
-            ..['_meta'] = const {
-              McpMetaKey.protocolVersion: previewProtocolVersion,
-            },
-        ),
+        body: jsonEncode(request),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
@@ -1273,9 +1273,33 @@ void main() {
 
       expect(response.statusCode, HttpStatus.badRequest);
       final body = jsonDecode(response.body) as Map<String, dynamic>;
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
       expect(
         body['error']['message'],
         contains('MCP-Protocol-Version header is required'),
+      );
+
+      final placementResponse = await http.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(request),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': previewProtocolVersion,
+          'Mcp-Method': Method.toolsList,
+        },
+      );
+
+      expect(placementResponse.statusCode, HttpStatus.badRequest);
+      final placementBody =
+          jsonDecode(placementResponse.body) as Map<String, dynamic>;
+      expect(
+        placementBody['error']['code'],
+        ErrorCode.invalidParams.value,
+      );
+      expect(
+        placementBody['error']['message'],
+        contains(McpMetaKey.protocolVersion),
       );
     });
 

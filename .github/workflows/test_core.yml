@@ -30,6 +30,9 @@ jobs:
       - name: Test publish workflow permission separation
         run: bash tool/release/verify_publish_workflow_security_test.sh
 
+      - name: Test CLI binary release dependency isolation
+        run: bash tool/release/verify_cli_binary_workflow_test.sh
+
       - name: Set up Flutter and Dart
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:

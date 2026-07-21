@@ -513,6 +513,35 @@ void main() {
       expect(listenError['id'], 'bad-listen');
       expect(listenError['error']['code'], ErrorCode.invalidParams.value);
 
+      final cursorError = await post(
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'bad-tools-cursor',
+          'method': Method.toolsList,
+          'params': {
+            'cursor': 42,
+            '_meta': _statelessMeta(),
+          },
+        },
+        method: Method.toolsList,
+      );
+      expect(cursorError['id'], 'bad-tools-cursor');
+      expect(cursorError['error']['code'], ErrorCode.invalidParams.value);
+
+      final missingIdError = await post(
+        {
+          'jsonrpc': jsonRpcVersion,
+          'method': Method.toolsList,
+          'params': {'_meta': _statelessMeta()},
+        },
+        method: Method.toolsList,
+      );
+      expect(missingIdError['id'], isNull);
+      expect(
+        missingIdError['error']['code'],
+        ErrorCode.invalidRequest.value,
+      );
+
       final envelopeError = await post(
         {
           'jsonrpc': jsonRpcVersion,

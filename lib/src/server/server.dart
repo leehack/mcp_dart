@@ -231,73 +231,6 @@ class Server extends Protocol {
     );
   }
 
-  Map<String, dynamic>? _readPresentCapabilityObject(
-    Map<String, dynamic> parent,
-    String key,
-    String field,
-  ) {
-    if (!parent.containsKey(key)) {
-      return null;
-    }
-    return readJsonObject(parent[key], field);
-  }
-
-  void _validateStatelessClientCapabilityShapes(
-    Map<String, dynamic> capabilities,
-  ) {
-    _readPresentCapabilityObject(
-      capabilities,
-      'experimental',
-      'ClientCapabilities.experimental',
-    );
-    _readPresentCapabilityObject(
-      capabilities,
-      'extensions',
-      'ClientCapabilities.extensions',
-    );
-    _readPresentCapabilityObject(
-      capabilities,
-      'roots',
-      'ClientCapabilities.roots',
-    );
-
-    final sampling = _readPresentCapabilityObject(
-      capabilities,
-      'sampling',
-      'ClientCapabilities.sampling',
-    );
-    if (sampling != null) {
-      _readPresentCapabilityObject(
-        sampling,
-        'context',
-        'ClientCapabilities.sampling.context',
-      );
-      _readPresentCapabilityObject(
-        sampling,
-        'tools',
-        'ClientCapabilities.sampling.tools',
-      );
-    }
-
-    final elicitation = _readPresentCapabilityObject(
-      capabilities,
-      'elicitation',
-      'ClientCapabilities.elicitation',
-    );
-    if (elicitation != null) {
-      _readPresentCapabilityObject(
-        elicitation,
-        'form',
-        'ClientCapabilities.elicitation.form',
-      );
-      _readPresentCapabilityObject(
-        elicitation,
-        'url',
-        'ClientCapabilities.elicitation.url',
-      );
-    }
-  }
-
   McpError? _validateStatelessRequestMetadata(JsonRpcRequest request) {
     final meta = request.meta;
     try {
@@ -347,11 +280,10 @@ class Server extends Protocol {
     try {
       final typedClientCapabilities =
           clientCapabilities.cast<String, dynamic>();
-      _validateStatelessClientCapabilityShapes(typedClientCapabilities);
       if (hasClientInfo) {
         Implementation.fromJson(clientInfo!.cast<String, dynamic>());
       }
-      ClientCapabilities.fromJson(typedClientCapabilities);
+      ClientCapabilities.fromStatelessJson(typedClientCapabilities);
     } catch (error) {
       return McpError(
         ErrorCode.invalidParams.value,
@@ -376,11 +308,17 @@ class Server extends Protocol {
     final clientCapabilitiesValue =
         request.meta?[McpMetaKey.clientCapabilities];
     try {
-      final clientCapabilities = clientCapabilitiesValue is Map
-          ? ClientCapabilities.fromJson(
-              clientCapabilitiesValue.cast<String, dynamic>(),
-            )
-          : _clientCapabilities;
+      final protocolVersion = request.meta?[McpMetaKey.protocolVersion];
+      ClientCapabilities? clientCapabilities;
+      if (clientCapabilitiesValue is Map) {
+        final json = clientCapabilitiesValue.cast<String, dynamic>();
+        clientCapabilities = protocolVersion is String &&
+                isStatelessProtocolVersion(protocolVersion)
+            ? ClientCapabilities.fromStatelessJson(json)
+            : ClientCapabilities.fromJson(json);
+      } else {
+        clientCapabilities = _clientCapabilities;
+      }
       return (capabilities: clientCapabilities, error: null);
     } catch (error) {
       return (
@@ -1668,9 +1606,8 @@ class Server extends Protocol {
       _supportedVersions.any(isStatelessProtocolVersion);
 
   ServerCapabilities _discoveryCapabilities() {
-    final json = getCapabilities().toJson();
-    json.remove('tasks');
-    return ServerCapabilities.fromJson(json);
+    final json = getCapabilities().toJson(omitLegacyTasks: true);
+    return ServerCapabilities.fromDiscoveryJson(json);
   }
 
   /// Handles the client's `server/discover` request.

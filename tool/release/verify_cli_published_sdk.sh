@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+MODE="${1:-full}"
+if [[ "$MODE" != "full" && "$MODE" != "--resolution-only" ]]; then
+  echo "Usage: $0 [--resolution-only]" >&2
+  exit 64
+fi
+
 if [[ ! -f pubspec.yaml || ! -f bin/mcp_dart.dart ]]; then
   echo "Run this check from the mcp_dart_cli package directory." >&2
   exit 64
@@ -40,6 +46,10 @@ if [[ "$RESOLVED_SDK_VERSION" != "$EXPECTED_SDK_VERSION" ||
   exit 65
 fi
 echo "Resolved minimum hosted mcp_dart $RESOLVED_SDK_VERSION."
+
+if [[ "$MODE" == "--resolution-only" ]]; then
+  exit 0
+fi
 
 dart analyze
 dart test --exclude-tags e2e

@@ -264,6 +264,34 @@ class Method {
   const Method._();
 }
 
+// Built-in MCP request methods always require a JSON-RPC id. Unknown methods
+// remain notification-capable so extension namespaces stay open.
+const Set<String> _knownRequestOnlyMethods = {
+  Method.serverDiscover,
+  Method.initialize,
+  Method.ping,
+  Method.resourcesList,
+  Method.resourcesRead,
+  Method.resourcesTemplatesList,
+  Method.resourcesSubscribe,
+  Method.resourcesUnsubscribe,
+  Method.subscriptionsListen,
+  Method.promptsList,
+  Method.promptsGet,
+  Method.elicitationCreate,
+  Method.toolsList,
+  Method.toolsCall,
+  Method.loggingSetLevel,
+  Method.samplingCreateMessage,
+  Method.completionComplete,
+  Method.rootsList,
+  Method.tasksList,
+  Method.tasksCancel,
+  Method.tasksGet,
+  Method.tasksResult,
+  Method.tasksUpdate,
+};
+
 /// A progress token, used to associate progress notifications with the original request.
 typedef ProgressToken = dynamic;
 
@@ -720,10 +748,45 @@ Map<String, dynamic>? _parseRequestMeta(Object? value) {
 
 /// Extracts request metadata, preferring spec-defined params-nested `_meta`.
 Map<String, dynamic>? extractRequestMeta(Map<String, dynamic> json) {
-  final topLevelMeta = _parseRequestMeta(json['_meta']);
   final params = json['params'];
-  final paramsMeta = params is Map ? _parseRequestMeta(params['_meta']) : null;
+  final paramsMetaValue = params is Map ? params['_meta'] : null;
+  if (paramsMetaValue is Map) {
+    // A valid spec-defined value is authoritative. Do not let an unrelated or
+    // malformed legacy fallback field make an otherwise-valid request fail.
+    return _parseRequestMeta(paramsMetaValue);
+  }
+
+  final topLevelMeta = _parseRequestMeta(json['_meta']);
+  final paramsMeta = _parseRequestMeta(paramsMetaValue);
   return paramsMeta ?? topLevelMeta;
+}
+
+// Validate modern wire placement before typed request factories erase it.
+// Direct typed factories also serve Protocol.setRequestHandler's separate
+// (params, meta) compatibility API, so placement cannot be inferred there.
+void _validateStatelessRequestMetaPlacement(
+  Map<String, dynamic> json,
+  String method,
+) {
+  if (method == Method.initialize) {
+    return;
+  }
+
+  final topLevelMeta = json['_meta'];
+  final protocolVersion =
+      topLevelMeta is Map ? topLevelMeta[McpMetaKey.protocolVersion] : null;
+  if (protocolVersion is! String ||
+      !isStatelessProtocolVersion(protocolVersion)) {
+    return;
+  }
+
+  final params = json['params'];
+  final paramsMeta = params is Map ? params['_meta'] : null;
+  if (paramsMeta is! Map) {
+    throw const FormatException(
+      'MCP 2026-07-28 request metadata must be nested under params._meta',
+    );
+  }
 }
 
 void _expectJsonRpcVersion(Map<String, dynamic> json, String context) {
@@ -773,6 +836,10 @@ sealed class JsonRpcMessage {
   const JsonRpcMessage();
 
   /// Parses a JSON map into a specific [JsonRpcMessage] subclass.
+  ///
+  /// Transport implementations should use this factory for raw wire messages
+  /// so envelope-level validation runs before typed compatibility factories
+  /// normalize their input.
   factory JsonRpcMessage.fromJson(Map<String, dynamic> json) {
     if (json['jsonrpc'] != jsonRpcVersion) {
       throw FormatException('Invalid JSON-RPC version: ${json['jsonrpc']}');
@@ -796,6 +863,13 @@ sealed class JsonRpcMessage {
     if (hasMethod) {
       final method = _parseMethod(json['method']);
       final hasId = json.containsKey('id');
+      if (hasId) {
+        _validateStatelessRequestMetaPlacement(json, method);
+      } else if (_knownRequestOnlyMethods.contains(method)) {
+        throw FormatException(
+          'JSON-RPC request method "$method" requires an id',
+        );
+      }
       final params = _parseOptionalParamsObject(
         json,
         hasId ? 'JsonRpcRequest.params' : 'JsonRpcNotification.params',
@@ -1522,12 +1596,16 @@ class JsonRpcListToolsRequest extends JsonRpcRequest {
 
   factory JsonRpcListToolsRequest.fromJson(Map<String, dynamic> json) {
     _expectJsonRpcMethod(json, Method.toolsList, 'JsonRpcListToolsRequest');
+    final params = readOptionalJsonObject(
+      json['params'],
+      'JsonRpcListToolsRequest.params',
+    );
+    if (params != null) {
+      ListToolsRequest.fromJson(params);
+    }
     return JsonRpcListToolsRequest(
       id: parseRequestId(json['id']),
-      params: readOptionalJsonObject(
-        json['params'],
-        'JsonRpcListToolsRequest.params',
-      ),
+      params: params,
       meta: extractRequestMeta(json),
     );
   }

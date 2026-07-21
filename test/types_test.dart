@@ -2060,6 +2060,168 @@ void main() {
       expect(message, isA<JsonRpcInitializedNotification>());
     });
 
+    test('rejects every known MCP request method without an id', () {
+      const requestOnlyMethods = [
+        Method.serverDiscover,
+        Method.initialize,
+        Method.ping,
+        Method.resourcesList,
+        Method.resourcesRead,
+        Method.resourcesTemplatesList,
+        Method.resourcesSubscribe,
+        Method.resourcesUnsubscribe,
+        Method.subscriptionsListen,
+        Method.promptsList,
+        Method.promptsGet,
+        Method.elicitationCreate,
+        Method.toolsList,
+        Method.toolsCall,
+        Method.loggingSetLevel,
+        Method.samplingCreateMessage,
+        Method.completionComplete,
+        Method.rootsList,
+        Method.tasksList,
+        Method.tasksCancel,
+        Method.tasksGet,
+        Method.tasksResult,
+        Method.tasksUpdate,
+      ];
+
+      for (final method in requestOnlyMethods) {
+        expect(
+          () => JsonRpcMessage.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'method': method,
+          }),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              allOf(contains(method), contains('requires an id')),
+            ),
+          ),
+          reason: method,
+        );
+      }
+    });
+
+    test('retains every known notification method and unknown extensions', () {
+      final notifications = <JsonRpcNotification>[
+        const JsonRpcInitializedNotification(),
+        JsonRpcCancelledNotification(
+          cancelParams: const CancelledNotification(requestId: 1),
+        ),
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 1,
+            progress: 0,
+          ),
+        ),
+        const JsonRpcResourceListChangedNotification(),
+        JsonRpcResourceUpdatedNotification(
+          updatedParams: const ResourceUpdatedNotification(
+            uri: 'file:///resource',
+          ),
+        ),
+        JsonRpcSubscriptionsAcknowledgedNotification(
+          acknowledgedParams: const SubscriptionsAcknowledgedNotification(
+            notifications: SubscriptionFilter(),
+          ),
+        ),
+        const JsonRpcPromptListChangedNotification(),
+        const JsonRpcToolListChangedNotification(),
+        const JsonRpcNotification(
+          method: 'notifications/completions/list_changed',
+        ),
+        const JsonRpcNotification(
+          method: Method.notificationsExperimentalCompletionsListChanged,
+        ),
+        JsonRpcLoggingMessageNotification(
+          logParams: const LoggingMessageNotification(
+            level: LoggingLevel.info,
+            data: 'log',
+          ),
+        ),
+        const JsonRpcRootsListChangedNotification(),
+        JsonRpcTaskStatusNotification(
+          statusParams: const TaskStatusNotification(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            ttl: null,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+          ),
+        ),
+        JsonRpcTaskNotification(
+          task: const TaskExtensionTask(
+            taskId: 'task-1',
+            status: TaskStatus.working,
+            createdAt: '2026-07-28T00:00:00Z',
+            lastUpdatedAt: '2026-07-28T00:00:00Z',
+            ttlMs: null,
+          ),
+        ),
+        const JsonRpcNotification(
+          method: Method.notificationsElicitationComplete,
+          params: {'elicitationId': 'elicitation-1'},
+        ),
+        const JsonRpcNotification(
+          method: 'notifications/vendor/custom',
+          params: {'extension': true},
+        ),
+      ];
+
+      for (final notification in notifications) {
+        final parsed = JsonRpcMessage.fromJson(notification.toJson());
+        expect(parsed, isA<JsonRpcNotification>(), reason: notification.method);
+        expect(
+          (parsed as JsonRpcNotification).method,
+          notification.method,
+          reason: notification.method,
+        );
+      }
+    });
+
+    test('tools/list validates cursor eagerly while preserving raw params', () {
+      final validParams = <String, dynamic>{
+        'cursor': 'next-page',
+        'futureField': true,
+      };
+      final parsed = JsonRpcListToolsRequest.fromJson({
+        'jsonrpc': jsonRpcVersion,
+        'id': 'valid-tools-list',
+        'method': Method.toolsList,
+        'params': validParams,
+      });
+
+      expect(parsed.params, validParams);
+      for (final parse in <Object Function()>[
+        () => JsonRpcListToolsRequest.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'bad-tools-list',
+              'method': Method.toolsList,
+              'params': {'cursor': 42},
+            }),
+        () => JsonRpcMessage.fromJson({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'bad-tools-list',
+              'method': Method.toolsList,
+              'params': {'cursor': 42},
+            }),
+      ]) {
+        expect(
+          parse,
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('cursor'),
+            ),
+          ),
+        );
+      }
+    });
+
     test('Parses valid response with result and meta', () {
       final json = {
         'jsonrpc': '2.0',

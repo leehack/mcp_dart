@@ -101,3 +101,8 @@ push step.
 Run `bash tool/release/verify_publish_workflow_security_test.sh` to verify the
 pre-checkout authorization gate, immutable candidate handoff, and OIDC job
 isolation, including prerelease rejection and pending-status polling.
+
+Run `bash tool/release/verify_cli_binary_workflow_test.sh` to verify that
+standalone CLI build jobs are read-only, remove the monorepo SDK override, and
+resolve the exact minimum hosted SDK before compiling release binaries. Only
+the final asset-attachment job retains repository write permission.

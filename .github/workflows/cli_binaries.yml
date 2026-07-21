@@ -12,7 +12,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -41,6 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Verify release tag checkout
@@ -76,8 +77,12 @@ jobs:
         with:
           sdk: stable
 
-      - name: Install dependencies
-        run: dart pub get
+      - name: Resolve minimum hosted SDK dependency
+        shell: bash
+        run: |
+          rm -f pubspec_overrides.yaml
+          bash "$GITHUB_WORKSPACE/tool/release/verify_cli_published_sdk.sh" \
+            --resolution-only
 
       - name: Compile executable
         shell: bash
@@ -106,9 +111,12 @@ jobs:
     name: Attach binaries to release
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Verify release tag checkout

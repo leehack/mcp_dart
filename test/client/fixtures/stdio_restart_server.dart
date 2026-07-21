@@ -11,11 +11,7 @@ Future<void> main(List<String> arguments) async {
   final launchCountFile = File(arguments.first);
   final replayBehavior =
       arguments.length > 1 ? arguments[1] : 'acknowledge-first';
-  final previousLaunchCount = launchCountFile.existsSync()
-      ? int.parse(launchCountFile.readAsStringSync())
-      : 0;
-  final launchCount = previousLaunchCount + 1;
-  _writeLaunchCountAtomically(launchCountFile, launchCount);
+  final launchCount = _claimLaunchNumber(launchCountFile);
   var rejectedDiscovery = false;
   final receivedSubscriptionIds = <Object?>[];
 
@@ -40,6 +36,26 @@ Future<void> main(List<String> arguments) async {
     await inputSubscription.cancel();
     File('${launchCountFile.path}.stdin-closed').writeAsStringSync('ready');
     await Future<void>.delayed(const Duration(seconds: 30));
+    return;
+  }
+  if (launchCount == 2 &&
+      replayBehavior == 'closed-stdin-ignore-sigterm-after-restart') {
+    final ignoredSigterm = ProcessSignal.sigterm.watch().listen((_) {});
+    final inputSubscription = stdin.listen((_) {});
+    await inputSubscription.cancel();
+    File('${launchCountFile.path}.stdin-closed').writeAsStringSync('ready');
+    await Future<void>.delayed(const Duration(minutes: 5));
+    await ignoredSigterm.cancel();
+    return;
+  }
+  if (launchCount == 2 &&
+      replayBehavior == 'closed-stdin-exit-zero-on-sigterm-after-restart') {
+    final handledSigterm = ProcessSignal.sigterm.watch().listen((_) => exit(0));
+    final inputSubscription = stdin.listen((_) {});
+    await inputSubscription.cancel();
+    File('${launchCountFile.path}.stdin-closed').writeAsStringSync('ready');
+    await Future<void>.delayed(const Duration(minutes: 5));
+    await handledSigterm.cancel();
     return;
   }
   await for (final line
@@ -318,8 +334,20 @@ void _send(Map<String, dynamic> message) {
   stdout.writeln(jsonEncode(message));
 }
 
-void _writeLaunchCountAtomically(File destination, int launchCount) {
-  final staging = File('${destination.path}.$pid.tmp');
-  staging.writeAsStringSync('$launchCount', flush: true);
-  staging.renameSync(destination.path);
+int _claimLaunchNumber(File markerPrefix) {
+  for (var launchNumber = 1; launchNumber <= 1000; launchNumber++) {
+    final marker = File('${markerPrefix.path}.launch-$launchNumber');
+    try {
+      marker.createSync(exclusive: true);
+      return launchNumber;
+    } on FileSystemException {
+      // Another fixture process already owns this immutable launch marker.
+      // Exclusive files avoid replacing a counter that the parent test may
+      // have open, which is not reliable on Windows.
+      if (!marker.existsSync()) {
+        rethrow;
+      }
+    }
+  }
+  throw StateError('Stdio fixture exceeded 1000 launches.');
 }
