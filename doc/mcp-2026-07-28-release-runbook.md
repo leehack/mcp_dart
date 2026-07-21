@@ -166,6 +166,8 @@ dart run tool/testing/run_json_schema_2020_12_suite.dart \
   .dart_tool/json-schema-test-suite/tests/draft2020-12
 dart run tool/testing/run_json_schema_draft7_suite.dart \
   .dart_tool/json-schema-test-suite/tests/draft7
+dart run tool/testing/run_json_schema_draft7_format_suite.dart \
+  .dart_tool/json-schema-test-suite/tests/draft7/optional/format
 dart run test/conformance/run_2025_server_conformance.dart \
   --timeout-seconds 90 --isolate-scenarios
 CONFORMANCE_VERSION=0.2.0-alpha.9 # Replace with the final compatible release.

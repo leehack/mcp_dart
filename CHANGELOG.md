@@ -2,6 +2,10 @@
 
 ### Changed
 
+- Removed the `json_schema` and `quiver` package dependencies in favor of an
+  SDK-owned offline validator, preserving public validation APIs, Draft 2020-12
+  and Draft 7 semantics, and canonical meta-schema references. Draft 7 format
+  checks and validation diagnostics are now stricter and more precise.
 - Preserved the `2.2.2` registration, callback, logging, request metadata, and
   `StartSseOptions` APIs, with additive `registerStatelessTool`,
   `registerStatelessPrompt`, `registerStatelessResource`, and
@@ -236,10 +240,11 @@ MCP `2025-11-25` and earlier initialization compatibility.
 - `CreateMessageRequest` now rejects invalid sampling tool-use/result roles,
   ordering, and ID matches during parsing and serialization.
 - JSON Schema validation now follows Draft 2020-12 by default and declared
-  Draft 7, so outcomes and errors may differ. Unsupported dialects, custom
-  vocabularies, unresolved external references, schemas deeper than 64 levels,
-  and more than 1,024 subschemas are rejected. `JsonSchema.fromJson()` may
-  return `JsonAny`; the package now depends on `json_schema ^5.2.2`.
+  Draft 7, so outcomes and errors may differ. Unsupported dialects, unresolved
+  external references, schemas deeper than 64 levels, and more than 1,024
+  subschemas are rejected; custom vocabularies are not interpreted.
+  `JsonSchema.fromJson()` may return `JsonAny`; validation remains synchronous
+  and does not perform network access.
 - MCP 2026-07-28 per-request Streamable HTTP cancellation closes only the
   matching POST response stream. Body-only transports and MCP 2025-11-25
   retain `notifications/cancelled`.

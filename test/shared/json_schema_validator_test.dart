@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:mcp_dart/src/shared/json_schema/json_schema.dart';
 import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:test/test.dart';
@@ -179,6 +181,26 @@ void main() {
         schema.validate(15);
         expect(
           () => schema.validate(7),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('compares large integers without double precision loss', () {
+        final enumSchema = JsonSchema.fromJson({
+          'enum': [9007199254740992.0, 9007199254740993],
+        });
+        enumSchema.validate(9007199254740992.0);
+        enumSchema.validate(9007199254740993);
+        expect(
+          () => JsonSchema.fromJson({
+            'enum': [9007199254740992.0],
+          }).validate(9007199254740993),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+        expect(
+          () => JsonSchema.fromJson({
+            'maximum': 9007199254740992.0,
+          }).validate(9007199254740993),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
@@ -443,6 +465,21 @@ void main() {
         );
       });
 
+      test('preserves validation behavior for non-string Dart map keys', () {
+        final bounded = JsonSchema.fromJson({'maxProperties': 0});
+        final closed = JsonSchema.fromJson({'additionalProperties': false});
+        final named = JsonSchema.fromJson({
+          'propertyNames': {'type': 'string'},
+        });
+
+        for (final schema in [bounded, closed, named]) {
+          expect(
+            () => schema.validate({1: 'value'}),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+        }
+      });
+
       test('validates additionalProperties as schema', () {
         final schema = JsonSchema.object(
           properties: {"name": JsonSchema.string()},
@@ -532,6 +569,22 @@ void main() {
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
+
+      test(
+        'compiles large enums without quadratic duplicate scanning',
+        () {
+          final schema = JsonSchema.fromJson({
+            'enum': List<int>.generate(10000, (index) => index),
+          });
+
+          schema.validate(9999);
+          expect(
+            () => schema.validate(10000),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+        },
+        timeout: const Timeout(Duration(seconds: 5)),
+      );
 
       test('validates titled enum values against canonical values', () {
         final schema = const JsonEnum([
@@ -919,6 +972,135 @@ void main() {
         }
       });
 
+      test(r'canonical meta-schema $ref accepts custom dialect identifiers',
+          () {
+        final schema = JsonSchema.fromJson({
+          r'$schema': 'https://json-schema.org/draft/2020-12/schema',
+          r'$ref': 'https://json-schema.org/draft/2020-12/schema',
+        });
+
+        schema.validate({
+          r'$schema': 'https://example.com/custom',
+          'type': 'string',
+        });
+        schema.validate({
+          r'$id': 'not a uri',
+          r'$ref': 'not a uri',
+          r'$dynamicRef': 'not a uri',
+          r'$vocabulary': {'relative': true},
+          'pattern': '[',
+          'patternProperties': {'[': true},
+        });
+        // The canonical 2020-12 validation meta-schema only requires `enum`
+        // to be an array. Ordinary schema compilation remains stricter.
+        schema.validate({'enum': []});
+        schema.validate({
+          'enum': [1, 1],
+        });
+        expect(
+          () => schema.validate({'enum': 'value'}),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+
+        Object deepSchema = true;
+        for (var depth = 0; depth < 70; depth++) {
+          deepSchema = {
+            'allOf': [deepSchema],
+          };
+        }
+        schema.validate(deepSchema);
+        schema.validate({
+          r'$defs': {
+            for (var index = 0; index < 1100; index++) '$index': true,
+          },
+        });
+      });
+
+      test(r'resolves canonical meta-schema fragment $ref values', () {
+        for (final dialect in const [
+          'http://json-schema.org/draft-07/schema#',
+          'https://json-schema.org/draft-07/schema#',
+        ]) {
+          final base = dialect.substring(0, dialect.length - 1);
+          final schema = JsonSchema.fromJson({
+            r'$schema': dialect,
+            r'$ref': '$base#/definitions/nonNegativeInteger',
+          });
+          schema.validate(3);
+          expect(
+            () => schema.validate(-1),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+
+          final arbitraryPointer = JsonSchema.fromJson({
+            r'$schema': dialect,
+            r'$ref': '$base#/properties/multipleOf',
+          });
+          arbitraryPointer.validate(1);
+          expect(
+            () => arbitraryPointer.validate(0),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+        }
+
+        final schema2020 = JsonSchema.fromJson({
+          r'$schema': 'https://json-schema.org/draft/2020-12/schema',
+          r'$ref': 'https://json-schema.org/draft/2020-12/schema#/'
+              r'%24defs/vocab-validation/$defs/nonNegativeInteger',
+        });
+        schema2020.validate(3);
+        expect(
+          () => schema2020.validate(-1),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+
+        final nestedPointer = JsonSchema.fromJson({
+          r'$schema': 'https://json-schema.org/draft/2020-12/schema',
+          r'$ref': 'https://json-schema.org/draft/2020-12/schema#/'
+              r'$defs/vocab-validation/properties/type',
+        });
+        nestedPointer.validate(['object']);
+        expect(
+          () => nestedPointer.validate([]),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+
+        final draft7Root = JsonSchema.fromJson({
+          r'$schema': 'http://json-schema.org/draft-07/schema#',
+          r'$ref': 'http://json-schema.org/draft-07/schema',
+        });
+        expect(
+          () => draft7Root.validate({'type': 'bogus'}),
+          throwsA(
+            isA<JsonSchemaValidationException>().having(
+              (error) => error.path,
+              'path',
+              ['type'],
+            ),
+          ),
+        );
+      });
+
+      test('uses the target dialect for cross-dialect canonical references',
+          () {
+        final draft7From2020 = JsonSchema.fromJson({
+          r'$schema': 'https://json-schema.org/draft/2020-12/schema',
+          r'$ref': 'http://json-schema.org/draft-07/schema#/properties/items',
+        });
+        draft7From2020.validate([true]);
+
+        final draft2020From7 = JsonSchema.fromJson({
+          r'$schema': 'http://json-schema.org/draft-07/schema#',
+          r'$ref': 'https://json-schema.org/draft/2020-12/schema#/'
+              r'$defs/vocab-applicator/properties/items',
+        });
+        draft2020From7.validate(true);
+        expect(
+          () => draft2020From7.validate([true]),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
       test('uses declared Draft 7 tuple semantics for legacy schemas', () {
         for (final dialect in const [
           'http://json-schema.org/draft-07/schema#',
@@ -967,6 +1149,54 @@ void main() {
         );
       });
 
+      test('Draft 7 treats formats from later dialects as annotations', () {
+        for (final format in const ['duration', 'uuid', 'ecmascript-regex']) {
+          final schema = JsonSchema.fromJson({
+            r'$schema': 'http://json-schema.org/draft-07/schema#',
+            'format': format,
+          });
+
+          schema.validate(format == 'ecmascript-regex' ? '[' : 'not-valid');
+        }
+      });
+
+      test('Draft 7 rejects whitespace in IPv6 values on every Dart SDK', () {
+        final schema = JsonSchema.fromJson({
+          r'$schema': 'http://json-schema.org/draft-07/schema#',
+          'format': 'ipv6',
+        });
+
+        schema.validate('2001:db8::1');
+        for (final invalid in const [
+          '2001:db8::1 ',
+          ' 2001:db8::1',
+          '2001:db8::1\n',
+          'fe80::1%eth0',
+        ]) {
+          expect(
+            () => schema.validate(invalid),
+            throwsA(isA<JsonSchemaValidationException>()),
+            reason: invalid,
+          );
+        }
+      });
+
+      test(
+        'Draft 7 rejects oversized IDN labels before punycode encoding',
+        () {
+          final schema = JsonSchema.fromJson({
+            r'$schema': 'http://json-schema.org/draft-07/schema#',
+            'format': 'idn-hostname',
+          });
+
+          expect(
+            () => schema.validate(List.filled(100000, '例').join()),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+        },
+        timeout: const Timeout(Duration(seconds: 5)),
+      );
+
       test('Draft 7 ignores unrecognized 2020-12 keywords independently', () {
         final schemas = <String, Map<String, dynamic>>{
           'prefixItems': {
@@ -991,6 +1221,17 @@ void main() {
               },
             },
           },
+          'external references under unknown keywords': {
+            'prefixItems': [
+              {r'$ref': 'https://example.invalid/schema'},
+            ],
+            'unevaluatedItems': {
+              r'$ref': 'https://example.invalid/schema',
+            },
+            r'$defs': {
+              'ignored': {r'$ref': 'https://example.invalid/schema'},
+            },
+          },
         };
 
         for (final value in schemas.values) {
@@ -1001,6 +1242,27 @@ void main() {
           });
           schema.validate([1, 2]);
         }
+      });
+
+      test('Draft 7 treats anchor keywords as annotations', () {
+        final unresolvedAnchor = JsonSchema.fromJson({
+          r'$schema': 'http://json-schema.org/draft-07/schema#',
+          r'$anchor': 'value',
+          r'$ref': '#value',
+        });
+        expect(
+          () => unresolvedAnchor.validate('value'),
+          throwsA(isA<JsonSchemaDefinitionException>()),
+        );
+
+        final duplicateAnnotations = JsonSchema.fromJson({
+          r'$schema': 'http://json-schema.org/draft-07/schema#',
+          'definitions': {
+            'first': {r'$anchor': 'same'},
+            'second': {r'$anchor': 'same'},
+          },
+        });
+        duplicateAnnotations.validate(null);
       });
 
       test(r'Draft 7 resolves local $ref values through definitions', () {
@@ -1034,6 +1296,16 @@ void main() {
         });
 
         schema.validate('value');
+      });
+
+      test('2020-12 does not resolve references inside contentSchema', () {
+        final schema = JsonSchema.fromJson({
+          'contentSchema': {
+            r'$ref': 'https://example.invalid/schema',
+          },
+        });
+
+        schema.validate('encoded content');
       });
 
       test('rejects unsupported and malformed declared dialects clearly', () {
@@ -1089,6 +1361,27 @@ void main() {
         }
       });
 
+      test('rejects invalid URI-references in schema identifiers', () {
+        for (final keyword in const [r'$id', r'$ref', r'$dynamicRef']) {
+          for (final value in const [
+            'a b',
+            r'a\b',
+            '%zz',
+            'foo[bar',
+            'foo]bar',
+            'https://example.com/{x}',
+          ]) {
+            final schema = JsonSchema.fromJson({keyword: value});
+            expect(
+              () => schema.validate('value'),
+              throwsA(isA<JsonSchemaDefinitionException>()),
+              reason: '$keyword=$value',
+            );
+          }
+        }
+        JsonSchema.fromJson({r'$id': '//[::1]/schema'}).validate('value');
+      });
+
       test(r'resolves local $ref values through $defs', () {
         final schema = JsonSchema.fromJson({
           r'$defs': {
@@ -1126,6 +1419,134 @@ void main() {
         );
       });
 
+      test(r'rejects invalid JSON Pointer syntax in $ref values', () {
+        for (final reference in const [
+          r'#/$defs/foo~2bar',
+          r'#/$defs/foo~',
+          r'#/$defs/foo%7E2bar',
+        ]) {
+          final schema = JsonSchema.fromJson({
+            r'$defs': {
+              'foo~2bar': true,
+              'foo~': true,
+            },
+            r'$ref': reference,
+          });
+
+          expect(
+            () => schema.validate('value'),
+            throwsA(isA<JsonSchemaDefinitionException>()),
+            reason: reference,
+          );
+        }
+
+        for (final index in const ['01', '00', '+1', '-']) {
+          final schema = JsonSchema.fromJson({
+            'unknown-keyword': [true, true],
+            r'$ref': '#/unknown-keyword/$index',
+          });
+          expect(
+            () => schema.validate('value'),
+            throwsA(isA<JsonSchemaDefinitionException>()),
+            reason: index,
+          );
+        }
+      });
+
+      test('reuses overlapping lazily compiled pointer targets', () {
+        for (final target in [
+          <String, Object?>{r'$anchor': 'value', 'type': 'string'},
+          <String, Object?>{r'$id': 'value', 'type': 'string'},
+        ]) {
+          for (final references in const [
+            [r'#/unknown/properties/x', r'#/unknown'],
+            [r'#/unknown', r'#/unknown/properties/x'],
+          ]) {
+            final schema = JsonSchema.fromJson({
+              r'$id': 'https://example.test/root',
+              'unknown': {
+                'properties': {'x': target},
+              },
+              'allOf': [
+                for (final reference in references) {r'$ref': reference},
+              ],
+            });
+
+            schema.validate('value');
+            expect(
+              () => schema.validate(1),
+              throwsA(isA<JsonSchemaValidationException>()),
+            );
+          }
+        }
+      });
+
+      test('resolves lazy resource identifiers independently of ref order', () {
+        for (final references in const [
+          ['child', r'#/unknown'],
+          [r'#/unknown', 'child'],
+        ]) {
+          final schema = JsonSchema.fromJson({
+            r'$id': 'https://example.test/root',
+            'unknown': {r'$id': 'child', 'type': 'string'},
+            'allOf': [
+              for (final reference in references) {r'$ref': reference},
+            ],
+          });
+
+          schema.validate('value');
+          expect(
+            () => schema.validate(1),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+        }
+      });
+
+      test(r'decodes percent escapes in $ref fragments exactly once', () {
+        final schema = JsonSchema.fromJson({
+          r'$defs': {
+            'percent%25field': {'const': 'matched'},
+          },
+          r'$ref': r'#/$defs/percent%2525field',
+        });
+
+        schema.validate('matched');
+        expect(
+          () => schema.validate('other'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test(r'resolves $ref pointers beneath unknown keywords', () {
+        for (final schemaJson in [
+          {
+            'unknown-keyword': {'const': 'matched'},
+            r'$ref': '#/unknown-keyword',
+          },
+          {
+            'properties': {
+              'foo': {
+                'unknown-keyword': {'const': 'matched'},
+                r'$ref': '#/properties/foo/unknown-keyword',
+              },
+            },
+          },
+        ]) {
+          final schema = JsonSchema.fromJson(schemaJson);
+          schema.validate(
+            schemaJson.containsKey('properties')
+                ? {'foo': 'matched'}
+                : 'matched',
+          );
+          expect(
+            () => schema.validate(
+              schemaJson.containsKey('properties') ? {'foo': 'other'} : 'other',
+            ),
+            throwsA(isA<JsonSchemaValidationException>()),
+          );
+        }
+      });
+
       test(r'resolves local $anchor references', () {
         final schema = JsonSchema.fromJson({
           r'$defs': {
@@ -1143,6 +1564,71 @@ void main() {
           () => schema.validate(0),
           throwsA(isA<JsonSchemaValidationException>()),
         );
+      });
+
+      test('rejects duplicate plain-name fragments within one resource', () {
+        for (final definitions in [
+          {
+            'first': {r'$anchor': 'same'},
+            'second': {r'$anchor': 'same'},
+          },
+          {
+            'first': {r'$anchor': 'same'},
+            'second': {r'$dynamicAnchor': 'same'},
+          },
+          {
+            'first': {r'$dynamicAnchor': 'same'},
+            'second': {r'$dynamicAnchor': 'same'},
+          },
+          {
+            'sameNode': {
+              r'$anchor': 'same',
+              r'$dynamicAnchor': 'same',
+            },
+          },
+        ]) {
+          final schema = JsonSchema.fromJson({r'$defs': definitions});
+          expect(
+            () => schema.validate(null),
+            throwsA(isA<JsonSchemaDefinitionException>()),
+          );
+        }
+
+        final distinctResources = JsonSchema.fromJson({
+          r'$id': 'https://example.test/root',
+          r'$defs': {
+            'first': {
+              r'$id': 'first',
+              r'$anchor': 'same',
+            },
+            'second': {
+              r'$id': 'second',
+              r'$anchor': 'same',
+            },
+          },
+        });
+        distinctResources.validate(null);
+      });
+
+      test(r'rejects duplicate resolved $id resource identifiers', () {
+        for (final definitions in [
+          {
+            'first': {r'$id': 'resource'},
+            'second': {r'$id': './resource'},
+          },
+          {
+            'nested': {r'$id': 'https://example.test/root'},
+          },
+        ]) {
+          final schema = JsonSchema.fromJson({
+            r'$id': 'https://example.test/root',
+            r'$defs': definitions,
+          });
+          expect(
+            () => schema.validate(null),
+            throwsA(isA<JsonSchemaDefinitionException>()),
+          );
+        }
       });
 
       test('resolves absolute references to in-document resources', () {
@@ -1178,6 +1664,206 @@ void main() {
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
+
+      test(r'applies a nested $id before resolving its sibling $ref', () {
+        final schema = JsonSchema.fromJson({
+          r'$id': 'https://example.com/schemas/base.json',
+          r'$ref': 'nested/value.json',
+          r'$defs': {
+            'value': {
+              r'$id': 'nested/value.json',
+              r'$ref': './number.json',
+            },
+            'number': {
+              r'$id': 'nested/number.json',
+              'type': 'number',
+            },
+          },
+        });
+
+        schema.validate(1);
+        expect(
+          () => schema.validate('not a number'),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test(r'terminates cycles across schema resources', () {
+        final schema = JsonSchema.fromJson({
+          r'$id': 'https://example.com/A',
+          r'$ref': 'B',
+          r'$defs': {
+            'B': {
+              r'$id': 'B',
+              r'$ref': 'https://example.com/A',
+            },
+          },
+        });
+
+        schema.validate('value');
+      });
+
+      test(
+        'memoizes recursive combinator evaluation',
+        () {
+          final schema = JsonSchema.fromJson({
+            r'$defs': {
+              'node': {
+                'anyOf': [
+                  {
+                    'properties': {
+                      'next': {r'$ref': r'#/$defs/node'},
+                    },
+                  },
+                  {
+                    'properties': {
+                      'next': {r'$ref': r'#/$defs/node'},
+                    },
+                  },
+                ],
+              },
+            },
+            r'$ref': r'#/$defs/node',
+          });
+          Object value = <String, Object?>{};
+          for (var depth = 0; depth < 20; depth++) {
+            value = <String, Object?>{'next': value};
+          }
+
+          schema.validate(value);
+        },
+        timeout: const Timeout(Duration(seconds: 5)),
+      );
+
+      test(
+        'bounds deep recursive instance evaluation without reducing baseline',
+        () {
+          final schemas = [
+            JsonSchema.fromJson({
+              r'$defs': {
+                'node': {
+                  'type': 'object',
+                  'properties': {
+                    'next': {r'$ref': r'#/$defs/node'},
+                  },
+                },
+              },
+              r'$ref': r'#/$defs/node',
+            }),
+            JsonSchema.fromJson({
+              r'$id': 'https://example.test/node',
+              r'$dynamicAnchor': 'node',
+              'type': 'object',
+              'properties': {
+                'next': {r'$dynamicRef': '#node'},
+              },
+            }),
+          ];
+
+          Object nestedObject(int depth) => jsonDecode(
+                '${List.filled(depth, '{"next":').join()}{}'
+                '${List.filled(depth, '}').join()}',
+              );
+
+          final baselineDepth = nestedObject(1100);
+          final boundedDepth = nestedObject(1200);
+          for (final schema in schemas) {
+            schema.validate(baselineDepth);
+            expect(
+              () => schema.validate(boundedDepth),
+              throwsA(
+                isA<JsonSchemaValidationException>().having(
+                  (error) => error.message,
+                  'message',
+                  contains('maximum depth'),
+                ),
+              ),
+            );
+          }
+        },
+        timeout: const Timeout(Duration(seconds: 10)),
+      );
+
+      test(
+        'memoizes static reference DAGs across resource paths',
+        () {
+          const levels = 20;
+          final definitions = <String, Object?>{};
+          for (var level = 0; level < levels; level++) {
+            definitions['c$level'] = {
+              r'$id': 'c$level',
+              'allOf': [
+                {r'$ref': 'a$level'},
+                {r'$ref': 'b$level'},
+              ],
+            };
+            definitions['a$level'] = {
+              r'$id': 'a$level',
+              r'$ref': 'c${level + 1}',
+            };
+            definitions['b$level'] = {
+              r'$id': 'b$level',
+              r'$ref': 'c${level + 1}',
+            };
+          }
+          definitions['c$levels'] = {r'$id': 'c$levels'};
+          final schema = JsonSchema.fromJson({
+            r'$id': 'https://example.test/root',
+            r'$dynamicAnchor': 'unused',
+            r'$defs': {
+              ...definitions,
+              'unusedDynamic': {r'$dynamicRef': '#unused'},
+            },
+            r'$ref': 'c0',
+          });
+
+          schema.validate(null);
+        },
+        timeout: const Timeout(Duration(seconds: 5)),
+      );
+
+      test(
+        'memoizes dynamic reference DAGs across equivalent scopes',
+        () {
+          const levels = 8;
+          final definitions = <String, Object?>{};
+          for (var level = 0; level < levels; level++) {
+            definitions['c$level'] = {
+              r'$id': 'c$level',
+              'allOf': [
+                {r'$ref': 'a$level'},
+                {r'$ref': 'b$level'},
+              ],
+            };
+            definitions['a$level'] = {
+              r'$id': 'a$level',
+              r'$dynamicAnchor': 'node',
+              r'$ref': 'c${level + 1}',
+            };
+            definitions['b$level'] = {
+              r'$id': 'b$level',
+              r'$dynamicAnchor': 'node',
+              r'$ref': 'c${level + 1}',
+            };
+          }
+          definitions['c$levels'] = {
+            r'$id': 'c$levels',
+            r'$dynamicRef': 'target#node',
+          };
+          definitions['target'] = {
+            r'$id': 'target',
+            r'$dynamicAnchor': 'node',
+          };
+          final schema = JsonSchema.fromJson({
+            r'$id': 'https://example.test/root',
+            r'$defs': definitions,
+            r'$ref': 'c0',
+          });
+
+          schema.validate(null);
+        },
+        timeout: const Timeout(Duration(seconds: 5)),
+      );
 
       test('evaluates if, then, and else branches', () {
         final schema = JsonSchema.fromJson({

@@ -279,6 +279,11 @@ jobs:
           dart run tool/testing/run_json_schema_draft7_suite.dart
           .dart_tool/json-schema-test-suite/tests/draft7
 
+      - name: Run official JSON Schema Draft 7 format suite
+        run: >
+          dart run tool/testing/run_json_schema_draft7_format_suite.dart
+          .dart_tool/json-schema-test-suite/tests/draft7/optional/format
+
       - name: Run MCP spec conformance gate
         working-directory: packages/mcp_dart_cli
         run: dart run bin/mcp_dart.dart conformance --suite all --json

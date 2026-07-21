@@ -37,10 +37,10 @@ properties.
 Local fragments and absolute or relative resource identifiers that resolve
 inside the supplied schema document are evaluated synchronously, including
 `$dynamicRef`. For predictable offline behavior, unresolved references outside
-that document are rejected without network I/O, as are unsupported dialects
-and custom vocabularies. Schema evaluation is bounded to a depth of 64 and
-1,024 subschemas. Keep external reference resolution and custom-vocabulary
-processing in application code when needed.
+that document and unsupported dialects are rejected without network I/O.
+Custom vocabularies are preserved but not interpreted. Schema compilation is
+bounded to a depth of 64 and 1,024 subschemas. Keep external reference
+resolution and custom-vocabulary processing in application code when needed.
 
 MCP 2025-11-25 requires `inputSchema`; `outputSchema` remains optional. Its
 structured tool values are object-rooted, so initialization-era registrations use
