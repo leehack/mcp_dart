@@ -1454,6 +1454,25 @@ class ExperimentalMcpServerTasks {
   }
 }
 
+// Keep the high-level facade's session-scoped state aligned with Protocol's
+// transport lifecycle without widening the deprecated Server public API.
+// ignore: deprecated_member_use_from_same_package
+final class _McpServerProtocol extends Server {
+  final void Function() _onConnectionClosedCallback;
+
+  _McpServerProtocol(
+    super.serverInfo, {
+    super.options,
+    required void Function() onConnectionClosed,
+  }) : _onConnectionClosedCallback = onConnectionClosed;
+
+  @override
+  void onConnectionClosed() {
+    super.onConnectionClosed();
+    _onConnectionClosedCallback();
+  }
+}
+
 /// High-level Model Context Protocol (MCP) server API.
 ///
 /// This class provides a set of high-level methods to register resources, tools,
@@ -1492,8 +1511,11 @@ class McpServer {
 
   /// Creates an [McpServer] instance.
   McpServer(Implementation serverInfo, {McpServerOptions? options}) {
-    // ignore: deprecated_member_use_from_same_package
-    server = Server(serverInfo, options: options);
+    server = _McpServerProtocol(
+      serverInfo,
+      options: options,
+      onConnectionClosed: _taskOutputValidationsById.clear,
+    );
   }
 
   /// Connects the server to a communication [transport].
@@ -2235,32 +2257,8 @@ class McpServer {
 
         try {
           dynamic result;
-          if (taskSupport == 'required') {
+          if (taskSupport == 'required' || taskSupport == 'optional') {
             if (!isTaskRequest) {
-              result = await _handleAutomaticTaskPolling(
-                registeredTool,
-                toolArgs,
-                extra,
-              );
-            } else {
-              final InterfaceToolCallback taskHandler =
-                  registeredTool.callback as InterfaceToolCallback;
-              final taskResult =
-                  await taskHandler.handler.createTask(toolArgs, extra);
-              if (validateOutput != null) {
-                _taskOutputValidationsById[(
-                  extra.sessionId,
-                  taskResult.task.taskId
-                )] = _TaskOutputValidationSnapshot(
-                  toolName: toolName,
-                  validateOutput: validateOutput,
-                );
-              }
-              result = taskResult;
-            }
-          } else if (taskSupport == 'optional') {
-            if (!isTaskRequest) {
-              // Ensure we have a task handler for automatic polling (checked above, but safe cast)
               result = await _handleAutomaticTaskPolling(
                 registeredTool,
                 toolArgs,
@@ -3146,7 +3144,8 @@ class McpServer {
         completion: CompletionResultData(values: [], hasMore: false),
       );
 
-  /// Handles automatic task polling for tools with taskSupport 'optional'.
+  /// Handles automatic task polling for task-backed tools invoked without
+  /// legacy task augmentation.
   Future<CallToolResult> _handleAutomaticTaskPolling(
     _RegisteredToolImpl tool,
     Map<String, dynamic>? args,

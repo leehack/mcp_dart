@@ -366,6 +366,84 @@ void main() {
       expect(result.structuredContent, {'result': 'accepted'});
     });
 
+    test('unexpected transport close clears captured task output schemas',
+        () async {
+      final oldContractHandler = _ResultHandler();
+      final freshTaskHandler = _ResultHandler();
+      mcpServer.experimental.registerToolTask(
+        'old_contract_task',
+        outputSchema: ToolOutputSchema(
+          properties: {'result': JsonSchema.string()},
+          required: ['result'],
+        ),
+        handler: oldContractHandler,
+      );
+      mcpServer.experimental.registerToolTask(
+        'fresh_task',
+        handler: freshTaskHandler,
+      );
+      mcpServer.experimental.onTaskResult(
+        (taskId, extra) async =>
+            CallToolResult.fromStructuredContent({'count': 1}),
+      );
+
+      await mcpServer.connect(transport);
+      await _initializeServer(transport);
+
+      final firstCreateResponse = await _receiveResponse(
+        transport,
+        const JsonRpcCallToolRequest(
+          id: 'create-task-before-disconnect',
+          params: {
+            'name': 'old_contract_task',
+            'task': {'ttl': 60000},
+          },
+        ),
+      );
+      expect(firstCreateResponse, isA<JsonRpcResponse>());
+      expect(oldContractHandler.createTaskCalls, 1);
+
+      // Simulate the transport closing independently of McpServer.close().
+      // Both handlers deliberately return task1, so the fresh schema-free task
+      // would pick up the previous session's validator if it leaked.
+      await transport.close();
+      expect(mcpServer.isConnected, isFalse);
+
+      final reconnectedTransport = MockTransport();
+      try {
+        await mcpServer.connect(reconnectedTransport);
+        await _initializeServer(reconnectedTransport);
+
+        final secondCreateResponse = await _receiveResponse(
+          reconnectedTransport,
+          const JsonRpcCallToolRequest(
+            id: 'create-task-after-reconnect',
+            params: {
+              'name': 'fresh_task',
+              'task': {'ttl': 60000},
+            },
+          ),
+        );
+        expect(secondCreateResponse, isA<JsonRpcResponse>());
+        expect(freshTaskHandler.createTaskCalls, 1);
+
+        final resultResponse = await _receiveResponse(
+          reconnectedTransport,
+          JsonRpcTaskResultRequest(
+            id: 'task-result-after-reconnect',
+            resultParams: const TaskResultRequest(taskId: 'task1'),
+          ),
+        );
+        expect(resultResponse, isA<JsonRpcResponse>());
+        final result = CallToolResult.fromJson(
+          (resultResponse as JsonRpcResponse).result,
+        );
+        expect(result.structuredContent, {'count': 1});
+      } finally {
+        await mcpServer.close();
+      }
+    });
+
     test('required task mode is checked before input schema', () async {
       final handler = _ResultHandler();
       mcpServer.experimental.registerToolTask(
