@@ -1426,11 +1426,11 @@ bool _matchesType(String type, Object? value) {
 bool _jsonEqual(Object? left, Object? right) {
   if (left is num && right is num) return jsonNumbersEqual(left, right);
   if (left is List && right is List) {
-    return left.length == right.length &&
-        List.generate(
-          left.length,
-          (index) => index,
-        ).every((index) => _jsonEqual(left[index], right[index]));
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      if (!_jsonEqual(left[index], right[index])) return false;
+    }
+    return true;
   }
   if (left is Map && right is Map) {
     if (left.length != right.length) return false;

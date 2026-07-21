@@ -45,11 +45,17 @@ void main() {
       expect(
         () => schema.validate('value'),
         throwsA(
-          isA<JsonSchemaDefinitionException>().having(
-            (error) => error.message,
-            'message',
-            contains('Invalid JSON Schema schema'),
-          ),
+          isA<JsonSchemaDefinitionException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('Invalid JSON Schema schema: #/minLength:'),
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                isNot(contains('schema: Invalid JSON Schema')),
+              ),
         ),
       );
     });

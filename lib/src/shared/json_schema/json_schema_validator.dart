@@ -50,7 +50,7 @@ void Function(dynamic) compileJsonSchemaValidator(JsonSchema schema) {
     validateJsonSchemaDefinition(schemaValue, schemaVersion);
   } on FormatException catch (error) {
     throw JsonSchemaDefinitionException._(
-      'Invalid JSON Schema schema: ${error.message}',
+      _schemaDefinitionMessage(error),
     );
   }
 
@@ -77,6 +77,15 @@ void Function(dynamic) compileJsonSchemaValidator(JsonSchema schema) {
       throw JsonSchemaValidationException(error.message, error.path);
     }
   };
+}
+
+String _schemaDefinitionMessage(FormatException error) {
+  const validatorPrefix = 'Invalid JSON Schema at ';
+  final message = error.message.toString();
+  final detail = message.startsWith(validatorPrefix)
+      ? message.substring(validatorPrefix.length)
+      : message;
+  return 'Invalid JSON Schema schema: $detail';
 }
 
 /// Adds standards-compliant JSON Schema validation to [JsonSchema].
