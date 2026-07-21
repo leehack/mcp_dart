@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 import 'package:mcp_dart/src/client/oauth_client_platform.dart'
     as oauth_platform;
+import 'package:mcp_dart/src/shared/protocol_direction.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 
@@ -1504,7 +1505,7 @@ class StreamableHttpClientTransport
     final params = _paramsFrom(message);
     final name = _standardNameHeaderValue(method, params);
     if (name != null) {
-      headers['Mcp-Name'] = name;
+      headers['Mcp-Name'] = _encodeMcpHeaderValue(name);
     }
 
     if (method == Method.toolsCall && name != null) {
@@ -1532,13 +1533,23 @@ class StreamableHttpClientTransport
         continue;
       }
 
+      if (_isUnsafeHeaderInteger(argument.value)) {
+        throw ArgumentError.value(
+          argument.value,
+          entry.key,
+          'Tool "$toolName" parameter mirrored to '
+          'Mcp-Param-${entry.value} must be within the JavaScript safe '
+          'integer range ($_minSafeHeaderInteger to '
+          '$_maxSafeHeaderInteger)',
+        );
+      }
+
       final value = _toolParameterHeaderString(argument.value);
       if (value == null) {
         continue;
       }
 
-      headers['Mcp-Param-${entry.value}'] =
-          _encodeToolParameterHeaderValue(value);
+      headers['Mcp-Param-${entry.value}'] = _encodeMcpHeaderValue(value);
     }
     return headers;
   }
@@ -1562,6 +1573,16 @@ class StreamableHttpClientTransport
       current = current[segment];
     }
     return (exists: true, value: current);
+  }
+
+  bool _isUnsafeHeaderInteger(Object? value) {
+    if (value is int) {
+      return value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger;
+    }
+    return value is double &&
+        value.isFinite &&
+        value == value.truncateToDouble() &&
+        (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger);
   }
 
   Iterable<String> _jsonPointerSegments(String selector) {
@@ -1598,23 +1619,24 @@ class StreamableHttpClientTransport
     };
   }
 
-  String _encodeToolParameterHeaderValue(String value) {
-    if (_isPlainToolParameterHeaderValue(value)) {
+  String _encodeMcpHeaderValue(String value) {
+    if (_isPlainMcpHeaderValue(value)) {
       return value;
     }
 
     return '=?base64?${base64Encode(utf8.encode(value))}?=';
   }
 
-  bool _isPlainToolParameterHeaderValue(String value) {
-    return !_isBase64ToolParameterHeaderSentinel(value) &&
+  bool _isPlainMcpHeaderValue(String value) {
+    return value.isNotEmpty &&
+        !_isBase64McpHeaderSentinel(value) &&
         value.trim() == value &&
         value.codeUnits.every(
           (unit) => unit == 0x09 || (unit >= 0x20 && unit <= 0x7E),
         );
   }
 
-  bool _isBase64ToolParameterHeaderSentinel(String value) {
+  bool _isBase64McpHeaderSentinel(String value) {
     return value.startsWith('=?base64?') && value.endsWith('?=');
   }
 
@@ -2729,6 +2751,37 @@ class StreamableHttpClientTransport
           ErrorCode.connectionClosed.value,
           'HTTP request$requestLabel was interrupted because the transport '
           'closed.',
+        );
+      }
+      final outgoingProtocolVersion =
+          _protocolVersion ?? _protocolVersionFrom(message);
+      if (outgoingProtocolVersion != null &&
+          isStatelessProtocolVersion(outgoingProtocolVersion) &&
+          (message is JsonRpcResponse || message is JsonRpcError)) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          'MCP $outgoingProtocolVersion clients must not send JSON-RPC '
+          'responses to servers.',
+        );
+      }
+      if (outgoingProtocolVersion != null &&
+          isStatelessProtocolVersion(outgoingProtocolVersion) &&
+          message is JsonRpcCancelledNotification) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          'MCP $outgoingProtocolVersion Streamable HTTP cancels a request by '
+          'closing its response stream, not by sending '
+          '${Method.notificationsCancelled}.',
+        );
+      }
+      if (outgoingProtocolVersion != null &&
+          isStatelessProtocolVersion(outgoingProtocolVersion) &&
+          message is JsonRpcNotification &&
+          isStatelessForbiddenClientNotification(message.method)) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          'MCP $outgoingProtocolVersion clients must not send known '
+          'server-to-client notification ${message.method}.',
         );
       }
       if (resumptionToken != null) {

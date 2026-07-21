@@ -309,6 +309,31 @@ void main() {
       expect((validMessage as JsonRpcPingRequest).id, 7);
     });
 
+    test('Transport drains a valid frame after a malformed frame in one chunk',
+        () async {
+      await serverTransport.start();
+
+      final validMessageReceived = Completer<JsonRpcMessage>();
+      serverTransport.onmessage = (message) {
+        if (!validMessageReceived.isCompleted) {
+          validMessageReceived.complete(message);
+        }
+      };
+      const validMessage = JsonRpcPingRequest(id: 8);
+      clientToServerController.add(
+        utf8.encode(
+          'not valid json\n${jsonEncode(validMessage.toJson())}\n',
+        ),
+      );
+
+      await serverErrorCompleter.future.timeout(const Duration(seconds: 2));
+      final received = await validMessageReceived.future.timeout(
+        const Duration(seconds: 2),
+      );
+      expect(received, isA<JsonRpcPingRequest>());
+      expect((received as JsonRpcPingRequest).id, 8);
+    });
+
     test('Cannot start transport twice', () async {
       await serverTransport.start();
 

@@ -171,7 +171,10 @@ void main() {
     late TaskResultHandler handler;
 
     setUp(() async {
-      server = McpServer(const Implementation(name: 'test', version: '1.0'));
+      server = McpServer(
+        const Implementation(name: 'test', version: '1.0'),
+        options: const McpServerOptions(protocol: McpProtocol.legacy),
+      );
       transport = MockTransport();
       await server.connect(transport);
 

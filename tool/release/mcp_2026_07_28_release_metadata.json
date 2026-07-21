@@ -1,0 +1,37 @@
+{
+  "sdkStableVersion": "2.3.0",
+  "cliStableVersion": "0.2.0",
+  "protocolVersion": "2026-07-28",
+  "legacyInitializationProtocolVersion": "2025-11-25",
+  "coreSpecification": {
+    "ref": "88191b9f574d67d553ea9372278a14e09d762f55",
+    "finalReleaseReviewed": false
+  },
+  "tasksExtension": {
+    "ref": "2c1425d9a288b9b1f489430fe1e00bb392b47e48",
+    "finalReleaseReviewed": false,
+    "pinnedContentsReviewed": false,
+    "failedStateErrorShapeReviewed": false,
+    "timingFieldIntegerSemanticsReviewed": false
+  },
+  "missingRequiredClientCapability": {
+    "code": -32021,
+    "finalTextsAgree": false
+  },
+  "subscriptionTermination": {
+    "finalTextsAgree": false
+  },
+  "releaseDocumentation": {
+    "finalReleaseReviewed": false
+  },
+  "officialConformance": {
+    "version": "0.2.0-alpha.9",
+    "finalReleaseReviewed": false
+  },
+  "publishedInteropFixtures": {
+    "typescript": "2.0.0-beta.5",
+    "pythonMcp": "2.0.0b2",
+    "pythonMcpTypes": "2.0.0b2",
+    "finalReleaseReviewed": false
+  }
+}

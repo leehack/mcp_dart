@@ -7,8 +7,7 @@ import 'package:test/test.dart';
 import '../../tool/testing/bounded_response_body.dart';
 
 void main() {
-  test('published TypeScript gap flag requires the TS client direction',
-      () async {
+  test('retired published TypeScript gap flag fails closed', () async {
     final result = await Process.run(
       Platform.resolvedExecutable,
       [
@@ -24,7 +23,7 @@ void main() {
     expect(
       result.stderr,
       contains(
-        '--expect-published-ts-client-gap requires the ts-to-dart direction',
+        '--expect-published-ts-client-gap is retired',
       ),
     );
   });

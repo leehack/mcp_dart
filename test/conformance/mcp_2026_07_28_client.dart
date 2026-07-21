@@ -208,7 +208,9 @@ Future<void> _runStandardHeaders(Uri serverUrl, String protocolVersion) async {
         ),
       ),
     );
-    await transport.send(const JsonRpcInitializedNotification());
+    if (!isStatelessProtocolVersion(protocolVersion)) {
+      await transport.send(const JsonRpcInitializedNotification());
+    }
     await transport.send(const JsonRpcListToolsRequest(id: 2));
     await transport.send(
       JsonRpcCallToolRequest(
@@ -278,7 +280,9 @@ Future<void> _runCustomHeaders(
         ),
       ),
     );
-    await transport.send(const JsonRpcInitializedNotification());
+    if (!isStatelessProtocolVersion(protocolVersion)) {
+      await transport.send(const JsonRpcInitializedNotification());
+    }
     await transport.send(const JsonRpcListToolsRequest(id: 2));
 
     final toolCalls = context['toolCalls'];
@@ -327,7 +331,9 @@ Future<void> _runInvalidToolHeaders(
         ),
       ),
     );
-    await transport.send(const JsonRpcInitializedNotification());
+    if (!isStatelessProtocolVersion(protocolVersion)) {
+      await transport.send(const JsonRpcInitializedNotification());
+    }
     await transport.send(const JsonRpcListToolsRequest(id: 2));
     await transport.send(
       JsonRpcCallToolRequest(
@@ -359,7 +365,9 @@ Future<void> _runSchemaRefNoDeref(
         ),
       ),
     );
-    await transport.send(const JsonRpcInitializedNotification());
+    if (!isStatelessProtocolVersion(protocolVersion)) {
+      await transport.send(const JsonRpcInitializedNotification());
+    }
     await transport.send(const JsonRpcListToolsRequest(id: 2));
   } finally {
     await transport.close();

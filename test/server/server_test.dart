@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/server/server.dart';
+import 'package:mcp_dart/src/server/tasks/store.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -142,6 +143,213 @@ void main() {
       final customServer = Server(serverInfo, options: options);
       expect(customServer.getCapabilities().logging, isNotNull);
       expect(customServer.getCapabilities().tools, isNotNull);
+    });
+
+    test('allows a legacy task store with explicit modern Tasks handlers',
+        () async {
+      final store = InMemoryTaskStore();
+      addTearDown(store.dispose);
+
+      final dualEraServer = Server(
+        serverInfo,
+        options: McpServerOptions(
+          taskStore: store,
+          capabilities: const ServerCapabilities(
+            tasks: ServerCapabilitiesTasks(),
+            extensions: {
+              mcpTasksExtensionId: <String, dynamic>{},
+            },
+          ),
+        ),
+      );
+
+      expect(dualEraServer.getCapabilities().tasks, isNotNull);
+      expect(dualEraServer.getCapabilities().supportsTasksExtension, isTrue);
+      expect(
+        () => dualEraServer.setRequestHandler<JsonRpcGetTaskRequest>(
+          Method.tasksGet,
+          (request, extra) async => GetTaskExtensionResult(
+            task: TaskExtensionTask(
+              taskId: request.getParams.taskId,
+              status: TaskStatus.working,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:00:00Z',
+              ttlMs: null,
+            ),
+          ),
+          (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': Method.tasksGet,
+            'params': params,
+            if (meta != null) '_meta': meta,
+          }),
+        ),
+        returnsNormally,
+      );
+
+      await dualEraServer.connect(transport);
+      transport.receiveMessage(
+        JsonRpcGetTaskRequest(
+          id: 'modern-task-get',
+          getParams: const GetTaskRequest(taskId: 'modern-task'),
+          meta: buildProtocolRequestMeta(
+            protocolVersion: previewProtocolVersion,
+            clientCapabilities: const ClientCapabilities(
+              extensions: {
+                mcpTasksExtensionId: <String, dynamic>{},
+              },
+            ),
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.id, 'modern-task-get');
+      expect(response.result['resultType'], resultTypeComplete);
+      expect(response.result['taskId'], 'modern-task');
+    });
+
+    test('allows registering the modern Tasks capability after legacy setup',
+        () {
+      final store = InMemoryTaskStore();
+      addTearDown(store.dispose);
+      final dualEraServer = Server(
+        serverInfo,
+        options: McpServerOptions(
+          taskStore: store,
+          capabilities: const ServerCapabilities(
+            tasks: ServerCapabilitiesTasks(),
+          ),
+        ),
+      );
+
+      expect(
+        () => dualEraServer.registerCapabilities(
+          const ServerCapabilities(
+            extensions: {
+              mcpTasksExtensionId: <String, dynamic>{},
+            },
+          ),
+        ),
+        returnsNormally,
+      );
+      expect(dualEraServer.getCapabilities().tasks, isNotNull);
+      expect(dualEraServer.getCapabilities().supportsTasksExtension, isTrue);
+      expect(
+        () => dualEraServer.setRequestHandler<JsonRpcGetTaskRequest>(
+          Method.tasksGet,
+          (request, extra) async => GetTaskExtensionResult(
+            task: TaskExtensionTask(
+              taskId: request.getParams.taskId,
+              status: TaskStatus.working,
+              createdAt: '2026-07-28T00:00:00Z',
+              lastUpdatedAt: '2026-07-28T00:00:00Z',
+              ttlMs: null,
+            ),
+          ),
+          (id, params, meta) => JsonRpcGetTaskRequest.fromJson({
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': Method.tasksGet,
+            'params': params,
+            if (meta != null) '_meta': meta,
+          }),
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('keeps the legacy task store available to legacy servers', () {
+      final store = InMemoryTaskStore();
+      addTearDown(store.dispose);
+
+      final legacyServer = Server(
+        serverInfo,
+        options: McpServerOptions(
+          protocol: McpProtocol.legacy,
+          taskStore: store,
+          capabilities: const ServerCapabilities(
+            tasks: ServerCapabilitiesTasks(),
+          ),
+        ),
+      );
+
+      expect(legacyServer.getCapabilities().tasks, isNotNull);
+    });
+
+    test('rejects legacy-only task handlers for extension-only servers', () {
+      final extensionServer = Server(
+        serverInfo,
+        options: const McpServerOptions(
+          capabilities: ServerCapabilities(
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+
+      for (final method in [Method.tasksList, Method.tasksResult]) {
+        expect(
+          () => extensionServer.setRequestHandler<JsonRpcRequest>(
+            method,
+            (request, extra) async => const EmptyResult(),
+            (id, params, meta) => JsonRpcRequest(
+              id: id,
+              method: method,
+              params: params,
+              meta: meta,
+            ),
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains("legacy 'tasks' capability"),
+            ),
+          ),
+        );
+      }
+    });
+
+    test('requires a stateless profile for extension task handlers', () {
+      final legacyExtensionServer = Server(
+        serverInfo,
+        options: const McpServerOptions(
+          protocol: McpProtocol.legacy,
+          capabilities: ServerCapabilities(
+            extensions: {mcpTasksExtensionId: {}},
+          ),
+        ),
+      );
+
+      for (final method in [Method.tasksGet, Method.tasksCancel]) {
+        expect(
+          () => legacyExtensionServer.setRequestHandler<JsonRpcRequest>(
+            method,
+            (request, extra) async => const EmptyResult(),
+            (id, params, meta) => JsonRpcRequest(
+              id: id,
+              method: method,
+              params: params,
+              meta: meta,
+            ),
+          ),
+          throwsA(
+            isA<StateError>()
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains('stateless MCP protocol version'),
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains(mcpTasksExtensionId),
+                ),
+          ),
+        );
+      }
     });
 
     test('Register capabilities before connecting', () {
@@ -671,7 +879,10 @@ void main() {
         resources:
             ServerCapabilitiesResources(listChanged: true, subscribe: true),
       );
-      final options = McpServerOptions(capabilities: capabilities);
+      final options = McpServerOptions(
+        protocol: McpProtocol.legacy,
+        capabilities: capabilities,
+      );
       final resourceServer = Server(serverInfo, options: options);
 
       await resourceServer.connect(transport);
@@ -704,10 +915,89 @@ void main() {
       );
     });
 
+    test('legacy request handlers retain request-scoped notifications',
+        () async {
+      final legacyServer = Server(
+        serverInfo,
+        options: const McpServerOptions(
+          protocol: McpProtocol.legacy,
+          capabilities: ServerCapabilities(
+            tools: ServerCapabilitiesTools(listChanged: true),
+            prompts: ServerCapabilitiesPrompts(listChanged: true),
+            resources: ServerCapabilitiesResources(
+              listChanged: true,
+              subscribe: true,
+            ),
+          ),
+        ),
+      );
+      legacyServer.setRequestHandler<JsonRpcRequest>(
+        'test/legacy-handler-notifications',
+        (request, extra) async {
+          await extra.sendNotification(
+            const JsonRpcToolListChangedNotification(),
+          );
+          await extra.sendNotification(
+            const JsonRpcPromptListChangedNotification(),
+          );
+          await extra.sendNotification(
+            const JsonRpcResourceListChangedNotification(),
+          );
+          await extra.sendNotification(
+            JsonRpcResourceUpdatedNotification(
+              updatedParams: const ResourceUpdatedNotification(
+                uri: 'file:///legacy-resource',
+              ),
+            ),
+          );
+          await extra.sendNotification(
+            JsonRpcCancelledNotification(
+              cancelParams: CancelledNotification(
+                requestId: request.id,
+                reason: 'legacy handler cancellation',
+              ),
+            ),
+          );
+          return const EmptyResult();
+        },
+        (id, params, meta) => JsonRpcRequest(
+          id: id,
+          method: 'test/legacy-handler-notifications',
+          params: params,
+          meta: meta,
+        ),
+      );
+      await legacyServer.connect(transport);
+      await _initializeClient(transport, legacyServer);
+      transport.sentMessages.clear();
+
+      transport.receiveMessage(
+        const JsonRpcRequest(
+          id: 72,
+          method: 'test/legacy-handler-notifications',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        transport.sentMessages
+            .whereType<JsonRpcNotification>()
+            .map((message) => message.method),
+        [
+          Method.notificationsToolsListChanged,
+          Method.notificationsPromptsListChanged,
+          Method.notificationsResourcesListChanged,
+          Method.notificationsResourcesUpdated,
+          Method.notificationsCancelled,
+        ],
+      );
+      expect(transport.sentMessages.last, isA<JsonRpcResponse>());
+    });
+
     test('Server cannot send notifications when capability is not registered',
         () {
       // Create server with NO capabilities
-      final options = const McpServerOptions();
+      final options = const McpServerOptions(protocol: McpProtocol.legacy);
       final plainServer = Server(serverInfo, options: options);
 
       expect(

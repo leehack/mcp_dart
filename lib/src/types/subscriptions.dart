@@ -14,7 +14,8 @@ class SubscriptionFilter {
   /// Subscribe to `notifications/resources/list_changed`.
   final bool? resourcesListChanged;
 
-  /// Subscribe to `notifications/resources/updated` for the given URIs.
+  /// Subscribe to `notifications/resources/updated` for the given URIs and
+  /// their sub-resources.
   final List<String>? resourceSubscriptions;
 
   /// Subscribe to `notifications/tasks` for the given task ids.

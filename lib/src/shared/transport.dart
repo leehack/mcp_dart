@@ -59,6 +59,24 @@ abstract class RequestIdAwareTransport {
   });
 }
 
+/// Optional capability for transports that distinguish independent incoming
+/// requests which happen to reuse the same JSON-RPC request ID.
+///
+/// The context is an opaque, transport-owned value. It is available while an
+/// incoming message is being delivered and can be retained by the protocol
+/// until every response and request-scoped notification has been sent.
+abstract class IncomingRequestContextAwareTransport {
+  /// Context for the incoming message currently being delivered, if any.
+  Object? get incomingRequestContext;
+
+  /// Sends [message] on the HTTP exchange identified by [requestContext].
+  Future<void> sendWithRequestContext(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+    required Object requestContext,
+  });
+}
+
 /// Optional capability for transports that cancel an individual outgoing
 /// request through transport-specific means.
 ///
@@ -78,6 +96,20 @@ abstract class RequestCancellationAwareTransport {
   Future<void> cancelRequest(RequestId requestId);
 }
 
+/// Optional capability for transports that replay active subscriptions after
+/// reconnecting to a replacement peer.
+///
+/// A replay opens a new physical `subscriptions/listen` stream for an existing
+/// logical subscription, so its first acknowledgment is valid even though the
+/// high-level subscription handle has already observed the original stream's
+/// acknowledgment. Implementations return `true` exactly while delivering that
+/// replacement acknowledgment.
+abstract interface class SubscriptionReplayAcknowledgmentTransport {
+  /// Consumes the replay marker for [subscriptionId], if the currently
+  /// delivered acknowledgment belongs to a replacement subscription stream.
+  bool consumeSubscriptionReplayAcknowledgment(RequestId subscriptionId);
+}
+
 /// Optional capability for request-scoped SSE streams that can be closed and
 /// later resumed from an event store.
 abstract class RequestSseStreamControlAwareTransport {
@@ -91,6 +123,32 @@ abstract class RequestSseStreamControlAwareTransport {
   /// a client that reconnects with the last SSE event ID.
   void closeRequestSseStream(RequestId requestId);
 }
+
+/// Context-aware counterpart to [RequestSseStreamControlAwareTransport].
+///
+/// This keeps stream control unambiguous when independent clients use the same
+/// JSON-RPC request ID concurrently on one transport instance.
+abstract class RequestContextSseStreamControlAwareTransport {
+  /// Whether the request identified by both [requestId] and [requestContext]
+  /// has an active resumable SSE stream.
+  bool canCloseRequestSseStreamWithContext(
+    RequestId requestId,
+    Object requestContext,
+  );
+
+  /// Closes the resumable SSE stream identified by [requestContext].
+  void closeRequestSseStreamWithContext(
+    RequestId requestId,
+    Object requestContext,
+  );
+}
+
+/// Marker for server transports that close subscription streams with an MCP
+/// `notifications/cancelled` control message.
+///
+/// MCP 2026-07-28 requires this on stdio, where there is no per-request stream
+/// to close. Streamable HTTP transports must not implement this marker.
+abstract interface class ServerSubscriptionCancellationTransport {}
 
 extension RequestIdAwareTransportSend on Transport {
   /// Sends [message] while preserving non-integer request IDs when the transport
@@ -113,6 +171,32 @@ extension RequestIdAwareTransportSend on Transport {
     return send(
       message,
       relatedRequestId: relatedRequestId is int ? relatedRequestId : null,
+    );
+  }
+
+  /// Sends [message] on a specific incoming-request context when supported.
+  ///
+  /// Transports without request contexts retain the existing request-ID-aware
+  /// behavior.
+  Future<void> sendPreservingRequestContext(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+    Object? requestContext,
+  }) {
+    final transport = this;
+    if (requestContext != null &&
+        transport is IncomingRequestContextAwareTransport) {
+      return (transport as IncomingRequestContextAwareTransport)
+          .sendWithRequestContext(
+        message,
+        relatedRequestId: relatedRequestId,
+        requestContext: requestContext,
+      );
+    }
+
+    return sendPreservingRequestId(
+      message,
+      relatedRequestId: relatedRequestId,
     );
   }
 }
@@ -152,4 +236,11 @@ abstract class IncomingRequestValidationAwareTransport {
 
   /// Supplies a live request-method support predicate.
   void setRequestMethodSupported(bool Function(String method) isSupported);
+}
+
+/// Optional capability for server transports that validate protocol-version
+/// metadata before forwarding a request to the protocol layer.
+abstract class ServerSupportedProtocolVersionsAwareTransport {
+  /// Supplies the exact protocol versions accepted by the connected server.
+  void setServerSupportedProtocolVersions(Iterable<String> versions);
 }

@@ -320,7 +320,7 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'capabilities.stateless-does-not-infer-initialize-extensions',
           description:
-              'Requires MCP 2026-07-28 stateless requests to declare extension capabilities per request instead of inheriting initialize capabilities.',
+              'Keeps a connection on legacy semantics after initialize instead of letting a later stateless request inherit initialize capabilities.',
           check: _statelessDoesNotInferInitializeExtensions,
         ),
         _ConformanceCase(
@@ -367,10 +367,10 @@ class ConformanceRunner {
         ),
         _ConformanceCase(
           suite: _specSuite,
-          name: 'stateless-http.omits-non-integer-parameter-headers',
+          name: 'stateless-http.validates-numeric-parameter-headers',
           description:
-              'Mirrors JavaScript-safe integer x-mcp-header values while omitting fractional and unsafe numbers.',
-          check: _omitsNonIntegerParameterHeaders,
+              'Mirrors JavaScript-safe integer x-mcp-header values, omits fractional numbers, and rejects unsafe integers.',
+          check: _validatesNumericParameterHeaders,
         ),
         _ConformanceCase(
           suite: _specSuite,
@@ -381,10 +381,10 @@ class ConformanceRunner {
         ),
         _ConformanceCase(
           suite: _specSuite,
-          name: 'stateless-http.accepts-response-posts',
+          name: 'stateless-http.rejects-response-posts',
           description:
-              'Accepts MCP 2026-07-28 JSON-RPC response POSTs without request-body metadata.',
-          check: _acceptsStatelessHttpResponsePosts,
+              'Rejects MCP 2026-07-28 JSON-RPC response POSTs because stateless servers cannot initiate requests.',
+          check: _rejectsStatelessHttpResponsePosts,
         ),
         _ConformanceCase(
           suite: _specSuite,
@@ -439,14 +439,14 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'tools-list.stateless-omits-legacy-execution',
           description:
-              'Omits stable-only Tool.execution metadata from MCP 2026-07-28 stateless tools/list results.',
+              'Omits initialization-era-only Tool.execution metadata from MCP 2026-07-28 stateless tools/list results.',
           check: _statelessToolsListOmitsLegacyExecution,
         ),
         _ConformanceCase(
           suite: _specSuite,
           name: 'resources.missing-resource-error-code-by-version',
           description:
-              'Uses legacy ResourceNotFound for stable resource misses and InvalidParams for MCP 2026-07-28 stateless resource misses.',
+              'Uses ResourceNotFound for MCP 2025-11-25 resource misses and InvalidParams for MCP 2026-07-28 stateless resource misses.',
           check: _missingResourceErrorCodeByVersion,
         ),
         _ConformanceCase(
@@ -500,18 +500,17 @@ class ConformanceRunner {
         ),
         _ConformanceCase(
           suite: _specSuite,
-          name:
-              'tasks-extension.lifecycle-methods-do-not-require-repeated-capability',
+          name: 'tasks-extension.lifecycle-methods-require-request-capability',
           description:
-              'Does not reject task lifecycle requests solely because the request omits repeated task extension capability metadata.',
-          check: _taskLifecycleMethodsAllowResumedClientCapability,
+              'Requires the Tasks extension capability on every stateless lifecycle request.',
+          check: _taskLifecycleMethodsRequireRequestCapability,
         ),
         _ConformanceCase(
           suite: _specSuite,
-          name: 'tasks-extension.task-store-uses-extension-result-shapes',
+          name: 'tasks-extension.keeps-legacy-task-store-separate',
           description:
-              'Serializes built-in task-store tasks/get and tasks/cancel responses in the MCP Tasks extension wire shape.',
-          check: _taskStoreUsesTaskExtensionResultShapes,
+              'Allows a legacy task-augmentation store to coexist without adapting its results to the independent MCP Tasks extension.',
+          check: _tasksExtensionKeepsLegacyTaskStoreSeparate,
         ),
         _ConformanceCase(
           suite: _specSuite,
@@ -574,7 +573,7 @@ class ConformanceRunner {
           suite: _specSuite,
           name: 'capabilities.unadvertised-peer-methods-use-method-not-found',
           description:
-              'Uses MethodNotFound for MCP methods whose peer capability was not advertised.',
+              'Uses MethodNotFound for MCP methods whose peer capability was not advertised without sending forbidden stateless client responses.',
           check: _unadvertisedPeerMethodsUseMethodNotFound,
         ),
         _ConformanceCase(
@@ -1790,6 +1789,8 @@ Future<void> _statelessDoesNotInferInitializeExtensions() async {
   await _settle();
   _expectSingleErrorFreeResponse(transport.sentMessages, id: 'init');
   transport.sentMessages.clear();
+  transport.emit(const JsonRpcInitializedNotification());
+  await _settle();
 
   final request = JsonRpcMessage.fromJson(
     <String, dynamic>{
@@ -1814,13 +1815,12 @@ Future<void> _statelessDoesNotInferInitializeExtensions() async {
   transport.emit(request);
   await _settle();
 
-  final error = _expectSingleError(
+  _expectSingleError(
     transport.sentMessages,
     id: 'stateless-subscribe',
-    code: ErrorCode.missingRequiredClientCapability.value,
-    messageContains: 'Missing required client capability',
+    code: ErrorCode.invalidRequest.value,
+    messageContains: 'legacy initialize protocol',
   );
-  _expectMissingTasksExtensionCapabilityData(error.error.data);
 
   await server.close();
 }
@@ -2452,10 +2452,11 @@ Future<void> _validatesStatelessHttpParameterHeaders() async {
   }
 }
 
-Future<void> _omitsNonIntegerParameterHeaders() async {
+Future<void> _validatesNumericParameterHeaders() async {
   final httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   final receivedHeaders = Completer<Map<String, String?>>();
   final responseMessage = Completer<JsonRpcMessage>();
+  var requestCount = 0;
   final transport = StreamableHttpClientTransport(
     Uri.parse('http://127.0.0.1:${httpServer.port}/mcp'),
   )..protocolVersion = _previewProtocolVersion;
@@ -2472,6 +2473,7 @@ Future<void> _omitsNonIntegerParameterHeaders() async {
   );
 
   final serverSubscription = httpServer.listen((request) async {
+    requestCount++;
     if (!receivedHeaders.isCompleted) {
       receivedHeaders.complete(
         <String, String?>{
@@ -2511,7 +2513,6 @@ Future<void> _omitsNonIntegerParameterHeaders() async {
           'arguments': <String, dynamic>{
             'limit': 42,
             'ratio': 1.5,
-            'unsafe': 9007199254740992,
           },
         },
         meta: _statelessRequestMeta(),
@@ -2534,7 +2535,7 @@ Future<void> _omitsNonIntegerParameterHeaders() async {
     }
     if (headers['unsafe'] != null) {
       throw StateError(
-        'Expected unsafe integer header to be omitted, got '
+        'Expected absent unsafe parameter header to be omitted, got '
         "${headers['unsafe']}.",
       );
     }
@@ -2544,6 +2545,38 @@ Future<void> _omitsNonIntegerParameterHeaders() async {
     );
     if (response is! JsonRpcResponse || response.id != 'number-headers') {
       throw StateError('Expected JSON-RPC response, got $response.');
+    }
+
+    var rejectedUnsafeInteger = false;
+    try {
+      await transport.send(
+        JsonRpcCallToolRequest(
+          id: 'unsafe-number-header',
+          params: const <String, dynamic>{
+            'name': 'calculate',
+            'arguments': <String, dynamic>{
+              'unsafe': 9007199254740992,
+            },
+          },
+          meta: _statelessRequestMeta(),
+        ),
+      );
+    } on ArgumentError catch (error) {
+      rejectedUnsafeInteger = true;
+      if (!error.toString().contains('JavaScript safe integer range')) {
+        throw StateError('Unexpected unsafe integer rejection: $error');
+      }
+    }
+    if (!rejectedUnsafeInteger) {
+      throw StateError(
+        'Expected unsafe integer routing header to be rejected.',
+      );
+    }
+    if (requestCount != 1) {
+      throw StateError(
+        'Unsafe integer request reached HTTP transport; request count was '
+        '$requestCount.',
+      );
     }
   } finally {
     await transport.close();
@@ -2672,7 +2705,7 @@ Future<void> _encodesStatelessHttpParameterHeaderValues() async {
   }
 }
 
-Future<void> _acceptsStatelessHttpResponsePosts() async {
+Future<void> _rejectsStatelessHttpResponsePosts() async {
   final transport = StreamableHTTPServerTransport(
     options: StreamableHTTPServerTransportOptions(
       sessionIdGenerator: () => null,
@@ -2682,9 +2715,9 @@ Future<void> _acceptsStatelessHttpResponsePosts() async {
   );
   final httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   final httpClient = HttpClient();
-  final receivedMessage = Completer<JsonRpcMessage>();
+  var receivedMessage = false;
 
-  transport.onmessage = receivedMessage.complete;
+  transport.onmessage = (_) => receivedMessage = true;
 
   await transport.start();
   final serverSubscription = httpServer.listen((request) {
@@ -2711,29 +2744,24 @@ Future<void> _acceptsStatelessHttpResponsePosts() async {
     final response = await request.close();
     final responseBody = await utf8.decodeStream(response);
 
-    if (response.statusCode != HttpStatus.accepted) {
+    if (response.statusCode != HttpStatus.badRequest) {
       throw StateError(
-        'Expected HTTP 202 for stateless response POST, got '
+        'Expected HTTP 400 for stateless response POST, got '
         '${response.statusCode}: $responseBody.',
       );
     }
-    if (responseBody.isNotEmpty) {
+    final responseJson = jsonDecode(responseBody);
+    if (responseJson is! Map ||
+        responseJson['error'] is! Map ||
+        (responseJson['error'] as Map)['code'] !=
+            ErrorCode.invalidRequest.value) {
       throw StateError(
-        'Expected empty stateless response POST body, got $responseBody.',
+        'Expected Invalid Request JSON-RPC error for stateless response POST, '
+        'got $responseBody.',
       );
     }
-
-    final message = await receivedMessage.future.timeout(
-      const Duration(seconds: 5),
-    );
-    if (message is! JsonRpcResponse) {
-      throw StateError(
-        'Expected server transport to receive JsonRpcResponse, got '
-        '${message.runtimeType}.',
-      );
-    }
-    if (message.id != 'http-input-response' || message.result['ok'] != true) {
-      throw StateError('Unexpected stateless response POST message $message.');
+    if (receivedMessage) {
+      throw StateError('Rejected stateless response POST reached onmessage.');
     }
   } finally {
     httpClient.close(force: true);
@@ -3790,6 +3818,18 @@ Future<void> _mrtrInputRequestsRequireClientCapabilities() async {
             ],
           ),
         ),
+        'needs-sampling-context' => InputRequest.createMessage(
+          const CreateMessageRequest(
+            messages: <SamplingMessage>[
+              SamplingMessage(
+                role: SamplingMessageRole.user,
+                content: SamplingTextContent(text: 'Use server context'),
+              ),
+            ],
+            includeContext: IncludeContext.thisServer,
+            maxTokens: 16,
+          ),
+        ),
         _ => throw StateError('Unknown tool ${request.callParams.name}'),
       };
 
@@ -3850,6 +3890,18 @@ Future<void> _mrtrInputRequestsRequireClientCapabilities() async {
       requiredCapabilities: const <String, dynamic>{
         'sampling': <String, dynamic>{
           'tools': <String, dynamic>{},
+        },
+      },
+    ),
+    _MissingCapabilityScenario(
+      name: 'needs-sampling-context',
+      capabilities: const ClientCapabilities(
+        sampling: ClientCapabilitiesSampling(),
+      ),
+      method: Method.samplingCreateMessage,
+      requiredCapabilities: const <String, dynamic>{
+        'sampling': <String, dynamic>{
+          'context': <String, dynamic>{},
         },
       },
     ),
@@ -4202,6 +4254,7 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
           data: 'below-threshold',
         ),
         requestMeta: extra.meta,
+        requestId: extra.requestId,
       );
       await server.sendStatelessLoggingMessage(
         const LoggingMessageNotification(
@@ -4209,6 +4262,7 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
           data: 'threshold-match',
         ),
         requestMeta: extra.meta,
+        requestId: extra.requestId,
       );
       return const ListToolsResult(tools: <Tool>[]);
     },
@@ -4274,7 +4328,7 @@ Future<void> _statelessLoggingRequiresRequestLogLevel() async {
   await server.close();
 }
 
-Future<void> _taskLifecycleMethodsAllowResumedClientCapability() async {
+Future<void> _taskLifecycleMethodsRequireRequestCapability() async {
   final transport = _ConformanceTransport();
   // ignore: deprecated_member_use
   final server = Server(
@@ -4319,9 +4373,34 @@ Future<void> _taskLifecycleMethodsAllowResumedClientCapability() async {
     transport.emit(request);
     await _settle();
 
-    _expectSingleError(
+    final error = _expectSingleError(
       transport.sentMessages,
       id: request.id,
+      code: ErrorCode.missingRequiredClientCapability.value,
+      messageContains: 'Missing required client capability',
+    );
+    _expectMissingTasksExtensionCapabilityData(error.error.data);
+
+    transport.sentMessages.clear();
+    transport.emit(
+      JsonRpcRequest(
+        id: '${request.id}-with-capability',
+        method: request.method,
+        params: request.params,
+        meta: _statelessRequestMeta(
+          capabilities: const ClientCapabilities(
+            extensions: <String, Map<String, dynamic>>{
+              _tasksExtensionId: <String, dynamic>{},
+            },
+          ),
+        ),
+      ),
+    );
+    await _settle();
+
+    _expectSingleError(
+      transport.sentMessages,
+      id: '${request.id}-with-capability',
       code: ErrorCode.methodNotFound.value,
       messageContains: request.method,
     );
@@ -4330,30 +4409,14 @@ Future<void> _taskLifecycleMethodsAllowResumedClientCapability() async {
   await server.close();
 }
 
-Future<void> _taskStoreUsesTaskExtensionResultShapes() async {
+Future<void> _tasksExtensionKeepsLegacyTaskStoreSeparate() async {
   final store = InMemoryTaskStore();
-  final completedTask = await store.createTask(
+  final legacyTask = await store.createTask(
     const TaskCreation(ttl: 60000),
-    'source-request',
+    'legacy-request',
     const <String, dynamic>{
       'method': Method.toolsCall,
-      'params': <String, dynamic>{'name': 'long-running'},
-    },
-    null,
-  );
-  await store.storeTaskResult(
-    completedTask.taskId,
-    TaskStatus.completed,
-    const CallToolResult(
-      content: <Content>[TextContent(text: 'task complete')],
-    ),
-  );
-  final workingTask = await store.createTask(
-    const TaskCreation(ttl: null),
-    'cancel-request',
-    const <String, dynamic>{
-      'method': Method.toolsCall,
-      'params': <String, dynamic>{'name': 'cancel-me'},
+      'params': <String, dynamic>{'name': 'legacy-tool'},
     },
     null,
   );
@@ -4363,6 +4426,7 @@ Future<void> _taskStoreUsesTaskExtensionResultShapes() async {
     const Implementation(name: 'server', version: '1.0.0'),
     options: _mcpServerOptionsWithTaskStore(
       capabilities: const ServerCapabilities(
+        tasks: ServerCapabilitiesTasks(),
         extensions: <String, Map<String, dynamic>>{
           _tasksExtensionId: <String, dynamic>{},
         },
@@ -4370,14 +4434,13 @@ Future<void> _taskStoreUsesTaskExtensionResultShapes() async {
       taskStore: store,
     ),
   );
-
   try {
     await server.connect(transport);
     transport.emit(
       JsonRpcRequest(
-        id: 'task-store-get',
+        id: 'legacy-store-get',
         method: _methodTasksGet,
-        params: <String, dynamic>{'taskId': completedTask.taskId},
+        params: <String, dynamic>{'taskId': legacyTask.taskId},
         meta: _statelessRequestMeta(
           capabilities: const ClientCapabilities(
             extensions: <String, Map<String, dynamic>>{
@@ -4389,65 +4452,12 @@ Future<void> _taskStoreUsesTaskExtensionResultShapes() async {
     );
     await _settle();
 
-    final getResponse = _expectSingleErrorFreeResponse(
+    _expectSingleError(
       transport.sentMessages,
-      id: 'task-store-get',
+      id: 'legacy-store-get',
+      code: ErrorCode.invalidParams.value,
+      messageContains: 'Expected GetTaskExtensionResult',
     );
-    final getResult = getResponse.result;
-    if (getResult['resultType'] != _resultTypeComplete ||
-        getResult['taskId'] != completedTask.taskId ||
-        getResult['status'] != 'completed' ||
-        getResult['ttlMs'] != 60000 ||
-        getResult.containsKey('ttl') ||
-        (getResult['result'] as Map<String, dynamic>?)?['content'] == null) {
-      throw StateError(
-        'Expected built-in tasks/get to use the task extension result shape, '
-        'got $getResult.',
-      );
-    }
-
-    transport.sentMessages.clear();
-    transport.emit(
-      JsonRpcRequest(
-        id: 'task-store-cancel',
-        method: Method.tasksCancel,
-        params: <String, dynamic>{'taskId': workingTask.taskId},
-        meta: _statelessRequestMeta(
-          capabilities: const ClientCapabilities(
-            extensions: <String, Map<String, dynamic>>{
-              _tasksExtensionId: <String, dynamic>{},
-            },
-          ),
-        ),
-      ),
-    );
-    await _settle();
-
-    final cancelResponse = _expectSingleErrorFreeResponse(
-      transport.sentMessages,
-      id: 'task-store-cancel',
-    );
-    final cancelResult = cancelResponse.result;
-    final cancelMeta = cancelResult['_meta'];
-    final cancelServerInfo = cancelMeta is Map
-        ? cancelMeta[_serverInfoMetaKey]
-        : null;
-    if (cancelResult.length != 2 ||
-        cancelResult['resultType'] != _resultTypeComplete ||
-        cancelServerInfo is! Map ||
-        cancelServerInfo['name'] != 'server') {
-      throw StateError(
-        'Expected built-in tasks/cancel to acknowledge with complete result '
-        'and server identity metadata, got $cancelResult.',
-      );
-    }
-    final cancelledTask = await store.getTask(workingTask.taskId);
-    if (cancelledTask?.status != TaskStatus.cancelled) {
-      throw StateError(
-        'Expected task ${workingTask.taskId} to be cancelled, '
-        'got ${cancelledTask?.status}.',
-      );
-    }
   } finally {
     await server.close();
     store.dispose();
@@ -4853,15 +4863,22 @@ Future<void> _unadvertisedPeerMethodsUseMethodNotFound() async {
       protocol: McpProtocol.stable,
     ),
   );
+  final statelessErrors = <Error>[];
+  statelessClient.onerror = statelessErrors.add;
   await statelessClient.connect(statelessClientTransport);
   statelessClientTransport.sentMessages.clear();
+  statelessErrors.clear();
   statelessClientTransport.onmessage?.call(
     const JsonRpcListRootsRequest(id: 'roots-list'),
   );
   await _settle();
-  _expectSingleError(
-    statelessClientTransport.sentMessages,
-    id: 'roots-list',
+  if (statelessClientTransport.sentMessages.isNotEmpty) {
+    throw StateError(
+      'Stateless client sent a forbidden JSON-RPC response to a server request.',
+    );
+  }
+  _expectSingleProtocolError(
+    statelessErrors,
     code: ErrorCode.methodNotFound.value,
     messageContains: 'roots',
   );
@@ -4956,7 +4973,9 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
     },
   );
   if (!clientCapabilities.toJson().containsKey('tasks')) {
-    throw StateError('Expected stable client capabilities to include tasks.');
+    throw StateError(
+      'Expected initialization-era client capabilities to include tasks.',
+    );
   }
 
   final statelessMeta = _statelessRequestMeta(capabilities: clientCapabilities);
@@ -5056,7 +5075,9 @@ Future<void> _statelessOmitsLegacyTaskCapabilities() async {
     },
   );
   if (!serverCapabilities.toJson().containsKey('tasks')) {
-    throw StateError('Expected stable server capabilities to include tasks.');
+    throw StateError(
+      'Expected initialization-era server capabilities to include tasks.',
+    );
   }
 
   final serverTransport = _ConformanceTransport();

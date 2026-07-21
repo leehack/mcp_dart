@@ -327,7 +327,13 @@ void main() {
       );
       expect(
         () => client.assertCapabilityForMethod(Method.subscriptionsListen),
-        returnsNormally,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
 
       // Create a client with limited capabilities
@@ -365,7 +371,13 @@ void main() {
         () => limitedClient.assertCapabilityForMethod(
           Method.subscriptionsListen,
         ),
-        returnsNormally,
+        throwsA(
+          isA<McpError>().having(
+            (error) => error.code,
+            'code',
+            ErrorCode.methodNotFound.value,
+          ),
+        ),
       );
     });
 

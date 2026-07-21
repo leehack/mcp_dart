@@ -71,11 +71,10 @@ jobs:
           dart run tool/testing/run_ts_2026_07_28_interop.dart
           --direction=dart-to-ts
 
-      - name: Verify known published TypeScript beta client gap
+      - name: Run published TypeScript beta client against Dart server
         run: >-
           dart run tool/testing/run_ts_2026_07_28_interop.dart
           --direction=ts-to-dart
-          --expect-published-ts-client-gap
 
   python-2026-07-28-interop:
     runs-on: ubuntu-latest

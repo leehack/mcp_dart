@@ -11,12 +11,14 @@ import 'package:test/test.dart';
 class McpServerTestTransport
     implements Transport, ToolParameterHeaderAwareTransport {
   final String initializationProtocolVersion;
+  final bool initializeOnStart;
   final List<JsonRpcMessage> sentMessages = [];
   final List<ToolParameterHeaderMappings> toolParameterHeaderMappings = [];
   bool _closed = false;
 
   McpServerTestTransport({
     this.initializationProtocolVersion = latestInitializationProtocolVersion,
+    this.initializeOnStart = true,
   });
 
   @override
@@ -57,6 +59,7 @@ class McpServerTestTransport
   @override
   Future<void> start() async {
     if (_closed) throw StateError('Cannot start closed transport');
+    if (!initializeOnStart) return;
     onmessage?.call(
       JsonRpcInitializeRequest(
         id: 0,
@@ -224,6 +227,7 @@ void main() {
         callback: (args, extra) async => const CallToolResult(content: []),
       );
 
+      transport = McpServerTestTransport(initializeOnStart: false);
       await server.connect(transport);
 
       expect(transport.toolParameterHeaderMappings, isNotEmpty);
@@ -356,6 +360,7 @@ void main() {
         callback: (args, extra) async => const CallToolResult(content: []),
       );
 
+      transport = McpServerTestTransport(initializeOnStart: false);
       await server.connect(transport);
 
       expect(transport.toolParameterHeaderMappings, isNotEmpty);
@@ -470,6 +475,7 @@ void main() {
         callback: (args, extra) async => const CallToolResult(content: []),
       );
 
+      transport = McpServerTestTransport(initializeOnStart: false);
       await server.connect(transport);
 
       transport.receiveMessage(
@@ -603,6 +609,7 @@ void main() {
       );
       expect(registeredTool.outputJsonSchema, same(updatedOutputSchema));
 
+      transport = McpServerTestTransport(initializeOnStart: false);
       await server.connect(transport);
       final listMessage = await _receiveResponse(
         transport,
@@ -849,6 +856,7 @@ void main() {
           return const CallToolResult(content: []);
         },
       );
+      transport = McpServerTestTransport(initializeOnStart: false);
       await server.connect(transport);
 
       final message = await _receiveResponse(
@@ -942,27 +950,49 @@ void main() {
       );
       await server.connect(transport);
 
-      for (final request in [
-        const JsonRpcCallToolRequest(
-          id: 'stable-malformed',
-          params: {
-            'name': 'validated-tool',
-            'arguments': 'not-an-object',
-          },
+      final statelessServer = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+      );
+      addTearDown(statelessServer.close);
+      statelessServer.registerTool(
+        'validated-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      final statelessTransport = McpServerTestTransport(
+        initializeOnStart: false,
+      );
+      await statelessServer.connect(statelessTransport);
+
+      for (final scenario in [
+        (
+          transport: transport,
+          request: const JsonRpcCallToolRequest(
+            id: 'stable-malformed',
+            params: {
+              'name': 'validated-tool',
+              'arguments': 'not-an-object',
+            },
+          ),
         ),
-        JsonRpcCallToolRequest(
-          id: 'stateless-malformed',
-          params: const {
-            'name': 'validated-tool',
-            'arguments': 'not-an-object',
-          },
-          meta: _statelessMeta(),
+        (
+          transport: statelessTransport,
+          request: JsonRpcCallToolRequest(
+            id: 'stateless-malformed',
+            params: const {
+              'name': 'validated-tool',
+              'arguments': 'not-an-object',
+            },
+            meta: _statelessMeta(),
+          ),
         ),
       ]) {
-        final message = await _receiveResponse(transport, request);
+        final message = await _receiveResponse(
+          scenario.transport,
+          scenario.request,
+        );
         expect(message, isA<JsonRpcError>());
         final response = message as JsonRpcError;
-        expect(response.id, request.id);
+        expect(response.id, scenario.request.id);
         expect(response.error.code, ErrorCode.invalidParams.value);
         expect(
           response.error.message,
@@ -1104,21 +1134,43 @@ void main() {
       );
       await server.connect(transport);
 
-      for (final request in [
-        const JsonRpcCallToolRequest(
-          id: 'stable-unknown',
-          params: {'name': 'non-existent-tool'},
+      final statelessServer = McpServer(
+        const Implementation(name: 'test-server', version: '1.0.0'),
+      );
+      addTearDown(statelessServer.close);
+      statelessServer.registerTool(
+        'known-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      final statelessTransport = McpServerTestTransport(
+        initializeOnStart: false,
+      );
+      await statelessServer.connect(statelessTransport);
+
+      for (final scenario in [
+        (
+          transport: transport,
+          request: const JsonRpcCallToolRequest(
+            id: 'stable-unknown',
+            params: {'name': 'non-existent-tool'},
+          ),
         ),
-        JsonRpcCallToolRequest(
-          id: 'stateless-unknown',
-          params: const {'name': 'non-existent-tool'},
-          meta: _statelessMeta(),
+        (
+          transport: statelessTransport,
+          request: JsonRpcCallToolRequest(
+            id: 'stateless-unknown',
+            params: const {'name': 'non-existent-tool'},
+            meta: _statelessMeta(),
+          ),
         ),
       ]) {
-        final message = await _receiveResponse(transport, request);
+        final message = await _receiveResponse(
+          scenario.transport,
+          scenario.request,
+        );
         expect(message, isA<JsonRpcError>());
         final response = message as JsonRpcError;
-        expect(response.id, request.id);
+        expect(response.id, scenario.request.id);
         expect(response.error.code, ErrorCode.invalidParams.value);
         expect(response.error.message, "Tool 'non-existent-tool' not found");
       }
@@ -1468,6 +1520,7 @@ void main() {
         ),
       );
 
+      transport = McpServerTestTransport(initializeOnStart: false);
       await server.connect(transport);
 
       transport.receiveMessage(
@@ -1689,6 +1742,44 @@ void main() {
       await server.connect(transport);
       await server.close();
       expect(server.isConnected, isFalse);
+    });
+
+    test('legacy connections accept initialization-era request metadata',
+        () async {
+      server.registerTool(
+        'legacy-tool',
+        callback: (args, extra) async => const CallToolResult(content: []),
+      );
+      await server.connect(transport);
+
+      final message = await _receiveResponse(
+        transport,
+        const JsonRpcListToolsRequest(
+          id: 'legacy-version-metadata',
+          meta: {McpMetaKey.protocolVersion: '2025-06-18'},
+        ),
+      );
+
+      expect(message, isA<JsonRpcResponse>());
+    });
+
+    test('legacy connections accept client progress notifications', () async {
+      final errors = <Error>[];
+      server.onError = errors.add;
+      await server.connect(transport);
+
+      transport.receiveMessage(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 'request-1',
+            progress: 1,
+            total: 2,
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(errors, isEmpty);
     });
   });
 }

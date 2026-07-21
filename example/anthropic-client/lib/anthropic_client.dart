@@ -312,13 +312,9 @@ class AnthropicMcpClient {
           '${jsonEncode(tool.name)} advertises ${jsonEncode(inputSchema)}.',
         );
       }
-      final anthropicName =
-          _anthropicToolNamePattern.hasMatch(tool.name)
-              ? tool.name
-              : _anthropicToolAlias(tool.name, {
-                ...reservedNames,
-                ...usedNames,
-              });
+      final anthropicName = _anthropicToolNamePattern.hasMatch(tool.name)
+          ? tool.name
+          : _anthropicToolAlias(tool.name, {...reservedNames, ...usedNames});
       usedNames.add(anthropicName);
       mcpNameByAnthropicName[anthropicName] = tool.name;
 
@@ -349,8 +345,9 @@ class AnthropicMcpClient {
     for (var attempt = 0; ; attempt++) {
       final suffix = attempt == 0 ? '_$hash' : '_${hash}_$attempt';
       final prefixLength = 64 - suffix.length;
-      final prefix =
-          base.length <= prefixLength ? base : base.substring(0, prefixLength);
+      final prefix = base.length <= prefixLength
+          ? base
+          : base.substring(0, prefixLength);
       final candidate = '$prefix$suffix';
       if (!unavailable.contains(candidate)) {
         return candidate;
@@ -511,12 +508,11 @@ class AnthropicMcpClient {
     AnthropicLineWriter? writeLine,
     AnthropicLineWriter? writeError,
   }) async {
-    final iterator =
-        readLine == null
-            ? StreamIterator(
-              stdin.transform(utf8.decoder).transform(const LineSplitter()),
-            )
-            : null;
+    final iterator = readLine == null
+        ? StreamIterator(
+            stdin.transform(utf8.decoder).transform(const LineSplitter()),
+          )
+        : null;
     Future<String?> readFromStdin() async {
       if (await iterator!.moveNext()) {
         return iterator.current;

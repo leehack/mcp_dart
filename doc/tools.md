@@ -43,7 +43,7 @@ and custom vocabularies. Schema evaluation is bounded to a depth of 64 and
 processing in application code when needed.
 
 MCP 2025-11-25 requires `inputSchema`; `outputSchema` remains optional. Its
-structured tool values are object-rooted, so stable registrations use
+structured tool values are object-rooted, so initialization-era registrations use
 `JsonSchema.object(...)` or `JsonObject.fromJson(...)` at both schema roots and
 put primitive values under named properties. Primitive tool input schemas and
 primitive form-elicitation roots are rejected at the MCP wire boundary.

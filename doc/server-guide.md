@@ -85,6 +85,19 @@ final server = McpServer(
 Use `McpServerOptions(protocol: McpProtocol.require2026)` when the server
 should reject legacy initialization.
 
+When the server is hosted by `StreamableMcpServer`, pass the same profile to
+both layers so HTTP routing and the factory-created protocol agree:
+
+```dart
+final httpServer = StreamableMcpServer(
+  protocol: McpProtocol.require2026,
+  serverFactory: (_) => McpServer(
+    const Implementation(name: 'my-server', version: '1.0.0'),
+    options: const McpServerOptions(protocol: McpProtocol.require2026),
+  ),
+);
+```
+
 ## Server Capabilities
 
 Registering a tool, resource, or prompt declares the corresponding base
@@ -588,35 +601,50 @@ server.registerResource(
 
 ### Resource Updates
 
-Notify clients when resources change:
+For MCP 2026-07-28, resource updates are delivered only on an acknowledged
+`subscriptions/listen` stream. Inside that long-lived handler, use its
+request-scoped `extra` object:
 
 ```dart
-// Register resource with change notifications
+await extra.sendSubscriptionAcknowledged(
+  request.listenParams.notifications.acknowledgedBy(
+    server.server.getCapabilities(),
+  ),
+);
+
+await extra.sendSubscriptionNotification(
+  JsonRpcResourceUpdatedNotification(
+    updatedParams: const ResourceUpdatedNotification(
+      uri: 'file:///data/metrics.json',
+    ),
+  ),
+);
+```
+
+Retain the request-scoped `extra` for each active subscription, filter events
+to the acknowledged resource URIs, and stop when `extra.signal` is aborted.
+The global `sendResourceUpdated()` and `sendResourceListChanged()` helpers are
+legacy MCP APIs. They continue to work in an initialization-era session but
+are suppressed for stateless MCP because they cannot identify an active
+subscription stream.
+
+Register and read the resource normally in either profile:
+
+```dart
 server.registerResource(
   'Metrics',
   'file:///data/metrics.json',
   null,
-  (uri, extra) async {
-    final content = await File('metrics.json').readAsString();
-    return ReadResourceResult(
-      contents: [
-        TextResourceContents(
-          uri: uri.toString(),
-          text: content,
-          mimeType: 'application/json',
-        ),
-      ],
-    );
-  },
+  (uri, extra) async => ReadResourceResult(
+    contents: [
+      TextResourceContents(
+        uri: uri.toString(),
+        text: await File('metrics.json').readAsString(),
+        mimeType: 'application/json',
+      ),
+    ],
+  ),
 );
-
-// Later, notify clients of changes through the low-level protocol surface.
-await server.server.sendResourceUpdated(
-  const ResourceUpdatedNotification(uri: 'file:///data/metrics.json'),
-);
-
-// Notify after an external registry change. registerResource already notifies.
-server.sendResourceListChanged();
 ```
 
 ## Creating Prompts
@@ -829,12 +857,32 @@ resolvable through `tasks/get`. High-level stateless tool registrations also
 validate completed task output from `tasks/get` and `notifications/tasks`
 against the schema captured at acceptance.
 
+`CreateTaskExtensionResult` contains only the base task fields, even when its
+seed status is terminal or requires input. The client retrieves the matching
+status-specific `result`, `error`, or `inputRequests` through `tasks/get` before
+acting on that status. A `tasks/get` result or `notifications/tasks` event must
+contain exactly the detailed fields required by its status, and every embedded
+input request requires the same per-request client capability as its standalone
+RPC.
+
 Updating the tool registration later does not change an in-flight task's
 contract. The validation snapshot is discarded after a terminal result,
 cancellation, or server close. Low-level custom `tools/call` handlers remain
 responsible for their own output schema association. Give persisted tasks a
 finite `ttlMs` unless indefinite retention is intentional, and expire the
 application task/result record on the same schedule.
+
+Treat task IDs as security-sensitive handles. Generate them with a
+cryptographically secure source and enough entropy that they cannot be guessed
+or enumerated. Authenticate and authorize every `tasks/get`, `tasks/update`, and
+`tasks/cancel` request against the task's owner instead of treating knowledge of
+an ID as sufficient access. Keep each `inputRequests` key unique for the entire
+task lifetime. Hosts must apply the same user-consent, model-access, and trust
+policy to embedded elicitation, sampling, and roots requests that they apply to
+the equivalent standalone request; a task is not a higher-trust channel. The SDK
+checks negotiated capabilities and wire shapes, but application persistence,
+authorization, key uniqueness, and user-facing trust decisions remain the
+implementer's responsibility.
 
 The low-level handlers below show the minimum creation and polling shape:
 
@@ -906,6 +954,16 @@ input and cancellation; successful handlers return
 `tasks/list`,
 `tasks/result`, or client-supplied `task` option. `McpClient.callTool()` polls
 `tasks/get` and returns the final `CallToolResult` transparently.
+
+`ProtocolOptions.taskStore` and `taskMessageQueue` preserve the MCP 2025-11-25
+task-augmentation lifecycle and do not implement the modern extension's
+detailed state or update semantics. A dual-era server may keep them configured
+alongside the Tasks extension, whether the extension capability is supplied in
+`McpServerOptions` or added with `registerCapabilities`. It must still register
+the modern handlers above and own their persistence explicitly. Registering a
+modern `tasks/get` or `tasks/cancel` handler replaces the legacy default for
+that method, so a server that needs both forms through one instance must branch
+on the request protocol metadata and return the result shape for that era.
 
 ### MCP 2025-11-25 legacy task augmentation
 
@@ -982,10 +1040,12 @@ logger.error('Database connection failed');
 ```
 
 MCP 2026-07-28 deprecates `notifications/message`. The SDK keeps
-`sendLoggingMessage` for compatibility, but new stdio servers should log to
-`stderr` and deployed services should prefer OpenTelemetry. Compatibility
-implementations must advertise the logging capability, honor the request's log
-level, and exclude secrets and personal identifying information.
+`sendLoggingMessage` for legacy-session compatibility and suppresses that
+global helper for stateless MCP. Request-scoped compatibility handlers must use
+`sendStatelessLoggingMessage` with the originating request metadata and ID.
+New stdio servers should log to `stderr`, deployed services should prefer
+OpenTelemetry, and all logging must exclude secrets and personal identifying
+information.
 
 ## Server Lifecycle
 

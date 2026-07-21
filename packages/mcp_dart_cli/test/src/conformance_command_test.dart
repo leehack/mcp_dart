@@ -41,74 +41,77 @@ void main() {
       },
     );
 
-    test('spec suite covers high-risk wire cases across spec versions', () async {
-      final result = await ConformanceRunner().runSpecSuite();
+    test(
+      'spec suite covers high-risk wire cases across spec versions',
+      () async {
+        final result = await ConformanceRunner().runSpecSuite();
 
-      expect(result.passed, isTrue);
-      expect(result.total, greaterThanOrEqualTo(5));
-      expect(
-        result.caseNames,
-        containsAll(<String>[
-          'lifecycle.rejects-pre-initialize-request',
-          'lifecycle.gates-until-initialized-notification',
-          'lifecycle.does-not-cancel-initialize',
-          'cancellation.requires-request-id',
-          'server-discover.requires-request-meta',
-          'server-discover.returns-supported-capabilities',
-          'protocol-version.rejects-unsupported-stateless-version',
-          'stateless.requires-complete-request-meta',
-          'protocol-version.http-modern-400-retries-discovery',
-          'capabilities.http-modern-400-does-not-fallback',
-          'protocol-version.initialize-negotiates-stateful-version',
-          'capabilities.stateless-does-not-infer-initialize-extensions',
-          'stateless-http.rejects-mismatched-routing-headers',
-          'stateless-http.requires-routing-headers',
-          'stateless-http.rejects-non-post-methods',
-          'stateless-http.rejects-batch-payloads',
-          'stateless-http.task-requests-require-name-header',
-          'stateless-http.validates-parameter-headers',
-          'stateless-http.omits-non-integer-parameter-headers',
-          'stateless-http.encodes-parameter-header-values',
-          'stateless-http.accepts-response-posts',
-          'stateless-http.task-subscription-requires-client-capability',
-          'stateless-http.omits-session-header-after-initialize',
-          'stateless.related-task-uses-explicit-id-across-transports',
-          'stateless.ignores-legacy-task-parameter',
-          'stateless.adds-result-type-and-cache-defaults',
-          'tools-list.stateless-returns-deterministic-order',
-          'resources.missing-resource-error-code-by-version',
-          'stateless.rejects-unrecognized-result-type',
-          'mrtr.input-required-supported-requests',
-          'mrtr.rejects-unsupported-input-required-results',
-          'mrtr.input-requests-require-client-capabilities',
-          'stateless.rejects-removed-core-rpcs',
-          'stateless.rejects-removed-core-notifications',
-          'logging.stateless-requires-request-log-level',
-          'tasks-extension.lifecycle-methods-do-not-require-repeated-capability',
-          'tasks-extension.task-store-uses-extension-result-shapes',
-          'tasks-extension.call-tool-result-cannot-spoof-task-result',
-          'tasks-extension.task-result-requires-client-extension',
-          'subscriptions-listen.task-ids-require-client-capability',
-          'subscriptions-listen.requires-request-meta',
-          'subscriptions-listen.resource-subscriptions-require-capability',
-          'subscriptions-acknowledged.rejects-wrapper-mismatch',
-          'capabilities.rejects-unnegotiated-sampling-tools',
-          'capabilities.rejects-unnegotiated-sampling-context',
-          'capabilities.unadvertised-peer-methods-use-method-not-found',
-          'capabilities.task-scoped-peer-methods-use-method-not-found',
-          'capabilities.stateless-omits-legacy-task-capabilities',
-          'elicitation.rejects-invalid-form-url-union',
-          'elicitation.accepts-numeric-number-schema-keywords',
-          'tasks.strips-unnegotiated-related-task-metadata',
-          'progress.rejects-malformed-progress-token',
-          'progress.dispatches-integer-progress-token',
-        ]),
-      );
-      expect(
-        result.cases.map((testCase) => testCase.suite),
-        everyElement('spec'),
-      );
-    });
+        expect(result.passed, isTrue);
+        expect(result.total, greaterThanOrEqualTo(5));
+        expect(
+          result.caseNames,
+          containsAll(<String>[
+            'lifecycle.rejects-pre-initialize-request',
+            'lifecycle.gates-until-initialized-notification',
+            'lifecycle.does-not-cancel-initialize',
+            'cancellation.requires-request-id',
+            'server-discover.requires-request-meta',
+            'server-discover.returns-supported-capabilities',
+            'protocol-version.rejects-unsupported-stateless-version',
+            'stateless.requires-complete-request-meta',
+            'protocol-version.http-modern-400-retries-discovery',
+            'capabilities.http-modern-400-does-not-fallback',
+            'protocol-version.initialize-negotiates-stateful-version',
+            'capabilities.stateless-does-not-infer-initialize-extensions',
+            'stateless-http.rejects-mismatched-routing-headers',
+            'stateless-http.requires-routing-headers',
+            'stateless-http.rejects-non-post-methods',
+            'stateless-http.rejects-batch-payloads',
+            'stateless-http.task-requests-require-name-header',
+            'stateless-http.validates-parameter-headers',
+            'stateless-http.validates-numeric-parameter-headers',
+            'stateless-http.encodes-parameter-header-values',
+            'stateless-http.rejects-response-posts',
+            'stateless-http.task-subscription-requires-client-capability',
+            'stateless-http.omits-session-header-after-initialize',
+            'stateless.related-task-uses-explicit-id-across-transports',
+            'stateless.ignores-legacy-task-parameter',
+            'stateless.adds-result-type-and-cache-defaults',
+            'tools-list.stateless-returns-deterministic-order',
+            'resources.missing-resource-error-code-by-version',
+            'stateless.rejects-unrecognized-result-type',
+            'mrtr.input-required-supported-requests',
+            'mrtr.rejects-unsupported-input-required-results',
+            'mrtr.input-requests-require-client-capabilities',
+            'stateless.rejects-removed-core-rpcs',
+            'stateless.rejects-removed-core-notifications',
+            'logging.stateless-requires-request-log-level',
+            'tasks-extension.lifecycle-methods-require-request-capability',
+            'tasks-extension.keeps-legacy-task-store-separate',
+            'tasks-extension.call-tool-result-cannot-spoof-task-result',
+            'tasks-extension.task-result-requires-client-extension',
+            'subscriptions-listen.task-ids-require-client-capability',
+            'subscriptions-listen.requires-request-meta',
+            'subscriptions-listen.resource-subscriptions-require-capability',
+            'subscriptions-acknowledged.rejects-wrapper-mismatch',
+            'capabilities.rejects-unnegotiated-sampling-tools',
+            'capabilities.rejects-unnegotiated-sampling-context',
+            'capabilities.unadvertised-peer-methods-use-method-not-found',
+            'capabilities.task-scoped-peer-methods-use-method-not-found',
+            'capabilities.stateless-omits-legacy-task-capabilities',
+            'elicitation.rejects-invalid-form-url-union',
+            'elicitation.accepts-numeric-number-schema-keywords',
+            'tasks.strips-unnegotiated-related-task-metadata',
+            'progress.rejects-malformed-progress-token',
+            'progress.dispatches-integer-progress-token',
+          ]),
+        );
+        expect(
+          result.cases.map((testCase) => testCase.suite),
+          everyElement('spec'),
+        );
+      },
+    );
 
     test('all suite combines fixture and spec cases', () async {
       final result = await ConformanceRunner().runAllSuites();
@@ -130,6 +133,21 @@ void main() {
       expect(result.total, 1);
       expect(result.caseNames, ['jsonrpc.preserves-string-response-id']);
     });
+
+    test(
+      'stateless client rejects unadvertised peer methods without responding',
+      () async {
+        const caseName =
+            'capabilities.unadvertised-peer-methods-use-method-not-found';
+        final result = await ConformanceRunner().runSpecSuite(
+          filter: caseName,
+        );
+
+        expect(result.passed, isTrue);
+        expect(result.total, 1);
+        expect(result.caseNames, [caseName]);
+      },
+    );
 
     test(
       'deterministic fuzz suite exercises generated JSON-RPC envelopes',

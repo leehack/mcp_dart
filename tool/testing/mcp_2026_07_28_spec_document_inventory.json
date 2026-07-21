@@ -232,7 +232,7 @@
     },
     "server/tools.mdx": {
       "scope": "Tool listing and invocation, JSON Schema 2020-12, structured output, deterministic ordering, headers, and MRTR.",
-      "sha256": "bc1408732947112ce6c69916d62518206c324e780aa9abf55242e300aceca01f",
+      "sha256": "05a6958e710d81f8ee0b5351a29c1f5993e0d3ce0e7714debe8b1690843e1c6a",
       "evidence": [
         "lib/src/types/tools.dart",
         "test/tool_schema_test.dart",

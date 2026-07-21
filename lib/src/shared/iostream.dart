@@ -142,7 +142,9 @@ class IOStreamTransport implements Transport {
         _logger.warn(
           "IOStreamTransport: Error processing read buffer: $parseError. Skipping data.",
         );
-        break; // Stop processing buffer on error
+        // readMessage consumes one complete newline-delimited frame before it
+        // parses, so keep draining any later frames already in this chunk.
+        continue;
       }
     }
   }

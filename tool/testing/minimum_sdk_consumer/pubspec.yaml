@@ -1,0 +1,11 @@
+name: mcp_dart_minimum_sdk_consumer
+description: Compile-only consumer fixture for the oldest supported SDK graph.
+publish_to: none
+version: 0.0.0
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  mcp_dart:
+    path: ../../..

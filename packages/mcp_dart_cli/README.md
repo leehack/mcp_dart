@@ -233,6 +233,11 @@ cd packages/mcp_dart_cli
 dart pub global run pana --no-warning --exit-code-threshold 0
 ```
 
+The release and tag-publish workflows also use a clean exported candidate.
+They downgrade to the declared minimum hosted `mcp_dart` version, verify its
+exact version and source, run analysis and the non-interop tests, and compile
+and smoke-test the CLI before publishing.
+
 Require the full 160/160 score before publishing.
 
 See [CONTRIBUTING.md](https://github.com/leehack/mcp_dart/blob/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli/CONTRIBUTING.md)

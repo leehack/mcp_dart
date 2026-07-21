@@ -128,7 +128,16 @@ Map<String, Map<String, dynamic>>? _asExtensionMap(
 ) {
   final map = _asJsonObjectMap(value, field);
   return map?.map(
-    (key, value) => MapEntry(key, value.cast<String, dynamic>()),
+    (key, value) {
+      _validateExtensionIdentifier(key, '$field.$key');
+      final settings = value.cast<String, dynamic>();
+      if (key == mcpTasksExtensionId && settings.isNotEmpty) {
+        throw FormatException(
+          '$field.$key must be an empty settings object',
+        );
+      }
+      return MapEntry(key, settings);
+    },
   );
 }
 
@@ -138,8 +147,32 @@ Map<String, Map<String, dynamic>>? _serializeExtensionMap(
 ) {
   final map = _serializeJsonObjectMap(value, field);
   return map?.map(
-    (key, value) => MapEntry(key, value.cast<String, dynamic>()),
+    (key, value) {
+      try {
+        _validateExtensionIdentifier(key, '$field.$key');
+      } on FormatException catch (error) {
+        throw ArgumentError.value(key, '$field.$key', error.message);
+      }
+      final settings = value.cast<String, dynamic>();
+      if (key == mcpTasksExtensionId && settings.isNotEmpty) {
+        throw ArgumentError.value(
+          settings,
+          '$field.$key',
+          'must be an empty settings object',
+        );
+      }
+      return MapEntry(key, settings);
+    },
   );
+}
+
+void _validateExtensionIdentifier(String identifier, String field) {
+  validateMetaKeyName(identifier, fieldName: field);
+  if (!identifier.contains('/')) {
+    throw FormatException(
+      'Invalid $field extension identifier "$identifier": prefix is required',
+    );
+  }
 }
 
 Map<String, dynamic>? _readAdditionalCapabilities(
@@ -226,6 +259,14 @@ const _clientCapabilityKeys = {
   'extensions',
 };
 
+const _statelessClientCapabilityKeys = {
+  'experimental',
+  'sampling',
+  'roots',
+  'elicitation',
+  'extensions',
+};
+
 const _serverCapabilityKeys = {
   'experimental',
   'logging',
@@ -237,6 +278,30 @@ const _serverCapabilityKeys = {
   'elicitation',
   'extensions',
 };
+
+const _discoverServerCapabilityObjectKeys = {
+  // These are the exact ServerCapabilities properties in the pinned MCP
+  // 2026-07-28 schema. The capability set remains open, so additional keys
+  // may retain any valid JSON value.
+  'experimental',
+  'logging',
+  'completions',
+  'prompts',
+  'resources',
+  'tools',
+  'extensions',
+};
+
+Map<String, dynamic>? _readPresentCapabilityObject(
+  Map<String, dynamic> parent,
+  String key,
+  String field,
+) {
+  if (!parent.containsKey(key)) {
+    return null;
+  }
+  return readJsonObject(parent[key], field);
+}
 
 /// Describes an MCP implementation (client or server).
 class Implementation {
@@ -376,6 +441,13 @@ class ClientElicitation {
   /// Present if the client supports URL mode elicitation.
   /// URL mode directs users to external URLs for sensitive interactions.
   final ClientElicitationUrl? url;
+
+  /// Whether this capability advertises form mode support.
+  ///
+  /// An empty capability object historically advertised form mode before MCP
+  /// added explicit elicitation modes, so preserve that interpretation when
+  /// neither [form] nor [url] is present.
+  bool get supportsForm => form != null || url == null;
 
   /// Creates elicitation capabilities.
   /// By default, supports form mode only for backwards compatibility.
@@ -696,6 +768,94 @@ class ClientCapabilities {
     );
   }
 
+  /// Parses capabilities from MCP `2026-07-28` stateless request metadata.
+  ///
+  /// Unlike [ClientCapabilities.fromJson], this treats capability names and
+  /// nested fields removed from the current schema as open extension data
+  /// rather than applying initialization-era compatibility parsing.
+  factory ClientCapabilities.fromStatelessJson(Map<String, dynamic> json) {
+    final experimentalMap = _readPresentCapabilityObject(
+      json,
+      'experimental',
+      'ClientCapabilities.experimental',
+    );
+    final extensionsMap = _readPresentCapabilityObject(
+      json,
+      'extensions',
+      'ClientCapabilities.extensions',
+    );
+    final rootsMap = _readPresentCapabilityObject(
+      json,
+      'roots',
+      'ClientCapabilities.roots',
+    );
+    final samplingMap = _readPresentCapabilityObject(
+      json,
+      'sampling',
+      'ClientCapabilities.sampling',
+    );
+    if (samplingMap != null) {
+      _readPresentCapabilityObject(
+        samplingMap,
+        'context',
+        'ClientCapabilities.sampling.context',
+      );
+      _readPresentCapabilityObject(
+        samplingMap,
+        'tools',
+        'ClientCapabilities.sampling.tools',
+      );
+    }
+    final elicitationMap = _readPresentCapabilityObject(
+      json,
+      'elicitation',
+      'ClientCapabilities.elicitation',
+    );
+    if (elicitationMap != null) {
+      _readPresentCapabilityObject(
+        elicitationMap,
+        'form',
+        'ClientCapabilities.elicitation.form',
+      );
+      _readPresentCapabilityObject(
+        elicitationMap,
+        'url',
+        'ClientCapabilities.elicitation.url',
+      );
+    }
+
+    // MCP 2026 uses presence-only JSON objects for roots and elicitation
+    // modes. Do not reinterpret removed legacy fields that happen to reuse a
+    // name inside those otherwise-open objects.
+    final statelessElicitation = elicitationMap == null
+        ? null
+        : ClientElicitation.fromJson({
+            if (elicitationMap.containsKey('form')) 'form': <String, dynamic>{},
+            if (elicitationMap.containsKey('url')) 'url': <String, dynamic>{},
+          });
+
+    return ClientCapabilities(
+      experimental: _asJsonObjectMap(
+        experimentalMap,
+        'ClientCapabilities.experimental',
+      ),
+      sampling: samplingMap == null
+          ? null
+          : ClientCapabilitiesSampling.fromJson(samplingMap),
+      roots: rootsMap == null ? null : const ClientCapabilitiesRoots(),
+      elicitation: statelessElicitation,
+      extensions: _asExtensionMap(
+        extensionsMap,
+        'ClientCapabilities.extensions',
+      ),
+      additionalCapabilities: _readAdditionalCapabilities(
+        json,
+        _statelessClientCapabilityKeys,
+        'ClientCapabilities',
+      ),
+    );
+  }
+
   Map<String, dynamic> toJson({
     bool omitLegacyTasks = false,
     bool omitLegacyRootsListChanged = false,
@@ -720,7 +880,9 @@ class ClientCapabilities {
           ),
         ...?_serializeAdditionalCapabilities(
           additionalCapabilities,
-          _clientCapabilityKeys,
+          omitLegacyTasks
+              ? _statelessClientCapabilityKeys
+              : _clientCapabilityKeys,
           'ClientCapabilities.additionalCapabilities',
         ),
       };
@@ -1012,7 +1174,7 @@ class ServerCapabilitiesCompletions {
   /// Legacy non-standard completion list changed flag.
   ///
   /// MCP 2025-11-25 defines `completions` as an empty capability object and
-  /// does not define a stable `notifications/completions/list_changed` method.
+  /// does not define a core `notifications/completions/list_changed` method.
   @Deprecated(
     'MCP 2025-11-25 completions capability is an empty object; listChanged is ignored when serializing.',
   )
@@ -1252,6 +1414,78 @@ class ServerCapabilities {
     );
   }
 
+  /// Parses capabilities from an MCP `2026-07-28` `server/discover` result.
+  ///
+  /// Capability names removed from the current schema remain valid additional
+  /// capabilities because the 2026 capability set is explicitly open.
+  factory ServerCapabilities.fromDiscoveryJson(Map<String, dynamic> json) {
+    final experimentalMap = _readPresentCapabilityObject(
+      json,
+      'experimental',
+      'DiscoverResult.capabilities.experimental',
+    );
+    final loggingMap = _readPresentCapabilityObject(
+      json,
+      'logging',
+      'DiscoverResult.capabilities.logging',
+    );
+    final promptsMap = _readPresentCapabilityObject(
+      json,
+      'prompts',
+      'DiscoverResult.capabilities.prompts',
+    );
+    final resourcesMap = _readPresentCapabilityObject(
+      json,
+      'resources',
+      'DiscoverResult.capabilities.resources',
+    );
+    final toolsMap = _readPresentCapabilityObject(
+      json,
+      'tools',
+      'DiscoverResult.capabilities.tools',
+    );
+    final completionsMap = _readPresentCapabilityObject(
+      json,
+      'completions',
+      'DiscoverResult.capabilities.completions',
+    );
+    final extensionsMap = _readPresentCapabilityObject(
+      json,
+      'extensions',
+      'DiscoverResult.capabilities.extensions',
+    );
+
+    return ServerCapabilities(
+      experimental: _asJsonObjectMap(
+        experimentalMap,
+        'ServerCapabilities.experimental',
+      ),
+      logging: loggingMap,
+      prompts: promptsMap == null
+          ? null
+          : ServerCapabilitiesPrompts.fromJson(promptsMap),
+      resources: resourcesMap == null
+          ? null
+          : ServerCapabilitiesResources.fromJson(resourcesMap),
+      tools:
+          toolsMap == null ? null : ServerCapabilitiesTools.fromJson(toolsMap),
+      // The current schema defines completions as an arbitrary JSONObject.
+      // Ignore the removed legacy listChanged member instead of type-checking
+      // an otherwise-valid extension value with that name.
+      completions:
+          completionsMap == null ? null : const ServerCapabilitiesCompletions(),
+      extensions: _asExtensionMap(
+        extensionsMap,
+        'ServerCapabilities.extensions',
+      ),
+      additionalCapabilities: _readAdditionalCapabilities(
+        json,
+        _discoverServerCapabilityObjectKeys,
+        'ServerCapabilities',
+      ),
+    );
+  }
+
   Map<String, dynamic> toJson({bool omitLegacyTasks = false}) => {
         if (experimental != null)
           'experimental': _serializeJsonObjectMap(
@@ -1272,7 +1506,9 @@ class ServerCapabilities {
           ),
         ...?_serializeAdditionalCapabilities(
           additionalCapabilities,
-          _serverCapabilityKeys,
+          omitLegacyTasks
+              ? _discoverServerCapabilityObjectKeys
+              : _serverCapabilityKeys,
           'ServerCapabilities.additionalCapabilities',
         ),
       };
@@ -1406,6 +1642,21 @@ class DiscoverResult implements CacheableResultData {
       );
     }
 
+    final capabilities = readJsonObject(
+      json['capabilities'],
+      'DiscoverResult.capabilities',
+    );
+    final ttlMs = readOptionalTtlMs(json['ttlMs'], 'DiscoverResult.ttlMs');
+    if (ttlMs == null) {
+      throw const FormatException('DiscoverResult.ttlMs is required');
+    }
+    final cacheScope = readOptionalCacheScope(
+      json['cacheScope'],
+      'DiscoverResult.cacheScope',
+    );
+    if (cacheScope == null) {
+      throw const FormatException('DiscoverResult.cacheScope is required');
+    }
     final meta = readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta');
     Implementation? readLegacyServerInfo(Object? value) {
       if (value == null) return null;
@@ -1439,19 +1690,14 @@ class DiscoverResult implements CacheableResultData {
         for (final version in supportedVersions)
           readRequiredString(version, 'DiscoverResult.supportedVersions items'),
       ],
-      capabilities: ServerCapabilities.fromJson(
-        readJsonObject(json['capabilities'], 'DiscoverResult.capabilities'),
-      ),
+      capabilities: ServerCapabilities.fromDiscoveryJson(capabilities),
       serverInfo: serverInfo,
       instructions: readOptionalString(
         json['instructions'],
         'DiscoverResult.instructions',
       ),
-      ttlMs: readOptionalTtlMs(json['ttlMs'], 'DiscoverResult.ttlMs'),
-      cacheScope: readOptionalCacheScope(
-        json['cacheScope'],
-        'DiscoverResult.cacheScope',
-      ),
+      ttlMs: ttlMs,
+      cacheScope: cacheScope,
       meta: meta,
     );
   }
@@ -1496,8 +1742,8 @@ class DiscoverResult implements CacheableResultData {
       'supportedVersions': supportedVersions,
       'capabilities': capabilities.toJson(omitLegacyTasks: true),
       if (instructions != null) 'instructions': instructions,
-      if (ttlMs != null) 'ttlMs': ttlMs,
-      if (cacheScope != null) 'cacheScope': cacheScope,
+      'ttlMs': ttlMs ?? 0,
+      'cacheScope': cacheScope ?? CacheScope.private,
       if (meta != null || serverInfo != null) '_meta': resultMeta,
     };
   }

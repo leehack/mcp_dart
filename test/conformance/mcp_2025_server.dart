@@ -9,7 +9,7 @@ const _png1x1 =
 const _wavSilence =
     'UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
 
-/// Dedicated HTTP server fixture for the stable MCP 2025-11-25 conformance
+/// Dedicated HTTP server fixture for the MCP 2025-11-25 conformance
 /// suite.
 ///
 /// The conformance package calls hard-coded diagnostic tools, prompts, and

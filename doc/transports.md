@@ -25,6 +25,12 @@ Standard input/output transport for process-based communication. Best for:
 - Process spawning
 - Node.js MCP servers
 
+Stdio frames are newline-delimited JSON-RPC messages. The server reports JSON
+syntax failures, invalid envelopes, and invalid MCP parameters with the
+corresponding JSON-RPC error, while malformed notifications and responses do
+not receive a response. A malformed frame is consumed independently so valid
+frames later in the same input chunk are still processed.
+
 ### Server Setup
 
 ```dart
@@ -120,9 +126,29 @@ withhold host credentials, copy and sanitize `Platform.environment`, pass that
 map as `environment`, and set `includeParentEnvironment: false`. Compare
 variable names case-insensitively when sanitizing for Windows compatibility.
 
-The default inherited stderr mode is continuously forwarded. If you choose
-`ProcessStartMode.normal`, continuously drain `transport.stderr`; otherwise a
-child that fills its stderr pipe can block protocol startup or later requests.
+The default inherited stderr mode is continuously forwarded. With
+`ProcessStartMode.normal`, the transport continuously drains child stderr and
+exposes it through the optional broadcast `transport.stderr` stream. The stream
+stays stable across automatic child restarts. It retains at most 64 KiB emitted
+before the first listener attaches; after that first listener, chunks emitted
+during gaps with no listeners follow broadcast semantics and are discarded.
+Explicit `close()` closes the stream; a later `start()` creates a new stream
+lifecycle with an empty pre-listener buffer.
+
+After a stateless MCP connection is established, the client transport restarts
+an unexpectedly terminated child and replays active `subscriptions/listen`
+requests with their original IDs. It validates the replacement server's
+acknowledgments before forwarding new subscription events. Equivalent replay
+acknowledgments are transparent; changed replacement filters are exposed on
+`McpSubscription.acknowledgmentChanges`. Ordinary in-flight requests are not
+replayed, so application retry policy remains authoritative. An idle code-zero
+exit is treated as a clean server shutdown. Set
+`restartOnUnexpectedExit: false` to close on every child exit instead.
+
+Explicit shutdown closes the child's stdin first, waits briefly for a clean
+exit, and only then escalates to process termination signals. Initialization-
+era MCP sessions are never restarted because their lifecycle state cannot be
+restored by replaying individual requests.
 
 ### Platform Support
 
@@ -234,11 +260,28 @@ void main() async {
 }
 ```
 
+The wrapper and each factory-created `McpServer` default to
+`McpProtocol.stable`. For a legacy-only or 2026-only deployment, pass the same
+`protocol` value to `StreamableMcpServer` and `McpServerOptions`; the wrapper
+uses it to route and reject HTTP protocol versions before dispatch.
+
 This helper handles:
+
 - Creating an HTTP server
 - Stateless request routing for MCP 2026-07-28
 - Sessions, event storage, and resumability for legacy MCP
 - Connecting the `McpServer` to the transport
+
+Each MCP 2026-07-28 POST carries exactly one client request or notification.
+Clients do not POST JSON-RPC responses or errors in the stateless protocol;
+multi-round input uses an `input_required` result instead. Initialization-era
+sessions retain client response POSTs for server-initiated requests.
+
+Core MCP 2026-07-28 defines no client-to-server notification over Streamable
+HTTP: request cancellation closes that request's response stream. The
+transport rejects known server-to-client or removed legacy notification
+methods in a client POST, while preserving unknown notification methods for an
+extension that defines the required capability and routing headers.
 
 ### DNS Rebinding Protection
 
@@ -481,6 +524,15 @@ By default, Streamable HTTP server transports also enforce:
 These defaults make compatibility failures visible instead of accepting requests
 that the Streamable HTTP spec no longer allows. If you need a temporary migration
 mode, disable only the specific check that blocks a known legacy client:
+
+`enableJsonResponse` applies to finite request/response exchanges. If a handler
+emits a request-scoped notification or legacy server request before its final
+response, the transport automatically promotes that response to SSE so no
+in-band message is lost.
+Stateless MCP 2026-07-28 JSON responses deliberately use `Connection: close` so a client
+disconnect remains observable as request cancellation before the response.
+`subscriptions/listen` always receives an SSE response so its acknowledgment,
+notifications, and final response remain ordered on the request stream.
 
 ```dart
 final server = StreamableMcpServer(
@@ -1057,6 +1109,13 @@ class StreamRoutingTransport extends CustomTransport
   }
 }
 ```
+
+Server transports that multiplex independent HTTP exchanges on one transport
+instance should also implement `IncomingRequestContextAwareTransport`. Its
+opaque context keeps responses and request-scoped notifications isolated when
+different clients concurrently reuse the same JSON-RPC request ID. Implement
+`RequestContextSseStreamControlAwareTransport` as well when handlers can detach
+and resume individual request SSE streams.
 
 ### Transport Middleware
 

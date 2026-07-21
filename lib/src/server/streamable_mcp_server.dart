@@ -5,11 +5,13 @@ import 'dart:typed_data';
 
 import 'package:mcp_dart/src/server/dns_rebinding_protection.dart';
 import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/server/server_protocol_state.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
+import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 
 const List<String> _defaultCorsAllowedHeaders = [
   'Origin',
@@ -316,6 +318,13 @@ class StreamableMcpServer {
   /// interactions.
   final bool enableJsonResponse;
 
+  /// Protocol profile used for HTTP routing before [serverFactory] connects a
+  /// per-session or per-request server.
+  ///
+  /// Keep this aligned with the [McpServerOptions.protocol] used by the
+  /// factory.
+  final McpProtocol protocol;
+
   /// Reconnection delay advertised in resumable SSE priming events.
   final Duration sseRetryDelay;
 
@@ -324,8 +333,12 @@ class StreamableMcpServer {
 
   HttpServer? _httpServer;
   final Map<String, StreamableHTTPServerTransport> _transports = {};
+  final Set<StreamableHTTPServerTransport> _activeStatelessTransports =
+      Set<StreamableHTTPServerTransport>.identity();
   // Keep track of servers to close them if needed, though closing transport usually suffices
   final Map<String, McpServer> _servers = {};
+  final Object _statelessTaskOutputValidationScope = Object();
+  bool _stopping = false;
 
   StreamableMcpServer({
     required McpServer Function(String sessionId) serverFactory,
@@ -342,6 +355,7 @@ class StreamableMcpServer {
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
     this.enableJsonResponse = false,
+    this.protocol = McpProtocol.stable,
     this.sseRetryDelay = const Duration(seconds: 1),
   })  : allowedOrigins = allowedOrigins == null
             ? null
@@ -372,6 +386,7 @@ class StreamableMcpServer {
       throw StateError('Server already started');
     }
 
+    _stopping = false;
     _httpServer = await HttpServer.bind(host, port);
     _logger.info(
       'MCP Streamable HTTP Server listening on http://$host:$boundPort$path',
@@ -386,15 +401,26 @@ class StreamableMcpServer {
 
   /// Stops the HTTP server and closes all active sessions.
   Future<void> stop() async {
+    _stopping = true;
     await _httpServer?.close(force: true);
     _httpServer = null;
 
-    // Close all transports
-    for (final transport in _transports.values) {
+    final statelessTransports = _activeStatelessTransports.toList();
+    for (final transport in statelessTransports) {
+      if (_activeStatelessTransports.remove(transport)) {
+        await transport.close();
+      }
+    }
+
+    // Closing a transport removes its session through the protocol callback,
+    // so iterate over a snapshot rather than the mutating session map.
+    final transports = _transports.values.toList(growable: false);
+    for (final transport in transports) {
       await transport.close();
     }
     _transports.clear();
     _servers.clear();
+    clearTaskOutputValidatorsForScope(_statelessTaskOutputValidationScope);
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -474,7 +500,7 @@ class StreamableMcpServer {
       if (request.method == 'POST') {
         await _handlePostRequest(request);
       } else if (_requiresStatelessTransport(request)) {
-        await _createStatelessTransport().handleRequest(request);
+        await _handleStatelessRequest(request);
       } else if (request.method == 'GET') {
         await _handleGetRequest(request);
       } else if (request.method == 'DELETE') {
@@ -504,6 +530,20 @@ class StreamableMcpServer {
   }
 
   Future<void> _handlePostRequest(HttpRequest request) async {
+    final protocolHeader =
+        request.headers.value('mcp-protocol-version')?.trim();
+    if (strictProtocolVersionHeaderValidation &&
+        protocolHeader != null &&
+        protocolHeader.isNotEmpty &&
+        !protocol.supportedVersions.contains(protocolHeader)) {
+      // Let the transport recover a readable JSON-RPC ID when possible while
+      // keeping UnsupportedProtocolVersion ahead of body/media validation.
+      await _handleStatelessRequest(request);
+      return;
+    }
+
+    final mediaPreflightError = _postMediaPreflightError(request);
+
     // We need to read the body to determine if it's an initialization request
     // or a request for an existing session.
     // However, StreamableHTTPServerTransport.handleRequest expects to read the body itself
@@ -513,11 +553,19 @@ class StreamableMcpServer {
     final sessionId = request.headers.value('mcp-session-id');
 
     final bodyBytes = await _collectBytes(request);
-    final bodyString = utf8.decode(bodyBytes);
     dynamic body;
     try {
-      body = jsonDecode(bodyString);
+      body = jsonDecode(utf8.decode(bodyBytes));
     } catch (e) {
+      if (mediaPreflightError != null) {
+        await _respondWithJsonRpcError(
+          request.response,
+          httpStatus: mediaPreflightError.httpStatus,
+          errorCode: ErrorCode.connectionClosed,
+          message: mediaPreflightError.message,
+        );
+        return;
+      }
       if (sessionId != null &&
           !_transports.containsKey(sessionId) &&
           !_requiresStatelessTransport(request)) {
@@ -534,6 +582,18 @@ class StreamableMcpServer {
         httpStatus: HttpStatus.badRequest,
         errorCode: ErrorCode.parseError,
         message: 'Parse error',
+      );
+      return;
+    }
+
+    final requestId = _requestIdFromParsedBody(body);
+    if (mediaPreflightError != null) {
+      await _respondWithJsonRpcError(
+        request.response,
+        httpStatus: mediaPreflightError.httpStatus,
+        errorCode: ErrorCode.connectionClosed,
+        id: requestId,
+        message: mediaPreflightError.message,
       );
       return;
     }
@@ -567,6 +627,7 @@ class StreamableMcpServer {
         request.response,
         httpStatus: HttpStatus.notFound,
         errorCode: ErrorCode.connectionClosed,
+        id: requestId,
         message: 'Session not found',
       );
       return;
@@ -575,10 +636,11 @@ class StreamableMcpServer {
     StreamableHTTPServerTransport? transport;
 
     if (isStatelessRequest) {
-      transport = _createStatelessTransport();
-      final server = _serverFactory('');
-      await server.connect(transport);
-      await transport.handleRequest(request, body);
+      await _handleStatelessRequest(
+        request,
+        parsedBody: body,
+        connectServer: true,
+      );
       return;
     } else if (sessionId != null) {
       transport = _transports[sessionId]!;
@@ -594,6 +656,7 @@ class StreamableMcpServer {
         request.response,
         httpStatus: HttpStatus.badRequest,
         errorCode: ErrorCode.connectionClosed,
+        id: requestId,
         message:
             'Bad Request: No valid session ID provided or not an initialization request',
       );
@@ -604,9 +667,38 @@ class StreamableMcpServer {
     await transport.handleRequest(request, body);
   }
 
+  ({int httpStatus, String message})? _postMediaPreflightError(
+    HttpRequest request,
+  ) {
+    final acceptedMediaTypes = request.headers[HttpHeaders.acceptHeader]
+            ?.expand((value) => value.split(','))
+            .map((value) => value.split(';').first.trim().toLowerCase())
+            .where((value) => value.isNotEmpty)
+            .toSet() ??
+        const <String>{};
+    if (!acceptedMediaTypes.contains('application/json') ||
+        !acceptedMediaTypes.contains('text/event-stream')) {
+      return (
+        httpStatus: HttpStatus.notAcceptable,
+        message: 'Not Acceptable: Client must accept both application/json '
+            'and text/event-stream',
+      );
+    }
+
+    final contentType = request.headers.contentType?.mimeType.toLowerCase();
+    if (contentType != 'application/json') {
+      return (
+        httpStatus: HttpStatus.unsupportedMediaType,
+        message:
+            'Unsupported Media Type: Content-Type must be application/json',
+      );
+    }
+    return null;
+  }
+
   Future<void> _handleGetRequest(HttpRequest request) async {
     if (_requiresStatelessTransport(request)) {
-      await _createStatelessTransport().handleRequest(request);
+      await _handleStatelessRequest(request);
       return;
     }
 
@@ -632,7 +724,7 @@ class StreamableMcpServer {
 
   Future<void> _handleDeleteRequest(HttpRequest request) async {
     if (_requiresStatelessTransport(request)) {
-      await _createStatelessTransport().handleRequest(request);
+      await _handleStatelessRequest(request);
       return;
     }
 
@@ -654,6 +746,34 @@ class StreamableMcpServer {
 
     final transport = _transports[sessionId]!;
     await transport.handleRequest(request);
+  }
+
+  Future<void> _handleStatelessRequest(
+    HttpRequest request, {
+    dynamic parsedBody,
+    bool connectServer = false,
+  }) async {
+    if (_stopping) {
+      try {
+        request.response.statusCode = HttpStatus.serviceUnavailable;
+        await request.response.close();
+      } catch (_) {
+        // The listener may already have force-closed this request.
+      }
+      return;
+    }
+
+    final transport = _createStatelessTransport();
+    _activeStatelessTransports.add(transport);
+    try {
+      if (connectServer) {
+        final server = _serverFactory('');
+        await server.connect(transport);
+      }
+      await transport.handleRequest(request, parsedBody);
+    } finally {
+      _activeStatelessTransports.remove(transport);
+    }
   }
 
   StreamableHTTPServerTransport _createTransport() {
@@ -679,6 +799,27 @@ class StreamableMcpServer {
           final server = _serverFactory(sid);
           _servers[sid] = server;
 
+          // Protocol.connect installs its own transport onclose callback. Keep
+          // session cleanup on the server callback so it survives that wiring,
+          // while preserving callbacks configured by the server factory.
+          final factoryOnClose = server.server.onclose;
+          server.server.onclose = () {
+            try {
+              factoryOnClose?.call();
+            } finally {
+              final removedTransport = identical(_transports[sid], transport);
+              if (removedTransport) {
+                _transports.remove(sid);
+              }
+              if (identical(_servers[sid], server)) {
+                _servers.remove(sid);
+              }
+              if (removedTransport) {
+                _logger.info('Session closed: $sid');
+              }
+            }
+          };
+
           // Connect server to transport
           // Note: connect() is async, but onsessioninitialized is sync.
           // This usually works because the transport handles the immediate request
@@ -697,12 +838,13 @@ class StreamableMcpServer {
         },
       ),
     );
+    transport.setServerSupportedProtocolVersions(protocol.supportedVersions);
 
     transport.onclose = () {
       final sid = transport.sessionId;
-      if (sid != null) {
+      if (sid != null && identical(_transports[sid], transport)) {
         _transports.remove(sid);
-        _servers.remove(sid); // This will be GC'd
+        _servers.remove(sid);
         _logger.info('Session closed: $sid');
       }
     };
@@ -711,7 +853,7 @@ class StreamableMcpServer {
   }
 
   StreamableHTTPServerTransport _createStatelessTransport() {
-    return StreamableHTTPServerTransport(
+    final transport = StreamableHTTPServerTransport(
       options: StreamableHTTPServerTransportOptions(
         sessionIdGenerator: () => null,
         eventStore: eventStore,
@@ -725,6 +867,12 @@ class StreamableMcpServer {
         sseRetryDelay: sseRetryDelay,
       ),
     );
+    transport.setServerSupportedProtocolVersions(protocol.supportedVersions);
+    writeTransportTaskOutputValidationScope(
+      transport,
+      _statelessTaskOutputValidationScope,
+    );
+    return transport;
   }
 
   bool _requiresStatelessTransport(HttpRequest request) {
@@ -736,7 +884,7 @@ class StreamableMcpServer {
     final version = versionHeader.trim();
     return isStatelessProtocolVersion(version) ||
         strictProtocolVersionHeaderValidation &&
-            !allSupportedProtocolVersions.contains(version);
+            !protocol.supportedVersions.contains(version);
   }
 
   bool _isStatelessRequest(HttpRequest request, dynamic body) {
@@ -748,7 +896,7 @@ class StreamableMcpServer {
       return version != null &&
           (isStatelessProtocolVersion(version) ||
               strictProtocolVersionHeaderValidation &&
-                  !allSupportedProtocolVersions.contains(version));
+                  !protocol.supportedVersions.contains(version));
     }
     if (body is List) {
       return body.whereType<Map<String, dynamic>>().any((item) {
@@ -756,7 +904,7 @@ class StreamableMcpServer {
         return version != null &&
             (isStatelessProtocolVersion(version) ||
                 strictProtocolVersionHeaderValidation &&
-                    !allSupportedProtocolVersions.contains(version));
+                    !protocol.supportedVersions.contains(version));
       });
     }
     return false;
@@ -950,14 +1098,16 @@ class StreamableMcpServer {
     required int httpStatus,
     required ErrorCode errorCode,
     required String message,
+    RequestId? id,
     Object? data,
   }) async {
     response
       ..statusCode = httpStatus
+      ..headers.contentType = ContentType.json
       ..write(
         jsonEncode(
           JsonRpcError(
-            id: null,
+            id: id,
             error: JsonRpcErrorData(
               code: errorCode.value,
               message: message,
@@ -967,6 +1117,17 @@ class StreamableMcpServer {
         ),
       );
     await response.close();
+  }
+
+  RequestId? _requestIdFromParsedBody(dynamic body) {
+    if (body is! Map || !body.containsKey('id')) {
+      return null;
+    }
+    try {
+      return json_rpc.parseRequestId(body['id']);
+    } catch (_) {
+      return null;
+    }
   }
 
   String _corsAllowedHeaders(HttpRequest request) {

@@ -41,12 +41,10 @@ Future<void> main(List<String> args) async {
     return;
   }
   final selectedDirection = direction ?? 'all';
-  final expectPublishedTsGap =
-      args.contains('--expect-published-ts-client-gap');
-  if (expectPublishedTsGap && selectedDirection == 'dart-to-ts') {
+  if (args.contains('--expect-published-ts-client-gap')) {
     stderr.writeln(
-      '--expect-published-ts-client-gap requires the ts-to-dart direction '
-      '(or all).',
+      '--expect-published-ts-client-gap is retired: the pinned published '
+      'TypeScript beta must pass both directions.',
     );
     exitCode = 64;
     return;
@@ -76,33 +74,13 @@ Future<void> main(List<String> args) async {
       await _runDartClientAgainstTsServer(repoRoot, fixtureDir);
     }
     if (selectedDirection != 'dart-to-ts') {
-      final result = await _runTsClientAgainstDartServer(repoRoot, fixtureDir);
-      if (expectPublishedTsGap) {
-        final isExpectedGap = result.exitCode != 0 &&
-            result.output.contains('ERA_NEGOTIATION_FAILED') &&
-            result.output.contains(
-              'server did not offer pinned protocol version 2026-07-28 '
-              'via server/discover',
-            );
-        if (!isExpectedGap) {
-          if (result.exitCode == 0) {
-            throw StateError(
-              'Published TypeScript client unexpectedly passed; remove the '
-              'temporary #2513 expected-gap handling.',
-            );
-          }
-          throw StateError(
-            'TypeScript client failed for an unexpected reason '
-            '(exit ${result.exitCode}).',
-          );
-        }
-        stdout.writeln(
-          '[expected-gap] Published TypeScript beta client predates spec #3002; '
-          'remove this expectation after TypeScript SDK #2513 is released.',
-        );
-      } else if (result.exitCode != 0) {
+      final exitCode = await _runTsClientAgainstDartServer(
+        repoRoot,
+        fixtureDir,
+      );
+      if (exitCode != 0) {
         throw StateError(
-          'TypeScript 2026-07-28 client exited with ${result.exitCode}',
+          'TypeScript 2026-07-28 client exited with $exitCode',
         );
       }
     }
@@ -112,14 +90,7 @@ Future<void> main(List<String> args) async {
   }
 }
 
-class _TsClientRun {
-  const _TsClientRun(this.exitCode, this.output);
-
-  final int exitCode;
-  final String output;
-}
-
-Future<_TsClientRun> _runTsClientAgainstDartServer(
+Future<int> _runTsClientAgainstDartServer(
   Directory repoRoot,
   Directory fixtureDir,
 ) async {
@@ -148,7 +119,7 @@ Future<_TsClientRun> _runTsClientAgainstDartServer(
     ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[dart-server]');
-  late _TsClientRun result;
+  late int result;
 
   try {
     final url = await serverUrl.future.timeout(
@@ -168,18 +139,15 @@ Future<_TsClientRun> _runTsClientAgainstDartServer(
       ['src/client.mjs', '--url', url],
       workingDirectory: fixtureDir.path,
     );
-    final clientOutput = StringBuffer();
     final clientStdout = _pipeLines(
       client.stdout,
       stdout,
       '[ts-client]',
-      onLine: clientOutput.writeln,
     );
     final clientStderr = _pipeLines(
       client.stderr,
       stderr,
       '[ts-client]',
-      onLine: clientOutput.writeln,
     );
     late int clientExit;
     try {
@@ -190,7 +158,7 @@ Future<_TsClientRun> _runTsClientAgainstDartServer(
       await _terminate(client);
       await Future.wait([clientStdout, clientStderr]);
     }
-    result = _TsClientRun(clientExit, clientOutput.toString());
+    result = clientExit;
   } finally {
     await _terminate(server);
     await Future.wait([serverStdout, serverStderr]);

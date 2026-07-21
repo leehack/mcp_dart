@@ -7,7 +7,12 @@ const String relatedTaskMetadataKey = 'io.modelcontextprotocol/related-task';
 @Deprecated('Use relatedTaskMetadataKey instead')
 const String legacyRelatedTaskMetadataKey = 'relatedTask';
 
-/// Interface for storing and retrieving tasks.
+/// Interface for storing and retrieving legacy task-augmented requests.
+///
+/// This API preserves MCP initialization-era task behavior. It is not a
+/// persistence adapter for the independent `io.modelcontextprotocol/tasks`
+/// extension. A dual-era server may configure both, but must register and
+/// implement the modern extension handlers separately.
 abstract class TaskStore {
   /// Creates a new task with the given creation parameters.
   ///
@@ -56,7 +61,7 @@ abstract class TaskStore {
   Future<ListTasksResult> listTasks(String? cursor, [String? sessionId]);
 }
 
-/// Interface for managing server-initiated messages for tasks.
+/// Interface for managing legacy server-initiated task messages.
 abstract class TaskMessageQueue {
   /// Enqueues a message for delivery.
   Future<void> enqueue(
@@ -86,7 +91,7 @@ class QueuedMessage {
   });
 }
 
-/// Request-scoped TaskStore interface.
+/// Request-scoped interface for legacy task augmentation.
 abstract class RequestTaskStore {
   Future<Task> createTask(TaskCreation taskParams);
   Future<Task> getTask(String taskId);

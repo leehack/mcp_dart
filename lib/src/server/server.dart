@@ -3,7 +3,11 @@ import 'dart:async';
 import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/protocol_direction.dart';
 import 'package:mcp_dart/src/shared/protocol_notification_validation.dart';
+import 'package:mcp_dart/src/shared/stateless_meta_validation.dart';
+import 'package:mcp_dart/src/shared/task_interfaces.dart';
+import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 import 'package:mcp_dart/src/types/validation.dart'
@@ -51,6 +55,7 @@ class McpServerOptions extends ProtocolOptions {
     super.taskMessageQueue,
     super.defaultTaskPollInterval,
     super.maxTaskQueueSize,
+    super.gracefulShutdownTimeout,
     this.capabilities,
     this.instructions,
     this.protocol = McpProtocol.stable,
@@ -60,6 +65,8 @@ class McpServerOptions extends ProtocolOptions {
 /// Deprecated alias for [McpServerOptions].
 @Deprecated('Use McpServerOptions instead')
 typedef ServerOptions = McpServerOptions;
+
+enum _ServerConnectionMode { undecided, legacy, stateless }
 
 /// An MCP server implementation built on top of a pluggable [Transport].
 ///
@@ -73,6 +80,7 @@ class Server extends Protocol {
   ClientCapabilities? _clientCapabilities;
   Implementation? _clientVersion;
   _ServerLifecycleState _lifecycleState = _ServerLifecycleState.uninitialized;
+  _ServerConnectionMode _connectionMode = _ServerConnectionMode.undecided;
   ServerCapabilities _capabilities;
   final String? _instructions;
   final Implementation _serverInfo;
@@ -101,10 +109,28 @@ class Server extends Protocol {
     Method.resourcesUnsubscribe,
   };
 
-  static const Set<String> _statelessRemovedNotificationMethods = {
+  static const Set<String> _statelessOnlyRequestMethods = {
+    Method.subscriptionsListen,
+    Method.tasksUpdate,
+  };
+
+  static const Set<String> _statelessSubscriptionOnlyNotificationMethods = {
+    Method.notificationsSubscriptionsAcknowledged,
+    Method.notificationsToolsListChanged,
+    Method.notificationsPromptsListChanged,
+    Method.notificationsResourcesListChanged,
+    Method.notificationsResourcesUpdated,
+    Method.notificationsTasks,
+  };
+
+  static const Set<String> _statelessHandlerForbiddenNotificationMethods = {
+    Method.notificationsCancelled,
     Method.notificationsInitialized,
     Method.notificationsRootsListChanged,
     Method.notificationsTasksStatus,
+    Method.notificationsCompletionsListChanged,
+    Method.notificationsExperimentalCompletionsListChanged,
+    Method.notificationsElicitationComplete,
   };
 
   static const Set<String> _inputRequiredResultMethods = {
@@ -175,11 +201,21 @@ class Server extends Protocol {
     }
   }
 
+  @override
+  Future<void> connect(Transport transport) {
+    if (transport is ServerSupportedProtocolVersionsAwareTransport) {
+      (transport as ServerSupportedProtocolVersionsAwareTransport)
+          .setServerSupportedProtocolVersions(_supportedVersions);
+    }
+    return super.connect(transport);
+  }
+
   void _resetSessionState() {
     _clientCapabilities = null;
     _clientVersion = null;
     writeServerProtocolVersion(this, null);
     _lifecycleState = _ServerLifecycleState.uninitialized;
+    _connectionMode = _ServerConnectionMode.undecided;
     _loggingLevels.clear();
     clearServerTaskOutputValidators(this);
   }
@@ -242,10 +278,12 @@ class Server extends Protocol {
     }
 
     try {
+      final typedClientCapabilities =
+          clientCapabilities.cast<String, dynamic>();
       if (hasClientInfo) {
         Implementation.fromJson(clientInfo!.cast<String, dynamic>());
       }
-      ClientCapabilities.fromJson(clientCapabilities.cast<String, dynamic>());
+      ClientCapabilities.fromStatelessJson(typedClientCapabilities);
     } catch (error) {
       return McpError(
         ErrorCode.invalidParams.value,
@@ -270,11 +308,17 @@ class Server extends Protocol {
     final clientCapabilitiesValue =
         request.meta?[McpMetaKey.clientCapabilities];
     try {
-      final clientCapabilities = clientCapabilitiesValue is Map
-          ? ClientCapabilities.fromJson(
-              clientCapabilitiesValue.cast<String, dynamic>(),
-            )
-          : _clientCapabilities;
+      final protocolVersion = request.meta?[McpMetaKey.protocolVersion];
+      ClientCapabilities? clientCapabilities;
+      if (clientCapabilitiesValue is Map) {
+        final json = clientCapabilitiesValue.cast<String, dynamic>();
+        clientCapabilities = protocolVersion is String &&
+                isStatelessProtocolVersion(protocolVersion)
+            ? ClientCapabilities.fromStatelessJson(json)
+            : ClientCapabilities.fromJson(json);
+      } else {
+        clientCapabilities = _clientCapabilities;
+      }
       return (capabilities: clientCapabilities, error: null);
     } catch (error) {
       return (
@@ -331,6 +375,49 @@ class Server extends Protocol {
         isStatelessProtocolVersion(requestedProtocolVersion);
   }
 
+  bool _usesStatelessNotificationSemantics(
+    JsonRpcNotification notification,
+  ) =>
+      _connectionMode == _ServerConnectionMode.stateless ||
+      (_connectionMode == _ServerConnectionMode.undecided &&
+          _supportsStatelessProtocol &&
+          !_supportsLegacyInitialization) ||
+      _isStatelessNotification(notification);
+
+  McpError? _validateRequestConnectionMode(JsonRpcRequest request) {
+    final requestedProtocolVersion = request.meta?[McpMetaKey.protocolVersion];
+    final selectsSupportedLegacyVersion = requestedProtocolVersion is String &&
+        _supportedVersions.contains(requestedProtocolVersion) &&
+        !isStatelessProtocolVersion(requestedProtocolVersion);
+    return switch (_connectionMode) {
+      _ServerConnectionMode.undecided => null,
+      _ServerConnectionMode.legacy
+          when request.method == Method.serverDiscover ||
+              _isStatelessRequest(request) =>
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'This connection already selected the legacy initialize protocol; '
+          'stateless requests require a separate connection.',
+        ),
+      _ServerConnectionMode.stateless
+          when request.method == Method.initialize ||
+              requestedProtocolVersion is! String ||
+              selectsSupportedLegacyVersion =>
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'This connection already selected the stateless protocol; every '
+          'request must use stateless protocol metadata.',
+        ),
+      _ => null,
+    };
+  }
+
+  bool get _requiresStatelessMetadataBeforeConnectionMode =>
+      _connectionMode == _ServerConnectionMode.stateless ||
+      (_connectionMode == _ServerConnectionMode.undecided &&
+          _supportsStatelessProtocol &&
+          !_supportsLegacyInitialization);
+
   LoggingLevel? _parseLoggingLevel(Object? value) {
     if (value is LoggingLevel) {
       return value;
@@ -384,19 +471,54 @@ class Server extends Protocol {
     );
   }
 
-  McpError? _validateStatelessRemovedNotificationMethod(
+  McpError? _validateStatelessClientNotificationDirection(
     JsonRpcNotification notification,
   ) {
-    if (!_isStatelessNotification(notification)) {
+    if (!_usesStatelessNotificationSemantics(notification)) {
       return null;
     }
-    if (!_statelessRemovedNotificationMethods.contains(notification.method)) {
+    if (!isStatelessForbiddenClientNotification(notification.method)) {
       return null;
     }
 
     return McpError(
       ErrorCode.methodNotFound.value,
-      '${notification.method} is not part of MCP stateless protocol versions.',
+      '${notification.method} is not a client-to-server notification in MCP '
+      'stateless protocol versions.',
+    );
+  }
+
+  McpError? _validateLegacyRemovedRequestMethod(JsonRpcRequest request) {
+    if (_isStatelessRequest(request) ||
+        !_statelessOnlyRequestMethods.contains(request.method)) {
+      return null;
+    }
+    return McpError(
+      ErrorCode.methodNotFound.value,
+      '${request.method} is only available in MCP stateless protocol versions.',
+    );
+  }
+
+  McpError? _validateLegacyTaskCapability(JsonRpcRequest request) {
+    if (_isStatelessRequest(request)) {
+      return null;
+    }
+    final isLegacyTaskMethod = switch (request.method) {
+      Method.tasksGet ||
+      Method.tasksCancel ||
+      Method.tasksList ||
+      Method.tasksResult =>
+        true,
+      _ => false,
+    };
+    if (!isLegacyTaskMethod || _capabilities.tasks != null) {
+      return null;
+    }
+    return McpError(
+      ErrorCode.methodNotFound.value,
+      '${request.method} requires the legacy tasks capability under MCP '
+      '$latestInitializationProtocolVersion; $mcpTasksExtensionId does not '
+      'enable legacy tasks.',
     );
   }
 
@@ -439,9 +561,14 @@ class Server extends Protocol {
   }
 
   McpError? _validateTasksExtensionCapabilities(JsonRpcRequest request) {
+    final isTaskExtensionMethod = switch (request.method) {
+      Method.tasksGet || Method.tasksUpdate || Method.tasksCancel => true,
+      _ => false,
+    };
     final requiresTasksExtension =
-        request is JsonRpcSubscriptionsListenRequest &&
-            request.listenParams.notifications.taskIds != null;
+        (_isStatelessRequest(request) && isTaskExtensionMethod) ||
+            (request is JsonRpcSubscriptionsListenRequest &&
+                request.listenParams.notifications.taskIds != null);
 
     if (!requiresTasksExtension) {
       return null;
@@ -472,8 +599,13 @@ class Server extends Protocol {
   McpError? _validateInputRequiredClientCapabilities(
     InputRequiredResult result,
     JsonRpcRequest request,
+  ) =>
+      _validateInputRequestsClientCapabilities(result.inputRequests, request);
+
+  McpError? _validateInputRequestsClientCapabilities(
+    InputRequests? inputRequests,
+    JsonRpcRequest request,
   ) {
-    final inputRequests = result.inputRequests;
     if (inputRequests == null || inputRequests.isEmpty) {
       return null;
     }
@@ -511,7 +643,7 @@ class Server extends Protocol {
         final elicitation = capabilities?.elicitation;
         final supportsMode = requiredMode == 'url'
             ? elicitation?.url != null
-            : elicitation?.form != null;
+            : elicitation?.supportsForm ?? false;
         if (!supportsMode) {
           return {
             'elicitation': {
@@ -532,6 +664,13 @@ class Server extends Protocol {
             'sampling': {'tools': <String, dynamic>{}},
           };
         }
+        if (createParams.includeContext != null &&
+            createParams.includeContext != IncludeContext.none &&
+            !sampling.context) {
+          return {
+            'sampling': {'context': <String, dynamic>{}},
+          };
+        }
         return null;
       case Method.rootsList:
         if (capabilities?.roots == null) {
@@ -544,6 +683,15 @@ class Server extends Protocol {
   }
 
   McpError? _validateRequestTaskSemantics(JsonRpcRequest request) {
+    final legacyMethodError = _validateLegacyRemovedRequestMethod(request);
+    if (legacyMethodError != null) {
+      return legacyMethodError;
+    }
+    final legacyTaskError = _validateLegacyTaskCapability(request);
+    if (legacyTaskError != null) {
+      return legacyTaskError;
+    }
+
     if (request is JsonRpcCallToolRequest) {
       try {
         request.callParams;
@@ -688,7 +836,7 @@ class Server extends Protocol {
     RequestHandlerExtra extra,
   ) async {
     try {
-      return await invokeRequestHandlerForValidation(
+      final resolvedResult = await invokeRequestHandlerForValidation(
         JsonRpcGetTaskRequest(
           id: request.id,
           getParams: GetTaskRequest(taskId: result.task.taskId),
@@ -696,9 +844,19 @@ class Server extends Protocol {
         ),
         extra,
       );
+      // The durability requirement is about a real tasks/get response, not
+      // merely a handler returning the expected Dart type. Force detailed task
+      // and JSON validation now so an unserializable task cannot be advertised.
+      if (resolvedResult is GetTaskExtensionResult) {
+        resolvedResult.toJson();
+      }
+      return resolvedResult;
     } on ServerTaskOutputValidationError {
       rethrow;
     } on McpError catch (error, stackTrace) {
+      if (error.code == ErrorCode.missingRequiredClientCapability.value) {
+        rethrow;
+      }
       _logger.error(
         'Failed to resolve task ${result.task.taskId} with tasks/get while '
         'validating ${request.method}: $error\n$stackTrace',
@@ -803,12 +961,20 @@ class Server extends Protocol {
     }
 
     final task = result.task;
+    final requestedTaskId = request.getParams.taskId;
+    if (task.taskId != requestedTaskId) {
+      throw McpError(
+        ErrorCode.internalError.value,
+        'Invalid ${request.method} result: returned task ${task.taskId} '
+        'instead of requested task $requestedTaskId.',
+      );
+    }
     if (task.status == TaskStatus.failed ||
         task.status == TaskStatus.cancelled) {
       removeServerTaskOutputValidator(
         this,
         extra.sessionId,
-        task.taskId,
+        requestedTaskId,
       );
       return;
     }
@@ -819,7 +985,7 @@ class Server extends Protocol {
     final validator = readServerTaskOutputValidator(
       this,
       extra.sessionId,
-      task.taskId,
+      requestedTaskId,
     );
     if (validator != null) {
       validator(task.result!);
@@ -828,8 +994,24 @@ class Server extends Protocol {
       removeServerTaskOutputValidator(
         this,
         extra.sessionId,
-        task.taskId,
+        requestedTaskId,
       );
+    }
+  }
+
+  void _validateTaskExtensionInputRequests(
+    BaseResultData result,
+    JsonRpcRequest request,
+  ) {
+    if (!_isStatelessRequest(request) || result is! GetTaskExtensionResult) {
+      return;
+    }
+    final capabilityError = _validateInputRequestsClientCapabilities(
+      result.task.inputRequests,
+      request,
+    );
+    if (capabilityError != null) {
+      throw capabilityError;
     }
   }
 
@@ -857,6 +1039,24 @@ class Server extends Protocol {
 
   @override
   McpError? validateIncomingRequest(JsonRpcRequest request) {
+    // A stateless-only server, and a connection that has already selected the
+    // stateless protocol, can identify malformed 2026 requests without using
+    // legacy lifecycle state. Validate the required per-request fields first
+    // so missing metadata consistently maps to Invalid params (-32602).
+    var statelessMetadataValidated = false;
+    if (_requiresStatelessMetadataBeforeConnectionMode) {
+      final metadataError = _validateStatelessRequestMetadata(request);
+      if (metadataError != null) {
+        return metadataError;
+      }
+      statelessMetadataValidated = true;
+    }
+
+    final connectionModeError = _validateRequestConnectionMode(request);
+    if (connectionModeError != null) {
+      return connectionModeError;
+    }
+
     if (request.method == Method.serverDiscover) {
       if (!_supportsStatelessProtocol) {
         // A recognized modern protocol error would identify this as a modern
@@ -867,9 +1067,11 @@ class Server extends Protocol {
           '${Method.serverDiscover} is not available for legacy MCP profiles.',
         );
       }
-      final metadataError = _validateStatelessRequestMetadata(request);
-      if (metadataError != null) {
-        return metadataError;
+      if (!statelessMetadataValidated) {
+        final metadataError = _validateStatelessRequestMetadata(request);
+        if (metadataError != null) {
+          return metadataError;
+        }
       }
       return null;
     }
@@ -881,9 +1083,20 @@ class Server extends Protocol {
     }
     if (requestedProtocolVersion is String &&
         isStatelessProtocolVersion(requestedProtocolVersion)) {
-      final metadataError = _validateStatelessRequestMetadata(request);
-      if (metadataError != null) {
-        return metadataError;
+      if (!statelessMetadataValidated) {
+        final metadataError = _validateStatelessRequestMetadata(request);
+        if (metadataError != null) {
+          return metadataError;
+        }
+      }
+      try {
+        validateStatelessRequestMetaObjects(request);
+      } on FormatException catch (error) {
+        return McpError(
+          ErrorCode.invalidParams.value,
+          'Invalid nested stateless request metadata.',
+          error.message,
+        );
       }
       final removedMethodError = _validateStatelessRemovedRequestMethod(
         request,
@@ -929,11 +1142,35 @@ class Server extends Protocol {
   }
 
   @override
+  McpError? validateIncomingNotificationBeforeParsing(
+    JsonRpcNotification notification,
+  ) =>
+      _validateStatelessClientNotificationDirection(notification);
+
+  @override
   McpError? validateIncomingNotification(JsonRpcNotification notification) {
-    final removedMethodError =
-        _validateStatelessRemovedNotificationMethod(notification);
-    if (removedMethodError != null) {
-      return removedMethodError;
+    if (_usesStatelessNotificationSemantics(notification)) {
+      try {
+        validateStatelessNotificationMetaObjects(notification);
+      } on FormatException catch (error) {
+        return McpError(
+          ErrorCode.invalidParams.value,
+          'Invalid stateless notification metadata.',
+          error.message,
+        );
+      }
+    }
+
+    final directionError =
+        _validateStatelessClientNotificationDirection(notification);
+    if (directionError != null) {
+      return directionError;
+    }
+    if (_usesStatelessNotificationSemantics(notification)) {
+      // Stateless MCP has no initialize lifecycle. Cancellation and custom
+      // extension notifications that survive the direction check are valid
+      // inputs for protocol or application handlers.
+      return null;
     }
 
     switch (notification.method) {
@@ -973,9 +1210,83 @@ class Server extends Protocol {
   }
 
   @override
+  void validateOutgoingSubscriptionNotification(
+    JsonRpcSubscriptionsListenRequest request,
+    JsonRpcNotification notification,
+  ) {
+    if (notification.method != Method.notificationsTasks) {
+      return;
+    }
+    final taskNotification = notification is JsonRpcTaskNotification
+        ? notification
+        : JsonRpcTaskNotification.fromJson(notification.toJson());
+    final capabilityError = _validateInputRequestsClientCapabilities(
+      taskNotification.task.inputRequests,
+      request,
+    );
+    if (capabilityError != null) {
+      throw capabilityError;
+    }
+  }
+
+  @override
+  bool shouldSendOutgoingRequestScopedNotification(
+    JsonRpcRequest request,
+    JsonRpcNotification notification,
+  ) {
+    if (!_isStatelessRequest(request)) {
+      return true;
+    }
+    if (_statelessHandlerForbiddenNotificationMethods.contains(
+      notification.method,
+    )) {
+      final message = notification.method == Method.notificationsCancelled
+          ? '${Method.notificationsCancelled} cannot be sent by request '
+              'handlers in stateless MCP; subscription cancellation is '
+              'managed by the protocol.'
+          : '${notification.method} is not an allowed server notification '
+              'from request handlers in stateless MCP.';
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        message,
+      );
+    }
+    if (_statelessSubscriptionOnlyNotificationMethods.contains(
+      notification.method,
+    )) {
+      if (request is! JsonRpcSubscriptionsListenRequest) {
+        throw McpError(
+          ErrorCode.invalidRequest.value,
+          '${notification.method} can only be sent from a '
+          '${Method.subscriptionsListen} handler in stateless MCP.',
+        );
+      }
+      return true;
+    }
+    if (notification.method != Method.notificationsMessage) {
+      return true;
+    }
+    if (_capabilities.logging == null) {
+      return false;
+    }
+    final loggingNotification =
+        notification is JsonRpcLoggingMessageNotification
+            ? notification
+            : JsonRpcLoggingMessageNotification.fromJson(notification.toJson());
+    return _allowsStatelessLogging(
+      loggingNotification.logParams.level,
+      request.meta,
+    );
+  }
+
+  @override
   void onIncomingRequestAccepted(JsonRpcRequest request) {
     if (request.method == Method.initialize) {
+      _connectionMode = _ServerConnectionMode.legacy;
       _lifecycleState = _ServerLifecycleState.initializing;
+    } else if (_connectionMode == _ServerConnectionMode.undecided &&
+        _isStatelessRequest(request)) {
+      _connectionMode = _ServerConnectionMode.stateless;
     }
   }
 
@@ -1014,6 +1325,12 @@ class Server extends Protocol {
     };
   }
 
+  bool _isMrtrRetry(JsonRpcRequest request) {
+    final params = request.params;
+    return params?.containsKey('inputResponses') == true ||
+        params?.containsKey('requestState') == true;
+  }
+
   void _omitStatelessLegacyToolExecution(
     Map<String, dynamic> resultJson,
   ) {
@@ -1021,11 +1338,13 @@ class Server extends Protocol {
     if (tools is! List) {
       return;
     }
-    for (final tool in tools) {
-      if (tool is Map<String, dynamic>) {
-        tool.remove('execution');
-      }
-    }
+    resultJson['tools'] = [
+      for (final tool in tools)
+        if (tool is Map<String, dynamic>)
+          Map<String, dynamic>.from(tool)..remove('execution')
+        else
+          tool,
+    ];
   }
 
   @override
@@ -1043,17 +1362,26 @@ class Server extends Protocol {
     }
 
     json.putIfAbsent('resultType', () => resultTypeComplete);
-    if (_requiresCacheableResult(request.method)) {
-      json.putIfAbsent(
-        'ttlMs',
-        () => result is CacheableResultData ? result.ttlMs ?? 0 : 0,
-      );
-      json.putIfAbsent(
-        'cacheScope',
-        () => result is CacheableResultData
-            ? result.cacheScope ?? CacheScope.private
-            : CacheScope.private,
-      );
+    if (json['resultType'] == resultTypeComplete &&
+        _requiresCacheableResult(request.method)) {
+      if (_isMrtrRetry(request)) {
+        // MRTR retry inputs are intentionally excluded from cache keys by the
+        // protocol. Never propagate handler-provided reusable cache hints for
+        // a result that depends on those inputs.
+        json['ttlMs'] = 0;
+        json['cacheScope'] = CacheScope.private;
+      } else {
+        json.putIfAbsent(
+          'ttlMs',
+          () => result is CacheableResultData ? result.ttlMs ?? 0 : 0,
+        );
+        json.putIfAbsent(
+          'cacheScope',
+          () => result is CacheableResultData
+              ? result.cacheScope ?? CacheScope.private
+              : CacheScope.private,
+        );
+      }
     }
 
     final handlerMeta = readOptionalJsonObject(result.meta, 'Result._meta');
@@ -1087,6 +1415,7 @@ class Server extends Protocol {
       resultMeta[McpMetaKey.serverInfo] = _serverInfo.toJson();
     }
     json['_meta'] = resultMeta;
+    validateStatelessResultMetaObjects(request, json);
 
     return json;
   }
@@ -1209,6 +1538,7 @@ class Server extends Protocol {
           );
         }
         _validateTaskExtensionToolResult(result, request, extra);
+        _validateTaskExtensionInputRequests(result, request);
         if (request is JsonRpcCancelTaskRequest) {
           removeServerTaskOutputValidator(
             this,
@@ -1227,6 +1557,13 @@ class Server extends Protocol {
       ) async {
         final result = await handler(request, extra);
         _validateUnsupportedInputRequiredResult(result, request);
+        if (result is CreateTaskExtensionResult) {
+          throw McpError(
+            ErrorCode.invalidParams.value,
+            'Invalid ${request.method} result: CreateTaskExtensionResult is '
+            'only supported by ${Method.toolsCall}.',
+          );
+        }
         return result;
       }
 
@@ -1269,9 +1606,8 @@ class Server extends Protocol {
       _supportedVersions.any(isStatelessProtocolVersion);
 
   ServerCapabilities _discoveryCapabilities() {
-    final json = getCapabilities().toJson();
-    json.remove('tasks');
-    return ServerCapabilities.fromJson(json);
+    final json = getCapabilities().toJson(omitLegacyTasks: true);
+    return ServerCapabilities.fromDiscoveryJson(json);
   }
 
   /// Handles the client's `server/discover` request.
@@ -1378,7 +1714,7 @@ class Server extends Protocol {
 
       case Method.notificationsCompletionsListChanged:
         throw StateError(
-          "$method is not part of stable MCP 2025-11-25. Use ${Method.notificationsExperimentalCompletionsListChanged} for extension behavior.",
+          "$method is not part of MCP 2025-11-25. Use ${Method.notificationsExperimentalCompletionsListChanged} for extension behavior.",
         );
 
       case Method.notificationsExperimentalCompletionsListChanged:
@@ -1390,17 +1726,23 @@ class Server extends Protocol {
         break;
 
       case Method.notificationsTasksStatus:
-        if (!(_capabilities.tasks != null)) {
+        final protocolVersion = readServerProtocolVersion(this);
+        if (_capabilities.tasks == null ||
+            protocolVersion == null ||
+            isStatelessProtocolVersion(protocolVersion)) {
           throw StateError(
-            "Server does not support task capability (required for sending $method)",
+            'Server can send $method only in a negotiated legacy MCP session '
+            "with the legacy 'tasks' capability.",
           );
         }
         break;
 
       case Method.notificationsTasks:
-        if (!_capabilities.supportsTasksExtension) {
+        if (!_supportsStatelessProtocol ||
+            !_capabilities.supportsTasksExtension) {
           throw StateError(
-            "Server does not support the $mcpTasksExtensionId extension (required for sending $method)",
+            'Server does not support the stateless $mcpTasksExtensionId '
+            'extension (required for sending $method)',
           );
         }
         break;
@@ -1415,7 +1757,14 @@ class Server extends Protocol {
 
       case Method.notificationsCancelled:
       case Method.notificationsProgress:
+        break;
+
       case Method.notificationsSubscriptionsAcknowledged:
+        if (!_supportsStatelessProtocol) {
+          throw StateError(
+            '$method is only available in MCP stateless protocol versions.',
+          );
+        }
         break;
 
       default:
@@ -1426,6 +1775,10 @@ class Server extends Protocol {
   }
 
   void _validateOutgoingNotification(JsonRpcNotification notification) {
+    if (_usesStatelessNotificationSemantics(notification)) {
+      validateStatelessNotificationMetaObjects(notification);
+    }
+
     if (notification.method != Method.notificationsTasks) {
       return;
     }
@@ -1451,13 +1804,55 @@ class Server extends Protocol {
   }
 
   @override
+  Future<void> notification(
+    JsonRpcNotification notificationData, {
+    RelatedTaskMetadata? relatedTask,
+    int? relatedRequestId,
+  }) async {
+    if (relatedRequestId == null &&
+        !_hasLegacyServerInitiatedInteractionContext) {
+      if (_statelessSubscriptionOnlyNotificationMethods.contains(
+        notificationData.method,
+      )) {
+        throw StateError(
+          '${notificationData.method} can only be emitted on an acknowledged '
+          '${Method.subscriptionsListen} stream in stateless MCP.',
+        );
+      }
+      if (_statelessHandlerForbiddenNotificationMethods.contains(
+            notificationData.method,
+          ) ||
+          notificationData.method == Method.notificationsMessage ||
+          notificationData.method == Method.notificationsProgress) {
+        throw StateError(
+          '${notificationData.method} cannot be emitted globally in stateless '
+          'MCP; send request-scoped notifications through the originating '
+          'RequestHandlerExtra.',
+        );
+      }
+    }
+    await super.notification(
+      notificationData,
+      relatedTask: relatedTask,
+      relatedRequestId: relatedRequestId,
+    );
+  }
+
+  @override
   void assertRequestHandlerCapability(String method) {
     switch (method) {
       case Method.serverDiscover:
       case Method.initialize:
       case Method.ping:
       case Method.completionComplete:
+        break;
+
       case Method.subscriptionsListen:
+        if (!_supportsStatelessProtocol) {
+          throw StateError(
+            "Server setup error: Cannot handle '$method' without a stateless MCP protocol version",
+          );
+        }
         break;
 
       case Method.loggingSetLevel:
@@ -1507,10 +1902,9 @@ class Server extends Protocol {
 
       case Method.tasksList:
       case Method.tasksResult:
-        if (!(_capabilities.tasks != null ||
-            _capabilities.supportsTasksExtension)) {
+        if (_capabilities.tasks == null) {
           throw StateError(
-            "Server setup error: Cannot handle '$method' without 'tasks' capability or '$mcpTasksExtensionId' extension",
+            "Server setup error: Cannot handle '$method' without the legacy 'tasks' capability",
           );
         }
         break;
@@ -1518,17 +1912,21 @@ class Server extends Protocol {
       case Method.tasksCancel:
       case Method.tasksGet:
         if (!(_capabilities.tasks != null ||
-            _capabilities.supportsTasksExtension)) {
+            (_supportsStatelessProtocol &&
+                _capabilities.supportsTasksExtension))) {
           throw StateError(
-            "Server setup error: Cannot handle '$method' without 'tasks' capability or '$mcpTasksExtensionId' extension",
+            "Server setup error: Cannot handle '$method' without the legacy "
+            "'tasks' capability or a stateless MCP protocol version with the "
+            "'$mcpTasksExtensionId' extension",
           );
         }
         break;
 
       case Method.tasksUpdate:
-        if (!_capabilities.supportsTasksExtension) {
+        if (!_supportsStatelessProtocol ||
+            !_capabilities.supportsTasksExtension) {
           throw StateError(
-            "Server setup error: Cannot handle '$method' without '$mcpTasksExtensionId' extension",
+            "Server setup error: Cannot handle '$method' without a stateless MCP protocol version and '$mcpTasksExtensionId' extension",
           );
         }
         break;
@@ -1579,8 +1977,47 @@ class Server extends Protocol {
     }
   }
 
-  /// Sends a `ping` request to the client and awaits an empty response.
+  bool get _hasLegacyServerInitiatedInteractionContext {
+    if (!_supportsStatelessProtocol) {
+      return true;
+    }
+    final protocolVersion = readServerProtocolVersion(this);
+    return protocolVersion != null &&
+        !isStatelessProtocolVersion(protocolVersion);
+  }
+
+  void _assertLegacyServerInitiatedInteraction(String method) {
+    if (_hasLegacyServerInitiatedInteractionContext) {
+      return;
+    }
+    throw StateError(
+      '$method is a legacy server-initiated interaction and is not supported '
+      'by stateless MCP. Use stateless results and request-scoped '
+      'notifications from the originating handler instead.',
+    );
+  }
+
+  @override
+  Future<T> request<T extends BaseResultData>(
+    JsonRpcRequest requestData,
+    T Function(Map<String, dynamic> resultJson) resultFactory, [
+    RequestOptions? options,
+    int? relatedRequestId,
+  ]) {
+    _assertLegacyServerInitiatedInteraction(requestData.method);
+    return super.request<T>(
+      requestData,
+      resultFactory,
+      options,
+      relatedRequestId,
+    );
+  }
+
+  /// Sends a legacy-session `ping` request to the client.
+  ///
+  /// Stateless MCP does not permit server-to-client JSON-RPC requests.
   Future<EmptyResult> ping([RequestOptions? options]) {
+    _assertLegacyServerInitiatedInteraction(Method.ping);
     return request<EmptyResult>(
       const JsonRpcPingRequest(id: -1),
       EmptyResult.fromJson,
@@ -1588,11 +2025,15 @@ class Server extends Protocol {
     );
   }
 
-  /// Sends a `sampling/createMessage` request to the client to ask it to sample an LLM.
+  /// Sends a legacy-session `sampling/createMessage` request to the client.
+  ///
+  /// For stateless MCP, return an [InputRequiredResult] containing an embedded
+  /// sampling input request from the originating handler.
   Future<CreateMessageResult> createMessage(
     CreateMessageRequest params, [
     RequestOptions? options,
   ]) {
+    _assertLegacyServerInitiatedInteraction(Method.samplingCreateMessage);
     // Capability check - only required when tools/toolChoice are provided
     if (params.tools != null || params.toolChoice != null) {
       if (!(_clientCapabilities?.sampling?.tools ?? false)) {
@@ -1713,11 +2154,15 @@ class Server extends Protocol {
     }
   }
 
-  /// Creates an elicitation request for the given parameters.
+  /// Creates a legacy-session elicitation request for the given parameters.
+  ///
+  /// For stateless MCP, return an [InputRequiredResult] containing an embedded
+  /// elicitation input request from the originating handler.
   Future<ElicitResult> elicitInput(
     ElicitRequest params, [
     RequestOptions? options,
   ]) async {
+    _assertLegacyServerInitiatedInteraction(Method.elicitationCreate);
     // Mode defaults to 'form' if omitted (handled in types, but logic here too)
     final mode = params.mode ?? ElicitationMode.form;
 
@@ -1731,7 +2176,7 @@ class Server extends Protocol {
         }
         break;
       case ElicitationMode.form:
-        if (!(_clientCapabilities?.elicitation?.form != null)) {
+        if (!(_clientCapabilities?.elicitation?.supportsForm ?? false)) {
           throw McpError(
             ErrorCode.invalidRequest.value,
             "Client does not support form elicitation.",
@@ -1770,11 +2215,15 @@ class Server extends Protocol {
     return result;
   }
 
-  /// Creates a reusable callback that, when invoked, will send a `notifications/elicitation/complete`
-  /// notification for the specified elicitation ID.
+  /// Creates a legacy-session `notifications/elicitation/complete` callback.
+  ///
+  /// Stateless URL elicitation does not use this completion notification.
   Future<void> Function() createElicitationCompletionNotifier(
     String elicitationId,
   ) {
+    _assertLegacyServerInitiatedInteraction(
+      Method.notificationsElicitationComplete,
+    );
     if (!(_clientCapabilities?.elicitation?.url != null)) {
       throw StateError(
         "Client does not support URL elicitation (required for notifications/elicitation/complete)",
@@ -1790,8 +2239,12 @@ class Server extends Protocol {
         );
   }
 
-  /// Sends a `roots/list` request to the client to ask for its root URIs.
+  /// Sends a legacy-session `roots/list` request to the client.
+  ///
+  /// For stateless MCP, return an [InputRequiredResult] containing an embedded
+  /// roots input request from the originating handler.
   Future<ListRootsResult> listRoots({RequestOptions? options}) {
+    _assertLegacyServerInitiatedInteraction(Method.rootsList);
     final req = const JsonRpcListRootsRequest(id: -1);
     return request<ListRootsResult>(
       req,
@@ -1800,24 +2253,37 @@ class Server extends Protocol {
     );
   }
 
-  /// Sends a `notifications/message` (logging) notification to the client.
+  /// Sends a legacy-session `notifications/message` notification.
+  ///
+  /// Global logging is suppressed for stateless MCP. Use
+  /// [sendStatelessLoggingMessage] from the originating request handler so the
+  /// request log-level opt-in and response-stream routing remain observable.
   Future<void> sendLoggingMessage(
     LoggingMessageNotification params, {
     String? sessionId,
   }) {
+    if (!_allowsGlobalLegacyNotification(Method.notificationsMessage)) {
+      return Future.value();
+    }
     return _sendLoggingMessage(params, sessionId: sessionId);
   }
 
   /// Sends a request-scoped logging notification for stateless MCP.
+  ///
+  /// Pass [requestId] from [RequestHandlerExtra.requestId] when the transport
+  /// has per-request response streams (notably Streamable HTTP). It remains
+  /// optional for compatibility with shared-channel transports such as stdio.
   Future<void> sendStatelessLoggingMessage(
     LoggingMessageNotification params, {
     String? sessionId,
     required Map<String, dynamic>? requestMeta,
+    RequestId? requestId,
   }) {
     return _sendLoggingMessage(
       params,
       sessionId: sessionId,
       requestMeta: requestMeta,
+      requestId: requestId,
     );
   }
 
@@ -1825,6 +2291,7 @@ class Server extends Protocol {
     LoggingMessageNotification params, {
     String? sessionId,
     Map<String, dynamic>? requestMeta,
+    RequestId? requestId,
   }) async {
     if (_capabilities.logging != null) {
       final statelessLogContext = _isStatelessMeta(requestMeta);
@@ -1832,36 +2299,84 @@ class Server extends Protocol {
           (statelessLogContext ||
               !_isMessageIgnored(params.level, sessionId))) {
         final notif = JsonRpcLoggingMessageNotification(logParams: params);
+        if (statelessLogContext && requestId != null) {
+          return notificationForRequest(notif, requestId: requestId);
+        }
+        if (statelessLogContext && transport is RequestIdAwareTransport) {
+          throw ArgumentError.notNull('requestId');
+        }
         return notification(notif);
       }
     }
   }
 
-  /// Sends a `notifications/resources/updated` notification to the client.
+  bool _allowsGlobalLegacyNotification(String method) {
+    if (_hasLegacyServerInitiatedInteractionContext) {
+      return true;
+    }
+    final guidance = switch (method) {
+      Method.notificationsMessage =>
+        'Use sendStatelessLoggingMessage with the originating request '
+            'metadata and ID instead.',
+      Method.notificationsCompletionsListChanged =>
+        'No stateless replacement is defined.',
+      _ => 'Send it from a subscriptions/listen handler with '
+          'RequestHandlerExtra.sendSubscriptionNotification instead.',
+    };
+    _logger.warn(
+      '$method is not emitted globally for stateless MCP. $guidance',
+    );
+    return false;
+  }
+
+  /// Sends a legacy global `notifications/resources/updated` notification.
+  ///
+  /// Stateless MCP delivers this notification only through an acknowledged
+  /// `subscriptions/listen` stream; global delivery is suppressed there.
   Future<void> sendResourceUpdated(ResourceUpdatedNotification params) {
+    if (!_allowsGlobalLegacyNotification(
+      Method.notificationsResourcesUpdated,
+    )) {
+      return Future.value();
+    }
     final notif = JsonRpcResourceUpdatedNotification(updatedParams: params);
     return notification(notif);
   }
 
-  /// Sends a `notifications/resources/list_changed` notification to the client.
+  /// Sends a legacy global `notifications/resources/list_changed` notification.
   Future<void> sendResourceListChanged() {
+    if (!_allowsGlobalLegacyNotification(
+      Method.notificationsResourcesListChanged,
+    )) {
+      return Future.value();
+    }
     const notif = JsonRpcResourceListChangedNotification();
     return notification(notif);
   }
 
-  /// Sends a `notifications/tools/list_changed` notification to the client.
+  /// Sends a legacy global `notifications/tools/list_changed` notification.
   Future<void> sendToolListChanged() {
+    if (!_allowsGlobalLegacyNotification(
+      Method.notificationsToolsListChanged,
+    )) {
+      return Future.value();
+    }
     const notif = JsonRpcToolListChangedNotification();
     return notification(notif);
   }
 
-  /// Sends a `notifications/prompts/list_changed` notification to the client.
+  /// Sends a legacy global `notifications/prompts/list_changed` notification.
   Future<void> sendPromptListChanged() {
+    if (!_allowsGlobalLegacyNotification(
+      Method.notificationsPromptsListChanged,
+    )) {
+      return Future.value();
+    }
     const notif = JsonRpcPromptListChangedNotification();
     return notification(notif);
   }
 
-  /// Sends an experimental completion list-changed notification to the client.
+  /// Sends a legacy experimental completion list-changed notification.
   ///
   /// Stable MCP 2025-11-25 does not define a completion list-changed
   /// notification or capability flag.
@@ -1869,6 +2384,11 @@ class Server extends Protocol {
     'Stable MCP 2025-11-25 does not define completion list-changed notifications.',
   )
   Future<void> sendCompletionListChanged() {
+    if (!_allowsGlobalLegacyNotification(
+      Method.notificationsCompletionsListChanged,
+    )) {
+      return Future.value();
+    }
     const notif = JsonRpcCompletionListChangedNotification();
     return notification(notif);
   }
