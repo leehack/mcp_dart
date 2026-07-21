@@ -4,6 +4,8 @@ import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
 import 'package:mcp_dart/src/shared/protocol.dart';
+import 'package:mcp_dart/src/shared/protocol_direction.dart';
+import 'package:mcp_dart/src/shared/stateless_meta_validation.dart';
 import 'package:mcp_dart/src/shared/task_interfaces.dart';
 import 'package:mcp_dart/src/shared/tool_parameter_headers.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
@@ -107,6 +109,7 @@ class McpClientOptions extends ProtocolOptions {
   /// not a legacy peer.
   const McpClientOptions({
     super.enforceStrictCapabilities,
+    super.gracefulShutdownTimeout,
     this.capabilities,
     this.protocol = McpProtocol.stable,
     String? protocolVersion,
@@ -133,6 +136,13 @@ class McpSubscription {
   /// Acknowledgment sent as the first message on the subscription stream.
   final Future<SubscriptionsAcknowledgedNotification> acknowledged;
 
+  /// Changed acknowledgments from replacement streams after transport replay.
+  ///
+  /// The initial stream's acknowledgment is exposed through [acknowledged].
+  /// Reconnecting transports suppress equivalent replay acknowledgments and
+  /// emit only a changed filter here.
+  final Stream<SubscriptionsAcknowledgedNotification> acknowledgmentChanges;
+
   /// Notifications delivered on this subscription stream after acknowledgment.
   final Stream<JsonRpcNotification> notifications;
 
@@ -142,6 +152,7 @@ class McpSubscription {
   McpSubscription._({
     required this.id,
     required this.acknowledged,
+    required this.acknowledgmentChanges,
     required this.notifications,
     required this.done,
     required void Function([Object? reason]) cancel,
@@ -215,10 +226,30 @@ const Set<String> _statelessRemovedRequestMethods = {
   Method.tasksResult,
 };
 
-const Set<String> _statelessRemovedNotificationMethods = {
+const Set<String> _statelessRemovedServerNotificationMethods = {
   Method.notificationsInitialized,
   Method.notificationsRootsListChanged,
   Method.notificationsTasksStatus,
+  Method.notificationsElicitationComplete,
+};
+
+const Set<String> _statelessOnlyRequestMethods = {
+  Method.subscriptionsListen,
+  Method.tasksUpdate,
+};
+
+const Set<String> _statelessOnlyNotificationMethods = {
+  Method.notificationsSubscriptionsAcknowledged,
+  Method.notificationsTasks,
+};
+
+const Set<String> _statelessSubscriptionNotificationMethods = {
+  Method.notificationsSubscriptionsAcknowledged,
+  Method.notificationsToolsListChanged,
+  Method.notificationsPromptsListChanged,
+  Method.notificationsResourcesListChanged,
+  Method.notificationsResourcesUpdated,
+  Method.notificationsTasks,
 };
 
 const Set<String> _statelessInputRequiredResultMethods = {
@@ -310,7 +341,7 @@ class McpClient extends Protocol {
             );
           }
           if (request.elicitParams.isFormMode &&
-              _capabilities.elicitation?.form == null) {
+              !(_capabilities.elicitation?.supportsForm ?? false)) {
             throw McpError(
               ErrorCode.invalidParams.value,
               "Client does not support form elicitation.",
@@ -382,6 +413,14 @@ class McpClient extends Protocol {
             throw McpError(
               ErrorCode.methodNotFound.value,
               "Client does not support 'sampling.tools' capability required by sampling/createMessage request.",
+            );
+          }
+          if (request.createParams.includeContext != null &&
+              request.createParams.includeContext != IncludeContext.none &&
+              _capabilities.sampling?.context != true) {
+            throw McpError(
+              ErrorCode.methodNotFound.value,
+              "Client does not support 'sampling.context' capability required by sampling/createMessage request.",
             );
           }
           return await onSamplingRequest!(request.createParams);
@@ -688,6 +727,7 @@ class McpClient extends Protocol {
     int? relatedRequestId,
   ]) async {
     _assertStatelessRequestAllowed(requestData.method);
+    _assertLegacyRequestAllowed(requestData.method);
 
     final outboundRequest =
         _usesStatelessProtocol && requestData.method != Method.serverDiscover
@@ -749,10 +789,17 @@ class McpClient extends Protocol {
   }
 
   BaseResultData _parseExpectedOrInputRequired<T extends BaseResultData>(
+    String method,
     Map<String, dynamic> json,
     T Function(Map<String, dynamic>) resultFactory,
   ) {
     if (json['resultType'] == resultTypeInputRequired) {
+      if (!_usesStatelessProtocol) {
+        throw FormatException(
+          'MCP resultType "$resultTypeInputRequired" is not valid for '
+          '$method in initialization-era MCP',
+        );
+      }
       return InputRequiredResult.fromJson(json);
     }
     return resultFactory(json);
@@ -761,6 +808,12 @@ class McpClient extends Protocol {
   BaseResultData _parseToolCallResult(Map<String, dynamic> json) {
     switch (json['resultType']) {
       case resultTypeInputRequired:
+        if (!_usesStatelessProtocol) {
+          throw const FormatException(
+            'MCP resultType "$resultTypeInputRequired" is not valid for '
+            '${Method.toolsCall} in initialization-era MCP',
+          );
+        }
         return InputRequiredResult.fromJson(json);
       case resultTypeTask:
         if (!_usesStatelessProtocol ||
@@ -787,6 +840,7 @@ class McpClient extends Protocol {
     final inputResponses = <String, InputResponse>{};
     for (final entry in inputRequests.entries) {
       signal?.throwIfAborted();
+      _assertEmbeddedInputRequestCapability(entry.key, entry.value);
       final result = await handleEmbeddedInputRequest(
         entry.key,
         entry.value,
@@ -795,6 +849,64 @@ class McpClient extends Protocol {
       inputResponses[entry.key] = InputResponse.fromResult(result);
     }
     return inputResponses;
+  }
+
+  void _assertEmbeddedInputRequestCapability(
+    String inputRequestKey,
+    InputRequest inputRequest,
+  ) {
+    Map<String, dynamic>? requiredCapabilities;
+    switch (inputRequest.method) {
+      case Method.rootsList:
+        if (_capabilities.roots == null) {
+          requiredCapabilities = {'roots': <String, dynamic>{}};
+        }
+        break;
+      case Method.elicitationCreate:
+        final params = inputRequest.elicitParams;
+        if (params.isUrlMode && _capabilities.elicitation?.url == null) {
+          requiredCapabilities = {
+            'elicitation': {'url': <String, dynamic>{}},
+          };
+        } else if (params.isFormMode &&
+            !(_capabilities.elicitation?.supportsForm ?? false)) {
+          requiredCapabilities = {
+            'elicitation': {'form': <String, dynamic>{}},
+          };
+        }
+        break;
+      case Method.samplingCreateMessage:
+        final params = inputRequest.createMessageParams;
+        final sampling = _capabilities.sampling;
+        if (sampling == null) {
+          requiredCapabilities = {'sampling': <String, dynamic>{}};
+        } else if ((params.tools != null || params.toolChoice != null) &&
+            !sampling.tools) {
+          requiredCapabilities = {
+            'sampling': {'tools': <String, dynamic>{}},
+          };
+        } else if (params.includeContext != null &&
+            params.includeContext != IncludeContext.none &&
+            !sampling.context) {
+          requiredCapabilities = {
+            'sampling': {'context': <String, dynamic>{}},
+          };
+        }
+        break;
+    }
+
+    if (requiredCapabilities != null) {
+      throw McpError(
+        ErrorCode.missingRequiredClientCapability.value,
+        'Received an embedded input request requiring an unadvertised client '
+        'capability.',
+        {
+          'inputRequest': inputRequestKey,
+          'method': inputRequest.method,
+          'requiredCapabilities': requiredCapabilities,
+        },
+      );
+    }
   }
 
   Future<InputResponses?> _resolveNewInputRequests(
@@ -842,7 +954,11 @@ class McpClient extends Protocol {
     for (var attempt = 0; attempt <= _maxInputRequiredRetries; attempt++) {
       final result = await request<BaseResultData>(
         buildRequest(inputResponses, requestState, attempt > 0),
-        (json) => _parseExpectedOrInputRequired<T>(json, resultFactory),
+        (json) => _parseExpectedOrInputRequired<T>(
+          method,
+          json,
+          resultFactory,
+        ),
         options,
       );
 
@@ -1005,6 +1121,12 @@ class McpClient extends Protocol {
     while (true) {
       options?.signal?.throwIfAborted();
 
+      // CreateTaskResult contains only the base Task shape. Always resolve the
+      // detailed state through tasks/get before inspecting status-specific
+      // fields, including when the seed already reports a terminal status.
+      await _waitForTaskExtensionPoll(currentTask, options?.signal);
+      currentTask = await _getTaskExtension(currentTask.taskId, options);
+
       switch (currentTask.status) {
         case TaskStatus.completed:
           final result = currentTask.result;
@@ -1056,9 +1178,6 @@ class McpClient extends Protocol {
         case TaskStatus.working:
           break;
       }
-
-      await _waitForTaskExtensionPoll(currentTask, options?.signal);
-      currentTask = await _getTaskExtension(currentTask.taskId, options);
     }
   }
 
@@ -1074,6 +1193,13 @@ class McpClient extends Protocol {
       GetTaskExtensionResult.fromJson,
       _taskFollowUpOptions(options),
     );
+    if (result.task.taskId != taskId) {
+      throw McpError(
+        ErrorCode.internalError.value,
+        'Invalid ${Method.tasksGet} response: returned task '
+        '${result.task.taskId} instead of requested task $taskId.',
+      );
+    }
     return result.task;
   }
 
@@ -1130,6 +1256,9 @@ class McpClient extends Protocol {
     int? relatedRequestId,
   }) async {
     _assertStatelessNotificationAllowed(notificationData.method);
+    if (_usesStatelessProtocol) {
+      validateStatelessNotificationMetaObjects(notificationData);
+    }
     await super.notification(
       notificationData,
       relatedTask: relatedTask,
@@ -1149,9 +1278,20 @@ class McpClient extends Protocol {
     );
   }
 
+  void _assertLegacyRequestAllowed(String method) {
+    if (_usesStatelessProtocol ||
+        !_statelessOnlyRequestMethods.contains(method)) {
+      return;
+    }
+    throw McpError(
+      ErrorCode.methodNotFound.value,
+      '$method is only available in MCP stateless protocol versions.',
+    );
+  }
+
   void _assertStatelessNotificationAllowed(String method) {
     if (!_usesStatelessProtocol ||
-        !_statelessRemovedNotificationMethods.contains(method)) {
+        !isStatelessForbiddenClientNotification(method)) {
       return;
     }
 
@@ -1239,6 +1379,13 @@ class McpClient extends Protocol {
     );
   }
 
+  @override
+  bool shouldRespondToInvalidIncomingRequest(
+    JsonRpcRequest request,
+    McpError error,
+  ) =>
+      !_usesStatelessProtocol;
+
   String? _missingPeerCapabilityForIncomingRequest(String method) {
     return switch (method) {
       Method.rootsList => _capabilities.roots == null ? 'roots' : null,
@@ -1250,8 +1397,96 @@ class McpClient extends Protocol {
     };
   }
 
+  McpError? _validateIncomingNotificationDirection(
+    JsonRpcNotification notification,
+  ) {
+    if (_usesStatelessProtocol &&
+        _statelessRemovedServerNotificationMethods
+            .contains(notification.method)) {
+      return McpError(
+        ErrorCode.methodNotFound.value,
+        'MCP $_negotiatedProtocolVersion does not define '
+        '${notification.method}.',
+      );
+    }
+    if (!_usesStatelessProtocol &&
+        _statelessOnlyNotificationMethods.contains(notification.method)) {
+      return McpError(
+        ErrorCode.methodNotFound.value,
+        '${notification.method} is only available in MCP stateless protocol '
+        'versions.',
+      );
+    }
+    return null;
+  }
+
+  @override
+  McpError? validateIncomingNotificationBeforeParsing(
+    JsonRpcNotification notification,
+  ) =>
+      _validateIncomingNotificationDirection(notification);
+
   @override
   McpError? validateIncomingNotification(JsonRpcNotification notification) {
+    if (_usesStatelessProtocol) {
+      try {
+        validateStatelessNotificationMetaObjects(notification);
+      } on FormatException catch (error) {
+        return McpError(
+          ErrorCode.invalidParams.value,
+          'Invalid stateless notification metadata.',
+          error.message,
+        );
+      }
+    }
+
+    final directionError = _validateIncomingNotificationDirection(notification);
+    if (directionError != null) {
+      return directionError;
+    }
+    if (_usesStatelessProtocol &&
+        _statelessSubscriptionNotificationMethods
+            .contains(notification.method)) {
+      final subscriptionId = notification.meta?[McpMetaKey.subscriptionId];
+      if (subscriptionId is! int && subscriptionId is! String) {
+        return McpError(
+          ErrorCode.invalidRequest.value,
+          '${notification.method} must include a string or integer '
+          '${McpMetaKey.subscriptionId}.',
+        );
+      }
+      if (!_activeSubscriptions.containsKey(subscriptionId)) {
+        return McpError(
+          ErrorCode.invalidRequest.value,
+          '${notification.method} references unknown subscription '
+          '$subscriptionId.',
+        );
+      }
+    }
+    if (_usesStatelessProtocol &&
+        notification.method == Method.notificationsCancelled) {
+      JsonRpcCancelledNotification cancellation;
+      try {
+        cancellation = notification is JsonRpcCancelledNotification
+            ? notification
+            : JsonRpcCancelledNotification.fromJson(notification.toJson());
+      } on FormatException catch (error) {
+        return McpError(
+          ErrorCode.invalidRequest.value,
+          'Invalid stateless subscription cancellation.',
+          error.message,
+        );
+      }
+      final subscriptionId = cancellation.meta?[McpMetaKey.subscriptionId];
+      if ((subscriptionId is! int && subscriptionId is! String) ||
+          subscriptionId != cancellation.cancelParams.requestId) {
+        return McpError(
+          ErrorCode.invalidRequest.value,
+          '${Method.notificationsCancelled} must correlate its requestId '
+          'with ${McpMetaKey.subscriptionId}.',
+        );
+      }
+    }
     if (_sentInitialized) {
       return null;
     }
@@ -1271,13 +1506,35 @@ class McpClient extends Protocol {
 
   @override
   void onIncomingNotificationAccepted(JsonRpcNotification notification) {
+    if (notification is JsonRpcCancelledNotification) {
+      final requestId = notification.cancelParams.requestId;
+      final subscriptionId = notification.meta?[McpMetaKey.subscriptionId];
+      final activeSubscription = _activeSubscriptions[requestId];
+      if (activeSubscription != null &&
+          (!_usesStatelessProtocol || subscriptionId == requestId)) {
+        activeSubscription.handleServerCancellation();
+        return;
+      }
+    }
+
     final subscriptionId = notification.meta?[McpMetaKey.subscriptionId];
     if (subscriptionId is! int && subscriptionId is! String) {
       return;
     }
 
     final activeSubscription = _activeSubscriptions[subscriptionId];
-    activeSubscription?.handleNotification(notification);
+    final activeTransport = transport;
+    var isReplayAcknowledgment = false;
+    if (notification.method == Method.notificationsSubscriptionsAcknowledged &&
+        activeTransport is SubscriptionReplayAcknowledgmentTransport) {
+      isReplayAcknowledgment =
+          (activeTransport as SubscriptionReplayAcknowledgmentTransport)
+              .consumeSubscriptionReplayAcknowledgment(subscriptionId);
+    }
+    activeSubscription?.handleNotification(
+      notification,
+      isReplayAcknowledgment: isReplayAcknowledgment,
+    );
   }
 
   @override
@@ -1340,7 +1597,8 @@ class McpClient extends Protocol {
         requiredCapability = 'resources.subscribe';
         break;
       case Method.subscriptionsListen:
-        supported = true;
+        supported = _usesStatelessProtocol;
+        requiredCapability = 'MCP stateless subscriptions';
         break;
       case Method.toolsCall:
       case Method.toolsList:
@@ -1349,17 +1607,19 @@ class McpClient extends Protocol {
         break;
       case Method.tasksGet:
       case Method.tasksCancel:
-        supported =
-            serverCaps.tasks != null || serverCaps.supportsTasksExtension;
-        requiredCapability = 'tasks or $mcpTasksExtensionId';
+        supported = _usesStatelessProtocol
+            ? serverCaps.supportsTasksExtension
+            : serverCaps.tasks != null;
+        requiredCapability =
+            _usesStatelessProtocol ? mcpTasksExtensionId : 'legacy tasks';
         break;
       case Method.tasksUpdate:
-        supported = serverCaps.supportsTasksExtension;
+        supported = _usesStatelessProtocol && serverCaps.supportsTasksExtension;
         requiredCapability = mcpTasksExtensionId;
         break;
       case Method.tasksList:
       case Method.tasksResult:
-        supported = serverCaps.tasks != null;
+        supported = !_usesStatelessProtocol && serverCaps.tasks != null;
         requiredCapability = 'tasks';
         break;
       case Method.completionComplete:
@@ -1604,6 +1864,29 @@ class McpClient extends Protocol {
     if (transport == null) {
       throw StateError('Not connected to a transport.');
     }
+    _assertLegacyRequestAllowed(Method.subscriptionsListen);
+    if (params.notifications.taskIds != null) {
+      if (!_capabilities.supportsTasksExtension) {
+        throw McpError(
+          ErrorCode.missingRequiredClientCapability.value,
+          'Task subscriptions require the client to advertise '
+          '$mcpTasksExtensionId.',
+          const {
+            'requiredCapabilities': {
+              'extensions': {
+                mcpTasksExtensionId: <String, dynamic>{},
+              },
+            },
+          },
+        );
+      }
+      if (!(_serverCapabilities?.supportsTasksExtension ?? false)) {
+        throw McpError(
+          ErrorCode.methodNotFound.value,
+          'Server does not support $mcpTasksExtensionId task subscriptions.',
+        );
+      }
+    }
 
     final requestId = reserveRequestId();
     final abortController = BasicAbortController();
@@ -1634,6 +1917,7 @@ class McpClient extends Protocol {
     return McpSubscription._(
       id: requestId,
       acknowledged: state.acknowledged,
+      acknowledgmentChanges: state.acknowledgmentChanges,
       notifications: state.notifications,
       done: state.done,
       cancel: state.cancel,
@@ -1931,54 +2215,72 @@ class McpClient extends Protocol {
 typedef Client = McpClient;
 
 class _ClientSubscriptionState {
+  static const int _maxPendingNotifications = 256;
+
   final int id;
   final SubscriptionFilter requestedNotifications;
   final BasicAbortController abortController;
   final void Function() onClose;
-  final StreamController<JsonRpcNotification> _notifications =
-      StreamController<JsonRpcNotification>.broadcast();
+  late final StreamController<JsonRpcNotification> _notifications;
   final Completer<SubscriptionsAcknowledgedNotification> _acknowledged =
       Completer<SubscriptionsAcknowledgedNotification>();
   final Completer<SubscriptionsListenResult> _done =
       Completer<SubscriptionsListenResult>();
+  final StreamController<SubscriptionsAcknowledgedNotification>
+      _acknowledgmentChanges =
+      StreamController<SubscriptionsAcknowledgedNotification>.broadcast();
+  final List<JsonRpcNotification> _pendingNotifications = [];
 
   SubscriptionFilter? _acknowledgedNotifications;
+  bool _notificationStreamObserved = false;
+  bool _notificationStreamShouldClose = false;
+  ({Object error, StackTrace stackTrace})? _pendingNotificationError;
   bool _closed = false;
   bool _localCancellation = false;
+  bool _serverCancellationReceived = false;
 
   _ClientSubscriptionState({
     required this.id,
     required this.requestedNotifications,
     required this.abortController,
     required this.onClose,
-  });
+  }) {
+    _notifications = StreamController<JsonRpcNotification>.broadcast(
+      onListen: _onNotificationStreamListen,
+    );
+  }
 
   Future<SubscriptionsAcknowledgedNotification> get acknowledged =>
       _acknowledged.future;
+
+  Stream<SubscriptionsAcknowledgedNotification> get acknowledgmentChanges =>
+      _acknowledgmentChanges.stream;
 
   Stream<JsonRpcNotification> get notifications => _notifications.stream;
 
   Future<SubscriptionsListenResult> get done => _done.future;
 
-  void handleNotification(JsonRpcNotification notification) {
+  void handleNotification(
+    JsonRpcNotification notification, {
+    bool isReplayAcknowledgment = false,
+  }) {
     if (_closed) {
       return;
     }
 
-    if (_acknowledgedNotifications == null) {
-      if (notification.method !=
-          Method.notificationsSubscriptionsAcknowledged) {
+    if (notification.method == Method.notificationsSubscriptionsAcknowledged) {
+      final hadAcknowledgment = _acknowledgedNotifications != null;
+      if (hadAcknowledgment && !isReplayAcknowledgment) {
         fail(
           McpError(
             ErrorCode.invalidRequest.value,
-            'Subscription $id received ${notification.method} before '
-            '${Method.notificationsSubscriptionsAcknowledged}.',
+            'Subscription $id received '
+            '${Method.notificationsSubscriptionsAcknowledged} more than once.',
           ),
           StackTrace.current,
         );
         return;
       }
-
       final acknowledgedParams =
           (notification as JsonRpcSubscriptionsAcknowledgedNotification)
               .acknowledgedParams;
@@ -1999,6 +2301,33 @@ class _ClientSubscriptionState {
       if (!_acknowledged.isCompleted) {
         _acknowledged.complete(acknowledgedParams);
       }
+      if (hadAcknowledgment && isReplayAcknowledgment) {
+        _acknowledgmentChanges.add(acknowledgedParams);
+      }
+      return;
+    }
+
+    if (_serverCancellationReceived) {
+      fail(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'Subscription $id received ${notification.method} after '
+          '${Method.notificationsCancelled}.',
+        ),
+        StackTrace.current,
+      );
+      return;
+    }
+
+    if (_acknowledgedNotifications == null) {
+      fail(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'Subscription $id received ${notification.method} before '
+          '${Method.notificationsSubscriptionsAcknowledged}.',
+        ),
+        StackTrace.current,
+      );
       return;
     }
 
@@ -2015,7 +2344,92 @@ class _ClientSubscriptionState {
       return;
     }
 
-    _notifications.add(notification);
+    if (_notificationStreamObserved) {
+      _notifications.add(notification);
+    } else {
+      if (_pendingNotifications.length >= _maxPendingNotifications) {
+        _pendingNotifications.clear();
+        fail(
+          McpError(
+            ErrorCode.invalidRequest.value,
+            'Subscription $id exceeded the '
+            '$_maxPendingNotifications-notification buffer before its '
+            'notification stream was listened to.',
+          ),
+          StackTrace.current,
+        );
+        return;
+      }
+      _pendingNotifications.add(notification);
+    }
+  }
+
+  void handleServerCancellation() {
+    if (_closed) {
+      return;
+    }
+    if (_serverCancellationReceived) {
+      fail(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'Subscription $id received ${Method.notificationsCancelled} more '
+          'than once.',
+        ),
+        StackTrace.current,
+      );
+      return;
+    }
+    if (_acknowledgedNotifications == null) {
+      fail(
+        McpError(
+          ErrorCode.invalidRequest.value,
+          'Subscription $id received ${Method.notificationsCancelled} before '
+          '${Method.notificationsSubscriptionsAcknowledged}.',
+        ),
+        StackTrace.current,
+      );
+      return;
+    }
+
+    _serverCancellationReceived = true;
+  }
+
+  void _onNotificationStreamListen() {
+    if (_notificationStreamObserved) {
+      return;
+    }
+    _notificationStreamObserved = true;
+
+    for (final notification in _pendingNotifications) {
+      _notifications.add(notification);
+    }
+    _pendingNotifications.clear();
+
+    final pendingError = _pendingNotificationError;
+    if (pendingError != null) {
+      _notifications.addError(pendingError.error, pendingError.stackTrace);
+    }
+    if (_notificationStreamShouldClose) {
+      unawaited(_notifications.close());
+    }
+  }
+
+  void _closeNotificationStream() {
+    if (_notificationStreamObserved) {
+      unawaited(_notifications.close());
+    } else {
+      _notificationStreamShouldClose = true;
+    }
+  }
+
+  void _failNotificationStream(Object error, StackTrace stackTrace) {
+    if (_notificationStreamObserved) {
+      _notifications.addError(error, stackTrace);
+      unawaited(_notifications.close());
+    } else {
+      _pendingNotificationError = (error: error, stackTrace: stackTrace);
+      _notificationStreamShouldClose = true;
+    }
   }
 
   void trackRequest(Future<SubscriptionsListenResult> requestDone) {
@@ -2083,7 +2497,8 @@ class _ClientSubscriptionState {
     if (!_done.isCompleted) {
       _done.complete(result);
     }
-    _notifications.close();
+    unawaited(_acknowledgmentChanges.close());
+    _closeNotificationStream();
   }
 
   void fail(
@@ -2106,9 +2521,8 @@ class _ClientSubscriptionState {
     if (!_done.isCompleted) {
       _done.completeError(error, stackTrace);
     }
-    _notifications
-      ..addError(error, stackTrace)
-      ..close();
+    unawaited(_acknowledgmentChanges.close());
+    _failNotificationStream(error, stackTrace);
   }
 }
 

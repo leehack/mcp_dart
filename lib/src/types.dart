@@ -12,6 +12,7 @@ export 'types/json_rpc.dart'
         parseProgressToken,
         parseRequestId,
         validateMetaKeyName,
+        validateMetaObject,
         validateRequestMeta;
 export 'types/mcp_ui.dart';
 export 'types/misc.dart';

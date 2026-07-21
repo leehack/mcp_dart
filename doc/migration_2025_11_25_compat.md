@@ -54,14 +54,15 @@ This guide helps update existing code that used older sampling/tool-choice APIs.
 - Form elicitation schemas must now be object-root schemas whose properties are
   primitive string, number, integer, boolean, enum, or multiselect schemas.
 - Tool inputs and MCP 2025-11-25 structured outputs are object-rooted. A
-  non-object `inputSchema` fails at parse/serialization boundaries; stable
-  client/server compatibility paths omit or ignore MCP `2026-07-28`-only
-  non-object output schemas and structured values.
-- Stable metadata serializers no longer emit legacy singular `icon` fields,
+  non-object `inputSchema` fails at parse/serialization boundaries;
+  initialization-era client/server compatibility paths omit or ignore MCP
+  `2026-07-28`-only non-object output schemas and structured values.
+- MCP 2025-11-25 metadata serializers no longer emit legacy singular `icon`
+  fields,
   `ResourceAnnotations.title`, `ToolAnnotations.priority`, or
   `ToolAnnotations.audience`. Those fields still parse into deprecated Dart
   accessors for legacy peers.
-- Stable server capabilities no longer emit top-level `elicitation` or
+- MCP 2025-11-25 server capabilities no longer emit top-level `elicitation` or
   `tasks.listChanged`; legacy payloads still parse for compatibility.
 - Required result arrays are strict at incoming wire boundaries. Empty arrays
   remain valid when the required key is present, but missing `resources`,

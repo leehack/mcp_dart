@@ -128,7 +128,16 @@ Map<String, Map<String, dynamic>>? _asExtensionMap(
 ) {
   final map = _asJsonObjectMap(value, field);
   return map?.map(
-    (key, value) => MapEntry(key, value.cast<String, dynamic>()),
+    (key, value) {
+      _validateExtensionIdentifier(key, '$field.$key');
+      final settings = value.cast<String, dynamic>();
+      if (key == mcpTasksExtensionId && settings.isNotEmpty) {
+        throw FormatException(
+          '$field.$key must be an empty settings object',
+        );
+      }
+      return MapEntry(key, settings);
+    },
   );
 }
 
@@ -138,8 +147,32 @@ Map<String, Map<String, dynamic>>? _serializeExtensionMap(
 ) {
   final map = _serializeJsonObjectMap(value, field);
   return map?.map(
-    (key, value) => MapEntry(key, value.cast<String, dynamic>()),
+    (key, value) {
+      try {
+        _validateExtensionIdentifier(key, '$field.$key');
+      } on FormatException catch (error) {
+        throw ArgumentError.value(key, '$field.$key', error.message);
+      }
+      final settings = value.cast<String, dynamic>();
+      if (key == mcpTasksExtensionId && settings.isNotEmpty) {
+        throw ArgumentError.value(
+          settings,
+          '$field.$key',
+          'must be an empty settings object',
+        );
+      }
+      return MapEntry(key, settings);
+    },
   );
+}
+
+void _validateExtensionIdentifier(String identifier, String field) {
+  validateMetaKeyName(identifier, fieldName: field);
+  if (!identifier.contains('/')) {
+    throw FormatException(
+      'Invalid $field extension identifier "$identifier": prefix is required',
+    );
+  }
 }
 
 Map<String, dynamic>? _readAdditionalCapabilities(
@@ -376,6 +409,13 @@ class ClientElicitation {
   /// Present if the client supports URL mode elicitation.
   /// URL mode directs users to external URLs for sensitive interactions.
   final ClientElicitationUrl? url;
+
+  /// Whether this capability advertises form mode support.
+  ///
+  /// An empty capability object historically advertised form mode before MCP
+  /// added explicit elicitation modes, so preserve that interpretation when
+  /// neither [form] nor [url] is present.
+  bool get supportsForm => form != null || url == null;
 
   /// Creates elicitation capabilities.
   /// By default, supports form mode only for backwards compatibility.
@@ -1012,7 +1052,7 @@ class ServerCapabilitiesCompletions {
   /// Legacy non-standard completion list changed flag.
   ///
   /// MCP 2025-11-25 defines `completions` as an empty capability object and
-  /// does not define a stable `notifications/completions/list_changed` method.
+  /// does not define a core `notifications/completions/list_changed` method.
   @Deprecated(
     'MCP 2025-11-25 completions capability is an empty object; listChanged is ignored when serializing.',
   )

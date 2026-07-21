@@ -34,6 +34,12 @@ class StdioServerParameters {
   /// The working directory to use when spawning the process.
   final String? workingDirectory;
 
+  /// Whether to restart a stateless MCP server after an unexpected exit.
+  ///
+  /// Process recovery is unavailable on web platforms, but this field keeps
+  /// the conditional export API-compatible with the Dart IO implementation.
+  final bool restartOnUnexpectedExit;
+
   /// Creates parameters for launching the stdio server.
   const StdioServerParameters({
     required this.command,
@@ -42,11 +48,13 @@ class StdioServerParameters {
     this.includeParentEnvironment = true,
     this.stderrMode,
     this.workingDirectory,
+    this.restartOnUnexpectedExit = true,
   });
 }
 
 /// Stub for the stdio client transport on platforms without `dart:io`.
-class StdioClientTransport implements Transport {
+class StdioClientTransport
+    implements Transport, SubscriptionReplayAcknowledgmentTransport {
   /// Creates a stdio client transport stub.
   StdioClientTransport(this.serverParams);
 
@@ -67,6 +75,10 @@ class StdioClientTransport implements Transport {
 
   /// Stderr is unavailable without a spawned process.
   Stream<List<int>>? get stderr => null;
+
+  @override
+  bool consumeSubscriptionReplayAcknowledgment(RequestId subscriptionId) =>
+      false;
 
   @override
   Future<void> start() async => _unsupported();

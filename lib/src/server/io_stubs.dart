@@ -132,7 +132,12 @@ class StreamableHTTPServerTransportOptions {
 
 /// Stub for Streamable HTTP server transport on platforms without `dart:io`.
 class StreamableHTTPServerTransport
-    implements Transport, RequestIdAwareTransport {
+    implements
+        Transport,
+        RequestIdAwareTransport,
+        IncomingRequestContextAwareTransport,
+        RequestSseStreamControlAwareTransport,
+        RequestContextSseStreamControlAwareTransport {
   /// Creates a new StreamableHTTPServerTransport stub.
   StreamableHTTPServerTransport({required this.options});
 
@@ -150,6 +155,9 @@ class StreamableHTTPServerTransport
 
   @override
   void Function(JsonRpcMessage message)? onmessage;
+
+  @override
+  Object? get incomingRequestContext => null;
 
   @override
   Future<void> start() async =>
@@ -174,6 +182,37 @@ class StreamableHTTPServerTransport
     RequestId? relatedRequestId,
   }) async =>
       _unsupported('StreamableHTTPServerTransport.send');
+
+  @override
+  Future<void> sendWithRequestContext(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+    required Object requestContext,
+  }) async =>
+      _unsupported('StreamableHTTPServerTransport.sendWithRequestContext');
+
+  @override
+  bool canCloseRequestSseStream(RequestId requestId) => false;
+
+  @override
+  void closeRequestSseStream(RequestId requestId) =>
+      _unsupported('StreamableHTTPServerTransport.closeRequestSseStream');
+
+  @override
+  bool canCloseRequestSseStreamWithContext(
+    RequestId requestId,
+    Object requestContext,
+  ) =>
+      false;
+
+  @override
+  void closeRequestSseStreamWithContext(
+    RequestId requestId,
+    Object requestContext,
+  ) =>
+      _unsupported(
+        'StreamableHTTPServerTransport.closeRequestSseStreamWithContext',
+      );
 }
 
 /// Server transport for SSE on IO platforms.
@@ -264,7 +303,8 @@ class SseServerManager {
 }
 
 /// Stub for stdio server transport on platforms without `dart:io`.
-class StdioServerTransport implements Transport {
+class StdioServerTransport
+    implements Transport, ServerSubscriptionCancellationTransport {
   /// Creates a new stdio server transport stub.
   StdioServerTransport({Object? stdin, Object? stdout})
       : _stdin = stdin,
@@ -510,6 +550,7 @@ class StreamableMcpServer {
     this.strictProtocolVersionHeaderValidation = true,
     this.rejectBatchJsonRpcPayloads = true,
     this.enableJsonResponse = false,
+    this.protocol = McpProtocol.stable,
     this.sseRetryDelay = const Duration(seconds: 1),
   }) : _serverFactory = serverFactory {
     if (sseRetryDelay.isNegative) {
@@ -563,6 +604,9 @@ class StreamableMcpServer {
   /// If true, return JSON responses instead of SSE streams for request/response
   /// interactions.
   final bool enableJsonResponse;
+
+  /// Protocol profile used for HTTP request routing on IO platforms.
+  final McpProtocol protocol;
 
   /// Reconnection delay advertised in resumable SSE priming events.
   final Duration sseRetryDelay;

@@ -2430,6 +2430,13 @@ void main() {
       expect(restored.url != null, isFalse);
     });
 
+    test('ClientElicitation legacy default supports form mode', () {
+      const capability = ClientElicitation();
+
+      expect(capability.toJson(), isEmpty);
+      expect(capability.supportsForm, isTrue);
+    });
+
     test('ClientElicitation all modes', () {
       final capability = const ClientElicitation.all();
 

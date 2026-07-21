@@ -18,7 +18,8 @@ final _logger = Logger("mcp_dart.server.stdio");
 ///
 /// Note: This transport assumes exclusive control over stdin/stdout for JSON-RPC
 /// communication while active. Other uses of stdin/stdout might interfere.
-class StdioServerTransport implements Transport {
+class StdioServerTransport
+    implements Transport, ServerSubscriptionCancellationTransport {
   final io.Stdin _stdin;
   final io.IOSink _stdout;
 
@@ -36,6 +37,9 @@ class StdioServerTransport implements Transport {
 
   /// Incremented when the transport starts or closes to invalidate queued sends.
   int _lifecycleGeneration = 0;
+
+  /// Shared completion for concurrent [close] calls.
+  Future<void>? _closeFuture;
 
   /// Callback for when the connection is closed.
   @override
@@ -71,6 +75,9 @@ class StdioServerTransport implements Transport {
       throw StateError(
         "StdioServerTransport already started! If using Server class, note that connect() calls start() automatically.",
       );
+    }
+    if (_closeFuture != null) {
+      throw StateError("StdioServerTransport is closing.");
     }
     _started = true;
     _lifecycleGeneration++;
@@ -125,6 +132,23 @@ class StdioServerTransport implements Transport {
           onerror?.call(StateError("Error in onmessage handler: $e"));
         }
       } catch (error) {
+        if (error is StdioMessageDecodeException && error.shouldRespond) {
+          unawaited(
+            send(
+              JsonRpcError(
+                id: error.requestId,
+                error: JsonRpcErrorData(
+                  code: error.errorCode.value,
+                  message: error.wireMessage,
+                ),
+              ),
+            ).catchError((Object sendError) {
+              _logger.warn(
+                'Failed to send malformed-message response: $sendError',
+              );
+            }),
+          );
+        }
         final Error dartError = (error is Error)
             ? error
             : StateError("Message parsing error: $error");
@@ -146,7 +170,23 @@ class StdioServerTransport implements Transport {
   /// as they might be shared by other parts of the application. It only stops
   /// this transport from listening and interacting with them.
   @override
-  Future<void> close() async {
+  Future<void> close() {
+    final activeClose = _closeFuture;
+    if (activeClose != null) {
+      return activeClose;
+    }
+
+    late final Future<void> closeFuture;
+    closeFuture = _close().whenComplete(() {
+      if (identical(_closeFuture, closeFuture)) {
+        _closeFuture = null;
+      }
+    });
+    _closeFuture = closeFuture;
+    return closeFuture;
+  }
+
+  Future<void> _close() async {
     if (!_started) {
       return;
     }

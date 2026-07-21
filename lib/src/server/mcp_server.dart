@@ -102,7 +102,7 @@ JsonSchema? _outputSchemaForProtocol(
 
   // MCP 2025-11-25 restricts tool output schemas to object roots. MCP
   // 2026-07-28 allows any JSON Schema, so omit non-object schemas for
-  // stable callers.
+  // initialization-era callers.
   if (schema.toJson()['type'] == 'object') {
     return schema;
   }
@@ -1521,6 +1521,7 @@ class McpServer {
   /// Connects the server to a communication [transport].
   Future<void> connect(Transport transport) async {
     _syncToolParameterHeaderMappings(transport);
+    linkServerTaskOutputValidationScope(server, transport);
     await server.connect(transport);
     if (transport is IncomingRequestValidationAwareTransport) {
       final validationAwareTransport =
@@ -1640,15 +1641,19 @@ class McpServer {
   ///
   /// Pass [requestMeta] from [RequestHandlerExtra.meta] so the notification
   /// honors the request's `io.modelcontextprotocol/logLevel` opt-in.
+  /// Pass [requestId] from [RequestHandlerExtra.requestId] so Streamable HTTP
+  /// routes the notification on the originating response stream.
   Future<void> sendStatelessLoggingMessage(
     LoggingMessageNotification params, {
     String? sessionId,
     required Map<String, dynamic>? requestMeta,
+    RequestId? requestId,
   }) async {
     return server.sendStatelessLoggingMessage(
       params,
       sessionId: sessionId,
       requestMeta: requestMeta,
+      requestId: requestId,
     );
   }
 
@@ -2827,7 +2832,7 @@ class McpServer {
   /// `2025-06-18` and earlier peers retain JSON-RPC `invalidParams`
   /// compatibility. Unknown tools and malformed `tools/call` requests remain
   /// JSON-RPC errors.
-  /// [outputSchema] defines the stable object-root result structure.
+  /// [outputSchema] defines the initialization-era object-root result structure.
   /// [annotations] provides additional metadata.
   /// [callback] is the function executed when the tool is called.
   RegisteredTool registerTool(

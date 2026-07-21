@@ -887,7 +887,7 @@ class JsonInteger extends JsonSchema {
     int? exclusiveMinimum,
     int? exclusiveMaximum,
     int? multipleOf,
-    int? defaultValue,
+    this.defaultValue,
     super.title,
     super.description,
     this.mcpHeader,
@@ -897,7 +897,6 @@ class JsonInteger extends JsonSchema {
         _exclusiveMaximum = exclusiveMaximum,
         _multipleOf = multipleOf,
         _defaultValue = defaultValue,
-        defaultValue = defaultValue,
         _hasDefault = defaultValue != null,
         _hasMcpHeader = mcpHeader != null,
         _rawMcpHeader = mcpHeader;

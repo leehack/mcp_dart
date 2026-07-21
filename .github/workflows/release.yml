@@ -11,16 +11,27 @@ on:
           - mcp_dart
           - mcp_dart_cli
 
+concurrency:
+  group: release-${{ inputs.package }}
+  cancel-in-progress: false
+
 jobs:
-  create-release:
+  validate-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required to create tags and releases
+      actions: read
+      contents: read
+    outputs:
+      make_latest: ${{ steps.release-type.outputs.make_latest }}
+      prerelease: ${{ steps.release-type.outputs.prerelease }}
+      release_sha: ${{ steps.release-source.outputs.release_sha }}
+      tag: ${{ steps.release-source.outputs.tag }}
+      version: ${{ steps.get-version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.RELEASE_PAT }}
-      
+          persist-credentials: false
+
       - name: Set package configuration
         id: set-config
         run: |
@@ -40,15 +51,20 @@ jobs:
         id: get-version
         working-directory: ${{ steps.set-config.outputs.working_directory }}
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //')
+          VERSION=$(awk '$1 == "version:" { print $2; exit }' pubspec.yaml)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "❌ Package version is not a supported release version: $VERSION"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "📦 Package: ${{ inputs.package }}"
           echo "📦 Detected version: $VERSION"
 
       - name: Determine release type
         id: release-type
+        env:
+          VERSION: ${{ steps.get-version.outputs.version }}
         run: |
-          VERSION="${{ steps.get-version.outputs.version }}"
           if [[ "$VERSION" == *-* ]]; then
             {
               echo "prerelease=true"
@@ -63,10 +79,109 @@ jobs:
             echo "📦 Release type: stable"
           fi
 
+      - name: Record release source
+        id: release-source
+        env:
+          TAG_PREFIX: ${{ steps.set-config.outputs.tag_prefix }}
+          VERSION: ${{ steps.get-version.outputs.version }}
+        run: |
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG_PREFIX$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+
+      - name: Validate coordinated release metadata
+        env:
+          PACKAGE: ${{ inputs.package }}
+          TAG: ${{ steps.release-source.outputs.tag }}
+        run: |
+          dart tool/validate_release_metadata.dart \
+            --package "$PACKAGE" \
+            --tag "$TAG"
+
       - name: Verify stable release source
         if: steps.release-type.outputs.prerelease == 'false'
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TAG: ${{ steps.release-source.outputs.tag }}
+        run: |
+          bash tool/release/verify_stable_release_source.sh \
+            "$DEFAULT_BRANCH" "$TAG"
+
+      - name: Verify stable release CI
+        if: steps.release-type.outputs.prerelease == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ inputs.package }}
+          RELEASE_SHA: ${{ steps.release-source.outputs.release_sha }}
+        run: |
+          bash tool/release/verify_stable_release_ci.sh \
+            "$PACKAGE" "$RELEASE_SHA"
+
+      - name: Prepare release candidate
+        id: publish-dir
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          if [ "$PACKAGE" = "mcp_dart_cli" ]; then
+            PUBLISH_ROOT="$RUNNER_TEMP/mcp_dart_cli_publish"
+            rm -rf "$PUBLISH_ROOT"
+            mkdir -p "$PUBLISH_ROOT"
+            rsync -a \
+              --exclude .dart_tool \
+              --exclude pubspec.lock \
+              --exclude pubspec_overrides.yaml \
+              packages/mcp_dart_cli/ "$PUBLISH_ROOT/"
+            echo "working_directory=$PUBLISH_ROOT" >> "$GITHUB_OUTPUT"
+          else
+            echo "working_directory=." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install release dependencies
+        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+        run: dart pub get
+
+      - name: Verify CLI against the minimum published SDK
+        if: inputs.package == 'mcp_dart_cli'
+        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+        run: bash "$GITHUB_WORKSPACE/tool/release/verify_cli_published_sdk.sh"
+
+      - name: Validate release before creating tag
+        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+        run: dart pub publish --dry-run
+
+  create-release:
+    needs: validate-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to create tags and releases
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ needs.validate-release.outputs.release_sha }}
+
+      - name: Verify validated release checkout
+        env:
+          EXPECTED_SHA: ${{ needs.validate-release.outputs.release_sha }}
+        run: |
+          ACTUAL_SHA=$(git rev-parse HEAD)
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "❌ Checked out $ACTUAL_SHA instead of validated commit $EXPECTED_SHA."
+            exit 1
+          fi
+          echo "✅ Checked out validated commit $ACTUAL_SHA."
+
+      # Keep this independent of repository scripts: this job holds write
+      # permissions, while all package code ran in validate-release.
+      - name: Re-verify stable release source immediately before authorization
+        if: needs.validate-release.outputs.prerelease == 'false'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_SHA: ${{ needs.validate-release.outputs.release_sha }}
+          TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
           if [ "$GITHUB_REF_TYPE" != "branch" ] || [ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]; then
             echo "❌ Stable releases must be dispatched from $DEFAULT_BRANCH."
@@ -77,78 +192,126 @@ jobs:
             echo "❌ Could not resolve origin/$DEFAULT_BRANCH."
             exit 1
           fi
-          HEAD_SHA=$(git rev-parse HEAD)
-          if [ "$HEAD_SHA" != "$DEFAULT_SHA" ]; then
-            TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
-            TAG_REF=$(git ls-remote --tags origin "refs/tags/$TAG")
-            if [ -z "$TAG_REF" ]; then
-              echo "❌ Stable releases must use the latest origin/$DEFAULT_BRANCH commit."
-              exit 1
-            fi
-            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          TAG_REF=$(git ls-remote --tags origin "refs/tags/$TAG" | awk 'NR == 1 { print $1 }')
+          if [ -n "$TAG_REF" ]; then
+            git fetch --quiet --force origin "refs/tags/$TAG:refs/tags/$TAG"
             TAG_COMMIT=$(git rev-list -n 1 "$TAG")
-            if [ "$HEAD_SHA" != "$TAG_COMMIT" ]; then
-              echo "❌ Stale release source does not match existing tag $TAG."
+            if [ "$RELEASE_SHA" != "$TAG_COMMIT" ]; then
+              echo "❌ Existing tag $TAG points to $TAG_COMMIT, not $RELEASE_SHA."
+              echo "   Never move or recreate a published tag; bump the version instead."
               exit 1
             fi
             echo "✅ Stable release recovery matches existing tag $TAG."
+          elif [ "$RELEASE_SHA" != "$DEFAULT_SHA" ]; then
+            echo "❌ Stable releases must still use the latest origin/$DEFAULT_BRANCH commit."
+            exit 1
           else
-            echo "✅ Stable release source matches origin/$DEFAULT_BRANCH."
+            echo "✅ Stable release source still matches origin/$DEFAULT_BRANCH."
           fi
-
-      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
-
-      - name: Prepare release candidate
-        id: publish-dir
-        run: |
-          if [ "${{ inputs.package }}" = "mcp_dart_cli" ]; then
-            PUBLISH_ROOT="$RUNNER_TEMP/mcp_dart_publish"
-            rm -rf "$PUBLISH_ROOT"
-            mkdir -p "$PUBLISH_ROOT"
-            rsync -a --exclude .git --exclude .dart_tool --exclude pubspec.lock ./ "$PUBLISH_ROOT/"
-            rm -f "$PUBLISH_ROOT/packages/mcp_dart_cli/pubspec_overrides.yaml"
-            echo "working_directory=$PUBLISH_ROOT/packages/mcp_dart_cli" >> "$GITHUB_OUTPUT"
-          else
-            echo "working_directory=." >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Install release dependencies
-        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
-        run: dart pub get
-
-      - name: Validate release before creating tag
-        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
-        run: dart pub publish --dry-run
 
       - name: Resolve release tag
         id: create-tag
+        env:
+          PACKAGE: ${{ inputs.package }}
+          RELEASE_SHA: ${{ needs.validate-release.outputs.release_sha }}
+          TAG: ${{ needs.validate-release.outputs.tag }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
         run: |
-          TAG="${{ steps.set-config.outputs.tag_prefix }}${{ steps.get-version.outputs.version }}"
-          TAG_REF=$(git ls-remote --tags origin "refs/tags/$TAG")
+          TAG_REF=$(git ls-remote --tags origin "refs/tags/$TAG" | awk 'NR == 1 { print $1 }')
           if [ -n "$TAG_REF" ]; then
-            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            git fetch --quiet --force origin "refs/tags/$TAG:refs/tags/$TAG"
             TAG_COMMIT=$(git rev-list -n 1 "$TAG")
-            if [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
-              echo "❌ Existing tag $TAG points to $TAG_COMMIT, not $(git rev-parse HEAD)."
+            if [ "$RELEASE_SHA" != "$TAG_COMMIT" ]; then
+              echo "❌ Existing tag $TAG points to $TAG_COMMIT, not $RELEASE_SHA."
               echo "   Never move or recreate a published tag; bump the version instead."
               exit 1
             fi
             echo "✅ Reusing existing tag $TAG at $TAG_COMMIT."
+            echo "needs_push=false" >> "$GITHUB_OUTPUT"
           else
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag -a "$TAG" -m "Release ${{ inputs.package }} ${{ steps.get-version.outputs.version }}"
-            git push origin "$TAG"
-            echo "🏷️ Created and pushed tag: $TAG"
+            git tag -a "$TAG" -m "Release $PACKAGE $VERSION"
+            echo "needs_push=true" >> "$GITHUB_OUTPUT"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Authorize existing release tag
+        if: steps.create-tag.outputs.needs_push == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ inputs.package }}
+          RELEASE_SHA: ${{ needs.validate-release.outputs.release_sha }}
+        run: |
+          CONTEXT="mcp_dart/release/$PACKAGE"
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/statuses/$RELEASE_SHA" \
+            -f state=success \
+            -f context="$CONTEXT" \
+            -f description="Existing exact release tag and gates verified" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          echo "✅ Authorized existing tag at exact commit $RELEASE_SHA."
+
+      - name: Push new release tag
+        if: steps.create-tag.outputs.needs_push == 'true'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ inputs.package }}
+          PRERELEASE: ${{ needs.validate-release.outputs.prerelease }}
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+          RELEASE_SHA: ${{ needs.validate-release.outputs.release_sha }}
+          TAG: ${{ needs.validate-release.outputs.tag }}
+        run: |
+          # Close the last practical stale-main window before a new stable tag.
+          if [ "$PRERELEASE" = "false" ]; then
+            DEFAULT_SHA=$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | awk 'NR == 1 { print $1 }')
+            if [ -z "$DEFAULT_SHA" ] || [ "$RELEASE_SHA" != "$DEFAULT_SHA" ]; then
+              echo "❌ origin/$DEFAULT_BRANCH advanced before tag creation."
+              exit 1
+            fi
+          fi
+
+          CONTEXT="mcp_dart/release/$PACKAGE"
+          post_status() {
+            local state="$1"
+            local description="$2"
+            gh api --method POST \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/$GITHUB_REPOSITORY/statuses/$RELEASE_SHA" \
+              -f state="$state" \
+              -f context="$CONTEXT" \
+              -f description="$description" \
+              -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          }
+          post_status pending "Validated release tag push is in progress"
+
+          PUSH_SUCCEEDED=false
+          AUTH_HEADER=$(printf 'x-access-token:%s' "$RELEASE_PAT" | base64 | tr -d '\n')
+          HEADER_KEY=http.https://github.com/.extraheader
+          finish_push() {
+            git config --local --unset-all "$HEADER_KEY" >/dev/null 2>&1 || true
+            if [ "$PUSH_SUCCEEDED" != "true" ]; then
+              post_status failure "Validated release tag push failed" >/dev/null 2>&1 || true
+            fi
+          }
+          trap finish_push EXIT
+          git config --local "$HEADER_KEY" "AUTHORIZATION: basic $AUTH_HEADER"
+          git push origin "refs/tags/$TAG"
+          PUSH_SUCCEEDED=true
+          finish_push
+          trap - EXIT
+          post_status success "Exact release tag and gates verified"
+          echo "✅ Authorized $CONTEXT for exact commit $RELEASE_SHA."
+          echo "🏷️ Created and pushed tag: $TAG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ steps.create-tag.outputs.tag }}
-          name: ${{ inputs.package }} ${{ steps.get-version.outputs.version }}
+          name: ${{ inputs.package }} ${{ needs.validate-release.outputs.version }}
           generate_release_notes: true
-          prerelease: ${{ steps.release-type.outputs.prerelease }}
-          make_latest: ${{ steps.release-type.outputs.make_latest }}
+          prerelease: ${{ needs.validate-release.outputs.prerelease }}
+          make_latest: ${{ needs.validate-release.outputs.make_latest }}
           draft: false

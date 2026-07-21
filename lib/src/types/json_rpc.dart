@@ -243,10 +243,10 @@ class Method {
 
   /// Deprecated completion list-change notification method.
   ///
-  /// Stable MCP `2025-11-25` does not include this method. Use
+  /// MCP `2025-11-25` does not include this method. Use
   /// [notificationsExperimentalCompletionsListChanged] for extension behavior.
   @Deprecated(
-    'notifications/completions/list_changed is not part of stable MCP 2025-11-25. '
+    'notifications/completions/list_changed is not part of MCP 2025-11-25. '
     'Use notifications/experimental/completions/list_changed for extension behavior.',
   )
   static const notificationsCompletionsListChanged =
@@ -370,6 +370,267 @@ final _metaPrefixLabelPattern = RegExp(
 final _metaNamePattern = RegExp(
   r'^(?:[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?)?$',
 );
+final _lowerHexPattern = RegExp(r'^[0-9a-f]+$');
+final _tracestateSimpleKeyPattern = RegExp(r'^[a-z][a-z0-9_\-*/]{0,255}$');
+final _tracestateTenantIdPattern = RegExp(
+  r'^[a-z0-9][a-z0-9_\-*/]{0,240}$',
+);
+final _tracestateSystemIdPattern = RegExp(
+  r'^[a-z][a-z0-9_\-*/]{0,13}$',
+);
+final _baggageTokenPattern = RegExp(
+  r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+);
+
+bool _hasFullMatch(RegExp pattern, String value) {
+  return pattern.matchAsPrefix(value)?.end == value.length;
+}
+
+Never _invalidReservedMetaValue(
+  String fieldName,
+  String key,
+  String requirement,
+) {
+  throw FormatException(
+    'Invalid $fieldName.$key: $requirement',
+  );
+}
+
+bool _isAllZero(String value) {
+  for (var index = 0; index < value.length; index++) {
+    if (value.codeUnitAt(index) != 0x30) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _isValidTraceparent(String value) {
+  if (value.length < 55 ||
+      value.codeUnitAt(2) != 0x2d ||
+      value.codeUnitAt(35) != 0x2d ||
+      value.codeUnitAt(52) != 0x2d) {
+    return false;
+  }
+
+  final version = value.substring(0, 2);
+  final traceId = value.substring(3, 35);
+  final parentId = value.substring(36, 52);
+  final traceFlags = value.substring(53, 55);
+  if (!_hasFullMatch(_lowerHexPattern, version) ||
+      version == 'ff' ||
+      !_hasFullMatch(_lowerHexPattern, traceId) ||
+      _isAllZero(traceId) ||
+      !_hasFullMatch(_lowerHexPattern, parentId) ||
+      _isAllZero(parentId) ||
+      !_hasFullMatch(_lowerHexPattern, traceFlags)) {
+    return false;
+  }
+
+  // Version 00 has no extension fields. Higher versions are additive; W3C
+  // requires the known prefix to end here or be followed by a dash, while
+  // forbidding implementations from interpreting the unknown suffix.
+  return version == '00'
+      ? value.length == 55
+      : value.length == 55 || value.codeUnitAt(55) == 0x2d;
+}
+
+String _trimOws(String value) {
+  var start = 0;
+  var end = value.length;
+  while (start < end) {
+    final codeUnit = value.codeUnitAt(start);
+    if (codeUnit != 0x20 && codeUnit != 0x09) {
+      break;
+    }
+    start++;
+  }
+  while (end > start) {
+    final codeUnit = value.codeUnitAt(end - 1);
+    if (codeUnit != 0x20 && codeUnit != 0x09) {
+      break;
+    }
+    end--;
+  }
+  return value.substring(start, end);
+}
+
+bool _isValidTracestateKey(String key) {
+  if (_hasFullMatch(_tracestateSimpleKeyPattern, key)) {
+    return true;
+  }
+  final atIndex = key.indexOf('@');
+  return atIndex > 0 &&
+      atIndex == key.lastIndexOf('@') &&
+      _hasFullMatch(
+        _tracestateTenantIdPattern,
+        key.substring(0, atIndex),
+      ) &&
+      _hasFullMatch(
+        _tracestateSystemIdPattern,
+        key.substring(atIndex + 1),
+      );
+}
+
+bool _isValidTracestateValue(String value) {
+  if (value.isEmpty ||
+      value.length > 256 ||
+      value.codeUnitAt(value.length - 1) == 0x20) {
+    return false;
+  }
+  for (var index = 0; index < value.length; index++) {
+    final codeUnit = value.codeUnitAt(index);
+    if (codeUnit < 0x20 ||
+        codeUnit > 0x7e ||
+        codeUnit == 0x2c ||
+        codeUnit == 0x3d) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _isValidTracestate(String value) {
+  final members = value.split(',');
+  if (members.length > 32) {
+    return false;
+  }
+
+  final keys = <String>{};
+  for (final rawMember in members) {
+    final member = _trimOws(rawMember);
+    if (member.isEmpty) {
+      continue;
+    }
+    final equalsIndex = member.indexOf('=');
+    if (equalsIndex <= 0 || equalsIndex != member.lastIndexOf('=')) {
+      return false;
+    }
+    final key = member.substring(0, equalsIndex);
+    final memberValue = member.substring(equalsIndex + 1);
+    if (!_isValidTracestateKey(key) ||
+        !_isValidTracestateValue(memberValue) ||
+        !keys.add(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _isHexCodeUnit(int codeUnit) {
+  return codeUnit >= 0x30 && codeUnit <= 0x39 ||
+      codeUnit >= 0x41 && codeUnit <= 0x46 ||
+      codeUnit >= 0x61 && codeUnit <= 0x66;
+}
+
+bool _isValidBaggageValue(String value) {
+  for (var index = 0; index < value.length; index++) {
+    final codeUnit = value.codeUnitAt(index);
+    final isBaggageOctet = codeUnit == 0x21 ||
+        codeUnit >= 0x23 && codeUnit <= 0x2b ||
+        codeUnit >= 0x2d && codeUnit <= 0x3a ||
+        codeUnit >= 0x3c && codeUnit <= 0x5b ||
+        codeUnit >= 0x5d && codeUnit <= 0x7e;
+    if (!isBaggageOctet) {
+      return false;
+    }
+    if (codeUnit == 0x25) {
+      if (index + 2 >= value.length ||
+          !_isHexCodeUnit(value.codeUnitAt(index + 1)) ||
+          !_isHexCodeUnit(value.codeUnitAt(index + 2))) {
+        return false;
+      }
+      index += 2;
+    }
+  }
+  return true;
+}
+
+bool _isValidBaggageProperty(String rawProperty) {
+  final property = _trimOws(rawProperty);
+  if (property.isEmpty) {
+    return false;
+  }
+  final equalsIndex = property.indexOf('=');
+  if (equalsIndex == -1) {
+    return _hasFullMatch(_baggageTokenPattern, property);
+  }
+  final key = _trimOws(property.substring(0, equalsIndex));
+  final value = _trimOws(property.substring(equalsIndex + 1));
+  return _hasFullMatch(_baggageTokenPattern, key) &&
+      _isValidBaggageValue(value);
+}
+
+bool _isValidBaggageMember(String rawMember) {
+  final segments = rawMember.split(';');
+  final pair = _trimOws(segments.first);
+  final equalsIndex = pair.indexOf('=');
+  if (equalsIndex == -1) {
+    return false;
+  }
+  final key = _trimOws(pair.substring(0, equalsIndex));
+  final value = _trimOws(pair.substring(equalsIndex + 1));
+  if (!_hasFullMatch(_baggageTokenPattern, key) ||
+      !_isValidBaggageValue(value)) {
+    return false;
+  }
+  for (var index = 1; index < segments.length; index++) {
+    if (!_isValidBaggageProperty(segments[index])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _isValidBaggage(String value) {
+  final members = value.split(',');
+  if (members.length > 180) {
+    return false;
+  }
+  return members.every(_isValidBaggageMember);
+}
+
+void _validateReservedMetaValue(
+  String key,
+  Object? value,
+  String fieldName,
+) {
+  if (key != 'traceparent' && key != 'tracestate' && key != 'baggage') {
+    return;
+  }
+  if (value is! String) {
+    _invalidReservedMetaValue(fieldName, key, 'must be a string');
+  }
+  switch (key) {
+    case 'traceparent':
+      if (!_isValidTraceparent(value)) {
+        _invalidReservedMetaValue(
+          fieldName,
+          key,
+          'must use the W3C Trace Context traceparent format',
+        );
+      }
+      break;
+    case 'tracestate':
+      if (!_isValidTracestate(value)) {
+        _invalidReservedMetaValue(
+          fieldName,
+          key,
+          'must use the W3C Trace Context tracestate format',
+        );
+      }
+      break;
+    case 'baggage':
+      if (!_isValidBaggage(value)) {
+        _invalidReservedMetaValue(
+          fieldName,
+          key,
+          'must use the W3C Baggage format',
+        );
+      }
+      break;
+  }
+}
 
 /// Validates an MCP `2026-07-28` `_meta` key name.
 ///
@@ -389,7 +650,7 @@ void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
     }
     final labels = prefix.split('.');
     for (final label in labels) {
-      if (!_metaPrefixLabelPattern.hasMatch(label)) {
+      if (!_hasFullMatch(_metaPrefixLabelPattern, label)) {
         throw FormatException(
           'Invalid $fieldName key "$key": invalid prefix label "$label"',
         );
@@ -397,18 +658,38 @@ void validateMetaKeyName(String key, {String fieldName = '_meta'}) {
     }
   }
 
-  if (!_metaNamePattern.hasMatch(name)) {
+  if (!_hasFullMatch(_metaNamePattern, name)) {
     throw FormatException(
       'Invalid $fieldName key "$key": invalid name segment "$name"',
     );
   }
 }
 
+/// Validates every key and reserved trace-context value in an MCP `2026-07-28`
+/// metadata object.
+///
+/// Earlier protocol versions did not define this key grammar, so callers must
+/// only use this at boundaries where the stateless protocol version is known.
+Map<String, dynamic>? validateMetaObject(
+  Map<String, dynamic>? meta, {
+  String fieldName = '_meta',
+}) {
+  if (meta == null) {
+    return null;
+  }
+
+  for (final key in meta.keys) {
+    validateMetaKeyName(key, fieldName: fieldName);
+    _validateReservedMetaValue(key, meta[key], fieldName);
+  }
+  return meta;
+}
+
 /// Validates request metadata that can affect protocol behavior.
 ///
 /// `_meta.progressToken` is an MCP wire token and must be a string or integer
 /// when present. [validateKeys] opts in to the MCP `2026-07-28`
-/// `_meta` key-name grammar without changing stable/legacy request parsing.
+/// `_meta` key-name grammar without changing initialization-era request parsing.
 Map<String, dynamic>? validateRequestMeta(
   Map<String, dynamic>? meta, {
   bool validateKeys = false,
@@ -418,9 +699,7 @@ Map<String, dynamic>? validateRequestMeta(
   }
 
   if (validateKeys) {
-    for (final key in meta.keys) {
-      validateMetaKeyName(key);
-    }
+    validateMetaObject(meta);
   }
 
   if (meta.containsKey('progressToken')) {
@@ -744,7 +1023,7 @@ enum ErrorCode {
   /// HTTP request metadata headers do not match the JSON-RPC body.
   headerMismatch(-32020),
 
-  /// Resource not found in stable MCP 2025-11-25.
+  /// Resource not found in MCP 2025-11-25.
   resourceNotFound(-32002),
 
   /// Required per-request client capabilities were not declared.

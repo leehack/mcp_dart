@@ -235,8 +235,8 @@ https://github.com/leehack/mcp_dart/tree/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_
 - Official MCP 2025-11-25 server/client conformance paths.
 - MCP 2026-07-28 alpha.9 client coverage, including all 25 authorization
   scenarios, plus exactly three stale expected server diagnostics.
-- Published TypeScript and Python SDK beta server interop, with exact
-  expected-gap checks for their pre-#3002 clients.
+- Bidirectional published TypeScript SDK beta interop, plus Python SDK beta
+  server interop with an exact expected-gap check for its pre-#3002 client.
 - Real Chrome cross-origin Streamable HTTP smoke coverage.
 - Checked-in spec example audit pinned to an upstream commit.
 

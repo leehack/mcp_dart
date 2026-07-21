@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:mcp_dart/src/shared/mcp_header_validation.dart';
+import 'package:mcp_dart/src/shared/protocol_direction.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 
@@ -12,12 +13,38 @@ import '../types.dart';
 import 'dns_rebinding_protection.dart';
 
 const String _xAccelBufferingHeader = 'X-Accel-Buffering';
+const int _maxSafeHeaderInteger = 9007199254740991;
+const int _minSafeHeaderInteger = -9007199254740991;
 
 /// ID for SSE streams
 typedef StreamId = String;
 
 /// ID for events in SSE streams
 typedef EventId = String;
+
+final Object _incomingRequestRouteZoneKey = Object();
+
+class _IncomingRequestRoute {
+  final RequestId requestId;
+  final StreamId streamId;
+  final bool stateless;
+
+  const _IncomingRequestRoute({
+    required this.requestId,
+    required this.streamId,
+    required this.stateless,
+  });
+}
+
+class _DetachedHttpResponse {
+  final Socket socket;
+  final Map<String, List<String>> headers;
+
+  const _DetachedHttpResponse({
+    required this.socket,
+    required this.headers,
+  });
+}
 
 /// Interface for resumability support via event storage
 abstract class EventStore {
@@ -71,6 +98,8 @@ class StreamableHTTPServerTransportOptions {
 
   /// If true, the server will return JSON responses instead of starting an SSE stream.
   /// This can be useful for simple request/response scenarios without streaming.
+  /// Stateless 2026 JSON responses close their HTTP connection after the
+  /// response so a peer disconnect can cancel a still-pending request.
   /// Default is false (SSE streams are preferred).
   final bool enableJsonResponse;
 
@@ -176,8 +205,11 @@ class StreamableHTTPServerTransport
     implements
         Transport,
         RequestIdAwareTransport,
+        IncomingRequestContextAwareTransport,
         RequestSseStreamControlAwareTransport,
+        RequestContextSseStreamControlAwareTransport,
         IncomingRequestValidationAwareTransport,
+        ServerSupportedProtocolVersionsAwareTransport,
         ToolParameterHeaderAwareTransport {
   static const Set<String> _statelessRemovedRequestMethods = {
     Method.initialize,
@@ -190,15 +222,22 @@ class StreamableHTTPServerTransport
   // when sessionId is not set (null), it means the transport is in stateless mode
   final String? Function()? _sessionIdGenerator;
   bool _started = false;
+  bool _closed = false;
   final Map<String, HttpResponse> _streamMapping = {};
   final Set<StreamId> _standaloneSseStreamIds = {};
   final Map<StreamId, Set<HttpResponse>> _standaloneSseResponses = {};
   final Map<HttpResponse, Future<void>> _responseWriteTails = Map.identity();
   final Set<StreamId> _ownedStreamIds = {};
-  final Map<dynamic, String> _requestToStreamMapping = {};
-  final Map<dynamic, JsonRpcMessage> _requestResponseMap = {};
-  final Set<dynamic> _statelessRequestIds = {};
+  final Map<RequestId, List<_IncomingRequestRoute>> _requestRoutesById = {};
+  final Map<StreamId, Set<_IncomingRequestRoute>> _requestRoutesByStream = {};
+  final Map<_IncomingRequestRoute, JsonRpcMessage> _requestResponseMap = {};
+  final Set<StreamId> _jsonResponseStreamIds = {};
+  final Map<StreamId, HttpRequest> _pendingJsonResponseRequests = {};
+  final Map<StreamId, _DetachedHttpResponse> _detachedJsonResponses = {};
+  final Map<StreamId, Future<void>> _jsonResponseToSseTransitions = {};
+  final Set<StreamId> _detachingJsonResponseStreamIds = {};
   final Map<StreamId, Socket> _responseStreamSockets = {};
+  final Map<StreamId, Completer<void>> _detachedResponseLifecycles = {};
   final Set<StreamId> _detachedResumableStreamIds = {};
   bool _initialized = false;
   bool _terminated = false;
@@ -217,6 +256,8 @@ class StreamableHTTPServerTransport
   ToolParameterHeaderMappings _toolParameterHeaderMappings = const {};
   McpError? Function(JsonRpcRequest request)? _incomingRequestValidator;
   bool Function(String method)? _isRequestMethodSupported;
+  Set<String> _supportedProtocolVersions =
+      Set<String>.of(allSupportedProtocolVersions);
   static const JsonRpcNotification _ssePrimingMessage =
       JsonRpcNotification(method: 'notifications/experimental/sse/priming');
 
@@ -252,6 +293,9 @@ class StreamableHTTPServerTransport
   /// for the Streamable HTTP transport as connections are managed per-request.
   @override
   Future<void> start() async {
+    if (_closed) {
+      throw StateError("Transport is closed");
+    }
     if (_started) {
       throw StateError("Transport already started");
     }
@@ -281,31 +325,167 @@ class StreamableHTTPServerTransport
   }
 
   @override
+  void setServerSupportedProtocolVersions(Iterable<String> versions) {
+    _supportedProtocolVersions = Set<String>.unmodifiable(versions);
+  }
+
+  @override
+  Object? get incomingRequestContext {
+    final route = Zone.current[_incomingRequestRouteZoneKey];
+    return route is _IncomingRequestRoute ? route : null;
+  }
+
+  void _registerRequestRoute(_IncomingRequestRoute route) {
+    _requestRoutesById.putIfAbsent(route.requestId, () => []).add(route);
+    _requestRoutesByStream.putIfAbsent(route.streamId, () => {}).add(route);
+  }
+
+  bool _isActiveRequestRoute(_IncomingRequestRoute route) =>
+      _requestRoutesByStream[route.streamId]?.contains(route) ?? false;
+
+  void _removeRequestRoute(_IncomingRequestRoute route) {
+    _requestResponseMap.remove(route);
+    final routesForId = _requestRoutesById[route.requestId];
+    routesForId?.remove(route);
+    if (routesForId?.isEmpty ?? false) {
+      _requestRoutesById.remove(route.requestId);
+    }
+    final routesForStream = _requestRoutesByStream[route.streamId];
+    routesForStream?.remove(route);
+    if (routesForStream?.isEmpty ?? false) {
+      _requestRoutesByStream.remove(route.streamId);
+    }
+  }
+
+  List<_IncomingRequestRoute> _routesForStream(StreamId streamId) =>
+      List<_IncomingRequestRoute>.of(
+        _requestRoutesByStream[streamId] ?? const {},
+      );
+
+  void _completeDetachedResponseLifecycle(StreamId streamId) {
+    final lifecycle = _detachedResponseLifecycles.remove(streamId);
+    if (lifecycle != null && !lifecycle.isCompleted) {
+      lifecycle.complete();
+    }
+  }
+
+  _IncomingRequestRoute? _resolveRequestRoute(
+    RequestId requestId, {
+    Object? requestContext,
+    bool throwIfAmbiguous = true,
+  }) {
+    final context = requestContext ?? incomingRequestContext;
+    if (context is _IncomingRequestRoute &&
+        context.requestId == requestId &&
+        _isActiveRequestRoute(context)) {
+      return context;
+    }
+    if (context != null) {
+      return null;
+    }
+
+    final routes = _requestRoutesById[requestId] ?? const [];
+    if (routes.length == 1) {
+      return routes.single;
+    }
+    if (routes.length > 1 && throwIfAmbiguous) {
+      throw StateError(
+        'Multiple connections are active for request ID $requestId; '
+        'send the response from its incoming request context.',
+      );
+    }
+    return null;
+  }
+
+  void _deliverIncomingMessage(
+    JsonRpcMessage message, [
+    _IncomingRequestRoute? route,
+  ]) {
+    if (route == null) {
+      onmessage?.call(message);
+      return;
+    }
+    runZoned(
+      () => onmessage?.call(message),
+      zoneValues: {_incomingRequestRouteZoneKey: route},
+    );
+  }
+
+  @override
   bool canCloseRequestSseStream(RequestId requestId) {
-    final streamId = _requestToStreamMapping[requestId];
-    return _eventStore != null &&
-        !_enableJsonResponse &&
-        streamId != null &&
-        !_statelessRequestIds.contains(requestId) &&
-        _streamMapping.containsKey(streamId);
+    final route = _resolveRequestRoute(
+      requestId,
+      throwIfAmbiguous: false,
+    );
+    return route != null && _canCloseRequestSseStream(route);
   }
 
   @override
   void closeRequestSseStream(RequestId requestId) {
-    if (!canCloseRequestSseStream(requestId)) {
+    final route = _resolveRequestRoute(requestId);
+    if (route == null || !_canCloseRequestSseStream(route)) {
       throw StateError(
         'No resumable SSE stream established for request ID: $requestId',
       );
     }
 
-    final streamId = _requestToStreamMapping[requestId]!;
+    _closeRequestSseStream(route);
+  }
+
+  @override
+  bool canCloseRequestSseStreamWithContext(
+    RequestId requestId,
+    Object requestContext,
+  ) {
+    final route = _resolveRequestRoute(
+      requestId,
+      requestContext: requestContext,
+      throwIfAmbiguous: false,
+    );
+    return route != null && _canCloseRequestSseStream(route);
+  }
+
+  @override
+  void closeRequestSseStreamWithContext(
+    RequestId requestId,
+    Object requestContext,
+  ) {
+    final route = _resolveRequestRoute(
+      requestId,
+      requestContext: requestContext,
+    );
+    if (route == null || !_canCloseRequestSseStream(route)) {
+      throw StateError(
+        'No resumable SSE stream established for request ID: $requestId',
+      );
+    }
+
+    _closeRequestSseStream(route);
+  }
+
+  bool _canCloseRequestSseStream(_IncomingRequestRoute route) =>
+      _eventStore != null &&
+      !_jsonResponseStreamIds.contains(route.streamId) &&
+      !route.stateless &&
+      _streamMapping.containsKey(route.streamId);
+
+  void _closeRequestSseStream(_IncomingRequestRoute route) {
+    final streamId = route.streamId;
     final response = _streamMapping.remove(streamId)!;
     _detachedResumableStreamIds.add(streamId);
     unawaited(_safeClose(response));
   }
 
-  /// Handles an incoming HTTP request, whether GET or POST
+  /// Handles an incoming HTTP request, whether GET or POST.
+  ///
+  /// For detached stateless response streams, the returned future completes
+  /// when that request's raw HTTP connection closes.
   Future<void> handleRequest(HttpRequest req, [dynamic parsedBody]) async {
+    final wasOpenAtStart = !_closed;
+    if (!wasOpenAtStart && sessionId == null) {
+      await _safeClose(req.response);
+      return;
+    }
     req.response.bufferOutput = false;
     if (_enableDnsRebindingProtection &&
         !isRequestAllowedByDnsRebindingProtection(
@@ -327,9 +507,13 @@ class StreamableHTTPServerTransport
     )) {
       return;
     }
+    if (wasOpenAtStart && _closed) {
+      await _safeClose(req.response);
+      return;
+    }
 
     if (req.method == "POST") {
-      await _handlePostRequest(req, parsedBody);
+      await _handlePostRequest(req, parsedBody, wasOpenAtStart);
     } else if (_isStatelessProtocolVersionRequest(req)) {
       await _handleStatelessUnsupportedRequest(req.response);
     } else if (req.method == "GET") {
@@ -356,8 +540,19 @@ class StreamableHTTPServerTransport
     }
 
     final requestedVersion = versionHeader.trim();
-    if (allSupportedProtocolVersions.contains(requestedVersion)) {
+    if (_supportedProtocolVersions.contains(requestedVersion)) {
       return true;
+    }
+
+    var bodyForRequestId = parsedBody;
+    if (bodyForRequestId == null && req.method == 'POST') {
+      try {
+        final bodyBytes = await _collectBytes(req);
+        bodyForRequestId = jsonDecode(utf8.decode(bodyBytes));
+      } catch (_) {
+        // The unsupported-version response still takes precedence. JSON-RPC
+        // requires null only when the request ID cannot be established.
+      }
     }
 
     await _writeJsonRpcErrorResponse(
@@ -365,10 +560,10 @@ class StreamableHTTPServerTransport
       httpStatus: HttpStatus.badRequest,
       errorCode: ErrorCode.unsupportedProtocolVersion,
       message: 'Unsupported protocol version',
-      id: _requestIdFromParsedBody(parsedBody),
+      id: _requestIdFromParsedBody(bodyForRequestId),
       data: {
         'requested': requestedVersion,
-        'supported': allSupportedProtocolVersions,
+        'supported': _supportedProtocolVersions.toList(growable: false),
       },
     );
     return false;
@@ -521,6 +716,14 @@ class StreamableHTTPServerTransport
     }
   }
 
+  RequestId? _singleRequestId(List<JsonRpcMessage> messages) {
+    if (messages.length != 1) {
+      return null;
+    }
+    final message = messages.single;
+    return message is JsonRpcRequest ? message.id : null;
+  }
+
   RequestId? _rawRequestId(Map<String, dynamic> messageJson) {
     if (!messageJson.containsKey('id')) {
       return null;
@@ -532,15 +735,17 @@ class StreamableHTTPServerTransport
     }
   }
 
-  bool _isStatelessServerDiscoverJson(
-    HttpRequest req,
+  bool _hasValidJsonRpcRequestEnvelope(
     Map<String, dynamic> messageJson,
   ) {
-    if (messageJson['method'] != Method.serverDiscover) {
+    if (messageJson['jsonrpc'] != jsonRpcVersion ||
+        messageJson['method'] is! String ||
+        !messageJson.containsKey('id') ||
+        messageJson.containsKey('result') ||
+        messageJson.containsKey('error')) {
       return false;
     }
-
-    return _isStatelessRequestJson(req, messageJson);
+    return _rawRequestId(messageJson) != null;
   }
 
   bool _isStatelessRemovedRequestJson(
@@ -566,6 +771,89 @@ class StreamableHTTPServerTransport
     final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
     return metadataVersion != null &&
         isStatelessProtocolVersion(metadataVersion);
+  }
+
+  String? _rawStatelessRequestMetadataError(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    if (!_hasValidJsonRpcRequestEnvelope(messageJson) ||
+        !_isStatelessRequestJson(req, messageJson)) {
+      return null;
+    }
+
+    final params = messageJson['params'];
+    final meta = params is Map ? params['_meta'] : null;
+    if (meta != null && meta is! Map) {
+      return 'Invalid stateless request metadata.';
+    }
+    final protocolVersion =
+        meta is Map ? meta[McpMetaKey.protocolVersion] : null;
+    if (protocolVersion is! String || protocolVersion.isEmpty) {
+      return 'Missing required request metadata: '
+          '${McpMetaKey.protocolVersion}';
+    }
+    return null;
+  }
+
+  String? _rawStatelessRequestHeaderMismatch(
+    HttpRequest req,
+    Map<String, dynamic> messageJson,
+  ) {
+    if (!_hasValidJsonRpcRequestEnvelope(messageJson) ||
+        !_isStatelessRequestJson(req, messageJson)) {
+      return null;
+    }
+
+    final protocolHeader = req.headers.value('mcp-protocol-version')?.trim();
+    if (protocolHeader == null || protocolHeader.isEmpty) {
+      return 'MCP-Protocol-Version header is required';
+    }
+    if (!_isValidHeaderValue(protocolHeader)) {
+      return 'MCP-Protocol-Version header value is malformed';
+    }
+
+    final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
+    if (metadataVersion == null) {
+      return 'MCP-Protocol-Version header has no matching request _meta '
+          'protocol version in params._meta';
+    }
+    if (protocolHeader != metadataVersion) {
+      return "MCP-Protocol-Version header value '$protocolHeader' does not "
+          "match body value '$metadataVersion'";
+    }
+
+    final method = messageJson['method'] as String;
+    final methodHeader = req.headers.value('mcp-method');
+    if (methodHeader == null) {
+      return 'Mcp-Method header is required';
+    }
+    if (methodHeader != method) {
+      return "Mcp-Method header value '$methodHeader' does not match body "
+          "value '$method'";
+    }
+
+    final requiredNameSourceField = _requiredNameHeaderSourceField(method);
+    if (requiredNameSourceField == null) {
+      return null;
+    }
+    final nameHeader = req.headers.value('mcp-name');
+    if (nameHeader == null || nameHeader.isEmpty) {
+      return 'Mcp-Name header is required';
+    }
+    final decodedName = _decodeMcpHeaderValue(nameHeader);
+    if (decodedName == null) {
+      return 'Mcp-Name header value is malformed';
+    }
+
+    final params = messageJson['params'];
+    final requiredName = params is Map ? params[requiredNameSourceField] : null;
+    if (requiredName is String && decodedName != requiredName) {
+      return "Mcp-Name header value '$nameHeader' does not match body value "
+          "'$requiredName'";
+    }
+
+    return null;
   }
 
   bool _usesStatelessHttpValidation(
@@ -603,27 +891,16 @@ class StreamableHTTPServerTransport
     return null;
   }
 
-  String? _requiredNameHeaderValue(JsonRpcMessage message) {
-    final method = _messageMethod(message);
-    final params = _messageParams(message);
-    if (params == null) {
-      return null;
-    }
-
-    final value = switch (method) {
-      Method.toolsCall => params['name'],
-      Method.resourcesRead => params['uri'],
-      Method.promptsGet => params['name'],
-      Method.tasksGet ||
-      Method.tasksUpdate ||
-      Method.tasksCancel =>
-        params['taskId'],
+  String? _requiredNameHeaderSourceField(String method) {
+    return switch (method) {
+      Method.toolsCall || Method.promptsGet => 'name',
+      Method.resourcesRead => 'uri',
+      Method.tasksGet || Method.tasksUpdate || Method.tasksCancel => 'taskId',
       _ => null,
     };
-    return value is String ? value : null;
   }
 
-  String? _decodeMcpParamHeaderValue(String value) {
+  String? _decodeMcpHeaderValue(String value) {
     if (value.startsWith('=?base64?') && value.endsWith('?=')) {
       final encoded = value.substring('=?base64?'.length, value.length - 2);
       try {
@@ -655,6 +932,16 @@ class StreamableHTTPServerTransport
     };
   }
 
+  bool _isUnsafeHeaderInteger(Object? value) {
+    if (value is int) {
+      return value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger;
+    }
+    return value is double &&
+        value.isFinite &&
+        value == value.truncateToDouble() &&
+        (value < _minSafeHeaderInteger || value > _maxSafeHeaderInteger);
+  }
+
   bool _headerValueMatchesPrimitive(Object? bodyValue, String headerValue) {
     if (bodyValue is num) {
       if (!bodyValue.isFinite) {
@@ -684,6 +971,13 @@ class StreamableHTTPServerTransport
     HttpResponse res,
     JsonRpcMessage message,
   ) async {
+    final toolName = _toolName(message);
+    final headerMappings =
+        toolName == null ? null : _toolParameterHeaderMappings[toolName];
+    final recognizedHeaderSuffixes = <String>{
+      for (final suffix in headerMappings?.values ?? const <String>[])
+        suffix.toLowerCase(),
+    };
     final headers = <String, _McpParamHeader>{};
     req.headers.forEach((name, values) {
       const prefix = 'mcp-param-';
@@ -693,6 +987,10 @@ class StreamableHTTPServerTransport
       }
 
       final headerSuffix = name.substring(prefix.length);
+      if (!recognizedHeaderSuffixes.contains(headerSuffix.toLowerCase())) {
+        return;
+      }
+
       if (!isValidMcpHeaderNameSuffix(headerSuffix)) {
         headers[lowerName] = _McpParamHeader.invalidName(
           name: name,
@@ -703,7 +1001,7 @@ class StreamableHTTPServerTransport
 
       final headerValue = req.headers.value(name);
       final decodedValue =
-          headerValue == null ? null : _decodeMcpParamHeaderValue(headerValue);
+          headerValue == null ? null : _decodeMcpHeaderValue(headerValue);
       if (decodedValue == null) {
         headers[lowerName] = _McpParamHeader.invalidValue(
           name: name,
@@ -735,104 +1033,66 @@ class StreamableHTTPServerTransport
       return false;
     }
 
+    if (headerMappings == null) {
+      return true;
+    }
+
     final params = _messageParams(message);
     final arguments = params?['arguments'];
-    if (arguments is! Map) {
-      if (headers.isEmpty) {
-        return true;
-      }
-      await _writeHeaderMismatchResponse(
-        res,
-        message,
-        '${headers.values.first.name} header has no matching body arguments',
-      );
-      return false;
-    }
+    final argumentMap = arguments is Map
+        ? arguments.cast<String, dynamic>()
+        : const <String, dynamic>{};
 
-    final argumentMap = arguments.cast<String, dynamic>();
-    final consumedHeaders = <String>{};
-    final toolName = _toolName(message);
-    final headerMappings =
-        toolName == null ? null : _toolParameterHeaderMappings[toolName];
+    for (final entry in headerMappings.entries) {
+      final argumentName = entry.key;
+      final headerSuffix = entry.value;
+      final header = headers[headerSuffix.toLowerCase()];
+      final argument = _toolParameterHeaderArgument(argumentMap, entry.key);
+      final hasArgument = argument.exists;
+      final bodyArgument = argument.value;
 
-    if (headerMappings != null) {
-      for (final entry in headerMappings.entries) {
-        final argumentName = entry.key;
-        final headerSuffix = entry.value;
-        final header = headers[headerSuffix.toLowerCase()];
-        final argument = _toolParameterHeaderArgument(argumentMap, entry.key);
-        final hasArgument = argument.exists;
-        final bodyArgument = argument.value;
-        final bodyValue =
-            hasArgument ? _primitiveHeaderString(bodyArgument) : null;
-
-        if (!hasArgument || bodyValue == null) {
-          if (header != null) {
-            await _writeHeaderMismatchResponse(
-              res,
-              message,
-              '${header.name} header has no matching primitive body argument '
-              "'$argumentName'",
-            );
-            return false;
-          }
-          continue;
-        }
-
-        if (header == null) {
-          await _writeHeaderMismatchResponse(
-            res,
-            message,
-            'Mcp-Param-$headerSuffix header is required for body argument '
-            "'$argumentName'",
-          );
-          return false;
-        }
-
-        consumedHeaders.add(header.suffix.toLowerCase());
-        if (!_headerValueMatchesPrimitive(bodyArgument, header.value!)) {
-          await _writeHeaderMismatchResponse(
-            res,
-            message,
-            '${header.name} header value does not match body argument '
-            "'$argumentName'",
-          );
-          return false;
-        }
-      }
-    }
-
-    final argumentNamesByLowercase = <String, String>{};
-    for (final argumentName in argumentMap.keys) {
-      argumentNamesByLowercase.putIfAbsent(
-        argumentName.toLowerCase(),
-        () => argumentName,
-      );
-    }
-
-    for (final header in headers.values) {
-      if (consumedHeaders.contains(header.suffix.toLowerCase())) {
-        continue;
-      }
-
-      final argumentName = argumentMap.containsKey(header.suffix)
-          ? header.suffix
-          : argumentNamesByLowercase[header.suffix.toLowerCase()];
-      if (argumentName == null) {
+      if (hasArgument && _isUnsafeHeaderInteger(bodyArgument)) {
         await _writeHeaderMismatchResponse(
           res,
           message,
-          '${header.name} header has no matching body argument',
+          "Body argument '$argumentName' must be within the JavaScript safe "
+          'integer range ($_minSafeHeaderInteger to '
+          '$_maxSafeHeaderInteger)',
         );
         return false;
       }
 
-      final bodyArgument = argumentMap[argumentName];
+      final bodyValue =
+          hasArgument ? _primitiveHeaderString(bodyArgument) : null;
+      if (!hasArgument || bodyValue == null) {
+        if (header != null) {
+          await _writeHeaderMismatchResponse(
+            res,
+            message,
+            '${header.name} header has no matching primitive body argument '
+            "'$argumentName'",
+          );
+          return false;
+        }
+        continue;
+      }
+
+      if (header == null) {
+        await _writeHeaderMismatchResponse(
+          res,
+          message,
+          'Mcp-Param-$headerSuffix header is required for body argument '
+          "'$argumentName'",
+        );
+        return false;
+      }
+
       if (!_headerValueMatchesPrimitive(bodyArgument, header.value!)) {
         await _writeHeaderMismatchResponse(
           res,
           message,
-          "${header.name} header value does not match body argument '$argumentName'",
+          '${header.name} header value does not match body argument '
+          "'$argumentName'",
         );
         return false;
       }
@@ -913,19 +1173,56 @@ class StreamableHTTPServerTransport
     }
 
     if (message is JsonRpcResponse || message is JsonRpcError) {
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.invalidRequest,
+        message:
+            'Invalid Request: stateless MCP clients must not POST JSON-RPC responses',
+      );
+      return false;
+    }
+    if (message is JsonRpcCancelledNotification) {
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.invalidRequest,
+        message: 'Invalid Request: stateless Streamable HTTP cancels a '
+            'request by closing its response stream, not by POSTing '
+            '${Method.notificationsCancelled}.',
+      );
+      return false;
+    }
+    if (message is JsonRpcNotification &&
+        isStatelessForbiddenClientNotification(message.method)) {
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.invalidRequest,
+        message: 'Invalid Request: ${message.method} is a server-to-client '
+            'notification in stateless MCP.',
+      );
+      return false;
+    }
+    if (message is JsonRpcNotification) {
+      // Core 2026-07-28 defines no accepted HTTP client notifications and no
+      // request-metadata header contract for notification POSTs. Preserve the
+      // generic transport mechanics for negotiated extensions without
+      // applying request-only body metadata checks to them.
       return true;
     }
 
     final metadataVersion = _nestedMetadataProtocolVersion(messageJson);
     if (metadataVersion == null) {
-      if (message is! JsonRpcServerDiscoverRequest) {
-        await _writeHeaderMismatchResponse(
-          req.response,
-          message,
-          'MCP-Protocol-Version header has no matching request _meta protocol version in params._meta',
-        );
-        return false;
-      }
+      await _writeJsonRpcErrorResponse(
+        req.response,
+        httpStatus: HttpStatus.badRequest,
+        errorCode: ErrorCode.invalidParams,
+        id: message is JsonRpcRequest ? message.id : null,
+        message: 'Missing required request metadata: '
+            '${McpMetaKey.protocolVersion}',
+      );
+      return false;
     } else if (protocolHeader != metadataVersion) {
       await _writeHeaderMismatchResponse(
         req.response,
@@ -940,7 +1237,7 @@ class StreamableHTTPServerTransport
     }
 
     final methodHeader = req.headers.value('mcp-method');
-    if (methodHeader == null || methodHeader.isEmpty) {
+    if (methodHeader == null) {
       await _writeHeaderMismatchResponse(
         req.response,
         message,
@@ -957,10 +1254,10 @@ class StreamableHTTPServerTransport
       return false;
     }
 
-    final requiredName = _requiredNameHeaderValue(message);
-    if (requiredName != null) {
+    final requiredNameSourceField = _requiredNameHeaderSourceField(method);
+    if (requiredNameSourceField != null) {
       final nameHeader = req.headers.value('mcp-name');
-      if (nameHeader == null || nameHeader.isEmpty) {
+      if (nameHeader == null) {
         await _writeHeaderMismatchResponse(
           req.response,
           message,
@@ -968,7 +1265,17 @@ class StreamableHTTPServerTransport
         );
         return false;
       }
-      if (nameHeader != requiredName) {
+      final decodedName = _decodeMcpHeaderValue(nameHeader);
+      if (decodedName == null) {
+        await _writeHeaderMismatchResponse(
+          req.response,
+          message,
+          'Mcp-Name header value is malformed',
+        );
+        return false;
+      }
+      final requiredName = _messageParams(message)?[requiredNameSourceField];
+      if (decodedName != requiredName) {
         await _writeHeaderMismatchResponse(
           req.response,
           message,
@@ -1019,7 +1326,11 @@ class StreamableHTTPServerTransport
   }
 
   void _addStandaloneSseResponse(StreamId streamId, HttpResponse response) {
-    _ownedStreamIds.add(streamId);
+    // Ownership only participates in Last-Event-ID replay validation. Do not
+    // retain every ordinary SSE stream for the lifetime of the transport.
+    if (_eventStore != null) {
+      _ownedStreamIds.add(streamId);
+    }
     _standaloneSseStreamIds.add(streamId);
     _standaloneSseResponses.putIfAbsent(streamId, () => {}).add(response);
     _streamMapping.putIfAbsent(streamId, () => response);
@@ -1371,7 +1682,22 @@ class StreamableHTTPServerTransport
     HttpRequest req,
     Map<String, String> headers,
   ) async {
-    final responseHeaders = <String, String>{};
+    final response = await _detachHttpResponse(req);
+    try {
+      await _writeDetachedResponseHead(
+        response,
+        statusCode: HttpStatus.ok,
+        headers: headers,
+      );
+    } catch (_) {
+      response.socket.destroy();
+      rethrow;
+    }
+    return response.socket;
+  }
+
+  Future<_DetachedHttpResponse> _detachHttpResponse(HttpRequest req) async {
+    final responseHeaders = <String, List<String>>{};
     req.response.headers.forEach((name, values) {
       final normalizedName = name.toLowerCase();
       if (normalizedName == HttpHeaders.contentLengthHeader ||
@@ -1379,21 +1705,75 @@ class StreamableHTTPServerTransport
           normalizedName == HttpHeaders.connectionHeader) {
         return;
       }
-      responseHeaders[name] = values.join(', ');
+      responseHeaders[normalizedName] = List<String>.of(values);
     });
-    responseHeaders
-      ..addAll(headers)
-      ..[HttpHeaders.connectionHeader] = 'close';
-
     final socket = await req.response.detachSocket(writeHeaders: false);
-    final responseHead = StringBuffer('HTTP/1.1 200 OK\r\n');
-    responseHeaders.forEach((key, value) {
-      responseHead.write('$key: $value\r\n');
+    return _DetachedHttpResponse(
+      socket: socket,
+      headers: responseHeaders,
+    );
+  }
+
+  Future<void> _writeDetachedResponseHead(
+    _DetachedHttpResponse response, {
+    required int statusCode,
+    Map<String, String> headers = const {},
+    int? contentLength,
+    List<int> body = const [],
+  }) async {
+    final responseHeaders = <String, List<String>>{
+      for (final entry in response.headers.entries)
+        entry.key: List<String>.of(entry.value),
+    };
+    for (final entry in headers.entries) {
+      responseHeaders[entry.key.toLowerCase()] = [entry.value];
+    }
+    if (contentLength != null) {
+      responseHeaders[HttpHeaders.contentLengthHeader] = ['$contentLength'];
+    }
+    responseHeaders[HttpHeaders.connectionHeader] = const ['close'];
+
+    final reasonPhrase = switch (statusCode) {
+      HttpStatus.ok => 'OK',
+      HttpStatus.badRequest => 'Bad Request',
+      HttpStatus.notFound => 'Not Found',
+      _ => 'Status',
+    };
+    final responseHead = StringBuffer(
+      'HTTP/1.1 $statusCode $reasonPhrase\r\n',
+    );
+    responseHeaders.forEach((key, values) {
+      for (final value in values) {
+        responseHead.write('$key: $value\r\n');
+      }
     });
     responseHead.write('\r\n');
-    socket.add(utf8.encode(responseHead.toString()));
-    await socket.flush();
-    return socket;
+    response.socket.add(utf8.encode(responseHead.toString()));
+    if (body.isNotEmpty) {
+      response.socket.add(body);
+    }
+    await response.socket.flush();
+  }
+
+  Future<void> _writeDetachedJsonResponse(
+    _DetachedHttpResponse response, {
+    required int statusCode,
+    required Map<String, String> headers,
+    required List<int> body,
+  }) async {
+    try {
+      await _writeDetachedResponseHead(
+        response,
+        statusCode: statusCode,
+        headers: headers,
+        contentLength: body.length,
+        body: body,
+      );
+    } catch (_) {
+      // The client can close the response stream at any time.
+    } finally {
+      await _safeCloseSocket(response.socket);
+    }
   }
 
   Future<bool> _writeSSEEventToSocket(
@@ -1496,7 +1876,13 @@ class StreamableHTTPServerTransport
   }
 
   /// Handles POST requests containing JSON-RPC messages
-  Future<void> _handlePostRequest(HttpRequest req, [dynamic parsedBody]) async {
+  Future<void> _handlePostRequest(
+    HttpRequest req, [
+    dynamic parsedBody,
+    bool abortIfClosed = true,
+  ]) async {
+    var jsonParsed = parsedBody != null;
+    var parsedRequestId = _requestIdFromParsedBody(parsedBody);
     try {
       // Validate the Accept header
       final acceptedMediaTypes = _parseAcceptedMediaTypes(req);
@@ -1507,6 +1893,7 @@ class StreamableHTTPServerTransport
           req.response,
           httpStatus: HttpStatus.notAcceptable,
           errorCode: ErrorCode.connectionClosed,
+          id: parsedRequestId,
           message:
               'Not Acceptable: Client must accept both application/json and text/event-stream',
         );
@@ -1519,6 +1906,7 @@ class StreamableHTTPServerTransport
           req.response,
           httpStatus: HttpStatus.unsupportedMediaType,
           errorCode: ErrorCode.connectionClosed,
+          id: parsedRequestId,
           message:
               'Unsupported Media Type: Content-Type must be application/json',
         );
@@ -1534,6 +1922,7 @@ class StreamableHTTPServerTransport
         final bodyString = utf8.decode(bodyBytes);
         rawMessage = jsonDecode(bodyString);
       }
+      jsonParsed = true;
 
       final List<dynamic> rawMessages;
       if (rawMessage is List) {
@@ -1589,6 +1978,32 @@ class StreamableHTTPServerTransport
           final messageJson = rawItem is Map<String, dynamic>
               ? rawItem
               : rawItem.cast<String, dynamic>();
+          final rawMetadataError = rawMessages.length == 1
+              ? _rawStatelessRequestMetadataError(req, messageJson)
+              : null;
+          if (rawMetadataError != null) {
+            await _writeJsonRpcErrorResponse(
+              req.response,
+              httpStatus: HttpStatus.badRequest,
+              errorCode: ErrorCode.invalidParams,
+              id: _rawRequestId(messageJson),
+              message: rawMetadataError,
+            );
+            return;
+          }
+          final rawHeaderMismatch = rawMessages.length == 1
+              ? _rawStatelessRequestHeaderMismatch(req, messageJson)
+              : null;
+          if (rawHeaderMismatch != null) {
+            await _writeJsonRpcErrorResponse(
+              req.response,
+              httpStatus: HttpStatus.badRequest,
+              errorCode: ErrorCode.headerMismatch,
+              id: _rawRequestId(messageJson),
+              message: 'Header mismatch: $rawHeaderMismatch',
+            );
+            return;
+          }
           if (_isStatelessRemovedRequestJson(req, messageJson)) {
             final method = messageJson['method'] as String;
             await _writeJsonRpcErrorResponse(
@@ -1607,24 +2022,16 @@ class StreamableHTTPServerTransport
           final messageJson = rawItem is Map<String, dynamic>
               ? rawItem
               : rawItem.cast<String, dynamic>();
-          if (_isStatelessServerDiscoverJson(req, messageJson)) {
-            await _writeJsonRpcErrorResponse(
-              req.response,
-              httpStatus: HttpStatus.badRequest,
-              errorCode: ErrorCode.invalidParams,
-              id: _rawRequestId(messageJson),
-              message: 'Invalid params',
-              data: e.toString(),
-            );
-            onerror?.call(e is Error ? e : StateError(e.toString()));
-            return;
-          }
-
+          final hasRequestEnvelope =
+              _hasValidJsonRpcRequestEnvelope(messageJson);
           await _writeJsonRpcErrorResponse(
             req.response,
             httpStatus: HttpStatus.badRequest,
-            errorCode: ErrorCode.parseError,
-            message: 'Parse error',
+            errorCode: hasRequestEnvelope
+                ? ErrorCode.invalidParams
+                : ErrorCode.invalidRequest,
+            id: _rawRequestId(messageJson),
+            message: hasRequestEnvelope ? 'Invalid params' : 'Invalid Request',
             data: e.toString(),
           );
           onerror?.call(e is Error ? e : StateError(e.toString()));
@@ -1634,6 +2041,7 @@ class StreamableHTTPServerTransport
 
       final usesStatelessHttpValidation =
           _usesStatelessHttpValidation(req, messages);
+      parsedRequestId = _singleRequestId(messages);
       if (!await _validateStatelessHttpHeaders(req, messages, messageJsons)) {
         return;
       }
@@ -1657,6 +2065,7 @@ class StreamableHTTPServerTransport
               req.response,
               httpStatus: HttpStatus.notFound,
               errorCode: ErrorCode.connectionClosed,
+              id: parsedRequestId,
               message: 'Session not found',
             );
             return;
@@ -1666,6 +2075,7 @@ class StreamableHTTPServerTransport
             req.response,
             httpStatus: HttpStatus.badRequest,
             errorCode: ErrorCode.invalidRequest,
+            id: parsedRequestId,
             message: 'Invalid Request: Server already initialized',
           );
           return;
@@ -1675,6 +2085,7 @@ class StreamableHTTPServerTransport
             req.response,
             httpStatus: HttpStatus.badRequest,
             errorCode: ErrorCode.invalidRequest,
+            id: parsedRequestId,
             message:
                 'Invalid Request: Only one initialization request is allowed',
           );
@@ -1688,6 +2099,7 @@ class StreamableHTTPServerTransport
             req.response,
             httpStatus: HttpStatus.internalServerError,
             errorCode: ErrorCode.internalError,
+            id: parsedRequestId,
             message: 'Invalid session ID generated by server',
           );
           return;
@@ -1700,6 +2112,7 @@ class StreamableHTTPServerTransport
             req.response,
             httpStatus: HttpStatus.notFound,
             errorCode: ErrorCode.connectionClosed,
+            id: parsedRequestId,
             message: 'Session not found',
           );
           return;
@@ -1720,12 +2133,21 @@ class StreamableHTTPServerTransport
       // in the Mcp-Session-Id header on all of their subsequent HTTP requests.
       if (!isInitializationRequest &&
           !isStatelessMessage &&
-          !await _validateSession(req, req.response)) {
+          !await _validateSession(
+            req,
+            req.response,
+            requestId: parsedRequestId,
+          )) {
         return;
       }
 
       // Check if it contains requests
       final hasRequests = messages.any(_isJsonRpcRequest);
+
+      if (abortIfClosed && _closed) {
+        await _safeClose(req.response);
+        return;
+      }
 
       if (!hasRequests) {
         // If it only contains notifications or responses, return 202
@@ -1745,8 +2167,22 @@ class StreamableHTTPServerTransport
         // The default behavior is to use SSE streaming
         // but in some cases server will return JSON responses
         final streamId = generateUUID();
+        final requestRoutes =
+            Map<JsonRpcRequest, _IncomingRequestRoute>.identity();
+        final requiresSseResponse = messages.any(
+          (message) =>
+              message is JsonRpcRequest &&
+              message.method == Method.subscriptionsListen,
+        );
+        final useJsonResponse = _enableJsonResponse && !requiresSseResponse;
         Socket? responseSocket;
-        if (!_enableJsonResponse) {
+        _DetachedHttpResponse? detachedJsonResponse;
+        if (useJsonResponse && isStatelessRequest) {
+          // HttpResponse.done does not observe a peer disconnect until Dart
+          // starts the response. Detach before dispatch so stateless MCP can
+          // treat closing a pending JSON response as request cancellation.
+          detachedJsonResponse = await _detachHttpResponse(req);
+        } else if (!useJsonResponse) {
           final headers = _sseResponseHeaders();
 
           // After initialization, always include the session ID if we have one
@@ -1765,25 +2201,46 @@ class StreamableHTTPServerTransport
           }
         }
 
+        if (abortIfClosed && _closed) {
+          responseSocket?.destroy();
+          detachedJsonResponse?.socket.destroy();
+          await _safeClose(req.response);
+          return;
+        }
+
         // Store the response for this request to send messages back through this connection
         // We need to track by request ID to maintain the connection
         for (final message in messages) {
           if (_isJsonRpcRequest(message)) {
-            final reqId = (message as JsonRpcRequest).id;
-            _ownedStreamIds.add(streamId);
-            if (responseSocket == null) {
+            final request = message as JsonRpcRequest;
+            final route = _IncomingRequestRoute(
+              requestId: request.id,
+              streamId: streamId,
+              stateless: _isStatelessJsonRpcRequest(request),
+            );
+            requestRoutes[request] = route;
+            _registerRequestRoute(route);
+            // Stateless request streams are never resumable, even when an
+            // EventStore is configured for the transport. Retaining them here
+            // would grow the replay-ownership set once per request.
+            if (_eventStore != null && !route.stateless) {
+              _ownedStreamIds.add(streamId);
+            }
+            if (detachedJsonResponse != null) {
+              _detachedJsonResponses[streamId] = detachedJsonResponse;
+            } else if (responseSocket == null) {
               _streamMapping[streamId] = req.response;
             } else {
               _responseStreamSockets[streamId] = responseSocket;
             }
-            _requestToStreamMapping[reqId] = streamId;
-            if (_isStatelessJsonRpcRequest(message)) {
-              _statelessRequestIds.add(reqId);
-            }
           }
         }
+        if (useJsonResponse) {
+          _jsonResponseStreamIds.add(streamId);
+          _pendingJsonResponseRequests[streamId] = req;
+        }
 
-        final ssePrimed = _enableJsonResponse ||
+        final ssePrimed = useJsonResponse ||
             (responseSocket == null
                 ? await _primeSseStream(
                     streamId,
@@ -1796,50 +2253,99 @@ class StreamableHTTPServerTransport
           _streamMapping.remove(streamId);
           _responseStreamSockets.remove(streamId)?.destroy();
           _ownedStreamIds.remove(streamId);
-          for (final message in messages) {
-            if (_isJsonRpcRequest(message)) {
-              final reqId = (message as JsonRpcRequest).id;
-              _requestToStreamMapping.remove(reqId);
-              _requestResponseMap.remove(reqId);
-              _statelessRequestIds.remove(reqId);
-            }
+          _jsonResponseStreamIds.remove(streamId);
+          _pendingJsonResponseRequests.remove(streamId);
+          _detachedJsonResponses.remove(streamId)?.socket.destroy();
+          for (final route in requestRoutes.values) {
+            _removeRequestRoute(route);
+          }
+          await _safeClose(req.response);
+          return;
+        }
+        if (abortIfClosed && _closed) {
+          _streamMapping.remove(streamId);
+          _responseStreamSockets.remove(streamId)?.destroy();
+          _ownedStreamIds.remove(streamId);
+          _jsonResponseStreamIds.remove(streamId);
+          _pendingJsonResponseRequests.remove(streamId);
+          _detachedJsonResponses.remove(streamId)?.socket.destroy();
+          for (final route in requestRoutes.values) {
+            _removeRequestRoute(route);
           }
           await _safeClose(req.response);
           return;
         }
 
         var responseDoneHandled = false;
-        void handleResponseDone() {
+        void handleResponseDone({required bool fromDetachedSocket}) {
+          if (!fromDetachedSocket &&
+              _detachingJsonResponseStreamIds.contains(streamId)) {
+            // detachSocket completes HttpResponse.done; the detached socket's
+            // listener owns cleanup after the response switches to SSE.
+            return;
+          }
           if (responseDoneHandled) {
             return;
           }
           responseDoneHandled = true;
-          if (_enableJsonResponse) {
-            _streamMapping.remove(streamId);
-          } else {
-            _handleResponseStreamClosed(streamId);
+          try {
+            _pendingJsonResponseRequests.remove(streamId);
+            _detachedJsonResponses.remove(streamId);
+            if (_jsonResponseStreamIds.remove(streamId)) {
+              // A response that remained JSON never produced resumable SSE
+              // events, so it must not retain replay ownership after either a
+              // normal close or a client disconnect.
+              _ownedStreamIds.remove(streamId);
+              final relatedRoutes = _routesForStream(streamId);
+              _notifyUnresolvedStatelessRequestCancellations(
+                relatedRoutes,
+                reason: 'JSON response stream closed by client',
+              );
+              _streamMapping.remove(streamId);
+              for (final route in relatedRoutes) {
+                _removeRequestRoute(route);
+              }
+            } else {
+              _handleResponseStreamClosed(streamId);
+            }
+          } finally {
+            _completeDetachedResponseLifecycle(streamId);
           }
         }
 
         // Set up close handler for client disconnects
-        if (responseSocket == null) {
+        final disconnectSocket = responseSocket ?? detachedJsonResponse?.socket;
+        Completer<void>? detachedResponseLifecycle;
+        if (disconnectSocket == null) {
           req.response.done.then(
-            (_) => handleResponseDone(),
-            onError: (Object _, StackTrace __) => handleResponseDone(),
+            (_) => handleResponseDone(fromDetachedSocket: false),
+            onError: (Object _, StackTrace __) =>
+                handleResponseDone(fromDetachedSocket: false),
           );
         } else {
-          responseSocket.listen(
-            null,
-            onDone: handleResponseDone,
-            onError: (Object _, StackTrace __) => handleResponseDone(),
-            cancelOnError: true,
-          );
+          detachedResponseLifecycle = Completer<void>();
+          _detachedResponseLifecycles[streamId] = detachedResponseLifecycle;
+          try {
+            disconnectSocket.listen(
+              null,
+              onDone: () => handleResponseDone(fromDetachedSocket: true),
+              onError: (Object _, StackTrace __) =>
+                  handleResponseDone(fromDetachedSocket: true),
+              cancelOnError: true,
+            );
+          } catch (_) {
+            _handleResponseStreamClosed(streamId);
+            rethrow;
+          }
         }
 
         // Handle each message
         for (final message in messages) {
           try {
-            onmessage?.call(message);
+            _deliverIncomingMessage(
+              message,
+              message is JsonRpcRequest ? requestRoutes[message] : null,
+            );
           } catch (e) {
             // Don't let handler errors affect the response - message was received successfully
             onerror?.call(e is Error ? e : StateError(e.toString()));
@@ -1847,13 +2353,18 @@ class StreamableHTTPServerTransport
         }
         // The server SHOULD NOT close the SSE stream before sending all JSON-RPC responses
         // This will be handled by the send() method when responses are ready
+        if (detachedResponseLifecycle != null) {
+          await detachedResponseLifecycle.future;
+        }
       }
     } catch (error) {
       await _writeJsonRpcErrorResponse(
         req.response,
-        httpStatus: HttpStatus.badRequest,
-        errorCode: ErrorCode.parseError,
-        message: 'Parse error',
+        httpStatus:
+            jsonParsed ? HttpStatus.internalServerError : HttpStatus.badRequest,
+        errorCode: jsonParsed ? ErrorCode.internalError : ErrorCode.parseError,
+        id: parsedRequestId,
+        message: jsonParsed ? 'Internal error' : 'Parse error',
         data: error.toString(),
       );
 
@@ -1892,13 +2403,18 @@ class StreamableHTTPServerTransport
 
   /// Validates session ID for non-initialization requests
   /// Returns true if the session is valid, false otherwise
-  Future<bool> _validateSession(HttpRequest req, HttpResponse res) async {
+  Future<bool> _validateSession(
+    HttpRequest req,
+    HttpResponse res, {
+    RequestId? requestId,
+  }) async {
     if (!_initialized) {
       // If the server has not been initialized yet, reject all requests
       await _writeJsonRpcErrorResponse(
         res,
         httpStatus: HttpStatus.badRequest,
         errorCode: ErrorCode.connectionClosed,
+        id: requestId,
         message: 'Bad Request: Server not initialized',
       );
       return false;
@@ -1918,6 +2434,7 @@ class StreamableHTTPServerTransport
         res,
         httpStatus: HttpStatus.badRequest,
         errorCode: ErrorCode.connectionClosed,
+        id: requestId,
         message: 'Bad Request: Mcp-Session-Id header is required',
       );
       return false;
@@ -1927,6 +2444,7 @@ class StreamableHTTPServerTransport
         res,
         httpStatus: HttpStatus.notFound,
         errorCode: ErrorCode.connectionClosed,
+        id: requestId,
         message: 'Session not found',
       );
       return false;
@@ -1937,6 +2455,7 @@ class StreamableHTTPServerTransport
 
   @override
   Future<void> close() async {
+    _closed = true;
     if (sessionId != null) {
       _terminated = true;
     }
@@ -1955,7 +2474,12 @@ class StreamableHTTPServerTransport
     for (final socket in sockets) {
       await _safeCloseSocket(socket);
     }
+    final detachedJsonResponses = _detachedJsonResponses.values.toList();
+    for (final response in detachedJsonResponses) {
+      await _safeCloseSocket(response.socket);
+    }
     _responseStreamSockets.clear();
+    _detachedJsonResponses.clear();
     _streamMapping.clear();
     _detachedResumableStreamIds.clear();
     _standaloneSseStreamIds.clear();
@@ -1965,9 +2489,121 @@ class StreamableHTTPServerTransport
 
     // Clear any pending responses
     _requestResponseMap.clear();
-    _requestToStreamMapping.clear(); // Also clear this map
-    _statelessRequestIds.clear();
+    _requestRoutesById.clear();
+    _requestRoutesByStream.clear();
+    _jsonResponseStreamIds.clear();
+    _pendingJsonResponseRequests.clear();
+    _jsonResponseToSseTransitions.clear();
+    _detachingJsonResponseStreamIds.clear();
+    final detachedResponseLifecycles =
+        _detachedResponseLifecycles.values.toList();
+    _detachedResponseLifecycles.clear();
+    for (final lifecycle in detachedResponseLifecycles) {
+      if (!lifecycle.isCompleted) {
+        lifecycle.complete();
+      }
+    }
     onclose?.call();
+  }
+
+  Future<void> _ensureJsonResponseStreamUsesSse(
+    _IncomingRequestRoute route,
+  ) async {
+    final streamId = route.streamId;
+    final existingTransition = _jsonResponseToSseTransitions[streamId];
+    if (existingTransition != null) {
+      await existingTransition;
+      return;
+    }
+
+    final transition = _promoteJsonResponseStreamToSse(route);
+    _jsonResponseToSseTransitions[streamId] = transition;
+    try {
+      await transition;
+    } finally {
+      if (identical(_jsonResponseToSseTransitions[streamId], transition)) {
+        _jsonResponseToSseTransitions.remove(streamId);
+      }
+    }
+  }
+
+  Future<void> _promoteJsonResponseStreamToSse(
+    _IncomingRequestRoute route,
+  ) async {
+    final streamId = route.streamId;
+    if (!_jsonResponseStreamIds.contains(streamId)) {
+      return;
+    }
+    final request = _pendingJsonResponseRequests[streamId];
+    if (request == null) {
+      throw StateError(
+        'Cannot switch JSON response stream $streamId to SSE: request is no '
+        'longer active.',
+      );
+    }
+
+    final headers = _sseResponseHeaders();
+    if (sessionId != null && !route.stateless) {
+      headers['mcp-session-id'] = sessionId!;
+    }
+
+    if (route.stateless) {
+      _detachingJsonResponseStreamIds.add(streamId);
+      try {
+        final detachedResponse = _detachedJsonResponses.remove(streamId);
+        final Socket socket;
+        if (detachedResponse == null) {
+          socket = await _detachSseSocket(request, headers);
+        } else {
+          socket = detachedResponse.socket;
+        }
+        _responseStreamSockets[streamId] = socket;
+        _streamMapping.remove(streamId);
+        _jsonResponseStreamIds.remove(streamId);
+        _pendingJsonResponseRequests.remove(streamId);
+        if (detachedResponse != null) {
+          await _writeDetachedResponseHead(
+            detachedResponse,
+            statusCode: HttpStatus.ok,
+            headers: headers,
+          );
+        } else {
+          socket.listen(
+            null,
+            onDone: () => _handleResponseStreamClosed(streamId),
+            onError: (Object _, StackTrace __) =>
+                _handleResponseStreamClosed(streamId),
+            cancelOnError: true,
+          );
+        }
+        if (!await _primeSseSocket(socket)) {
+          throw StateError('Failed to initialize promoted SSE response stream');
+        }
+      } catch (_) {
+        _handleResponseStreamClosed(streamId);
+        rethrow;
+      } finally {
+        _detachingJsonResponseStreamIds.remove(streamId);
+      }
+      return;
+    }
+
+    final response = _streamMapping[streamId];
+    if (response == null) {
+      throw StateError(
+        'Cannot switch JSON response stream $streamId to SSE: response is no '
+        'longer active.',
+      );
+    }
+    response
+      ..statusCode = HttpStatus.ok
+      ..bufferOutput = false;
+    headers.forEach(response.headers.set);
+    _jsonResponseStreamIds.remove(streamId);
+    _pendingJsonResponseRequests.remove(streamId);
+    if (!await _primeSseStream(streamId, response)) {
+      throw StateError('Failed to initialize promoted SSE response stream');
+    }
   }
 
   @override
@@ -1979,20 +2615,34 @@ class StreamableHTTPServerTransport
   Future<void> sendWithRequestId(
     JsonRpcMessage message, {
     RequestId? relatedRequestId,
+  }) =>
+      _sendWithRequestContext(
+        message,
+        relatedRequestId: relatedRequestId,
+        requestContext: incomingRequestContext,
+      );
+
+  @override
+  Future<void> sendWithRequestContext(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+    required Object requestContext,
+  }) =>
+      _sendWithRequestContext(
+        message,
+        relatedRequestId: relatedRequestId,
+        requestContext: requestContext,
+      );
+
+  Future<void> _sendWithRequestContext(
+    JsonRpcMessage message, {
+    RequestId? relatedRequestId,
+    Object? requestContext,
   }) async {
     dynamic requestId = relatedRequestId;
     if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
       // If the message is a response, use the request ID from the message
       requestId = _getMessageId(message);
-    }
-
-    if (message is JsonRpcRequest &&
-        requestId != null &&
-        _statelessRequestIds.contains(requestId)) {
-      throw StateError(
-        "Cannot send JSON-RPC requests on stateless MCP response streams; "
-        "return an InputRequiredResult for client input instead.",
-      );
     }
 
     // Check if this message should be sent on the standalone SSE stream (no request ID)
@@ -2032,18 +2682,38 @@ class StreamableHTTPServerTransport
       }
     }
 
-    // Get the response for this request
-    final streamId = _requestToStreamMapping[requestId];
-    if (streamId == null) {
+    final route = _resolveRequestRoute(
+      requestId as RequestId,
+      requestContext: requestContext,
+    );
+    if (route == null) {
       throw StateError("No connection established for request ID: $requestId");
     }
+    if (message is JsonRpcRequest && route.stateless) {
+      throw StateError(
+        "Cannot send JSON-RPC requests on stateless MCP response streams; "
+        "return an InputRequiredResult for client input instead.",
+      );
+    }
 
+    final streamId = route.streamId;
     var response = _streamMapping[streamId];
-    final responseSocket = _responseStreamSockets[streamId];
-    final isStatelessRequestStream =
-        requestId != null && _statelessRequestIds.contains(requestId);
+    var responseSocket = _responseStreamSockets[streamId];
+    var detachedJsonResponse = _detachedJsonResponses[streamId];
+    final isStatelessRequestStream = route.stateless;
+    var useJsonResponse = _jsonResponseStreamIds.contains(streamId);
 
-    if (!_enableJsonResponse) {
+    if (useJsonResponse &&
+        !_isJsonRpcResponse(message) &&
+        !_isJsonRpcError(message)) {
+      await _ensureJsonResponseStreamUsesSse(route);
+      response = _streamMapping[streamId];
+      responseSocket = _responseStreamSockets[streamId];
+      detachedJsonResponse = null;
+      useJsonResponse = false;
+    }
+
+    if (!useJsonResponse) {
       if (response == null && responseSocket == null) {
         if (isStatelessRequestStream) {
           _handleResponseStreamClosed(streamId);
@@ -2079,74 +2749,81 @@ class StreamableHTTPServerTransport
     }
 
     if (_isJsonRpcResponse(message) || _isJsonRpcError(message)) {
-      if (!_requestToStreamMapping.containsKey(requestId)) {
+      if (!_isActiveRequestRoute(route)) {
         return;
       }
 
-      _requestResponseMap[requestId] = message;
-      final relatedIds = _requestToStreamMapping.entries
-          .where((entry) => entry.value == streamId)
-          .map((entry) => entry.key)
-          .toList();
+      _requestResponseMap[route] = message;
+      final relatedRoutes = _routesForStream(streamId);
 
       // Check if we have responses for all requests using this connection
-      final allResponsesReady = relatedIds.every(
-        (id) => _requestResponseMap.containsKey(id),
+      final allResponsesReady = relatedRoutes.every(
+        _requestResponseMap.containsKey,
       );
 
       if (allResponsesReady) {
-        if (response == null && responseSocket == null) {
+        if (response == null &&
+            responseSocket == null &&
+            detachedJsonResponse == null) {
           if (!_detachedResumableStreamIds.contains(streamId)) {
             throw StateError(
               "No connection established for request ID: $requestId",
             );
           }
 
-          for (final id in relatedIds) {
-            _requestResponseMap.remove(id);
-            _requestToStreamMapping.remove(id);
-            _statelessRequestIds.remove(id);
+          for (final relatedRoute in relatedRoutes) {
+            _removeRequestRoute(relatedRoute);
           }
           _detachedResumableStreamIds.remove(streamId);
+          _jsonResponseStreamIds.remove(streamId);
           return;
         }
 
-        if (_enableJsonResponse) {
+        if (useJsonResponse) {
           // All responses ready, send as JSON
           final headers = {
             HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
           };
+          var statusCode = HttpStatus.ok;
 
-          final isStatelessResponse = relatedIds.any(
-            (id) => _statelessRequestIds.contains(id),
+          final isStatelessResponse = relatedRoutes.any(
+            (relatedRoute) => relatedRoute.stateless,
           );
           if (sessionId != null && !isStatelessResponse) {
             headers['mcp-session-id'] = sessionId!;
           }
 
-          final responses =
-              relatedIds.map((id) => _requestResponseMap[id]!).toList();
+          final responses = relatedRoutes
+              .map((relatedRoute) => _requestResponseMap[relatedRoute]!)
+              .toList();
 
           if (isStatelessResponse &&
               responses.length == 1 &&
               responses.single is JsonRpcError) {
             final error = responses.single as JsonRpcError;
-            response!.statusCode =
-                _statelessHttpStatusForErrorCode(error.error.code);
+            statusCode = _statelessHttpStatusForErrorCode(error.error.code);
           }
 
-          headers.forEach((key, value) {
-            response!.headers.set(key, value);
-          });
-
-          if (responses.length == 1) {
-            response!.write(jsonEncode(responses[0].toJson()));
-          } else {
-            response!.write(
-              jsonEncode(responses.map((r) => r.toJson()).toList()),
+          final body = utf8.encode(
+            jsonEncode(
+              responses.length == 1
+                  ? responses[0].toJson()
+                  : responses.map((response) => response.toJson()).toList(),
+            ),
+          );
+          if (detachedJsonResponse != null) {
+            await _writeDetachedJsonResponse(
+              detachedJsonResponse,
+              statusCode: statusCode,
+              headers: headers,
+              body: body,
             );
+          } else {
+            response!.statusCode = statusCode;
+            headers.forEach(response.headers.set);
+            response.add(body);
+            await _safeClose(response);
           }
-          await _safeClose(response);
         } else if (responseSocket != null) {
           await _safeCloseSocket(responseSocket);
         } else {
@@ -2157,59 +2834,81 @@ class StreamableHTTPServerTransport
         // Clean up
         _responseStreamSockets.remove(streamId);
         _detachedResumableStreamIds.remove(streamId);
-        for (final id in relatedIds) {
-          _requestResponseMap.remove(id);
-          _requestToStreamMapping.remove(id);
-          _statelessRequestIds.remove(id);
+        _jsonResponseStreamIds.remove(streamId);
+        if (useJsonResponse) {
+          _ownedStreamIds.remove(streamId);
+        }
+        _pendingJsonResponseRequests.remove(streamId);
+        _detachedJsonResponses.remove(streamId);
+        for (final relatedRoute in relatedRoutes) {
+          _removeRequestRoute(relatedRoute);
         }
       }
     }
   }
 
   void _handleResponseStreamClosed(StreamId streamId) {
-    _responseStreamSockets.remove(streamId)?.destroy();
-    final relatedIds = _requestToStreamMapping.entries
-        .where((entry) => entry.value == streamId)
-        .map((entry) => entry.key)
-        .toList();
+    try {
+      _responseStreamSockets.remove(streamId)?.destroy();
+      final relatedRoutes = _routesForStream(streamId);
 
-    _streamMapping.remove(streamId);
+      _streamMapping.remove(streamId);
+      _jsonResponseStreamIds.remove(streamId);
+      _pendingJsonResponseRequests.remove(streamId);
+      _detachedJsonResponses.remove(streamId);
 
-    final statelessIds = relatedIds
-        .where((requestId) => _statelessRequestIds.contains(requestId))
-        .toList();
-    if (statelessIds.isEmpty) {
-      if (_eventStore != null && relatedIds.isNotEmpty) {
+      final statelessRoutes =
+          relatedRoutes.where((route) => route.stateless).toList();
+      final resumableRoutes =
+          relatedRoutes.where((route) => !route.stateless).toList();
+      if (_eventStore != null && resumableRoutes.isNotEmpty) {
         _detachedResumableStreamIds.add(streamId);
+      } else {
+        for (final route in resumableRoutes) {
+          _removeRequestRoute(route);
+        }
       }
-      return;
-    }
+      if (statelessRoutes.isEmpty) {
+        return;
+      }
 
-    for (final requestId in statelessIds) {
-      if (_requestResponseMap.containsKey(requestId)) {
+      _notifyUnresolvedStatelessRequestCancellations(
+        statelessRoutes,
+        reason: 'SSE response stream closed by client',
+      );
+
+      for (final route in statelessRoutes) {
+        _removeRequestRoute(route);
+      }
+    } finally {
+      _completeDetachedResponseLifecycle(streamId);
+    }
+  }
+
+  void _notifyUnresolvedStatelessRequestCancellations(
+    Iterable<_IncomingRequestRoute> routes, {
+    required String reason,
+  }) {
+    for (final route in routes) {
+      if (_requestResponseMap.containsKey(route)) {
         continue;
       }
 
       try {
-        onmessage?.call(
+        _deliverIncomingMessage(
           JsonRpcCancelledNotification(
             cancelParams: CancelledNotification(
-              requestId: requestId,
-              reason: 'SSE response stream closed by client',
+              requestId: route.requestId,
+              reason: reason,
             ),
           ),
+          route,
         );
       } catch (error) {
         onerror?.call(
           error is Error ? error : StateError(error.toString()),
         );
       }
-    }
-
-    for (final requestId in statelessIds) {
-      _requestResponseMap.remove(requestId);
-      _requestToStreamMapping.remove(requestId);
-      _statelessRequestIds.remove(requestId);
     }
   }
 

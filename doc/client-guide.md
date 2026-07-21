@@ -302,6 +302,13 @@ final subscription = client.listenSubscriptions(
 final acknowledged = await subscription.acknowledged;
 print(acknowledged.notifications.resourceSubscriptions);
 
+// Reconnecting transports emit this only if a replacement stream
+// acknowledges a different subset of the original filter.
+final acknowledgmentChanges =
+    subscription.acknowledgmentChanges.listen((replacement) {
+  print('Replacement subscription filter: ${replacement.notifications}');
+});
+
 final listener = subscription.notifications.listen((notification) async {
   if (notification is JsonRpcResourceUpdatedNotification) {
     final result = await client.readResource(
@@ -314,6 +321,7 @@ final listener = subscription.notifications.listen((notification) async {
 // When this caller no longer needs updates:
 subscription.cancel();
 await listener.cancel();
+await acknowledgmentChanges.cancel();
 ```
 
 ### Subscribe to Resource Updates (MCP 2025-11-25)

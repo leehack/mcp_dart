@@ -10,6 +10,45 @@ permissions:
   contents: read
 
 jobs:
+  format:
+    name: repository format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test stable release CI provenance gate
+        run: bash tool/release/verify_stable_release_ci_test.sh
+
+      - name: Test stable release source gate
+        run: bash tool/release/verify_stable_release_source_test.sh
+
+      - name: Test release workflow permission separation
+        run: bash tool/release/verify_release_workflow_security_test.sh
+
+      - name: Test publish workflow permission separation
+        run: bash tool/release/verify_publish_workflow_security_test.sh
+
+      - name: Set up Flutter and Dart
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve package formatter configurations
+        run: |
+          dart pub get --no-precompile
+          dart pub get --no-precompile -C packages/mcp_dart_cli
+          dart pub get --no-precompile -C example/anthropic-client
+          dart pub get --no-precompile -C example/fetch-server
+          dart pub get --no-precompile -C example/gemini-client
+          dart pub get --no-precompile -C example/jaspr-client
+          flutter pub get --no-precompile -C example/flutter_http_client
+
+      - name: Check repository formatting (release gate)
+        run: dart format --output=none --set-exit-if-changed .
+
   minimum-sdk:
     name: minimum SDK (Dart 3.4.0)
     runs-on: ubuntu-latest
@@ -39,8 +78,20 @@ jobs:
       - name: Install dependencies
         run: dart pub get
 
+      - name: Verify oldest supported consumer dependency graph
+        working-directory: tool/testing/minimum_sdk_consumer
+        run: |
+          dart pub downgrade
+          dart compile exe bin/main.dart -o "$RUNNER_TEMP/mcp_dart_minimum_consumer"
+          dart compile js bin/main.dart -o "$RUNNER_TEMP/mcp_dart_minimum_consumer.js"
+
       - name: Analyze SDK sources
         run: dart analyze lib
+
+      - name: Compile conditional stdio API for web
+        run: >
+          dart compile js tool/testing/stdio_web_api_probe.dart
+          -o /tmp/stdio_web_api_probe.js
 
       - name: Run minimum-SDK test suite
         run: dart test
@@ -174,6 +225,10 @@ jobs:
       - name: Check out pinned MCP 2026-07-28 specification source
         run: |
           SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_07_28_spec_ref.txt)"
+          [[ "$SPEC_REF" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "MCP specification reference must be an immutable commit SHA."
+            exit 1
+          }
           git clone --filter=blob:none --no-checkout https://github.com/modelcontextprotocol/modelcontextprotocol.git .dart_tool/mcp-spec
           git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
           git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
@@ -187,6 +242,22 @@ jobs:
         run: >
           dart run tool/spec_document_inventory_audit.dart
           .dart_tool/mcp-spec/docs/specification/draft
+
+      - name: Check out pinned MCP Tasks extension source
+        run: |
+          TASKS_SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_07_28_tasks_spec_ref.txt)"
+          [[ "$TASKS_SPEC_REF" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "MCP Tasks extension reference must be an immutable commit SHA."
+            exit 1
+          }
+          git clone --filter=blob:none --no-checkout https://github.com/modelcontextprotocol/ext-tasks.git .dart_tool/mcp-ext-tasks
+          git -C .dart_tool/mcp-ext-tasks fetch --depth=1 origin "$TASKS_SPEC_REF"
+          git -C .dart_tool/mcp-ext-tasks checkout --detach FETCH_HEAD
+
+      - name: Audit pinned MCP Tasks extension contract
+        run: >
+          dart run tool/testing/audit_tasks_extension.dart
+          .dart_tool/mcp-ext-tasks
 
       - name: Check out pinned JSON Schema Test Suite
         run: |

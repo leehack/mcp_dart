@@ -81,6 +81,78 @@ class MockStdin extends Stream<List<int>> implements io.Stdin {
   bool get hasTerminal => false;
 }
 
+class _CancelGateStdin extends MockStdin {
+  final Completer<void> cancelStarted;
+  final Completer<void> cancelBlocker;
+
+  _CancelGateStdin({
+    required this.cancelStarted,
+    required this.cancelBlocker,
+  });
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int> event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return _CancelGateSubscription<List<int>>(
+      super.listen(
+        onData,
+        onError: onError,
+        onDone: onDone,
+        cancelOnError: cancelOnError,
+      ),
+      cancelStarted,
+      cancelBlocker,
+    );
+  }
+}
+
+class _CancelGateSubscription<T> implements StreamSubscription<T> {
+  final StreamSubscription<T> _delegate;
+  final Completer<void> _cancelStarted;
+  final Completer<void> _cancelBlocker;
+
+  _CancelGateSubscription(
+    this._delegate,
+    this._cancelStarted,
+    this._cancelBlocker,
+  );
+
+  @override
+  Future<void> cancel() async {
+    if (!_cancelStarted.isCompleted) {
+      _cancelStarted.complete();
+    }
+    await _cancelBlocker.future;
+    await _delegate.cancel();
+  }
+
+  @override
+  void onData(void Function(T data)? handleData) =>
+      _delegate.onData(handleData);
+
+  @override
+  void onError(Function? handleError) => _delegate.onError(handleError);
+
+  @override
+  void onDone(void Function()? handleDone) => _delegate.onDone(handleDone);
+
+  @override
+  void pause([Future<void>? resumeSignal]) => _delegate.pause(resumeSignal);
+
+  @override
+  void resume() => _delegate.resume();
+
+  @override
+  bool get isPaused => _delegate.isPaused;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _delegate.asFuture(futureValue);
+}
+
 /// Mock stdout sink for testing
 class MockStdout implements io.IOSink {
   final List<String> writtenData = [];
@@ -208,6 +280,42 @@ void main() {
       );
     });
 
+    test('shares close completion and rejects restart while closing', () async {
+      final cancelStarted = Completer<void>();
+      final cancelBlocker = Completer<void>();
+      stdin = _CancelGateStdin(
+        cancelStarted: cancelStarted,
+        cancelBlocker: cancelBlocker,
+      );
+      transport = StdioServerTransport(stdin: stdin, stdout: stdout);
+      var closeCount = 0;
+      transport.onclose = () => closeCount++;
+
+      await transport.start();
+      final firstClose = transport.close();
+      await cancelStarted.future;
+      final secondClose = transport.close();
+
+      expect(identical(firstClose, secondClose), isTrue);
+      await expectLater(
+        transport.start(),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('closing'),
+          ),
+        ),
+      );
+      expect(closeCount, 0);
+
+      cancelBlocker.complete();
+      await Future.wait([firstClose, secondClose]);
+      expect(closeCount, 1);
+
+      await transport.start();
+    });
+
     test('closes successfully and calls onclose', () async {
       var oncloseCalled = false;
       transport.onclose = () {
@@ -331,6 +439,149 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 50));
 
       expect(receivedError, isNotNull);
+      final response = jsonDecode(stdout.writtenData.join()) as Map;
+      expect(response['error']['code'], ErrorCode.parseError.value);
+      expect(response['error']['message'], 'Parse error');
+    });
+
+    test('recovers from malformed JSON before a valid frame in one chunk',
+        () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = receivedMessages.add;
+
+      await transport.start();
+
+      const validMessage = JsonRpcPingRequest(id: 'valid-after-syntax');
+      stdin.addString(
+        'not json\n${jsonEncode(validMessage.toJson())}\n',
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        receivedMessages.single,
+        isA<JsonRpcPingRequest>().having(
+          (message) => message.id,
+          'id',
+          'valid-after-syntax',
+        ),
+      );
+      final response = jsonDecode(stdout.writtenData.join()) as Map;
+      expect(response['error']['code'], ErrorCode.parseError.value);
+    });
+
+    test('recovers from invalid UTF-8 before a valid frame in one chunk',
+        () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = receivedMessages.add;
+
+      await transport.start();
+
+      const validMessage = JsonRpcPingRequest(id: 'valid-after-utf8');
+      stdin.addData([
+        0xff,
+        0x0a,
+        ...utf8.encode('${jsonEncode(validMessage.toJson())}\n'),
+      ]);
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        receivedMessages.single,
+        isA<JsonRpcPingRequest>().having(
+          (message) => message.id,
+          'id',
+          'valid-after-utf8',
+        ),
+      );
+      final response = jsonDecode(stdout.writtenData.join()) as Map;
+      expect(response['error']['code'], ErrorCode.parseError.value);
+    });
+
+    test('reports invalid params with the request id and keeps draining',
+        () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = receivedMessages.add;
+
+      await transport.start();
+
+      const validMessage = JsonRpcPingRequest(id: 'valid-after-params');
+      stdin.addString(
+        '${jsonEncode({
+              'jsonrpc': jsonRpcVersion,
+              'id': 'bad-params',
+              'method': Method.ping,
+              'params': <Object>[],
+            })}\n${jsonEncode(validMessage.toJson())}\n',
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        (receivedMessages.single as JsonRpcPingRequest).id,
+        'valid-after-params',
+      );
+      final response = jsonDecode(stdout.writtenData.join()) as Map;
+      expect(response['id'], 'bad-params');
+      expect(response['error']['code'], ErrorCode.invalidParams.value);
+      expect(response['error']['message'], 'Invalid params');
+    });
+
+    test('does not respond to a malformed notification and keeps draining',
+        () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      final receivedErrors = <Error>[];
+      transport
+        ..onmessage = receivedMessages.add
+        ..onerror = receivedErrors.add;
+
+      await transport.start();
+
+      const validMessage = JsonRpcPingRequest(id: 'valid-after-notification');
+      stdin.addString(
+        '${jsonEncode({
+              'jsonrpc': jsonRpcVersion,
+              'method': Method.notificationsCancelled,
+              'params': {'requestId': false},
+            })}\n${jsonEncode(validMessage.toJson())}\n',
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        (receivedMessages.single as JsonRpcPingRequest).id,
+        'valid-after-notification',
+      );
+      expect(receivedErrors, hasLength(1));
+      expect(stdout.writtenData, isEmpty);
+    });
+
+    test('reports invalid requests but never responds to malformed responses',
+        () async {
+      final receivedMessages = <JsonRpcMessage>[];
+      final receivedErrors = <Error>[];
+      transport
+        ..onmessage = receivedMessages.add
+        ..onerror = receivedErrors.add;
+
+      await transport.start();
+
+      const validMessage = JsonRpcPingRequest(id: 'valid-after-envelopes');
+      stdin.addString(
+        '[]\n'
+        '${jsonEncode({
+              'jsonrpc': jsonRpcVersion,
+              'id': false,
+              'result': <String, dynamic>{},
+            })}\n'
+        '${jsonEncode(validMessage.toJson())}\n',
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        (receivedMessages.single as JsonRpcPingRequest).id,
+        'valid-after-envelopes',
+      );
+      expect(receivedErrors, hasLength(2));
+      final response = jsonDecode(stdout.writtenData.join()) as Map;
+      expect(response['error']['code'], ErrorCode.invalidRequest.value);
+      expect(response['error']['message'], 'Invalid Request');
     });
 
     test('rejects malformed MCP wire values from raw stdio input', () async {

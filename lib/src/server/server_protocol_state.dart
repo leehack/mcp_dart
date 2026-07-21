@@ -15,6 +15,31 @@ final class ServerTaskOutputValidationError extends McpError {
 
 final Expando<Map<(String?, String), ServerTaskOutputValidator>>
     _taskOutputValidators = Expando('mcp_dart.server.taskOutputValidators');
+final Expando<Object> _serverTaskOutputValidationScopes =
+    Expando<Object>('mcp_dart.server.taskOutputValidationScope');
+final Expando<Object> _transportTaskOutputValidationScopes =
+    Expando<Object>('mcp_dart.transport.taskOutputValidationScope');
+
+Object _taskOutputValidationScope(Object server) =>
+    _serverTaskOutputValidationScopes[server] ?? server;
+
+/// Assigns application-owned task validation state to a transport.
+///
+/// Stateless HTTP creates a fresh protocol instance for every POST. Sharing a
+/// scope across those transports preserves the immutable output contract from
+/// task creation until a later task retrieval validates its terminal result.
+void writeTransportTaskOutputValidationScope(
+  Object transport,
+  Object scope,
+) {
+  _transportTaskOutputValidationScopes[transport] = scope;
+}
+
+/// Links [server] to task validation state supplied by [transport], if any.
+void linkServerTaskOutputValidationScope(Object server, Object transport) {
+  _serverTaskOutputValidationScopes[server] =
+      _transportTaskOutputValidationScopes[transport];
+}
 
 /// Reads the legacy protocol version negotiated by [server].
 ///
@@ -36,10 +61,11 @@ void writeServerTaskOutputValidator(
   String taskId,
   ServerTaskOutputValidator validator,
 ) {
-  final validators = _taskOutputValidators[server] ??
+  final scope = _taskOutputValidationScope(server);
+  final validators = _taskOutputValidators[scope] ??
       <(String?, String), ServerTaskOutputValidator>{};
   validators[(sessionId, taskId)] = validator;
-  _taskOutputValidators[server] = validators;
+  _taskOutputValidators[scope] = validators;
 }
 
 /// Reads the output contract captured when a task was accepted.
@@ -48,7 +74,10 @@ ServerTaskOutputValidator? readServerTaskOutputValidator(
   String? sessionId,
   String taskId,
 ) =>
-    _taskOutputValidators[server]?[(sessionId, taskId)];
+    _taskOutputValidators[_taskOutputValidationScope(server)]?[(
+      sessionId,
+      taskId,
+    )];
 
 /// Removes output-contract state for a task that can no longer return a result.
 void removeServerTaskOutputValidator(
@@ -56,10 +85,20 @@ void removeServerTaskOutputValidator(
   String? sessionId,
   String taskId,
 ) {
-  _taskOutputValidators[server]?.remove((sessionId, taskId));
+  _taskOutputValidators[_taskOutputValidationScope(server)]
+      ?.remove((sessionId, taskId));
 }
 
 /// Clears task output-contract state when a server session is closed.
 void clearServerTaskOutputValidators(Object server) {
-  _taskOutputValidators[server] = null;
+  final scope = _serverTaskOutputValidationScopes[server];
+  _serverTaskOutputValidationScopes[server] = null;
+  if (scope == null) {
+    _taskOutputValidators[server] = null;
+  }
+}
+
+/// Clears application-scoped task output contracts during owner shutdown.
+void clearTaskOutputValidatorsForScope(Object scope) {
+  _taskOutputValidators[scope] = null;
 }

@@ -338,10 +338,23 @@ server.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
 ```
 
 MCP 2026-07-28 deprecates protocol logging. The compatibility API belongs
-inside a request handler, must receive `requestMeta: extra.meta`, and emits only
-messages allowed by that request's log level. Legacy MCP 2025-11-25 peers
-instead use global capability-gated methods such as `sendToolListChanged`,
-`sendResourceUpdated`, and `logging/setLevel`.
+inside a request handler and emits only messages allowed by that request's log
+level:
+
+```dart
+await server.sendStatelessLoggingMessage(
+  const LoggingMessageNotification(
+    level: LoggingLevel.info,
+    data: 'Working on the request',
+  ),
+  requestMeta: extra.meta,
+  requestId: extra.requestId,
+);
+```
+
+The request ID is mandatory for routing on Streamable HTTP. Legacy MCP
+2025-11-25 peers instead use global capability-gated methods such as
+`sendToolListChanged`, `sendResourceUpdated`, and `logging/setLevel`.
 
 Stdio servers must reserve stdout for MCP frames; send application logs to
 stderr. Configure internal SDK logs with `setMcpLogHandler`,

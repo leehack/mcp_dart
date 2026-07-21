@@ -4,6 +4,9 @@
   support Dart 3.4.
 - Inspection recognizes stateless clients that skip optional discovery, accepts
   omitted client/server identity, and emits server identity in result `_meta`.
+- The built-in conformance gate now verifies that a legacy task store can
+  coexist with the independent MCP Tasks extension without being treated as
+  its persistence adapter.
 
 ## 0.2.0-dev.2
 

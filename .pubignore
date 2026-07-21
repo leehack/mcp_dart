@@ -25,3 +25,7 @@ __pycache__/
 
 # JS interop test fixtures (not required by package consumers).
 test/interop/ts/
+test/interop/ts_2026_07_28/
+
+# CI-only minimum-SDK consumer fixture.
+tool/testing/minimum_sdk_consumer/

@@ -24,10 +24,9 @@ Future<void> main(List<String> args) async {
   }
 
   final configuredModel = Platform.environment['ANTHROPIC_MODEL']?.trim();
-  final model =
-      configuredModel == null || configuredModel.isEmpty
-          ? defaultAnthropicModel
-          : configuredModel;
+  final model = configuredModel == null || configuredModel.isEmpty
+      ? defaultAnthropicModel
+      : configuredModel;
   final console = _ConsoleLines();
 
   final client = AnthropicMcpClient(

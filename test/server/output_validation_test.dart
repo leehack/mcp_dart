@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
 import 'package:mcp_dart/src/server/server.dart';
-import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
@@ -252,7 +251,7 @@ void main() {
         JsonRpcGetTaskRequest(
           id: 'read-output-task',
           getParams: const GetTaskRequest(taskId: 'output-task'),
-          meta: _statelessMeta(),
+          meta: statelessMeta,
         ),
       );
       await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -344,12 +343,10 @@ void main() {
           ),
         ),
       );
-      late RequestHandlerExtra toolExtra;
       mcpServer.registerStatelessTool(
         'notified_task_tool',
         outputJsonSchema: JsonSchema.array(items: JsonSchema.string()),
         callback: (args, extra) async {
-          toolExtra = extra;
           return const CreateTaskExtensionResult(
             task: TaskExtensionTask(
               taskId: 'notified-output-task',
@@ -380,6 +377,32 @@ void main() {
           if (meta != null) '_meta': meta,
         }),
       );
+      mcpServer.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
+        Method.subscriptionsListen,
+        (request, extra) async {
+          await extra.sendSubscriptionAcknowledged(
+            request.listenParams.notifications,
+          );
+          await extra.sendNotification(
+            JsonRpcTaskNotification(
+              task: TaskExtensionTask(
+                taskId: 'notified-output-task',
+                status: TaskStatus.completed,
+                createdAt: '2026-07-28T00:00:00Z',
+                lastUpdatedAt: '2026-07-28T00:01:00Z',
+                ttlMs: null,
+                result: CallToolResult.fromStructuredArray([1]).toJson(),
+              ),
+            ),
+          );
+          return const EmptyResult();
+        },
+        (id, params, meta) => JsonRpcSubscriptionsListenRequest(
+          id: id,
+          listenParams: SubscriptionsListenRequest.fromJson(params!),
+          meta: meta,
+        ),
+      );
 
       await mcpServer.connect(transport);
       final statelessMeta = _statelessMeta()
@@ -397,34 +420,34 @@ void main() {
       expect(transport.sentMessages.last, isA<JsonRpcResponse>());
 
       transport.sentMessages.clear();
-      await expectLater(
-        toolExtra.sendNotification(
-          JsonRpcTaskNotification(
-            task: TaskExtensionTask(
-              taskId: 'notified-output-task',
-              status: TaskStatus.completed,
-              createdAt: '2026-07-28T00:00:00Z',
-              lastUpdatedAt: '2026-07-28T00:01:00Z',
-              ttlMs: null,
-              result: CallToolResult.fromStructuredArray([1]).toJson(),
+      transport.receiveMessage(
+        JsonRpcSubscriptionsListenRequest(
+          id: 'invalid-output-subscription',
+          listenParams: const SubscriptionsListenRequest(
+            notifications: SubscriptionFilter(
+              taskIds: ['notified-output-task'],
             ),
           ),
-        ),
-        throwsA(
-          isA<McpError>()
-              .having(
-                (error) => error.code,
-                'code',
-                ErrorCode.internalError.value,
-              )
-              .having(
-                (error) => error.message,
-                'message',
-                contains("Tool 'notified_task_tool'"),
-              ),
+          meta: statelessMeta,
         ),
       );
-      expect(transport.sentMessages, isEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(
+        transport.sentMessages.first,
+        isA<JsonRpcNotification>().having(
+          (message) => message.method,
+          'method',
+          Method.notificationsSubscriptionsAcknowledged,
+        ),
+      );
+      final error = transport.sentMessages.last as JsonRpcError;
+      expect(error.id, 'invalid-output-subscription');
+      expect(error.error.code, ErrorCode.internalError.value);
+      expect(
+        error.error.message,
+        contains("Tool 'notified_task_tool'"),
+      );
     });
 
     test('nullable output schema rejects omitted structured content', () async {

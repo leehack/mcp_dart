@@ -1,4 +1,3 @@
-import '../types.dart';
 import 'json_rpc.dart';
 import 'validation.dart';
 
@@ -528,6 +527,22 @@ class TaskErrorMessage extends TaskStreamMessage {
 
 /// Task state shape used by the MCP Tasks extension.
 class TaskExtensionTask {
+  static const _baseFieldNames = {
+    'taskId',
+    'status',
+    'statusMessage',
+    'createdAt',
+    'lastUpdatedAt',
+    'ttlMs',
+    'pollIntervalMs',
+  };
+  static const _detailedFieldNames = {
+    'inputRequests',
+    'result',
+    'error',
+  };
+  static const _wrapperFieldNames = {'resultType', '_meta'};
+
   /// Unique identifier for the task.
   final String taskId;
 
@@ -558,6 +573,12 @@ class TaskExtensionTask {
   /// JSON-RPC error when [status] is `failed`.
   final JsonRpcErrorData? error;
 
+  /// Additional result or notification fields preserved for compatibility.
+  ///
+  /// Protocol-owned task fields are always read from their typed properties;
+  /// conflicting entries in this map are ignored during serialization.
+  final Map<String, dynamic>? extra;
+
   const TaskExtensionTask({
     required this.taskId,
     required this.status,
@@ -569,18 +590,87 @@ class TaskExtensionTask {
     this.inputRequests,
     this.result,
     this.error,
+    this.extra,
   });
 
   factory TaskExtensionTask.fromJson(Map<String, dynamic> json) {
+    final task = TaskExtensionTask._fromDetailedJson(json);
+    task._validateDetailedStatusPayload();
+    return task;
+  }
+
+  factory TaskExtensionTask._fromBaseJson(Map<String, dynamic> json) =>
+      TaskExtensionTask._fromJson(
+        json,
+        includeDetailedFields: false,
+        allowedContextFields: const {'resultType', '_meta'},
+      );
+
+  factory TaskExtensionTask._fromDetailedResultJson(
+    Map<String, dynamic> json,
+  ) {
+    final task = TaskExtensionTask._fromDetailedJson(
+      json,
+      allowedContextFields: const {'resultType', '_meta'},
+    );
+    task._validateDetailedStatusPayload();
+    return task;
+  }
+
+  factory TaskExtensionTask._fromDetailedNotificationJson(
+    Map<String, dynamic> json,
+  ) {
+    final task = TaskExtensionTask._fromDetailedJson(
+      json,
+      allowedContextFields: const {'_meta'},
+    );
+    task._validateDetailedStatusPayload();
+    return task;
+  }
+
+  static TaskExtensionTask _fromDetailedJson(
+    Map<String, dynamic> json, {
+    Set<String> allowedContextFields = const {},
+  }) =>
+      TaskExtensionTask._fromJson(
+        json,
+        includeDetailedFields: true,
+        allowedContextFields: allowedContextFields,
+      );
+
+  static TaskExtensionTask _fromJson(
+    Map<String, dynamic> json, {
+    required bool includeDetailedFields,
+    Set<String> allowedContextFields = const {},
+  }) {
+    final status = TaskStatusName.fromString(
+      _readRequiredTaskString(json, 'status', owner: 'TaskExtensionTask'),
+    );
+    final detailedField = includeDetailedFields
+        ? switch (status) {
+            TaskStatus.inputRequired => 'inputRequests',
+            TaskStatus.completed => 'result',
+            TaskStatus.failed => 'error',
+            TaskStatus.working || TaskStatus.cancelled => null,
+          }
+        : null;
+
+    final extra = Map<String, dynamic>.from(json)
+      ..removeWhere(
+        (field, value) =>
+            _baseFieldNames.contains(field) ||
+            field == detailedField ||
+            _wrapperFieldNames.contains(field) ||
+            allowedContextFields.contains(field),
+      );
+
     final task = TaskExtensionTask(
       taskId: _readRequiredTaskString(
         json,
         'taskId',
         owner: 'TaskExtensionTask',
       ),
-      status: TaskStatusName.fromString(
-        _readRequiredTaskString(json, 'status', owner: 'TaskExtensionTask'),
-      ),
+      status: status,
       statusMessage: _readOptionalTaskString(
         json,
         'statusMessage',
@@ -607,28 +697,36 @@ class TaskExtensionTask {
         'pollIntervalMs',
         owner: 'TaskExtensionTask',
       ),
-      inputRequests: InputRequest.mapFromJson(
-        json['inputRequests'],
-        'TaskExtensionTask.inputRequests',
-      ),
-      result: _readOptionalJsonObject(
-        json['result'],
-        'TaskExtensionTask.result',
-      ),
-      error: json['error'] == null
-          ? null
-          : JsonRpcErrorData.fromJson(
+      inputRequests: includeDetailedFields && status == TaskStatus.inputRequired
+          ? InputRequest.mapFromJson(
+              json['inputRequests'],
+              'TaskExtensionTask.inputRequests',
+            )
+          : null,
+      result: includeDetailedFields && status == TaskStatus.completed
+          ? _readOptionalJsonObject(
+              json['result'],
+              'TaskExtensionTask.result',
+            )
+          : null,
+      error: includeDetailedFields &&
+              status == TaskStatus.failed &&
+              json['error'] != null
+          ? JsonRpcErrorData.fromJson(
               _readRequiredJsonObject(
                 json['error'],
                 'TaskExtensionTask.error',
               ),
-            ),
+            )
+          : null,
+      extra: extra.isEmpty
+          ? null
+          : readJsonObject(extra, 'TaskExtensionTask.extra'),
     );
-    task._validateStatusPayload();
     return task;
   }
 
-  void _validateStatusPayload() {
+  void _validateDetailedStatusPayload() {
     switch (status) {
       case TaskStatus.inputRequired:
         if (inputRequests == null) {
@@ -658,7 +756,27 @@ class TaskExtensionTask {
   }
 
   Map<String, dynamic> toJson({String? resultType}) {
-    _validateStatusPayload();
+    _validateDetailedStatusPayload();
+    return _toJson(resultType: resultType, includeDetailedFields: true);
+  }
+
+  Map<String, dynamic> _toBaseJson({String? resultType}) =>
+      _toJson(resultType: resultType, includeDetailedFields: false);
+
+  Map<String, dynamic> _toJson({
+    String? resultType,
+    required bool includeDetailedFields,
+  }) {
+    final extraJson = extra == null
+        ? null
+        : (Map<String, dynamic>.from(
+            readJsonObject(extra, 'TaskExtensionTask.extra'),
+          )..removeWhere(
+            (field, value) =>
+                _baseFieldNames.contains(field) ||
+                _detailedFieldNames.contains(field) ||
+                _wrapperFieldNames.contains(field),
+          ));
     return {
       if (resultType != null) 'resultType': resultType,
       'taskId': taskId,
@@ -668,11 +786,17 @@ class TaskExtensionTask {
       'lastUpdatedAt': lastUpdatedAt,
       'ttlMs': ttlMs,
       if (pollIntervalMs != null) 'pollIntervalMs': pollIntervalMs,
-      if (inputRequests != null)
+      if (includeDetailedFields &&
+          status == TaskStatus.inputRequired &&
+          inputRequests != null)
         'inputRequests': InputRequest.mapToJson(inputRequests!),
-      if (result != null)
+      if (includeDetailedFields &&
+          status == TaskStatus.completed &&
+          result != null)
         'result': readJsonObject(result, 'TaskExtensionTask.result'),
-      if (error != null) 'error': error!.toJson(),
+      if (includeDetailedFields && status == TaskStatus.failed && error != null)
+        'error': error!.toJson(),
+      if (extraJson != null) ...extraJson,
     };
   }
 }
@@ -695,7 +819,7 @@ class CreateTaskExtensionResult implements BaseResultData {
       );
     }
     return CreateTaskExtensionResult(
-      task: TaskExtensionTask.fromJson(json),
+      task: TaskExtensionTask._fromBaseJson(json),
       meta: _readOptionalJsonObject(
         json['_meta'],
         'CreateTaskExtensionResult._meta',
@@ -705,7 +829,7 @@ class CreateTaskExtensionResult implements BaseResultData {
 
   @override
   Map<String, dynamic> toJson() => {
-        ...task.toJson(resultType: resultTypeTask),
+        ...task._toBaseJson(resultType: resultTypeTask),
         if (meta != null)
           '_meta': readJsonObject(meta, 'CreateTaskExtensionResult._meta'),
       };
@@ -729,7 +853,7 @@ class GetTaskExtensionResult implements BaseResultData {
       );
     }
     return GetTaskExtensionResult(
-      task: TaskExtensionTask.fromJson(json),
+      task: TaskExtensionTask._fromDetailedResultJson(json),
       meta: _readOptionalJsonObject(
         json['_meta'],
         'GetTaskExtensionResult._meta',
@@ -751,7 +875,13 @@ class TaskExtensionAcknowledgementResult implements BaseResultData {
   @override
   final Map<String, dynamic>? meta;
 
-  const TaskExtensionAcknowledgementResult({this.meta});
+  /// Additional extension result fields not yet modeled by this SDK.
+  ///
+  /// MCP results are open objects. Preserving unknown fields keeps newer
+  /// Tasks extension peers forward compatible with this SDK.
+  final Map<String, dynamic>? extra;
+
+  const TaskExtensionAcknowledgementResult({this.meta, this.extra});
 
   factory TaskExtensionAcknowledgementResult.fromJson(
     Map<String, dynamic> json,
@@ -761,23 +891,45 @@ class TaskExtensionAcknowledgementResult implements BaseResultData {
         'TaskExtensionAcknowledgementResult.resultType must be complete',
       );
     }
+    final extra = Map<String, dynamic>.from(json)
+      ..remove('resultType')
+      ..remove('_meta');
     return TaskExtensionAcknowledgementResult(
       meta: _readOptionalJsonObject(
         json['_meta'],
         'TaskExtensionAcknowledgementResult._meta',
       ),
+      extra: extra.isEmpty
+          ? null
+          : readJsonObject(
+              extra,
+              'TaskExtensionAcknowledgementResult.extra',
+            ),
     );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-        'resultType': resultTypeComplete,
-        if (meta != null)
-          '_meta': readJsonObject(
-            meta,
-            'TaskExtensionAcknowledgementResult._meta',
-          ),
-      };
+  Map<String, dynamic> toJson() {
+    final extraJson = Map<String, dynamic>.from(
+      extra == null
+          ? const <String, dynamic>{}
+          : readJsonObject(
+              extra,
+              'TaskExtensionAcknowledgementResult.extra',
+            ),
+    )
+      ..remove('resultType')
+      ..remove('_meta');
+    return {
+      ...extraJson,
+      'resultType': resultTypeComplete,
+      if (meta != null)
+        '_meta': readJsonObject(
+          meta,
+          'TaskExtensionAcknowledgementResult._meta',
+        ),
+    };
+  }
 }
 
 /// Parameters for the `notifications/tasks/status` notification.
@@ -938,7 +1090,7 @@ class JsonRpcTaskNotification extends JsonRpcNotification {
     final paramsMap =
         _readRequiredParamsObject(json, 'JsonRpcTaskNotification.params');
     return JsonRpcTaskNotification(
-      task: TaskExtensionTask.fromJson(paramsMap),
+      task: TaskExtensionTask._fromDetailedNotificationJson(paramsMap),
       meta: _readOptionalJsonObject(
         paramsMap['_meta'],
         'JsonRpcTaskNotification._meta',

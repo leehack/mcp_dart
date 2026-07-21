@@ -145,6 +145,7 @@ void _registerAlpha8StatelessDiagnostics(McpServer server) {
           data: 'log-level diagnostic',
         ),
         requestMeta: extra.meta,
+        requestId: extra.requestId,
       );
       return _textResult('logging-ok');
     },

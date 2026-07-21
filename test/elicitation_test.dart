@@ -171,8 +171,9 @@ void main() {
       await client.close();
     });
 
-    test('Client successfully handles elicit request with string input',
-        () async {
+    test(
+        'Client legacy default capability handles form elicitation with '
+        'string input', () async {
       final transport = MockTransport();
       transport.mockInitializeResponse = const InitializeResult(
         protocolVersion: latestInitializationProtocolVersion,
@@ -184,7 +185,7 @@ void main() {
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const ClientOptions(
           capabilities: ClientCapabilities(
-            elicitation: ClientElicitation.formOnly(),
+            elicitation: ClientElicitation(),
           ),
         ),
       );

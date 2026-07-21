@@ -7,6 +7,7 @@ import 'package:mcp_dart/src/types/validation.dart';
 import 'package:meta/meta.dart';
 
 import 'protocol_notification_validation.dart';
+import 'stateless_meta_validation.dart';
 import 'transport.dart';
 
 final _logger = Logger("mcp_dart.shared.protocol");
@@ -26,11 +27,48 @@ const Set<String> _statelessCacheableResultMethods = {
 };
 
 final _lastProgressByExtra = Expando<double>();
-final _subscriptionStateByExtra = Expando<_SubscriptionStreamState>();
+final _subscriptionStateByExtra = Expando<_SubscriptionNotificationState>();
 
-class _SubscriptionStreamState {
+class _SubscriptionNotificationState {
   bool acknowledgmentSent = false;
   SubscriptionFilter acknowledgedNotifications = const SubscriptionFilter();
+}
+
+class _SubscriptionStreamState extends _SubscriptionNotificationState {
+  final SubscriptionFilter requestedNotifications;
+  final Completer<void> settlementCompleted = Completer<void>();
+  bool cancellationSent = false;
+  bool settlementStarted = false;
+
+  _SubscriptionStreamState(this.requestedNotifications);
+}
+
+class _ActiveIncomingSubscription {
+  final JsonRpcSubscriptionsListenRequest request;
+  final _SubscriptionStreamState state;
+  final Object? requestContext;
+
+  const _ActiveIncomingSubscription(
+    this.request,
+    this.state,
+    this.requestContext,
+  );
+}
+
+class _IncomingRequestKey {
+  final RequestId requestId;
+  final Object? requestContext;
+
+  const _IncomingRequestKey(this.requestId, this.requestContext);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _IncomingRequestKey &&
+      other.requestId == requestId &&
+      identical(other.requestContext, requestContext);
+
+  @override
+  int get hashCode => Object.hash(requestId, identityHashCode(requestContext));
 }
 
 /// Callback for progress notifications.
@@ -45,10 +83,15 @@ class ProtocolOptions {
   /// An array of notification method names that should be automatically debounced.
   final List<String>? debouncedNotificationMethods;
 
-  /// Optional task storage implementation.
+  /// Optional storage for legacy MCP task augmentation.
+  ///
+  /// This interface models the initialization-era task lifecycle. It does not
+  /// implement the independent `io.modelcontextprotocol/tasks` extension;
+  /// dual-era servers may keep it configured, but must register their modern
+  /// extension handlers and persistence explicitly.
   final TaskStore? taskStore;
 
-  /// Optional task message queue implementation.
+  /// Optional message queue for legacy MCP task augmentation.
   final TaskMessageQueue? taskMessageQueue;
 
   /// Default polling interval (in milliseconds) for task status checks.
@@ -56,6 +99,10 @@ class ProtocolOptions {
 
   /// Maximum number of messages that can be queued per task.
   final int? maxTaskQueueSize;
+
+  /// Maximum time to flush subscription cancellation and terminal responses
+  /// before closing the transport during [Protocol.close].
+  final Duration gracefulShutdownTimeout;
 
   /// Creates protocol options.
   const ProtocolOptions({
@@ -65,6 +112,7 @@ class ProtocolOptions {
     this.taskMessageQueue,
     this.defaultTaskPollInterval,
     this.maxTaskQueueSize,
+    this.gracefulShutdownTimeout = const Duration(seconds: 5),
   });
 }
 
@@ -181,7 +229,12 @@ class RequestHandlerExtra {
   /// Task ID if this request is related to a task.
   final String? taskId;
 
-  /// Task store for this request context.
+  /// Legacy task-augmentation store for this request context.
+  ///
+  /// This may be non-null for a modern `io.modelcontextprotocol/tasks` request
+  /// when a dual-era server also enables legacy compatibility. It is not an
+  /// adapter for the modern extension, whose persistence and handlers remain
+  /// application-owned.
   final RequestTaskStore? taskStore;
 
   /// Requested TTL for the task, if any.
@@ -207,6 +260,8 @@ class RequestHandlerExtra {
   /// Closes the standalone SSE stream (if supported).
   final void Function()? closeStandaloneSSEStream;
 
+  final bool _validateSubscriptionNotificationsLocally;
+
   /// Creates extra data for request handlers.
   const RequestHandlerExtra({
     required this.signal,
@@ -224,10 +279,28 @@ class RequestHandlerExtra {
     required this.sendRequest,
     this.closeSSEStream,
     this.closeStandaloneSSEStream,
-  });
+  }) : _validateSubscriptionNotificationsLocally = true;
 
-  _SubscriptionStreamState get _activeSubscriptionState =>
-      (_subscriptionStateByExtra[this] ??= _SubscriptionStreamState());
+  const RequestHandlerExtra._protocol({
+    required this.signal,
+    this.sessionId,
+    required this.requestId,
+    this.meta,
+    this.inputResponses,
+    this.requestState,
+    this.taskId,
+    this.taskStore,
+    this.taskRequestedTtl,
+    required this.sendNotification,
+    required this.sendRequest,
+    this.closeSSEStream,
+  })  : authInfo = null,
+        requestInfo = null,
+        closeStandaloneSSEStream = null,
+        _validateSubscriptionNotificationsLocally = false;
+
+  _SubscriptionNotificationState get _activeSubscriptionState =>
+      (_subscriptionStateByExtra[this] ??= _SubscriptionNotificationState());
 
   void _validateSubscriptionNotification(JsonRpcNotification notification) {
     _recordOrValidateSubscriptionNotification(
@@ -301,9 +374,9 @@ class RequestHandlerExtra {
   ) {
     final subscriptionNotification =
         _withSubscriptionId(notification, requestId);
-
-    _validateSubscriptionNotification(subscriptionNotification);
-
+    if (_validateSubscriptionNotificationsLocally) {
+      _validateSubscriptionNotification(subscriptionNotification);
+    }
     return sendNotification(subscriptionNotification);
   }
 }
@@ -324,14 +397,31 @@ JsonRpcNotification _withSubscriptionId(
 }
 
 void _recordOrValidateSubscriptionNotification(
-  _SubscriptionStreamState state,
-  JsonRpcNotification notification,
-) {
+  _SubscriptionNotificationState state,
+  JsonRpcNotification notification, {
+  SubscriptionFilter? requestedNotifications,
+}) {
   if (notification.method == Method.notificationsSubscriptionsAcknowledged) {
+    if (state.acknowledgmentSent) {
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        'subscriptions/listen streams must send exactly one '
+        '${Method.notificationsSubscriptionsAcknowledged} notification.',
+      );
+    }
+    final acknowledgedNotifications =
+        _acknowledgedSubscriptionFilter(notification);
+    if (requestedNotifications != null &&
+        !acknowledgedNotifications.isSubsetOf(requestedNotifications)) {
+      throw McpError(
+        ErrorCode.invalidRequest.value,
+        'subscriptions/listen acknowledged notifications that were not '
+        'requested.',
+      );
+    }
     state
       ..acknowledgmentSent = true
-      ..acknowledgedNotifications =
-          _acknowledgedSubscriptionFilter(notification);
+      ..acknowledgedNotifications = acknowledgedNotifications;
     return;
   }
 
@@ -349,6 +439,16 @@ void _recordOrValidateSubscriptionNotification(
       ErrorCode.invalidRequest.value,
       '${notification.method} was not requested or acknowledged for this '
       'subscriptions/listen stream.',
+    );
+  }
+}
+
+void _requireSubscriptionAcknowledgment(_SubscriptionStreamState state) {
+  if (!state.acknowledgmentSent) {
+    throw McpError(
+      ErrorCode.invalidRequest.value,
+      'subscriptions/listen handlers must send '
+      '${Method.notificationsSubscriptionsAcknowledged} before completing.',
     );
   }
 }
@@ -432,7 +532,24 @@ abstract class Protocol {
       )> _requestHandlers = {};
 
   /// Tracks [AbortController] instances for cancellable incoming requests.
-  final Map<RequestId, AbortController> _requestHandlerAbortControllers = {};
+  final Map<_IncomingRequestKey, AbortController>
+      _requestHandlerAbortControllers = {};
+
+  /// Acknowledged incoming subscription streams that still need teardown.
+  final Map<_IncomingRequestKey, _ActiveIncomingSubscription>
+      _activeIncomingSubscriptions = {};
+
+  /// Acknowledgments already handed to the transport but not yet confirmed.
+  /// Shutdown waits for these before snapshotting active subscriptions so an
+  /// acknowledgment cannot become active after teardown has been planned.
+  final Map<_IncomingRequestKey, Future<void>>
+      _pendingIncomingSubscriptionAcknowledgments = {};
+
+  /// Prevents new protocol work from being accepted once shutdown begins.
+  bool _closingConnection = false;
+
+  /// Shared completion for concurrent [close] calls.
+  Future<void>? _closeFuture;
 
   /// Handlers for incoming notifications, mapped by method name.
   final Map<String, Future<void> Function(JsonRpcNotification notification)>
@@ -502,11 +619,18 @@ abstract class Protocol {
       : _options = options ?? const ProtocolOptions(),
         _taskStore = options?.taskStore,
         _taskMessageQueue = options?.taskMessageQueue {
+    if (_options.gracefulShutdownTimeout.isNegative) {
+      throw ArgumentError.value(
+        _options.gracefulShutdownTimeout,
+        'gracefulShutdownTimeout',
+        'Must not be negative',
+      );
+    }
     setNotificationHandler<JsonRpcCancelledNotification>(
       "notifications/cancelled",
       (notification) async {
         final params = notification.cancelParams;
-        final controller = _requestHandlerAbortControllers[params.requestId];
+        final controller = _incomingRequestAbortController(params.requestId);
         controller?.abort(params.reason);
       },
       (params, meta) => JsonRpcCancelledNotification.fromJson({
@@ -537,6 +661,48 @@ abstract class Protocol {
     if (_taskStore != null) {
       _registerTaskHandlers();
     }
+  }
+
+  Object? get _incomingRequestContext {
+    final activeTransport = _transport;
+    return activeTransport is IncomingRequestContextAwareTransport
+        ? (activeTransport as IncomingRequestContextAwareTransport)
+            .incomingRequestContext
+        : null;
+  }
+
+  AbortController? _incomingRequestAbortController(RequestId requestId) {
+    final requestContext = _incomingRequestContext;
+    if (requestContext != null) {
+      return _requestHandlerAbortControllers[
+          _IncomingRequestKey(requestId, requestContext)];
+    }
+
+    AbortController? match;
+    for (final entry in _requestHandlerAbortControllers.entries) {
+      if (entry.key.requestId != requestId || entry.value.signal.aborted) {
+        continue;
+      }
+      if (match != null) {
+        // A context-free cancellation cannot safely choose between concurrent
+        // connections that reuse the same JSON-RPC request ID.
+        return null;
+      }
+      match = entry.value;
+    }
+    return match;
+  }
+
+  Future<void> _sendForIncomingRequest(
+    JsonRpcMessage message, {
+    required RequestId relatedRequestId,
+    Object? requestContext,
+  }) async {
+    await _transport?.sendPreservingRequestContext(
+      message,
+      relatedRequestId: relatedRequestId,
+      requestContext: requestContext,
+    );
   }
 
   /// Returns whether [resultType] is recognized for result parsing.
@@ -605,6 +771,7 @@ abstract class Protocol {
       resultJson['_meta'],
       'MCP stateless Result._meta',
     );
+    validateStatelessResultMetaObjects(request, resultJson);
     if (resultMeta?.containsKey(McpMetaKey.serverInfo) == true) {
       Implementation.fromJson(
         readJsonObject(
@@ -671,14 +838,6 @@ abstract class Protocol {
           throw McpError(
             ErrorCode.invalidParams.value,
             'Failed to retrieve task: Task not found',
-          );
-        }
-        if (_usesStatelessResultTypes(request)) {
-          return GetTaskExtensionResult(
-            task: await _taskExtensionTaskFromStore(
-              task,
-              extra.sessionId,
-            ),
           );
         }
         return task;
@@ -754,9 +913,6 @@ abstract class Protocol {
               'Task not found after cancellation: $taskId',
             );
           }
-          if (_usesStatelessResultTypes(request)) {
-            return const TaskExtensionAcknowledgementResult();
-          }
           return cancelledTask;
         } catch (error) {
           if (error is McpError) rethrow;
@@ -777,55 +933,16 @@ abstract class Protocol {
     );
   }
 
-  Future<TaskExtensionTask> _taskExtensionTaskFromStore(
-    Task task,
-    String? sessionId,
-  ) async {
-    Map<String, dynamic>? result;
-    JsonRpcErrorData? error;
-    InputRequests? inputRequests;
-
-    switch (task.status) {
-      case TaskStatus.completed:
-        result = (await _taskStore!.getTaskResult(
-          task.taskId,
-          sessionId,
-        ))
-            .toJson();
-        break;
-      case TaskStatus.failed:
-        error = JsonRpcErrorData(
-          code: ErrorCode.internalError.value,
-          message: task.statusMessage ?? 'Task failed',
-        );
-        break;
-      case TaskStatus.inputRequired:
-        inputRequests = const {};
-        break;
-      case TaskStatus.working:
-      case TaskStatus.cancelled:
-        break;
-    }
-
-    return TaskExtensionTask(
-      taskId: task.taskId,
-      status: task.status,
-      statusMessage: task.statusMessage,
-      createdAt: task.createdAt,
-      lastUpdatedAt: task.lastUpdatedAt,
-      ttlMs: task.ttl,
-      pollIntervalMs: task.pollInterval,
-      inputRequests: inputRequests,
-      result: result,
-      error: error,
-    );
-  }
-
   /// Attaches to the given transport, starts it, and starts listening for messages.
   Future<void> connect(Transport transport) async {
+    if (_closeFuture != null) {
+      throw StateError("Protocol connection is closing.");
+    }
     if (_transport != null) {
       throw StateError("Protocol already connected to a transport.");
     }
+    _closingConnection = false;
+    _pendingIncomingSubscriptionAcknowledgments.clear();
     _transport = transport;
     if (transport is IncomingRequestValidationAwareTransport) {
       final validationAwareTransport =
@@ -840,6 +957,18 @@ abstract class Protocol {
     _transport!.onerror = _onerror;
     _transport!.onmessage = (message) {
       try {
+        // Direction and protocol-state checks are method-level constraints.
+        // Apply them before reparsing a generic notification into its typed
+        // form so a known wrong-direction method is rejected consistently even
+        // when its parameters are also malformed.
+        if (message case final JsonRpcNotification notification) {
+          final validationError =
+              validateIncomingNotificationBeforeParsing(notification);
+          if (validationError != null) {
+            _onerror(validationError);
+            return;
+          }
+        }
         final parsedMessage = JsonRpcMessage.fromJson(message.toJson());
         switch (parsedMessage) {
           case final JsonRpcResponse response:
@@ -901,8 +1030,125 @@ abstract class Protocol {
   Transport? get transport => _transport;
 
   /// Closes the connection by closing the underlying transport.
-  Future<void> close() async {
-    await _transport?.close();
+  Future<void> close() {
+    final activeClose = _closeFuture;
+    if (activeClose != null) {
+      return activeClose;
+    }
+
+    late final Future<void> closeFuture;
+    closeFuture = _close().whenComplete(() {
+      if (identical(_closeFuture, closeFuture)) {
+        _closeFuture = null;
+      }
+    });
+    _closeFuture = closeFuture;
+    return closeFuture;
+  }
+
+  Future<void> _close() async {
+    _closingConnection = true;
+    final activeTransport = _transport;
+    var activeSubscriptions =
+        <MapEntry<_IncomingRequestKey, _ActiveIncomingSubscription>>[];
+
+    Future<void> settleSubscriptions() async {
+      final pendingAcknowledgments = List<Future<void>>.of(
+        _pendingIncomingSubscriptionAcknowledgments.values,
+      );
+      for (final acknowledgment in pendingAcknowledgments) {
+        try {
+          await acknowledgment;
+        } catch (_) {
+          // The request handler path reports acknowledgment delivery failures.
+        }
+      }
+      activeSubscriptions = List.of(_activeIncomingSubscriptions.entries);
+      for (final entry in activeSubscriptions) {
+        final active = entry.value;
+        try {
+          if (!active.state.settlementStarted) {
+            active.state.settlementStarted = true;
+            _requestHandlerAbortControllers[entry.key]?.abort(
+              'Server is shutting down.',
+            );
+            await _cancelIncomingSubscription(
+              entry.key.requestId,
+              active.state,
+              'Server is shutting down.',
+              requestContext: active.requestContext,
+            );
+            final result = serializeIncomingResult(
+              active.request,
+              const EmptyResult(),
+            );
+            await activeTransport?.sendPreservingRequestContext(
+              JsonRpcResponse(id: entry.key.requestId, result: result),
+              relatedRequestId: entry.key.requestId,
+              requestContext: active.requestContext,
+            );
+          } else {
+            await active.state.settlementCompleted.future;
+          }
+        } catch (error) {
+          _onerror(
+            error is Error
+                ? error
+                : StateError(
+                    'Failed to close subscription ${entry.key} during '
+                    'shutdown: $error',
+                  ),
+          );
+        } finally {
+          _completeSubscriptionSettlement(active.state);
+        }
+      }
+    }
+
+    final settlement = settleSubscriptions();
+    var settlementTimedOut = false;
+    try {
+      await settlement.timeout(_options.gracefulShutdownTimeout);
+    } on TimeoutException {
+      settlementTimedOut = true;
+      _onerror(
+        StateError(
+          'Timed out after ${_options.gracefulShutdownTimeout} while '
+          'closing subscriptions; forcing transport shutdown.',
+        ),
+      );
+      final subscriptionsToAbort = {
+        for (final entry in activeSubscriptions) entry.key: entry.value,
+        ..._activeIncomingSubscriptions,
+      };
+      for (final entry in subscriptionsToAbort.entries) {
+        entry.value.state.settlementStarted = true;
+        _requestHandlerAbortControllers[entry.key]?.abort(
+          'Server shutdown timed out.',
+        );
+        _completeSubscriptionSettlement(entry.value.state);
+      }
+    }
+
+    if (settlementTimedOut) {
+      // The transport close normally releases blocked writes. Keep any custom
+      // transport future observed so a late failure cannot become unhandled.
+      unawaited(
+        settlement.then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            _onerror(
+              error is Error
+                  ? error
+                  : StateError(
+                      'Subscription shutdown failed after timeout: $error',
+                    ),
+            );
+          },
+        ),
+      );
+    }
+    await activeTransport?.close();
   }
 
   /// Sets up the timeout mechanism for an outgoing request.
@@ -1148,6 +1394,7 @@ abstract class Protocol {
     String message, [
     dynamic data,
     String? relatedTaskId,
+    Object? requestContext,
   ]) async {
     final error = JsonRpcError(
       id: id,
@@ -1166,7 +1413,11 @@ abstract class Protocol {
       );
     } else {
       try {
-        await _transport?.send(error);
+        await _transport?.sendPreservingRequestContext(
+          error,
+          relatedRequestId: id,
+          requestContext: requestContext,
+        );
       } catch (e) {
         _onerror(
           StateError("Failed to send error response for request $id: $e"),
@@ -1177,6 +1428,7 @@ abstract class Protocol {
 
   /// Handles the transport closure event.
   void _onclose() {
+    _closingConnection = true;
     final completers = Map.of(_responseCompleters);
     final errorHandlers = Map.of(_responseErrorHandlers);
     final pendingTimeouts = Map.of(_timeoutInfo);
@@ -1190,6 +1442,8 @@ abstract class Protocol {
     _progressTokenRequestIds.clear();
     _timeoutInfo.clear();
     _requestHandlerAbortControllers.clear();
+    _activeIncomingSubscriptions.clear();
+    _pendingIncomingSubscriptionAcknowledgments.clear();
     _pendingDebouncedNotifications.clear();
     _requestResolvers.clear();
     _taskRequestsByMessageId.clear();
@@ -1248,9 +1502,30 @@ abstract class Protocol {
   /// current protocol state.
   McpError? validateIncomingRequest(JsonRpcRequest request) => null;
 
+  /// Whether an invalid incoming request should receive a JSON-RPC error.
+  ///
+  /// Stateless clients override this because that protocol direction forbids
+  /// clients from writing responses, including error responses.
+  @protected
+  bool shouldRespondToInvalidIncomingRequest(
+    JsonRpcRequest request,
+    McpError error,
+  ) =>
+      true;
+
   /// Returns an MCP error when an incoming notification is not valid for the
   /// current protocol state.
   McpError? validateIncomingNotification(JsonRpcNotification notification) =>
+      null;
+
+  /// Performs method-level notification validation before a generic transport
+  /// message is reparsed into its typed notification class.
+  ///
+  /// Subclasses should keep this check independent of typed parameter fields.
+  @protected
+  McpError? validateIncomingNotificationBeforeParsing(
+    JsonRpcNotification notification,
+  ) =>
       null;
 
   /// Subclass hook called after an incoming request has passed validation and
@@ -1261,6 +1536,25 @@ abstract class Protocol {
   /// Subclass hook called after an incoming notification has passed validation.
   @protected
   void onIncomingNotificationAccepted(JsonRpcNotification notification) {}
+
+  /// Validates a notification emitted for a `subscriptions/listen` request.
+  @protected
+  void validateOutgoingSubscriptionNotification(
+    JsonRpcSubscriptionsListenRequest request,
+    JsonRpcNotification notification,
+  ) {}
+
+  /// Returns whether a request-scoped notification should be emitted.
+  ///
+  /// Subclasses can suppress optional notifications whose per-request opt-in
+  /// or threshold is not satisfied, or throw to reject a notification that is
+  /// invalid for the originating request channel.
+  @protected
+  bool shouldSendOutgoingRequestScopedNotification(
+    JsonRpcRequest request,
+    JsonRpcNotification notification,
+  ) =>
+      true;
 
   /// Subclass hook called after an incoming request handler has completed and
   /// its response has been sent or enqueued.
@@ -1384,6 +1678,13 @@ abstract class Protocol {
 
   /// Handles incoming JSON-RPC notifications.
   void _onnotification(JsonRpcNotification notification) {
+    // Shutdown is completed from local protocol and transport state. Incoming
+    // notifications cannot contribute to it and must not mutate state or report
+    // handler errors after the connection has started closing.
+    if (_closingConnection) {
+      return;
+    }
+
     final validationError = validateIncomingNotification(notification);
     if (validationError != null) {
       _onerror(validationError);
@@ -1513,16 +1814,79 @@ abstract class Protocol {
     }
   }
 
+  Future<void> _cancelIncomingSubscription(
+    RequestId requestId,
+    _SubscriptionStreamState state,
+    String reason, {
+    Object? requestContext,
+  }) async {
+    if (!state.acknowledgmentSent ||
+        state.cancellationSent ||
+        _transport is! ServerSubscriptionCancellationTransport) {
+      return;
+    }
+    state.cancellationSent = true;
+    await _notificationWithRequestId(
+      JsonRpcCancelledNotification(
+        cancelParams: CancelledNotification(
+          requestId: requestId,
+          reason: reason,
+        ),
+        meta: {McpMetaKey.subscriptionId: requestId},
+      ),
+      relatedRequestId: requestId,
+      requestContext: requestContext,
+      allowWhileClosing: true,
+    );
+  }
+
+  void _completeSubscriptionSettlement(_SubscriptionStreamState state) {
+    if (!state.settlementCompleted.isCompleted) {
+      state.settlementCompleted.complete();
+    }
+  }
+
   /// Handles incoming JSON-RPC requests.
   void _onrequest(JsonRpcRequest request) {
+    final requestContext = _incomingRequestContext;
+    final requestKey = _IncomingRequestKey(request.id, requestContext);
+    if (_closingConnection) {
+      final error = McpError(
+        ErrorCode.connectionClosed.value,
+        'Connection is closing.',
+      );
+      if (shouldRespondToInvalidIncomingRequest(request, error)) {
+        unawaited(
+          _sendErrorResponse(
+            request.id,
+            error.code,
+            error.message,
+            error.data,
+            null,
+            requestContext,
+          ),
+        );
+      } else {
+        _onerror(error);
+      }
+      return;
+    }
     final validationError = validateIncomingRequest(request);
     if (validationError != null) {
-      _sendErrorResponse(
-        request.id,
-        validationError.code,
-        validationError.message,
-        validationError.data,
-      );
+      if (shouldRespondToInvalidIncomingRequest(request, validationError)) {
+        unawaited(
+          _sendErrorResponse(
+            request.id,
+            validationError.code,
+            validationError.message,
+            validationError.data,
+            null,
+            requestContext,
+          ),
+        );
+      } else {
+        _onerror(validationError);
+      }
       return;
     }
 
@@ -1548,14 +1912,15 @@ abstract class Protocol {
         "Method not found: ${request.method}",
         null,
         relatedTaskId,
+        requestContext,
       );
       return;
     }
 
     final abortController = BasicAbortController();
-    _requestHandlerAbortControllers[request.id] = abortController;
+    _requestHandlerAbortControllers[requestKey] = abortController;
     final subscriptionState = request is JsonRpcSubscriptionsListenRequest
-        ? _SubscriptionStreamState()
+        ? _SubscriptionStreamState(request.listenParams.notifications)
         : null;
     final usesStatelessResultTypes = _usesStatelessResultTypes(request);
     final requestSessionId =
@@ -1565,10 +1930,19 @@ abstract class Protocol {
         requestSseTransport is RequestSseStreamControlAwareTransport
             ? requestSseTransport as RequestSseStreamControlAwareTransport
             : null;
-    final canCloseRequestSseStream =
-        requestSseController?.canCloseRequestSseStream(request.id) ?? false;
+    final contextSseController = requestSseTransport
+            is RequestContextSseStreamControlAwareTransport
+        ? requestSseTransport as RequestContextSseStreamControlAwareTransport
+        : null;
+    final canCloseRequestSseStream = requestContext != null &&
+            contextSseController != null
+        ? contextSseController.canCloseRequestSseStreamWithContext(
+            request.id,
+            requestContext,
+          )
+        : requestSseController?.canCloseRequestSseStream(request.id) ?? false;
 
-    final extra = RequestHandlerExtra(
+    final extra = RequestHandlerExtra._protocol(
       signal: abortController.signal,
       sessionId: requestSessionId,
       requestId: request.id,
@@ -1591,26 +1965,90 @@ abstract class Protocol {
               'RequestOptions.task.ttl',
             ),
       sendNotification: (notification, {relatedTask}) {
+        if (subscriptionState != null &&
+            (_closingConnection ||
+                abortController.signal.aborted ||
+                subscriptionState.settlementStarted)) {
+          return Future<void>.error(
+            McpError(
+              ErrorCode.connectionClosed.value,
+              'Cannot send subscription notifications while the connection '
+              'is closing.',
+            ),
+          );
+        }
+        try {
+          if (!shouldSendOutgoingRequestScopedNotification(
+            request,
+            notification,
+          )) {
+            return Future.value();
+          }
+        } catch (error, stackTrace) {
+          return Future<void>.error(error, stackTrace);
+        }
         var outgoingNotification = notification;
+        var recordsAcknowledgment = false;
         if (subscriptionState != null) {
           outgoingNotification = _withSubscriptionId(notification, request.id);
           _recordOrValidateSubscriptionNotification(
             subscriptionState,
             outgoingNotification,
+            requestedNotifications: subscriptionState.requestedNotifications,
+          );
+          recordsAcknowledgment = outgoingNotification.method ==
+              Method.notificationsSubscriptionsAcknowledged;
+          validateOutgoingSubscriptionNotification(
+            request as JsonRpcSubscriptionsListenRequest,
+            outgoingNotification,
           );
         }
 
-        return _notificationWithRequestId(
+        final sent = _notificationWithRequestId(
           outgoingNotification,
           relatedTask: relatedTask,
           relatedRequestId: request.id,
+          requestContext: requestContext,
         );
+        if (!recordsAcknowledgment) {
+          return sent;
+        }
+        final trackedAcknowledgment = sent.then((_) {
+          if (!abortController.signal.aborted && _transport != null) {
+            _activeIncomingSubscriptions[requestKey] =
+                _ActiveIncomingSubscription(
+              request as JsonRpcSubscriptionsListenRequest,
+              subscriptionState!,
+              requestContext,
+            );
+          }
+        });
+        _pendingIncomingSubscriptionAcknowledgments[requestKey] =
+            trackedAcknowledgment;
+        unawaited(
+          trackedAcknowledgment.whenComplete(() {
+            if (identical(
+              _pendingIncomingSubscriptionAcknowledgments[requestKey],
+              trackedAcknowledgment,
+            )) {
+              _pendingIncomingSubscriptionAcknowledgments.remove(requestKey);
+            }
+          }).catchError((Object _) {}),
+        );
+        return trackedAcknowledgment;
       },
       sendRequest: <T extends BaseResultData>(
         JsonRpcRequest req,
         T Function(Map<String, dynamic>) resultFactory,
         RequestOptions options,
       ) {
+        if (usesStatelessResultTypes) {
+          throw StateError(
+            'Server-initiated JSON-RPC requests are not supported by '
+            'stateless MCP. Return an InputRequiredResult with embedded '
+            'inputRequests instead.',
+          );
+        }
         final newOptions = RequestOptions(
           onprogress: options.onprogress,
           signal: options.signal,
@@ -1633,13 +2071,18 @@ abstract class Protocol {
         );
       },
       closeSSEStream: canCloseRequestSseStream
-          ? () => requestSseController!.closeRequestSseStream(request.id)
+          ? () {
+              if (requestContext != null && contextSseController != null) {
+                contextSseController.closeRequestSseStreamWithContext(
+                  request.id,
+                  requestContext,
+                );
+              } else {
+                requestSseController!.closeRequestSseStream(request.id);
+              }
+            }
           : null,
     );
-    if (subscriptionState != null) {
-      _subscriptionStateByExtra[extra] = subscriptionState;
-    }
-
     // If task creation is requested, check capability
     if (!usesStatelessResultTypes &&
         (extra.taskRequestedTtl != null ||
@@ -1653,8 +2096,9 @@ abstract class Protocol {
           e.toString(),
           null,
           relatedTaskId,
+          requestContext,
         );
-        _requestHandlerAbortControllers.remove(request.id);
+        _requestHandlerAbortControllers.remove(requestKey);
         return;
       }
     }
@@ -1670,12 +2114,72 @@ abstract class Protocol {
       );
     }
 
-    Future<BaseResultData> invokeHandler() {
+    Future<BaseResultData> invokeHandler() async {
       final handler = registeredHandler;
+      final BaseResultData result;
       if (handler != null) {
-        return handler(request, extra);
+        result = await handler(request, extra);
+      } else {
+        result = await fallbackHandler!(request);
       }
-      return fallbackHandler!(request);
+      if (subscriptionState != null) {
+        _requireSubscriptionAcknowledgment(subscriptionState);
+      }
+      return result;
+    }
+
+    Future<void> handleHandlerError(Object error, StackTrace stackTrace) async {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      if (subscriptionState != null) {
+        if (subscriptionState.settlementStarted) {
+          return;
+        }
+        subscriptionState.settlementStarted = true;
+      }
+      onIncomingRequestFailed(request, error);
+
+      var code = ErrorCode.internalError.value;
+      var message = "Internal server error processing ${request.method}";
+      dynamic data;
+
+      if (error is McpError) {
+        code = error.code;
+        message = error.message;
+        data = error.data;
+      } else {
+        _logger.error(
+          'Unhandled error processing ${request.method}: '
+          '$error\n$stackTrace',
+        );
+      }
+
+      try {
+        if (subscriptionState?.acknowledgmentSent ?? false) {
+          await _cancelIncomingSubscription(
+            request.id,
+            subscriptionState!,
+            'Server terminated subscription stream after an error.',
+            requestContext: requestContext,
+          );
+        }
+      } finally {
+        try {
+          await _sendErrorResponse(
+            request.id,
+            code,
+            message,
+            data,
+            relatedTaskId,
+            requestContext,
+          );
+        } finally {
+          if (subscriptionState != null) {
+            _completeSubscriptionSettlement(subscriptionState);
+          }
+        }
+      }
     }
 
     Future.microtask(invokeHandler).then(
@@ -1684,26 +2188,45 @@ abstract class Protocol {
           return;
         }
 
-        final serializedResult = serializeIncomingResult(request, result);
-        final serializedMeta = readOptionalJsonObject(
-          serializedResult['_meta'],
-          'Result._meta',
-        );
-        Map<String, dynamic>? responseMeta;
-        if (serializedResult.containsKey('_meta')) {
-          // The serializer may validate or sanitize reserved metadata, so its
-          // output is authoritative. Falling back only when `_meta` was omitted
-          // preserves compatibility with older custom result implementations.
-          responseMeta = serializedMeta ?? <String, dynamic>{};
-        } else if (result.meta != null) {
-          responseMeta = readJsonObject(result.meta, 'Result._meta');
+        late final JsonRpcResponse response;
+        try {
+          final serializedResult = serializeIncomingResult(request, result);
+          final serializedMeta = readOptionalJsonObject(
+            serializedResult['_meta'],
+            'Result._meta',
+          );
+          Map<String, dynamic>? responseMeta;
+          if (serializedResult.containsKey('_meta')) {
+            // The serializer may validate or sanitize reserved metadata, so its
+            // output is authoritative. Falling back only when `_meta` was omitted
+            // preserves compatibility with older custom result implementations.
+            responseMeta = serializedMeta ?? <String, dynamic>{};
+          } else if (result.meta != null) {
+            responseMeta = readJsonObject(result.meta, 'Result._meta');
+          }
+
+          response = JsonRpcResponse(
+            id: request.id,
+            result: serializedResult,
+            meta: _mergeRelatedTaskMeta(responseMeta, relatedTaskJson),
+          );
+        } catch (error, stackTrace) {
+          await handleHandlerError(error, stackTrace);
+          return;
         }
 
-        final response = JsonRpcResponse(
-          id: request.id,
-          result: serializedResult,
-          meta: _mergeRelatedTaskMeta(responseMeta, relatedTaskJson),
-        );
+        if (subscriptionState != null) {
+          if (subscriptionState.settlementStarted) {
+            return;
+          }
+          subscriptionState.settlementStarted = true;
+          await _cancelIncomingSubscription(
+            request.id,
+            subscriptionState,
+            'Server closed subscription stream.',
+            requestContext: requestContext,
+          );
+        }
 
         if (relatedTaskId != null && _taskMessageQueue != null) {
           await _enqueueTaskMessage(
@@ -1716,39 +2239,18 @@ abstract class Protocol {
             _transport?.sessionId,
           );
         } else {
-          await _transport?.send(response);
-        }
-        onIncomingRequestHandled(request, result);
-      },
-      onError: (error, stackTrace) {
-        if (abortController.signal.aborted) {
-          return Future.value(null);
-        }
-        onIncomingRequestFailed(request, error);
-
-        int code = ErrorCode.internalError.value;
-        String message = "Internal server error processing ${request.method}";
-        dynamic data;
-
-        if (error is McpError) {
-          code = error.code;
-          message = error.message;
-          data = error.data;
-        } else {
-          _logger.error(
-            'Unhandled error processing ${request.method}: '
-            '$error\n$stackTrace',
+          await _sendForIncomingRequest(
+            response,
+            relatedRequestId: request.id,
+            requestContext: requestContext,
           );
         }
-
-        return _sendErrorResponse(
-          request.id,
-          code,
-          message,
-          data,
-          relatedTaskId,
-        );
+        onIncomingRequestHandled(request, result);
+        if (subscriptionState != null) {
+          _completeSubscriptionSettlement(subscriptionState);
+        }
       },
+      onError: handleHandlerError,
     ).catchError((sendError) {
       onIncomingRequestFailed(request, sendError);
       _onerror(
@@ -1758,7 +2260,11 @@ abstract class Protocol {
       );
       return null;
     }).whenComplete(() {
-      _requestHandlerAbortControllers.remove(request.id);
+      if (subscriptionState != null) {
+        _completeSubscriptionSettlement(subscriptionState);
+      }
+      _requestHandlerAbortControllers.remove(requestKey);
+      _activeIncomingSubscriptions.remove(requestKey);
     });
   }
 
@@ -1957,6 +2463,9 @@ abstract class Protocol {
     RequestId? relatedRequestId,
     int? reservedRequestId,
   ]) {
+    if (_closingConnection) {
+      return Future.error(StateError("Connection is closing."));
+    }
     if (_transport == null) {
       return Future.error(StateError("Not connected to a transport."));
     }
@@ -2049,6 +2558,13 @@ abstract class Protocol {
       params: finalParams,
       meta: finalMeta,
     );
+    if (usesStatelessRequestShape) {
+      try {
+        validateStatelessRequestMetaObjects(jsonrpcRequest);
+      } catch (error, stackTrace) {
+        return Future<T>.error(error, stackTrace);
+      }
+    }
 
     final taskRequestState = options?.task != null
         ? _TaskAugmentedRequestState(
@@ -2356,11 +2872,30 @@ abstract class Protocol {
     );
   }
 
+  /// Sends a notification on the response stream for [requestId].
+  @protected
+  Future<void> notificationForRequest(
+    JsonRpcNotification notificationData, {
+    required RequestId requestId,
+    RelatedTaskMetadata? relatedTask,
+  }) {
+    return _notificationWithRequestId(
+      notificationData,
+      relatedTask: relatedTask,
+      relatedRequestId: requestId,
+    );
+  }
+
   Future<void> _notificationWithRequestId(
     JsonRpcNotification notificationData, {
     RelatedTaskMetadata? relatedTask,
     RequestId? relatedRequestId,
+    Object? requestContext,
+    bool allowWhileClosing = false,
   }) async {
+    if (_closingConnection && !allowWhileClosing) {
+      throw StateError("Connection is closing.");
+    }
     if (_transport == null) {
       throw StateError("Not connected to a transport.");
     }
@@ -2418,20 +2953,22 @@ abstract class Protocol {
       _pendingDebouncedNotifications.add(notificationData.method);
       Future.microtask(() {
         _pendingDebouncedNotifications.remove(notificationData.method);
-        if (_transport == null) return;
+        if (_closingConnection || _transport == null) return;
         _transport!
-            .sendPreservingRequestId(
+            .sendPreservingRequestContext(
               jsonrpcNotification,
               relatedRequestId: relatedRequestId,
+              requestContext: requestContext,
             )
             .catchError((e) => _onerror(e));
       });
       return;
     }
 
-    await _transport!.sendPreservingRequestId(
+    await _transport!.sendPreservingRequestContext(
       jsonrpcNotification,
       relatedRequestId: relatedRequestId,
+      requestContext: requestContext,
     );
   }
 

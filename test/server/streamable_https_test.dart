@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:mirrors';
 
 import 'package:mcp_dart/src/server/server.dart';
 import 'package:mcp_dart/src/server/streamable_https.dart';
@@ -8,6 +9,21 @@ import 'package:mcp_dart/src/shared/protocol.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
 import 'package:test/test.dart';
+
+int _ownedStreamIdCount(StreamableHTTPServerTransport transport) {
+  final instance = reflect(transport);
+  for (ClassMirror? type = instance.type;
+      type != null;
+      type = type.superclass) {
+    for (final declaration in type.declarations.entries) {
+      if (MirrorSystem.getName(declaration.key) == '_ownedStreamIds') {
+        return (instance.getField(declaration.key).reflectee as Set<Object?>)
+            .length;
+      }
+    }
+  }
+  throw StateError('Stream ownership state not found');
+}
 
 /// A simple implementation of EventStore for testing event resumability
 class TestEventStore implements EventStore {
@@ -424,6 +440,357 @@ void main() {
       );
     });
 
+    test('maps malformed typed request params to InvalidParams', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      Future<Map<String, dynamic>> post(
+        Map<String, dynamic> body, {
+        required String method,
+        String? name,
+      }) async {
+        final client = HttpClient();
+        try {
+          final request = await client.postUrl(
+            Uri.parse('$serverUrlBase/mcp'),
+          );
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            )
+            ..set('MCP-Protocol-Version', previewProtocolVersion)
+            ..set('Mcp-Method', method);
+          if (name != null) {
+            request.headers.set('Mcp-Name', name);
+          }
+          request.write(jsonEncode(body));
+          final response = await request.close();
+          expect(response.statusCode, HttpStatus.badRequest);
+          return jsonDecode(await utf8.decodeStream(response))
+              as Map<String, dynamic>;
+        } finally {
+          client.close(force: true);
+        }
+      }
+
+      final taskError = await post(
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'bad-task',
+          'method': Method.tasksGet,
+          'params': {
+            'taskId': 7,
+            '_meta': _statelessMeta(),
+          },
+        },
+        method: Method.tasksGet,
+        name: '7',
+      );
+      expect(taskError['id'], 'bad-task');
+      expect(taskError['error']['code'], ErrorCode.invalidParams.value);
+
+      final listenError = await post(
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': 'bad-listen',
+          'method': Method.subscriptionsListen,
+          'params': {
+            'notifications': 'tools',
+            '_meta': _statelessMeta(),
+          },
+        },
+        method: Method.subscriptionsListen,
+      );
+      expect(listenError['id'], 'bad-listen');
+      expect(listenError['error']['code'], ErrorCode.invalidParams.value);
+
+      final envelopeError = await post(
+        {
+          'jsonrpc': jsonRpcVersion,
+          'id': <String>[],
+          'method': Method.tasksGet,
+          'params': {'taskId': 'task'},
+        },
+        method: Method.tasksGet,
+        name: 'task',
+      );
+      expect(envelopeError['id'], isNull);
+      expect(envelopeError['error']['code'], ErrorCode.invalidRequest.value);
+
+      for (final scenario in [
+        (
+          body: <String, dynamic>{
+            'jsonrpc': '1.0',
+            'id': 'wrong-version',
+            'method': Method.tasksGet,
+            'params': {
+              'taskId': 'task',
+              '_meta': _statelessMeta(),
+            },
+          },
+          id: 'wrong-version',
+          method: Method.tasksGet,
+          name: 'task',
+        ),
+        (
+          body: <String, dynamic>{
+            'jsonrpc': jsonRpcVersion,
+            'id': 42,
+            'method': 7,
+          },
+          id: 42,
+          method: Method.tasksGet,
+          name: null,
+        ),
+      ]) {
+        final invalidRequest = await post(
+          scenario.body,
+          method: scenario.method,
+          name: scenario.name,
+        );
+        expect(invalidRequest['id'], scenario.id);
+        expect(
+          invalidRequest['error']['code'],
+          ErrorCode.invalidRequest.value,
+        );
+      }
+    });
+
+    test(
+        'validates required 2026 headers before malformed typed request params',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      Future<Map<String, dynamic>> post({
+        required String id,
+        required String bodyVersion,
+        required String? protocolHeader,
+        required String? methodHeader,
+        required String? nameHeader,
+      }) async {
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        if (protocolHeader != null) {
+          request.headers.set('MCP-Protocol-Version', protocolHeader);
+        }
+        if (methodHeader != null) {
+          request.headers.set('Mcp-Method', methodHeader);
+        }
+        if (nameHeader != null) {
+          request.headers.set('Mcp-Name', nameHeader);
+        }
+        request.write(
+          jsonEncode({
+            'jsonrpc': jsonRpcVersion,
+            'id': id,
+            'method': Method.tasksUpdate,
+            'params': {
+              'taskId': 'task-1',
+              'inputResponses': 'not-an-object',
+              '_meta': {
+                ..._statelessMeta(),
+                McpMetaKey.protocolVersion: bodyVersion,
+              },
+            },
+          }),
+        );
+
+        final response = await request.close();
+        expect(response.statusCode, HttpStatus.badRequest, reason: id);
+        return jsonDecode(await utf8.decodeStream(response))
+            as Map<String, dynamic>;
+      }
+
+      final scenarios = <({
+        String id,
+        String bodyVersion,
+        String? protocolHeader,
+        String? methodHeader,
+        String? nameHeader,
+        String expectedMessage,
+      })>[
+        (
+          id: 'missing-protocol',
+          bodyVersion: previewProtocolVersion,
+          protocolHeader: null,
+          methodHeader: Method.tasksUpdate,
+          nameHeader: 'task-1',
+          expectedMessage: 'MCP-Protocol-Version header is required',
+        ),
+        (
+          id: 'mismatched-protocol',
+          bodyVersion: latestInitializationProtocolVersion,
+          protocolHeader: previewProtocolVersion,
+          methodHeader: Method.tasksUpdate,
+          nameHeader: 'task-1',
+          expectedMessage: 'MCP-Protocol-Version header value',
+        ),
+        (
+          id: 'missing-method',
+          bodyVersion: previewProtocolVersion,
+          protocolHeader: previewProtocolVersion,
+          methodHeader: null,
+          nameHeader: 'task-1',
+          expectedMessage: 'Mcp-Method header is required',
+        ),
+        (
+          id: 'mismatched-method',
+          bodyVersion: previewProtocolVersion,
+          protocolHeader: previewProtocolVersion,
+          methodHeader: Method.tasksGet,
+          nameHeader: 'task-1',
+          expectedMessage: 'Mcp-Method header value',
+        ),
+        (
+          id: 'missing-name',
+          bodyVersion: previewProtocolVersion,
+          protocolHeader: previewProtocolVersion,
+          methodHeader: Method.tasksUpdate,
+          nameHeader: null,
+          expectedMessage: 'Mcp-Name header is required',
+        ),
+        (
+          id: 'mismatched-name',
+          bodyVersion: previewProtocolVersion,
+          protocolHeader: previewProtocolVersion,
+          methodHeader: Method.tasksUpdate,
+          nameHeader: 'different-task',
+          expectedMessage: 'Mcp-Name header value',
+        ),
+      ];
+
+      for (final scenario in scenarios) {
+        final error = await post(
+          id: scenario.id,
+          bodyVersion: scenario.bodyVersion,
+          protocolHeader: scenario.protocolHeader,
+          methodHeader: scenario.methodHeader,
+          nameHeader: scenario.nameHeader,
+        );
+        expect(error['id'], scenario.id);
+        expect(error['error']['code'], ErrorCode.headerMismatch.value);
+        expect(
+          error['error']['message'],
+          contains(scenario.expectedMessage),
+        );
+      }
+
+      final invalidParams = await post(
+        id: 'valid-headers',
+        bodyVersion: previewProtocolVersion,
+        protocolHeader: previewProtocolVersion,
+        methodHeader: Method.tasksUpdate,
+        nameHeader: 'task-1',
+      );
+      expect(invalidParams['id'], 'valid-headers');
+      expect(invalidParams['error']['code'], ErrorCode.invalidParams.value);
+    });
+
+    test('stateless HTTP discover requires body protocol metadata', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        )
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
+        ..set('Mcp-Method', Method.serverDiscover);
+      request.write(
+        jsonEncode({
+          'jsonrpc': jsonRpcVersion,
+          'id': 'discover-missing-version',
+          'method': Method.serverDiscover,
+          'params': <String, dynamic>{},
+        }),
+      );
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 'discover-missing-version');
+      expect(body['error']['code'], ErrorCode.invalidParams.value);
+      expect(body['error']['message'], contains(McpMetaKey.protocolVersion));
+    });
+
+    test('unsupported protocol response preserves a readable request id',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      )..setServerSupportedProtocolVersions({previewProtocolVersion});
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        )
+        ..set('MCP-Protocol-Version', '1900-01-01');
+      request.write(
+        jsonEncode(
+          const JsonRpcRequest(id: 'unsupported-version', method: 'ping')
+              .toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 'unsupported-version');
+      expect(
+        body['error']['code'],
+        ErrorCode.unsupportedProtocolVersion.value,
+      );
+    });
+
     test('initialization with stateful session management', () async {
       // Create a new transport with session management
       final transport = StreamableHTTPServerTransport(
@@ -741,6 +1108,533 @@ void main() {
       timeout: const Timeout(Duration(seconds: 5)),
     );
 
+    test(
+      'isolates concurrent JSON POSTs that reuse a request ID',
+      () async {
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => null,
+            enableJsonResponse: true,
+          ),
+        );
+        addTearDown(transport.close);
+
+        final server = Server(
+          const Implementation(name: 'TestServer', version: '1.0.0'),
+        );
+        addTearDown(server.close);
+        final firstStarted = Completer<void>();
+        final secondStarted = Completer<void>();
+        final releaseFirst = Completer<void>();
+        final releaseSecond = Completer<void>();
+
+        void registerHandler(
+          String method,
+          String marker,
+          Completer<void> started,
+          Completer<void> release,
+        ) {
+          server.setRequestHandler<JsonRpcRequest>(
+            method,
+            (request, extra) async {
+              expect(extra.requestId, 'shared-id');
+              started.complete();
+              await release.future;
+              return EmptyResult(meta: {'marker': marker});
+            },
+            (id, params, meta) => JsonRpcRequest(
+              id: id,
+              method: method,
+              params: params,
+              meta: meta,
+            ),
+          );
+        }
+
+        registerHandler(
+          'test/first',
+          'first',
+          firstStarted,
+          releaseFirst,
+        );
+        registerHandler(
+          'test/second',
+          'second',
+          secondStarted,
+          releaseSecond,
+        );
+        await server.connect(transport);
+        transports['/mcp'] = transport;
+
+        Future<HttpClientResponse> postMessage(JsonRpcMessage message) async {
+          final client = HttpClient();
+          addTearDown(() => client.close(force: true));
+          final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            );
+          request.write(jsonEncode(message.toJson()));
+          return request.close();
+        }
+
+        final initializeResponse = await postMessage(
+          JsonRpcInitializeRequest(
+            id: 1,
+            initParams: const InitializeRequestParams(
+              protocolVersion: latestInitializationProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'TestClient', version: '1.0'),
+            ),
+          ),
+        );
+        expect(initializeResponse.statusCode, HttpStatus.ok);
+        await initializeResponse.drain<void>();
+        final initializedResponse = await postMessage(
+          const JsonRpcInitializedNotification(),
+        );
+        expect(initializedResponse.statusCode, HttpStatus.accepted);
+        await initializedResponse.drain<void>();
+
+        Future<Map<String, dynamic>> post(String method) async {
+          final response = await postMessage(
+            JsonRpcRequest(id: 'shared-id', method: method),
+          );
+          expect(response.statusCode, HttpStatus.ok);
+          expect(response.headers.contentType?.mimeType, 'application/json');
+          return jsonDecode(await utf8.decodeStream(response))
+              as Map<String, dynamic>;
+        }
+
+        final firstResponse = post('test/first');
+        await firstStarted.future;
+        final secondResponse = post('test/second');
+        await secondStarted.future;
+
+        releaseSecond.complete();
+        final secondJson = await secondResponse;
+        releaseFirst.complete();
+        final firstJson = await firstResponse;
+
+        expect(secondJson['id'], 'shared-id');
+        expect(secondJson['result']['_meta']['marker'], 'second');
+        expect(firstJson['id'], 'shared-id');
+        expect(firstJson['result']['_meta']['marker'], 'first');
+      },
+      timeout: const Timeout(Duration(seconds: 5)),
+    );
+
+    test(
+      'legacy cancellation aborts the unique matching HTTP request',
+      () async {
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => null,
+            eventStore: TestEventStore(),
+          ),
+        );
+        addTearDown(transport.close);
+
+        final server = Server(
+          const Implementation(name: 'TestServer', version: '1.0.0'),
+        );
+        addTearDown(server.close);
+        final requestStarted = Completer<void>();
+        final cancellationObserved = Completer<Object?>();
+        server.setRequestHandler<JsonRpcRequest>(
+          'test/cancellable',
+          (request, extra) async {
+            final abortSubscription = extra.signal.onAbort.listen((_) {
+              if (!cancellationObserved.isCompleted) {
+                cancellationObserved.complete(extra.signal.reason);
+              }
+            });
+            if (!requestStarted.isCompleted) {
+              requestStarted.complete();
+            }
+            try {
+              await cancellationObserved.future;
+            } finally {
+              await abortSubscription.cancel();
+            }
+            return const EmptyResult();
+          },
+          (id, params, meta) => JsonRpcRequest(
+            id: id,
+            method: 'test/cancellable',
+            params: params,
+            meta: meta,
+          ),
+        );
+        await server.connect(transport);
+        transports['/mcp'] = transport;
+
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+
+        Future<HttpClientResponse> post(JsonRpcMessage message) async {
+          final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            );
+          request.write(jsonEncode(message.toJson()));
+          return request.close();
+        }
+
+        final initialize = await post(
+          JsonRpcInitializeRequest(
+            id: 1,
+            initParams: const InitializeRequestParams(
+              protocolVersion: latestInitializationProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'TestClient', version: '1.0'),
+            ),
+          ),
+        );
+        expect(initialize.statusCode, HttpStatus.ok);
+        await initialize.drain<void>();
+        final initialized = await post(
+          const JsonRpcInitializedNotification(),
+        );
+        expect(initialized.statusCode, HttpStatus.accepted);
+        await initialized.drain<void>();
+
+        final pending = await post(
+          const JsonRpcRequest(
+            id: 'unique-request',
+            method: 'test/cancellable',
+          ),
+        );
+        expect(pending.statusCode, HttpStatus.ok);
+        expect(pending.headers.contentType?.mimeType, 'text/event-stream');
+        final pendingSubscription = pending.listen((_) {});
+        addTearDown(pendingSubscription.cancel);
+        await requestStarted.future;
+
+        final cancellation = await post(
+          JsonRpcCancelledNotification(
+            cancelParams: const CancelledNotification(
+              requestId: 'unique-request',
+              reason: 'legacy client cancelled',
+            ),
+          ),
+        );
+        expect(cancellation.statusCode, HttpStatus.accepted);
+        await cancellation.drain<void>();
+        expect(
+          await cancellationObserved.future,
+          'legacy client cancelled',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 5)),
+    );
+
+    test(
+      'legacy cancellation does not cross-cancel ambiguous duplicate IDs',
+      () async {
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => null,
+            eventStore: TestEventStore(),
+          ),
+        );
+        addTearDown(transport.close);
+
+        final server = Server(
+          const Implementation(name: 'TestServer', version: '1.0.0'),
+        );
+        addTearDown(server.close);
+        final firstStarted = Completer<AbortSignal>();
+        final secondStarted = Completer<AbortSignal>();
+        final releaseFirst = Completer<void>();
+        final releaseSecond = Completer<void>();
+        addTearDown(() {
+          if (!releaseFirst.isCompleted) {
+            releaseFirst.complete();
+          }
+          if (!releaseSecond.isCompleted) {
+            releaseSecond.complete();
+          }
+        });
+
+        void registerHandler(
+          String method,
+          String marker,
+          Completer<AbortSignal> started,
+          Completer<void> release,
+        ) {
+          server.setRequestHandler<JsonRpcRequest>(
+            method,
+            (request, extra) async {
+              started.complete(extra.signal);
+              await release.future;
+              return EmptyResult(meta: {'marker': marker});
+            },
+            (id, params, meta) => JsonRpcRequest(
+              id: id,
+              method: method,
+              params: params,
+              meta: meta,
+            ),
+          );
+        }
+
+        registerHandler(
+          'test/first-cancellable',
+          'first',
+          firstStarted,
+          releaseFirst,
+        );
+        registerHandler(
+          'test/second-cancellable',
+          'second',
+          secondStarted,
+          releaseSecond,
+        );
+        await server.connect(transport);
+        transports['/mcp'] = transport;
+
+        final client = HttpClient();
+        addTearDown(() => client.close(force: true));
+
+        Future<HttpClientResponse> post(JsonRpcMessage message) async {
+          final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            );
+          request.write(jsonEncode(message.toJson()));
+          return request.close();
+        }
+
+        final initialize = await post(
+          JsonRpcInitializeRequest(
+            id: 1,
+            initParams: const InitializeRequestParams(
+              protocolVersion: latestInitializationProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'TestClient', version: '1.0'),
+            ),
+          ),
+        );
+        expect(initialize.statusCode, HttpStatus.ok);
+        await initialize.drain<void>();
+        final initialized = await post(
+          const JsonRpcInitializedNotification(),
+        );
+        expect(initialized.statusCode, HttpStatus.accepted);
+        await initialized.drain<void>();
+
+        final firstResponse = await post(
+          const JsonRpcRequest(
+            id: 'shared-cancellation-id',
+            method: 'test/first-cancellable',
+          ),
+        );
+        final firstSignal = await firstStarted.future;
+        final secondResponse = await post(
+          const JsonRpcRequest(
+            id: 'shared-cancellation-id',
+            method: 'test/second-cancellable',
+          ),
+        );
+        final secondSignal = await secondStarted.future;
+
+        final cancellation = await post(
+          JsonRpcCancelledNotification(
+            cancelParams: const CancelledNotification(
+              requestId: 'shared-cancellation-id',
+              reason: 'ambiguous cancellation',
+            ),
+          ),
+        );
+        expect(cancellation.statusCode, HttpStatus.accepted);
+        await cancellation.drain<void>();
+        expect(firstSignal.aborted, isFalse);
+        expect(secondSignal.aborted, isFalse);
+
+        releaseSecond.complete();
+        releaseFirst.complete();
+        final responses = await Future.wait([
+          utf8.decodeStream(firstResponse),
+          utf8.decodeStream(secondResponse),
+        ]);
+        final firstMessages = _decodeSseJsonMessages(responses.first);
+        final secondMessages = _decodeSseJsonMessages(responses.last);
+        expect(firstMessages.single['result']['_meta']['marker'], 'first');
+        expect(secondMessages.single['result']['_meta']['marker'], 'second');
+      },
+      timeout: const Timeout(Duration(seconds: 5)),
+    );
+
+    test(
+      'isolates same-ID subscriptions and forces SSE for JSON mode',
+      () async {
+        const capabilities = ServerCapabilities(
+          tools: ServerCapabilitiesTools(listChanged: true),
+          resources: ServerCapabilitiesResources(listChanged: true),
+        );
+        final transport = StreamableHTTPServerTransport(
+          options: StreamableHTTPServerTransportOptions(
+            sessionIdGenerator: () => null,
+            enableJsonResponse: true,
+          ),
+        );
+        addTearDown(transport.close);
+        final server = Server(
+          const Implementation(name: 'TestServer', version: '1.0.0'),
+          options: const McpServerOptions(
+            protocol: McpProtocol.stable,
+            capabilities: capabilities,
+          ),
+        );
+        addTearDown(server.close);
+        final toolsAcknowledged = Completer<void>();
+        final resourcesAcknowledged = Completer<void>();
+        final releaseTools = Completer<void>();
+        final releaseResources = Completer<void>();
+
+        server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
+          Method.subscriptionsListen,
+          (request, extra) async {
+            final filter = request.listenParams.notifications;
+            await extra.sendSubscriptionAcknowledged(
+              filter.acknowledgedBy(capabilities),
+            );
+            if (filter.toolsListChanged == true) {
+              toolsAcknowledged.complete();
+              await releaseTools.future;
+              await extra.sendSubscriptionNotification(
+                const JsonRpcToolListChangedNotification(),
+              );
+            } else {
+              resourcesAcknowledged.complete();
+              await releaseResources.future;
+              await extra.sendSubscriptionNotification(
+                const JsonRpcResourceListChangedNotification(),
+              );
+            }
+            return const EmptyResult();
+          },
+          (id, params, meta) => JsonRpcSubscriptionsListenRequest(
+            id: id,
+            listenParams: SubscriptionsListenRequest.fromJson(params!),
+            meta: meta,
+          ),
+        );
+        await server.connect(transport);
+        transports['/mcp'] = transport;
+
+        Future<HttpClientResponse> postSubscription(
+          SubscriptionFilter filter,
+        ) async {
+          final client = HttpClient();
+          addTearDown(() => client.close(force: true));
+          final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            )
+            ..set('MCP-Protocol-Version', previewProtocolVersion)
+            ..set('Mcp-Method', Method.subscriptionsListen);
+          request.write(
+            jsonEncode(
+              JsonRpcSubscriptionsListenRequest(
+                id: 'shared-subscription-id',
+                listenParams: SubscriptionsListenRequest(
+                  notifications: filter,
+                ),
+                meta: _statelessMeta(),
+              ).toJson(),
+            ),
+          );
+          return request.close();
+        }
+
+        final toolsResponse = await postSubscription(
+          const SubscriptionFilter(toolsListChanged: true),
+        );
+        expect(toolsResponse.statusCode, HttpStatus.ok);
+        expect(
+          toolsResponse.headers.contentType?.mimeType,
+          'text/event-stream',
+        );
+        final toolsLines = StreamIterator(
+          toolsResponse.transform(utf8.decoder).transform(const LineSplitter()),
+        );
+        addTearDown(toolsLines.cancel);
+        final toolsAck = await _readSseJsonEvent(toolsLines);
+        await toolsAcknowledged.future;
+
+        final resourcesResponse = await postSubscription(
+          const SubscriptionFilter(resourcesListChanged: true),
+        );
+        expect(resourcesResponse.statusCode, HttpStatus.ok);
+        expect(
+          resourcesResponse.headers.contentType?.mimeType,
+          'text/event-stream',
+        );
+        final resourcesLines = StreamIterator(
+          resourcesResponse
+              .transform(utf8.decoder)
+              .transform(const LineSplitter()),
+        );
+        addTearDown(resourcesLines.cancel);
+        final resourcesAck = await _readSseJsonEvent(resourcesLines);
+        await resourcesAcknowledged.future;
+
+        expect(
+          toolsAck.json['method'],
+          Method.notificationsSubscriptionsAcknowledged,
+        );
+        expect(
+          toolsAck.json['params']['_meta'][McpMetaKey.subscriptionId],
+          'shared-subscription-id',
+        );
+        expect(
+          resourcesAck.json['method'],
+          Method.notificationsSubscriptionsAcknowledged,
+        );
+        expect(
+          resourcesAck.json['params']['_meta'][McpMetaKey.subscriptionId],
+          'shared-subscription-id',
+        );
+
+        releaseResources.complete();
+        final resourcesEvent = await _readSseJsonEvent(resourcesLines);
+        final resourcesFinal = await _readSseJsonEvent(resourcesLines);
+        expect(
+          resourcesEvent.json['method'],
+          Method.notificationsResourcesListChanged,
+        );
+        expect(resourcesFinal.json['id'], 'shared-subscription-id');
+        expect(
+          resourcesFinal.json['result']['_meta'][McpMetaKey.subscriptionId],
+          'shared-subscription-id',
+        );
+
+        releaseTools.complete();
+        final toolsEvent = await _readSseJsonEvent(toolsLines);
+        final toolsFinal = await _readSseJsonEvent(toolsLines);
+        expect(toolsEvent.json['method'], Method.notificationsToolsListChanged);
+        expect(toolsFinal.json['id'], 'shared-subscription-id');
+        expect(
+          toolsFinal.json['result']['_meta'][McpMetaKey.subscriptionId],
+          'shared-subscription-id',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 5)),
+    );
+
     test('enableJsonResponse option is accepted', () async {
       // Create a transport with JSON response enabled
       final transport = StreamableHTTPServerTransport(
@@ -762,6 +1656,214 @@ void main() {
         isTrue,
         reason: "Transport successfully created with enableJsonResponse=true",
       );
+    });
+
+    test('JSON responses release unused EventStore replay ownership', () async {
+      final eventStore = TestEventStore();
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'json-ownership-session',
+          eventStore: eventStore,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+      transport.onmessage = (message) {
+        if (message is JsonRpcInitializeRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const InitializeResult(
+                  protocolVersion: latestInitializationProtocolVersion,
+                  capabilities: ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'LegacyServer',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ),
+            ),
+          );
+        } else if (message is JsonRpcRequest && message.method == 'test/json') {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(id: message.id, result: const {'ok': true}),
+            ),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      Future<HttpClientResponse> post(
+        JsonRpcMessage message, {
+        String? sessionId,
+      }) async {
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        if (sessionId != null) {
+          request.headers.set('mcp-session-id', sessionId);
+        }
+        request.write(jsonEncode(message.toJson()));
+        return request.close();
+      }
+
+      final initialize = await post(
+        JsonRpcInitializeRequest(
+          id: 'initialize',
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestInitializationProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'Client', version: '1.0.0'),
+          ),
+        ),
+      );
+      expect(initialize.statusCode, HttpStatus.ok);
+      final sessionId = initialize.headers.value('mcp-session-id');
+      expect(sessionId, 'json-ownership-session');
+      await initialize.drain<void>();
+      await Future<void>.delayed(Duration.zero);
+      expect(_ownedStreamIdCount(transport), 0);
+
+      final initialized = await post(
+        const JsonRpcInitializedNotification(),
+        sessionId: sessionId,
+      );
+      expect(initialized.statusCode, HttpStatus.accepted);
+      await initialized.drain<void>();
+
+      for (var index = 0; index < 3; index++) {
+        final response = await post(
+          JsonRpcRequest(id: 'json-$index', method: 'test/json'),
+          sessionId: sessionId,
+        );
+        expect(response.statusCode, HttpStatus.ok);
+        expect(response.headers.contentType?.mimeType, 'application/json');
+        await response.drain<void>();
+        await Future<void>.delayed(Duration.zero);
+        expect(_ownedStreamIdCount(transport), 0);
+      }
+
+      expect(eventStore.events, isEmpty);
+    });
+
+    test('JSON response mode promotes legacy intermediate messages to SSE',
+        () async {
+      final eventStore = TestEventStore();
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'json-to-sse-session',
+          eventStore: eventStore,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+      transport.onmessage = (message) {
+        if (message is JsonRpcInitializeRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const InitializeResult(
+                  protocolVersion: latestInitializationProtocolVersion,
+                  capabilities: ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'LegacyServer',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ),
+            ),
+          );
+        } else if (message is JsonRpcRequest &&
+            message.method == 'test/intermediate') {
+          unawaited(() async {
+            await transport.send(
+              const JsonRpcNotification(
+                method: 'notifications/test/intermediate',
+              ),
+              relatedRequestId: message.id,
+            );
+            await transport.send(
+              JsonRpcResponse(id: message.id, result: const {'ok': true}),
+            );
+          }());
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      Future<HttpClientResponse> post(
+        JsonRpcMessage message, {
+        String? sessionId,
+      }) async {
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          );
+        if (sessionId != null) {
+          request.headers.set('mcp-session-id', sessionId);
+        }
+        request.write(jsonEncode(message.toJson()));
+        return request.close();
+      }
+
+      final initialize = await post(
+        JsonRpcInitializeRequest(
+          id: 'initialize',
+          initParams: const InitializeRequestParams(
+            protocolVersion: latestInitializationProtocolVersion,
+            capabilities: ClientCapabilities(),
+            clientInfo: Implementation(name: 'Client', version: '1.0.0'),
+          ),
+        ),
+      );
+      expect(initialize.statusCode, HttpStatus.ok);
+      final sessionId = initialize.headers.value('mcp-session-id');
+      expect(sessionId, 'json-to-sse-session');
+      await initialize.drain<void>();
+
+      final initialized = await post(
+        const JsonRpcInitializedNotification(),
+        sessionId: sessionId,
+      );
+      expect(initialized.statusCode, HttpStatus.accepted);
+      await initialized.drain<void>();
+
+      final response = await post(
+        const JsonRpcRequest(
+          id: 'intermediate',
+          method: 'test/intermediate',
+        ),
+        sessionId: sessionId,
+      );
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers.contentType?.mimeType, 'text/event-stream');
+      expect(response.headers.value('mcp-session-id'), sessionId);
+      final messages = _decodeSseJsonMessages(
+        await utf8.decodeStream(response),
+      );
+      expect(messages, hasLength(2));
+      expect(messages.first['method'], 'notifications/test/intermediate');
+      expect(messages.last['id'], 'intermediate');
+      expect(messages.last['result'], {'ok': true});
+      expect(_ownedStreamIdCount(transport), 1);
+      expect(eventStore.events.values.single, hasLength(3));
     });
 
     test('dns rebinding and compatibility toggle options are accepted',
@@ -998,8 +2100,12 @@ void main() {
       );
       expect(missingSession.statusCode, HttpStatus.badRequest);
       expect(missingSession.headers.contentType?.mimeType, 'application/json');
-      expect(
+      final missingSessionBody = jsonDecode(
         await utf8.decodeStream(missingSession),
+      ) as Map<String, dynamic>;
+      expect(missingSessionBody['id'], 2);
+      expect(
+        missingSessionBody['error']['message'],
         contains('Mcp-Session-Id header is required'),
       );
 
@@ -1009,8 +2115,12 @@ void main() {
       );
       expect(invalidSession.statusCode, HttpStatus.notFound);
       expect(invalidSession.headers.contentType?.mimeType, 'application/json');
-      expect(
+      final invalidSessionBody = jsonDecode(
         await utf8.decodeStream(invalidSession),
+      ) as Map<String, dynamic>;
+      expect(invalidSessionBody['id'], 3);
+      expect(
+        invalidSessionBody['error']['message'],
         contains('Session not found'),
       );
     });
@@ -1094,8 +2204,12 @@ void main() {
         alreadyInitialized.headers.contentType?.mimeType,
         'application/json',
       );
-      expect(
+      final alreadyInitializedBody = jsonDecode(
         await utf8.decodeStream(alreadyInitialized),
+      ) as Map<String, dynamic>;
+      expect(alreadyInitializedBody['id'], 4);
+      expect(
+        alreadyInitializedBody['error']['message'],
         contains('Server already initialized'),
       );
     });
@@ -1142,16 +2256,60 @@ void main() {
         );
 
         final response = await request.close();
-        final body = await utf8.decodeStream(response);
+        final body = jsonDecode(
+          await utf8.decodeStream(response),
+        ) as Map<String, dynamic>;
 
         expect(response.statusCode, HttpStatus.internalServerError);
         expect(response.headers.value('mcp-session-id'), isNull);
-        expect(body, contains('Invalid session ID'));
+        expect(body['id'], 1);
+        expect(body['error']['message'], contains('Invalid session ID'));
         expect(transport.sessionId, isNull);
 
         await transport.close();
         transports.remove('/mcp');
       }
+    });
+
+    test('post-parse internal errors preserve the request ID', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => throw StateError('generator failed'),
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        );
+      request.write(
+        jsonEncode(
+          JsonRpcRequest(
+            id: 'generator-error',
+            method: 'initialize',
+            params: const InitializeRequestParams(
+              protocolVersion: latestInitializationProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(name: 'Client', version: '1.0'),
+            ).toJson(),
+          ).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.internalServerError);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 'generator-error');
+      expect(body['error']['code'], ErrorCode.internalError.value);
     });
 
     test('rejects unsafe custom EventStore SSE event IDs', () async {
@@ -2093,7 +3251,8 @@ void main() {
             .value;
         final firstEventId = streamEvents.first.key;
 
-        // 3. Close the active GET stream cleanly. The streamId remains in `_ownedStreamIds` forever.
+        // 3. Close the active GET stream cleanly. Replay ownership remains
+        // available because the EventStore may serve a later reconnect.
         for (final client in activeClients) {
           client.close(force: true);
         }
@@ -2270,6 +3429,7 @@ void main() {
       final transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
           sessionIdGenerator: () => null,
+          enableJsonResponse: true,
         ),
       );
       await transport.start();
@@ -2390,6 +3550,185 @@ void main() {
       expect(body['error']['message'], contains('Mcp-Name header value'));
     });
 
+    test(
+        '2026 stateless HTTP requires name headers before validating body sources',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'unused-session-id',
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = (message) {
+        receivedMessages.add(message);
+        if (message is JsonRpcRequest) {
+          unawaited(
+            transport.send(JsonRpcResponse(id: message.id, result: const {})),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      const cases = <(String, String, Map<String, dynamic>)>[
+        (Method.toolsCall, 'name', {'arguments': <String, dynamic>{}}),
+        (Method.resourcesRead, 'uri', <String, dynamic>{}),
+        (Method.promptsGet, 'name', <String, dynamic>{}),
+        (Method.tasksGet, 'taskId', <String, dynamic>{}),
+        (
+          Method.tasksUpdate,
+          'taskId',
+          {'inputResponses': <String, dynamic>{}},
+        ),
+        (Method.tasksCancel, 'taskId', <String, dynamic>{}),
+      ];
+      var id = 20;
+      for (final (method, sourceField, otherParams) in cases) {
+        for (final includeWrongTypeSource in const [false, true]) {
+          final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+          request.headers
+            ..contentType = ContentType.json
+            ..set(
+              HttpHeaders.acceptHeader,
+              'application/json, text/event-stream',
+            )
+            ..set('MCP-Protocol-Version', previewProtocolVersion)
+            ..set('Mcp-Method', method);
+          request.write(
+            jsonEncode(
+              JsonRpcRequest(
+                id: id,
+                method: method,
+                params: {
+                  ...otherParams,
+                  if (includeWrongTypeSource) sourceField: 42,
+                },
+                meta: _statelessMeta(),
+              ),
+            ),
+          );
+
+          final response = await request.close();
+          expect(
+            response.statusCode,
+            HttpStatus.badRequest,
+            reason:
+                '$method ${includeWrongTypeSource ? 'wrong type' : 'absent'}',
+          );
+          final body = jsonDecode(await utf8.decodeStream(response))
+              as Map<String, dynamic>;
+          expect(body['id'], id, reason: method);
+          expect(
+            body['error']['code'],
+            ErrorCode.headerMismatch.value,
+            reason: method,
+          );
+          expect(
+            body['error']['message'],
+            contains('Mcp-Name header is required'),
+            reason: method,
+          );
+          id++;
+        }
+      }
+
+      expect(receivedMessages, isEmpty);
+    });
+
+    test('2026 stateless HTTP decodes base64 Mcp-Name values', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => 'unused-session-id',
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+      transport.onmessage = (message) {
+        if (message is JsonRpcRequest) {
+          unawaited(
+            transport.send(JsonRpcResponse(id: message.id, result: const {})),
+          );
+        }
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      const cases = <(String, String, String)>[
+        (Method.toolsCall, 'name', 'café'),
+        (Method.toolsCall, 'name', 'tool\u0001name'),
+        (Method.promptsGet, 'name', ' prompt '),
+        (Method.resourcesRead, 'uri', 'file:///café'),
+        (Method.tasksGet, 'taskId', '=?base64?literal?='),
+      ];
+      for (var index = 0; index < cases.length; index++) {
+        final (method, field, value) = cases[index];
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          )
+          ..set('MCP-Protocol-Version', previewProtocolVersion)
+          ..set('Mcp-Method', method)
+          ..set(
+            'Mcp-Name',
+            '=?base64?${base64Encode(utf8.encode(value))}?=',
+          );
+        request.write(
+          jsonEncode(
+            JsonRpcRequest(
+              id: index + 1,
+              method: method,
+              params: <String, dynamic>{
+                field: value,
+                if (method == Method.toolsCall)
+                  'arguments': <String, dynamic>{},
+              },
+              meta: _statelessMeta(),
+            ),
+          ),
+        );
+
+        final response = await request.close();
+        expect(response.statusCode, HttpStatus.ok, reason: '$method $value');
+        await response.drain<void>();
+      }
+
+      final malformed = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      malformed.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        )
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
+        ..set('Mcp-Method', Method.toolsCall)
+        ..set('Mcp-Name', '=?base64?%%%?=');
+      malformed.write(
+        jsonEncode(
+          JsonRpcCallToolRequest(
+            id: 99,
+            params: const {'name': 'echo', 'arguments': <String, dynamic>{}},
+            meta: _statelessMeta(),
+          ),
+        ),
+      );
+      final malformedResponse = await malformed.close();
+      expect(malformedResponse.statusCode, HttpStatus.badRequest);
+      final malformedBody = jsonDecode(
+        await utf8.decodeStream(malformedResponse),
+      ) as Map<String, dynamic>;
+      expect(malformedBody['error']['message'], contains('malformed'));
+    });
+
     test('2026 stateless HTTP accepts task requests with matching name header',
         () async {
       final transport = StreamableHTTPServerTransport(
@@ -2403,7 +3742,12 @@ void main() {
       transports['/mcp'] = transport;
 
       transport.onmessage = (message) {
-        if (message is JsonRpcUpdateTaskRequest) {
+        if (message is JsonRpcRequest &&
+            {
+              Method.tasksGet,
+              Method.tasksUpdate,
+              Method.tasksCancel,
+            }.contains(message.method)) {
           unawaited(
             transport.send(
               JsonRpcResponse(
@@ -2417,33 +3761,68 @@ void main() {
 
       final client = HttpClient();
       addTearDown(() => client.close(force: true));
-      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
-      request.headers
-        ..contentType = ContentType.json
-        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-        ..set('MCP-Protocol-Version', previewProtocolVersion)
-        ..set('Mcp-Method', Method.tasksUpdate)
-        ..set('Mcp-Name', 'task-1');
-      request.write(
-        jsonEncode(
-          JsonRpcUpdateTaskRequest(
+      final requests = <MapEntry<JsonRpcRequest, String>>[
+        MapEntry(
+          JsonRpcGetTaskRequest(
             id: 4,
+            getParams: const GetTaskRequest(taskId: 'task-1'),
+            meta: _statelessMeta(),
+          ),
+          'task-1',
+        ),
+        MapEntry(
+          JsonRpcUpdateTaskRequest(
+            id: 5,
             updateParams: const UpdateTaskRequest(
               taskId: 'task-1',
               inputResponses: {},
             ),
             meta: _statelessMeta(),
           ),
+          'task-1',
         ),
-      );
+        MapEntry(
+          JsonRpcCancelTaskRequest(
+            id: 6,
+            cancelParams: const CancelTaskRequest(taskId: 'task-1'),
+            meta: _statelessMeta(),
+          ),
+          'task-1',
+        ),
+        MapEntry(
+          JsonRpcGetTaskRequest(
+            id: 7,
+            getParams: const GetTaskRequest(taskId: ''),
+            meta: _statelessMeta(),
+          ),
+          '=?base64??=',
+        ),
+      ];
+      for (final entry in requests) {
+        final message = entry.key;
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          )
+          ..set('MCP-Protocol-Version', previewProtocolVersion)
+          ..set('Mcp-Method', message.method)
+          ..set('Mcp-Name', entry.value);
+        request.write(jsonEncode(message));
 
-      final response = await request.close();
-
-      expect(response.statusCode, HttpStatus.ok);
-      final body =
-          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
-      expect(body['id'], 4);
-      expect(body['result'], {'resultType': resultTypeComplete});
+        final response = await request.close();
+        final responseBody = await utf8.decodeStream(response);
+        expect(
+          response.statusCode,
+          HttpStatus.ok,
+          reason: '${message.method}: $responseBody',
+        );
+        final body = jsonDecode(responseBody) as Map<String, dynamic>;
+        expect(body['id'], message.id);
+        expect(body['result'], {'resultType': resultTypeComplete});
+      }
     });
 
     test('2026 stateless HTTP rejects task requests without name header',
@@ -2489,8 +3868,7 @@ void main() {
       expect(body['error']['message'], contains('Mcp-Name header'));
     });
 
-    test('2026 stateless HTTP accepts response posts without body metadata',
-        () async {
+    test('2026 stateless HTTP rejects client response posts', () async {
       final transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
           sessionIdGenerator: () => "unused-session-id",
@@ -2501,8 +3879,8 @@ void main() {
       await transport.start();
       transports['/mcp'] = transport;
 
-      final receivedMessage = Completer<JsonRpcMessage>();
-      transport.onmessage = receivedMessage.complete;
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = receivedMessages.add;
 
       final client = HttpClient();
       addTearDown(() => client.close(force: true));
@@ -2511,6 +3889,196 @@ void main() {
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
         ..set('MCP-Protocol-Version', previewProtocolVersion);
+      request.write(
+        jsonEncode(
+          const JsonRpcResponse(
+            id: 'input-response',
+            result: {'ok': true},
+          ).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], isNull);
+      expect(body['error']['code'], ErrorCode.invalidRequest.value);
+      expect(body['error']['message'], contains('must not POST'));
+      expect(receivedMessages, isEmpty);
+    });
+
+    test('2026 stateless HTTP rejects cancellation notification posts',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = receivedMessages.add;
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
+        ..set('Mcp-Method', Method.notificationsCancelled);
+      request.write(
+        jsonEncode(
+          JsonRpcCancelledNotification(
+            cancelParams: const CancelledNotification(requestId: 1),
+            meta: {McpMetaKey.protocolVersion: previewProtocolVersion},
+          ).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['error']['code'], ErrorCode.invalidRequest.value);
+      expect(body['error']['message'], contains('closing its response stream'));
+      expect(receivedMessages, isEmpty);
+    });
+
+    test('2026 HTTP rejects known server notifications but permits extensions',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final receivedMessages = <JsonRpcMessage>[];
+      transport.onmessage = receivedMessages.add;
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      Future<HttpClientResponse> post(JsonRpcNotification notification) async {
+        final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+        request.headers
+          ..contentType = ContentType.json
+          ..set(
+            HttpHeaders.acceptHeader,
+            'application/json, text/event-stream',
+          )
+          ..set('MCP-Protocol-Version', previewProtocolVersion)
+          ..set('Mcp-Method', notification.method);
+        request.write(jsonEncode(notification.toJson()));
+        return request.close();
+      }
+
+      final progressResponse = await post(
+        JsonRpcProgressNotification(
+          progressParams: const ProgressNotification(
+            progressToken: 'progress-1',
+            progress: 1,
+          ),
+        ),
+      );
+      expect(progressResponse.statusCode, HttpStatus.badRequest);
+      final progressBody = jsonDecode(
+        await utf8.decodeStream(progressResponse),
+      ) as Map<String, dynamic>;
+      expect(
+        progressBody['error']['code'],
+        ErrorCode.invalidRequest.value,
+      );
+      expect(
+        progressBody['error']['message'],
+        contains(Method.notificationsProgress),
+      );
+      expect(receivedMessages, isEmpty);
+
+      const custom = JsonRpcNotification(
+        method: 'com.example/notifications/custom',
+      );
+      final customResponse = await post(custom);
+      expect(customResponse.statusCode, HttpStatus.accepted);
+      expect(await utf8.decodeStream(customResponse), isEmpty);
+      expect(receivedMessages, hasLength(1));
+      expect(receivedMessages.single, isA<JsonRpcNotification>());
+      expect(
+        (receivedMessages.single as JsonRpcNotification).method,
+        custom.method,
+      );
+    });
+
+    test('legacy HTTP still accepts client response posts', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final receivedMessage = Completer<JsonRpcMessage>();
+      transport.onmessage = (message) {
+        if (message is JsonRpcInitializeRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const InitializeResult(
+                  protocolVersion: latestInitializationProtocolVersion,
+                  capabilities: ServerCapabilities(),
+                  serverInfo: Implementation(
+                    name: 'legacy-server',
+                    version: '1.0.0',
+                  ),
+                ).toJson(),
+              ),
+            ),
+          );
+          return;
+        }
+        receivedMessage.complete(message);
+      };
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final initializeRequest =
+          await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      initializeRequest.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream');
+      initializeRequest.write(
+        jsonEncode(
+          JsonRpcInitializeRequest(
+            id: 1,
+            initParams: const InitializeRequestParams(
+              protocolVersion: latestInitializationProtocolVersion,
+              capabilities: ClientCapabilities(),
+              clientInfo: Implementation(
+                name: 'legacy-client',
+                version: '1.0.0',
+              ),
+            ),
+          ).toJson(),
+        ),
+      );
+      final initializeResponse = await initializeRequest.close();
+      expect(initializeResponse.statusCode, HttpStatus.ok);
+      await initializeResponse.drain<void>();
+
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream');
       request.write(
         jsonEncode(
           const JsonRpcResponse(
@@ -2731,6 +4299,93 @@ void main() {
       expect(body['result']['content'], isEmpty);
     });
 
+    test('2026 stateless HTTP routes only opted-in request logging', () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      late final Server server;
+      server = Server(
+        const Implementation(name: 'TestServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.stable,
+          capabilities: ServerCapabilities(
+            logging: <String, dynamic>{},
+            tools: ServerCapabilitiesTools(),
+          ),
+        ),
+      );
+      addTearDown(server.close);
+      server.setRequestHandler<JsonRpcListToolsRequest>(
+        Method.toolsList,
+        (request, extra) async {
+          await extra.sendNotification(
+            JsonRpcLoggingMessageNotification(
+              logParams: const LoggingMessageNotification(
+                level: LoggingLevel.debug,
+                data: 'below threshold',
+              ),
+            ),
+          );
+          await server.sendStatelessLoggingMessage(
+            const LoggingMessageNotification(
+              level: LoggingLevel.warning,
+              data: 'routed warning',
+            ),
+            requestMeta: extra.meta,
+            requestId: extra.requestId,
+          );
+          return const ListToolsResult(tools: []);
+        },
+        (id, params, meta) => JsonRpcListToolsRequest(
+          id: id,
+          params: params,
+          meta: meta,
+        ),
+      );
+      await server.connect(transport);
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        )
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
+        ..set('Mcp-Method', Method.toolsList);
+      request.write(
+        jsonEncode(
+          JsonRpcListToolsRequest(
+            id: 'logged-list',
+            meta: {
+              ..._statelessMeta(),
+              McpMetaKey.logLevel: LoggingLevel.warning.name,
+            },
+          ),
+        ),
+      );
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers.contentType?.mimeType, 'text/event-stream');
+      final messages = _decodeSseJsonMessages(
+        await utf8.decodeStream(response),
+      );
+      expect(messages, hasLength(2));
+      expect(messages.first['method'], Method.notificationsMessage);
+      expect(messages.first['params']['level'], LoggingLevel.warning.name);
+      expect(messages.first['params']['data'], 'routed warning');
+      expect(messages.last['id'], 'logged-list');
+      expect(messages.last['result']['tools'], isEmpty);
+    });
+
     test('2026 stateless HTTP rejects server requests on response streams',
         () async {
       final transport = StreamableHTTPServerTransport(
@@ -2884,6 +4539,188 @@ void main() {
         notification.cancelParams.reason,
         contains('SSE response stream closed'),
       );
+    });
+
+    test(
+        '2026 stateless HTTP cancels pending request when JSON response closes',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+      transports['/mcp'] = transport;
+
+      final receivedRequest = Completer<JsonRpcListToolsRequest>();
+      final cancellation = Completer<JsonRpcCancelledNotification>();
+      transport.onmessage = (message) {
+        if (message is JsonRpcListToolsRequest) {
+          if (!receivedRequest.isCompleted) {
+            receivedRequest.complete(message);
+          }
+          return;
+        }
+
+        if (message is JsonRpcCancelledNotification &&
+            !cancellation.isCompleted) {
+          cancellation.complete(message);
+        }
+      };
+
+      final body = jsonEncode(
+        JsonRpcListToolsRequest(id: 12, meta: _statelessMeta()).toJson(),
+      );
+      final bodyBytes = utf8.encode(body);
+      final socket =
+          await Socket.connect(InternetAddress.loopbackIPv4, serverPort);
+      addTearDown(socket.destroy);
+      socket.add(
+        utf8.encode(
+          'POST /mcp HTTP/1.1\r\n'
+          'Host: localhost:$serverPort\r\n'
+          'Content-Type: application/json\r\n'
+          'Accept: application/json, text/event-stream\r\n'
+          'MCP-Protocol-Version: $previewProtocolVersion\r\n'
+          'Mcp-Method: ${Method.toolsList}\r\n'
+          'Content-Length: ${bodyBytes.length}\r\n'
+          '\r\n',
+        ),
+      );
+      socket.add(bodyBytes);
+      await socket.flush();
+
+      expect(
+        (await receivedRequest.future.timeout(const Duration(seconds: 3))).id,
+        12,
+      );
+      socket.destroy();
+
+      final notification = await cancellation.future.timeout(
+        const Duration(seconds: 3),
+      );
+      expect(notification.cancelParams.requestId, 12);
+      expect(
+        notification.cancelParams.reason,
+        contains('JSON response stream closed'),
+      );
+    });
+
+    test(
+        '2026 detached JSON preserves response headers without cancelling completed requests',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      addTearDown(transport.close);
+      await transport.start();
+
+      final cancellations = <JsonRpcCancelledNotification>[];
+      transport.onmessage = (message) {
+        if (message is JsonRpcCancelledNotification) {
+          cancellations.add(message);
+        } else if (message is JsonRpcListToolsRequest) {
+          unawaited(
+            message.id == 14
+                ? transport.send(
+                    JsonRpcError(
+                      id: message.id,
+                      error: const JsonRpcErrorData(
+                        code: -32601,
+                        message: 'Method not found',
+                      ),
+                    ),
+                  )
+                : transport.send(
+                    JsonRpcResponse(
+                      id: message.id,
+                      result: const ListToolsResult(tools: []).toJson(),
+                    ),
+                  ),
+          );
+        }
+      };
+
+      final headerServer = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      addTearDown(() => headerServer.close(force: true));
+      headerServer.listen((request) async {
+        request.response.headers
+          ..set('access-control-allow-origin', 'https://example.com')
+          ..add(HttpHeaders.setCookieHeader, 'first=1')
+          ..add(HttpHeaders.setCookieHeader, 'second=2');
+        await transport.handleRequest(request);
+      });
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:${headerServer.port}/mcp'),
+      );
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
+        ..set('Mcp-Method', Method.toolsList);
+      request.write(
+        jsonEncode(
+          JsonRpcListToolsRequest(id: 13, meta: _statelessMeta()).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.headers.contentLength, greaterThan(0));
+      expect(response.persistentConnection, isFalse);
+      expect(
+        response.headers.value('access-control-allow-origin'),
+        'https://example.com',
+      );
+      expect(
+        response.headers[HttpHeaders.setCookieHeader],
+        containsAll(<String>['first=1', 'second=2']),
+      );
+      expect(body['id'], 13);
+      expect(body['result']['tools'], isEmpty);
+      expect(cancellations, isEmpty);
+
+      final errorRequest = await client.postUrl(
+        Uri.parse('http://127.0.0.1:${headerServer.port}/mcp'),
+      );
+      errorRequest.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
+        ..set('Mcp-Method', Method.toolsList);
+      errorRequest.write(
+        jsonEncode(
+          JsonRpcListToolsRequest(id: 14, meta: _statelessMeta()).toJson(),
+        ),
+      );
+
+      final errorResponse = await errorRequest.close();
+      final errorBody = jsonDecode(await utf8.decodeStream(errorResponse))
+          as Map<String, dynamic>;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(errorResponse.statusCode, HttpStatus.notFound);
+      expect(
+        errorResponse.headers.value('access-control-allow-origin'),
+        'https://example.com',
+      );
+      expect(errorBody['id'], 14);
+      expect(errorBody['error']['code'], ErrorCode.methodNotFound.value);
+      expect(cancellations, isEmpty);
     });
 
     test('2026 stateless HTTP validates mapped tool parameter headers',
@@ -3061,6 +4898,44 @@ void main() {
       expect(body['result']['content'], isEmpty);
 
       (statusCode, body) = await postToolCall(
+        id: 39,
+        arguments: const {
+          'count': 9007199254740991,
+          'dryRun': false,
+          'region': 'us-east1',
+        },
+        headers: const {
+          'Mcp-Param-Count': '9007199254740991',
+          'Mcp-Param-Dry-Run': 'false',
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.ok);
+      expect(body['id'], 39);
+      expect(body['result']['content'], isEmpty);
+
+      (statusCode, body) = await postToolCall(
+        id: 40,
+        arguments: const {
+          'count': 9007199254740992,
+          'dryRun': false,
+          'region': 'us-east1',
+        },
+        headers: const {
+          'Mcp-Param-Count': '9007199254740992',
+          'Mcp-Param-Dry-Run': 'false',
+          'Mcp-Param-Region': 'us-east1',
+        },
+      );
+      expect(statusCode, HttpStatus.badRequest);
+      expect(body['id'], 40);
+      expect(body['error']['code'], ErrorCode.headerMismatch.value);
+      expect(
+        body['error']['message'],
+        contains('JavaScript safe integer range'),
+      );
+
+      (statusCode, body) = await postToolCall(
         id: 36,
         arguments: const {
           'dryRun': false,
@@ -3096,6 +4971,23 @@ void main() {
       expect(body['result']['content'], isEmpty);
 
       (statusCode, body) = await postToolCall(
+        id: 41,
+        arguments: const {
+          'dryRun': false,
+          'region': 'us-east1',
+          'trace': 'body-value',
+        },
+        headers: const {
+          'Mcp-Param-Dry-Run': 'false',
+          'Mcp-Param-Region': 'us-east1',
+          'Mcp-Param-Trace': '=?base64?%%%?=',
+        },
+      );
+      expect(statusCode, HttpStatus.ok);
+      expect(body['id'], 41);
+      expect(body['result']['content'], isEmpty);
+
+      (statusCode, body) = await postToolCall(
         id: 33,
         headers: const {
           'Mcp-Param-Dry-Run': 'false',
@@ -3107,7 +4999,7 @@ void main() {
       expect(body['result']['content'], isEmpty);
     });
 
-    test('2026 stateless HTTP rejects malformed routing headers', () async {
+    test('2026 stateless HTTP validates recognized routing headers', () async {
       final transport = StreamableHTTPServerTransport(
         options: StreamableHTTPServerTransportOptions(
           sessionIdGenerator: () => "unused-session-id",
@@ -3115,13 +5007,31 @@ void main() {
           rejectBatchJsonRpcPayloads: false,
         ),
       );
+      transport.setToolParameterHeaderMappings(
+        const {
+          'execute': {'region': 'Region'},
+        },
+      );
       addTearDown(transport.close);
       await transport.start();
       transports['/mcp'] = transport;
+      transport.onmessage = (message) {
+        if (message is JsonRpcCallToolRequest) {
+          unawaited(
+            transport.send(
+              JsonRpcResponse(
+                id: message.id,
+                result: const CallToolResult(content: []).toJson(),
+              ),
+            ),
+          );
+        }
+      };
 
       Future<Map<String, dynamic>> postJson(
         Object body, {
         Map<String, String> headers = const {},
+        int expectedStatus = HttpStatus.badRequest,
       }) async {
         final client = HttpClient();
         addTearDown(() => client.close(force: true));
@@ -3136,7 +5046,7 @@ void main() {
         request.write(jsonEncode(body));
 
         final response = await request.close();
-        expect(response.statusCode, HttpStatus.badRequest);
+        expect(response.statusCode, expectedStatus);
         return jsonDecode(await utf8.decodeStream(response))
             as Map<String, dynamic>;
       }
@@ -3148,10 +5058,8 @@ void main() {
           'Mcp-Method': Method.toolsList,
         },
       );
-      expect(
-        body['error']['message'],
-        contains('no matching request _meta protocol version'),
-      );
+      expect(body['error']['code'], ErrorCode.invalidParams.value);
+      expect(body['error']['message'], contains(McpMetaKey.protocolVersion));
 
       final topLevelMetaOnly = const JsonRpcListToolsRequest(id: 20).toJson()
         ..['_meta'] = _statelessMeta();
@@ -3163,7 +5071,8 @@ void main() {
         },
       );
       expect(body['id'], 20);
-      expect(body['error']['message'], contains('params._meta'));
+      expect(body['error']['code'], ErrorCode.invalidParams.value);
+      expect(body['error']['message'], contains(McpMetaKey.protocolVersion));
 
       body = await postJson(
         JsonRpcListToolsRequest(id: 5, meta: _statelessMeta()).toJson(),
@@ -3172,26 +5081,6 @@ void main() {
         },
       );
       expect(body['error']['message'], contains('Mcp-Method header'));
-
-      body = await postJson(
-        JsonRpcCallToolRequest(
-          id: 6,
-          params: const {
-            'name': 'execute',
-            'arguments': {'count': 2, 'enabled': true},
-          },
-          meta: _statelessMeta(),
-        ).toJson(),
-        headers: {
-          'MCP-Protocol-Version': previewProtocolVersion,
-          'Mcp-Method': Method.toolsCall,
-          'Mcp-Name': 'execute',
-          'Mcp-Param-count': '2',
-          'Mcp-Param-enabled': 'false',
-        },
-      );
-      expect(body['id'], 6);
-      expect(body['error']['message'], contains('mcp-param-enabled'));
 
       body = await postJson(
         JsonRpcCallToolRequest(
@@ -3207,10 +5096,12 @@ void main() {
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'execute',
           'Mcp-Param-': 'us-east1',
+          'Mcp-Param-Region': 'us-east1',
         },
+        expectedStatus: HttpStatus.ok,
       );
       expect(body['id'], 16);
-      expect(body['error']['message'], contains('header name is malformed'));
+      expect(body['result']['content'], isEmpty);
 
       body = await postJson(
         JsonRpcCallToolRequest(
@@ -3247,29 +5138,7 @@ void main() {
       expect(body['id'], 18);
       expect(
         body['error']['message'],
-        contains('header has no matching body arguments'),
-      );
-
-      body = await postJson(
-        JsonRpcCallToolRequest(
-          id: 19,
-          params: const {
-            'name': 'execute',
-            'arguments': {'region': 'us-east1'},
-          },
-          meta: _statelessMeta(),
-        ).toJson(),
-        headers: {
-          'MCP-Protocol-Version': previewProtocolVersion,
-          'Mcp-Method': Method.toolsCall,
-          'Mcp-Name': 'execute',
-          'Mcp-Param-zone': 'us-east1-b',
-        },
-      );
-      expect(body['id'], 19);
-      expect(
-        body['error']['message'],
-        contains('header has no matching body argument'),
+        contains('no matching primitive body argument'),
       );
 
       body = await postJson(
@@ -3361,6 +5230,59 @@ void main() {
       expect(
         body['error']['message'],
         contains('not part of MCP stateless protocol versions'),
+      );
+    });
+
+    test(
+        '2026 stateless HTTP rejects missing client capabilities as invalid params',
+        () async {
+      final transport = StreamableHTTPServerTransport(
+        options: StreamableHTTPServerTransportOptions(
+          sessionIdGenerator: () => null,
+          enableJsonResponse: true,
+        ),
+      );
+      final server = Server(
+        const Implementation(name: 'StatelessServer', version: '1.0.0'),
+        options: const McpServerOptions(
+          protocol: McpProtocol.require2026,
+        ),
+      );
+      addTearDown(server.close);
+      await server.connect(transport);
+      transports['/mcp'] = transport;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse('$serverUrlBase/mcp'));
+      request.headers
+        ..contentType = ContentType.json
+        ..set(
+          HttpHeaders.acceptHeader,
+          'application/json, text/event-stream',
+        )
+        ..set('MCP-Protocol-Version', previewProtocolVersion)
+        ..set('Mcp-Method', Method.toolsList);
+      request.write(
+        jsonEncode(
+          const JsonRpcListToolsRequest(
+            id: 'missing-client-capabilities',
+            meta: {
+              McpMetaKey.protocolVersion: previewProtocolVersion,
+            },
+          ).toJson(),
+        ),
+      );
+
+      final response = await request.close();
+      expect(response.statusCode, HttpStatus.badRequest);
+      final body =
+          jsonDecode(await utf8.decodeStream(response)) as Map<String, dynamic>;
+      expect(body['id'], 'missing-client-capabilities');
+      expect(body['error']['code'], ErrorCode.invalidParams.value);
+      expect(
+        body['error']['message'],
+        contains(McpMetaKey.clientCapabilities),
       );
     });
 

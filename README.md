@@ -85,11 +85,12 @@ commands.
   rebinding protection, and strict Streamable HTTP validation.
 - A Tasks extension implementation, MCP Apps metadata helpers, and generic
   extension negotiation. Extensions are separate from core protocol coverage.
-- Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, published
-  TypeScript/Python server interoperability, exact expected-gap checks for
-  their pre-#3002 beta clients, real-browser transport tests, a real Flutter
-  Web service integration in Chrome, deterministic widget tests, and an
-  independent pinned JSON Schema Test Suite gate.
+- Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, bidirectional
+  published TypeScript beta interoperability, Python beta server
+  interoperability with an exact pre-#3002 client-gap check, real-browser
+  transport tests, a real Flutter Web service integration in Chrome,
+  deterministic widget tests, and an independent pinned JSON Schema Test
+  Suite gate.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host

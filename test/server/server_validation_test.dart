@@ -36,7 +36,10 @@ void main() {
     late MockTransport transport;
 
     setUp(() {
-      server = Server(const Implementation(name: 'test', version: '1.0'));
+      server = Server(
+        const Implementation(name: 'test', version: '1.0'),
+        options: const McpServerOptions(protocol: McpProtocol.legacy),
+      );
       transport = MockTransport();
       server.connect(transport);
     });

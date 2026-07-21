@@ -57,9 +57,8 @@ void main() {
         0,
         reason: 'stdout:\n$stdoutOutput\nstderr:\n$stderrOutput',
       );
-      final probe =
-          (jsonDecode(await probeFile.readAsString()) as Map)
-              .cast<String, Object?>();
+      final probe = (jsonDecode(await probeFile.readAsString()) as Map)
+          .cast<String, Object?>();
       expect(probe, {
         'hasAnthropicApiKey': false,
         'hasAnthropicModel': false,

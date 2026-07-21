@@ -45,8 +45,8 @@ abstract class ToolTaskHandler {
 
 /// MCP 2025-11-25-compliant task handler that returns the cancelled task.
 ///
-/// Extend this when possible to keep the legacy [ToolTaskHandler.cancelTask]
-/// shim delegating to [cancelTaskWithResult]. If a handler already extends
+/// Extend this when possible to keep the legacy [ToolTaskHandler]
+/// `cancelTask` shim delegating to [cancelTaskWithResult]. If a handler extends
 /// another base class, implement [ToolTaskHandler] directly and wire
 /// `cancelTaskWithResult` through the server-level `onCancelTaskWithResult`
 /// callback instead.

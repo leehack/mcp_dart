@@ -6,74 +6,261 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+*'           # mcp_dart: v1.0.0, v1.0.0-dev, etc.
       - 'mcp_dart_cli-v[0-9]+.[0-9]+.[0-9]+*'  # mcp_dart_cli: mcp_dart_cli-v0.1.0, etc.
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  validate_candidate:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write # Required for authentication using OIDC
+      actions: read
+      contents: read
+      statuses: read
+    outputs:
+      archive_sha: ${{ steps.candidate.outputs.archive_sha }}
+      artifact_name: ${{ steps.candidate.outputs.artifact_name }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: Determine package from tag
         id: package-info
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="$GITHUB_REF_NAME"
           echo "🏷️ Processing tag: $TAG"
-          
+
           if [[ "$TAG" == mcp_dart_cli-v* ]]; then
             {
               echo "working_directory=packages/mcp_dart_cli"
               echo "package=mcp_dart_cli"
-              echo "tag_version=${TAG#mcp_dart_cli-v}"
             } >> "$GITHUB_OUTPUT"
+            TAG_VERSION="${TAG#mcp_dart_cli-v}"
             echo "📦 Package: mcp_dart_cli"
           elif [[ "$TAG" == v* ]]; then
             {
               echo "working_directory=."
               echo "package=mcp_dart"
-              echo "tag_version=${TAG#v}"
             } >> "$GITHUB_OUTPUT"
+            TAG_VERSION="${TAG#v}"
             echo "📦 Package: mcp_dart"
           else
             echo "❌ Unknown tag format: $TAG"
             exit 1
           fi
 
-      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+          if [[ "$TAG_VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Verify tag matches package version
-        working-directory: ${{ steps.package-info.outputs.working_directory }}
+      # This check intentionally runs before checkout or any repository code.
+      # Both stable and prerelease tags need the exact-commit status written by
+      # the Create Release workflow.
+      - name: Verify exact release source authorization
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ steps.package-info.outputs.package }}
         run: |
-          PACKAGE_VERSION=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)
-          TAG_VERSION="${{ steps.package-info.outputs.tag_version }}"
-          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
-            echo "❌ Tag version $TAG_VERSION does not match pubspec version $PACKAGE_VERSION."
+          RELEASE_SHA=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" \
+            --jq .sha)
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "❌ Could not resolve $GITHUB_REF_NAME to a commit SHA."
             exit 1
           fi
-          echo "✅ Tag and pubspec both identify version $PACKAGE_VERSION."
 
-      - name: Prepare nested package publish directory
-        id: publish-dir
-        run: |
-          if [[ "${{ steps.package-info.outputs.package }}" == "mcp_dart_cli" ]]; then
-            PUBLISH_ROOT="$RUNNER_TEMP/mcp_dart_publish"
-            rm -rf "$PUBLISH_ROOT"
-            mkdir -p "$PUBLISH_ROOT"
-            rsync -a --exclude .git --exclude .dart_tool --exclude pubspec.lock ./ "$PUBLISH_ROOT/"
-            rm -f "$PUBLISH_ROOT/packages/mcp_dart_cli/pubspec_overrides.yaml"
-            echo "working_directory=$PUBLISH_ROOT/${{ steps.package-info.outputs.working_directory }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "working_directory=${{ steps.package-info.outputs.working_directory }}" >> "$GITHUB_OUTPUT"
+          CONTEXT="mcp_dart/release/$PACKAGE"
+          AUTHORIZATION_ATTEMPTS=${PUBLISH_AUTHORIZATION_ATTEMPTS:-20}
+          AUTHORIZATION_INTERVAL_SECONDS=${PUBLISH_AUTHORIZATION_INTERVAL_SECONDS:-3}
+          AUTHORIZED=false
+          for ((ATTEMPT = 1; ATTEMPT <= AUTHORIZATION_ATTEMPTS; ATTEMPT++)); do
+            STATUS=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/$GITHUB_REPOSITORY/commits/$RELEASE_SHA/status")
+            STATE=$(jq -r --arg context "$CONTEXT" '
+              [.statuses[] | select(.context == $context)]
+              | if length == 0 then "absent" else max_by(.id).state end
+            ' <<<"$STATUS")
+
+            case "$STATE" in
+              success)
+                AUTHORIZED=true
+                break
+                ;;
+              failure | error)
+                echo "❌ Exact commit $RELEASE_SHA has $CONTEXT state $STATE."
+                exit 1
+                ;;
+              absent | pending)
+                if ((ATTEMPT < AUTHORIZATION_ATTEMPTS)); then
+                  echo "⏳ Waiting for $CONTEXT authorization ($STATE)."
+                  sleep "$AUTHORIZATION_INTERVAL_SECONDS"
+                fi
+                ;;
+              *)
+                echo "❌ Exact commit $RELEASE_SHA has invalid $CONTEXT state $STATE."
+                exit 1
+                ;;
+            esac
+          done
+
+          if [[ "$AUTHORIZED" != true ]]; then
+            echo "❌ Exact commit $RELEASE_SHA lacks successful $CONTEXT authorization."
+            echo "   Create tags only through the Create Release workflow."
+            exit 1
           fi
 
-      - name: Install dependencies
-        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "✅ Exact commit $RELEASE_SHA is authorized by $CONTEXT."
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify checkout matches authorized tag commit
+        env:
+          RELEASE_SHA: ${{ steps.provenance.outputs.release_sha }}
+        run: |
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "$HEAD_SHA" != "$RELEASE_SHA" ]; then
+            echo "❌ Checkout $HEAD_SHA does not match authorized commit $RELEASE_SHA."
+            exit 1
+          fi
+
+      - name: Build immutable publish candidate
+        id: candidate
+        env:
+          PACKAGE: ${{ steps.package-info.outputs.package }}
+          SOURCE_DIRECTORY: ${{ steps.package-info.outputs.working_directory }}
+        run: |
+          CANDIDATE_ROOT="$RUNNER_TEMP/publish-candidate"
+          ARTIFACT_ROOT="$RUNNER_TEMP/publish-artifact"
+          rm -rf "$CANDIDATE_ROOT" "$ARTIFACT_ROOT"
+          mkdir -p "$CANDIDATE_ROOT/package" "$ARTIFACT_ROOT"
+
+          RSYNC_EXCLUDES=(
+            --exclude .git
+            --exclude .dart_tool
+            --exclude pubspec.lock
+            --exclude pubspec_overrides.yaml
+          )
+          rsync -a "${RSYNC_EXCLUDES[@]}" \
+            "$SOURCE_DIRECTORY/" "$CANDIDATE_ROOT/package/"
+
+          if find "$CANDIDATE_ROOT/package" -type l -print -quit | grep -q .; then
+            echo "❌ Publish candidates must not contain symbolic links."
+            exit 1
+          fi
+          test -f "$CANDIDATE_ROOT/package/pubspec.yaml"
+
+          tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner \
+            -czf "$ARTIFACT_ROOT/package.tar.gz" \
+            -C "$CANDIDATE_ROOT" package
+          ARCHIVE_SHA=$(sha256sum "$ARTIFACT_ROOT/package.tar.gz" | awk '{print $1}')
+          if [[ ! "$ARCHIVE_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "❌ Could not hash publish candidate."
+            exit 1
+          fi
+
+          ARTIFACT_NAME="publish-candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$PACKAGE"
+          echo "archive_sha=$ARCHIVE_SHA" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "✅ Prepared immutable candidate $ARCHIVE_SHA."
+
+      - name: Upload immutable publish candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.candidate.outputs.artifact_name }}
+          path: ${{ runner.temp }}/publish-artifact/package.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+
+      - name: Validate coordinated release metadata
+        run: |
+          dart tool/validate_release_metadata.dart \
+            --package "${{ steps.package-info.outputs.package }}" \
+            --tag "$GITHUB_REF_NAME"
+
+      - name: Verify stable release CI for exact tag commit
+        if: steps.package-info.outputs.prerelease == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.provenance.outputs.release_sha }}
+        run: |
+          bash tool/release/verify_stable_release_ci.sh \
+            "${{ steps.package-info.outputs.package }}" "$RELEASE_SHA"
+
+      - name: Extract immutable candidate for validation
+        id: validation-dir
+        env:
+          EXPECTED_ARCHIVE_SHA: ${{ steps.candidate.outputs.archive_sha }}
+        run: |
+          if [[ ! "$EXPECTED_ARCHIVE_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "❌ Invalid expected candidate digest."
+            exit 1
+          fi
+          VALIDATION_ROOT="$RUNNER_TEMP/publish-validation"
+          rm -rf "$VALIDATION_ROOT"
+          mkdir -p "$VALIDATION_ROOT"
+          cd "$RUNNER_TEMP/publish-artifact"
+          echo "$EXPECTED_ARCHIVE_SHA  package.tar.gz" | sha256sum --check --strict -
+          tar -xzf package.tar.gz \
+            --no-same-owner \
+            -C "$VALIDATION_ROOT"
+          test -f "$VALIDATION_ROOT/package/pubspec.yaml"
+          test ! -e "$VALIDATION_ROOT/package/pubspec_overrides.yaml"
+          echo "working_directory=$VALIDATION_ROOT/package" >> "$GITHUB_OUTPUT"
+
+      - name: Install validation dependencies
+        working-directory: ${{ steps.validation-dir.outputs.working_directory }}
         run: dart pub get
 
+      - name: Verify CLI against the minimum published SDK
+        if: steps.package-info.outputs.package == 'mcp_dart_cli'
+        working-directory: ${{ steps.validation-dir.outputs.working_directory }}
+        run: bash "$GITHUB_WORKSPACE/tool/release/verify_cli_published_sdk.sh"
+
       - name: Validate package for publishing
-        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+        working-directory: ${{ steps.validation-dir.outputs.working_directory }}
         run: dart pub publish --dry-run
 
-      - name: Publish to pub.dev
-        working-directory: ${{ steps.publish-dir.outputs.working_directory }}
+  publish:
+    needs: validate_candidate
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      id-token: write # Required only for the final pub.dev publish operation.
+    steps:
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+
+      - name: Download immutable publish candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.validate_candidate.outputs.artifact_name }}
+          path: ${{ runner.temp }}/publish-artifact
+
+      - name: Verify and extract publish candidate
+        env:
+          EXPECTED_ARCHIVE_SHA: ${{ needs.validate_candidate.outputs.archive_sha }}
+        run: |
+          if [[ ! "$EXPECTED_ARCHIVE_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "❌ Invalid expected candidate digest."
+            exit 1
+          fi
+          cd "$RUNNER_TEMP/publish-artifact"
+          echo "$EXPECTED_ARCHIVE_SHA  package.tar.gz" | sha256sum --check --strict -
+          mkdir -p "$RUNNER_TEMP/publish-candidate"
+          tar -xzf package.tar.gz \
+            --no-same-owner \
+            -C "$RUNNER_TEMP/publish-candidate"
+          test -f "$RUNNER_TEMP/publish-candidate/package/pubspec.yaml"
+          test ! -e "$RUNNER_TEMP/publish-candidate/package/pubspec_overrides.yaml"
+
+      - name: Publish validated candidate to pub.dev
+        working-directory: ${{ runner.temp }}/publish-candidate/package
         run: dart pub publish --force
