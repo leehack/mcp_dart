@@ -678,11 +678,13 @@ class ReleaseMetadataValidator {
     if (package == ReleasePackage.sdk) {
       paths
         ..addAll(_markdownFilesUnder('doc'))
-        ..addAll(_markdownFilesUnder('example'));
+        ..addAll(_markdownFilesUnder('example'))
+        ..addAll(_dartFilesUnder('lib'));
     } else {
       paths
         ..addAll(_markdownFilesUnder('packages/mcp_dart_cli'))
         ..addAll(_markdownFilesUnder('packages/templates'))
+        ..addAll(_dartFilesUnder('packages/mcp_dart_cli/lib'))
         ..add(
           'packages/mcp_dart_cli/test/fixtures/'
           'dart_mcp_project/pubspec.yaml',
@@ -703,6 +705,11 @@ class ReleaseMetadataValidator {
       'use stableprotocolversion for the official 2025-11-25',
       'modelcontextprotocol.io/specification/draft/',
       'for preview gates',
+      'used by the sdk preview',
+      'preferred by default in this sdk preview',
+      'in the 2.3.0 preview',
+      'specification is still a release candidate',
+      'this preview prefers it by default',
     ];
     for (final path in paths.toList()..sort()) {
       final source = _readText(path, errors);
@@ -724,14 +731,29 @@ class ReleaseMetadataValidator {
   }
 
   List<String> _markdownFilesUnder(String relativeRoot) {
+    return _releaseFacingFilesUnder(
+      relativeRoot,
+      extension: '.md',
+      excludedPaths: const {'doc/mcp-2026-07-28-release-runbook.md'},
+      excludeChangelogs: true,
+    );
+  }
+
+  List<String> _dartFilesUnder(String relativeRoot) {
+    return _releaseFacingFilesUnder(relativeRoot, extension: '.dart');
+  }
+
+  List<String> _releaseFacingFilesUnder(
+    String relativeRoot, {
+    required String extension,
+    Set<String> excludedPaths = const <String>{},
+    bool excludeChangelogs = false,
+  }) {
     final directory = Directory(_path(relativeRoot));
     if (!directory.existsSync()) {
       return const <String>[];
     }
     final rootPrefix = '${repoRoot.absolute.path}${Platform.pathSeparator}';
-    const excludedPaths = <String>{
-      'doc/mcp-2026-07-28-release-runbook.md',
-    };
     const excludedSegments = <String>{
       '.dart_tool',
       '.git',
@@ -746,7 +768,7 @@ class ReleaseMetadataValidator {
     )) {
       final absolutePath = entity.absolute.path;
       if (entity is! File ||
-          !absolutePath.toLowerCase().endsWith('.md') ||
+          !absolutePath.toLowerCase().endsWith(extension) ||
           !absolutePath.startsWith(rootPrefix)) {
         continue;
       }
@@ -756,7 +778,8 @@ class ReleaseMetadataValidator {
       final segments = relativePath.split('/');
       if (excludedPaths.contains(relativePath) ||
           segments.any(excludedSegments.contains) ||
-          segments.last.toLowerCase() == 'changelog.md') {
+          (excludeChangelogs &&
+              segments.last.toLowerCase() == 'changelog.md')) {
         continue;
       }
       paths.add(relativePath);

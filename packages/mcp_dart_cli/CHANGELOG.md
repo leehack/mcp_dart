@@ -8,7 +8,8 @@
   coexist with the independent MCP Tasks extension without being treated as
   its persistence adapter.
 - Standalone release binaries now compile against the declared minimum hosted
-  SDK instead of the monorepo dependency override.
+  SDK instead of the monorepo dependency override and attach only to an
+  authorized, pre-existing GitHub release with matching prerelease status.
 
 ## 0.2.0-dev.2
 

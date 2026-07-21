@@ -415,6 +415,16 @@ void main() {
         unsupportedMediaType['error']['message'],
         contains('Unsupported Media Type'),
       );
+
+      final jsonSubtype = await post(
+        accept: 'application/json, text/event-stream',
+        contentType: ContentType('application', 'json-patch+json'),
+        expectedStatus: HttpStatus.unsupportedMediaType,
+      );
+      expect(
+        jsonSubtype['error']['message'],
+        contains('Unsupported Media Type'),
+      );
     });
 
     test('rejects POST without session ID for non-init request', () async {

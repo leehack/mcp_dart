@@ -23,7 +23,9 @@ Do not publish the stable Dart packages from a moving draft commit.
   require latest-`main`, exact-SHA CI, and final-spec gates. New tags remain
   `pending` until their PAT-backed push succeeds, and a failed push records
   `failure`. A manually pushed stable or prerelease tag therefore cannot
-  bypass the release workflow.
+  bypass the release workflow. CLI binaries additionally require that exact
+  authorization and an already-created GitHub release with matching stable or
+  prerelease classification; the asset job cannot create a release itself.
 
 ## Completed prerelease rehearsal
 

@@ -46,8 +46,12 @@
 - Made Streamable HTTP validation advertise only the connected server's
   configured protocol profile, reject wire cancellation and known
   wrong-direction notifications in stateless mode while preserving extension
-  notification methods, and classify valid JSON with malformed request
-  parameters as `invalidParams` instead of `parseError`.
+  notification methods, require the exact `application/json` request media
+  type, and classify valid JSON with malformed request parameters as
+  `invalidParams` instead of `parseError`.
+- Made `DiscoverResult` always emit and require the MCP `2026-07-28`
+  `ttlMs` and `cacheScope` fields, serializing omitted or null local hints as
+  immediately stale private caching.
 - Blocked legacy server-initiated request helpers and direct stateless client
   response sends under MCP `2026-07-28`; legacy sessions retain their existing
   bidirectional request flow.

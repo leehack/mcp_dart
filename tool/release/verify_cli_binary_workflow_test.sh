@@ -24,8 +24,33 @@ if grep -q 'contents: write' "$BUILD_JOB"; then
 fi
 grep -q '^      contents: write$' "$ASSET_JOB" ||
   fail "CLI binary asset attachment is missing repository write access."
+grep -q '^      statuses: read$' "$ASSET_JOB" ||
+  fail "CLI binary asset attachment cannot read release authorization status."
 if [[ $(grep -c 'persist-credentials: false' "$WORKFLOW") -ne 2 ]]; then
   fail "Both CLI binary workflow checkouts must disable persisted credentials."
+fi
+
+AUTHORIZATION_LINE=$(grep -n 'Verify authorized existing release' "$ASSET_JOB" |
+  cut -d: -f1)
+UPLOAD_LINE=$(grep -n '^[[:space:]]*gh release upload ' "$ASSET_JOB" |
+  cut -d: -f1)
+[[ -n "$AUTHORIZATION_LINE" && -n "$UPLOAD_LINE" ]] ||
+  fail "CLI binary assets must verify authorization before uploading."
+if ((AUTHORIZATION_LINE >= UPLOAD_LINE)); then
+  fail "CLI binary release authorization must precede asset upload."
+fi
+grep -Fq 'mcp_dart/release/mcp_dart_cli' "$ASSET_JOB" ||
+  fail "CLI binary assets must require the CLI exact-commit release context."
+grep -Fq "/commits/\$TAG_COMMIT/status" "$ASSET_JOB" ||
+  fail "CLI binary assets must inspect authorization on the exact tag commit."
+grep -Fq "/releases/tags/\$RELEASE_TAG" "$ASSET_JOB" ||
+  fail "CLI binary assets must require an existing GitHub release."
+grep -q 'RELEASE_LOOKUP_ATTEMPTS' "$ASSET_JOB" ||
+  fail "CLI binary assets must tolerate the release-creation ordering window."
+grep -Fq ".prerelease == \$prerelease" "$ASSET_JOB" ||
+  fail "CLI binary assets must verify stable/prerelease classification."
+if grep -q 'softprops/action-gh-release' "$ASSET_JOB"; then
+  fail "CLI binary assets must not use an action that can create a release."
 fi
 
 REMOVE_OVERRIDE_LINE=$(grep -n 'rm -f pubspec_overrides.yaml' "$BUILD_JOB" |

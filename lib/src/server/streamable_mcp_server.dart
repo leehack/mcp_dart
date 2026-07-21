@@ -685,8 +685,8 @@ class StreamableMcpServer {
       );
     }
 
-    final contentType = request.headers.contentType?.value ?? '';
-    if (!contentType.contains('application/json')) {
+    final contentType = request.headers.contentType?.mimeType.toLowerCase();
+    if (contentType != 'application/json') {
       return (
         httpStatus: HttpStatus.unsupportedMediaType,
         message:

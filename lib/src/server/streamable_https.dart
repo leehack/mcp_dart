@@ -1936,8 +1936,8 @@ class StreamableHTTPServerTransport
         return;
       }
 
-      final contentType = req.headers.contentType?.value ?? '';
-      if (!contentType.contains("application/json")) {
+      final contentType = req.headers.contentType?.mimeType.toLowerCase();
+      if (contentType != 'application/json') {
         await _writeJsonRpcErrorResponse(
           req.response,
           httpStatus: HttpStatus.unsupportedMediaType,

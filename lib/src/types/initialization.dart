@@ -1646,6 +1646,17 @@ class DiscoverResult implements CacheableResultData {
       json['capabilities'],
       'DiscoverResult.capabilities',
     );
+    final ttlMs = readOptionalTtlMs(json['ttlMs'], 'DiscoverResult.ttlMs');
+    if (ttlMs == null) {
+      throw const FormatException('DiscoverResult.ttlMs is required');
+    }
+    final cacheScope = readOptionalCacheScope(
+      json['cacheScope'],
+      'DiscoverResult.cacheScope',
+    );
+    if (cacheScope == null) {
+      throw const FormatException('DiscoverResult.cacheScope is required');
+    }
     final meta = readOptionalJsonObject(json['_meta'], 'DiscoverResult._meta');
     Implementation? readLegacyServerInfo(Object? value) {
       if (value == null) return null;
@@ -1685,11 +1696,8 @@ class DiscoverResult implements CacheableResultData {
         json['instructions'],
         'DiscoverResult.instructions',
       ),
-      ttlMs: readOptionalTtlMs(json['ttlMs'], 'DiscoverResult.ttlMs'),
-      cacheScope: readOptionalCacheScope(
-        json['cacheScope'],
-        'DiscoverResult.cacheScope',
-      ),
+      ttlMs: ttlMs,
+      cacheScope: cacheScope,
       meta: meta,
     );
   }
@@ -1734,8 +1742,8 @@ class DiscoverResult implements CacheableResultData {
       'supportedVersions': supportedVersions,
       'capabilities': capabilities.toJson(omitLegacyTasks: true),
       if (instructions != null) 'instructions': instructions,
-      if (ttlMs != null) 'ttlMs': ttlMs,
-      if (cacheScope != null) 'cacheScope': cacheScope,
+      'ttlMs': ttlMs ?? 0,
+      'cacheScope': cacheScope ?? CacheScope.private,
       if (meta != null || serverInfo != null) '_meta': resultMeta,
     };
   }

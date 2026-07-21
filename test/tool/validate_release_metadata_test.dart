@@ -307,6 +307,30 @@ void main() {
     );
   });
 
+  test('rejects stale preview wording in exported SDK Dartdoc', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final source = File('${fixture.path}/lib/src/types/json_rpc.dart');
+    source.writeAsStringSync(
+      '${source.readAsStringSync()}\n/// Used by the SDK preview.\n',
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(
+        allOf(
+          contains('stale release marker'),
+          contains('lib/src/types/json_rpc.dart'),
+        ),
+      ),
+    );
+  });
+
   test('rejects a stale preview-gate claim in the legacy coverage matrix', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
@@ -724,9 +748,25 @@ Directory _stableFixture(
 
   final constants = File('${fixture.path}/lib/src/types/json_rpc.dart');
   constants.writeAsStringSync(
-    constants.readAsStringSync().replaceFirst(
+    constants
+        .readAsStringSync()
+        .replaceFirst(
           'const stableProtocolVersion = latestInitializationProtocolVersion;',
           'const stableProtocolVersion = previewProtocolVersion;',
+        )
+        .replaceAll('used by the SDK preview', 'used by the SDK')
+        .replaceAll(
+          'preferred by default in this SDK preview',
+          'preferred by default in this SDK release',
+        )
+        .replaceAll('In the 2.3.0 preview', 'In mcp_dart 2.3.0')
+        .replaceAll(
+          'specification is still a release candidate',
+          'specification is final',
+        )
+        .replaceAll(
+          'this preview prefers it by default',
+          'this release prefers it by default',
         ),
   );
 

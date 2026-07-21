@@ -438,6 +438,23 @@ void main() {
         await utf8.decodeStream(postWithWrongContentType),
         contains('Content-Type must be application/json'),
       );
+
+      final postWithJsonSubtype = await send(
+        'POST',
+        headers: {
+          HttpHeaders.acceptHeader: 'application/json, text/event-stream',
+        },
+        contentType: ContentType('application', 'json-patch+json'),
+        body: const JsonRpcRequest(id: 3, method: 'ping').toJson(),
+      );
+      expect(
+        postWithJsonSubtype.statusCode,
+        HttpStatus.unsupportedMediaType,
+      );
+      expect(
+        await utf8.decodeStream(postWithJsonSubtype),
+        contains('Content-Type must be application/json'),
+      );
     });
 
     test('maps malformed typed request params to InvalidParams', () async {

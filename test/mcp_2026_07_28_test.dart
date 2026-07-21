@@ -1463,6 +1463,8 @@ void main() {
           'supportedVersions': [previewProtocolVersion],
           'capabilities': <String, dynamic>{},
           'serverInfo': {'name': 'server', 'version': '1.0.0'},
+          'ttlMs': 0,
+          'cacheScope': CacheScope.private,
           '_meta': {'bad': Object()},
         }),
         throwsA(isA<FormatException>()),
@@ -1543,8 +1545,43 @@ void main() {
         'resultType': resultTypeComplete,
         'supportedVersions': [previewProtocolVersion],
         'capabilities': <String, dynamic>{},
+        'ttlMs': 0,
+        'cacheScope': CacheScope.private,
       });
       expect(identityFreeResult.serverInfo, isNull);
+
+      for (final missingField in ['ttlMs', 'cacheScope']) {
+        final json = <String, dynamic>{
+          'resultType': resultTypeComplete,
+          'supportedVersions': [previewProtocolVersion],
+          'capabilities': <String, dynamic>{},
+          'ttlMs': 0,
+          'cacheScope': CacheScope.private,
+        }..remove(missingField);
+        expect(
+          () => DiscoverResult.fromJson(json),
+          throwsFormatException,
+          reason: '$missingField is required by DiscoverResult',
+        );
+      }
+
+      const defaultResult = DiscoverResult(
+        supportedVersions: [previewProtocolVersion],
+        capabilities: ServerCapabilities(),
+      );
+      expect(defaultResult.ttlMs, isNull);
+      expect(defaultResult.cacheScope, isNull);
+      final defaultCacheHints = defaultResult.toJson();
+      expect(defaultCacheHints['ttlMs'], 0);
+      expect(defaultCacheHints['cacheScope'], CacheScope.private);
+      final explicitNullCacheHints = const DiscoverResult(
+        supportedVersions: [previewProtocolVersion],
+        capabilities: ServerCapabilities(),
+        ttlMs: null,
+        cacheScope: null,
+      ).toJson();
+      expect(explicitNullCacheHints['ttlMs'], 0);
+      expect(explicitNullCacheHints['cacheScope'], CacheScope.private);
 
       for (final malformedServerInfo in <Object?>[
         null,
@@ -1556,6 +1593,8 @@ void main() {
             'resultType': resultTypeComplete,
             'supportedVersions': [previewProtocolVersion],
             'capabilities': <String, dynamic>{},
+            'ttlMs': 0,
+            'cacheScope': CacheScope.private,
             '_meta': {
               McpMetaKey.serverInfo: malformedServerInfo,
               'com.example/trace': 'trace-1',
@@ -1570,6 +1609,8 @@ void main() {
           'resultType': resultTypeComplete,
           'supportedVersions': [previewProtocolVersion],
           'capabilities': <String, dynamic>{},
+          'ttlMs': 0,
+          'cacheScope': CacheScope.private,
           '_meta': {McpMetaKey.serverInfo: 'malformed'},
           'serverInfo': {'name': 'legacy-server', 'version': '1.0.0'},
         }),
@@ -1589,6 +1630,8 @@ void main() {
         'resultType': resultTypeComplete,
         'supportedVersions': [previewProtocolVersion],
         'capabilities': <String, dynamic>{},
+        'ttlMs': 0,
+        'cacheScope': CacheScope.private,
         'serverInfo': {'name': 'legacy-server', 'version': '1.0.0'},
       });
       expect(legacyIdentity.serverInfo?.name, 'legacy-server');
@@ -1713,6 +1756,8 @@ void main() {
         'supportedVersions': [previewProtocolVersion],
         'capabilities': <String, dynamic>{},
         'serverInfo': {'name': 'server', 'version': '1.0.0'},
+        'ttlMs': 0,
+        'cacheScope': CacheScope.private,
       };
 
       for (final parse in <Object Function()>[
@@ -1757,6 +1802,8 @@ void main() {
         'resultType': resultTypeComplete,
         'supportedVersions': [previewProtocolVersion],
         'capabilities': <String, dynamic>{},
+        'ttlMs': 0,
+        'cacheScope': CacheScope.private,
       };
 
       for (final capability in <String>{
@@ -1785,6 +1832,8 @@ void main() {
       final parsed = DiscoverResult.fromJson({
         'resultType': resultTypeComplete,
         'supportedVersions': [previewProtocolVersion],
+        'ttlMs': 0,
+        'cacheScope': CacheScope.private,
         'capabilities': {
           'tools': <String, dynamic>{},
           'completions': {'listChanged': 'future-value'},
