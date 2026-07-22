@@ -22,6 +22,11 @@ void main() {
     );
   });
 
+  test('build metadata does not affect prerelease classification', () {
+    expect(isPrereleaseVersion('1.2.3+build-1'), isFalse);
+    expect(isPrereleaseVersion('1.2.3-dev.1+build-1'), isTrue);
+  });
+
   test(
     'CLI dependency and generated SDK constraint match the root package',
     () {

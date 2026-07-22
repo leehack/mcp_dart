@@ -12,7 +12,7 @@ fi
 
 if [[ "${GITHUB_REF_TYPE:-}" != "branch" ||
   "${GITHUB_REF_NAME:-}" != "$DEFAULT_BRANCH" ]]; then
-  echo "❌ Stable releases must be dispatched from $DEFAULT_BRANCH." >&2
+  echo "❌ Releases must be dispatched from $DEFAULT_BRANCH." >&2
   exit 1
 fi
 
@@ -34,13 +34,13 @@ if [[ -n "$TAG_REF" ]]; then
     echo "   Never move or recreate a published tag; bump the version instead." >&2
     exit 1
   fi
-  echo "✅ Stable release recovery matches existing tag $TAG."
+  echo "✅ Release recovery matches existing tag $TAG."
   exit 0
 fi
 
 if [[ "$HEAD_SHA" != "$DEFAULT_SHA" ]]; then
-  echo "❌ Stable releases must use the latest $REMOTE/$DEFAULT_BRANCH commit." >&2
+  echo "❌ Releases must use the latest $REMOTE/$DEFAULT_BRANCH commit." >&2
   exit 1
 fi
 
-echo "✅ Stable release source matches $REMOTE/$DEFAULT_BRANCH."
+echo "✅ Release source matches $REMOTE/$DEFAULT_BRANCH."

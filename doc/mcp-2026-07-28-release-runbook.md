@@ -19,8 +19,8 @@ Do not publish the stable Dart packages from a moving draft commit.
   `GITHUB_TOKEN` would not start those workflows.
 - Every pub.dev publication requires the exact release commit to carry the
   `mcp_dart/release/<package>` success status. Only `Create Release` writes
-  that status, after metadata and publish dry-run checks; stable releases also
-  require latest-`main`, exact-SHA CI, and final-spec gates. New tags remain
+  that status, after latest-`main`, exact-SHA CI, metadata, and publish dry-run
+  checks; stable releases also require the final-spec gates. New tags remain
   `pending` until their PAT-backed push succeeds, and a failed push records
   `failure`. A manually pushed stable or prerelease tag therefore cannot
   bypass the release workflow. CLI binaries additionally require that exact
@@ -261,7 +261,7 @@ On the final release-prep commit:
   for the stable release commit. SDK releases additionally require
   `.github/workflows/interop_2026_07_28.yml`. Display-name matches from another
   workflow do not satisfy the gate, and a missing or unsuccessful run blocks
-  the stable tag.
+  any release tag.
 - Verify `Create Release` runs repository code and its publish dry run in the
   read-only validation job. Its minimal write job must write
   `mcp_dart/release/mcp_dart` only after the existing tag is verified or the
@@ -269,14 +269,21 @@ On the final release-prep commit:
   that exact-commit status, then repeat the exact-SHA CI lookup before
   requesting pub.dev OIDC.
 
-Merge the release PR to `main` only after this commit passes the complete gate.
+Create one release prep PR targeting `main`, apply the `release-prep` label,
+and merge it only after this commit passes the complete gate. Increasing the
+SDK version selects the SDK, increasing the CLI version selects the CLI, and
+increasing both selects a coordinated release. Versions with a prerelease
+suffix select the dev channel; versions without one select stable. A
+coordinated prep cannot mix channels.
 
 ## 4. Publish and verify `mcp_dart`
 
-1. Dispatch `Create Release` for `mcp_dart` from the merged `main` commit.
-   New stable tags require the latest `main` commit. A retry may reuse an
-   existing tag only when that tag resolves to the exact original release
-   commit; the workflow never moves it.
+1. Merge the labeled release prep PR. `Release Merged Prep` waits for the
+   required push CI on the exact merge commit, then invokes `Create Release`
+   for `mcp_dart`. Every new tag requires the latest `main` commit. A retry may
+   reuse an existing tag only when that tag resolves to the exact original
+   release commit; the workflow never moves it. Manual dispatch is a recovery
+   path only.
 2. Verify tag `v2.3.0`, the GitHub release, and the `Publish to pub.dev` workflow.
    If GitHub release creation fails after the tag was pushed, use **Re-run all
    jobs** on the original failed `Create Release` run so the workflow retains
@@ -285,8 +292,9 @@ Merge the release PR to `main` only after this commit passes the complete gate.
    different commit. If publication fails after the tag was pushed, rerun the
    failed tag-triggered `Publish to pub.dev` workflow; reusing a tag does not
    emit another push event.
-3. Confirm pub.dev shows version `2.3.0`, correct `main` documentation links,
-   and a successful package analysis.
+3. Confirm pub.dev shows version `2.3.0`, immutable `v2.3.0` documentation
+   links, and a successful package analysis. Checked-in links on `main` remain
+   pointed at `main`.
 4. Create a clean temporary Dart project, resolve `mcp_dart: ^2.3.0`, and run a
    minimal MCP 2026-07-28 client/server smoke test using only the published
    package.
@@ -314,11 +322,13 @@ cd packages/mcp_dart_cli
 dart pub global run pana --no-warning --exit-code-threshold 0
 ```
 
-Then dispatch `Create Release` for `mcp_dart_cli`, verify the
-`mcp_dart_cli-v0.2.0` publish, and verify the standalone binary workflow and
-release assets for every supported platform. If the binary workflow must be
-dispatched manually, supply the release tag; both build and asset jobs verify
-and check out that exact tag before attaching files.
+When the same prep PR selects both packages, the automation waits until
+`mcp_dart 2.3.0` is visible on pub.dev and then invokes `Create Release` for
+the CLI. For a CLI-only prep, it invokes the CLI release directly. Verify the
+`mcp_dart_cli-v0.2.0` publish and the standalone binary workflow and release
+assets for every supported platform. If the binary workflow must be dispatched
+manually, supply the release tag; both build and asset jobs verify and check out
+that exact tag before attaching files.
 The standalone build matrix removes the monorepo override and verifies the
 declared minimum hosted SDK before compiling each platform binary. `Create
 Release` and the tag-triggered publish workflow each repeat that override-free

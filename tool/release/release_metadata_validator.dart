@@ -1,24 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-enum ReleasePackage {
-  sdk('mcp_dart', 'v'),
-  cli('mcp_dart_cli', 'mcp_dart_cli-v');
+import 'release_link_manager.dart';
+import 'release_prep_plan.dart';
 
-  const ReleasePackage(this.packageName, this.tagPrefix);
-
-  final String packageName;
-  final String tagPrefix;
-
-  static ReleasePackage parse(String value) {
-    for (final package in values) {
-      if (package.packageName == value) {
-        return package;
-      }
-    }
-    throw FormatException('Unknown package: $value');
-  }
-}
+export 'release_link_manager.dart' show ReleasePackage;
 
 class ReleaseMetadataValidation {
   const ReleaseMetadataValidation({
@@ -56,11 +42,19 @@ class ReleaseMetadataValidator {
     final sdkVersion = _yamlScalar(rootPubspec, 'version');
     final cliVersion = _yamlScalar(cliPubspec, 'version');
     final version = package == ReleasePackage.sdk ? sdkVersion : cliVersion;
-    if (version == null || !_versionPattern.hasMatch(version)) {
+    ReleaseVersion? parsedVersion;
+    if (version != null) {
+      try {
+        parsedVersion = ReleaseVersion.parse(version);
+      } on FormatException {
+        // Report the package-scoped validation error below.
+      }
+    }
+    if (parsedVersion == null) {
       errors.add('${package.packageName} has an invalid or missing version.');
     }
     final effectiveVersion = version ?? '';
-    final isPrerelease = effectiveVersion.contains('-');
+    final isPrerelease = parsedVersion?.isPrerelease ?? false;
 
     final expectedTag = '${package.tagPrefix}$effectiveVersion';
     if (tag != null && tag != expectedTag) {
@@ -105,6 +99,7 @@ class ReleaseMetadataValidator {
       manifest: manifest,
       errors: errors,
     );
+    _validateMainBranchLinks(package, errors);
     if (!isPrerelease) {
       _validateStableDocumentation(package, manifest, errors);
     }
@@ -115,6 +110,26 @@ class ReleaseMetadataValidator {
       isPrerelease: isPrerelease,
       errors: List.unmodifiable(errors),
     );
+  }
+
+  void _validateMainBranchLinks(
+    ReleasePackage package,
+    List<String> errors,
+  ) {
+    final packageRoot = package == ReleasePackage.sdk
+        ? repoRoot
+        : Directory('${repoRoot.path}/packages/mcp_dart_cli');
+    try {
+      final result = ReleaseLinkManager(
+        packageRoot: packageRoot,
+        package: package,
+      ).check('main');
+      for (final issue in result.issues) {
+        errors.add('Release-facing source link must use main: $issue');
+      }
+    } on Object catch (error) {
+      errors.add('Could not validate release-facing source links: $error');
+    }
   }
 
   void _validateReleaseDocumentation(
@@ -514,8 +529,7 @@ class ReleaseMetadataValidator {
         version.isEmpty ? null : _releaseSection(changelog, version);
     if (version.isNotEmpty && releaseSection == null) {
       errors.add('$changelogPath has no release heading for $version.');
-    } else if (!isPrerelease &&
-        releaseSection != null &&
+    } else if (releaseSection != null &&
         !_hasSubstantiveReleaseNotes(releaseSection)) {
       errors.add(
         '$changelogPath release section for $version has no substantive '
@@ -525,9 +539,8 @@ class ReleaseMetadataValidator {
 
     if (package == ReleasePackage.sdk) {
       final documentation = _yamlScalar(rootPubspec, 'documentation');
-      final expectedDocumentation = isPrerelease
-          ? 'https://github.com/leehack/mcp_dart/tree/v$version/doc'
-          : 'https://github.com/leehack/mcp_dart/tree/main/doc';
+      const expectedDocumentation =
+          'https://github.com/leehack/mcp_dart/tree/main/doc';
       if (documentation != expectedDocumentation) {
         errors.add(
           'SDK documentation metadata must be $expectedDocumentation.',
@@ -587,11 +600,8 @@ class ReleaseMetadataValidator {
       }
     }
 
-    final expectedUrl = isPrerelease
-        ? 'https://github.com/leehack/mcp_dart/tree/'
-            'mcp_dart_cli-v$version/packages/mcp_dart_cli'
-        : 'https://github.com/leehack/mcp_dart/tree/main/'
-            'packages/mcp_dart_cli';
+    const expectedUrl = 'https://github.com/leehack/mcp_dart/tree/main/'
+        'packages/mcp_dart_cli';
     if (_yamlScalar(cliPubspec, 'homepage') != expectedUrl ||
         _yamlScalar(cliPubspec, 'documentation') != expectedUrl) {
       errors.add(
@@ -821,9 +831,6 @@ class ReleaseMetadataValidator {
   }
 }
 
-const _versionPatternSource =
-    r'^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$';
-final RegExp _versionPattern = RegExp(_versionPatternSource);
 final RegExp _shaPattern = RegExp(r'^[0-9a-f]{40}$');
 
 String? _yamlScalar(String source, String key) {

@@ -1,0 +1,182 @@
+name: Release Merged Prep
+
+on:
+  pull_request_target:
+    types:
+      - closed
+
+concurrency:
+  group: release-prep-${{ github.event.pull_request.merge_commit_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch &&
+      contains(github.event.pull_request.labels.*.name, 'release-prep')
+    runs-on: ubuntu-latest
+    outputs:
+      release_cli: ${{ steps.release-plan.outputs.release_cli }}
+      release_sdk: ${{ steps.release-plan.outputs.release_sdk }}
+      release_sha: ${{ steps.release-source.outputs.release_sha }}
+      sdk_version: ${{ steps.release-plan.outputs.sdk_version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+
+      - name: Verify exact merged release source
+        id: release-source
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          RELEASE_SHA=$(git rev-parse HEAD)
+          if [ "$RELEASE_SHA" != "$EXPECTED_SHA" ]; then
+            echo "Checked out $RELEASE_SHA instead of merged commit $EXPECTED_SHA."
+            exit 1
+          fi
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Detect release plan from version changes
+        id: release-plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          dart tool/release/detect_release_prep.dart \
+            --base-sha "$BASE_SHA" \
+            --github-output "$GITHUB_OUTPUT"
+
+  wait-release-ci:
+    needs: detect
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.detect.outputs.release_sha }}
+
+      - name: Wait for exact-commit push CI
+        env:
+          ATTEMPTS: ${{ vars.RELEASE_CI_ATTEMPTS || '60' }}
+          INTERVAL_SECONDS: ${{ vars.RELEASE_CI_INTERVAL_SECONDS || '30' }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SDK: ${{ needs.detect.outputs.release_sdk }}
+          RELEASE_SHA: ${{ needs.detect.outputs.release_sha }}
+        run: |
+          if [[ ! "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]] ||
+            [[ ! "$INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Release CI polling values must be positive integers."
+            exit 1
+          fi
+          if [ "$RELEASE_SDK" = "true" ]; then
+            PACKAGE=mcp_dart
+          else
+            PACKAGE=mcp_dart_cli
+          fi
+          for ((ATTEMPT = 1; ATTEMPT <= ATTEMPTS; ATTEMPT++)); do
+            if bash tool/release/verify_release_ci.sh \
+              "$PACKAGE" "$RELEASE_SHA"; then
+              exit 0
+            fi
+            if ((ATTEMPT < ATTEMPTS)); then
+              echo "Waiting for exact-commit push CI ($ATTEMPT/$ATTEMPTS)."
+              sleep "$INTERVAL_SECONDS"
+            fi
+          done
+          echo "Exact-commit push CI did not pass after $ATTEMPTS attempts."
+          exit 1
+
+  release-sdk:
+    needs:
+      - detect
+      - wait-release-ci
+    if: >-
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.release_sdk == 'true' &&
+      needs.wait-release-ci.result == 'success'
+    permissions:
+      actions: read
+      contents: write
+      statuses: write
+    uses: ./.github/workflows/release.yml
+    with:
+      package: mcp_dart
+      release_sha: ${{ needs.detect.outputs.release_sha }}
+    secrets:
+      RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+
+  wait-for-sdk:
+    needs:
+      - detect
+      - release-sdk
+    if: >-
+      always() &&
+      needs.detect.outputs.release_sdk == 'true' &&
+      needs.detect.outputs.release_cli == 'true' &&
+      needs.release-sdk.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the coordinated SDK version on pub.dev
+        env:
+          ATTEMPTS: ${{ vars.RELEASE_PUB_ATTEMPTS || '60' }}
+          INTERVAL_SECONDS: ${{ vars.RELEASE_PUB_INTERVAL_SECONDS || '15' }}
+          SDK_VERSION: ${{ needs.detect.outputs.sdk_version }}
+        run: |
+          if [[ ! "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]] ||
+            [[ ! "$INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "pub.dev polling values must be positive integers."
+            exit 1
+          fi
+          for ((ATTEMPT = 1; ATTEMPT <= ATTEMPTS; ATTEMPT++)); do
+            if curl --fail --silent --show-error \
+              "https://pub.dev/api/packages/mcp_dart" |
+              jq -e --arg version "$SDK_VERSION" \
+                'any(.versions[]; .version == $version)' >/dev/null; then
+              echo "mcp_dart $SDK_VERSION is available on pub.dev."
+              exit 0
+            fi
+            if ((ATTEMPT < ATTEMPTS)); then
+              echo "Waiting for mcp_dart $SDK_VERSION on pub.dev ($ATTEMPT/$ATTEMPTS)."
+              sleep "$INTERVAL_SECONDS"
+            fi
+          done
+          echo "mcp_dart $SDK_VERSION was not visible after $ATTEMPTS attempts."
+          exit 1
+
+  release-cli:
+    needs:
+      - detect
+      - wait-release-ci
+      - release-sdk
+      - wait-for-sdk
+    if: >-
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.release_cli == 'true' &&
+      needs.wait-release-ci.result == 'success' &&
+      (needs.release-sdk.result == 'success' ||
+       needs.release-sdk.result == 'skipped') &&
+      (needs.wait-for-sdk.result == 'success' ||
+       needs.wait-for-sdk.result == 'skipped')
+    permissions:
+      actions: read
+      contents: write
+      statuses: write
+    uses: ./.github/workflows/release.yml
+    with:
+      package: mcp_dart_cli
+      release_sha: ${{ needs.detect.outputs.release_sha }}
+    secrets:
+      RELEASE_PAT: ${{ secrets.RELEASE_PAT }}

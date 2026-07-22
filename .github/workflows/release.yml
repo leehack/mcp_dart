@@ -10,6 +10,21 @@ on:
         options:
           - mcp_dart
           - mcp_dart_cli
+      release_sha:
+        description: 'Exact release commit (automatic releases and recovery)'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      package:
+        required: true
+        type: string
+      release_sha:
+        required: true
+        type: string
+    secrets:
+      RELEASE_PAT:
+        required: true
 
 concurrency:
   group: release-${{ inputs.package }}
@@ -31,6 +46,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.release_sha || github.sha }}
 
       - name: Set package configuration
         id: set-config
@@ -65,7 +81,8 @@ jobs:
         env:
           VERSION: ${{ steps.get-version.outputs.version }}
         run: |
-          if [[ "$VERSION" == *-* ]]; then
+          VERSION_WITHOUT_BUILD=${VERSION%%+*}
+          if [[ "$VERSION_WITHOUT_BUILD" == *-* ]]; then
             {
               echo "prerelease=true"
               echo "make_latest=false"
@@ -99,43 +116,48 @@ jobs:
             --package "$PACKAGE" \
             --tag "$TAG"
 
-      - name: Verify stable release source
-        if: steps.release-type.outputs.prerelease == 'false'
+      - name: Verify release source
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           TAG: ${{ steps.release-source.outputs.tag }}
         run: |
-          bash tool/release/verify_stable_release_source.sh \
+          bash tool/release/verify_release_source.sh \
             "$DEFAULT_BRANCH" "$TAG"
 
-      - name: Verify stable release CI
-        if: steps.release-type.outputs.prerelease == 'false'
+      - name: Verify release CI
         env:
           GH_TOKEN: ${{ github.token }}
           PACKAGE: ${{ inputs.package }}
           RELEASE_SHA: ${{ steps.release-source.outputs.release_sha }}
         run: |
-          bash tool/release/verify_stable_release_ci.sh \
+          bash tool/release/verify_release_ci.sh \
             "$PACKAGE" "$RELEASE_SHA"
 
       - name: Prepare release candidate
         id: publish-dir
         env:
           PACKAGE: ${{ inputs.package }}
+          RELEASE_TAG: ${{ steps.release-source.outputs.tag }}
         run: |
+          PUBLISH_ROOT="$RUNNER_TEMP/${PACKAGE}_publish"
+          rm -rf "$PUBLISH_ROOT"
+          mkdir -p "$PUBLISH_ROOT"
           if [ "$PACKAGE" = "mcp_dart_cli" ]; then
-            PUBLISH_ROOT="$RUNNER_TEMP/mcp_dart_cli_publish"
-            rm -rf "$PUBLISH_ROOT"
-            mkdir -p "$PUBLISH_ROOT"
-            rsync -a \
-              --exclude .dart_tool \
-              --exclude pubspec.lock \
-              --exclude pubspec_overrides.yaml \
-              packages/mcp_dart_cli/ "$PUBLISH_ROOT/"
-            echo "working_directory=$PUBLISH_ROOT" >> "$GITHUB_OUTPUT"
+            SOURCE_DIRECTORY=packages/mcp_dart_cli
           else
-            echo "working_directory=." >> "$GITHUB_OUTPUT"
+            SOURCE_DIRECTORY=.
           fi
+          rsync -a \
+            --exclude .git \
+            --exclude .dart_tool \
+            --exclude pubspec.lock \
+            --exclude pubspec_overrides.yaml \
+            "$SOURCE_DIRECTORY/" "$PUBLISH_ROOT/"
+          dart tool/release/update_release_links.dart \
+            --package "$PACKAGE" \
+            --root "$PUBLISH_ROOT" \
+            --ref "$RELEASE_TAG"
+          echo "working_directory=$PUBLISH_ROOT" >> "$GITHUB_OUTPUT"
 
       - name: Install release dependencies
         working-directory: ${{ steps.publish-dir.outputs.working_directory }}
@@ -176,15 +198,14 @@ jobs:
 
       # Keep this independent of repository scripts: this job holds write
       # permissions, while all package code ran in validate-release.
-      - name: Re-verify stable release source immediately before authorization
-        if: needs.validate-release.outputs.prerelease == 'false'
+      - name: Re-verify release source immediately before authorization
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           RELEASE_SHA: ${{ needs.validate-release.outputs.release_sha }}
           TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
           if [ "$GITHUB_REF_TYPE" != "branch" ] || [ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]; then
-            echo "❌ Stable releases must be dispatched from $DEFAULT_BRANCH."
+            echo "❌ Releases must be dispatched from $DEFAULT_BRANCH."
             exit 1
           fi
           DEFAULT_SHA=$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | awk 'NR == 1 { print $1 }')
@@ -201,12 +222,12 @@ jobs:
               echo "   Never move or recreate a published tag; bump the version instead."
               exit 1
             fi
-            echo "✅ Stable release recovery matches existing tag $TAG."
+            echo "✅ Release recovery matches existing tag $TAG."
           elif [ "$RELEASE_SHA" != "$DEFAULT_SHA" ]; then
-            echo "❌ Stable releases must still use the latest origin/$DEFAULT_BRANCH commit."
+            echo "❌ Releases must still use the latest origin/$DEFAULT_BRANCH commit."
             exit 1
           else
-            echo "✅ Stable release source still matches origin/$DEFAULT_BRANCH."
+            echo "✅ Release source still matches origin/$DEFAULT_BRANCH."
           fi
 
       - name: Resolve release tag
@@ -259,18 +280,15 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ github.token }}
           PACKAGE: ${{ inputs.package }}
-          PRERELEASE: ${{ needs.validate-release.outputs.prerelease }}
           RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
           RELEASE_SHA: ${{ needs.validate-release.outputs.release_sha }}
           TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
-          # Close the last practical stale-main window before a new stable tag.
-          if [ "$PRERELEASE" = "false" ]; then
-            DEFAULT_SHA=$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | awk 'NR == 1 { print $1 }')
-            if [ -z "$DEFAULT_SHA" ] || [ "$RELEASE_SHA" != "$DEFAULT_SHA" ]; then
-              echo "❌ origin/$DEFAULT_BRANCH advanced before tag creation."
-              exit 1
-            fi
+          # Close the last practical stale-main window before a new tag.
+          DEFAULT_SHA=$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | awk 'NR == 1 { print $1 }')
+          if [ -z "$DEFAULT_SHA" ] || [ "$RELEASE_SHA" != "$DEFAULT_SHA" ]; then
+            echo "❌ origin/$DEFAULT_BRANCH advanced before tag creation."
+            exit 1
           fi
 
           CONTEXT="mcp_dart/release/$PACKAGE"

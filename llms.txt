@@ -65,13 +65,13 @@ final client = McpClient(
 ```
 
 2026-only APIs, examples, and fallback rules:
-https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28.md
+https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-07-28.md
 
 Upgrade requirements and application-visible changes from 2.2 to 2.3:
-https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/migration-2.2-to-2.3.md
+https://github.com/leehack/mcp_dart/blob/main/doc/migration-2.2-to-2.3.md
 
 Strict MCP 2026-07-28 runnable example:
-https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28
+https://github.com/leehack/mcp_dart/tree/main/example/mcp_2026_07_28
 
 ## Main capabilities
 
@@ -125,7 +125,7 @@ await server.connect(StdioServerTransport());
 ```
 
 Detailed server APIs:
-https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/server-guide.md
+https://github.com/leehack/mcp_dart/blob/main/doc/server-guide.md
 
 ## Client skeleton
 
@@ -157,7 +157,7 @@ try {
 ```
 
 Detailed client APIs:
-https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/client-guide.md
+https://github.com/leehack/mcp_dart/blob/main/doc/client-guide.md
 
 ## Transports
 
@@ -176,7 +176,7 @@ For Streamable HTTP, keep DNS rebinding protection enabled and configure exact
 Host and Origin allowlists. Use TLS for remote endpoints.
 
 Transport details:
-https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md
+https://github.com/leehack/mcp_dart/blob/main/doc/transports.md
 
 ## Authentication and security
 
@@ -190,7 +190,7 @@ learning. Production applications must replace that storage with a system
 keychain, platform secure storage, or an encrypted credential service.
 
 OAuth examples:
-https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/authentication
+https://github.com/leehack/mcp_dart/tree/main/example/authentication
 
 ## Errors
 
@@ -230,7 +230,7 @@ certification suite for arbitrary targets. Prerelease automatic updates are
 disabled so the stable channel cannot replace a preview installation.
 
 CLI docs:
-https://github.com/leehack/mcp_dart/tree/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli
+https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
 
 ## Verification evidence
 
@@ -249,10 +249,10 @@ the full day-0 release gate.
 
 Evidence and runbooks:
 
-- https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/interoperability.md
-- https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2025-11-25.md
-- https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2026-07-28.md
-- https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-release-runbook.md
+- https://github.com/leehack/mcp_dart/blob/main/doc/interoperability.md
+- https://github.com/leehack/mcp_dart/blob/main/doc/spec-coverage-2025-11-25.md
+- https://github.com/leehack/mcp_dart/blob/main/doc/spec-coverage-2026-07-28.md
+- https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-07-28-release-runbook.md
 
 ## Documentation map
 

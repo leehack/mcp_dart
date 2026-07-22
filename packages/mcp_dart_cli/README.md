@@ -126,7 +126,7 @@ mcp_dart inspect-server --json --probe-config probes.json -- node server.js
 
 Warnings fail only with `--strict`. The inspector exercises advertised and
 safely configurable behavior; it does not certify complete spec compliance.
-See the [inspection coverage and limits](https://github.com/leehack/mcp_dart/blob/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli/doc/inspection-coverage.md).
+See the [inspection coverage and limits](https://github.com/leehack/mcp_dart/blob/main/packages/mcp_dart_cli/doc/inspection-coverage.md).
 
 ## Inspect a client or host
 
@@ -240,5 +240,5 @@ and smoke-test the CLI before publishing.
 
 Require the full 160/160 score before publishing.
 
-See [CONTRIBUTING.md](https://github.com/leehack/mcp_dart/blob/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli/CONTRIBUTING.md)
+See [CONTRIBUTING.md](https://github.com/leehack/mcp_dart/blob/main/packages/mcp_dart_cli/CONTRIBUTING.md)
 for contribution instructions.

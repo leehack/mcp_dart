@@ -171,7 +171,8 @@ jobs:
           PACKAGE_VERSION=$(sed -n \
             's/^version: //p' packages/mcp_dart_cli/pubspec.yaml)
           EXPECTED_PRERELEASE=false
-          if [[ "$PACKAGE_VERSION" == *-* ]]; then
+          VERSION_WITHOUT_BUILD=${PACKAGE_VERSION%%+*}
+          if [[ "$VERSION_WITHOUT_BUILD" == *-* ]]; then
             EXPECTED_PRERELEASE=true
           fi
           RELEASE_LOOKUP_ATTEMPTS=${CLI_RELEASE_LOOKUP_ATTEMPTS:-20}

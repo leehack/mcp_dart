@@ -105,11 +105,23 @@ DEPENDENCIES_LINE=$(grep -n -- '- name: Install validation dependencies' \
 [[ -n "$CANDIDATE_LINE" && -n "$UPLOAD_LINE" &&
   -n "$SETUP_DART_LINE" && -n "$DEPENDENCIES_LINE" ]] ||
   fail "The candidate construction or validation sequence is incomplete."
-if ((CANDIDATE_LINE >= UPLOAD_LINE ||
-  UPLOAD_LINE >= SETUP_DART_LINE ||
+if ((SETUP_DART_LINE >= CANDIDATE_LINE ||
+  CANDIDATE_LINE >= UPLOAD_LINE ||
   UPLOAD_LINE >= DEPENDENCIES_LINE)); then
-  fail "The immutable candidate must be built and uploaded before dependency code."
+  fail "The immutable candidate must be rewritten and uploaded before dependency code."
 fi
+LINK_UPDATE_LINE=$(grep -n 'dart tool/release/update_release_links.dart' \
+  "$VALIDATION_JOB" | cut -d: -f1)
+# Match the literal shell variable in the workflow.
+# shellcheck disable=SC2016
+ARCHIVE_LINE=$(grep -n -- '-czf "$ARTIFACT_ROOT/package.tar.gz"' \
+  "$VALIDATION_JOB" | cut -d: -f1)
+if [[ -z "$LINK_UPDATE_LINE" || -z "$ARCHIVE_LINE" ]] ||
+  ((LINK_UPDATE_LINE <= CANDIDATE_LINE || LINK_UPDATE_LINE >= ARCHIVE_LINE)); then
+  fail "Release links must be pinned inside the candidate before hashing."
+fi
+grep -q 'RELEASE_TAG:.*github.ref_name' "$VALIDATION_JOB" ||
+  fail "The publish candidate link ref must come from the pushed release tag."
 if grep -q -- '--exclude-from=' "$VALIDATION_JOB"; then
   fail "rsync must not reinterpret Dart .pubignore rules."
 fi
