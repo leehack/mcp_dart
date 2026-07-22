@@ -20,6 +20,11 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
 ''');
     _write(
       root,
+      'CHANGELOG.md',
+      '[Migration](https://github.com/leehack/mcp_dart/blob/main/doc/migration.md)\n',
+    );
+    _write(
+      root,
       'llms.txt',
       'https://github.com/leehack/mcp_dart/tree/main/example\n',
     );
@@ -45,6 +50,7 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
     expect(
       first.changedFiles,
       containsAll([
+        'CHANGELOG.md',
         'README.md',
         'doc/guide.md',
         'example/README.md',
@@ -60,6 +66,10 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
         contains('https://example.com/blob/main/doc/guide.md'),
       ),
     );
+    expect(
+      File('${root.path}/CHANGELOG.md').readAsStringSync(),
+      contains('/blob/v2.4.0-dev.1/doc/migration.md'),
+    );
     expect(manager.update('v2.4.0-dev.1').changedFiles, isEmpty);
   });
 
@@ -72,6 +82,7 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
 First line
 [Old](https://github.com/leehack/mcp_dart/blob/v2.3.0/doc/guide.md)
 ''');
+    _write(root, 'CHANGELOG.md', 'No links here.\n');
     _write(root, 'llms.txt', 'No links here.\n');
 
     final result = ReleaseLinkManager(
@@ -100,6 +111,11 @@ homepage: https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
       'README.md',
       '[CLI](https://github.com/leehack/mcp_dart/blob/main/packages/mcp_dart_cli/README.md)\n',
     );
+    _write(
+      root,
+      'CHANGELOG.md',
+      '[CLI guide](https://github.com/leehack/mcp_dart/blob/main/packages/mcp_dart_cli/README.md)\n',
+    );
     _write(root, 'CONTRIBUTING.md', 'No repository links.\n');
 
     final manager = ReleaseLinkManager(
@@ -120,6 +136,12 @@ homepage: https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
     expect(
       File('${root.path}/pubspec.yaml').readAsStringSync(),
       contains('/tree/mcp_dart_cli-v0.3.0/packages/mcp_dart_cli'),
+    );
+    expect(
+      File('${root.path}/CHANGELOG.md').readAsStringSync(),
+      contains(
+        '/blob/mcp_dart_cli-v0.3.0/packages/mcp_dart_cli/README.md',
+      ),
     );
   });
 }

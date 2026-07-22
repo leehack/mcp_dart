@@ -2,9 +2,10 @@
 
 `mcp_dart 2.3` adds the MCP `2026-07-28` release-candidate surface while
 preserving the public `2.2.2` API. See the
-[2.2 to 2.3 migration guide](doc/migration-2.2-to-2.3.md) for upgrade steps and
-the [MCP 2026-07-28 transition guide](doc/mcp-2026-07-28.md) for protocol
-details.
+[2.2 to 2.3 migration guide](https://github.com/leehack/mcp_dart/blob/main/doc/migration-2.2-to-2.3.md)
+for upgrade steps and the
+[MCP 2026-07-28 transition guide](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-07-28.md)
+for protocol details.
 
 ### Added
 
