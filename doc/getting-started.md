@@ -8,7 +8,7 @@ Add the MCP Dart SDK to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.3.0-dev.2
+  mcp_dart: ^2.3.0-dev.3
 ```
 
 Then run:

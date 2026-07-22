@@ -11,17 +11,16 @@ Install the stable CLI with a Dart SDK allowed by that release:
 dart pub global activate mcp_dart_cli
 ```
 
-The current unreleased source targets Dart 3.12. The published
-`0.2.0-dev.2` preview retains its Dart 3.7 minimum.
+The `0.2.0-dev.3` preview requires Dart 3.12.
 
 Install the coordinated MCP `2026-07-28` preview explicitly:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.0-dev.2
+dart pub global activate mcp_dart_cli 0.2.0-dev.3
 ```
 
 Prerelease packages are published SDK first, then CLI. Confirm
-`mcp_dart 2.3.0-dev.2` is available before installing this CLI preview.
+`mcp_dart 2.3.0-dev.3` is available before installing this CLI preview.
 
 Without Dart, install the latest stable standalone binary:
 
@@ -48,7 +47,7 @@ cd my_server
 mcp_dart serve
 ```
 
-The dev.2 CLI writes `mcp_dart: ^2.3.0-dev.2`, the SDK channel tested with this
+The dev.3 CLI writes `mcp_dart: ^2.3.0-dev.3`, the SDK channel tested with this
 CLI. A stable CLI selects its matching stable SDK. You can also supply a local
 Mason brick, Git URL, GitHub shorthand, or tree URL:
 

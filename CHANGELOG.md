@@ -1,4 +1,4 @@
-## Unreleased
+## 2.3.0-dev.3
 
 `mcp_dart 2.3` adds the MCP `2026-07-28` release-candidate surface while
 preserving the public `2.2.2` API. See the

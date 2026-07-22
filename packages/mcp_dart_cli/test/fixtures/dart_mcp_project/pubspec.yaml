@@ -9,7 +9,7 @@ environment:
 dependencies:
   args: ^2.6.0
   logging: ^1.3.0
-  mcp_dart: ^2.3.0-dev.2
+  mcp_dart: ^2.3.0-dev.3
   mcp_dart_cli:
     path: ../../..
 
