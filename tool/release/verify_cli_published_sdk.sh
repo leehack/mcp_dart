@@ -28,10 +28,21 @@ if [[ -z "$EXPECTED_SDK_VERSION" ]]; then
   echo "Could not determine the minimum mcp_dart version." >&2
   exit 65
 fi
+if [[ ! "$EXPECTED_SDK_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+  echo "Invalid minimum mcp_dart version: $EXPECTED_SDK_VERSION." >&2
+  exit 65
+fi
 
-# Exercise the lower bound of the declared hosted SDK constraint. A normal
-# `pub get` can select a newer 2.3.x and hide a 2.3.0 compatibility regression.
-dart pub downgrade
+# Exercise only the lower bound of the declared hosted SDK constraint. A
+# package-wide `pub downgrade` can select transitive versions that predate the
+# CLI's Dart SDK and fail for reasons unrelated to mcp_dart compatibility.
+cleanup() {
+  rm -f pubspec_overrides.yaml
+}
+trap cleanup EXIT
+printf 'dependency_overrides:\n  mcp_dart: %s\n' \
+  "$EXPECTED_SDK_VERSION" >pubspec_overrides.yaml
+dart pub get
 DEPENDENCIES=$(dart pub deps --json)
 RESOLVED_SDK_VERSION=$(jq -r '
   [.packages[] | select(.name == "mcp_dart")][0].version // empty
