@@ -68,7 +68,7 @@ final client = McpClient(
 https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28.md
 
 Upgrade requirements and application-visible changes from 2.2 to 2.3:
-https://github.com/leehack/mcp_dart/blob/main/doc/migration-2.2-to-2.3.md
+https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/migration-2.2-to-2.3.md
 
 Strict MCP 2026-07-28 runnable example:
 https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28
