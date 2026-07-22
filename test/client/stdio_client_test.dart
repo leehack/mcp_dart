@@ -1467,6 +1467,7 @@ void main() {
         '${temporaryDirectory.path}${io.Platform.pathSeparator}launch-count',
       );
       final responseMarker = io.File('${launchCountFile.path}.response');
+      responseMarker.writeAsStringSync('stale response marker');
       final transport = StdioClientTransport(
         StdioServerParameters(
           command: io.Platform.resolvedExecutable,
@@ -1496,15 +1497,26 @@ void main() {
         await transport.send(
           const JsonRpcResponse(id: 999, result: {'ok': true}),
         );
+        String? responseContents;
         for (var attempt = 0;
-            attempt < 100 && !responseMarker.existsSync();
+            attempt < 100 && responseContents == null;
             attempt++) {
+          if (responseMarker.existsSync()) {
+            try {
+              final candidate = responseMarker.readAsStringSync();
+              if (candidate != 'stale response marker') {
+                responseContents = candidate;
+              }
+            } on io.FileSystemException {
+              // The fixture may be between deleting and replacing the marker.
+            }
+          }
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
 
-        expect(responseMarker.existsSync(), isTrue);
+        expect(responseContents, isNotNull);
         expect(
-          jsonDecode(responseMarker.readAsStringSync()),
+          jsonDecode(responseContents!),
           containsPair('id', 999),
         );
       } finally {

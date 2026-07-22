@@ -27,11 +27,7 @@ environment:
 dependencies:
   crypto: ^3.0.7
   http: ^1.5.0
-  json_schema: ^5.2.2
   meta: ^1.16.0
-  # json_schema -> uri otherwise permits quiver 3.0.x, which does not compile
-  # on Dart 3 because it implements the removed BidirectionalIterator API.
-  quiver: ^3.2.1
 
 dev_dependencies:
   # Dart 3.4 resolves lints 4.0; Dart 3.8+ can use the latest lints 6 release.

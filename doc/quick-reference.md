@@ -283,9 +283,10 @@ final schema = JsonSchema.object(
 
 The SDK validates JSON Schema Draft 2020-12 by default and accepts an explicitly
 declared Draft 7 schema for MCP 2025-11-25 compatibility. Same-document `$ref`
-and `$dynamicRef` references are supported; relative and network references,
-unsupported dialects, and custom vocabularies are rejected. Validate business
-rules in the callback as well as describing inputs in the schema.
+and `$dynamicRef` references are supported; unresolved relative and network
+references and unsupported dialects are rejected. Custom vocabularies are
+preserved but not interpreted. Validate business rules in the callback as well
+as describing inputs in the schema.
 
 ## Errors
 
