@@ -28,9 +28,10 @@ in focused docs and runbooks.
 - **DRY**: Keep protocol constants, version parsing, schemas, and release rules
   in one source of truth. Reuse shared behavior when copies must stay identical;
   do not introduce an abstraction merely to remove a few obvious lines.
-- Add a dependency only when the SDK or a small local implementation is not a
-  reasonable fit. Consider maintenance, package size, minimum Dart support, and
-  transitive dependencies.
+- Minimize direct and transitive dependencies. Do not add a dependency or raise
+  a package's minimum Dart version without explicit human approval. Before
+  requesting approval, document the need, alternatives, compatibility impact,
+  and transitive footprint.
 - Optimize measured or structurally clear hot paths. Do not trade correctness
   or readability for unproven micro-optimizations.
 - Preserve public API compatibility unless a breaking change is explicitly
@@ -75,9 +76,15 @@ in focused docs and runbooks.
    `packages/mcp_dart_cli/`.
 6. Treat examples as contracts. Verify affected nested Dart/Flutter examples
    when changing public APIs or protocol flows.
-7. For PR work, keep the diff focused, monitor CI, and resolve every actionable
+7. For SDK behavior or public API changes, run a representative MCP client and
+   server through public package APIs as users would. Cover affected transports
+   and do not rely only on mocks or `lib/src` imports.
+8. For protocol changes, run the relevant official MCP conformance suites and
+   pinned spec/schema audits used by CI. Never weaken a conformance expectation
+   merely to make a test pass; reconcile failures with the official spec.
+9. For PR work, keep the diff focused, monitor CI, and resolve every actionable
    review thread before reporting readiness.
-8. Never merge a PR without explicit user approval.
+10. Never merge a PR without explicit user approval.
 
 ## Documentation and releases
 
