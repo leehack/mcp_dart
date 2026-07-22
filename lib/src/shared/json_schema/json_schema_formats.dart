@@ -324,8 +324,9 @@ _HostnameLabel? _validateHostnameLabel(
   String label, {
   required bool international,
 }) {
-  final lower = label.toLowerCase();
-  if (lower.startsWith('xn--')) {
+  final isAceLabel =
+      label.length >= 4 && label.substring(0, 4).toLowerCase() == 'xn--';
+  if (isAceLabel) {
     if (label.length > 63) return null;
     final payload = label.substring(4);
     final decoded = _punycodeDecode(payload);
@@ -340,15 +341,14 @@ _HostnameLabel? _validateHostnameLabel(
     return _HostnameLabel(ascii, decoded);
   }
 
-  final runes = label.runes.toList(growable: false);
+  final runes = label.runes.take(64).toList(growable: false);
   if (runes.length > 63) return null;
-  if (!international && runes.any((rune) => rune >= 0x80)) return null;
+  final hasNonAscii = runes.any((rune) => rune >= 0x80);
+  if (!international && hasNonAscii) return null;
   if (!_isValidIdnLabel(runes)) return null;
-  final encoded = runes.any((rune) => rune >= 0x80)
-      ? _punycodeEncode(runes)
-      : label.toLowerCase();
+  final encoded = hasNonAscii ? _punycodeEncode(runes) : label.toLowerCase();
   if (encoded == null) return null;
-  final ascii = runes.any((rune) => rune >= 0x80) ? 'xn--$encoded' : encoded;
+  final ascii = hasNonAscii ? 'xn--$encoded' : encoded;
   if (ascii.length > 63) return null;
   return _HostnameLabel(ascii, runes);
 }

@@ -97,6 +97,8 @@ final class _Compiler {
     Uri? declaredId;
 
     final id = map?[r'$id'];
+    // Draft 7 core section 8.3 requires every sibling of `$ref`, including
+    // `$id`, to be ignored. Draft 2020-12 permits reference siblings.
     final draft7ReferenceObject =
         dialect == JsonSchemaDialect.draft7 && map?[r'$ref'] is String;
     if (id is String && !draft7ReferenceObject) {

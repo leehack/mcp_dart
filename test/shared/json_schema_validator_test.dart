@@ -1276,15 +1276,28 @@ void main() {
       });
 
       test(
-        'Draft 7 rejects oversized IDN labels before punycode encoding',
+        'Draft 7 rejects oversized hostname labels with bounded work',
         () {
-          final schema = JsonSchema.fromJson({
+          for (final format in const ['hostname', 'idn-hostname']) {
+            final schema = JsonSchema.fromJson({
+              r'$schema': 'http://json-schema.org/draft-07/schema#',
+              'format': format,
+            });
+
+            schema.validate(List.filled(63, 'a').join());
+            expect(
+              () => schema.validate(List.filled(64, 'a').join()),
+              throwsA(isA<JsonSchemaValidationException>()),
+              reason: format,
+            );
+          }
+
+          final idnSchema = JsonSchema.fromJson({
             r'$schema': 'http://json-schema.org/draft-07/schema#',
             'format': 'idn-hostname',
           });
-
           expect(
-            () => schema.validate(List.filled(100000, '例').join()),
+            () => idnSchema.validate(List.filled(100000, '例').join()),
             throwsA(isA<JsonSchemaValidationException>()),
           );
         },
