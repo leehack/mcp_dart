@@ -125,9 +125,10 @@ CI provenance is matched by the exact workflow files
 `.github/workflows/test_core.yml`, `.github/workflows/test_cli.yml`, and, for
 the SDK, `.github/workflows/interop_2026_07_28.yml`; matching display names are
 not sufficient. For CLI candidates, both workflows remove the monorepo
-override, downgrade to and verify the declared minimum SDK from pub.dev, run
-the non-interop test suite and analysis, compile and smoke-test the binary, and
-run the publish dry-run before authorization or publication.
+override, pin and verify only the declared minimum SDK from pub.dev while
+resolving other dependencies normally, run the non-interop test suite and
+analysis, compile and smoke-test the binary, and run the publish dry-run before
+authorization or publication.
 
 Run `bash tool/release/verify_release_ci_test.sh` to exercise the local
 workflow-provenance fixtures without calling GitHub.

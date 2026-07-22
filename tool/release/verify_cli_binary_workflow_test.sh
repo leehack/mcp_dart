@@ -86,7 +86,9 @@ YAML
 cat >"$FIXTURE_DIR/bin/dart" <<'DART'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "$*" == "pub downgrade" ]]; then
+if [[ "$*" == "pub get" ]]; then
+  grep -q '^dependency_overrides:$' pubspec_overrides.yaml
+  grep -q '^  mcp_dart: 2.3.0$' pubspec_overrides.yaml
   exit 0
 fi
 if [[ "$*" == "pub deps --json" ]]; then
@@ -120,11 +122,15 @@ run_helper() {
 
 run_helper "$FIXTURE_DIR/hosted.json" >/dev/null ||
   fail "The hosted minimum SDK fixture should pass."
+[[ ! -e "$CLI_FIXTURE/pubspec_overrides.yaml" ]] ||
+  fail "The hosted SDK verifier left its temporary override behind."
 if run_helper "$FIXTURE_DIR/path.json" >"$FIXTURE_DIR/path.out" 2>&1; then
   fail "A workspace/path SDK unexpectedly passed hosted dependency verification."
 fi
 grep -q 'Expected hosted mcp_dart 2.3.0' "$FIXTURE_DIR/path.out" ||
   fail "The path SDK fixture did not fail for hosted-source mismatch."
+[[ ! -e "$CLI_FIXTURE/pubspec_overrides.yaml" ]] ||
+  fail "A failed hosted SDK verification left its temporary override behind."
 if run_helper "$FIXTURE_DIR/newer.json" >"$FIXTURE_DIR/newer.out" 2>&1; then
   fail "A newer caret-compatible SDK unexpectedly passed minimum verification."
 fi

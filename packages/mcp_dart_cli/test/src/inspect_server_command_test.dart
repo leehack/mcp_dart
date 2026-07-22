@@ -481,11 +481,18 @@ void main() {
 File _typescriptServerFixture() {
   final repoRoot = _findRepoRoot(Directory.current);
   return File(
-    p.join(repoRoot.path, 'test', 'interop', 'ts', 'dist', 'server.js'),
+    p.join(
+      repoRoot?.path ?? Directory.current.path,
+      'test',
+      'interop',
+      'ts',
+      'dist',
+      'server.js',
+    ),
   );
 }
 
-Directory _findRepoRoot(Directory start) {
+Directory? _findRepoRoot(Directory start) {
   var current = start.absolute;
   while (current.path != current.parent.path) {
     if (File(p.join(current.path, 'AGENTS.md')).existsSync() &&
@@ -496,7 +503,7 @@ Directory _findRepoRoot(Directory start) {
     }
     current = current.parent;
   }
-  throw StateError('Could not locate repository root from ${start.path}.');
+  return null;
 }
 
 bool _requireFile(File file, String description) {

@@ -28,29 +28,42 @@ void main() {
   });
 
   test(
-    'CLI dependency and generated SDK constraint match the root package',
+    'CLI dependency and generated SDK constraint stay aligned',
     () {
       final cliPubspec =
           loadYaml(File('pubspec.yaml').readAsStringSync()) as YamlMap;
-      final rootPubspec =
-          loadYaml(File('../../pubspec.yaml').readAsStringSync()) as YamlMap;
-      final rootVersion = rootPubspec['version'] as String;
       final dependencies = cliPubspec['dependencies'] as YamlMap;
-      final templatePubspec =
-          loadYaml(
-                File(
-                  '../templates/simple/__brick__/pubspec.yaml',
-                ).readAsStringSync(),
-              )
-              as YamlMap;
-      final templateDependencies = templatePubspec['dependencies'] as YamlMap;
+      final sdkConstraint = dependencies['mcp_dart'] as String;
 
-      expect(dependencies['mcp_dart'], '^$rootVersion');
-      expect(templateDependencies['mcp_dart'], '^$rootVersion');
-      expect(generatedSdkConstraint, '^$rootVersion');
+      expect(generatedSdkConstraint, sdkConstraint);
       expect(isPrereleaseVersion(packageVersion), isTrue);
       expect(defaultTemplateUrl, contains('mcp_dart_cli-v$packageVersion'));
       expect(defaultTemplateUrl, isNot(contains('/main/')));
     },
   );
+
+  test('CLI dependency matches the root package in a repository checkout', () {
+    final rootPubspecFile = File('../../pubspec.yaml');
+    if (!rootPubspecFile.existsSync()) {
+      markTestSkipped('Root package is unavailable outside the repository.');
+      return;
+    }
+
+    final cliPubspec =
+        loadYaml(File('pubspec.yaml').readAsStringSync()) as YamlMap;
+    final dependencies = cliPubspec['dependencies'] as YamlMap;
+    final rootPubspec = loadYaml(rootPubspecFile.readAsStringSync()) as YamlMap;
+    final rootVersion = rootPubspec['version'] as String;
+    final templatePubspec =
+        loadYaml(
+              File(
+                '../templates/simple/__brick__/pubspec.yaml',
+              ).readAsStringSync(),
+            )
+            as YamlMap;
+    final templateDependencies = templatePubspec['dependencies'] as YamlMap;
+
+    expect(dependencies['mcp_dart'], '^$rootVersion');
+    expect(templateDependencies['mcp_dart'], '^$rootVersion');
+  });
 }
