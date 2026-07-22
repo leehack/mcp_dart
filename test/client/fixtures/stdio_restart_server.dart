@@ -65,7 +65,10 @@ Future<void> main(List<String> arguments) async {
     final id = message['id'];
 
     if (method == null && id == 999) {
-      File('${launchCountFile.path}.response').writeAsStringSync(line);
+      _writeMarkerAtomically(
+        File('${launchCountFile.path}.response'),
+        line,
+      );
       continue;
     }
 
@@ -332,6 +335,12 @@ Future<void> main(List<String> arguments) async {
 
 void _send(Map<String, dynamic> message) {
   stdout.writeln(jsonEncode(message));
+}
+
+void _writeMarkerAtomically(File marker, String contents) {
+  final temporary = File('${marker.path}.$pid.tmp');
+  temporary.writeAsStringSync(contents, flush: true);
+  temporary.renameSync(marker.path);
 }
 
 int _claimLaunchNumber(File markerPrefix) {
