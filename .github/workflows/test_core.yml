@@ -21,8 +21,8 @@ jobs:
       - name: Test release CI provenance gate
         run: bash tool/release/verify_release_ci_test.sh
 
-      - name: Test stable release source gate
-        run: bash tool/release/verify_stable_release_source_test.sh
+      - name: Test release source gate
+        run: bash tool/release/verify_release_source_test.sh
 
       - name: Test release workflow permission separation
         run: bash tool/release/verify_release_workflow_security_test.sh

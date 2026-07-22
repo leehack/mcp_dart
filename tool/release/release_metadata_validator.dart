@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'release_link_manager.dart';
+import 'release_prep_plan.dart';
 
 export 'release_link_manager.dart' show ReleasePackage;
 
@@ -41,11 +42,19 @@ class ReleaseMetadataValidator {
     final sdkVersion = _yamlScalar(rootPubspec, 'version');
     final cliVersion = _yamlScalar(cliPubspec, 'version');
     final version = package == ReleasePackage.sdk ? sdkVersion : cliVersion;
-    if (version == null || !_versionPattern.hasMatch(version)) {
+    ReleaseVersion? parsedVersion;
+    if (version != null) {
+      try {
+        parsedVersion = ReleaseVersion.parse(version);
+      } on FormatException {
+        // Report the package-scoped validation error below.
+      }
+    }
+    if (parsedVersion == null) {
       errors.add('${package.packageName} has an invalid or missing version.');
     }
     final effectiveVersion = version ?? '';
-    final isPrerelease = effectiveVersion.contains('-');
+    final isPrerelease = parsedVersion?.isPrerelease ?? false;
 
     final expectedTag = '${package.tagPrefix}$effectiveVersion';
     if (tag != null && tag != expectedTag) {
@@ -520,8 +529,7 @@ class ReleaseMetadataValidator {
         version.isEmpty ? null : _releaseSection(changelog, version);
     if (version.isNotEmpty && releaseSection == null) {
       errors.add('$changelogPath has no release heading for $version.');
-    } else if (!isPrerelease &&
-        releaseSection != null &&
+    } else if (releaseSection != null &&
         !_hasSubstantiveReleaseNotes(releaseSection)) {
       errors.add(
         '$changelogPath release section for $version has no substantive '
@@ -823,9 +831,6 @@ class ReleaseMetadataValidator {
   }
 }
 
-const _versionPatternSource =
-    r'^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$';
-final RegExp _versionPattern = RegExp(_versionPatternSource);
 final RegExp _shaPattern = RegExp(r'^[0-9a-f]{40}$');
 
 String? _yamlScalar(String source, String key) {

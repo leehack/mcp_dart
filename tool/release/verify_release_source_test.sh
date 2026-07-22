@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-VERIFY_SCRIPT="$REPO_ROOT/tool/release/verify_stable_release_source.sh"
+VERIFY_SCRIPT="$REPO_ROOT/tool/release/verify_release_source.sh"
 FIXTURE_DIR=$(mktemp -d)
 trap 'rm -rf "$FIXTURE_DIR"' EXIT
 
@@ -60,8 +60,8 @@ if (
     RELEASE_SOURCE_REMOTE=origin \
     bash "$VERIFY_SCRIPT" main v2.3.0
 ) >/dev/null 2>&1; then
-  echo "A stable release dispatched from a non-default branch unexpectedly passed." >&2
+  echo "A release dispatched from a non-default branch unexpectedly passed." >&2
   exit 1
 fi
 
-echo "Stable release source fixtures passed."
+echo "Release source fixtures passed."

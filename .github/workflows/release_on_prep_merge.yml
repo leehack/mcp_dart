@@ -16,12 +16,10 @@ jobs:
   detect:
     if: >-
       github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch &&
       contains(github.event.pull_request.labels.*.name, 'release-prep')
     runs-on: ubuntu-latest
     outputs:
-      channel: ${{ steps.release-plan.outputs.channel }}
-      cli_version: ${{ steps.release-plan.outputs.cli_version }}
-      packages: ${{ steps.release-plan.outputs.packages }}
       release_cli: ${{ steps.release-plan.outputs.release_cli }}
       release_sdk: ${{ steps.release-plan.outputs.release_sdk }}
       release_sha: ${{ steps.release-source.outputs.release_sha }}
@@ -70,26 +68,33 @@ jobs:
 
       - name: Wait for exact-commit push CI
         env:
+          ATTEMPTS: ${{ vars.RELEASE_CI_ATTEMPTS || '60' }}
+          INTERVAL_SECONDS: ${{ vars.RELEASE_CI_INTERVAL_SECONDS || '30' }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_SDK: ${{ needs.detect.outputs.release_sdk }}
           RELEASE_SHA: ${{ needs.detect.outputs.release_sha }}
         run: |
+          if [[ ! "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]] ||
+            [[ ! "$INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Release CI polling values must be positive integers."
+            exit 1
+          fi
           if [ "$RELEASE_SDK" = "true" ]; then
             PACKAGE=mcp_dart
           else
             PACKAGE=mcp_dart_cli
           fi
-          for ATTEMPT in $(seq 1 60); do
+          for ((ATTEMPT = 1; ATTEMPT <= ATTEMPTS; ATTEMPT++)); do
             if bash tool/release/verify_release_ci.sh \
               "$PACKAGE" "$RELEASE_SHA"; then
               exit 0
             fi
-            if [ "$ATTEMPT" -lt 60 ]; then
-              echo "Waiting for exact-commit push CI ($ATTEMPT/60)."
-              sleep 30
+            if ((ATTEMPT < ATTEMPTS)); then
+              echo "Waiting for exact-commit push CI ($ATTEMPT/$ATTEMPTS)."
+              sleep "$INTERVAL_SECONDS"
             fi
           done
-          echo "Exact-commit push CI did not pass within 30 minutes."
+          echo "Exact-commit push CI did not pass after $ATTEMPTS attempts."
           exit 1
 
   release-sdk:
@@ -125,9 +130,16 @@ jobs:
     steps:
       - name: Wait for the coordinated SDK version on pub.dev
         env:
+          ATTEMPTS: ${{ vars.RELEASE_PUB_ATTEMPTS || '60' }}
+          INTERVAL_SECONDS: ${{ vars.RELEASE_PUB_INTERVAL_SECONDS || '15' }}
           SDK_VERSION: ${{ needs.detect.outputs.sdk_version }}
         run: |
-          for ATTEMPT in $(seq 1 60); do
+          if [[ ! "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]] ||
+            [[ ! "$INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "pub.dev polling values must be positive integers."
+            exit 1
+          fi
+          for ((ATTEMPT = 1; ATTEMPT <= ATTEMPTS; ATTEMPT++)); do
             if curl --fail --silent --show-error \
               "https://pub.dev/api/packages/mcp_dart" |
               jq -e --arg version "$SDK_VERSION" \
@@ -135,12 +147,12 @@ jobs:
               echo "mcp_dart $SDK_VERSION is available on pub.dev."
               exit 0
             fi
-            if [ "$ATTEMPT" -lt 60 ]; then
-              echo "Waiting for mcp_dart $SDK_VERSION on pub.dev ($ATTEMPT/60)."
-              sleep 15
+            if ((ATTEMPT < ATTEMPTS)); then
+              echo "Waiting for mcp_dart $SDK_VERSION on pub.dev ($ATTEMPT/$ATTEMPTS)."
+              sleep "$INTERVAL_SECONDS"
             fi
           done
-          echo "mcp_dart $SDK_VERSION was not visible on pub.dev within 15 minutes."
+          echo "mcp_dart $SDK_VERSION was not visible after $ATTEMPTS attempts."
           exit 1
 
   release-cli:

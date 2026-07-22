@@ -9,4 +9,5 @@ const defaultTemplateUrl =
     'mcp_dart_cli-v$packageVersion/packages/templates/simple';
 
 /// Whether [version] identifies a prerelease build.
-bool isPrereleaseVersion(String version) => version.contains('-');
+bool isPrereleaseVersion(String version) =>
+    version.split('+').first.contains('-');

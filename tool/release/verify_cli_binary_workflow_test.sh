@@ -49,6 +49,10 @@ grep -q 'RELEASE_LOOKUP_ATTEMPTS' "$ASSET_JOB" ||
   fail "CLI binary assets must tolerate the release-creation ordering window."
 grep -Fq ".prerelease == \$prerelease" "$ASSET_JOB" ||
   fail "CLI binary assets must verify stable/prerelease classification."
+# Match the literal shell expansion in the workflow.
+# shellcheck disable=SC2016
+grep -Fq 'VERSION_WITHOUT_BUILD=${PACKAGE_VERSION%%+*}' "$ASSET_JOB" ||
+  fail "CLI binary release classification must ignore build metadata."
 if grep -q 'softprops/action-gh-release' "$ASSET_JOB"; then
   fail "CLI binary assets must not use an action that can create a release."
 fi

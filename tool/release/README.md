@@ -46,7 +46,7 @@ and `Validate Release Prep` checks before a prep PR can merge.
 both the GitHub release workflow and the tag-triggered pub.dev publish
 workflow. It validates SDK/CLI version coordination, tag names, immutable
 prerelease documentation URLs, exact-version changelog headings with
-substantive stable release notes, protocol compatibility constants, and pinned
+substantive release notes, protocol compatibility constants, and pinned
 day-0 inputs.
 
 The `mcp_2026_07_28_release_metadata.json` manifest records the exact inputs
@@ -118,9 +118,9 @@ then a minimal write job checks the exact validated commit and tag before
 writing authorization. New-tag authorization transitions through `pending`
 and becomes `success` only after the PAT-backed tag push succeeds; failures
 overwrite it with `failure`. The publish workflow waits for that transition.
-Stable tags additionally require the latest default-branch source, exact-SHA
-CI runs, and final-spec acknowledgements, and the publish workflow repeats the
-exact-SHA CI check.
+Every tag additionally requires the latest default-branch source and exact-SHA
+CI runs, and the publish workflow repeats the exact-SHA CI check. Stable tags
+also require the final-spec acknowledgements.
 CI provenance is matched by the exact workflow files
 `.github/workflows/test_core.yml`, `.github/workflows/test_cli.yml`, and, for
 the SDK, `.github/workflows/interop_2026_07_28.yml`; matching display names are
@@ -132,7 +132,7 @@ run the publish dry-run before authorization or publication.
 Run `bash tool/release/verify_release_ci_test.sh` to exercise the local
 workflow-provenance fixtures without calling GitHub.
 
-Run `bash tool/release/verify_stable_release_source_test.sh` to exercise the
+Run `bash tool/release/verify_release_source_test.sh` to exercise the
 latest-default-branch and immutable-tag recovery gates against a local Git
 remote.
 
@@ -141,8 +141,14 @@ release validation stays read-only and the PAT remains scoped to the new-tag
 push step.
 
 Run `bash tool/release/verify_release_prep_workflow_test.sh` to verify labeled
-prep detection, exact-merge provenance, stable-CI waiting, permission scope,
+prep detection, exact-merge provenance, release-CI waiting, permission scope,
 and coordinated SDK-before-CLI ordering.
+
+`Release Merged Prep` defaults to 60 CI checks every 30 seconds and 60 pub.dev
+checks every 15 seconds. Maintainers can tune those limits with the positive
+integer repository variables `RELEASE_CI_ATTEMPTS`,
+`RELEASE_CI_INTERVAL_SECONDS`, `RELEASE_PUB_ATTEMPTS`, and
+`RELEASE_PUB_INTERVAL_SECONDS` without editing the workflow.
 
 Run `bash tool/release/verify_publish_workflow_security_test.sh` to verify the
 pre-checkout authorization gate, immutable candidate handoff, and OIDC job

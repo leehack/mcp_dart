@@ -46,6 +46,18 @@ grep -q -- '--exclude pubspec_overrides.yaml' "$VALIDATION_JOB" ||
   fail "Release staging must remove monorepo SDK overrides."
 grep -q 'dart tool/release/update_release_links.dart' "$VALIDATION_JOB" ||
   fail "Release validation must pin staged documentation links to the tag."
+grep -q 'bash tool/release/verify_release_source.sh' "$VALIDATION_JOB" ||
+  fail "Every release must use the default-branch source gate."
+grep -q 'bash tool/release/verify_release_ci.sh' "$VALIDATION_JOB" ||
+  fail "Every release must use the exact-commit CI gate."
+# Match the literal shell expansion in the workflow.
+# shellcheck disable=SC2016
+grep -Fq 'VERSION_WITHOUT_BUILD=${VERSION%%+*}' "$VALIDATION_JOB" ||
+  fail "Release type detection must ignore SemVer build metadata."
+if grep -q "if: steps.release-type.outputs.prerelease == 'false'" \
+  "$VALIDATION_JOB"; then
+  fail "Source and CI provenance checks must not be stable-only."
+fi
 LINK_UPDATE_LINE=$(grep -n 'dart tool/release/update_release_links.dart' \
   "$VALIDATION_JOB" | cut -d: -f1)
 DRY_RUN_LINE=$(grep -n 'run: dart pub publish --dry-run' \

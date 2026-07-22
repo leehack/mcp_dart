@@ -11,7 +11,7 @@ on:
           - mcp_dart
           - mcp_dart_cli
       release_sha:
-        description: 'Exact release-prep merge commit (automatic releases only)'
+        description: 'Exact release commit (automatic releases and recovery)'
         required: false
         type: string
   workflow_call:
@@ -81,7 +81,8 @@ jobs:
         env:
           VERSION: ${{ steps.get-version.outputs.version }}
         run: |
-          if [[ "$VERSION" == *-* ]]; then
+          VERSION_WITHOUT_BUILD=${VERSION%%+*}
+          if [[ "$VERSION_WITHOUT_BUILD" == *-* ]]; then
             {
               echo "prerelease=true"
               echo "make_latest=false"
@@ -115,17 +116,15 @@ jobs:
             --package "$PACKAGE" \
             --tag "$TAG"
 
-      - name: Verify stable release source
-        if: steps.release-type.outputs.prerelease == 'false'
+      - name: Verify release source
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           TAG: ${{ steps.release-source.outputs.tag }}
         run: |
-          bash tool/release/verify_stable_release_source.sh \
+          bash tool/release/verify_release_source.sh \
             "$DEFAULT_BRANCH" "$TAG"
 
-      - name: Verify stable release CI
-        if: steps.release-type.outputs.prerelease == 'false'
+      - name: Verify release CI
         env:
           GH_TOKEN: ${{ github.token }}
           PACKAGE: ${{ inputs.package }}
@@ -199,15 +198,14 @@ jobs:
 
       # Keep this independent of repository scripts: this job holds write
       # permissions, while all package code ran in validate-release.
-      - name: Re-verify stable release source immediately before authorization
-        if: needs.validate-release.outputs.prerelease == 'false'
+      - name: Re-verify release source immediately before authorization
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           RELEASE_SHA: ${{ needs.validate-release.outputs.release_sha }}
           TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
           if [ "$GITHUB_REF_TYPE" != "branch" ] || [ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]; then
-            echo "❌ Stable releases must be dispatched from $DEFAULT_BRANCH."
+            echo "❌ Releases must be dispatched from $DEFAULT_BRANCH."
             exit 1
           fi
           DEFAULT_SHA=$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | awk 'NR == 1 { print $1 }')
@@ -224,12 +222,12 @@ jobs:
               echo "   Never move or recreate a published tag; bump the version instead."
               exit 1
             fi
-            echo "✅ Stable release recovery matches existing tag $TAG."
+            echo "✅ Release recovery matches existing tag $TAG."
           elif [ "$RELEASE_SHA" != "$DEFAULT_SHA" ]; then
-            echo "❌ Stable releases must still use the latest origin/$DEFAULT_BRANCH commit."
+            echo "❌ Releases must still use the latest origin/$DEFAULT_BRANCH commit."
             exit 1
           else
-            echo "✅ Stable release source still matches origin/$DEFAULT_BRANCH."
+            echo "✅ Release source still matches origin/$DEFAULT_BRANCH."
           fi
 
       - name: Resolve release tag
@@ -282,18 +280,15 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ github.token }}
           PACKAGE: ${{ inputs.package }}
-          PRERELEASE: ${{ needs.validate-release.outputs.prerelease }}
           RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
           RELEASE_SHA: ${{ needs.validate-release.outputs.release_sha }}
           TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
-          # Close the last practical stale-main window before a new stable tag.
-          if [ "$PRERELEASE" = "false" ]; then
-            DEFAULT_SHA=$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | awk 'NR == 1 { print $1 }')
-            if [ -z "$DEFAULT_SHA" ] || [ "$RELEASE_SHA" != "$DEFAULT_SHA" ]; then
-              echo "❌ origin/$DEFAULT_BRANCH advanced before tag creation."
-              exit 1
-            fi
+          # Close the last practical stale-main window before a new tag.
+          DEFAULT_SHA=$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | awk 'NR == 1 { print $1 }')
+          if [ -z "$DEFAULT_SHA" ] || [ "$RELEASE_SHA" != "$DEFAULT_SHA" ]; then
+            echo "❌ origin/$DEFAULT_BRANCH advanced before tag creation."
+            exit 1
           fi
 
           CONTEXT="mcp_dart/release/$PACKAGE"

@@ -40,16 +40,16 @@ class ReleasePrepPlan {
     required String baseCliPubspec,
     required String headCliPubspec,
   }) {
-    final baseSdk = _SemanticVersion.parse(
+    final baseSdk = ReleaseVersion.parse(
       _pubspecVersion(baseSdkPubspec, ReleasePackage.sdk),
     );
-    final headSdk = _SemanticVersion.parse(
+    final headSdk = ReleaseVersion.parse(
       _pubspecVersion(headSdkPubspec, ReleasePackage.sdk),
     );
-    final baseCli = _SemanticVersion.parse(
+    final baseCli = ReleaseVersion.parse(
       _pubspecVersion(baseCliPubspec, ReleasePackage.cli),
     );
-    final headCli = _SemanticVersion.parse(
+    final headCli = ReleaseVersion.parse(
       _pubspecVersion(headCliPubspec, ReleasePackage.cli),
     );
     final changes = <ReleasePackageVersionChange>[];
@@ -79,7 +79,7 @@ class ReleasePrepPlan {
       );
     }
     final prereleaseStates = changes
-        .map((change) => _SemanticVersion.parse(change.after).isPrerelease)
+        .map((change) => ReleaseVersion.parse(change.after).isPrerelease)
         .toSet();
     if (prereleaseStates.length != 1) {
       throw const FormatException(
@@ -97,8 +97,8 @@ class ReleasePrepPlan {
 
   static void _requireIncreasing(
     ReleasePackage package,
-    _SemanticVersion before,
-    _SemanticVersion after,
+    ReleaseVersion before,
+    ReleaseVersion after,
   ) {
     if (after.compareTo(before) <= 0) {
       throw FormatException(
@@ -122,19 +122,21 @@ String _pubspecVersion(String source, ReleasePackage package) {
   return match.group(1)!;
 }
 
-class _SemanticVersion implements Comparable<_SemanticVersion> {
-  const _SemanticVersion({
+/// Canonical package version parsing and ordering for release automation.
+class ReleaseVersion implements Comparable<ReleaseVersion> {
+  const ReleaseVersion._({
     required this.source,
     required this.major,
     required this.minor,
     required this.patch,
     required this.prerelease,
+    required this.build,
   });
 
   static final _pattern = RegExp(
     r'^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
     r'(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?'
-    r'(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+    r'(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$',
   );
 
   final String source;
@@ -142,16 +144,19 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
   final int minor;
   final int patch;
   final List<String> prerelease;
+  final List<String> build;
 
   bool get isPrerelease => prerelease.isNotEmpty;
 
-  static _SemanticVersion parse(String value) {
+  static ReleaseVersion parse(String value) {
     final match = _pattern.firstMatch(value);
     if (match == null) {
       throw FormatException('Invalid semantic version: $value.');
     }
     final prereleaseSource = match.group(4);
     final prerelease = prereleaseSource?.split('.') ?? const <String>[];
+    final buildSource = match.group(5);
+    final build = buildSource?.split('.') ?? const <String>[];
     for (final identifier in prerelease) {
       if (RegExp(r'^[0-9]+$').hasMatch(identifier) &&
           identifier.length > 1 &&
@@ -161,17 +166,18 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
         );
       }
     }
-    return _SemanticVersion(
+    return ReleaseVersion._(
       source: value,
       major: int.parse(match.group(1)!),
       minor: int.parse(match.group(2)!),
       patch: int.parse(match.group(3)!),
       prerelease: List.unmodifiable(prerelease),
+      build: List.unmodifiable(build),
     );
   }
 
   @override
-  int compareTo(_SemanticVersion other) {
+  int compareTo(ReleaseVersion other) {
     for (final comparison in [
       major.compareTo(other.major),
       minor.compareTo(other.minor),
@@ -181,26 +187,29 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
         return comparison;
       }
     }
-    if (!isPrerelease && !other.isPrerelease) {
-      return 0;
+    final prereleaseComparison = switch ((isPrerelease, other.isPrerelease)) {
+      (false, false) => 0,
+      (false, true) => 1,
+      (true, false) => -1,
+      (true, true) => _compareIdentifiers(prerelease, other.prerelease),
+    };
+    if (prereleaseComparison != 0) {
+      return prereleaseComparison;
     }
-    if (!isPrerelease) {
-      return 1;
-    }
-    if (!other.isPrerelease) {
-      return -1;
-    }
-    final sharedLength = prerelease.length < other.prerelease.length
-        ? prerelease.length
-        : other.prerelease.length;
+    return _compareIdentifiers(build, other.build);
+  }
+
+  static int _compareIdentifiers(List<String> left, List<String> right) {
+    final sharedLength =
+        left.length < right.length ? left.length : right.length;
     for (var index = 0; index < sharedLength; index += 1) {
-      final left = prerelease[index];
-      final right = other.prerelease[index];
-      if (left == right) {
+      final leftIdentifier = left[index];
+      final rightIdentifier = right[index];
+      if (leftIdentifier == rightIdentifier) {
         continue;
       }
-      final leftNumber = int.tryParse(left);
-      final rightNumber = int.tryParse(right);
+      final leftNumber = int.tryParse(leftIdentifier);
+      final rightNumber = int.tryParse(rightIdentifier);
       if (leftNumber != null && rightNumber != null) {
         return leftNumber.compareTo(rightNumber);
       }
@@ -210,8 +219,8 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
       if (rightNumber != null) {
         return 1;
       }
-      return left.compareTo(right);
+      return leftIdentifier.compareTo(rightIdentifier);
     }
-    return prerelease.length.compareTo(other.prerelease.length);
+    return left.length.compareTo(right.length);
   }
 }

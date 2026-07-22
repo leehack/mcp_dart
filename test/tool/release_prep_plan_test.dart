@@ -75,6 +75,42 @@ void main() {
 
     expect(plan.sdkVersion, '2.4.0-dev.10');
   });
+
+  test('accepts a build-only stable version increase', () {
+    final plan = ReleasePrepPlan.detect(
+      baseSdkPubspec: _pubspec('mcp_dart', '2.3.0+1'),
+      headSdkPubspec: _pubspec('mcp_dart', '2.3.0+2'),
+      baseCliPubspec: _pubspec('mcp_dart_cli', '0.2.0'),
+      headCliPubspec: _pubspec('mcp_dart_cli', '0.2.0'),
+    );
+
+    expect(plan.channel, ReleaseChannel.stable);
+    expect(plan.sdkVersion, '2.3.0+2');
+  });
+
+  test('accepts a build-only prerelease version increase', () {
+    final plan = ReleasePrepPlan.detect(
+      baseSdkPubspec: _pubspec('mcp_dart', '2.3.0-dev.1+1'),
+      headSdkPubspec: _pubspec('mcp_dart', '2.3.0-dev.1+2'),
+      baseCliPubspec: _pubspec('mcp_dart_cli', '0.2.0'),
+      headCliPubspec: _pubspec('mcp_dart_cli', '0.2.0'),
+    );
+
+    expect(plan.channel, ReleaseChannel.dev);
+    expect(plan.sdkVersion, '2.3.0-dev.1+2');
+  });
+
+  test('rejects a build metadata downgrade', () {
+    expect(
+      () => ReleasePrepPlan.detect(
+        baseSdkPubspec: _pubspec('mcp_dart', '2.3.0+2'),
+        headSdkPubspec: _pubspec('mcp_dart', '2.3.0+1'),
+        baseCliPubspec: _pubspec('mcp_dart_cli', '0.2.0'),
+        headCliPubspec: _pubspec('mcp_dart_cli', '0.2.0'),
+      ),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }
 
 String _pubspec(String name, String version) => '''

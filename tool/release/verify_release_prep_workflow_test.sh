@@ -39,6 +39,11 @@ grep -q 'github.event.pull_request.merged == true' "$MERGE_WORKFLOW" || {
   echo 'The automatic release must require an actually merged PR.' >&2
   exit 1
 }
+grep -q 'github.event.pull_request.base.ref == github.event.repository.default_branch' \
+  "$MERGE_WORKFLOW" || {
+  echo 'The automatic release must only accept the default branch.' >&2
+  exit 1
+}
 grep -q "contains(github.event.pull_request.labels.*.name, 'release-prep')" \
   "$MERGE_WORKFLOW" || {
   echo 'The automatic release must require the release-prep label.' >&2
@@ -75,6 +80,16 @@ grep -q 'verify_release_ci.sh' "$MERGE_WORKFLOW" || {
   echo 'Automatic releases must wait for exact-commit push CI.' >&2
   exit 1
 }
+for VARIABLE in \
+  RELEASE_CI_ATTEMPTS \
+  RELEASE_CI_INTERVAL_SECONDS \
+  RELEASE_PUB_ATTEMPTS \
+  RELEASE_PUB_INTERVAL_SECONDS; do
+  grep -q "$VARIABLE" "$MERGE_WORKFLOW" || {
+    echo "Automatic release polling must support $VARIABLE." >&2
+    exit 1
+  }
+done
 
 SDK_RELEASE_LINE=$(grep -n '^  release-sdk:$' "$MERGE_WORKFLOW" | cut -d: -f1)
 SDK_WAIT_LINE=$(grep -n '^  wait-for-sdk:$' "$MERGE_WORKFLOW" | cut -d: -f1)

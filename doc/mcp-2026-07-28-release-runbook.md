@@ -19,8 +19,8 @@ Do not publish the stable Dart packages from a moving draft commit.
   `GITHUB_TOKEN` would not start those workflows.
 - Every pub.dev publication requires the exact release commit to carry the
   `mcp_dart/release/<package>` success status. Only `Create Release` writes
-  that status, after metadata and publish dry-run checks; stable releases also
-  require latest-`main`, exact-SHA CI, and final-spec gates. New tags remain
+  that status, after latest-`main`, exact-SHA CI, metadata, and publish dry-run
+  checks; stable releases also require the final-spec gates. New tags remain
   `pending` until their PAT-backed push succeeds, and a failed push records
   `failure`. A manually pushed stable or prerelease tag therefore cannot
   bypass the release workflow. CLI binaries additionally require that exact
@@ -261,7 +261,7 @@ On the final release-prep commit:
   for the stable release commit. SDK releases additionally require
   `.github/workflows/interop_2026_07_28.yml`. Display-name matches from another
   workflow do not satisfy the gate, and a missing or unsuccessful run blocks
-  the stable tag.
+  any release tag.
 - Verify `Create Release` runs repository code and its publish dry run in the
   read-only validation job. Its minimal write job must write
   `mcp_dart/release/mcp_dart` only after the existing tag is verified or the
@@ -280,7 +280,7 @@ coordinated prep cannot mix channels.
 
 1. Merge the labeled release prep PR. `Release Merged Prep` waits for the
    required push CI on the exact merge commit, then invokes `Create Release`
-   for `mcp_dart`. New stable tags require the latest `main` commit. A retry may
+   for `mcp_dart`. Every new tag requires the latest `main` commit. A retry may
    reuse an existing tag only when that tag resolves to the exact original
    release commit; the workflow never moves it. Manual dispatch is a recovery
    path only.

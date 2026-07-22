@@ -95,6 +95,40 @@ void main() {
     expect(result.isPrerelease, isFalse);
   });
 
+  test('hyphens in stable build metadata do not select prerelease', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final pubspec = File('${fixture.path}/pubspec.yaml');
+    pubspec.writeAsStringSync(
+      pubspec.readAsStringSync().replaceFirst(
+            'version: 2.3.0',
+            'version: 2.3.0+build-1',
+          ),
+    );
+    final changelog = File('${fixture.path}/CHANGELOG.md');
+    changelog.writeAsStringSync(
+      changelog.readAsStringSync().replaceFirst(
+            '## 2.3.0',
+            '## 2.3.0+build-1',
+          ),
+    );
+    final metadataFile = File(
+      '${fixture.path}/tool/release/mcp_2026_07_28_release_metadata.json',
+    );
+    final metadata =
+        jsonDecode(metadataFile.readAsStringSync()) as Map<String, dynamic>;
+    metadata['sdkStableVersion'] = '2.3.0+build-1';
+    metadataFile.writeAsStringSync(jsonEncode(metadata));
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0+build-1',
+    );
+
+    expect(result.errors, isEmpty);
+    expect(result.isPrerelease, isFalse);
+  });
+
   test('accepts active Core workflow commands with CRLF line endings', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
@@ -666,6 +700,35 @@ TODO
     final result = ReleaseMetadataValidator(fixture).validate(
       package: ReleasePackage.cli,
       tag: 'mcp_dart_cli-v0.2.0',
+    );
+
+    expect(
+      result.errors,
+      contains(contains('has no substantive release notes')),
+    );
+  });
+
+  test('rejects prerelease metadata with an empty release section', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final pubspec = File('${fixture.path}/pubspec.yaml');
+    pubspec.writeAsStringSync(
+      pubspec.readAsStringSync().replaceFirst(
+            'version: 2.3.0',
+            'version: 2.3.0-dev.3',
+          ),
+    );
+    File('${fixture.path}/CHANGELOG.md').writeAsStringSync('''
+## 2.3.0-dev.3
+
+### Changed
+
+TBD
+''');
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0-dev.3',
     );
 
     expect(

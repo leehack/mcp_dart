@@ -32,24 +32,16 @@ jobs:
               echo "working_directory=packages/mcp_dart_cli"
               echo "package=mcp_dart_cli"
             } >> "$GITHUB_OUTPUT"
-            TAG_VERSION="${TAG#mcp_dart_cli-v}"
             echo "📦 Package: mcp_dart_cli"
           elif [[ "$TAG" == v* ]]; then
             {
               echo "working_directory=."
               echo "package=mcp_dart"
             } >> "$GITHUB_OUTPUT"
-            TAG_VERSION="${TAG#v}"
             echo "📦 Package: mcp_dart"
           else
             echo "❌ Unknown tag format: $TAG"
             exit 1
-          fi
-
-          if [[ "$TAG_VERSION" == *-* ]]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
       # This check intentionally runs before checkout or any repository code.
@@ -192,8 +184,7 @@ jobs:
             --package "${{ steps.package-info.outputs.package }}" \
             --tag "$GITHUB_REF_NAME"
 
-      - name: Verify stable release CI for exact tag commit
-        if: steps.package-info.outputs.prerelease == 'false'
+      - name: Verify release CI for exact tag commit
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ steps.provenance.outputs.release_sha }}
