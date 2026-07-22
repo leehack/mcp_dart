@@ -334,6 +334,11 @@ compatible 2.3.x release.
   from the generated directory. Then start Streamable HTTP with
   `mcp_dart serve --transport http --host 127.0.0.1 --port 3000` and inspect
   `http://localhost:3000/mcp` from a separate process.
+- After the official MCP Inspector V2 is published for MCP `2026-07-28`, record
+  its exact version and use it to inspect the generated server over both stdio
+  and Streamable HTTP. Verify discovery plus tool listing and invocation. The
+  classic Inspector V1 `1.0.0` does not count as new-spec interoperability
+  evidence.
 - Recheck GitHub release links, pub.dev documentation links, installer asset
   resolution, and both stable package versions.
 - Confirm the normal `main` interop schedule is active and there is no duplicate
