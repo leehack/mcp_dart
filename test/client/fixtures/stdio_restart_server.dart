@@ -339,8 +339,17 @@ void _send(Map<String, dynamic> message) {
 
 void _writeMarkerAtomically(File marker, String contents) {
   final temporary = File('${marker.path}.$pid.tmp');
-  temporary.writeAsStringSync(contents, flush: true);
-  temporary.renameSync(marker.path);
+  try {
+    temporary.writeAsStringSync(contents, flush: true);
+    if (marker.existsSync()) {
+      marker.deleteSync();
+    }
+    temporary.renameSync(marker.path);
+  } finally {
+    if (temporary.existsSync()) {
+      temporary.deleteSync();
+    }
+  }
 }
 
 int _claimLaunchNumber(File markerPrefix) {

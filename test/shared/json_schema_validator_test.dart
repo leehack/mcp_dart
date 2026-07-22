@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:mcp_dart/src/shared/json_schema/json_schema.dart';
 import 'package:mcp_dart/src/shared/json_schema/json_schema_validator.dart';
 import 'package:test/test.dart';
@@ -107,6 +105,11 @@ void main() {
                   (error) => error.message,
                   'message',
                   isNot(contains('External $keyword')),
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  isNot(startsWith('Invalid JSON Schema schema:')),
                 ),
           ),
         );
@@ -1451,6 +1454,30 @@ void main() {
         }
       });
 
+      test('normalizes compiler errors from referenced schema locations', () {
+        final schema = JsonSchema.fromJson({
+          r'$ref': '#/x-target',
+          'x-target': {'minLength': -1},
+        });
+
+        expect(
+          () => schema.validate('value'),
+          throwsA(
+            isA<JsonSchemaDefinitionException>()
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains('Invalid JSON Schema schema: #/minLength:'),
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  isNot(contains('schema: Invalid JSON Schema')),
+                ),
+          ),
+        );
+      });
+
       test('rejects schemas that are invalid under 2020-12', () {
         final schemas = [
           JsonSchema.fromJson({
@@ -1879,10 +1906,13 @@ void main() {
             }),
           ];
 
-          Object nestedObject(int depth) => jsonDecode(
-                '${List.filled(depth, '{"next":').join()}{}'
-                '${List.filled(depth, '}').join()}',
-              );
+          Object nestedObject(int depth) {
+            Object value = <String, Object?>{};
+            for (var level = 0; level < depth; level++) {
+              value = <String, Object?>{'next': value};
+            }
+            return value;
+          }
 
           final baselineDepth = nestedObject(1100);
           final boundedDepth = nestedObject(1200);

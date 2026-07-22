@@ -6,7 +6,10 @@ import 'json_schema_formats.dart';
 import 'json_schema_meta_schemas.dart';
 import 'json_schema_number.dart';
 
-const _maxEvaluationDepth = 1120;
+const _maxEvaluationDepth = 1102;
+const _maxEvaluationDepthMessage =
+    'Instance validation exceeds the maximum depth of '
+    '$_maxEvaluationDepth';
 
 /// A failure produced by the package-internal JSON Schema engine.
 final class JsonSchemaEngineException implements Exception {
@@ -37,13 +40,18 @@ final class CompiledJsonSchema {
   const CompiledJsonSchema._(this._compiler, this._root);
 
   void validate(Object? instance) {
-    final result = _compiler.evaluate(
-      _root,
-      instance,
-      const [],
-      const [],
-      _EvaluationContext(),
-    );
+    late final _Result result;
+    try {
+      result = _compiler.evaluate(
+        _root,
+        instance,
+        const [],
+        const [],
+        _EvaluationContext(),
+      );
+    } on StackOverflowError {
+      throw const JsonSchemaEngineException(_maxEvaluationDepthMessage);
+    }
     final failure = result.failure;
     if (failure != null) {
       throw JsonSchemaEngineException(failure.message, failure.path);
@@ -539,8 +547,7 @@ final class _Compiler {
     }
     if (context.depth >= _maxEvaluationDepth) {
       return _Result.invalid(
-        'Instance validation exceeds the maximum depth of '
-        '$_maxEvaluationDepth',
+        _maxEvaluationDepthMessage,
         path,
       );
     }

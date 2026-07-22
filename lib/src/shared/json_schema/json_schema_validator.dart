@@ -61,12 +61,13 @@ void Function(dynamic) compileJsonSchemaValidator(JsonSchema schema) {
       dialect: schemaVersion,
     );
   } on JsonSchemaEngineException catch (error) {
-    if (error.message.startsWith('External ') &&
-        error.message.contains(' is unresolved:')) {
+    if (error.message.contains(' is unresolved:') &&
+        (error.message.startsWith('External ') ||
+            error.message.startsWith('Local '))) {
       throw JsonSchemaDefinitionException._(error.message);
     }
     throw JsonSchemaDefinitionException._(
-      'Invalid JSON Schema schema: ${error.message}',
+      _schemaDefinitionMessageText(error.message),
     );
   }
 
@@ -80,8 +81,11 @@ void Function(dynamic) compileJsonSchemaValidator(JsonSchema schema) {
 }
 
 String _schemaDefinitionMessage(FormatException error) {
+  return _schemaDefinitionMessageText(error.message.toString());
+}
+
+String _schemaDefinitionMessageText(String message) {
   const validatorPrefix = 'Invalid JSON Schema at ';
-  final message = error.message.toString();
   final detail = message.startsWith(validatorPrefix)
       ? message.substring(validatorPrefix.length)
       : message;
