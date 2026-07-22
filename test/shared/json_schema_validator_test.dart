@@ -30,7 +30,10 @@ void main() {
           isA<JsonSchemaDefinitionException>().having(
             (error) => error.message,
             'message',
-            contains('Unsupported JSON Schema dialect'),
+            allOf(
+              contains('Unsupported JSON Schema dialect'),
+              contains(r'#/$schema'),
+            ),
           ),
         ),
       );
@@ -264,6 +267,15 @@ void main() {
           () => JsonSchema.fromJson({
             'maximum': 9007199254740992.0,
           }).validate(9007199254740993),
+          throwsA(isA<JsonSchemaValidationException>()),
+        );
+      });
+
+      test('compares extreme numeric scale gaps exactly', () {
+        final finiteDoubleRange = JsonSchema.number(maximum: 5e-324);
+        finiteDoubleRange.validate(5e-324);
+        expect(
+          () => finiteDoubleRange.validate(1e308),
           throwsA(isA<JsonSchemaValidationException>()),
         );
       });
@@ -2100,6 +2112,23 @@ void main() {
           () => schema.validate({'name': 'Ada', 'extra': true}),
           throwsA(isA<JsonSchemaValidationException>()),
         );
+      });
+
+      test('tracks evaluated properties across matching anyOf branches', () {
+        final schema = JsonSchema.fromJson({
+          'type': 'object',
+          'anyOf': [
+            {
+              'properties': {'a': true},
+            },
+            {
+              'properties': {'b': true},
+            },
+          ],
+          'unevaluatedProperties': false,
+        });
+
+        schema.validate({'a': 1, 'b': 2});
       });
 
       test('tracks evaluated prefix items', () {

@@ -121,7 +121,7 @@ JsonSchemaDialect _schemaVersionFor(Object schema) {
     _jsonSchemaDraft7HttpsDialectWithoutFragment =>
       JsonSchemaDialect.draft7,
     final value => throw JsonSchemaDefinitionException._(
-        'Unsupported JSON Schema dialect: $value',
+        'Unsupported JSON Schema dialect: $value at #/\$schema',
       ),
   };
 }

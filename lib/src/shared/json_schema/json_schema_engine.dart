@@ -842,6 +842,9 @@ final class _Compiler {
         if (branch.isValid) {
           matched = true;
           result.merge(branch);
+          // Draft 7 has no unevaluated* keywords requiring annotations from
+          // every matching branch.
+          if (dialect == JsonSchemaDialect.draft7) break;
         }
       }
       if (!matched) {

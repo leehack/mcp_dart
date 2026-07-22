@@ -62,9 +62,8 @@ final class _JsonDecimal {
     final digits = point < 0 ? text : text.replaceFirst('.', '');
     var coefficient = BigInt.parse('${negative ? '-' : ''}$digits');
     var scale = fractionDigits - exponent;
-    final ten = BigInt.from(10);
-    while (coefficient != BigInt.zero && coefficient % ten == BigInt.zero) {
-      coefficient ~/= ten;
+    while (coefficient != BigInt.zero && coefficient % _ten == BigInt.zero) {
+      coefficient ~/= _ten;
       scale--;
     }
     if (coefficient == BigInt.zero) scale = 0;
@@ -72,4 +71,17 @@ final class _JsonDecimal {
   }
 }
 
-BigInt _powerOfTen(int exponent) => BigInt.from(10).pow(exponent);
+// Covers the full finite-double decimal scale span. Unexpected larger
+// exponents use the uncached fallback so retained data stays bounded.
+const _maxCachedPowerOfTenExponent = 632;
+final _ten = BigInt.from(10);
+final _powersOfTen = <BigInt>[BigInt.one];
+
+BigInt _powerOfTen(int exponent) {
+  if (exponent == 0) return BigInt.one;
+  if (exponent > _maxCachedPowerOfTenExponent) return _ten.pow(exponent);
+  while (_powersOfTen.length <= exponent) {
+    _powersOfTen.add(_powersOfTen.last * _ten);
+  }
+  return _powersOfTen[exponent];
+}
