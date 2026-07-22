@@ -1,179 +1,108 @@
 # mcp_dart Agent Guidelines
 
-This document provides instructions and guidelines for AI agents and developers working on the `mcp_dart` repository.
-Please review these guidelines before making changes to ensure consistency and quality.
+Use this file for durable, repository-specific rules. Keep detailed procedures
+in focused docs and runbooks.
 
-## 1. Project Overview
+## Priorities
 
-`mcp_dart` is a Dart implementation of the Model Context Protocol (MCP) SDK.
-It enables building MCP servers and clients to connect AI applications with external tools and resources.
+1. MCP and JSON-RPC specification correctness.
+2. Backward compatibility and cross-SDK interoperability.
+3. Simple, maintainable code.
+4. Evidence-backed delivery: tests, examples, CI, and clean review threads.
 
-- **SDK Version**: Dart ^3.4.0
-- **CLI Version**: Dart ^3.12.0
-- **Main Entry**: `lib/mcp_dart.dart`
-- **Core Logic**: `lib/src/`
-- **Tests**: `test/` (mirrors `lib/` structure)
+## Repository shape
 
-## 2. Build, Lint, and Test Commands
+- SDK: `lib/`, public barrel `lib/mcp_dart.dart`, minimum Dart 3.4.
+- CLI: `packages/mcp_dart_cli/`, minimum Dart 3.12.
+- Tests: `test/` and package-local `test/` directories.
+- Release automation: `.github/workflows/` and `tool/release/`.
+- Release process details: `tool/release/README.md` and
+  `doc/mcp-2026-07-28-release-runbook.md`.
 
-All commands should be run from the root of the repository.
+## Engineering principles
 
-### Dependencies
-```bash
-dart pub get
-```
+- **KISS**: Prefer the smallest clear design that preserves protocol behavior.
+  Avoid speculative features, hidden normalization, and clever control flow.
+- **SOLID**: Keep types and modules cohesive, make dependencies and capability
+  boundaries explicit, and extend behavior without destabilizing existing APIs.
+- **DRY**: Keep protocol constants, version parsing, schemas, and release rules
+  in one source of truth. Reuse shared behavior when copies must stay identical;
+  do not introduce an abstraction merely to remove a few obvious lines.
+- Add a dependency only when the SDK or a small local implementation is not a
+  reasonable fit. Consider maintenance, package size, minimum Dart support, and
+  transitive dependencies.
+- Optimize measured or structurally clear hot paths. Do not trade correctness
+  or readability for unproven micro-optimizations.
+- Preserve public API compatibility unless a breaking change is explicitly
+  approved and documented with migration guidance.
 
-### Formatting & Linting
-Enforce code style and static analysis rules.
-```bash
-# Format code (applies changes)
-dart format .
+## Protocol quality bar
 
-# Analyze code (reports lint errors)
-dart analyze
+- Treat the official MCP specification as authoritative. Convenience APIs must
+  not distort wire-level JSON-RPC/MCP semantics.
+- Preserve request IDs, metadata, method names, capability flags, error codes,
+  and transport-specific behavior unless the specification permits otherwise.
+- Distinguish advertised capabilities from runtime support and validate both.
+- Keep lower-level protocol behavior observable and testable when adding
+  ergonomic helpers.
+- When a spec version is new or ambiguous, encode the compatibility decision in
+  regression tests and cite the spec or rationale in focused documentation.
 
-# Fix auto-fixable lint errors
-dart fix --apply
-```
+## Dart conventions
 
-### Testing
-Tests are crucial. Do not commit code that breaks existing tests.
+- Use explicit, null-safe types; avoid `dynamic` without a concrete reason.
+- Document public APIs with `///`, use trailing commas, and prefer `const`.
+- Order imports as Dart SDK, package, then relative imports; sort each group.
+- Return `Future<void>` from asynchronous operations that callers may await.
+- Use `McpError` for protocol errors, `StateError` for invalid state, and
+  `ArgumentError` for invalid caller input. Do not broadly swallow errors.
 
-```bash
-# Run all tests
-dart test
+## Working and verification flow
 
-# Run a specific test file
-dart test test/server/server_test.dart
+1. Inspect the relevant implementation, tests, public API, and specification.
+2. Make a focused change using the simplest compatible design.
+3. Add success, failure, malformed-input, and compatibility regressions as
+   appropriate.
+4. Run, from the repository root:
 
-# Run a specific test case by name (substring match)
-dart test --name "Server initialization"
+   ```bash
+   dart format .
+   dart analyze
+   dart test
+   ```
 
-# Run tests with coverage (requires coverage package)
-dart test --coverage=coverage
-```
+5. For CLI changes, also run `dart analyze` and `dart test` from
+   `packages/mcp_dart_cli/`.
+6. Treat examples as contracts. Verify affected nested Dart/Flutter examples
+   when changing public APIs or protocol flows.
+7. For PR work, keep the diff focused, monitor CI, and resolve every actionable
+   review thread before reporting readiness.
+8. Never merge a PR without explicit user approval.
 
-## 3. Code Style & Conventions
+## Documentation and releases
 
-Adhere strictly to the following conventions.
+- Update user-facing documentation and migration guidance in the same PR as a
+  public API, behavior, or release-process change.
+- Keep changelog entries concise and user-facing. Put implementation details,
+  validation logs, and maintainer notes in the PR or focused docs.
+- `main` is the only release source. Checked-in release-facing links remain on
+  `main`; isolated publish candidates rewrite them to immutable release tags.
+- Prepare publications in a PR targeting `main` with the `release-prep` label.
+  Version changes select the SDK, CLI, or both. Merging that PR authorizes the
+  automatic release, so obtain explicit user approval immediately before
+  merging.
+- Never create, move, or push release tags manually. Use the documented recovery
+  path in `tool/release/README.md` for an existing exact tag and commit.
 
-### Protocol Quality Bar
-- **Spec first**: Official MCP specification compliance is the primary quality
-  bar. Convenience APIs must not distort wire-level JSON-RPC/MCP semantics.
-- **Preserve protocol identity**: Keep JSON-RPC request IDs, related request
-  metadata, method names, capability flags, and error codes in their original
-  spec-compatible shape unless the spec explicitly allows normalization.
-- **Capability clarity**: Distinguish advertised capabilities from runtime
-  support. Prefer explicit support/capability checks over structural assumptions
-  when behavior can vary by transport, protocol version, or peer capability.
-- **Interoperability over ergonomics**: If a helper improves ergonomics, also
-  keep the lower-level spec behavior observable, testable, and documented.
-- **Version/spec ambiguity**: When the MCP spec changes or is ambiguous, encode
-  the chosen behavior in tests and cite the spec section or compatibility reason
-  in docs or comments where useful.
+## Keeping this file current
 
-### General
-- **Dart Version**: Keep root SDK code compatible with Dart 3.4+. CLI-only code
-  may use Dart 3.12 features.
-- **Formatting**: Always run `dart format .` before submitting.
-- **Comments**: Use `///` for public API documentation (classes, methods).
-- **Trailing Commas**: Required. This helps `dart format` produce cleaner diffs.
-
-### Naming
-- **Classes/Types**: `PascalCase` (e.g., `McpServer`, `JsonRpcRequest`).
-- **Variables/Methods**: `camelCase` (e.g., `capabilities`, `sendLoggingMessage`).
-- **Private Members**: Prefix with `_` (e.g., `_capabilities`, `_oninitialize`).
-- **Files**: `snake_case.dart` (e.g., `server_test.dart`).
-
-### Imports
-- **Ordering**:
-    1. Dart SDK imports (`dart:async`, `dart:io`).
-    2. Package imports (`package:mcp_dart/...`).
-    3. Relative imports (only for strictly local usage, otherwise prefer `package:`).
-- **Sort**: Alphabetical within each group.
-
-### Types & Null Safety
-- **Strict Typing**: Avoid `dynamic` unless absolutely necessary.
-- **Null Safety**: Use `?` for nullable types. Use `required` for non-nullable named parameters.
-- **Return Types**: Always declare return types (e.g., `Future<void>`, `String`, `bool`).
-- **Const**: Use `const` constructors and literals where possible (`prefer_const_constructors`).
-
-### Asynchronous Programming
-- **Futures**: Return `Future<void>` instead of `void` for async functions to allow waiting.
-- **Streams**: Use `StreamController` for event-based logic.
-- **Async/Await**: Prefer `await` over `.then()`.
-
-### Error Handling
-- **Protocol Errors**: Use `McpError` with `ErrorCode` for MCP protocol-specific errors.
-  ```dart
-  throw McpError(ErrorCode.invalidParams.value, "Message text");
-  ```
-- **State Errors**: Use `StateError` for invalid object states.
-- **Argument Errors**: Use `ArgumentError` for invalid inputs.
-- **Try/Catch**: Handle specific exceptions. Avoid catching broad `Error` or `Exception` without rethrowing or logging.
-
-## 4. Testing Guidelines
-
-- **Framework**: Use `package:test`.
-- **Structure**: Use `group()` to organize tests by class or feature.
-- **Setup**: Use `setUp()` and `tearDown()` for resource management.
-- **Mocks**: Use manual mocks or `MockTransport` (as seen in `server_test.dart`) to test protocol logic without network I/O.
-- **Coverage**: Aim to test both success paths and error conditions (e.g., missing capabilities).
-- **Protocol regressions**: For MCP/JSON-RPC behavior, include negative and
-  edge-case tests for id preservation, missing/unsupported capabilities,
-  transport-specific behavior, malformed input, and error-code mapping.
-- **Examples are contracts**: When changing public APIs or protocol flows, verify
-  nested example packages and Flutter/example apps that exercise those APIs, not
-  only the root package analyzer/tests.
-
-## 5. Development Workflow for Agents
-
-1.  **Explore**: Read related files (`lib/src/...` and `test/...`) to understand the context.
-2.  **Spec Check**: Identify the relevant MCP/JSON-RPC spec behavior before
-    changing protocol types, transports, capability negotiation, or errors.
-3.  **Plan**: Create a brief plan of changes.
-4.  **Edit**: Apply changes using `write` or `edit` tools.
-    - Prefer editing existing files over creating new ones unless necessary.
-5.  **Verify**:
-    - Run `dart format .`
-    - Run `dart analyze` (fix any issues).
-    - Run related tests (e.g., `dart test test/path/to/relevant_test.dart`).
-    - Run all tests (`dart test`) before finishing to ensure no regressions.
-    - For protocol or public API changes, run/repair affected examples and add
-      regression tests that would fail against the old behavior.
-6.  **Review Loop**: For PR-bound work, keep the branch focused, update docs or
-    changelog entries when behavior changes, request/monitor review after pushes,
-    and do not report done until CI and unresolved review threads are clean.
-7.  **Changelog**: Keep entries concise and user-facing. Put implementation
-    details, validation logs, and maintainer notes in the PR or focused docs.
-
-## 6. Example Patterns
-
-**Class Definition:**
-```dart
-class MyServer extends Protocol {
-  final String _name;
-
-  MyServer(this._name, {super.options});
-
-  Future<void> handleRequest() async {
-    // ...
-  }
-}
-```
-
-**Test Definition:**
-```dart
-group('MyServer Tests', () {
-  late MyServer server;
-
-  setUp(() {
-    server = MyServer('Test');
-  });
-
-  test('handles request correctly', () async {
-    await server.handleRequest();
-    // expectations...
-  });
-});
-```
+- At the end of relevant work, promote a session learning here only when it is
+  durable, repository-specific, actionable, and likely to prevent repeated
+  mistakes.
+- Integrate new guidance into an existing rule and remove stale or redundant
+  text. Do not append session summaries, PR numbers, transient status, or long
+  procedures.
+- Keep commands and invariants here; keep explanations and operational detail in
+  focused documentation linked above.
+- Review this file when tooling, minimum SDKs, public compatibility policy, or
+  the release process changes. Concision is part of correctness.
