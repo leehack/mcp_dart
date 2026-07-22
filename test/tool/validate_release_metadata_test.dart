@@ -13,11 +13,11 @@ void main() {
 
     final sdk = validator.validate(
       package: ReleasePackage.sdk,
-      tag: 'v2.3.0-dev.2',
+      tag: 'v2.3.0-dev.3',
     );
     final cli = validator.validate(
       package: ReleasePackage.cli,
-      tag: 'mcp_dart_cli-v0.2.0-dev.2',
+      tag: 'mcp_dart_cli-v0.2.0-dev.3',
     );
 
     expect(sdk.errors, isEmpty);
@@ -794,10 +794,10 @@ Directory _stableFixture(
   pubspec.writeAsStringSync(
     pubspec
         .readAsStringSync()
-        .replaceFirst('version: 2.3.0-dev.2', 'version: 2.3.0')
+        .replaceFirst('version: 2.3.0-dev.3', 'version: 2.3.0')
         .replaceFirst(
           'documentation: https://github.com/leehack/mcp_dart/tree/'
-              'v2.3.0-dev.2/doc',
+              'v2.3.0-dev.3/doc',
           'documentation: https://github.com/leehack/mcp_dart/tree/main/doc',
         ),
   );
@@ -805,7 +805,7 @@ Directory _stableFixture(
   final changelog = File('${fixture.path}/CHANGELOG.md');
   changelog.writeAsStringSync(
     changelog.readAsStringSync().replaceFirst(
-          '## Unreleased',
+          '## 2.3.0-dev.3',
           '## 2.3.0',
         ),
   );
@@ -851,7 +851,7 @@ Directory _stableFixture(
     file.writeAsStringSync(
       file
           .readAsStringSync()
-          .replaceAll('2.3.0-dev.2', '2.3.0')
+          .replaceAll('2.3.0-dev.3', '2.3.0')
           .replaceAll('2.3.0 preview', '2.3.0')
           .replaceAll('MCP 2026-07-28 preview', 'MCP 2026-07-28')
           .replaceAll('MCP `2026-07-28` preview', 'MCP `2026-07-28`')
@@ -932,8 +932,8 @@ Directory _stableFixture(
       file.writeAsStringSync(
         file
             .readAsStringSync()
-            .replaceAll('2.3.0-dev.2', '2.3.0')
-            .replaceAll('0.2.0-dev.2', '0.2.0')
+            .replaceAll('2.3.0-dev.3', '2.3.0')
+            .replaceAll('0.2.0-dev.3', '0.2.0')
             .replaceAll('2.3.0 preview', '2.3.0')
             .replaceAll('MCP 2026-07-28 preview', 'MCP 2026-07-28')
             .replaceAll('MCP `2026-07-28` preview', 'MCP `2026-07-28`')
@@ -947,21 +947,21 @@ Directory _stableFixture(
     cliPubspec.writeAsStringSync(
       cliPubspec
           .readAsStringSync()
-          .replaceFirst('version: 0.2.0-dev.2', 'version: 0.2.0')
+          .replaceFirst('version: 0.2.0-dev.3', 'version: 0.2.0')
           .replaceAll(
             'https://github.com/leehack/mcp_dart/tree/'
-                'mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli',
+                'mcp_dart_cli-v0.2.0-dev.3/packages/mcp_dart_cli',
             'https://github.com/leehack/mcp_dart/tree/main/'
                 'packages/mcp_dart_cli',
           )
-          .replaceFirst('mcp_dart: ^2.3.0-dev.2', 'mcp_dart: ^2.3.0'),
+          .replaceFirst('mcp_dart: ^2.3.0-dev.3', 'mcp_dart: ^2.3.0'),
     );
     final cliChangelog = File(
       '${fixture.path}/packages/mcp_dart_cli/CHANGELOG.md',
     );
     cliChangelog.writeAsStringSync(
       cliChangelog.readAsStringSync().replaceFirst(
-            '## Unreleased',
+            '## 0.2.0-dev.3',
             '## 0.2.0',
           ),
     );
@@ -972,11 +972,11 @@ Directory _stableFixture(
       cliVersionSource
           .readAsStringSync()
           .replaceFirst(
-            "const packageVersion = '0.2.0-dev.2';",
+            "const packageVersion = '0.2.0-dev.3';",
             "const packageVersion = '0.2.0';",
           )
           .replaceFirst(
-            "const generatedSdkConstraint = '^2.3.0-dev.2';",
+            "const generatedSdkConstraint = '^2.3.0-dev.3';",
             "const generatedSdkConstraint = '^2.3.0';",
           ),
     );
@@ -985,7 +985,7 @@ Directory _stableFixture(
     );
     templatePubspec.writeAsStringSync(
       templatePubspec.readAsStringSync().replaceFirst(
-            'mcp_dart: ^2.3.0-dev.2',
+            'mcp_dart: ^2.3.0-dev.3',
             'mcp_dart: ^2.3.0',
           ),
     );

@@ -3,7 +3,7 @@
 `mcp_dart` implements the complete core client/server wire surface of the
 locked release candidate for the MCP 2026-07-28 specification. This matrix indexes the high-risk
 and release-changing requirements against checked-in evidence; it is not an
-exhaustive inventory of every schema type or API. The dev.2 preview defaults to
+exhaustive inventory of every schema type or API. The dev.3 preview defaults to
 `McpProtocol.stable`, while `McpProtocol.legacy` retains the full MCP
 2025-11-25 feature set and negotiates supported earlier initialization
 versions.

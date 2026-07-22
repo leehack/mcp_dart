@@ -16,8 +16,8 @@ extensions, host UI behavior, an authorization-server implementation, JSON
 Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
-> The latest published prerelease coordinates `mcp_dart 2.3.0-dev.2` and
-> `mcp_dart_cli 0.2.0-dev.2`. Current source passes the official alpha.9 MCP
+> The coordinated dev.3 prerelease pairs `mcp_dart 2.3.0-dev.3` with
+> `mcp_dart_cli 0.2.0-dev.3`. It passes the official alpha.9 MCP
 > `2026-07-28` client suite, including all 25 authorization scenarios. Its
 > server suite has three exact expected diagnostics because the published
 > referee predates spec PR #3002; merged conformance PR #403 semantics pass
@@ -28,13 +28,11 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 | Package | Minimum Dart SDK |
 | --- | --- |
-| `mcp_dart 2.3.0-dev.2` | 3.5 |
-| `mcp_dart_cli 0.2.0-dev.2` | 3.7 |
+| `mcp_dart 2.3.0-dev.3` | 3.4 |
+| `mcp_dart_cli 0.2.0-dev.3` | 3.12 |
 
-The current unreleased SDK source and SDK-only generated projects lower the
-minimum to Dart 3.4. The current unreleased CLI source targets Dart 3.12.
-Published dev.2 packages retain their declared Dart 3.5 SDK and Dart 3.7 CLI
-minimums.
+SDK-only generated projects retain the SDK's Dart 3.4 minimum. CLI projects
+use Dart 3.12 because the CLI and its toolchain target that release.
 
 Install Dart from [dart.dev](https://dart.dev/get-dart).
 
@@ -54,12 +52,11 @@ Select the prerelease explicitly:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.3.0-dev.2
+  mcp_dart: ^2.3.0-dev.3
 ```
 
-The installation snippets remain pinned to dev.2 until the next coordinated
-packages are published; current-source sections also describe unreleased
-release-readiness fixes. Production-channel users should follow the
+The preview snippets use the coordinated dev.3 package line.
+Production-channel users should follow the
 documentation for the version resolved in their own `pubspec.lock`. Package
 channels are separate from protocol profiles: `McpProtocol.stable` names the
 SDK's default compatibility policy, not package or wire-spec maturity.
@@ -138,13 +135,13 @@ Applications upgrading from the stable 2.2 line should also follow the
 Install the matching preview CLI:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.0-dev.2
+dart pub global activate mcp_dart_cli 0.2.0-dev.3
 mcp_dart create my_server
 cd my_server
 mcp_dart inspect
 ```
 
-The dev.2 CLI creates a project with `mcp_dart: ^2.3.0-dev.2`. The inspector
+The dev.3 CLI creates a project with `mcp_dart: ^2.3.0-dev.3`. The inspector
 launches the generated stdio server itself. After leaving the interactive
 inspector, you can run a single tool directly:
 
@@ -218,7 +215,7 @@ surface. Re-check both packages' current releases before a production decision.
 
 - [Issues and bug reports](https://github.com/leehack/mcp_dart/issues)
 - [SDK on pub.dev](https://pub.dev/packages/mcp_dart)
-- [dev.2 API reference](https://pub.dev/documentation/mcp_dart/2.3.0-dev.2/)
+- [dev.3 API reference](https://pub.dev/documentation/mcp_dart/2.3.0-dev.3/)
 - [Changelog](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)
 - [MCP 2026-07-28 RC](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
 - [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25)

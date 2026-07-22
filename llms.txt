@@ -3,12 +3,10 @@
 `mcp_dart` is a community Dart and Flutter SDK for Model Context Protocol
 (MCP) servers, clients, and hosts.
 
-- SDK preview: `2.3.0-dev.2`
-- CLI preview: `0.2.0-dev.2`
-- Published SDK preview minimum: Dart 3.5
-- Unreleased SDK source minimum: Dart 3.4
-- CLI preview minimum: Dart 3.7
-- Unreleased CLI source minimum: Dart 3.12
+- SDK preview: `2.3.0-dev.3`
+- CLI preview: `0.2.0-dev.3`
+- SDK preview minimum: Dart 3.4
+- CLI preview minimum: Dart 3.12
 - Repository: https://github.com/leehack/mcp_dart
 - Package: https://pub.dev/packages/mcp_dart
 - License: MIT
@@ -38,7 +36,7 @@ Select the preview explicitly:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.3.0-dev.2
+  mcp_dart: ^2.3.0-dev.3
 ```
 
 ## Primary import
@@ -206,7 +204,7 @@ https://github.com/leehack/mcp_dart/tree/main/example/authentication
 Install the preview after its matching SDK is public:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.0-dev.2
+dart pub global activate mcp_dart_cli 0.2.0-dev.3
 ```
 
 Common commands:

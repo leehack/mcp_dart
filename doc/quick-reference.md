@@ -8,17 +8,15 @@ Use this page for common `mcp_dart` calls. The [server guide](server-guide.md),
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.3.0-dev.2
+  mcp_dart: ^2.3.0-dev.3
 ```
 
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
 ```
 
-The published dev.2 SDK requires Dart 3.5 or later. The current unreleased SDK
-source lowers the next 2.3 release floor to Dart 3.4. The published dev.2 CLI
-requires Dart 3.7 or later; the current unreleased CLI source targets Dart
-3.12.
+The dev.3 SDK requires Dart 3.4 or later. The coordinated dev.3 CLI requires
+Dart 3.12 or later.
 
 ## Protocol profile
 
