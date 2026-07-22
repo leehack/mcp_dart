@@ -2,9 +2,9 @@ name: mcp_dart_cli
 description: Command-line tools for creating Dart MCP servers and inspecting, tracing, or testing Model Context Protocol servers and clients in any language.
 version: 0.2.0-dev.2
 repository: https://github.com/leehack/mcp_dart
-homepage: https://github.com/leehack/mcp_dart/tree/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli
+homepage: https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
 issue_tracker: https://github.com/leehack/mcp_dart/issues
-documentation: https://github.com/leehack/mcp_dart/tree/mcp_dart_cli-v0.2.0-dev.2/packages/mcp_dart_cli
+documentation: https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
 funding:
   - https://buymeacoffee.com/leehack
 topics:

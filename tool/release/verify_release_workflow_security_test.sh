@@ -38,12 +38,22 @@ grep -q '      contents: read$' "$VALIDATION_JOB" ||
 if grep -qE 'RELEASE_PAT|contents: write|statuses: write' "$VALIDATION_JOB"; then
   fail "Release validation unexpectedly has a release credential or write permission."
 fi
-# Match the literal shell variable in workflow code.
-# shellcheck disable=SC2016
-grep -Fq 'packages/mcp_dart_cli/ "$PUBLISH_ROOT/"' "$VALIDATION_JOB" ||
+grep -q 'SOURCE_DIRECTORY=packages/mcp_dart_cli' "$VALIDATION_JOB" ||
   fail "CLI release staging must copy only the nested package."
+grep -q 'SOURCE_DIRECTORY=\.' "$VALIDATION_JOB" ||
+  fail "SDK release staging must copy the repository package root."
 grep -q -- '--exclude pubspec_overrides.yaml' "$VALIDATION_JOB" ||
-  fail "CLI release staging must remove its monorepo SDK override."
+  fail "Release staging must remove monorepo SDK overrides."
+grep -q 'dart tool/release/update_release_links.dart' "$VALIDATION_JOB" ||
+  fail "Release validation must pin staged documentation links to the tag."
+LINK_UPDATE_LINE=$(grep -n 'dart tool/release/update_release_links.dart' \
+  "$VALIDATION_JOB" | cut -d: -f1)
+DRY_RUN_LINE=$(grep -n 'run: dart pub publish --dry-run' \
+  "$VALIDATION_JOB" | cut -d: -f1)
+if [[ -z "$LINK_UPDATE_LINE" || -z "$DRY_RUN_LINE" ]] ||
+  ((LINK_UPDATE_LINE >= DRY_RUN_LINE)); then
+  fail "Release links must be pinned before publish validation."
+fi
 grep -q '      contents: write' "$WRITE_JOB" ||
   fail "The release write job cannot create tags or releases."
 grep -q '      statuses: write$' "$WRITE_JOB" ||
@@ -52,9 +62,11 @@ grep -q '      statuses: write$' "$WRITE_JOB" ||
 if [[ $(grep -c 'persist-credentials: false' "$WORKFLOW") -ne 2 ]]; then
   fail "Both release checkouts must disable persisted credentials."
 fi
-if [[ $(grep -c 'RELEASE_PAT:' "$WORKFLOW") -ne 1 ]]; then
-  fail "RELEASE_PAT must be exposed only to the new-tag push step."
+if [[ $(grep -c 'RELEASE_PAT:' "$WORKFLOW") -ne 2 ]]; then
+  fail "RELEASE_PAT must be declared for callers and exposed only to the tag push."
 fi
+grep -A3 '^    secrets:$' "$WORKFLOW" | grep -q 'RELEASE_PAT:' ||
+  fail "The reusable release workflow must declare its tag-push secret."
 # Match the literal GitHub expression.
 # shellcheck disable=SC2016
 if grep -Fq '${{ needs.validate-release.outputs' "$WRITE_RUN_SCRIPTS"; then

@@ -18,14 +18,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Test stable release CI provenance gate
-        run: bash tool/release/verify_stable_release_ci_test.sh
+      - name: Test release CI provenance gate
+        run: bash tool/release/verify_release_ci_test.sh
 
       - name: Test stable release source gate
         run: bash tool/release/verify_stable_release_source_test.sh
 
       - name: Test release workflow permission separation
         run: bash tool/release/verify_release_workflow_security_test.sh
+
+      - name: Test release prep workflow orchestration
+        run: bash tool/release/verify_release_prep_workflow_test.sh
 
       - name: Test publish workflow permission separation
         run: bash tool/release/verify_publish_workflow_security_test.sh

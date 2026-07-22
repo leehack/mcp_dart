@@ -1,5 +1,47 @@
 # Release metadata gate
 
+## Release prep workflow
+
+`main` is the only release source and should remain the stable, current branch.
+Checked-in release-facing links therefore use `main`. The publish workflows
+copy the selected package to an isolated candidate and rewrite those links to
+the package's immutable release tag; the working tree and `main` are not
+modified.
+
+Prepare every publication in a PR targeting `main` with the `release-prep`
+label. The PR must increase the version in either `pubspec.yaml`,
+`packages/mcp_dart_cli/pubspec.yaml`, or both. The version determines the
+channel: a SemVer prerelease suffix selects a dev release, while a version
+without one selects a stable release. A coordinated SDK and CLI prep must put
+both packages on the same channel.
+
+The prep PR should contain all release metadata and essential source changes:
+
+- move each selected package's notes to an exact version heading in its
+  changelog;
+- update package versions, coordinated SDK constraints, generated version
+  constants, templates, and the day-0 release manifest as applicable;
+- finish release-facing documentation and required final-spec acknowledgements;
+- keep same-repository source links on `main`.
+
+`Validate Release Prep` derives the package set from version changes and runs
+the shared metadata gate for each selected package. After a labeled prep PR is
+merged, `Release Merged Prep` checks out the exact merge commit and invokes the
+existing release authorization workflow automatically. Every automatic release
+waits for all required push CI on that exact commit. When both packages are
+selected, the SDK is released first and the workflow waits until that exact SDK
+version is visible on pub.dev before releasing the CLI.
+
+Each package release creates its immutable tag and GitHub release. The tag then
+starts `Publish to pub.dev`, which publishes the already validated immutable
+candidate through pub.dev OIDC. Manual `Create Release` dispatch remains only
+as a recovery path; never push release tags by hand or move an existing tag.
+
+Before using the automation, create the repository label `release-prep` and
+keep the existing `RELEASE_PAT` Actions secret available for the narrowly
+scoped tag push. Branch protection should require the normal SDK, CLI, interop,
+and `Validate Release Prep` checks before a prep PR can merge.
+
 `dart tool/validate_release_metadata.dart` is the shared metadata gate used by
 both the GitHub release workflow and the tag-triggered pub.dev publish
 workflow. It validates SDK/CLI version coordination, tag names, immutable
@@ -87,7 +129,7 @@ override, downgrade to and verify the declared minimum SDK from pub.dev, run
 the non-interop test suite and analysis, compile and smoke-test the binary, and
 run the publish dry-run before authorization or publication.
 
-Run `bash tool/release/verify_stable_release_ci_test.sh` to exercise the local
+Run `bash tool/release/verify_release_ci_test.sh` to exercise the local
 workflow-provenance fixtures without calling GitHub.
 
 Run `bash tool/release/verify_stable_release_source_test.sh` to exercise the
@@ -97,6 +139,10 @@ remote.
 Run `bash tool/release/verify_release_workflow_security_test.sh` to ensure
 release validation stays read-only and the PAT remains scoped to the new-tag
 push step.
+
+Run `bash tool/release/verify_release_prep_workflow_test.sh` to verify labeled
+prep detection, exact-merge provenance, stable-CI waiting, permission scope,
+and coordinated SDK-before-CLI ordering.
 
 Run `bash tool/release/verify_publish_workflow_security_test.sh` to verify the
 pre-checkout authorization gate, immutable candidate handoff, and OIDC job

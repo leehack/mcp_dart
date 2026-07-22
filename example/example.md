@@ -23,9 +23,9 @@ The paired server uses `registerStatelessTool` for the multi-round
 same MCP 2026-07-28 result shape on those primitives; existing `register*`
 callbacks retain their 2.2-compatible result types.
 
-[Client source](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_2026_07_28/client.dart)
+[Client source](https://github.com/leehack/mcp_dart/blob/main/example/mcp_2026_07_28/client.dart)
 and
-[server source](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_2026_07_28/server.dart).
+[server source](https://github.com/leehack/mcp_dart/blob/main/example/mcp_2026_07_28/server.dart).
 
 ## Default dual-era
 
@@ -36,9 +36,9 @@ reads a resource, and gets a prompt:
 dart run example/client_stdio.dart
 ```
 
-[Stdio client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/client_stdio.dart)
+[Stdio client](https://github.com/leehack/mcp_dart/blob/main/example/client_stdio.dart)
 and
-[stdio server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/server_stdio.dart).
+[stdio server](https://github.com/leehack/mcp_dart/blob/main/example/server_stdio.dart).
 
 For Streamable HTTP, run these in separate terminals:
 
@@ -47,31 +47,31 @@ dart run example/streamable_https/server_streamable_https.dart
 dart run example/streamable_https/client_streamable_https.dart
 ```
 
-[Streamable HTTP server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/streamable_https/server_streamable_https.dart)
+[Streamable HTTP server](https://github.com/leehack/mcp_dart/blob/main/example/streamable_https/server_streamable_https.dart)
 and
-[client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/streamable_https/client_streamable_https.dart).
+[client](https://github.com/leehack/mcp_dart/blob/main/example/streamable_https/client_streamable_https.dart).
 
 ## MCP 2025-11-25 and earlier compatibility
 
 The
-[interactive task client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/simple_task_interactive_client.dart)
+[interactive task client](https://github.com/leehack/mcp_dart/blob/main/example/simple_task_interactive_client.dart)
 and
-[server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/simple_task_interactive_server.dart),
-[elicitation server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/elicitation_http_server.dart),
+[server](https://github.com/leehack/mcp_dart/blob/main/example/simple_task_interactive_server.dart),
+[elicitation server](https://github.com/leehack/mcp_dart/blob/main/example/elicitation_http_server.dart),
 and
-[SSE server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/server_sse.dart)
+[SSE server](https://github.com/leehack/mcp_dart/blob/main/example/server_sse.dart)
 intentionally demonstrate retained initialization-era behavior.
 
 ## Integrations
 
-- [Authentication and OAuth](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/authentication/README.md)
-- [Anthropic client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/anthropic-client/README.md)
-- [Gemini client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/gemini-client/README.md)
-- [Safe fetch server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/fetch-server/README.md)
-- [Flutter client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/flutter_http_client/README.md)
-- [Jaspr browser client](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/jaspr-client/README.md)
-- [MCP Apps helpers](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_apps_helpers_server.dart)
-- [MCP Apps metadata server](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/example/mcp_apps_metadata_server.dart)
+- [Authentication and OAuth](https://github.com/leehack/mcp_dart/blob/main/example/authentication/README.md)
+- [Anthropic client](https://github.com/leehack/mcp_dart/blob/main/example/anthropic-client/README.md)
+- [Gemini client](https://github.com/leehack/mcp_dart/blob/main/example/gemini-client/README.md)
+- [Safe fetch server](https://github.com/leehack/mcp_dart/blob/main/example/fetch-server/README.md)
+- [Flutter client](https://github.com/leehack/mcp_dart/blob/main/example/flutter_http_client/README.md)
+- [Jaspr browser client](https://github.com/leehack/mcp_dart/blob/main/example/jaspr-client/README.md)
+- [MCP Apps helpers](https://github.com/leehack/mcp_dart/blob/main/example/mcp_apps_helpers_server.dart)
+- [MCP Apps metadata server](https://github.com/leehack/mcp_dart/blob/main/example/mcp_apps_metadata_server.dart)
 
 ## Validation
 
@@ -85,5 +85,5 @@ Live provider and OAuth calls require credentials or external services; Jaspr
 browser and native-device sessions remain manual.
 
 See the complete
-[examples guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/examples.md)
+[examples guide](https://github.com/leehack/mcp_dart/blob/main/doc/examples.md)
 for setup, security boundaries, and additional recipes.

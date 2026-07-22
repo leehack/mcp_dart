@@ -128,10 +128,13 @@ jobs:
             exit 1
           fi
 
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+
       - name: Build immutable publish candidate
         id: candidate
         env:
           PACKAGE: ${{ steps.package-info.outputs.package }}
+          RELEASE_TAG: ${{ github.ref_name }}
           SOURCE_DIRECTORY: ${{ steps.package-info.outputs.working_directory }}
         run: |
           CANDIDATE_ROOT="$RUNNER_TEMP/publish-candidate"
@@ -147,6 +150,11 @@ jobs:
           )
           rsync -a "${RSYNC_EXCLUDES[@]}" \
             "$SOURCE_DIRECTORY/" "$CANDIDATE_ROOT/package/"
+
+          dart tool/release/update_release_links.dart \
+            --package "$PACKAGE" \
+            --root "$CANDIDATE_ROOT/package" \
+            --ref "$RELEASE_TAG"
 
           if find "$CANDIDATE_ROOT/package" -type l -print -quit | grep -q .; then
             echo "❌ Publish candidates must not contain symbolic links."
@@ -178,8 +186,6 @@ jobs:
           retention-days: 1
           compression-level: 0
 
-      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
-
       - name: Validate coordinated release metadata
         run: |
           dart tool/validate_release_metadata.dart \
@@ -192,7 +198,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ steps.provenance.outputs.release_sha }}
         run: |
-          bash tool/release/verify_stable_release_ci.sh \
+          bash tool/release/verify_release_ci.sh \
             "${{ steps.package-info.outputs.package }}" "$RELEASE_SHA"
 
       - name: Extract immutable candidate for validation

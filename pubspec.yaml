@@ -4,7 +4,7 @@ version: 2.3.0-dev.2
 repository: https://github.com/leehack/mcp_dart
 homepage: https://github.com/leehack/mcp_dart
 issue_tracker: https://github.com/leehack/mcp_dart/issues
-documentation: https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/doc
+documentation: https://github.com/leehack/mcp_dart/tree/main/doc
 funding:
   - https://buymeacoffee.com/leehack
 topics:

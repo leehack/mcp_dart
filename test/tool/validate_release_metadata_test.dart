@@ -701,6 +701,7 @@ Directory _stableFixture(
     'lib/src/types/json_rpc.dart',
     'llms.txt',
     'packages/mcp_dart_cli/CHANGELOG.md',
+    'packages/mcp_dart_cli/CONTRIBUTING.md',
     'packages/mcp_dart_cli/README.md',
     'packages/mcp_dart_cli/example/example.md',
     'packages/mcp_dart_cli/lib/src/version.dart',

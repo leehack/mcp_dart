@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-VERIFY_SCRIPT="$REPO_ROOT/tool/release/verify_stable_release_ci.sh"
+VERIFY_SCRIPT="$REPO_ROOT/tool/release/verify_release_ci.sh"
 RELEASE_SHA=1111111111111111111111111111111111111111
 FIXTURE_DIR=$(mktemp -d)
 trap 'rm -rf "$FIXTURE_DIR"' EXIT
@@ -78,4 +78,4 @@ if RELEASE_WORKFLOW_RUNS_FILE="$FIXTURE_DIR/display-name-decoys.json" \
   exit 1
 fi
 
-echo "Stable release workflow provenance fixtures passed."
+echo "Release workflow provenance fixtures passed."

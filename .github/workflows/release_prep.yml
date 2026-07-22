@@ -1,0 +1,68 @@
+name: Validate Release Prep
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: contains(github.event.pull_request.labels.*.name, 'release-prep')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the default branch as the release source
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$BASE_BRANCH" != "$DEFAULT_BRANCH" ]; then
+            echo "Release prep PRs must target $DEFAULT_BRANCH."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+
+      - name: Detect release plan from version changes
+        id: release-plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          dart tool/release/detect_release_prep.dart \
+            --base-sha "$BASE_SHA" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Validate SDK release metadata
+        if: steps.release-plan.outputs.release_sdk == 'true'
+        env:
+          VERSION: ${{ steps.release-plan.outputs.sdk_version }}
+        run: |
+          dart tool/validate_release_metadata.dart \
+            --package mcp_dart \
+            --tag "v$VERSION"
+
+      - name: Validate CLI release metadata
+        if: steps.release-plan.outputs.release_cli == 'true'
+        env:
+          VERSION: ${{ steps.release-plan.outputs.cli_version }}
+        run: |
+          dart tool/validate_release_metadata.dart \
+            --package mcp_dart_cli \
+            --tag "mcp_dart_cli-v$VERSION"
+
+      - name: Summarize release plan
+        env:
+          CHANNEL: ${{ steps.release-plan.outputs.channel }}
+          PACKAGES: ${{ steps.release-plan.outputs.packages }}
+        run: echo "Validated $CHANNEL release prep for $PACKAGES."
