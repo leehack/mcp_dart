@@ -224,7 +224,7 @@ On the final release-prep commit:
 - Set the root package version to `2.3.0`.
 - Restore root `documentation` and all user-facing repository links to `main`.
 - Replace prerelease dependency snippets in the README, getting-started,
-  quick-reference, and release docs with `mcp_dart: ^2.3.0`.
+  quick-reference, migration guide, and release docs with `mcp_dart: ^2.3.0`.
 - Keep the durable `2026-07-28` document, fixture, command, and workflow names;
   update only maturity wording that changes when the final specification ships.
 - Promote `stableProtocolVersion` and `defaultProtocolVersion` to the final
@@ -244,6 +244,8 @@ On the final release-prep commit:
   that presents the now-final protocol as draft-only.
 - Keep migration and compatibility notes explicit: `McpProtocol.stable`
   selects the current stable protocol while legacy profiles remain opt-in.
+  Re-read the 2.2-to-2.3 migration guide against the final package metadata and
+  link it from the tagged README and changelog.
 - Run `dart pub publish --dry-run` again from a clean checkout of the exact
   release commit. Do not create the release tag until this succeeds.
 - Run the shared metadata validator with `--package mcp_dart --tag v2.3.0`.

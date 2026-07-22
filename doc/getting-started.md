@@ -23,6 +23,10 @@ Or for Flutter projects:
 flutter pub get
 ```
 
+Upgrading an existing 2.2 application? Follow the
+[2.2 to 2.3 migration guide](migration-2.2-to-2.3.md) for dependency,
+protocol-default, validation, OAuth, and stdio lifecycle changes.
+
 ## Basic Concepts
 
 ### What is MCP?

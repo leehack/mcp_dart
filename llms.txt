@@ -67,6 +67,9 @@ final client = McpClient(
 2026-only APIs, examples, and fallback rules:
 https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28.md
 
+Upgrade requirements and application-visible changes from 2.2 to 2.3:
+https://github.com/leehack/mcp_dart/blob/main/doc/migration-2.2-to-2.3.md
+
 Strict MCP 2026-07-28 runnable example:
 https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28
 
@@ -261,5 +264,6 @@ Evidence and runbooks:
 - Transports: `doc/transports.md`
 - Flutter: `doc/flutter-recipes.md`
 - MCP Apps: `doc/mcp-apps.md`
-- Migration: `doc/migration-cookbooks.md`
+- Version upgrade: `doc/migration-2.2-to-2.3.md`
+- Other migrations: `doc/migration-cookbooks.md`
 - Examples: `doc/examples.md` and `example/`
