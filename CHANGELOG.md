@@ -1,201 +1,119 @@
 ## Unreleased
 
+`mcp_dart 2.3` adds the MCP `2026-07-28` release-candidate surface while
+preserving the public `2.2.2` API. See the
+[2.2 to 2.3 migration guide](doc/migration-2.2-to-2.3.md) for upgrade steps and
+the [MCP 2026-07-28 transition guide](doc/mcp-2026-07-28.md) for protocol
+details.
+
+### Added
+
+- Added an SDK-owned offline validator with public Draft 2020-12 and declared
+  Draft 7 APIs, removing the `json_schema` and `quiver` dependencies.
+- Added dual-era protocol profiles, `server/discover`, stateless metadata,
+  `subscriptions/listen`, multi-round tool/resource/prompt callbacks, the
+  independent Tasks extension, and any-root structured tool results for MCP
+  `2026-07-28`.
+- Added stateless registration helpers and a backward-compatible
+  `RegisteredStatelessTool` handle without widening the existing 2.2.2
+  registration interfaces.
+
 ### Changed
 
-- Removed the `json_schema` and `quiver` package dependencies in favor of an
-  SDK-owned offline validator, preserving public validation APIs, Draft 2020-12
-  and Draft 7 semantics, and canonical meta-schema references. Draft 7 format
-  checks and validation diagnostics are now stricter and more precise.
-- Preserved the `2.2.2` registration, callback, logging, request metadata, and
-  `StartSseOptions` APIs, with additive `registerStatelessTool`,
-  `registerStatelessPrompt`, `registerStatelessResource`, and
-  `registerStatelessResourceTemplate` helpers for MCP `2026-07-28` multi-round
-  results.
-- Preserved the `2.2.2` values of `latestProtocolVersion` and
+- `McpProtocol.stable` now prefers MCP `2026-07-28` and falls back to legacy
+  initialization. Silent body-only discovery probes are bounded to five
+  seconds; `McpProtocol.legacy` retains exact initialization-only behavior.
+- Preserved the 2.2.2 values of `latestProtocolVersion` and
   `supportedProtocolVersions`; use `defaultProtocolVersion` and
-  `allSupportedProtocolVersions` for the dual-era default profile.
-- Bounded silent `server/discover` probes to five seconds on body-only
-  transports before legacy fallback. HTTP discovery keeps its normal request
-  timeout, and `McpProtocol.legacy` remains the exact initialization-only
-  opt-in.
-- Hardened newline-delimited transports so malformed frames no longer strand
-  later messages in the same input chunk. Stdio servers now return the
-  appropriate JSON-RPC parse, invalid-request, or invalid-params error while
-  preserving valid request IDs and never replying to notifications or
-  responses.
-- Locked each accepted server connection to its first negotiated protocol era;
-  switching between stateless requests and the legacy initialize lifecycle now
-  requires a fresh connection.
-- Aligned MCP `2026-07-28` identity with spec PR #3002: client identity is
-  optional, and servers stamp validated identity in successful stateless result
-  `_meta` by default instead of the discovery body. A handler `null` omits the
-  optional key; received canonical `null` or malformed identities are rejected.
-- Applied era-aware MCP `2026-07-28` capability parsing: known capability
-  members must be JSON objects, removed legacy names remain valid open-ended
-  capability data, and legacy initialization boolean compatibility is unchanged.
-- Hardened raw JSON-RPC decoding by requiring IDs for built-in request methods,
-  validating `tools/list` cursors before dispatch, and enforcing 2026 request
-  metadata under `params._meta` while preserving legacy metadata and extension
-  notifications.
-- Required the logging notification `data` member on parsed wire messages while
-  continuing to accept its valid explicit JSON `null` value.
+  `allSupportedProtocolVersions` for the dual-era profile.
+- Hardened JSON-RPC parsing, protocol-era isolation, capability and metadata
+  validation, request direction, notification routing, and error-code mapping
+  while preserving legacy wire behavior.
+- Aligned stateless identity, discovery caching, tracing metadata,
+  request-scoped logging, and required client capabilities with MCP
+  `2026-07-28`.
 - Hardened OAuth discovery and authorization-code flows with exact issuer
-  matching, safe redirect URIs, client registration priority, challenge
-  parsing, token-endpoint authentication, issuer/resource-bound tokens, and
-  persisted scope accumulation.
-- Rejected MCP `2026-07-28` client-to-server JSON-RPC response POSTs, response
-  batches, mismatched request-scoped response IDs, and non-terminal HTTP `202`
-  request responses before dispatch, while retaining MCP `2025-11-25`
-  compatibility.
-- Made Streamable HTTP validation advertise only the connected server's
-  configured protocol profile, reject wire cancellation and known
-  wrong-direction notifications in stateless mode while preserving extension
-  notification methods, require the exact `application/json` request media
-  type, and classify valid JSON with malformed request parameters as
-  `invalidParams` instead of `parseError`.
-- Made `DiscoverResult` always emit and require the MCP `2026-07-28`
-  `ttlMs` and `cacheScope` fields, serializing omitted or null local hints as
-  immediately stale private caching.
-- Blocked legacy server-initiated request helpers and direct stateless client
-  response sends under MCP `2026-07-28`; legacy sessions retain their existing
-  bidirectional request flow.
-- Kept global resource, tool, prompt, and logging notification helpers scoped
-  to legacy sessions. Stateless list and resource updates use acknowledged
-  `subscriptions/listen` streams; request-scoped logging must include the
-  originating request ID when routed over Streamable HTTP.
-- Enforced tool `io.modelcontextprotocol/requiredClientCapabilities` metadata
-  consistently across Streamable HTTP, stdio, and custom transports.
-- Validated reserved `traceparent`, `tracestate`, and `baggage` metadata values
-  against their W3C wire formats under MCP `2026-07-28`.
-- Exported the JSON Schema validator through the public SDK barrel and retained
-  Draft 2020-12 and declared Draft 7 validation.
-- Aligned registered-tool input validation with the MCP error taxonomy:
-  arguments that do not satisfy a tool's `inputSchema` now return a
-  `CallToolResult` with `isError: true`, allowing models to correct and retry
-  the call under MCP `2025-11-25` and `2026-07-28`. Under those versions,
-  invalid output from a locally registered tool now reports JSON-RPC
-  `internalError` instead of blaming client params.
-- Hardened structured tool-result contracts across direct and task-backed
-  calls: output schemas are compiled before handler side effects, completed
-  task results use the immutable schema captured at acceptance whether polled
-  or notified, and initialization-era clients retain only object-root
-  structured content.
-- Aligned the Tasks extension with its independent wire contract: creation
-  results carry the base task shape, polling and notifications carry exact
-  status-specific details, task methods and embedded input requests enforce
-  per-request capabilities, and legacy task APIs stay protocol-isolated.
-- Enforced one in-scope acknowledgment and boundary-safe resource and
-  sub-resource URI matching for every `subscriptions/listen` request, buffered
-  a bounded number of early events until the first listener attaches, and made
-  stateless stdio clients recover bounded repeated child exits and broken
-  process pipes, with TERM-to-KILL cleanup, while restoring acknowledged
-  subscriptions without replaying ordinary requests. Changed replay filters are
-  exposed through
-  `McpSubscription.acknowledgmentChanges`.
-- Isolated concurrent Streamable HTTP POSTs even when independent clients reuse
-  a JSON-RPC request ID, and promoted JSON-preferred responses to SSE whenever
-  a request emits intermediate notifications or nested legacy requests.
-  JSON-only responses no longer retain unused EventStore replay ownership.
-- Made Streamable HTTP disconnects cancel pending stateless JSON and SSE work,
-  removed terminated sessions immediately, and serialized protocol and stdio
-  shutdown so close/restart races cannot leak work. Stateless JSON responses
-  use connection-close framing to keep disconnect cancellation observable.
-- Prevented completed multi-round-trip retry results from advertising reusable
-  cache hints when they depend on `inputResponses` or `requestState`.
-- Ordered stdio subscription cancellation before its terminal response or
-  error while preserving that terminal outcome for clients; Streamable HTTP
-  continues to terminate through its response stream.
-- Made `mcp_dart inspect-server` apply protocol-specific tool schema rules so
-  MCP `2026-07-28` array and primitive output schemas inspect successfully.
-- Added the backward-compatible `RegisteredStatelessTool` handle so stateless
-  registrations can inspect and update any-root output schemas without
-  widening the existing `RegisteredTool` interface.
-- Fixed registered tool, prompt, resource, and resource-template handles so
-  `remove()` reliably unregisters them; resource and template renames now keep
-  handle state and server indexes synchronized.
-- Lowered the unreleased SDK minimum to Dart 3.4, kept its oldest permitted
-  dependency graph compilable, and added a public API compatibility gate
-  against `mcp_dart 2.2.2`.
+  matching, safe redirects, endpoint validation, client registration priority,
+  and issuer/resource-bound tokens.
+- Restricted legacy server-initiated requests and global list/resource update
+  helpers to initialization-era sessions; stateless interactions use embedded
+  input requests and acknowledged subscriptions.
+- Tool input-schema failures now return `CallToolResult(isError: true)` under
+  MCP `2025-11-25` and `2026-07-28`; invalid registered schemas and output
+  contract violations are reported as server errors.
+- Structured output validation now compiles schemas before handler side
+  effects and preserves the accepted schema for task-backed results.
+- Tasks and `subscriptions/listen` now enforce their independent capabilities,
+  status shapes, acknowledgment scope, URI boundaries, and cancellation
+  lifecycle.
+- Stateless stdio clients recover from bounded child failures and restore
+  subscriptions without replaying ordinary requests.
+- Streamable HTTP now isolates concurrent requests, promotes responses to SSE
+  when intermediate traffic requires it, and cancels pending work promptly on
+  disconnect.
+- `mcp_dart inspect-server` now accepts protocol-appropriate array and primitive
+  output schemas.
+
+### Fixed
+
+- Registered tool, prompt, resource, and resource-template handles now remove
+  and rename their registrations consistently.
+- Malformed newline-delimited frames no longer strand valid messages later in
+  the same input chunk.
+- Shutdown, restart, request-ID reuse, subscription cancellation, and
+  response-stream races no longer leak work or cross request boundaries.
 
 ### Validation and documentation
 
-- The official alpha.9 MCP `2026-07-28` client suite passes, including all 25
-  authorization scenarios. Its three stale `server-stateless` diagnostics are
-  matched exactly while post-#3002 conformance semantics pass locally.
-- The independently released Tasks extension source is pinned alongside the
-  core specification so its final schema and prose receive a separate day-0
-  delta review.
-- Published TypeScript beta.5 interoperates bidirectionally on the post-#3002
-  wire. Python beta server interop retains the temporary legacy identity read;
-  its pre-#3002 client direction remains an explicit expected gap.
+- Added public API compatibility checks against `mcp_dart 2.2.2`, minimum-Dart
+  dependency testing, and pinned core, Tasks, and JSON Schema conformance data.
+- The official alpha.9 MCP `2026-07-28` client suite, including all 25 OAuth
+  scenarios, passes. Post-#3002 server semantics pass locally.
+- Published TypeScript beta.5 interoperates bidirectionally. Python beta server
+  interoperability retains a documented pre-#3002 compatibility fallback.
 
 ### Breaking and compatibility notes
 
 - `DiscoverResult.serverInfo` is now nullable because MCP `2026-07-28` permits
   anonymous servers. Check for `null` before reading identity fields. MCP
   `2025-11-25` behavior is unchanged.
-- `mcp_dart 2.3` requires Dart 3.4 or newer; the CLI continues to require Dart
-  3.12. Dart 3.4 is the lowest version supported by the current runtime
-  dependency set.
+- `mcp_dart 2.3` requires Dart 3.4 or newer; the CLI requires Dart 3.12.
 - The direct `http` constraint is now `^1.5.0` because cancellation uses APIs
-  introduced in 1.5. Existing caret constraints such as `^1.4.0` can resolve
-  compatibly; applications pinned below 1.5 must update that pin.
+  introduced in 1.5. Normal `^1.4.0` constraints remain compatible, but pins
+  below 1.5 must be updated.
 - Stateless stdio clients now restart an unexpectedly terminated child by
   default and restore active `subscriptions/listen` requests. Set
   `StdioServerParameters.restartOnUnexpectedExit` to `false` to retain the
   prior close-on-exit behavior. Ordinary in-flight requests are never replayed.
 - `ProtocolOptions.taskStore` and `taskMessageQueue` remain available for MCP
-  2025-11-25 task augmentation and may coexist with the independent
-  `io.modelcontextprotocol/tasks` extension on a dual-era server. They are not
-  adapted into modern extension persistence; modern handlers and persistence
-  remain application-owned.
-- OAuth providers with a non-empty `clientId` now use that value as
-  pre-registered client information (or a Client ID Metadata Document when
-  advertised and eligible). To opt into deprecated Dynamic Client
-  Registration, return an empty `clientId`.
+  2025-11-25 task augmentation and may coexist with the independent Tasks
+  extension, whose handlers and persistence remain application-owned.
+- OAuth providers now treat a non-empty `clientId` as pre-registered client
+  information. Return an empty `clientId` only to opt into deprecated Dynamic
+  Client Registration.
 - OAuth discovery and token endpoints on another origin now require an
   explicit `oauthUriValidator`; client redirect URIs must use HTTPS or loopback
-  HTTP. Protected-resource and authorization-server metadata factories also
-  reject malformed or incomplete documents that v2.2.2 accepted.
+  HTTP, and malformed or incomplete metadata is rejected.
 - The exact v2.2.2 `finishAuth(String)` override remains available but is
-  deprecated and assumes the application validates the OAuth redirect. New
-  integrations should call `finishAuthRedirect` with the returned `state` and
-  optional issuer for validation before token exchange.
+  deprecated. New integrations should use `finishAuthRedirect` to validate the
+  returned `state` and optional issuer.
 - A schema-invalid `tools/call` now completes at the JSON-RPC level and returns
   a tool error result instead of throwing `McpError(ErrorCode.invalidParams)`.
-  Clients that caught `invalidParams` for this case must inspect
-  `CallToolResult.isError`; unknown or unavailable tools, malformed requests,
-  and server failures remain JSON-RPC errors. Negotiated MCP `2025-06-18` and
-  earlier peers retain their frozen JSON-RPC `invalidParams` behavior,
-  including MCP `2024-10-07`. Legacy task-augmented calls also retain
-  `invalidParams` for pre-acceptance schema rejection; accepted task calls
-  still return `CreateTaskResult` and expose their final tool result through
-  `tasks/result`.
-- Malformed `tools/call` params now consistently return JSON-RPC
-  `invalidParams` instead of falling through to a generic `internalError`.
+  Inspect `CallToolResult.isError` instead; MCP `2025-06-18` and earlier peers
+  retain `invalidParams`.
 - Under MCP `2025-11-25` and `2026-07-28`, an invalid registered input or output
-  schema, or a successful tool result that omits or violates its registered
-  output schema, returns JSON-RPC `internalError`; these are server-side
-  contract failures, not invalid client requests. MCP `2025-06-18` and earlier
-  peers retain the previous `invalidParams` code for these cases.
+  schema or invalid server-produced output returns JSON-RPC `internalError`.
+  Malformed call parameters continue to return `invalidParams`.
 - Clients now reject successful tool results that omit `structuredContent` when
-  the advertised `outputSchema` requires validation. An explicit JSON `null`
-  remains distinct and valid when the schema permits it. MCP `2025-11-25` and
-  earlier clients ignore non-object output schemas and expose the result's
-  compatibility `content` without retaining non-object `structuredContent`;
-  MCP `2026-07-28` clients continue to validate and retain any JSON root.
+  the advertised `outputSchema` requires it. MCP `2025-11-25` and earlier
+  clients retain object-root compatibility; MCP `2026-07-28` accepts any JSON
+  root.
 - Under MCP `2025-11-25`, task-mode negotiation now runs before input-schema
-  validation. A required task tool called without task augmentation returns
-  JSON-RPC `methodNotFound` as before. A task-forbidden tool called with
-  augmentation now returns `methodNotFound` instead of `invalidParams`; neither
-  path invokes the handler. MCP `2025-06-18` and earlier peers retain
-  `invalidParams`.
+  validation. Task-required or task-forbidden negotiation failures return
+  `methodNotFound`; earlier protocol versions retain `invalidParams`.
 - `CallToolResult.extra` entries named `content`, `isError`, `_meta`, or
-  `structuredContent` are now ignored instead of replacing the corresponding
-  protocol fields. When contradictory `CallToolResult` or
-  `SamplingToolResultContent` constructor arguments are supplied, an explicit
-  structured value is authoritative and marks the field present; use the
-  dedicated parameters for protocol-owned values.
+  `structuredContent` no longer replace protocol-owned fields. Use their
+  dedicated constructor parameters.
 
 ## 2.3.0-dev.2
 

@@ -130,6 +130,8 @@ final strictPreviewServer = McpServer(
 See the [MCP 2026-07-28 transition guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28.md)
 for fallback rules and APIs specific to MCP 2026-07-28, or run the
 [strict MCP 2026-07-28 example](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/mcp_2026_07_28).
+Applications upgrading from the stable 2.2 line should also follow the
+[2.2 to 2.3 migration guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/migration-2.2-to-2.3.md).
 
 ## Quick start with the CLI
 
@@ -169,6 +171,7 @@ for command options and scope.
 ## Documentation
 
 - Start: [getting started](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/getting-started.md), [server guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/server-guide.md), [client guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/client-guide.md), [quick reference](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/quick-reference.md)
+- Upgrade: [2.2 to 2.3 migration guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/migration-2.2-to-2.3.md), [migration cookbooks](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/migration-cookbooks.md), [MCP 2026-07-28 transition guide](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28.md)
 - Build: [tools](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/tools.md), [transports](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md), [examples](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/examples.md), [MCP Apps](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-apps.md)
 - Deploy: [Streamable HTTP security](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/transports.md#dns-rebinding-protection), [OAuth examples](https://github.com/leehack/mcp_dart/tree/v2.3.0-dev.2/example/authentication), [Flutter recipes](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/flutter-recipes.md)
 - Verify: [interop matrix](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/interoperability.md), [MCP 2025-11-25 coverage](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2025-11-25.md), [MCP 2026-07-28 preview coverage](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/spec-coverage-2026-07-28.md), [day-0 runbook](https://github.com/leehack/mcp_dart/blob/v2.3.0-dev.2/doc/mcp-2026-07-28-release-runbook.md)

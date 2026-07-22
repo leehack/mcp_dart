@@ -383,6 +383,7 @@ guidance.
 
 ## Next steps
 
+- [Upgrade from mcp_dart 2.2 to 2.3](migration-2.2-to-2.3.md)
 - [Getting started](getting-started.md)
 - [Server guide](server-guide.md)
 - [Client guide](client-guide.md)

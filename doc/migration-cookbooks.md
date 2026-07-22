@@ -2,7 +2,8 @@
 
 This page collects practical migration paths into `mcp_dart`. It complements
 the protocol-specific [MCP 2025-11-25 compatibility migration](migration_2025_11_25_compat.md)
-guide.
+guide. Existing `mcp_dart` users updating the package should start with the
+[2.2 to 2.3 migration guide](migration-2.2-to-2.3.md).
 
 ## Cookbook 1: TypeScript SDK server example -> Dart server
 

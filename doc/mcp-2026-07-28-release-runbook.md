@@ -224,7 +224,7 @@ On the final release-prep commit:
 - Set the root package version to `2.3.0`.
 - Restore root `documentation` and all user-facing repository links to `main`.
 - Replace prerelease dependency snippets in the README, getting-started,
-  quick-reference, and release docs with `mcp_dart: ^2.3.0`.
+  quick-reference, migration guide, and release docs with `mcp_dart: ^2.3.0`.
 - Keep the durable `2026-07-28` document, fixture, command, and workflow names;
   update only maturity wording that changes when the final specification ships.
 - Promote `stableProtocolVersion` and `defaultProtocolVersion` to the final
@@ -244,6 +244,8 @@ On the final release-prep commit:
   that presents the now-final protocol as draft-only.
 - Keep migration and compatibility notes explicit: `McpProtocol.stable`
   selects the current stable protocol while legacy profiles remain opt-in.
+  Re-read the 2.2-to-2.3 migration guide against the final package metadata and
+  link it from the tagged README and changelog.
 - Run `dart pub publish --dry-run` again from a clean checkout of the exact
   release commit. Do not create the release tag until this succeeds.
 - Run the shared metadata validator with `--package mcp_dart --tag v2.3.0`.
@@ -332,6 +334,11 @@ compatible 2.3.x release.
   from the generated directory. Then start Streamable HTTP with
   `mcp_dart serve --transport http --host 127.0.0.1 --port 3000` and inspect
   `http://localhost:3000/mcp` from a separate process.
+- After the official MCP Inspector V2 is published for MCP `2026-07-28`, record
+  its exact version and use it to inspect the generated server over both stdio
+  and Streamable HTTP. Verify discovery plus tool listing and invocation. The
+  classic Inspector V1 `1.0.0` does not count as new-spec interoperability
+  evidence.
 - Recheck GitHub release links, pub.dev documentation links, installer asset
   resolution, and both stable package versions.
 - Confirm the normal `main` interop schedule is active and there is no duplicate
