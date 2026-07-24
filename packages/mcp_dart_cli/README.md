@@ -110,6 +110,11 @@ invoking every advertised operation:
   "tools": [{"name": "search", "arguments": {"query": "mcp"}}],
   "resource": {"uri": "file:///tmp/example.txt", "subscribe": false},
   "prompt": {"name": "summarize", "arguments": {"topic": "MCP"}},
+  "elicitation": {
+    "action": "accept",
+    "content": {"name": "Ada"}
+  },
+  "roots": [{"uri": "file:///workspace", "name": "workspace"}],
   "task": {
     "tool": "long_running",
     "arguments": {"duration": 250},
@@ -118,6 +123,13 @@ invoking every advertised operation:
   }
 }
 ```
+
+When a configured probe triggers MCP 2026-07-28 `input_required`, the
+inspector returns the configured elicitation response and roots. Without those
+fields it safely declines form elicitation and returns an empty roots list.
+Resource subscription probes use `subscriptions/listen` for MCP 2026-07-28
+and retain `resources/subscribe` plus `resources/unsubscribe` for older
+protocol versions.
 
 ```bash
 mcp_dart inspect-server --json --probe-config probes.json -- node server.js

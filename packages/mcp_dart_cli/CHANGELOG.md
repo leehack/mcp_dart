@@ -1,5 +1,7 @@
 ## 0.2.0-dev.3
 
+- `inspect-server` now fulfills configured form-elicitation and roots callbacks
+  and uses `subscriptions/listen` for MCP 2026-07-28 resource subscriptions.
 - Development now targets Dart 3.12; the SDK and SDK-only generated projects
   support Dart 3.4.
 - Inspection recognizes stateless clients that skip optional discovery, accepts

@@ -58,6 +58,16 @@ void main() {
           'arguments': <String, dynamic>{'message': 'cancel me'},
           'cancel': true,
         },
+        'elicitation': <String, dynamic>{
+          'action': 'accept',
+          'content': <String, dynamic>{'name': 'Ada'},
+        },
+        'roots': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'uri': 'file:///tmp/demo',
+            'name': 'demo',
+          },
+        ],
       });
 
       expect(config.toolCalls.single.name, equals('echo'));
@@ -67,6 +77,9 @@ void main() {
       expect(config.completion?.value, equals('D'));
       expect(config.task?.tool, equals('delayed_echo'));
       expect(config.task?.cancel, isTrue);
+      expect(config.elicitationResponse?.accepted, isTrue);
+      expect(config.elicitationResponse?.content, containsPair('name', 'Ada'));
+      expect(config.roots.single.uri, equals('file:///tmp/demo'));
     });
 
     test('inspects a Dart stdio server command', () async {
@@ -306,6 +319,117 @@ void main() {
       );
       expect(serverInfoCheck.status, 'info');
       expect(serverInfoCheck.message, contains('optional'));
+    });
+
+    test(
+      'handles 2026 elicitation, roots, sampling, and subscriptions',
+      () async {
+        final report =
+            await McpServerInspector(
+              logger: MockLogger(),
+              silentHandlers: true,
+              probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
+                'tools': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'name': 'collect_profile',
+                    'arguments': <String, dynamic>{},
+                  },
+                  <String, dynamic>{
+                    'name': 'list_client_roots',
+                    'arguments': <String, dynamic>{},
+                  },
+                  <String, dynamic>{
+                    'name': 'sample_text',
+                    'arguments': <String, dynamic>{},
+                  },
+                ],
+                'resource': <String, dynamic>{
+                  'uri': 'demo://status',
+                  'subscribe': true,
+                },
+                'elicitation': <String, dynamic>{
+                  'action': 'accept',
+                  'content': <String, dynamic>{'name': 'Ada'},
+                },
+                'roots': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'uri': 'file:///tmp/demo',
+                    'name': 'demo',
+                  },
+                ],
+              }),
+            ).inspect(
+              const ServerInspectionTarget(
+                command: 'dart',
+                serverArgs: <String>[
+                  'run',
+                  'test/fixtures/stateless_input_required_server.dart',
+                ],
+                url: null,
+                env: <String, String>{},
+              ),
+            );
+
+        expect(report.passed, isTrue);
+        final checksById = <String, InspectionCheck>{
+          for (final check in report.checks) check.id: check,
+        };
+        for (final id in <String>[
+          'tools.call.collect_profile',
+          'tools.call.list_client_roots',
+          'tools.call.sample_text',
+          'resources.subscribe',
+        ]) {
+          expect(checksById[id]?.status, equals('pass'), reason: id);
+        }
+        final subscriptions =
+            report.inventory['resourceSubscriptions'] as List<dynamic>;
+        expect(
+          subscriptions.single,
+          containsPair('method', Method.subscriptionsListen),
+        );
+      },
+    );
+
+    test('uses safe defaults for 2026 elicitation and roots', () async {
+      final report =
+          await McpServerInspector(
+            logger: MockLogger(),
+            silentHandlers: true,
+            probeConfig: InspectionProbeConfig.fromJson(<String, dynamic>{
+              'tools': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'name': 'collect_profile',
+                  'arguments': <String, dynamic>{},
+                },
+                <String, dynamic>{
+                  'name': 'list_client_roots',
+                  'arguments': <String, dynamic>{},
+                },
+              ],
+            }),
+          ).inspect(
+            const ServerInspectionTarget(
+              command: 'dart',
+              serverArgs: <String>[
+                'run',
+                'test/fixtures/stateless_input_required_server.dart',
+              ],
+              url: null,
+              env: <String, String>{},
+            ),
+          );
+
+      expect(report.passed, isTrue);
+      final checksById = <String, InspectionCheck>{
+        for (final check in report.checks) check.id: check,
+      };
+      for (final id in <String>[
+        'tools.call.collect_profile',
+        'tools.call.list_client_roots',
+      ]) {
+        expect(checksById[id]?.status, equals('pass'), reason: id);
+      }
     });
 
     test(
