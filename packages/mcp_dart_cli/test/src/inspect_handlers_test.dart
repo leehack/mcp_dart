@@ -110,13 +110,11 @@ void main() {
           action: 'accept',
           content: <String, dynamic>{'name': 'Ada'},
         ),
-        handleRoots: true,
       );
       final client = McpClient(
         const Implementation(name: 'test-client', version: '1.0.0'),
         options: const McpClientOptions(
           capabilities: ClientCapabilities(
-            roots: ClientCapabilitiesRoots(),
             elicitation: ClientElicitation.formOnly(),
           ),
         ),

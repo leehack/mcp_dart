@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -905,6 +906,7 @@ class McpServerInspector {
     Map<String, dynamic> inventory,
   ) async {
     McpSubscription? subscription;
+    StreamSubscription<JsonRpcNotification>? notificationDrain;
     try {
       subscription = client.listenSubscriptions(
         SubscriptionsListenRequest(
@@ -912,6 +914,12 @@ class McpServerInspector {
             resourceSubscriptions: <String>[resourceUri],
           ),
         ),
+      );
+      // The request's `done` future remains authoritative for failures. Drain
+      // notifications so the client can close the observed stream cleanly.
+      notificationDrain = subscription.notifications.listen(
+        (_) {},
+        onError: (Object _) {},
       );
       final acknowledgment = await subscription.acknowledged.timeout(
         const Duration(seconds: 5),
@@ -948,6 +956,7 @@ class McpServerInspector {
       );
     } finally {
       subscription?.cancel('CLI inspection cleanup.');
+      await notificationDrain?.cancel();
     }
   }
 

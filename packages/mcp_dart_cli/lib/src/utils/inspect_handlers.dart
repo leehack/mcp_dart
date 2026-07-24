@@ -50,15 +50,7 @@ class InspectHandlers {
       client.setRequestHandler<JsonRpcListRootsRequest>(
         Method.rootsList,
         (request, extra) async => ListRootsResult(roots: _roots),
-        (id, params, meta) => JsonRpcListRootsRequest.fromJson(
-          <String, dynamic>{
-            'jsonrpc': jsonRpcVersion,
-            'id': id,
-            'method': Method.rootsList,
-            'params': ?params,
-            '_meta': ?meta,
-          },
-        ),
+        (id, params, meta) => JsonRpcListRootsRequest(id: id, meta: meta),
       );
     }
 
@@ -73,7 +65,8 @@ class InspectHandlers {
       _logger.info('Mode: ${params.mode?.name ?? ElicitationMode.form.name}');
       _logger.info('Message: ${params.message}');
       _logger.info(
-        'Returning the configured response without interactive input.',
+        'Returning the configured or safe default response without '
+        'interactive input.',
       );
     }
     return _elicitationResponse;
