@@ -13,6 +13,13 @@ void main() {
       final handlers = InspectHandlers(logger, silent: true);
       final client = McpClient(
         const Implementation(name: 'test-client', version: '1.0.0'),
+        options: const McpClientOptions(
+          capabilities: ClientCapabilities(
+            roots: ClientCapabilitiesRoots(),
+            sampling: ClientCapabilitiesSampling(),
+            elicitation: ClientElicitation.formOnly(),
+          ),
+        ),
       );
       var toolsChanged = 0;
       handlers.onToolsListChanged = () => toolsChanged++;
@@ -69,6 +76,16 @@ void main() {
           maxTokens: 1,
         ),
       );
+      final elicitationResult = await client.onElicitRequest!(
+        ElicitRequest.form(
+          message: 'Name?',
+          requestedSchema: JsonSchema.object(
+            properties: <String, JsonSchema>{
+              'name': JsonSchema.string(),
+            },
+          ),
+        ),
+      );
 
       expect(toolsChanged, equals(1));
       expect(handlers.notifications, hasLength(5));
@@ -77,10 +94,47 @@ void main() {
         containsPair('issue', 'progress decreased for token'),
       );
       expect(samplingResult.model, equals('mcp-dart-cli-placeholder'));
+      expect(elicitationResult.declined, isTrue);
       verifyNever(() => logger.detail(any()));
       verifyNever(() => logger.info(any()));
       verifyNever(() => logger.warn(any()));
       verifyNever(() => logger.err(any()));
+    });
+
+    test('returns a configured elicitation response', () async {
+      final logger = MockLogger();
+      final handlers = InspectHandlers(
+        logger,
+        silent: true,
+        elicitationResponse: const ElicitResult(
+          action: 'accept',
+          content: <String, dynamic>{'name': 'Ada'},
+        ),
+      );
+      final client = McpClient(
+        const Implementation(name: 'test-client', version: '1.0.0'),
+        options: const McpClientOptions(
+          capabilities: ClientCapabilities(
+            elicitation: ClientElicitation.formOnly(),
+          ),
+        ),
+      );
+      handlers.registerHandlers(client);
+
+      final result = await client.onElicitRequest!(
+        ElicitRequest.form(
+          message: 'Name?',
+          requestedSchema: JsonSchema.object(
+            properties: <String, JsonSchema>{
+              'name': JsonSchema.string(),
+            },
+            required: <String>['name'],
+          ),
+        ),
+      );
+
+      expect(result.accepted, isTrue);
+      expect(result.content, containsPair('name', 'Ada'));
     });
   });
 }

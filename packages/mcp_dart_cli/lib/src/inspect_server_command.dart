@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -245,7 +246,13 @@ class McpServerInspector {
   /// Inspects [target].
   Future<InspectionReport> inspect(ServerInspectionTarget target) async {
     final checks = InspectionCheckBuilder();
-    final handlers = InspectHandlers(_logger, silent: silentHandlers);
+    final handlers = InspectHandlers(
+      _logger,
+      silent: silentHandlers,
+      elicitationResponse: probeConfig.elicitationResponse,
+      roots: probeConfig.roots,
+      handleRoots: true,
+    );
     final inventory = <String, dynamic>{};
     final metadata = <String, dynamic>{
       'transport': target.transport,
@@ -857,6 +864,15 @@ class McpServerInspector {
       return;
     }
     try {
+      if (_usesStatelessProtocol(client)) {
+        await _probeStatelessResourceSubscription(
+          client,
+          resource.uri,
+          checks,
+          inventory,
+        );
+        return;
+      }
       await client.subscribeResource(
         SubscribeRequest(uri: resource.uri),
         const RequestOptions(timeout: Duration(seconds: 5)),
@@ -880,6 +896,67 @@ class McpServerInspector {
         'resources.subscribe',
         'Server advertises resources.subscribe but subscribe/unsubscribe failed for ${resource.uri}: $error',
       );
+    }
+  }
+
+  Future<void> _probeStatelessResourceSubscription(
+    McpClient client,
+    String resourceUri,
+    InspectionCheckBuilder checks,
+    Map<String, dynamic> inventory,
+  ) async {
+    McpSubscription? subscription;
+    StreamSubscription<JsonRpcNotification>? notificationDrain;
+    try {
+      subscription = client.listenSubscriptions(
+        SubscriptionsListenRequest(
+          notifications: SubscriptionFilter(
+            resourceSubscriptions: <String>[resourceUri],
+          ),
+        ),
+      );
+      // The request's `done` future remains authoritative for failures. Drain
+      // notifications so the client can close the observed stream cleanly.
+      notificationDrain = subscription.notifications.listen(
+        (_) {},
+        onError: (Object _) {},
+      );
+      final acknowledgment = await subscription.acknowledged.timeout(
+        const Duration(seconds: 5),
+      );
+      final acknowledgedResources =
+          acknowledgment.notifications.resourceSubscriptions;
+      if (acknowledgedResources == null ||
+          !acknowledgedResources.contains(resourceUri)) {
+        throw StateError(
+          'subscriptions/listen did not acknowledge $resourceUri.',
+        );
+      }
+
+      subscription.cancel('CLI inspection completed.');
+      await subscription.done.timeout(const Duration(seconds: 5));
+      inventory['resourceSubscriptions'] = <Map<String, dynamic>>[
+        <String, dynamic>{
+          'uri': resourceUri,
+          'method': Method.subscriptionsListen,
+          'acknowledged': true,
+          'cancelled': true,
+        },
+      ];
+      checks.pass(
+        'resources.subscribe',
+        'subscriptions/listen acknowledged and cancelled cleanly for '
+            '$resourceUri.',
+      );
+    } catch (error) {
+      checks.fail(
+        'resources.subscribe',
+        'Server advertises resources.subscribe but subscriptions/listen '
+            'failed for $resourceUri: $error',
+      );
+    } finally {
+      subscription?.cancel('CLI inspection cleanup.');
+      await notificationDrain?.cancel();
     }
   }
 
@@ -2084,6 +2161,8 @@ class InspectionProbeConfig {
     this.prompt,
     this.completion,
     this.task,
+    this.elicitationResponse,
+    this.roots = const <Root>[],
   });
 
   /// Tool calls to execute with caller-provided arguments.
@@ -2100,6 +2179,16 @@ class InspectionProbeConfig {
 
   /// Task probe override.
   final TaskProbe? task;
+
+  /// Response returned when a configured probe triggers form elicitation.
+  ///
+  /// When omitted, the inspector safely declines the request.
+  final ElicitResult? elicitationResponse;
+
+  /// Roots returned when a configured probe triggers `roots/list`.
+  ///
+  /// When omitted, the inspector returns an empty roots list.
+  final List<Root> roots;
 
   /// Parses a JSON probe configuration.
   factory InspectionProbeConfig.fromJson(Map<String, dynamic> json) {
@@ -2127,6 +2216,12 @@ class InspectionProbeConfig {
               (json['task'] as Map).cast<String, dynamic>(),
             )
           : null,
+      elicitationResponse: json['elicitation'] is Map
+          ? ElicitResult.fromJson(
+              (json['elicitation'] as Map).cast<String, dynamic>(),
+            )
+          : null,
+      roots: _readObjectList(json['roots']).map(Root.fromJson).toList(),
     );
   }
 }

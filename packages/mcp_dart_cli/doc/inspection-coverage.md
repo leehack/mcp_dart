@@ -20,10 +20,10 @@ commit or upload reports unreviewed, and delete them when no longer needed.
 | Lifecycle and JSON-RPC | Stateless discovery or legacy initialization, implementation metadata, capabilities, legacy ping, IDs, and well-formed observed frames | Methods removed by MCP 2026-07-28 are reported without probing them; raw negative cases live primarily in `conformance` |
 | Transports | Live stdio and Streamable HTTP, session/protocol metadata, Origin behavior, GET/DELETE probes, stdio tracing | No automatic resumability/redelivery scenario |
 | Tools | List shape, unique names, schemas, configured calls, structured output validation | Does not invoke every ordinary tool without explicit arguments |
-| Resources | Resources/templates listing, URI shape, configured read, optional subscribe/unsubscribe | Reads and subscriptions require explicit probe configuration |
+| Resources | Resources/templates listing, URI shape, configured read, MCP 2026-07-28 `subscriptions/listen`, and legacy subscribe/unsubscribe | Reads and subscriptions require explicit probe configuration |
 | Prompts | List shape, arguments, configured `prompts/get` | Prompt retrieval requires explicit probe configuration |
 | Completions | Configured prompt-argument completion when advertised | Completion requires explicit probe configuration |
-| Client roots, sampling, elicitation | Records capabilities; probes legacy clients only with explicit `inspect-client --active-probes` | Active probes can expose roots, incur model cost, or open UI; stateless clients use MCP 2026-07-28 MRTR |
+| Client roots, sampling, elicitation | Handles MCP 2026-07-28 MRTR during configured server probes; probes legacy clients with explicit `inspect-client --active-probes` | Server probes safely decline form elicitation and return no roots unless explicit responses are configured; sampling uses a placeholder response |
 | Logging, progress, notifications | Logging level, observed notifications, numeric/non-decreasing progress | Does not trigger every list-change notification |
 | Cancellation | Task cancellation through configured probes | General request cancellation is not actively inspected |
 | Authorization | Same-origin protected-resource and authorization-server discovery, bearer challenges, PKCE S256 metadata | Server-advertised cross-origin OAuth URLs are reported but not followed; no credentialed token exchange |

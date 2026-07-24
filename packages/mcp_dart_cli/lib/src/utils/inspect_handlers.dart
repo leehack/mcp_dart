@@ -5,10 +5,21 @@ import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 
 /// Manages client-side handlers for server notifications and requests.
 class InspectHandlers {
-  InspectHandlers(this._logger, {this._silent = false});
+  InspectHandlers(
+    this._logger, {
+    this._silent = false,
+    ElicitResult? elicitationResponse,
+    List<Root> roots = const <Root>[],
+    this._handleRoots = false,
+  }) : _elicitationResponse =
+           elicitationResponse ?? const ElicitResult(action: 'decline'),
+       _roots = List<Root>.unmodifiable(roots);
 
   final Logger _logger;
   final bool _silent;
+  final ElicitResult _elicitationResponse;
+  final List<Root> _roots;
+  final bool _handleRoots;
   final List<Map<String, dynamic>> _notifications = <Map<String, dynamic>>[];
   final Map<String, num> _lastProgressByToken = <String, num>{};
   final List<Map<String, dynamic>> _progressIssues = <Map<String, dynamic>>[];
@@ -32,11 +43,33 @@ class InspectHandlers {
 
   /// Registers all handlers with the given client.
   void registerHandlers(McpClient client) {
+    client.onElicitRequest = _handleElicitRequest;
     // Register sampling request handler
     client.onSamplingRequest = _handleSamplingRequest;
+    if (_handleRoots) {
+      client.setRequestHandler<JsonRpcListRootsRequest>(
+        Method.rootsList,
+        (request, extra) async => ListRootsResult(roots: _roots),
+        (id, params, meta) => JsonRpcListRootsRequest(id: id, meta: meta),
+      );
+    }
 
     // Register notification handlers using fallback
     client.fallbackNotificationHandler = _handleNotification;
+  }
+
+  /// Handles elicitation/create requests from the server.
+  Future<ElicitResult> _handleElicitRequest(ElicitRequest params) async {
+    if (!_silent) {
+      _logger.info('\n[Elicitation Request]');
+      _logger.info('Mode: ${params.mode?.name ?? ElicitationMode.form.name}');
+      _logger.info('Message: ${params.message}');
+      _logger.info(
+        'Returning the configured or safe default response without '
+        'interactive input.',
+      );
+    }
+    return _elicitationResponse;
   }
 
   /// Handles sampling/createMessage requests from the server.
