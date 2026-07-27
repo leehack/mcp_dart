@@ -170,7 +170,7 @@ dart run tool/testing/run_json_schema_draft7_format_suite.dart \
   .dart_tool/json-schema-test-suite/tests/draft7/optional/format
 dart run test/conformance/run_2025_server_conformance.dart \
   --timeout-seconds 90 --isolate-scenarios
-CONFORMANCE_VERSION=0.2.0-alpha.9 # Replace with the final compatible release.
+CONFORMANCE_VERSION=0.2.0-alpha.10 # Replace with the final compatible release.
 npx -y "@modelcontextprotocol/conformance@$CONFORMANCE_VERSION" client \
   --command "dart run test/conformance/mcp_2026_07_28_client.dart" \
   --suite all --spec-version 2025-11-25 --verbose

@@ -507,7 +507,7 @@ with a local token endpoint, and the client transport discovery path is covered
 by [`test/client/streamable_https_test.dart`](../test/client/streamable_https_test.dart).
 MCP 2026-07-28 authorization edge cases are covered by
 [`test/client/oauth_2026_compliance_test.dart`](../test/client/oauth_2026_compliance_test.dart);
-the official alpha.9 client suite passes all 25 authorization scenarios.
+the official alpha.10 client suite passes all 25 authorization scenarios.
 The first-class OAuth protected-resource helper is covered by
 [`test/server/streamable_mcp_server_test.dart`](../test/server/streamable_mcp_server_test.dart)
 and the official TypeScript SDK OAuth interop path in

@@ -6,7 +6,7 @@ import 'conformance_expected_failures.dart';
 import 'conformance_scenario_inventory.dart';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.9';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.10';
 const _defaultTimeout = Duration(seconds: 25);
 
 const _serverScenarios = [
