@@ -5,19 +5,9 @@ import 'dart:io';
 import 'conformance_scenario_inventory.dart';
 
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.9';
+    '@modelcontextprotocol/conformance@0.2.0-alpha.10';
 const _defaultTimeout = Duration(seconds: 30);
 const _draftSpecVersion = '2026-07-28';
-const _stableFixtureSpecVersion = '2025-11-25';
-
-// alpha.9's network-ref canary server has not adopted the draft protocol yet.
-// The security requirement is protocol-version independent, so run that exact
-// official canary against its newest supported fixture version. A local MCP
-// 2026-07-28 regression separately verifies that the draft Tool wire shape is
-// preserved.
-const _scenarioSpecVersionOverrides = {
-  'json-schema-ref-no-deref': _stableFixtureSpecVersion,
-};
 
 const _draftClientScenarios = [
   'tools_call',
@@ -169,8 +159,7 @@ Future<_ScenarioResult> _runScenario({
 }) async {
   final outputDir = Directory('${outputRoot.path}/${_sanitize(scenario)}');
   await outputDir.create(recursive: true);
-  final specVersion =
-      _scenarioSpecVersionOverrides[scenario] ?? _draftSpecVersion;
+  const specVersion = _draftSpecVersion;
 
   final process = await Process.start(
     'npx',
@@ -184,7 +173,6 @@ Future<_ScenarioResult> _runScenario({
       scenario,
       '--spec-version',
       specVersion,
-      if (specVersion != _draftSpecVersion) '--force',
       '--verbose',
       '-o',
       outputDir.path,

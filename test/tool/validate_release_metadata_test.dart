@@ -399,12 +399,12 @@ void main() {
       '${fixture.path}/test/conformance/run_2025_server_conformance.dart',
     );
     final staleWrapper = wrapper.readAsStringSync().replaceFirst(
+          'conformance@0.2.0-alpha.10',
           'conformance@0.2.0-alpha.9',
-          'conformance@0.2.0-alpha.8',
         );
     wrapper.writeAsStringSync(
       '$staleWrapper\n'
-      '// @modelcontextprotocol/conformance@0.2.0-alpha.9\n',
+      '// @modelcontextprotocol/conformance@0.2.0-alpha.10\n',
     );
 
     final result = ReleaseMetadataValidator(fixture).validate(
@@ -425,12 +425,12 @@ void main() {
       '${fixture.path}/.github/workflows/test_core.yml',
     );
     final staleWorkflow = workflow.readAsStringSync().replaceFirst(
+          'conformance@0.2.0-alpha.10',
           'conformance@0.2.0-alpha.9',
-          'conformance@0.2.0-alpha.8',
         );
     workflow.writeAsStringSync(
       '$staleWorkflow\n'
-      '# npx -y @modelcontextprotocol/conformance@0.2.0-alpha.9 client\n',
+      '# npx -y @modelcontextprotocol/conformance@0.2.0-alpha.10 client\n',
     );
 
     final result = ReleaseMetadataValidator(fixture).validate(
