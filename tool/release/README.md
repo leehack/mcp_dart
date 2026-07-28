@@ -50,25 +50,26 @@ substantive release notes, protocol compatibility constants, and pinned
 day-0 inputs.
 
 The `mcp_2026_07_28_release_metadata.json` manifest records the exact inputs
-reviewed for the release. Before the final specification is published, its
-review acknowledgements intentionally remain `false`; prereleases still pass,
-but a stable SDK or CLI release is blocked. On release day, update the refs and
-version pins first, complete the full review, and only then set:
+reviewed for the release. Before the final Core specification is published,
+its final-review acknowledgements intentionally remain `false`; prereleases
+still pass, but a stable SDK or CLI release is blocked. The experimental Tasks
+status, pin, and known differences can be reviewed and recorded in advance. On
+release day, update the final inputs and version pins first, complete the full
+review, and only then set:
 
 - `coreSpecification.finalReleaseReviewed`
-- `tasksExtension.finalReleaseReviewed`
-- `tasksExtension.pinnedContentsReviewed`
-- `tasksExtension.failedStateErrorShapeReviewed`
-- `tasksExtension.timingFieldIntegerSemanticsReviewed`
-- `missingRequiredClientCapability.finalTextsAgree`
+- `missingRequiredClientCapability.coreFinalReleaseReviewed`
 - `subscriptionTermination.finalTextsAgree`
 - `releaseDocumentation.finalReleaseReviewed`
 - `officialConformance.finalReleaseReviewed`
 - `publishedInteropFixtures.finalReleaseReviewed`
 
-The core and Tasks refs must be full commit SHAs matching their files under
-`tool/testing/`. The capability error code must match the SDK implementation,
-and the conformance version must match Core CI and every conformance wrapper.
+The Core and experimental Tasks refs must be full commit SHAs matching their
+files under `tool/testing/`. Tasks remains separately pinned, but its upstream
+repository describes it as experimental and not an official MCP extension; a
+stable Core release does not wait for a nonexistent final Tasks release. The
+capability error code must match the SDK implementation, and the conformance
+version must match Core CI and every conformance wrapper.
 Stable Core CI must audit the immutable `schema/2026-07-28` and
 `docs/specification/2026-07-28` paths rather than the moving draft paths.
 The validator inspects active workflow `run` commands and rejects comment-only
@@ -91,16 +92,21 @@ intact.
 
 The Tasks acknowledgements are deliberately separate. Fetching the pinned
 commit is not a content audit: inspect its specification, SEP, and schema
-against the SDK and tests. In particular, reconcile the normative failed-task
-`error` prose (a JSON-RPC error shape) with the current schema's generic JSON
-object and the SDK's `JsonRpcErrorData` representation before acknowledging the
-stable gate.
+against the SDK and tests. Record the upstream experimental status and known
+wire differences, including:
 
-Also reconcile the Tasks prose that defines `ttlMs` and `pollIntervalMs` as
-integer milliseconds with the current generated schema's unrestricted JSON
-`number` fields. The SDK deliberately accepts only mathematically integral
-values and stores them as `int`; record the final decision through
-`tasksExtension.timingFieldIntegerSemanticsReviewed` before stable release.
+- failed-task `error` prose describes a JSON-RPC error shape, the schema
+  accepts a generic JSON object, and the SDK exposes `JsonRpcErrorData`;
+- `ttlMs` and `pollIntervalMs` are integer milliseconds in prose, unrestricted
+  JSON numbers in the schema, and mathematically integral `int` values in Dart;
+- experimental Tasks uses `-32003` for
+  `MissingRequiredClientCapability`, while final Core and this SDK use
+  `-32021`;
+- Tasks has no official-conformance or checked-in cross-SDK coverage.
+
+These differences are outside the stable Core claim. The gate requires their
+experimental status and disclosure to be reviewed; it does not misrepresent
+them as a final Tasks contract.
 
 The pinned Core draft is also internally ambiguous about server-initiated
 subscription teardown. Its cancellation page requires a

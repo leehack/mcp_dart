@@ -1,10 +1,10 @@
 # Python SDK 2026-07-28 Interop
 
 This fixture tracks both MCP `2026-07-28` directions against the official
-Python SDK `mcp==2.0.0b2` package: Dart client -> Python server remains a
-required compatible path, while Python client -> Dart server records the
-package's pre-spec-#3002 discovery gap. It is separate from the stable Python
-fixture, which continues to cover the released MCP 2025-11-25 specification.
+Python SDK `mcp==2.0.0rc1` and `mcp-types==2.0.0rc1` packages. Both Dart
+client -> Python server and Python client -> Dart server are required compatible
+paths. This fixture is separate from the stable Python fixture, which continues
+to cover the released MCP 2025-11-25 specification.
 
 ## Run
 
@@ -19,17 +19,13 @@ MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
   --direction=dart-to-python
 MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
   dart run tool/testing/run_python_2026_07_28_interop.dart \
-  --direction=python-to-dart \
-  --expect-published-python-client-gap
+  --direction=python-to-dart
 ```
 
-The Dart client -> Python server direction remains required and checks
-discovery, tool listing, and tool execution. The published Python beta client
-predates spec PR #3002 and requires obsolete body `serverInfo`, so the reverse
-direction first sends an independent anonymous raw `server/discover` request to
-the Dart server. That probe requires MCP `2026-07-28` acceptance without
-`clientInfo`, no obsolete body `serverInfo`, and canonical server identity in
-`_meta["io.modelcontextprotocol/serverInfo"]`. Only then does the runner accept
-the Python beta's exact 2026 -> 2025 fallback as a temporary expected gap. The
-expected-gap command fails if the Dart wire shape regresses, the beta starts
-passing, or it fails differently.
+The Dart client -> Python server direction checks discovery, tool listing, and
+tool execution. The reverse direction first sends an independent anonymous raw
+`server/discover` request to the Dart server. That probe requires MCP
+`2026-07-28` acceptance without `clientInfo`, no obsolete body `serverInfo`,
+and canonical server identity in
+`_meta["io.modelcontextprotocol/serverInfo"]`; the Python release-candidate
+client must then negotiate MCP `2026-07-28` and complete the scenario.

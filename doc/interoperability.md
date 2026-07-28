@@ -26,11 +26,11 @@ For MCP 2026-07-28 coverage, see the
 | Dart client -> TypeScript SDK server | Streamable HTTP | MCP 2025-11-25 | [`test/interop/dart_client_with_ts_server_test.dart`](../test/interop/dart_client_with_ts_server_test.dart), [`test/interop/ts/`](../test/interop/ts/) | Verified | Covers tool calls and stale preconfigured session-id recovery. |
 | TypeScript SDK client -> Dart server | stdio | MCP 2025-11-25 | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Runs the compiled TypeScript client fixture against a Dart server process and checks that an official TS client can list tools immediately after the lifecycle handshake. |
 | TypeScript SDK client -> Dart server | Streamable HTTP | MCP 2025-11-25 | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Includes official TS Streamable HTTP client lifecycle coverage, pre-`initialized` operation rejection, GET SSE streams, and `Last-Event-ID` replay behavior. |
-| TypeScript SDK beta client -> Dart server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/ts_2026_07_28/`](../test/interop/ts_2026_07_28/), [`tool/testing/run_ts_2026_07_28_interop.dart`](../tool/testing/run_ts_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Published `@modelcontextprotocol/client@2.0.0-beta.5` negotiates the post-#3002 wire with a spec-correct Dart server and covers discovery, routing headers, tool calls, multi-round input, progress, subscriptions, and cancellation. |
-| Dart MCP 2026-07-28 client -> TypeScript SDK beta server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/ts_2026_07_28/src/server.mjs`](../test/interop/ts_2026_07_28/src/server.mjs), [`tool/testing/run_ts_2026_07_28_interop.dart`](../tool/testing/run_ts_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Uses published `@modelcontextprotocol/server@2.0.0-beta.5` through its `createMcpHandler` entry; covers `server/discover`, `tools/list`, `tools/call`, one-time `HeaderMismatch` metadata refresh and retry, MCP 2026-07-28 `input_required`, request-stream cancellation, and post-cancellation recovery. |
-| Dart client -> Python MCP server | stdio | Server-dependent | [`doc/transports.md`](transports.md#connect-to-python-server) | Documented recipe | The transport can spawn Python servers over stdio; the MCP 2025-11-25 recipe remains separate from the MCP 2026-07-28 beta fixture. |
-| Python SDK beta client -> Dart server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/python_2026_07_28/`](../test/interop/python_2026_07_28/), [`tool/testing/run_python_2026_07_28_interop.dart`](../tool/testing/run_python_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Known published-beta gap | Published `mcp==2.0.0b2` predates spec PR #3002 and falls back to MCP 2025-11-25 when canonical discovery omits obsolete body `serverInfo`. CI asserts that exact fallback as temporary expected drift. |
-| Dart MCP 2026-07-28 client -> Python SDK beta server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/python_2026_07_28/server.py`](../test/interop/python_2026_07_28/server.py), [`tool/testing/run_python_2026_07_28_interop.dart`](../tool/testing/run_python_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Uses the official Python SDK beta server through the temporary read-only fallback for legacy body `serverInfo`; covers discovery, protocol selection, `tools/list`, and `tools/call`. |
+| TypeScript SDK client -> Dart server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/ts_2026_07_28/`](../test/interop/ts_2026_07_28/), [`tool/testing/run_ts_2026_07_28_interop.dart`](../tool/testing/run_ts_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Published `@modelcontextprotocol/client@2.0.0` negotiates the post-#3002 wire with a spec-correct Dart server and covers discovery, routing headers, tool calls, multi-round input, progress, subscriptions, and cancellation. |
+| Dart MCP 2026-07-28 client -> TypeScript SDK server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/ts_2026_07_28/src/server.mjs`](../test/interop/ts_2026_07_28/src/server.mjs), [`tool/testing/run_ts_2026_07_28_interop.dart`](../tool/testing/run_ts_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Uses published `@modelcontextprotocol/server@2.0.0` through its `createMcpHandler` entry; covers `server/discover`, `tools/list`, `tools/call`, one-time `HeaderMismatch` metadata refresh and retry, MCP 2026-07-28 `input_required`, request-stream cancellation, and post-cancellation recovery. |
+| Dart client -> Python MCP server | stdio | Server-dependent | [`doc/transports.md`](transports.md#connect-to-python-server) | Documented recipe | The transport can spawn Python servers over stdio; the MCP 2025-11-25 recipe remains separate from the MCP 2026-07-28 release-candidate fixture. |
+| Python SDK release-candidate client -> Dart server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/python_2026_07_28/`](../test/interop/python_2026_07_28/), [`tool/testing/run_python_2026_07_28_interop.dart`](../tool/testing/run_python_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Published `mcp==2.0.0rc1` negotiates the canonical post-#3002 discovery wire and covers discovery, tool listing, and tool execution. |
+| Dart MCP 2026-07-28 client -> Python SDK release-candidate server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/python_2026_07_28/server.py`](../test/interop/python_2026_07_28/server.py), [`tool/testing/run_python_2026_07_28_interop.dart`](../tool/testing/run_python_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Uses the official Python SDK `mcp==2.0.0rc1` server and covers discovery, protocol selection, `tools/list`, and `tools/call`. |
 | Dart browser client -> Dart server | Streamable HTTP | MCP 2025-11-25 and MCP 2026-07-28 | [`test/browser/mcp_2026_07_28_streamable_http_test.dart`](../test/browser/mcp_2026_07_28_streamable_http_test.dart), [`tool/testing/run_browser_2026_07_28_interop.dart`](../tool/testing/run_browser_2026_07_28_interop.dart) | Verified | A real Chrome client completes 12 tool-list requests and 12 tool calls in each profile over cross-origin Streamable HTTP. It also proves MCP 2026-07-28 request-stream cancellation and recovery. The MCP 2025-11-25 case waits for response-stream reconnect timers and guards against browser connection-slot exhaustion. |
 | Flutter Web example -> Dart server | Streamable HTTP | MCP 2026-07-28 | [`example/flutter_http_client/test/browser_e2e_test.dart`](../example/flutter_http_client/test/browser_e2e_test.dart), [`tool/testing/run_flutter_web_example_e2e.dart`](../tool/testing/run_flutter_web_example_e2e.dart), [`test_core.yml`](../.github/workflows/test_core.yml) | Verified | The example's real service layer runs in Chrome and completes connection, 12 tool-list requests, 12 tool calls, expected RPC-error recovery, reconnect, a post-reconnect request, and disconnect. Deterministic widget tests cover the UI separately. Flutter Web cannot spawn stdio servers. |
 | MCP Apps host/client metadata | stdio or Streamable HTTP | MCP 2026-07-28 plus `io.modelcontextprotocol/ui` extension | [`doc/mcp-apps.md`](mcp-apps.md), [`example/mcp_apps_helpers_server.dart`](../example/mcp_apps_helpers_server.dart), [`test/types/mcp_ui_test.dart`](../test/types/mcp_ui_test.dart), [`test/server/mcp_ui_test.dart`](../test/server/mcp_ui_test.dart) | Verified | Verified coverage is limited to SDK metadata helpers, serialization, and checked-in examples; host rendering behavior varies by host, so verify UI metadata against your target host. |
@@ -52,7 +52,7 @@ dart test --tags interop
 
 If the compiled fixtures are missing, local test runs skip the interop groups; CI should fail when required fixtures are unavailable.
 
-The TypeScript MCP 2026-07-28 fixture uses the published TypeScript SDK beta
+The TypeScript MCP 2026-07-28 fixture uses the published TypeScript SDK 2.0.0
 packages:
 
 ```bash
@@ -64,8 +64,8 @@ dart run tool/testing/run_ts_2026_07_28_interop.dart \
   --direction=dart-to-ts
 ```
 
-That direction verifies the Dart client -> published TypeScript beta server
-path. The published beta.5 client includes the post-#3002 identity shape, so CI
+That direction verifies the Dart client -> published TypeScript server path.
+The published 2.0.0 client includes the post-#3002 identity shape, so CI
 also requires the reverse direction to pass:
 
 ```bash
@@ -80,7 +80,7 @@ post-cancellation tool calls in addition to discovery and normal tool calls.
 The `Run MCP 2026-07-28 Interop` workflow covers relevant PRs, manual dispatch,
 and a daily schedule on `main`.
 
-The official Python SDK beta fixture runs each direction independently:
+The official Python SDK 2.0.0rc1 fixture runs each direction independently:
 
 ```bash
 python3 -m venv .dart_tool/python-2026-interop
@@ -91,13 +91,12 @@ MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
   --direction=dart-to-python
 MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
   dart run tool/testing/run_python_2026_07_28_interop.dart \
-  --direction=python-to-dart \
-  --expect-published-python-client-gap
+  --direction=python-to-dart
 ```
 
-The Dart client -> Python beta server path remains required. The reverse path
-asserts the published beta's exact pre-#3002 fallback; an unexpected pass or a
-different failure is an error so the exception cannot silently become stale.
+Both directions are required. The reverse path also probes Dart's anonymous
+`server/discover` wire response directly before the Python client connects, so
+canonical identity metadata cannot regress behind a peer-side fallback.
 
 The browser fixture runs the web implementation in Chrome against the same
 Dart conformance server:
@@ -145,14 +144,15 @@ When adding a new interoperability claim:
 
 ## Known gaps worth tracking
 
-- Broader Python SDK beta coverage for subscriptions, cache behavior, and
+- Broader Python SDK coverage for subscriptions, cache behavior, and
   multi-round-trip input once those server surfaces stabilize.
-- Broader reverse-path TypeScript SDK beta server coverage for MCP 2026-07-28
+- Broader reverse-path TypeScript SDK server coverage for MCP 2026-07-28
   subscriptions/listen, cacheable result fields, and other streaming/result
-  paths should follow as the TypeScript SDK beta server surface stabilizes.
+  paths should follow as the TypeScript SDK server surface stabilizes.
 - Host-specific MCP Apps rendering compatibility notes.
 - More OAuth-protected remote server scenarios beyond the checked-in examples.
 - A broader compatibility table once additional SDKs expose published MCP
   2025-11-25 fixtures.
-- Request-scoped cancellation against Python SDK beta and additional peer
-  implementations. Published TypeScript beta.5 is verified in both directions.
+- Request-scoped cancellation against the Python SDK and additional peer
+  implementations. Published TypeScript SDK 2.0.0 is verified in both
+  directions.

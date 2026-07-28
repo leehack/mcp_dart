@@ -66,12 +66,12 @@ jobs:
         working-directory: test/interop/ts_2026_07_28
         run: npm ci
 
-      - name: Run Dart client against published TypeScript beta server
+      - name: Run Dart client against published TypeScript server
         run: >-
           dart run tool/testing/run_ts_2026_07_28_interop.dart
           --direction=dart-to-ts
 
-      - name: Run published TypeScript beta client against Dart server
+      - name: Run published TypeScript client against Dart server
         run: >-
           dart run tool/testing/run_ts_2026_07_28_interop.dart
           --direction=ts-to-dart
@@ -101,20 +101,19 @@ jobs:
           python -m pip install
           -r test/interop/python_2026_07_28/requirements.txt
 
-      - name: Run Dart client against published Python beta server
+      - name: Run Dart client against published Python release candidate server
         env:
           MCP_PYTHON: python
         run: >-
           dart run tool/testing/run_python_2026_07_28_interop.dart
           --direction=dart-to-python
 
-      - name: Verify known published Python beta client gap
+      - name: Run published Python release candidate client against Dart server
         env:
           MCP_PYTHON: python
         run: >-
           dart run tool/testing/run_python_2026_07_28_interop.dart
           --direction=python-to-dart
-          --expect-published-python-client-gap
 
   browser-2026-07-28-interop:
     runs-on: ubuntu-latest

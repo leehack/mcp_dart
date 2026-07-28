@@ -9,14 +9,14 @@
   },
   "tasksExtension": {
     "ref": "2c1425d9a288b9b1f489430fe1e00bb392b47e48",
-    "finalReleaseReviewed": false,
-    "pinnedContentsReviewed": false,
-    "failedStateErrorShapeReviewed": false,
-    "timingFieldIntegerSemanticsReviewed": false
+    "maturity": "experimental",
+    "experimentalStatusReviewed": true,
+    "pinnedContentsReviewed": true,
+    "knownWireDifferencesReviewed": true
   },
   "missingRequiredClientCapability": {
     "code": -32021,
-    "finalTextsAgree": false
+    "coreFinalReleaseReviewed": false
   },
   "subscriptionTermination": {
     "finalTextsAgree": false
@@ -29,9 +29,9 @@
     "finalReleaseReviewed": false
   },
   "publishedInteropFixtures": {
-    "typescript": "2.0.0-beta.5",
-    "pythonMcp": "2.0.0b2",
-    "pythonMcpTypes": "2.0.0b2",
+    "typescript": "2.0.0",
+    "pythonMcp": "2.0.0rc1",
+    "pythonMcpTypes": "2.0.0rc1",
     "finalReleaseReviewed": false
   }
 }

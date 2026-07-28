@@ -526,9 +526,10 @@ server.registerTool(
 
 ### MCP 2026-07-28 Tasks extension
 
-The MCP 2026-07-28 extension is server-directed. Both peers advertise
-`io.modelcontextprotocol/tasks`, the client makes a normal `tools/call`, and the
-server may return a durable `CreateTaskExtensionResult`. See the
+This experimental extension is server-directed and is not currently an
+official MCP extension or part of Core conformance. Both peers advertise
+`io.modelcontextprotocol/tasks`, the client makes a normal `tools/call`, and
+the server may return a durable `CreateTaskExtensionResult`. See the
 [server guide](server-guide.md#mcp-2026-07-28-tasks-extension) for the low-level
 creation and `tasks/get` handlers.
 

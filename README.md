@@ -17,12 +17,10 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
 > The coordinated dev.3 prerelease pairs `mcp_dart 2.3.0-dev.3` with
-> `mcp_dart_cli 0.2.0-dev.3`. It passes the official alpha.9 MCP
-> `2026-07-28` client suite, including all 25 authorization scenarios. Its
-> server suite has three exact expected diagnostics because the published
-> referee predates spec PR #3002; merged conformance PR #403 semantics pass
-> locally. This is prerelease evidence, not a claim about the final
-> specification, which has not shipped.
+> `mcp_dart_cli 0.2.0-dev.3`. Current source passes the official alpha.10 MCP
+> `2026-07-28` client and server suites with no expected failures, including
+> all 25 authorization scenarios. This is prerelease evidence, not a claim
+> about the final specification, which has not shipped.
 
 ## Preview requirements
 
@@ -80,14 +78,15 @@ commands.
 - Stdio, Streamable HTTP, IO stream, and custom transports.
 - OAuth client discovery/PKCE hooks, server authentication callbacks, DNS
   rebinding protection, and strict Streamable HTTP validation.
-- A Tasks extension implementation, MCP Apps metadata helpers, and generic
-  extension negotiation. Extensions are separate from core protocol coverage.
+- An experimental Tasks extension implementation, MCP Apps metadata helpers,
+  and generic extension negotiation. Extensions are separate from core
+  protocol coverage; Tasks is not an official extension or part of the SDK's
+  core conformance claim.
 - Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, bidirectional
-  published TypeScript beta interoperability, Python beta server
-  interoperability with an exact pre-#3002 client-gap check, real-browser
-  transport tests, a real Flutter Web service integration in Chrome,
-  deterministic widget tests, and an independent pinned JSON Schema Test
-  Suite gate.
+  published TypeScript SDK 2.0.0 interoperability, bidirectional Python SDK
+  2.0.0rc1 interoperability, real-browser transport tests, a real Flutter Web
+  service integration in Chrome, deterministic widget tests, and an
+  independent pinned JSON Schema Test Suite gate.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host
