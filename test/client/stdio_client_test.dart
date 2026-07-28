@@ -689,7 +689,7 @@ void main() {
 
         try {
           await expectLater(
-            client.connect(transport),
+            client.connect(transport).timeout(_stdioRecoveryTimeout),
             throwsA(
               isA<McpError>()
                   .having(

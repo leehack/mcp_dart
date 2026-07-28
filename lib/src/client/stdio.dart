@@ -54,8 +54,11 @@ class StdioServerParameters {
   /// Automatic recovery uses a short exponential backoff and stops after five
   /// restarts within 30 seconds to prevent an unbounded child-process loop.
   ///
-  /// Unexpected exit is reported through [StdioClientTransport.onerror].
-  /// Ordinary in-flight requests are not replayed automatically.
+  /// An exit during the initial `server/discover` probe is settled as a
+  /// synthetic `server/discover` error response, allowing a stable client to
+  /// fall back to `initialize` while the transport restarts. Other unexpected
+  /// exits are reported through [StdioClientTransport.onerror]. Ordinary
+  /// in-flight requests are not replayed automatically.
   final bool restartOnUnexpectedExit;
 
   /// Creates parameters for launching the stdio server.
