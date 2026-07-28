@@ -59,6 +59,8 @@ for protocol details.
 
 - Registered tool, prompt, resource, and resource-template handles now remove
   and rename their registrations consistently.
+- Stdio legacy fallback now starts a fresh child when the initial
+  `server/discover` compatibility probe causes the server process to exit.
 - Malformed newline-delimited frames no longer strand valid messages later in
   the same input chunk.
 - Shutdown, restart, request-ID reuse, subscription cancellation, and
