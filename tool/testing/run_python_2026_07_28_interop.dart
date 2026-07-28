@@ -46,11 +46,11 @@ Future<void> main(List<String> args) async {
 
   try {
     if (selectedDirection != 'dart-to-python') {
-      final exitCode =
+      final pythonClientExitCode =
           await _runPythonClientAgainstDartServer(repoRoot, fixtureDir, python);
-      if (exitCode != 0) {
+      if (pythonClientExitCode != 0) {
         throw StateError(
-          'Python MCP 2026-07-28 client exited with $exitCode',
+          'Python MCP 2026-07-28 client exited with $pythonClientExitCode',
         );
       }
     }
