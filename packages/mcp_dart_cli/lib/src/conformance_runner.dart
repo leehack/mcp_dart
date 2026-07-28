@@ -1682,7 +1682,7 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
   await server.connect(serverTransport);
   serverTransport.emit(
     JsonRpcInitializeRequest(
-      id: 'stateless-initialize',
+      id: 'stateful-initialize',
       initParams: const InitializeRequest(
         protocolVersion: _mcp2026ProtocolVersion,
         capabilities: ClientCapabilities(),
@@ -1694,7 +1694,7 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
 
   final serverResponse = _expectSingleErrorFreeResponse(
     serverTransport.sentMessages,
-    id: 'stateless-initialize',
+    id: 'stateful-initialize',
   );
   if (serverResponse.result['protocolVersion'] !=
       latestInitializationProtocolVersion) {
