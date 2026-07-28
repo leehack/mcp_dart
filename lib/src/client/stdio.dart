@@ -882,8 +882,9 @@ class StdioClientTransport
             error: JsonRpcErrorData(
               code: ErrorCode.connectionClosed.value,
               message:
-                  'Stdio server exited during server/discover; a fresh process '
-                  'is ready for legacy initialization.',
+                  'Stdio server exited during server/discover; the transport '
+                  'is restarting with a fresh process for legacy '
+                  'initialization.',
               data: {
                 'method': Method.serverDiscover,
                 'freshProcess': true,
