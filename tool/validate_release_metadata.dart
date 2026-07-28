@@ -64,7 +64,7 @@ void main(List<String> args) {
   );
   if (result.isPrerelease) {
     stdout.writeln(
-      'Final-spec acknowledgements are deferred for this prerelease.',
+      'Final-release acknowledgements are deferred for this prerelease.',
     );
   }
 }

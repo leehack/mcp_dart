@@ -260,29 +260,35 @@ class ReleaseMetadataValidator {
       label: 'Tasks extension',
       value: manifest['tasksExtension'],
       pinPath: 'tool/testing/mcp_2026_07_28_tasks_spec_ref.txt',
-      requireFinalReview: !isPrerelease,
+      requireFinalReview: false,
       errors: errors,
     );
-    if (!isPrerelease) {
-      final tasks = manifest['tasksExtension'];
-      if (tasks is Map<String, Object?>) {
+    final tasks = manifest['tasksExtension'];
+    if (tasks is Map<String, Object?>) {
+      if (tasks['maturity'] != 'experimental') {
+        errors.add(
+          'The Tasks extension must remain classified as experimental until '
+          'its upstream repository declares otherwise.',
+        );
+      }
+      _validateExperimentalTasksDisclosures(errors);
+      if (!isPrerelease) {
+        if (tasks['experimentalStatusReviewed'] != true) {
+          errors.add(
+            'Stable release blocked: the Tasks extension experimental status '
+            'has not been reviewed and documented.',
+          );
+        }
         if (tasks['pinnedContentsReviewed'] != true) {
           errors.add(
-            'Stable release blocked: the pinned Tasks checkout contents have '
-            'not been audited against the SDK.',
+            'Stable release blocked: the pinned experimental Tasks checkout '
+            'contents have not been audited against the SDK.',
           );
         }
-        if (tasks['failedStateErrorShapeReviewed'] != true) {
+        if (tasks['knownWireDifferencesReviewed'] != true) {
           errors.add(
-            'Stable release blocked: Tasks failed-state error prose and schema '
-            'have not been reconciled with the SDK JsonRpcErrorData shape.',
-          );
-        }
-        if (tasks['timingFieldIntegerSemanticsReviewed'] != true) {
-          errors.add(
-            'Stable release blocked: Tasks ttlMs and pollIntervalMs integer '
-            'prose has not been reconciled with the number schema and SDK '
-            'integer representation.',
+            'Stable release blocked: known experimental Tasks wire '
+            'differences have not been reviewed and documented.',
           );
         }
       }
@@ -321,10 +327,10 @@ class ReleaseMetadataValidator {
           'implementation.',
         );
       }
-      if (!isPrerelease && capability['finalTextsAgree'] != true) {
+      if (!isPrerelease && capability['coreFinalReleaseReviewed'] != true) {
         errors.add(
-          'Stable release blocked: final core and Tasks texts must agree on '
-          'MissingRequiredClientCapability.',
+          'Stable release blocked: the final Core '
+          'MissingRequiredClientCapability contract has not been reviewed.',
         );
       }
     }
@@ -384,6 +390,34 @@ class ReleaseMetadataValidator {
     }
 
     _validateInteropFixtures(manifest, isPrerelease, errors);
+  }
+
+  void _validateExperimentalTasksDisclosures(List<String> errors) {
+    const paths = <String>[
+      'README.md',
+      'doc/spec-coverage-2026-07-28.md',
+    ];
+    for (final path in paths) {
+      final input = _readText(path, errors);
+      if (input.isEmpty && !File(_path(path)).existsSync()) {
+        continue;
+      }
+      final source = _stripMarkdownCommentsAndFences(input);
+      final identifiesExperimental = RegExp(
+        r'experimental\s+Tasks extension',
+        caseSensitive: false,
+      ).hasMatch(source);
+      final excludesOfficialStatus = RegExp(
+        r'not (?:currently )?an official (?:MCP )?extension',
+        caseSensitive: false,
+      ).hasMatch(source);
+      if (!identifiesExperimental || !excludesOfficialStatus) {
+        errors.add(
+          '$path must disclose the Tasks extension as experimental and not '
+          'an official MCP extension.',
+        );
+      }
+    }
   }
 
   void _validateStableCoreAuditCommand({

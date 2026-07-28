@@ -44,7 +44,7 @@ Future<void> main(List<String> args) async {
   if (args.contains('--expect-published-ts-client-gap')) {
     stderr.writeln(
       '--expect-published-ts-client-gap is retired: the pinned published '
-      'TypeScript beta must pass both directions.',
+      'TypeScript SDK must pass both directions.',
     );
     exitCode = 64;
     return;

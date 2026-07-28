@@ -1624,8 +1624,8 @@ void main() {
       ).toJson();
       expect(explicitEmptyMeta, containsPair('_meta', <String, dynamic>{}));
 
-      // Temporary compatibility for the pinned TypeScript and Python beta
-      // fixtures. Remove once corrected SDK releases are pinned.
+      // Read-only compatibility for older TypeScript and Python prerelease
+      // peers that still send the pre-spec identity shape.
       final legacyIdentity = DiscoverResult.fromJson({
         'resultType': resultTypeComplete,
         'supportedVersions': [previewProtocolVersion],

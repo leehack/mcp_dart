@@ -54,19 +54,7 @@ void main() {
     );
     expect(
       result.errors,
-      contains(contains('final core and Tasks texts must agree')),
-    );
-    expect(
-      result.errors,
-      contains(contains('pinned Tasks checkout contents')),
-    );
-    expect(
-      result.errors,
-      contains(contains('Tasks failed-state error prose and schema')),
-    );
-    expect(
-      result.errors,
-      contains(contains('Tasks ttlMs and pollIntervalMs integer prose')),
+      contains(contains('final Core MissingRequiredClientCapability')),
     );
     expect(
       result.errors,
@@ -93,6 +81,120 @@ void main() {
 
     expect(result.errors, isEmpty);
     expect(result.isPrerelease, isFalse);
+  });
+
+  test('blocks stable publishing until experimental Tasks is audited', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final metadataFile = File(
+      '${fixture.path}/tool/release/mcp_2026_07_28_release_metadata.json',
+    );
+    final metadata =
+        jsonDecode(metadataFile.readAsStringSync()) as Map<String, dynamic>;
+    final tasks = metadata['tasksExtension'] as Map<String, dynamic>;
+    tasks['experimentalStatusReviewed'] = false;
+    tasks['pinnedContentsReviewed'] = false;
+    tasks['knownWireDifferencesReviewed'] = false;
+    tasks['finalReleaseReviewed'] = true;
+    metadataFile.writeAsStringSync(jsonEncode(metadata));
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(contains('Tasks extension experimental status')),
+    );
+    expect(
+      result.errors,
+      contains(contains('pinned experimental Tasks checkout')),
+    );
+    expect(
+      result.errors,
+      contains(contains('known experimental Tasks wire differences')),
+    );
+  });
+
+  test('rejects promoting Tasks beyond its upstream maturity', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final metadataFile = File(
+      '${fixture.path}/tool/release/mcp_2026_07_28_release_metadata.json',
+    );
+    final metadata =
+        jsonDecode(metadataFile.readAsStringSync()) as Map<String, dynamic>;
+    (metadata['tasksExtension'] as Map<String, dynamic>)['maturity'] = 'stable';
+    metadataFile.writeAsStringSync(jsonEncode(metadata));
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(contains('must remain classified as experimental')),
+    );
+  });
+
+  test('rejects a missing public experimental Tasks disclosure', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final readme = File('${fixture.path}/README.md');
+    readme.writeAsStringSync(
+      readme
+          .readAsStringSync()
+          .replaceFirst(
+            'An experimental Tasks extension implementation',
+            'A Tasks extension implementation',
+          )
+          .replaceFirst(
+            'Tasks is not an official extension',
+            'Tasks is implemented as an extension',
+          ),
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(
+        contains(
+          'README.md must disclose the Tasks extension as experimental',
+        ),
+      ),
+    );
+  });
+
+  test('does not add a disclosure error for a missing input', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    File('${fixture.path}/README.md').deleteSync();
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains('Missing release input: README.md.'),
+    );
+    expect(
+      result.errors,
+      isNot(
+        contains(
+          contains(
+            'README.md must disclose the Tasks extension as experimental',
+          ),
+        ),
+      ),
+    );
   });
 
   test('hyphens in stable build metadata do not select prerelease', () {
@@ -478,8 +580,8 @@ void main() {
     requirements.writeAsStringSync('''
 mcp==2.0.0b1
 mcp-types==2.0.0b1
-# mcp==2.0.0b2
-# mcp-types==2.0.0b2
+# mcp==2.0.0rc1
+# mcp-types==2.0.0rc1
 ''');
 
     final result = ReleaseMetadataValidator(fixture).validate(
@@ -999,16 +1101,8 @@ Directory _stableFixture(
         jsonDecode(metadataFile.readAsStringSync()) as Map<String, dynamic>;
     (metadata['coreSpecification']
         as Map<String, dynamic>)['finalReleaseReviewed'] = true;
-    (metadata['tasksExtension']
-        as Map<String, dynamic>)['finalReleaseReviewed'] = true;
-    (metadata['tasksExtension']
-        as Map<String, dynamic>)['pinnedContentsReviewed'] = true;
-    (metadata['tasksExtension']
-        as Map<String, dynamic>)['failedStateErrorShapeReviewed'] = true;
-    (metadata['tasksExtension']
-        as Map<String, dynamic>)['timingFieldIntegerSemanticsReviewed'] = true;
     (metadata['missingRequiredClientCapability']
-        as Map<String, dynamic>)['finalTextsAgree'] = true;
+        as Map<String, dynamic>)['coreFinalReleaseReviewed'] = true;
     (metadata['subscriptionTermination']
         as Map<String, dynamic>)['finalTextsAgree'] = true;
     (metadata['releaseDocumentation']

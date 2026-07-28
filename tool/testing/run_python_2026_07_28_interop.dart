@@ -35,12 +35,10 @@ Future<void> main(List<String> args) async {
     return;
   }
   final selectedDirection = direction ?? 'all';
-  final expectPublishedPythonGap =
-      args.contains('--expect-published-python-client-gap');
-  if (expectPublishedPythonGap && selectedDirection == 'dart-to-python') {
+  if (args.contains('--expect-published-python-client-gap')) {
     stderr.writeln(
-      '--expect-published-python-client-gap requires the python-to-dart '
-      'direction (or all).',
+      '--expect-published-python-client-gap is retired: the pinned published '
+      'Python release candidate must pass both directions.',
     );
     exitCode = 64;
     return;
@@ -48,32 +46,11 @@ Future<void> main(List<String> args) async {
 
   try {
     if (selectedDirection != 'dart-to-python') {
-      final result =
+      final pythonClientExitCode =
           await _runPythonClientAgainstDartServer(repoRoot, fixtureDir, python);
-      if (expectPublishedPythonGap) {
-        final isExpectedGap = result.exitCode != 0 &&
-            result.output.contains(
-              'Expected protocol 2026-07-28, got 2025-11-25',
-            );
-        if (!isExpectedGap) {
-          if (result.exitCode == 0) {
-            throw StateError(
-              'Published Python client unexpectedly passed; remove the '
-              'temporary spec #3002 expected-gap handling.',
-            );
-          }
-          throw StateError(
-            'Python client failed for an unexpected reason '
-            '(exit ${result.exitCode}).',
-          );
-        }
-        stdout.writeln(
-          '[expected-gap] Published Python beta client predates spec #3002; '
-          'remove this expectation after its 2026 schema is updated.',
-        );
-      } else if (result.exitCode != 0) {
+      if (pythonClientExitCode != 0) {
         throw StateError(
-          'Python MCP 2026-07-28 client exited with ${result.exitCode}',
+          'Python MCP 2026-07-28 client exited with $pythonClientExitCode',
         );
       }
     }
@@ -86,14 +63,7 @@ Future<void> main(List<String> args) async {
   }
 }
 
-class _PythonClientRun {
-  const _PythonClientRun(this.exitCode, this.output);
-
-  final int exitCode;
-  final String output;
-}
-
-Future<_PythonClientRun> _runPythonClientAgainstDartServer(
+Future<int> _runPythonClientAgainstDartServer(
   Directory repoRoot,
   Directory fixtureDir,
   String python,
@@ -123,7 +93,7 @@ Future<_PythonClientRun> _runPythonClientAgainstDartServer(
     ),
   );
   final serverStderr = _pipeLines(server.stderr, stderr, '[dart-server]');
-  late _PythonClientRun result;
+  late int result;
 
   try {
     final url = await serverUrl.future.timeout(
@@ -142,18 +112,15 @@ Future<_PythonClientRun> _runPythonClientAgainstDartServer(
       ['client.py', '--url', url],
       workingDirectory: fixtureDir.path,
     );
-    final clientOutput = StringBuffer();
     final clientStdout = _pipeLines(
       client.stdout,
       stdout,
       '[python-client]',
-      onLine: clientOutput.writeln,
     );
     final clientStderr = _pipeLines(
       client.stderr,
       stderr,
       '[python-client]',
-      onLine: clientOutput.writeln,
     );
     late int clientExit;
     try {
@@ -164,7 +131,7 @@ Future<_PythonClientRun> _runPythonClientAgainstDartServer(
       await _terminate(client);
       await Future.wait([clientStdout, clientStderr]);
     }
-    result = _PythonClientRun(clientExit, clientOutput.toString());
+    result = clientExit;
   } finally {
     await _terminate(server);
     await Future.wait([serverStdout, serverStderr]);

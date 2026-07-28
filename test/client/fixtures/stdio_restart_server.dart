@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _protocolVersion = '2026-07-28';
+const _legacyProtocolVersion = '2025-11-25';
 const _protocolVersionKey = 'io.modelcontextprotocol/protocolVersion';
 const _serverInfoKey = 'io.modelcontextprotocol/serverInfo';
 const _subscriptionIdKey = 'io.modelcontextprotocol/subscriptionId';
@@ -73,6 +74,9 @@ Future<void> main(List<String> arguments) async {
     }
 
     if (method == 'server/discover') {
+      if (replayBehavior == 'legacy-exit-on-discover') {
+        return;
+      }
       final exercisesModernDiscoveryRecovery = launchCount == 1 &&
           (replayBehavior == 'modern-discovery-error-exit' ||
               replayBehavior == 'modern-discovery-error-exit-after-retry');
@@ -130,6 +134,26 @@ Future<void> main(List<String> arguments) async {
           'params': <String, dynamic>{},
         });
       }
+      continue;
+    }
+
+    if (method == 'initialize' && replayBehavior == 'legacy-exit-on-discover') {
+      _writeMarkerAtomically(
+        File('${launchCountFile.path}.initialize'),
+        line,
+      );
+      _send({
+        'jsonrpc': '2.0',
+        'id': id,
+        'result': {
+          'protocolVersion': _legacyProtocolVersion,
+          'capabilities': <String, dynamic>{},
+          'serverInfo': {
+            'name': 'legacy-exit-on-discover-fixture',
+            'version': '1.0.0',
+          },
+        },
+      });
       continue;
     }
 

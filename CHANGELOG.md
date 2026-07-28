@@ -13,8 +13,8 @@ for protocol details.
   Draft 7 APIs, removing the `json_schema` and `quiver` dependencies.
 - Added dual-era protocol profiles, `server/discover`, stateless metadata,
   `subscriptions/listen`, multi-round tool/resource/prompt callbacks, the
-  independent Tasks extension, and any-root structured tool results for MCP
-  `2026-07-28`.
+  independently pinned experimental Tasks extension, and any-root structured
+  tool results for MCP `2026-07-28`.
 - Added stateless registration helpers and a backward-compatible
   `RegisteredStatelessTool` handle without widening the existing 2.2.2
   registration interfaces.
@@ -59,6 +59,8 @@ for protocol details.
 
 - Registered tool, prompt, resource, and resource-template handles now remove
   and rename their registrations consistently.
+- Stdio legacy fallback now starts a fresh child when the initial
+  `server/discover` compatibility probe causes the server process to exit.
 - Malformed newline-delimited frames no longer strand valid messages later in
   the same input chunk.
 - Shutdown, restart, request-ID reuse, subscription cancellation, and
@@ -68,10 +70,10 @@ for protocol details.
 
 - Added public API compatibility checks against `mcp_dart 2.2.2`, minimum-Dart
   dependency testing, and pinned core, Tasks, and JSON Schema conformance data.
-- The official alpha.9 MCP `2026-07-28` client suite, including all 25 OAuth
-  scenarios, passes. Post-#3002 server semantics pass locally.
-- Published TypeScript beta.5 interoperates bidirectionally. Python beta server
-  interoperability retains a documented pre-#3002 compatibility fallback.
+- The official alpha.10 MCP `2026-07-28` client and server suites pass with no
+  expected failures, including all 25 OAuth scenarios.
+- Published TypeScript SDK 2.0.0 and Python SDK 2.0.0rc1 interoperate
+  bidirectionally on the post-#3002 discovery wire.
 
 ### Breaking and compatibility notes
 

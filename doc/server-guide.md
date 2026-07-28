@@ -844,8 +844,9 @@ server.registerPrompt(
 ## Long-running tasks
 
 MCP has two task protocols that are not wire-compatible. Use the MCP 2026-07-28
-extension for stateless peers and retain the MCP 2025-11-25 API only when
-interoperating with a legacy peer.
+experimental extension for stateless peers and retain the MCP 2025-11-25 API
+only when interoperating with a legacy peer. The extension is not currently an
+official MCP extension or part of Core conformance.
 
 ### MCP 2026-07-28 Tasks extension
 

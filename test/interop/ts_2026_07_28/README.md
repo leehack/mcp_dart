@@ -1,12 +1,12 @@
 # MCP 2026-07-28 TypeScript SDK Interop
 
-This fixture is an experimental smoke test for the unreleased MCP 2026-07-28
-path against the official TypeScript SDK work in progress.
+This fixture is a smoke test for the MCP 2026-07-28 path against the published
+official TypeScript SDK 2.0.0 packages.
 
 It is intentionally separate from `test/interop/ts`, which tracks the published
 stable TypeScript SDK and MCP 2025-11-25 behavior. The fixture pins published
-`@modelcontextprotocol/client@2.0.0-beta.5` and
-`@modelcontextprotocol/server@2.0.0-beta.5` packages. This release includes the
+`@modelcontextprotocol/client@2.0.0` and
+`@modelcontextprotocol/server@2.0.0` packages. This release includes the
 post-spec-PR-#3002 identity shape, so both directions are required to pass.
 
 ## Run
@@ -26,7 +26,7 @@ dart run tool/testing/run_ts_2026_07_28_interop.dart \
 The reverse path first probes
 `test/conformance/mcp_2026_07_28_server.dart` directly and requires
 `server/discover` to advertise `2026-07-28`, omit body `serverInfo`, and expose
-identity in `_meta["io.modelcontextprotocol/serverInfo"]`. The published beta.5
+identity in `_meta["io.modelcontextprotocol/serverInfo"]`. The published 2.0.0
 client must then complete the full scenario. `src/client.mjs` asserts:
 
 - TypeScript client negotiation selects MCP 2026-07-28.
@@ -58,7 +58,7 @@ client must then complete the full scenario. `src/client.mjs` asserts:
   server observes cancellation without `notifications/cancelled`, and a
   follow-up status call succeeds.
 
-The Dart-to-TypeScript direction starts `src/server.mjs` with the TypeScript beta
+The Dart-to-TypeScript direction starts `src/server.mjs` with the TypeScript
 `createMcpHandler` entry and runs a Dart stable-profile client against it. That
 direction asserts `server/discover` negotiation, `tools/list`, `tools/call`,
 a one-time `HeaderMismatch` recovery that refreshes `tools/list` before retrying
@@ -67,15 +67,15 @@ elicitation retry, request-stream cancellation observed through the TypeScript
 server's Web Request `AbortSignal`, and a successful post-cancellation tool call.
 Failures are treated as interop failures.
 
-Keep this fixture anchored to the official preview behavior rather than the
-TypeScript beta implementation alone. In particular, `x-mcp-header` tests use
-only the draft-permitted primitive types: `string`, `integer`, and `boolean`.
-When TypeScript beta behavior conflicts with the draft, keep the draft as the
-assertion source and document the beta gap near the test.
+Keep this fixture anchored to the official specification behavior rather than
+the TypeScript implementation alone. In particular, `x-mcp-header` tests use
+only the permitted primitive types: `string`, `integer`, and `boolean`. When
+TypeScript behavior conflicts with the specification, keep the specification
+as the assertion source and document the peer gap near the test.
 
 CI runs this fixture in the dedicated `Run MCP 2026-07-28 Interop` workflow for
 relevant PRs, daily scheduled drift checks, and manual dispatch.
-Keep the fixture pinned to a published TypeScript SDK beta that exposes the
-MCP 2026-07-28 draft path. Do not restore obsolete Dart body output to make an
-older peer pass, and do not treat package publication alone as enough to re-pin
+Keep the fixture pinned to a published TypeScript SDK release that exposes the
+MCP 2026-07-28 path. Do not restore obsolete Dart body output to make an older
+peer pass, and do not treat package publication alone as enough to re-pin
 without rerunning both explicit directions.

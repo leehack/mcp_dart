@@ -34,7 +34,7 @@ class StdioServerParameters {
   /// The working directory to use when spawning the process.
   final String? workingDirectory;
 
-  /// Whether to restart a stateless MCP server after an unexpected exit.
+  /// Whether to restart an MCP server after a recoverable unexpected exit.
   ///
   /// Process recovery is unavailable on web platforms, but this field keeps
   /// the conditional export API-compatible with the Dart IO implementation.

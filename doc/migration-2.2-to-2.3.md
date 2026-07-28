@@ -107,11 +107,13 @@ schema, OAuth, or malformed-message validation in 2.3.
 
 ### Stdio child recovery
 
-After a successful stateless connection, `StdioClientTransport` now restarts a
+`StdioClientTransport` now restarts a child that exits during the initial
+`server/discover` compatibility probe, allowing legacy fallback to initialize a
+fresh process. After a successful stateless connection, it also restarts a
 child process that terminates unexpectedly. Active `subscriptions/listen`
 requests are restored, but ordinary in-flight requests are never replayed.
 Initialization-era sessions still close because their lifecycle cannot be
-restored safely. Recovery reports failures through
+restored safely. Stateless recovery reports failures through
 `StdioClientTransport.onerror` and stops after five restarts within 30 seconds.
 
 Set the previous close-on-exit behavior explicitly when required:

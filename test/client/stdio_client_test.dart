@@ -611,6 +611,111 @@ void main() {
     });
 
     _stdioRecoveryTest(
+      'restarts a fresh child before legacy initialization fallback',
+      () async {
+        final temporaryDirectory = await io.Directory.systemTemp
+            .createTemp('mcp_stdio_legacy_discovery_exit_');
+        final launchCountFile = io.File(
+          '${temporaryDirectory.path}${io.Platform.pathSeparator}launch-count',
+        );
+        final transport = StdioClientTransport(
+          StdioServerParameters(
+            command: io.Platform.resolvedExecutable,
+            args: [
+              'test/client/fixtures/stdio_restart_server.dart',
+              launchCountFile.path,
+              'legacy-exit-on-discover',
+            ],
+            stderrMode: io.ProcessStartMode.normal,
+          ),
+        );
+        final client = McpClient(
+          const Implementation(
+            name: 'legacy-discovery-exit-client',
+            version: '1.0.0',
+          ),
+        );
+
+        try {
+          await client.connect(transport).timeout(_stdioRecoveryTimeout);
+
+          expect(client.isConnected, isTrue);
+          expect(
+            client.getProtocolVersion(),
+            latestInitializationProtocolVersion,
+          );
+          expect(
+            client.getServerVersion()?.name,
+            'legacy-exit-on-discover-fixture',
+          );
+          expect(_stdioFixtureLaunchCount(launchCountFile), 2);
+          expect(
+            io.File('${launchCountFile.path}.initialize').existsSync(),
+            isTrue,
+          );
+        } finally {
+          await client.close();
+          await temporaryDirectory.delete(recursive: true);
+        }
+      },
+    );
+
+    _stdioRecoveryTest(
+      'require2026 does not initialize after a legacy discovery exit',
+      () async {
+        final temporaryDirectory = await io.Directory.systemTemp
+            .createTemp('mcp_stdio_required_discovery_exit_');
+        final launchCountFile = io.File(
+          '${temporaryDirectory.path}${io.Platform.pathSeparator}launch-count',
+        );
+        final transport = StdioClientTransport(
+          StdioServerParameters(
+            command: io.Platform.resolvedExecutable,
+            args: [
+              'test/client/fixtures/stdio_restart_server.dart',
+              launchCountFile.path,
+              'legacy-exit-on-discover',
+            ],
+            stderrMode: io.ProcessStartMode.normal,
+          ),
+        );
+        final client = McpClient(
+          const Implementation(
+            name: 'required-discovery-exit-client',
+            version: '1.0.0',
+          ),
+          options: const McpClientOptions(protocol: McpProtocol.require2026),
+        );
+
+        try {
+          await expectLater(
+            client.connect(transport).timeout(_stdioRecoveryTimeout),
+            throwsA(
+              isA<McpError>()
+                  .having(
+                    (error) => error.code,
+                    'code',
+                    ErrorCode.connectionClosed.value,
+                  )
+                  .having(
+                    (error) => error.message,
+                    'message',
+                    contains('fresh process'),
+                  ),
+            ),
+          );
+          expect(
+            io.File('${launchCountFile.path}.initialize').existsSync(),
+            isFalse,
+          );
+        } finally {
+          await client.close();
+          await temporaryDirectory.delete(recursive: true);
+        }
+      },
+    );
+
+    _stdioRecoveryTest(
         'settles a discovery retry lost during modern child recovery',
         () async {
       final harness = await _RawRecoveryHarness.start(

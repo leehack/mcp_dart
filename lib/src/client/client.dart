@@ -710,7 +710,13 @@ class McpClient extends Protocol {
     }
 
     if (error.code == ErrorCode.connectionClosed.value) {
-      return message.contains('Server not initialized');
+      final data = error.data;
+      final freshProcessRecovery =
+          transport is! ProtocolVersionAwareTransport &&
+              data is Map &&
+              data['method'] == Method.serverDiscover &&
+              data['freshProcess'] == true;
+      return message.contains('Server not initialized') || freshProcessRecovery;
     }
 
     if (error.code == ErrorCode.internalError.value &&

@@ -40,19 +40,25 @@ class StdioServerParameters {
   /// If null, inherits the current working directory.
   final String? workingDirectory;
 
-  /// Whether to restart a stateless MCP server after an unexpected exit.
+  /// Whether to restart an MCP server after a recoverable unexpected exit.
   ///
-  /// Recovery is enabled only after the transport has identified a successful
-  /// stateless MCP connection. Initialization-era sessions still close because
-  /// they cannot be restored without repeating the lifecycle handshake.
+  /// Recovery is enabled while probing `server/discover`, so a legacy server
+  /// that exits on the unknown pre-initialization request can be initialized
+  /// on a fresh process. Recovery is also enabled after the transport has
+  /// identified a successful stateless MCP connection. Initialization-era
+  /// sessions still close because they cannot be restored without repeating
+  /// the lifecycle handshake.
   /// Active `subscriptions/listen` requests are replayed after a restart. An
   /// idle child that exits with code zero is treated as server-initiated clean
   /// shutdown; code zero while requests or subscriptions are active is not.
   /// Automatic recovery uses a short exponential backoff and stops after five
   /// restarts within 30 seconds to prevent an unbounded child-process loop.
   ///
-  /// Unexpected exit is reported through [StdioClientTransport.onerror].
-  /// Ordinary in-flight requests are not replayed automatically.
+  /// An exit during the initial `server/discover` probe is settled as a
+  /// synthetic `server/discover` error response, allowing a stable client to
+  /// fall back to `initialize` while the transport restarts. Other unexpected
+  /// exits are reported through [StdioClientTransport.onerror]. Ordinary
+  /// in-flight requests are not replayed automatically.
   final bool restartOnUnexpectedExit;
 
   /// Creates parameters for launching the stdio server.
@@ -736,16 +742,20 @@ class StdioClientTransport
       return;
     }
 
-    final hasActiveProtocolWork =
-        _pendingStatelessRequests.isNotEmpty || _activeSubscriptions.isNotEmpty;
+    final isLegacyDiscoveryProbeExit =
+        _protocolMode == _StdioProtocolMode.unknown &&
+            _pendingDiscoveryRequests.isNotEmpty;
+    final hasActiveProtocolWork = isLegacyDiscoveryProbeExit ||
+        _pendingStatelessRequests.isNotEmpty ||
+        _activeSubscriptions.isNotEmpty;
     final exitedUnexpectedly = recoveryForced ||
         exitError != null ||
         exitCode != 0 ||
         hasActiveProtocolWork;
     final canRestart = exitedUnexpectedly &&
         _serverParams.restartOnUnexpectedExit &&
-        _protocolMode == _StdioProtocolMode.stateless &&
-        _restartArmed;
+        (isLegacyDiscoveryProbeExit ||
+            (_protocolMode == _StdioProtocolMode.stateless && _restartArmed));
     if (!canRestart) {
       if (exitError != null) {
         _reportError(exitError);
@@ -768,23 +778,38 @@ class StdioClientTransport
     }
 
     _restartArmed = false;
+    final failedDiscoveryProbes = isLegacyDiscoveryProbeExit
+        ? List<RequestId>.of(_pendingDiscoveryRequests)
+        : const <RequestId>[];
+    if (isLegacyDiscoveryProbeExit) {
+      _pendingDiscoveryRequests.clear();
+    }
     final lostRequests = List<RequestId>.of(_pendingStatelessRequests);
     _pendingStatelessRequests.clear();
+    _pendingDiscoveryRequests.removeAll(lostRequests);
     final restartGeneration = ++_restartGeneration;
     final restart = _restartAfterUnexpectedExit(
       restartGeneration,
       restartDelay,
     );
     _restartFuture = restart;
-    _failLostStatelessRequests(lostRequests, exitCode, exitError);
-    _reportError(
-      exitError ??
-          StateError(
-            'Stdio server process exited unexpectedly with code $exitCode. '
-            'The process is restarting; ordinary in-flight requests were not '
-            'replayed.',
-          ),
-    );
+    if (failedDiscoveryProbes.isNotEmpty) {
+      _failLegacyDiscoveryProbes(
+        failedDiscoveryProbes,
+        exitCode,
+        exitError,
+      );
+    } else {
+      _failLostStatelessRequests(lostRequests, exitCode, exitError);
+      _reportError(
+        exitError ??
+            StateError(
+              'Stdio server process exited unexpectedly with code $exitCode. '
+              'The process is restarting; ordinary in-flight requests were not '
+              'replayed.',
+            ),
+      );
+    }
     unawaited(
       restart.whenComplete(() {
         if (identical(_restartFuture, restart)) {
@@ -841,6 +866,42 @@ class StdioClientTransport
         _reportError(
           StateError(
             'Failed to settle lost stdio request $requestId: $error',
+          ),
+        );
+      }
+    }
+  }
+
+  void _failLegacyDiscoveryProbes(
+    List<RequestId> requestIds,
+    int? exitCode,
+    Error? exitError,
+  ) {
+    for (final requestId in requestIds) {
+      try {
+        onmessage?.call(
+          JsonRpcError(
+            id: requestId,
+            error: JsonRpcErrorData(
+              code: ErrorCode.connectionClosed.value,
+              message:
+                  'Stdio server exited during server/discover; the transport '
+                  'is restarting with a fresh process for legacy '
+                  'initialization.',
+              data: {
+                'method': Method.serverDiscover,
+                'freshProcess': true,
+                if (exitCode != null) 'exitCode': exitCode,
+                if (exitError != null) 'cause': exitError.toString(),
+                'retriable': true,
+              },
+            ),
+          ),
+        );
+      } catch (error) {
+        _reportError(
+          StateError(
+            'Failed to settle stdio discovery probe $requestId: $error',
           ),
         );
       }

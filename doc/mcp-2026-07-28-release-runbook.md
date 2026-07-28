@@ -51,32 +51,32 @@ does not replace the final-spec delta review or authorize a stable release.
 
 1. Record the final core specification tag and commit SHA.
 2. Diff that SHA against `tool/testing/mcp_2026_07_28_spec_ref.txt`.
-3. Record the independently released Tasks extension tag and commit SHA, then
-   diff it against `tool/testing/mcp_2026_07_28_tasks_spec_ref.txt`. Review
+3. Record the exact experimental Tasks extension commit SHA, then diff it
+   against `tool/testing/mcp_2026_07_28_tasks_spec_ref.txt`. Review
    `specification/draft/tasks.md`, `seps/2663-tasks-extension.md`, and
-   `schema/draft/schema.json`; the extension is not versioned by the core
-   specification repository. Audit the actual pinned checkout contents and
-   their wire contracts; a successful fetch or matching commit ID alone is not
-   evidence that the extension is implemented.
+   `schema/draft/schema.json`. The upstream repository describes Tasks as
+   experimental and not an official extension, and it has no independent
+   release that the stable Core SDK must wait for. Audit the actual pinned
+   checkout contents and their wire contracts; a successful fetch or matching
+   commit ID alone is not evidence that the extension is implemented.
 4. Review every schema, example, conformance, and normative prose change in
-   both ranges; do not rely only on generated schema diffs.
-   Explicitly reconcile the Tasks failed-state `error` contract: current
-   normative prose describes the JSON-RPC error shape, the current schema
-   accepts a generic JSON object, and the SDK currently exposes
-   `JsonRpcErrorData`. Do not acknowledge the stable gate until the final text,
-   schema, SDK type, and wire tests agree.
-5. Reconcile the Tasks timing-field contract. Current prose defines `ttlMs`
-   and `pollIntervalMs` as integer milliseconds, while the generated schema
-   accepts any JSON number. The SDK accepts mathematically integral values and
-   stores them as `int`. Do not set
-   `tasksExtension.timingFieldIntegerSemanticsReviewed` until the final prose,
-   schema, SDK representation, and negative fractional-value tests agree.
-6. Resolve the current cross-repository error-code conflict before publishing:
-   the core MCP 2026-07-28 specification requires
-   `MissingRequiredClientCapability`
-   (`-32021`) for missing per-request capabilities, while the Tasks extension
-   draft still names `-32003`. The SDK follows the core error registry; stop
-   the release if the final texts do not establish one interoperable value.
+   the Core range and the pinned Tasks checkout; do not rely only on generated
+   schema diffs.
+5. Keep the experimental Tasks differences explicit:
+   - failed-state prose describes a JSON-RPC error shape, the schema accepts a
+     generic JSON object, and the SDK exposes `JsonRpcErrorData`;
+   - `ttlMs` and `pollIntervalMs` are integer milliseconds in prose, JSON
+     numbers in the schema, and mathematically integral `int` values in Dart;
+   - the extension draft names `-32003` for
+     `MissingRequiredClientCapability`, while Core and the SDK use `-32021`;
+   - neither the official conformance package nor a checked-in cross-SDK
+     fixture covers Tasks.
+   Do not present Tasks as stable, official, or cross-SDK verified. These
+   acknowledged experimental differences do not block a stable Core release.
+6. Review the final Core `MissingRequiredClientCapability` contract and confirm
+   that the manifest code remains aligned with the SDK. Set
+   `missingRequiredClientCapability.coreFinalReleaseReviewed` only after that
+   final Core review.
 7. Reconcile server-initiated subscription termination across the final Core
    cancellation, subscriptions, transport, and schema texts. The current
    draft requires `notifications/cancelled` in the cancellation page, describes
@@ -87,18 +87,16 @@ does not replace the final-spec delta review or authorize a stable release.
    behavior and tests if
    the final contract differs, then set
    `subscriptionTermination.finalTextsAgree`.
-8. Update both `tool/testing/mcp_2026_07_28_spec_ref.txt` and
-   `tool/testing/mcp_2026_07_28_tasks_spec_ref.txt` to the reviewed final SHAs.
+8. Update `tool/testing/mcp_2026_07_28_spec_ref.txt` to the reviewed final Core
+   SHA. Update `tool/testing/mcp_2026_07_28_tasks_spec_ref.txt` only if the
+   separately reviewed experimental Tasks pin changes.
 9. Update `tool/release/mcp_2026_07_28_release_metadata.json` with those exact
-   SHAs. Set each `finalReleaseReviewed` field only after its complete delta
-   review, record the agreed capability error code, and acknowledge the final
-   error-code, conformance, and published-peer checks only after they pass.
-   Set `tasksExtension.pinnedContentsReviewed` and
-   `tasksExtension.failedStateErrorShapeReviewed`, and
-   `tasksExtension.timingFieldIntegerSemanticsReviewed` independently; none is
-   implied by `finalReleaseReviewed`.
-   These explicit acknowledgements intentionally block stable publishing now
-   while leaving coordinated prereleases available.
+   SHAs. Set final Core, documentation, conformance, and published-peer
+   acknowledgements only after their complete reviews. Keep
+   `tasksExtension.maturity` set to `experimental`; record its status, pinned
+   contents, and known wire-difference reviews separately. These explicit
+   acknowledgements block stable publishing when a required Core input is
+   incomplete without pretending Tasks has a final upstream release.
 10. Update the official conformance package and the published TypeScript and
    Python SDK fixtures only after each candidate passes locally in both
    supported directions.
@@ -114,9 +112,10 @@ does not replace the final-spec delta review or authorize a stable release.
    SDK fixture pins, dated spec paths, and document/example inventories all
    point at the same reviewed release inputs.
 
-The release is blocked if either final source is unavailable, the pinned
-example audit is not complete, the core and Tasks extension disagree on a wire
-contract, or an official suite needs an unexplained expected failure.
+The release is blocked if the final Core source is unavailable, the pinned Core
+example or document audit is incomplete, the experimental Tasks pin/status/gap
+review is incomplete, a final Core wire contract remains ambiguous, or an
+official suite needs an unexplained expected failure.
 
 ## 2. Run the release gate
 
@@ -191,8 +190,7 @@ MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
   --direction=dart-to-python
 MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
   dart run tool/testing/run_python_2026_07_28_interop.dart \
-  --direction=python-to-dart \
-  --expect-published-python-client-gap
+  --direction=python-to-dart
 dart run tool/testing/run_browser_2026_07_28_interop.dart
 dart run tool/testing/run_flutter_web_example_e2e.dart
 dart pub publish --dry-run

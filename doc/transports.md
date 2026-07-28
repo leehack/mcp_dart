@@ -135,8 +135,10 @@ during gaps with no listeners follow broadcast semantics and are discarded.
 Explicit `close()` closes the stream; a later `start()` creates a new stream
 lifecycle with an empty pre-listener buffer.
 
-After a stateless MCP connection is established, the client transport restarts
-an unexpectedly terminated child and replays active `subscriptions/listen`
+If a legacy server exits while rejecting the initial `server/discover` probe,
+the client transport starts a fresh child before falling back to `initialize`.
+After a stateless MCP connection is established, it also restarts an
+unexpectedly terminated child and replays active `subscriptions/listen`
 requests with their original IDs. It validates the replacement server's
 acknowledgments before forwarding new subscription events. Equivalent replay
 acknowledgments are transparent; changed replacement filters are exposed on
