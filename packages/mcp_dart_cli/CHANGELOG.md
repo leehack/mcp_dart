@@ -1,9 +1,7 @@
-## Unreleased
+## 0.2.0
 
 - Fixed `inspect-server` support for MCP 2026-07-28 elicitation, roots, and
   resource subscriptions.
-
-## 0.2.0-dev.3
 
 - Development now targets Dart 3.12; the SDK and SDK-only generated projects
   support Dart 3.4.

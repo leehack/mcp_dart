@@ -2780,7 +2780,7 @@ void main() {
           id: 0,
           method: 'test/method',
           meta: buildProtocolRequestMeta(
-            protocolVersion: previewProtocolVersion,
+            protocolVersion: stableProtocolVersion,
             clientInfo: const Implementation(
               name: 'test-client',
               version: '1.0.0',
@@ -2810,7 +2810,7 @@ void main() {
           .single;
       expect(
         cancellation.meta?[McpMetaKey.protocolVersion],
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
       expect(
         cancellation.meta?[McpMetaKey.clientInfo],
@@ -2832,7 +2832,7 @@ void main() {
           id: 0,
           method: 'test/method',
           meta: buildProtocolRequestMeta(
-            protocolVersion: previewProtocolVersion,
+            protocolVersion: stableProtocolVersion,
             clientInfo: const Implementation(
               name: 'test-client',
               version: '1.0.0',
@@ -2880,7 +2880,7 @@ void main() {
           id: 0,
           method: 'test/method',
           meta: buildProtocolRequestMeta(
-            protocolVersion: previewProtocolVersion,
+            protocolVersion: stableProtocolVersion,
             clientInfo: const Implementation(
               name: 'test-client',
               version: '1.0.0',

@@ -37,9 +37,9 @@ Future<void> main() async {
   try {
     await client.connect(transport);
     final protocolVersion = client.getProtocolVersion();
-    if (protocolVersion != previewProtocolVersion) {
+    if (protocolVersion != stableProtocolVersion) {
       throw StateError(
-        'Expected $previewProtocolVersion, got $protocolVersion',
+        'Expected $stableProtocolVersion, got $protocolVersion',
       );
     }
     print('Negotiated protocol: $protocolVersion');

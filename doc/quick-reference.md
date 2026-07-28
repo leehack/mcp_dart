@@ -8,20 +8,20 @@ Use this page for common `mcp_dart` calls. The [server guide](server-guide.md),
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.3.0-dev.3
+  mcp_dart: ^2.3.0
 ```
 
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
 ```
 
-The dev.3 SDK requires Dart 3.4 or later. The coordinated dev.3 CLI requires
+The 2.3.0 SDK requires Dart 3.4 or later. The coordinated 0.2.0 CLI requires
 Dart 3.12 or later.
 
 ## Protocol profile
 
-The 2.3.0 preview defaults to `McpProtocol.stable`: try MCP `2026-07-28`
-preview, then fall back to legacy initialization when needed. Body-only
+The 2.3.0 SDK defaults to `McpProtocol.stable`: try MCP `2026-07-28`, then
+fall back to legacy initialization when needed. Body-only
 discovery probes are bounded to five seconds; HTTP retains its normal request
 timeout.
 
@@ -33,7 +33,7 @@ const strictServerOptions = McpServerOptions(
 ```
 
 See the [MCP 2026-07-28 transition guide](mcp-2026-07-28.md) before depending on
-draft-only behavior.
+protocol-specific behavior.
 
 ## Server
 
@@ -262,8 +262,8 @@ EmbeddedResource(
 );
 ```
 
-Tool results can contain multiple content items. The MCP 2026-07-28 preview also
-supports the documented draft-only structured-content helpers.
+Tool results can contain multiple content items. MCP 2026-07-28 also supports
+the documented structured-content helpers.
 
 ## JSON Schema
 

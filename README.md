@@ -6,28 +6,27 @@
 
 `mcp_dart` is a dual-era Dart and Flutter SDK for MCP clients, servers, and AI
 hosts. It implements the complete core client/server wire surface of the locked
-release candidate for the MCP 2026-07-28 specification, retains the MCP
-2025-11-25 feature set, and negotiates supported earlier initialization-based
-specifications.
+MCP 2026-07-28 specification, retains the MCP 2025-11-25 feature set, and
+negotiates supported earlier initialization-based specifications.
 
 Here, core means the normative wire requirements assigned to client and server
-roles by the pinned release-candidate specification. It excludes optional MCP
+roles by the pinned final specification. It excludes optional MCP
 extensions, host UI behavior, an authorization-server implementation, JSON
 Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
-> The coordinated dev.3 prerelease pairs `mcp_dart 2.3.0-dev.3` with
-> `mcp_dart_cli 0.2.0-dev.3`. Current source passes the official alpha.10 MCP
+> The coordinated stable release pairs `mcp_dart 2.3.0` with
+> `mcp_dart_cli 0.2.0`. Current source passes the official alpha.10 MCP
 > `2026-07-28` client and server suites with no expected failures, including
-> all 25 authorization scenarios. This is prerelease evidence, not a claim
-> about the final specification, which has not shipped.
+> all 25 authorization scenarios, plus bidirectional published TypeScript SDK
+> 2.0.0 and Python SDK 2.0.0rc1 interoperability.
 
-## Preview requirements
+## Requirements
 
 | Package | Minimum Dart SDK |
 | --- | --- |
-| `mcp_dart 2.3.0-dev.3` | 3.4 |
-| `mcp_dart_cli 0.2.0-dev.3` | 3.12 |
+| `mcp_dart 2.3.0` | 3.4 |
+| `mcp_dart_cli 0.2.0` | 3.12 |
 
 SDK-only generated projects retain the SDK's Dart 3.4 minimum. CLI projects
 use Dart 3.12 because the CLI and its toolchain target that release.
@@ -44,24 +43,22 @@ Use the latest stable package for production projects:
 dart pub add mcp_dart
 ```
 
-### Evaluate the MCP 2026-07-28 preview
+### Pin the coordinated stable release
 
-Select the prerelease explicitly:
+Pin the stable 2.3 line explicitly when reproducible dependency resolution is
+important:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.3.0-dev.3
+  mcp_dart: ^2.3.0
 ```
 
-The preview snippets use the coordinated dev.3 package line.
-Production-channel users should follow the
-documentation for the version resolved in their own `pubspec.lock`. Package
-channels are separate from protocol profiles: `McpProtocol.stable` names the
-SDK's default compatibility policy, not package or wire-spec maturity.
+The snippets below use the coordinated stable package line. Package versions
+remain separate from protocol profiles: `McpProtocol.stable` names the SDK's
+default compatibility policy.
 
-Prerelease packages are published in order: SDK first, then CLI. Verify the
-requested version is available on pub.dev before installing the CLI or creating
-a clean consumer project.
+The coordinated release publishes the SDK first and the CLI after the exact SDK
+version is available on pub.dev.
 
 For direct SDK integration, start with the
 [getting-started guide](https://github.com/leehack/mcp_dart/blob/main/doc/getting-started.md).
@@ -100,9 +97,9 @@ can manage multiple clients and servers.
 | `McpProtocol.legacy` | Initialization-era profile: negotiate the MCP 2025-11-25, MCP 2025-06-18, MCP 2025-03-26, MCP 2024-11-05, or MCP 2024-10-07 specification |
 | `McpProtocol.require2026` | Require MCP 2026-07-28 and reject legacy initialization |
 
-Use `stableProtocolVersion` for the official `2025-11-25` version,
-`previewProtocolVersion` for the MCP 2026-07-28 preview, and
-`defaultProtocolVersion` for this SDK preview's preferred version.
+Use `stableProtocolVersion` or `defaultProtocolVersion` for MCP `2026-07-28`.
+`previewProtocolVersion` remains as a deprecated alias for applications built
+against a 2.3 prerelease.
 `latestInitializationProtocolVersion` remains `2025-11-25` when the default
 profile falls back to the legacy lifecycle. For compatibility,
 `latestProtocolVersion` and `supportedProtocolVersions` retain their mcp_dart
@@ -117,7 +114,7 @@ final legacyClient = McpClient(
   options: const McpClientOptions(protocol: McpProtocol.legacy),
 );
 
-final strictPreviewServer = McpServer(
+final strict2026Server = McpServer(
   const Implementation(name: 'my-server', version: '1.0.0'),
   options: const McpServerOptions(protocol: McpProtocol.require2026),
 );
@@ -131,16 +128,16 @@ Applications upgrading from the stable 2.2 line should also follow the
 
 ## Quick start with the CLI
 
-Install the matching preview CLI:
+Install the matching stable CLI:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.0-dev.3
+dart pub global activate mcp_dart_cli 0.2.0
 mcp_dart create my_server
 cd my_server
 mcp_dart inspect
 ```
 
-The dev.3 CLI creates a project with `mcp_dart: ^2.3.0-dev.3`. The inspector
+The `0.2.0` CLI creates a project with `mcp_dart: ^2.3.0`. The inspector
 launches the generated stdio server itself. After leaving the interactive
 inspector, you can run a single tool directly:
 
@@ -170,7 +167,7 @@ for command options and scope.
 - Upgrade: [2.2 to 2.3 migration guide](https://github.com/leehack/mcp_dart/blob/main/doc/migration-2.2-to-2.3.md), [migration cookbooks](https://github.com/leehack/mcp_dart/blob/main/doc/migration-cookbooks.md), [MCP 2026-07-28 transition guide](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-07-28.md)
 - Build: [tools](https://github.com/leehack/mcp_dart/blob/main/doc/tools.md), [transports](https://github.com/leehack/mcp_dart/blob/main/doc/transports.md), [examples](https://github.com/leehack/mcp_dart/blob/main/doc/examples.md), [MCP Apps](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-apps.md)
 - Deploy: [Streamable HTTP security](https://github.com/leehack/mcp_dart/blob/main/doc/transports.md#dns-rebinding-protection), [OAuth examples](https://github.com/leehack/mcp_dart/tree/main/example/authentication), [Flutter recipes](https://github.com/leehack/mcp_dart/blob/main/doc/flutter-recipes.md)
-- Verify: [interop matrix](https://github.com/leehack/mcp_dart/blob/main/doc/interoperability.md), [MCP 2025-11-25 coverage](https://github.com/leehack/mcp_dart/blob/main/doc/spec-coverage-2025-11-25.md), [MCP 2026-07-28 preview coverage](https://github.com/leehack/mcp_dart/blob/main/doc/spec-coverage-2026-07-28.md), [day-0 runbook](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-07-28-release-runbook.md)
+- Verify: [interop matrix](https://github.com/leehack/mcp_dart/blob/main/doc/interoperability.md), [MCP 2025-11-25 coverage](https://github.com/leehack/mcp_dart/blob/main/doc/spec-coverage-2025-11-25.md), [MCP 2026-07-28 coverage](https://github.com/leehack/mcp_dart/blob/main/doc/spec-coverage-2026-07-28.md), [day-0 runbook](https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-07-28-release-runbook.md)
 
 Standalone integration examples may declare newer Dart SDK requirements; check
 each example README before running it.
@@ -214,7 +211,7 @@ surface. Re-check both packages' current releases before a production decision.
 
 - [Issues and bug reports](https://github.com/leehack/mcp_dart/issues)
 - [SDK on pub.dev](https://pub.dev/packages/mcp_dart)
-- [dev.3 API reference](https://pub.dev/documentation/mcp_dart/2.3.0-dev.3/)
+- [2.3.0 API reference](https://pub.dev/documentation/mcp_dart/2.3.0/)
 - [Changelog](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)
-- [MCP 2026-07-28 RC](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
+- [MCP 2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28)
 - [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25)

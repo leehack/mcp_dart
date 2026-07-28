@@ -101,7 +101,7 @@ Future<JsonRpcMessage> _receiveResponse(
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
-      protocolVersion: previewProtocolVersion,
+      protocolVersion: stableProtocolVersion,
       clientInfo: const Implementation(name: 'test-client', version: '1.0.0'),
       clientCapabilities: const ClientCapabilities(),
     );

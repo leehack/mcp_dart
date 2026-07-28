@@ -47,8 +47,8 @@ class ElicitRequest {
 
   /// Legacy URL elicitation identifier.
   ///
-  /// Current MCP `2026-07-28` draft URL elicitation requests no longer include
-  /// this field. It is retained for older wire shapes only.
+  /// MCP `2026-07-28` URL elicitation requests do not include this field. It is
+  /// retained for older wire shapes only.
   @Deprecated(
     'MCP 2026-07-28 URL elicitation requests do not include elicitationId.',
   )
@@ -390,10 +390,10 @@ void _validateElicitAction(String action) {
 /// Legacy parameters for the removed `notifications/elicitation/complete`
 /// notification.
 ///
-/// Current MCP `2026-07-28` draft schema no longer includes this notification
-/// in the client/server notification unions.
+/// MCP `2026-07-28` does not include this notification in the client/server
+/// notification unions.
 @Deprecated(
-  'notifications/elicitation/complete is not part of MCP 2026-07-28 draft.',
+  'notifications/elicitation/complete is not part of MCP 2026-07-28.',
 )
 class ElicitationCompleteNotification {
   /// The unique identifier for the elicitation, matching the original request.
@@ -415,10 +415,10 @@ class ElicitationCompleteNotification {
 
 /// Legacy notification sent from server to client when URL mode elicitation completes.
 ///
-/// Current MCP `2026-07-28` draft schema no longer includes this notification
-/// in the client/server notification unions.
+/// MCP `2026-07-28` does not include this notification in the client/server
+/// notification unions.
 @Deprecated(
-  'notifications/elicitation/complete is not part of MCP 2026-07-28 draft.',
+  'notifications/elicitation/complete is not part of MCP 2026-07-28.',
 )
 class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
   /// The notification parameters containing the elicitation ID.
@@ -461,8 +461,8 @@ class JsonRpcElicitationCompleteNotification extends JsonRpcNotification {
 /// before the original request can be retried.
 class URLElicitationRequiredErrorData {
   /// List of elicitations that are required to complete.
-  /// All elicitations MUST be URL mode. MCP `2026-07-28` draft URL
-  /// elicitations do not include `elicitationId`.
+  /// All elicitations MUST be URL mode. MCP `2026-07-28` URL elicitations do
+  /// not include `elicitationId`.
   final List<ElicitRequest> elicitations;
 
   const URLElicitationRequiredErrorData({required this.elicitations});
@@ -502,7 +502,7 @@ typedef ElicitRequestParams = ElicitRequest;
 
 /// Deprecated alias for [ElicitationCompleteNotification].
 @Deprecated(
-  'notifications/elicitation/complete is not part of MCP 2026-07-28 draft.',
+  'notifications/elicitation/complete is not part of MCP 2026-07-28.',
 )
 typedef ElicitationCompleteParams = ElicitationCompleteNotification;
 

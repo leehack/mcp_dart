@@ -6,7 +6,7 @@ void main() {
   group('MCP 2025-11-25 Protocol Updates', () {
     test('Initialization Protocol Version', () {
       expect(latestInitializationProtocolVersion, '2025-11-25');
-      expect(stableProtocolVersion, latestInitializationProtocolVersion);
+      expect(stableProtocolVersion, '2026-07-28');
       expect(
         McpProtocol.legacy.preferredProtocolVersion,
         latestInitializationProtocolVersion,

@@ -194,7 +194,7 @@ void main() {
           id: 'modern-task-get',
           getParams: const GetTaskRequest(taskId: 'modern-task'),
           meta: buildProtocolRequestMeta(
-            protocolVersion: previewProtocolVersion,
+            protocolVersion: stableProtocolVersion,
             clientCapabilities: const ClientCapabilities(
               extensions: {
                 mcpTasksExtensionId: <String, dynamic>{},

@@ -9,7 +9,9 @@ void main() {
   final repoRoot = Directory.current.absolute;
 
   test('accepts coordinated SDK and CLI prerelease metadata', () {
-    final validator = ReleaseMetadataValidator(repoRoot);
+    final fixture = _prereleaseFixture(repoRoot);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final validator = ReleaseMetadataValidator(fixture);
 
     final sdk = validator.validate(
       package: ReleasePackage.sdk,
@@ -29,7 +31,7 @@ void main() {
   test('rejects a tag that does not match package metadata', () {
     final result = ReleaseMetadataValidator(repoRoot).validate(
       package: ReleasePackage.sdk,
-      tag: 'v2.3.0',
+      tag: 'v2.3.0-dev.3',
     );
 
     expect(
@@ -554,9 +556,9 @@ void main() {
     );
     constants.writeAsStringSync(
       constants.readAsStringSync().replaceFirst(
-            'const stableProtocolVersion = previewProtocolVersion;',
+            'const stableProtocolVersion = "2026-07-28";',
             'const stableProtocolVersion = latestInitializationProtocolVersion;\n'
-                '// const stableProtocolVersion = previewProtocolVersion;',
+                '// const stableProtocolVersion = "2026-07-28";',
           ),
     );
 
@@ -838,6 +840,81 @@ TBD
       contains(contains('has no substantive release notes')),
     );
   });
+}
+
+Directory _prereleaseFixture(Directory repoRoot) {
+  final fixture = _stableFixture(
+    repoRoot,
+    finalInputsReviewed: false,
+    prepareStableCli: true,
+  );
+
+  final pubspec = File('${fixture.path}/pubspec.yaml');
+  pubspec.writeAsStringSync(
+    pubspec.readAsStringSync().replaceFirst(
+          'version: 2.3.0',
+          'version: 2.3.0-dev.3',
+        ),
+  );
+
+  final changelog = File('${fixture.path}/CHANGELOG.md');
+  changelog.writeAsStringSync(
+    changelog.readAsStringSync().replaceFirst(
+          '## 2.3.0',
+          '## 2.3.0-dev.3',
+        ),
+  );
+
+  final cliPubspec = File(
+    '${fixture.path}/packages/mcp_dart_cli/pubspec.yaml',
+  );
+  cliPubspec.writeAsStringSync(
+    cliPubspec
+        .readAsStringSync()
+        .replaceFirst('version: 0.2.0', 'version: 0.2.0-dev.3')
+        .replaceFirst('mcp_dart: ^2.3.0', 'mcp_dart: ^2.3.0-dev.3'),
+  );
+
+  final cliChangelog = File(
+    '${fixture.path}/packages/mcp_dart_cli/CHANGELOG.md',
+  );
+  cliChangelog.writeAsStringSync(
+    cliChangelog.readAsStringSync().replaceFirst(
+          '## 0.2.0',
+          '## 0.2.0-dev.3',
+        ),
+  );
+
+  final cliVersionSource = File(
+    '${fixture.path}/packages/mcp_dart_cli/lib/src/version.dart',
+  );
+  cliVersionSource.writeAsStringSync(
+    cliVersionSource
+        .readAsStringSync()
+        .replaceFirst(
+          "const packageVersion = '0.2.0';",
+          "const packageVersion = '0.2.0-dev.3';",
+        )
+        .replaceFirst(
+          "const generatedSdkConstraint = '^2.3.0';",
+          "const generatedSdkConstraint = '^2.3.0-dev.3';",
+        ),
+  );
+
+  for (final path in <String>[
+    'packages/templates/simple/__brick__/pubspec.yaml',
+    'packages/mcp_dart_cli/test/fixtures/dart_mcp_project/pubspec.yaml',
+  ]) {
+    final file = File('${fixture.path}/$path');
+    file.writeAsStringSync(
+      file.readAsStringSync().replaceFirst(
+            'mcp_dart: ^2.3.0',
+            'mcp_dart: ^2.3.0-dev.3',
+          ),
+    );
+  }
+
+  return fixture;
 }
 
 Directory _stableFixture(

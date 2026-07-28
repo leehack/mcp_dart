@@ -17,7 +17,7 @@ Map<String, Object?> buildAnonymousMcp20260728DiscoveryRequest() {
     'method': Method.serverDiscover,
     'params': {
       '_meta': {
-        McpMetaKey.protocolVersion: previewProtocolVersion,
+        McpMetaKey.protocolVersion: stableProtocolVersion,
         McpMetaKey.clientCapabilities: <String, Object?>{},
       },
     },
@@ -37,7 +37,7 @@ Future<void> assertDartMcp20260728DiscoveryWire(
       HttpHeaders.acceptHeader,
       'application/json, text/event-stream',
     );
-    request.headers.set('MCP-Protocol-Version', previewProtocolVersion);
+    request.headers.set('MCP-Protocol-Version', stableProtocolVersion);
     request.headers.set('Mcp-Method', Method.serverDiscover);
     request.add(
       utf8.encode(jsonEncode(buildAnonymousMcp20260728DiscoveryRequest())),
@@ -87,9 +87,9 @@ void validateDartMcp20260728DiscoveryWireResponse(String body) {
   }
   final supportedVersions = result['supportedVersions'];
   if (supportedVersions is! List ||
-      !supportedVersions.contains(previewProtocolVersion)) {
+      !supportedVersions.contains(stableProtocolVersion)) {
     throw StateError(
-      'Dart server/discover did not advertise $previewProtocolVersion: '
+      'Dart server/discover did not advertise $stableProtocolVersion: '
       '$result',
     );
   }

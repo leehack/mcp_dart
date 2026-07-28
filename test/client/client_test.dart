@@ -215,7 +215,7 @@ void main() {
       final discoverRequest = requests.first;
       expect(
         discoverRequest.meta?[McpMetaKey.protocolVersion],
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
       final initializeRequest = transport.sentMessages
           .whereType<JsonRpcRequest>()

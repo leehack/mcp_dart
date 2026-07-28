@@ -216,7 +216,7 @@ void main() {
           ),
         ),
         meta: const {
-          McpMetaKey.protocolVersion: previewProtocolVersion,
+          McpMetaKey.protocolVersion: stableProtocolVersion,
         },
       );
 
@@ -225,7 +225,7 @@ void main() {
       expect(json['params']['notifications']['toolsListChanged'], isTrue);
       expect(
         json['params']['_meta'][McpMetaKey.protocolVersion],
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
 
       final parsed = JsonRpcMessage.fromJson(json);
@@ -235,7 +235,7 @@ void main() {
       expect(listen.listenParams.notifications.toolsListChanged, isTrue);
       expect(
         listen.meta?[McpMetaKey.protocolVersion],
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
     });
 

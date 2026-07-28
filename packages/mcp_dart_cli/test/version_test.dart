@@ -36,7 +36,7 @@ void main() {
       final sdkConstraint = dependencies['mcp_dart'] as String;
 
       expect(generatedSdkConstraint, sdkConstraint);
-      expect(isPrereleaseVersion(packageVersion), isTrue);
+      expect(isPrereleaseVersion(packageVersion), isFalse);
       expect(defaultTemplateUrl, contains('mcp_dart_cli-v$packageVersion'));
       expect(defaultTemplateUrl, isNot(contains('/main/')));
     },

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:mason_logger/mason_logger.dart';
 import 'package:mcp_dart_cli/src/update_command.dart';
-import 'package:mcp_dart_cli/src/version.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:pub_updater/pub_updater.dart';
 import 'package:test/test.dart';
@@ -50,7 +49,7 @@ void main() {
         final prereleaseCommand = UpdateCommand(
           logger: logger,
           pubUpdater: pubUpdater,
-          currentVersion: packageVersion,
+          currentVersion: '0.2.0-dev.3',
         );
 
         final result = await prereleaseCommand.run();

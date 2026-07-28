@@ -848,7 +848,7 @@ void main() {
         'id': 'top-level-only',
         'method': Method.toolsList,
         '_meta': {
-          McpMetaKey.protocolVersion: previewProtocolVersion,
+          McpMetaKey.protocolVersion: stableProtocolVersion,
           McpMetaKey.clientCapabilities: <String, dynamic>{},
         },
       };
@@ -858,7 +858,7 @@ void main() {
         'method': Method.toolsList,
         'params': {
           '_meta': {
-            McpMetaKey.protocolVersion: previewProtocolVersion,
+            McpMetaKey.protocolVersion: stableProtocolVersion,
             McpMetaKey.clientCapabilities: <String, dynamic>{},
           },
         },
@@ -943,14 +943,14 @@ void main() {
         'jsonrpc': jsonRpcVersion,
         'method': 'notifications/custom',
         '_meta': {
-          McpMetaKey.protocolVersion: previewProtocolVersion,
+          McpMetaKey.protocolVersion: stableProtocolVersion,
           'custom': true,
         },
       });
 
       expect(parsed, isA<JsonRpcNotification>());
       expect((parsed as JsonRpcNotification).meta, {
-        McpMetaKey.protocolVersion: previewProtocolVersion,
+        McpMetaKey.protocolVersion: stableProtocolVersion,
         'custom': true,
       });
     });

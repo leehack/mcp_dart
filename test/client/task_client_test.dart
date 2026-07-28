@@ -201,7 +201,7 @@ void main() {
 
     test('stateless immediate results preserve non-object structured data',
         () async {
-      mockClient.protocolVersion = previewProtocolVersion;
+      mockClient.protocolVersion = stableProtocolVersion;
       mockClient.mockResponse(Method.toolsCall, {
         'content': [
           {'type': 'text', 'text': '["fallback"]'},
@@ -228,7 +228,7 @@ void main() {
 
     test('callToolStream delegates 2026 task extension tools to callTool',
         () async {
-      mockClient.protocolVersion = previewProtocolVersion;
+      mockClient.protocolVersion = stableProtocolVersion;
       mockClient.serverCapabilities = ServerCapabilities(
         tools: const ServerCapabilitiesTools(),
         extensions: withMcpTasksExtension(null),
@@ -260,7 +260,7 @@ void main() {
 
     test('callToolStream rejects legacy task parameter for 2026 task extension',
         () async {
-      mockClient.protocolVersion = previewProtocolVersion;
+      mockClient.protocolVersion = stableProtocolVersion;
       mockClient.serverCapabilities = ServerCapabilities(
         tools: const ServerCapabilitiesTools(),
         extensions: withMcpTasksExtension(null),
@@ -283,7 +283,7 @@ void main() {
 
     test('callToolStream rejects legacy task parameter in stateless sessions',
         () async {
-      mockClient.protocolVersion = previewProtocolVersion;
+      mockClient.protocolVersion = stableProtocolVersion;
       mockClient.serverCapabilities = const ServerCapabilities(
         tools: ServerCapabilitiesTools(),
       );

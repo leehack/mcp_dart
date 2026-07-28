@@ -1,7 +1,7 @@
 # MCP 2025-11-25 Compatibility Migration
 
 > This guide covers the `McpProtocol.legacy` and MCP 2025-11-25
-> initialization-era surface. The dev.3
+> initialization-era surface. The mcp_dart 2.3.0
 > default prefers MCP `2026-07-28`; see the
 > [transition guide](mcp-2026-07-28.md) for current default behavior.
 
