@@ -216,6 +216,8 @@ mcp_dart skills install
 
 For compiled stable binaries, `update` downloads the matching asset from the
 latest stable CLI GitHub release. Pub-installed stable CLIs delegate to pub.
+Automatic updates remain disabled for prerelease builds; reinstall the desired
+prerelease explicitly.
 
 ## Development and release validation
 
