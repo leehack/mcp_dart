@@ -124,9 +124,9 @@ void main() {
 
   group('StreamableMcpServer', () {
     late StreamableMcpServer server;
-    final port = 8081;
-    final host = 'localhost';
-    final baseUrl = 'http://$host:$port/mcp';
+    late int port;
+    late String baseUrl;
+    const host = 'localhost';
 
     Future<http.Response> postPingWithSession(String sessionId) {
       return http.post(
@@ -200,9 +200,11 @@ void main() {
           );
         },
         host: host,
-        port: port,
+        port: 0,
       );
       await server.start();
+      port = server.boundPort;
+      baseUrl = 'http://$host:$port/mcp';
     });
 
     tearDown(() async {
@@ -2793,6 +2795,8 @@ void main() {
     test('server can be stopped and restarted', () async {
       await server.stop();
       await server.start();
+      port = server.boundPort;
+      baseUrl = 'http://$host:$port/mcp';
 
       // Should be able to handle OPTIONS request after restart
       final client = http.Client();
@@ -2808,7 +2812,7 @@ void main() {
     });
 
     test('server port is exposed correctly', () async {
-      expect(server.port, equals(port));
+      expect(server.port, equals(0));
       expect(server.boundPort, equals(port));
     });
 
