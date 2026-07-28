@@ -4,7 +4,7 @@
   "documents": {
     "architecture/index.mdx": {
       "scope": "Architecture and role context for the SDK client and server implementations.",
-      "sha256": "00f3acefa150501311ff91bc3b4c278a6d6cf93e2aca566876a1221d0b6e338e",
+      "sha256": "9037b342a1f23c056a564a48dda15b70e511dda6d09e96ab0e86f6f9086f9cc3",
       "evidence": [
         "lib/src/client/client.dart",
         "lib/src/server/server.dart"
@@ -12,7 +12,7 @@
     },
     "basic/authorization/authorization-server-discovery.mdx": {
       "scope": "Client-side protected-resource and authorization-server discovery; implementing an authorization server is outside SDK scope.",
-      "sha256": "22e2841a5e561afa1bd246c9e3cac64392402b3cac19d33da1e5d0987ccb3df8",
+      "sha256": "2d80118a0187d16f0122e64e6092c49f13d901c650f69712dce1a241a08cfb1d",
       "evidence": [
         "lib/src/client/streamable_https.dart",
         "test/client/streamable_https_test.dart"
@@ -20,7 +20,7 @@
     },
     "basic/authorization/client-registration.mdx": {
       "scope": "Client registration and client metadata consumption; authorization-server implementation is outside SDK scope.",
-      "sha256": "462d87866544bef7ce44fcbd6fcbb615eb30708e635d4d33a72ea7ae49866c23",
+      "sha256": "912365f0c2b859269d25a3e868580d3f222dd94c80dbc5c3b18024bec1e7daff",
       "evidence": [
         "lib/src/client/streamable_https.dart",
         "test/client/streamable_https_test.dart"
@@ -28,7 +28,7 @@
     },
     "basic/authorization/index.mdx": {
       "scope": "MCP authorization client behavior and authenticated Streamable HTTP integration.",
-      "sha256": "4e1e0b760e8c9ff7bc322502dccf4450cd626036648b8221f66eb4be371da3c3",
+      "sha256": "e31841f18b21f83f984689c0b0409577139cc50b698ce7c8fbd09a8c920a5241",
       "evidence": [
         "lib/src/client/streamable_https.dart",
         "test/example/oauth_client_example_test.dart",
@@ -37,7 +37,7 @@
     },
     "basic/authorization/security-considerations.mdx": {
       "scope": "Authorization client validation and server-side HTTP deployment protections applicable to the SDK.",
-      "sha256": "592befe83fe38e7184fda6e18a4dfba9748ab50280ea31fe1ad64974065a1612",
+      "sha256": "71dd5f0f236cfa26fb33a3cebf6fc71d4797f1225a06c9cae85bdda54ae50bf8",
       "evidence": [
         "test/client/streamable_https_test.dart",
         "test/server/streamable_security_harness_test.dart",
@@ -46,7 +46,7 @@
     },
     "basic/index.mdx": {
       "scope": "Core JSON-RPC, stateless request metadata, result, error, and JSON Schema rules.",
-      "sha256": "6b4f006a59842877eec7c401f1cb69d7199996e879afb9b3a16baf9667da8aa1",
+      "sha256": "ce6b16e0b22544bb7efc201b09906b5f3efb6d55a83881766b36b8a71cfbeb95",
       "evidence": [
         "lib/src/types/json_rpc.dart",
         "test/mcp_2026_07_28_test.dart",
@@ -55,7 +55,7 @@
     },
     "basic/patterns/cancellation.mdx": {
       "scope": "Core request and subscription cancellation semantics across transports.",
-      "sha256": "5e1144654517b0a8a604f943e8b7d5f906af8fb67327ead3b541e9138dc8f18d",
+      "sha256": "396030784a4af9b734a1c8d4faed13b31077e4a3a1f03c9c1f2048ec52794ba4",
       "evidence": [
         "lib/src/shared/protocol.dart",
         "test/mcp_2026_07_28_test.dart",
@@ -64,7 +64,7 @@
     },
     "basic/patterns/index.mdx": {
       "scope": "Core request-response, multi-round-trip, and subscribe-notify pattern overview.",
-      "sha256": "a99260186f4a7b04b8509ada060b5961650ee30fae3d661ecdde2c139c84c316",
+      "sha256": "9e08dd8b295cacc59bd4e233e9e1d6bfcc149695c265d95a18e2fddc9ad3968d",
       "evidence": [
         "lib/src/shared/protocol.dart",
         "test/mcp_2026_07_28_test.dart"
@@ -72,7 +72,7 @@
     },
     "basic/patterns/mrtr.mdx": {
       "scope": "Core multi-round-trip input_required request and retry behavior.",
-      "sha256": "4c5666ff2f20980dcbaf24314bfa0ee460f2b45496cd27ccd7fbc6b4678880bf",
+      "sha256": "a8671eb2a0d292c0dcbae19666ff4fc3d97f294ce8107e9f38259cc5a02a066b",
       "evidence": [
         "lib/src/types/json_rpc.dart",
         "test/mcp_2026_07_28_test.dart",
@@ -90,7 +90,7 @@
     },
     "basic/patterns/subscriptions.mdx": {
       "scope": "Core subscriptions/listen filters, per-subscription acknowledgment ordering, correlation, cancellation, and graceful close.",
-      "sha256": "d04929920af54510f817b9437a92d8c3b9dd12efd119a520dc29e0842037da34",
+      "sha256": "e70504733d1a38053890d4aa7c2d98ead670649193f17373d72ad13fc8d50187",
       "evidence": [
         "lib/src/types/subscriptions.dart",
         "lib/src/shared/protocol.dart",
@@ -100,7 +100,7 @@
     },
     "basic/transports/index.mdx": {
       "scope": "Transport requirements shared by stdio and Streamable HTTP.",
-      "sha256": "23ef5932869304b6f6d18ebe7e50ab98b2cecdece4ea5c2cd4320b15ccba937d",
+      "sha256": "59cc01897f5efadc1d412007a47df4f19b30725cdeaf264bbaf25e6b6b0aeb51",
       "evidence": [
         "lib/src/shared/transport.dart",
         "test/shared/transport_api_compatibility_test.dart"
@@ -108,7 +108,7 @@
     },
     "basic/transports/stdio.mdx": {
       "scope": "Stdio framing, process lifecycle, discovery probing, and legacy fallback.",
-      "sha256": "0e2b9315a1adc04107539ab9eed6591c9ac1861e543b2127f4716cffec22ced1",
+      "sha256": "6fd49766c40dc093d1f5993ab584bad0a06cbb496c2d3019c50f8fe3c8171e57",
       "evidence": [
         "lib/src/shared/stdio.dart",
         "test/integration/stdio_integration_test.dart",
@@ -117,7 +117,7 @@
     },
     "basic/transports/streamable-http.mdx": {
       "scope": "Modern stateless and legacy stateful Streamable HTTP wire behavior, routing headers, security, streaming, and fallback.",
-      "sha256": "dd6a6255abab9207007d3aca525e5ee235fd6f66a22c240698831b3cc61d9034",
+      "sha256": "22574bf11e004068493787203ce92be1162107cad717bcb805a15780d4fa69c9",
       "evidence": [
         "lib/src/client/streamable_https.dart",
         "lib/src/server/streamable_https.dart",
@@ -127,7 +127,7 @@
     },
     "basic/versioning.mdx": {
       "scope": "Modern version discovery and retry plus dual-era negotiation and legacy initialization fallback.",
-      "sha256": "2c15ff5cf707151cb03137f4650b3beda3e11ec8c2469634581376755d601dac",
+      "sha256": "bc02f271700bdecd88034f2d7801eb09110a71d65876487378d94e48dfeb90dc",
       "evidence": [
         "lib/src/client/client.dart",
         "lib/src/server/server.dart",
@@ -136,7 +136,7 @@
     },
     "changelog.mdx": {
       "scope": "Authoritative 2025-to-2026 change inventory used to audit the SDK release delta.",
-      "sha256": "ae3b479c1a985ce073a3ce04c49471c6874d0ce3a141b4f8d64be43cc8cad9c6",
+      "sha256": "ba4d0ba299ff0b45d26c52111d41dc0c862dd04ef973f63f93570c2b020f3974",
       "evidence": [
         "doc/spec-coverage-2026-07-28.md",
         "test/mcp_2026_07_28_test.dart"
@@ -144,7 +144,7 @@
     },
     "client/elicitation.mdx": {
       "scope": "Client elicitation handlers and 2026 MRTR form and URL wire shapes.",
-      "sha256": "ef3c22a7ed7a0d9a63d4e66eb16bbc1972690fa129ae14025995c14122767866",
+      "sha256": "7546d202b551e12303801420ee27f31a835ed5d8f16626869083798785b7b2b3",
       "evidence": [
         "lib/src/types/elicitation.dart",
         "test/elicitation_test.dart",
@@ -153,7 +153,7 @@
     },
     "client/roots.mdx": {
       "scope": "Deprecated but supported roots client capability and MRTR roots/list input handling.",
-      "sha256": "27b2df19e384aa4a86f497cff93b72532487e3a696531e98e287642e6b942455",
+      "sha256": "016aea34d76ccce86a82509dbf2699833bb8547bde5b3f4a8eb086dfd26a9ba2",
       "evidence": [
         "lib/src/types/roots.dart",
         "test/server/server_test.dart",
@@ -162,7 +162,7 @@
     },
     "client/sampling.mdx": {
       "scope": "Deprecated but supported sampling client capability and MRTR sampling/createMessage input handling.",
-      "sha256": "424770ecd936697bed7757925b32352b1140f544dfa8860bab0c851eb3a5edf3",
+      "sha256": "32fe2bb69f5a7caa85a6b9501f465cb1fb888d0c669cd13b23a071071a029df1",
       "evidence": [
         "lib/src/types/sampling.dart",
         "test/types/sampling_test.dart",
@@ -171,7 +171,7 @@
     },
     "deprecated.mdx": {
       "scope": "Deprecated feature compatibility and the modern profile's removed-method boundaries.",
-      "sha256": "95435a9c15ff5eb68b0770e6dec9f41bf8d9bc60ad4bc6a64b0755190e4a6794",
+      "sha256": "6ec5fc903d1be37e5ab0afda2acd7765aaf2909b90a2dca405e1aaea8936225b",
       "evidence": [
         "test/mcp_2026_07_28_test.dart",
         "test/mcp_2025_11_25_test.dart"
@@ -179,7 +179,7 @@
     },
     "index.mdx": {
       "scope": "Specification landing page and declared core client-server role boundary.",
-      "sha256": "429270d0f42cb85c468ce5a9b610800a7092ee19f13b96b43ab3bfdf6dccb3b7",
+      "sha256": "08d7378342e2ff34a68690007ccf5761ad4de6debe27761be2caa67162973ec6",
       "evidence": [
         "doc/spec-coverage-2026-07-28.md",
         "lib/mcp_dart.dart"
@@ -187,7 +187,7 @@
     },
     "schema.mdx": {
       "scope": "Authoritative generated wire schema and its official machine-readable examples.",
-      "sha256": "0ef01bddba15370b4b3df6781f64a0e09cbbf0e1815ceef45bd44375da18fcc9",
+      "sha256": "bdfb232898c79aefc8ae29571c1ac99a19d482f4bf35c177bcfe9a89d86e8514",
       "evidence": [
         "tool/spec_example_audit.dart",
         "test/tool/spec_example_audit_test.dart",
@@ -196,7 +196,7 @@
     },
     "server/discover.mdx": {
       "scope": "Required server/discover request, result, cache metadata, and capability advertisement.",
-      "sha256": "668398cfdce5312a288fca3dc8e98ac1ddae363fe97a93d06afb4324f01f99fa",
+      "sha256": "3fe1f5b5f1528014216b1e49cc3363b3c689c36bcb80a6957ddca6a04cea409c",
       "evidence": [
         "lib/src/types/initialization.dart",
         "lib/src/server/server.dart",
@@ -205,7 +205,7 @@
     },
     "server/index.mdx": {
       "scope": "Server feature overview for prompts, resources, and tools.",
-      "sha256": "989f3b346db2747276359fa7d95d68007848f46ab41ed5a0541cde839ae9445c",
+      "sha256": "9c34c72960816e613caa449a2e716233e815196321011742f5cbc9b620539bef",
       "evidence": [
         "lib/src/server/mcp_server.dart",
         "test/server/mcp_server_test.dart"
@@ -213,7 +213,7 @@
     },
     "server/prompts.mdx": {
       "scope": "Prompt listing, retrieval, arguments, content, cache metadata, and list-change delivery.",
-      "sha256": "45402a66fc4556c73adeadb5283f167f5856c3a3eb83a1c2243bf4b6960b8b64",
+      "sha256": "85e550635bbbbaa90dff8738f98808c62987e8cfce1d75305b55ca43f3c546de",
       "evidence": [
         "lib/src/types/prompts.dart",
         "test/server/mcp_test.dart",
@@ -222,7 +222,7 @@
     },
     "server/resources.mdx": {
       "scope": "Resource and template listing, reads, errors, cache metadata, and subscription-delivered changes.",
-      "sha256": "ae6bf2f2a065adb39b5906a5b1b70ae29fb8591249423a6309f085154304996d",
+      "sha256": "6fe5c5fb880abc4bd6046647f107ecda6a41c3c566ea13f74068affbddfce834",
       "evidence": [
         "lib/src/types/resources.dart",
         "test/types/resources_test.dart",
@@ -232,7 +232,7 @@
     },
     "server/tools.mdx": {
       "scope": "Tool listing and invocation, JSON Schema 2020-12, structured output, deterministic ordering, headers, and MRTR.",
-      "sha256": "05a6958e710d81f8ee0b5351a29c1f5993e0d3ce0e7714debe8b1690843e1c6a",
+      "sha256": "ed550806a58eb7744b858fb9f26001aa5e55dac9e2babe88317cc81d9d4c490d",
       "evidence": [
         "lib/src/types/tools.dart",
         "test/tool_schema_test.dart",
@@ -242,7 +242,7 @@
     },
     "server/utilities/caching.mdx": {
       "scope": "Cacheable result ttlMs and cacheScope validation and defaulting.",
-      "sha256": "db392b54dfc3427f2691bb215a02ad68b84c242977d610dca62520fb7afee0c0",
+      "sha256": "ca416e94b40c067de638bb101541969f2b956b33e9695761032ddc06245d514d",
       "evidence": [
         "lib/src/shared/protocol.dart",
         "lib/src/server/server.dart",
@@ -251,7 +251,7 @@
     },
     "server/utilities/completion.mdx": {
       "scope": "Completion capability, request, result, reference, argument, and pagination-limit behavior.",
-      "sha256": "7f0814fad2248e9931b7226cfb1e2437b02fdd75e3af05ddd1776ab194d5fa07",
+      "sha256": "1965c563aadb99e141131444caa81ff1860ed82bab314b286c40a0f0ba839f99",
       "evidence": [
         "lib/src/types/completion.dart",
         "test/server/mcp_test.dart",
@@ -260,7 +260,7 @@
     },
     "server/utilities/logging.mdx": {
       "scope": "Deprecated request-scoped logging metadata and notification behavior retained by the modern profile.",
-      "sha256": "dd4c1de5bf8363abc7b4ff8583a3f324e5450713280c6fcaad0f5abc92ef385e",
+      "sha256": "4e77ec3257e07ad69bfd6ed902771f14d6498b60fe6c9c325b8ff4bfc35647a6",
       "evidence": [
         "lib/src/types/logging.dart",
         "test/server/server_advanced_test.dart",
@@ -269,7 +269,7 @@
     },
     "server/utilities/pagination.mdx": {
       "scope": "Cursor request and nextCursor result behavior for paginated core list methods.",
-      "sha256": "e67040d4c77e1b86dfa8efd61e445e88b574611bed5f66729e3b5267b9eec981",
+      "sha256": "c4c7b674ae9ce16c012b5da35559d35768f6b7a508ceb5d2d71393a9f46afd2b",
       "evidence": [
         "test/types/resources_test.dart",
         "test/types_test.dart",

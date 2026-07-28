@@ -53,7 +53,7 @@ external-reference groups and no unsupported-dialect or invalid-schema groups.
 
 CI runs the official conformance gate, TypeScript interop suite, and full CLI
 conformance gate. The CLI workflow also runs the CLI tests and conformance gate.
-See the [MCP 2026-07-28 matrix](spec-coverage-2026-07-28.md) for preview gates.
+See the [MCP 2026-07-28 matrix](spec-coverage-2026-07-28.md) for release gates.
 
 ## Matrix
 

@@ -242,12 +242,12 @@ jobs:
       - name: Audit pinned MCP 2026-07-28 specification examples
         run: >
           dart run tool/spec_example_audit.dart
-          .dart_tool/mcp-spec/schema/draft/examples
+          .dart_tool/mcp-spec/schema/2026-07-28/examples
 
       - name: Audit pinned MCP 2026-07-28 specification document inventory
         run: >
           dart run tool/spec_document_inventory_audit.dart
-          .dart_tool/mcp-spec/docs/specification/draft
+          .dart_tool/mcp-spec/docs/specification/2026-07-28
 
       - name: Check out pinned MCP Tasks extension source
         run: |

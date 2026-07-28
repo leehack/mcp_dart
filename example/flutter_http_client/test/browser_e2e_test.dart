@@ -16,7 +16,7 @@ void main() {
       addTearDown(service.dispose);
 
       expect(await service.connect(), isTrue, reason: service.connectionError);
-      expect(service.negotiatedProtocolVersion, previewProtocolVersion);
+      expect(service.negotiatedProtocolVersion, stableProtocolVersion);
 
       for (var request = 1; request <= 12; request++) {
         await service.listTools();
@@ -45,7 +45,7 @@ void main() {
       );
 
       expect(await service.reconnect(), isTrue);
-      expect(service.negotiatedProtocolVersion, previewProtocolVersion);
+      expect(service.negotiatedProtocolVersion, stableProtocolVersion);
 
       await service.listTools();
       const finalMessage = 'flutter-browser-after-reconnect';

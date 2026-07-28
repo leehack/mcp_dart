@@ -10,7 +10,7 @@ void main() {
   test('browser client sustains repeated 2026 requests', () async {
     await _exerciseRepeatedRequests(
       protocol: McpProtocol.stable,
-      expectedVersion: previewProtocolVersion,
+      expectedVersion: stableProtocolVersion,
       label: '2026',
     );
   });
@@ -18,7 +18,7 @@ void main() {
   test('browser client sustains repeated legacy requests', () async {
     await _exerciseRepeatedRequests(
       protocol: McpProtocol.legacy,
-      expectedVersion: stableProtocolVersion,
+      expectedVersion: latestInitializationProtocolVersion,
       label: 'legacy',
     );
   });

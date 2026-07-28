@@ -502,7 +502,7 @@ void main() {
         version: '1.0.0',
       );
       final meta = buildProtocolRequestMeta(
-        protocolVersion: previewProtocolVersion,
+        protocolVersion: stableProtocolVersion,
         clientInfo: clientInfo,
         clientCapabilities: const ClientCapabilities(),
       );
@@ -592,7 +592,7 @@ void main() {
           JsonRpcServerDiscoverRequest(
             id: 2,
             meta: buildProtocolRequestMeta(
-              protocolVersion: previewProtocolVersion,
+              protocolVersion: stableProtocolVersion,
               clientInfo: const Implementation(
                 name: 'discovery-recovery-client',
                 version: '1.0.0',
@@ -752,7 +752,7 @@ void main() {
           JsonRpcServerDiscoverRequest(
             id: 2,
             meta: buildProtocolRequestMeta(
-              protocolVersion: previewProtocolVersion,
+              protocolVersion: stableProtocolVersion,
               clientInfo: clientInfo,
               clientCapabilities: const ClientCapabilities(),
             ),
@@ -774,7 +774,7 @@ void main() {
           JsonRpcServerDiscoverRequest(
             id: 3,
             meta: buildProtocolRequestMeta(
-              protocolVersion: previewProtocolVersion,
+              protocolVersion: stableProtocolVersion,
               clientInfo: clientInfo,
               clientCapabilities: const ClientCapabilities(),
             ),
@@ -1205,7 +1205,7 @@ void main() {
         version: '1.0.0',
       );
       final meta = buildProtocolRequestMeta(
-        protocolVersion: previewProtocolVersion,
+        protocolVersion: stableProtocolVersion,
         clientInfo: clientInfo,
         clientCapabilities: const ClientCapabilities(),
       );
@@ -1998,7 +1998,7 @@ Future<void> _expectBrokenStdinRecovery(String replayBehavior) async {
     version: '1.0.0',
   );
   final meta = buildProtocolRequestMeta(
-    protocolVersion: previewProtocolVersion,
+    protocolVersion: stableProtocolVersion,
     clientInfo: clientInfo,
     clientCapabilities: const ClientCapabilities(),
   );

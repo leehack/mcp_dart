@@ -266,7 +266,7 @@ void main() {
               meta: invalidMeta,
             ).toJson(),
         () => DiscoverResult(
-              supportedVersions: const [previewProtocolVersion],
+              supportedVersions: const [stableProtocolVersion],
               capabilities: const ServerCapabilities(),
               serverInfo: const Implementation(name: 'server', version: '1.0'),
               meta: invalidMeta,
@@ -371,7 +371,7 @@ void main() {
       };
       final discoverResult = {
         'resultType': resultTypeComplete,
-        'supportedVersions': [previewProtocolVersion],
+        'supportedVersions': [stableProtocolVersion],
         'capabilities': <String, dynamic>{},
         '_meta': {
           McpMetaKey.serverInfo: {'name': 'server', 'version': '1.0.0'},
@@ -397,7 +397,7 @@ void main() {
             }),
         () => DiscoverResult.fromJson({
               ...discoverResult,
-              'supportedVersions': [previewProtocolVersion, 1],
+              'supportedVersions': [stableProtocolVersion, 1],
             }),
         () => DiscoverResult.fromJson({
               ...discoverResult,

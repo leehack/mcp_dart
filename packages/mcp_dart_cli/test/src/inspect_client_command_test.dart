@@ -178,7 +178,7 @@ void main() {
           await client.connect(transport);
           expect(
             client.getProtocolVersion(),
-            previewProtocolVersion,
+            stableProtocolVersion,
           );
           final tools = await client.listTools();
           expect(tools.tools.map((tool) => tool.name), contains('echo'));
@@ -200,7 +200,7 @@ void main() {
         final metadata = json['metadata'] as Map<String, dynamic>;
         expect(
           metadata['protocolVersion'],
-          previewProtocolVersion,
+          stableProtocolVersion,
         );
         expect(
           (metadata['observedMethods'] as List<dynamic>).cast<String>(),
@@ -249,7 +249,7 @@ void main() {
           writeLine: outputLines.add,
         );
         final meta = buildProtocolRequestMeta(
-          protocolVersion: previewProtocolVersion,
+          protocolVersion: stableProtocolVersion,
           clientCapabilities: const ClientCapabilities(),
         );
 
@@ -336,7 +336,7 @@ void main() {
           writeLine: outputLines.add,
         );
         final meta = buildProtocolRequestMeta(
-          protocolVersion: previewProtocolVersion,
+          protocolVersion: stableProtocolVersion,
           clientInfo: const Implementation(
             name: 'direct-stateless-client',
             version: '1.0.0',
@@ -380,7 +380,7 @@ void main() {
             jsonDecode(await report.readAsString()) as Map<String, dynamic>;
         expect(json['passed'], isTrue);
         final metadata = json['metadata'] as Map<String, dynamic>;
-        expect(metadata['protocolVersion'], previewProtocolVersion);
+        expect(metadata['protocolVersion'], stableProtocolVersion);
         expect(
           metadata['clientInfo'],
           allOf(
@@ -472,7 +472,7 @@ void main() {
             const JsonRpcListToolsRequest(
               id: 1,
               meta: <String, dynamic>{
-                McpMetaKey.protocolVersion: previewProtocolVersion,
+                McpMetaKey.protocolVersion: stableProtocolVersion,
               },
             ).toJson(),
           ),
@@ -562,7 +562,7 @@ void main() {
               'id': 1,
               'method': Method.initialize,
               'params': <String, dynamic>{
-                'protocolVersion': stableProtocolVersion,
+                'protocolVersion': latestInitializationProtocolVersion,
                 'capabilities': <String, dynamic>{},
                 'clientInfo': <String, dynamic>{
                   'name': 'fixture-client',
@@ -608,7 +608,7 @@ void main() {
         );
         expect(
           (initializeResponse['result'] as Map)['protocolVersion'],
-          stableProtocolVersion,
+          latestInitializationProtocolVersion,
         );
         final toolsResponse = responses.singleWhere(
           (response) => response['id'] == 2,
@@ -662,7 +662,7 @@ void main() {
         writeLine: outputLines.add,
       );
       final meta = buildProtocolRequestMeta(
-        protocolVersion: previewProtocolVersion,
+        protocolVersion: stableProtocolVersion,
         clientInfo: const Implementation(
           name: 'stateless-client',
           version: '1.0.0',
@@ -781,7 +781,7 @@ void main() {
               'id': 1,
               'method': Method.initialize,
               'params': <String, dynamic>{
-                'protocolVersion': stableProtocolVersion,
+                'protocolVersion': latestInitializationProtocolVersion,
                 'capabilities': <String, dynamic>{
                   'roots': <String, dynamic>{},
                   'sampling': <String, dynamic>{},
@@ -930,7 +930,7 @@ void main() {
             'id': 1,
             'method': Method.initialize,
             'params': <String, dynamic>{
-              'protocolVersion': stableProtocolVersion,
+              'protocolVersion': latestInitializationProtocolVersion,
               'capabilities': <String, dynamic>{
                 'roots': <String, dynamic>{},
                 'sampling': <String, dynamic>{},

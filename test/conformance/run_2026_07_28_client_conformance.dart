@@ -271,7 +271,7 @@ void _printUsage() {
 Usage: dart run test/conformance/run_2026_07_28_client_conformance.dart [options]
 
 Options:
-  --scenario <name>              Run one scenario instead of the full draft list.
+  --scenario <name>              Run one scenario instead of the full list.
   --expected-failures <path>     Expected-failure list.
   --output-dir <path>            Directory for conformance artifacts.
   --conformance-package <pkg>    Conformance npm package.

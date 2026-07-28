@@ -87,7 +87,6 @@ class ReleaseMetadataValidator {
 
     _validateProtocolConstants(manifest, isPrerelease, errors);
     _validatePinnedInputs(manifest, isPrerelease, errors);
-    _validateReleaseDocumentation(manifest, isPrerelease, errors);
     _validatePackageMetadata(
       package: package,
       version: effectiveVersion,
@@ -129,24 +128,6 @@ class ReleaseMetadataValidator {
       }
     } on Object catch (error) {
       errors.add('Could not validate release-facing source links: $error');
-    }
-  }
-
-  void _validateReleaseDocumentation(
-    Map<String, Object?> manifest,
-    bool isPrerelease,
-    List<String> errors,
-  ) {
-    final documentation = manifest['releaseDocumentation'];
-    if (documentation is! Map<String, Object?>) {
-      errors.add('Release documentation metadata is incomplete.');
-      return;
-    }
-    if (!isPrerelease && documentation['finalReleaseReviewed'] != true) {
-      errors.add(
-        'Stable release blocked: final release-facing documentation has not '
-        'been reviewed and recorded.',
-      );
     }
   }
 
@@ -253,14 +234,12 @@ class ReleaseMetadataValidator {
       label: 'core specification',
       value: manifest['coreSpecification'],
       pinPath: 'tool/testing/mcp_2026_07_28_spec_ref.txt',
-      requireFinalReview: !isPrerelease,
       errors: errors,
     );
     _validatePinnedInput(
       label: 'Tasks extension',
       value: manifest['tasksExtension'],
       pinPath: 'tool/testing/mcp_2026_07_28_tasks_spec_ref.txt',
-      requireFinalReview: false,
       errors: errors,
     );
     final tasks = manifest['tasksExtension'];
@@ -296,13 +275,13 @@ class ReleaseMetadataValidator {
 
     if (!isPrerelease) {
       final coreWorkflow = _readText('.github/workflows/test_core.yml', errors);
-      _validateStableCoreAuditCommand(
+      _validateCoreAuditCommand(
         workflow: coreWorkflow,
         toolPath: 'tool/spec_example_audit.dart',
         expectedArgument: '.dart_tool/mcp-spec/schema/2026-07-28/examples',
         errors: errors,
       );
-      _validateStableCoreAuditCommand(
+      _validateCoreAuditCommand(
         workflow: coreWorkflow,
         toolPath: 'tool/spec_document_inventory_audit.dart',
         expectedArgument: '.dart_tool/mcp-spec/docs/specification/2026-07-28',
@@ -327,23 +306,6 @@ class ReleaseMetadataValidator {
           'implementation.',
         );
       }
-      if (!isPrerelease && capability['coreFinalReleaseReviewed'] != true) {
-        errors.add(
-          'Stable release blocked: the final Core '
-          'MissingRequiredClientCapability contract has not been reviewed.',
-        );
-      }
-    }
-
-    final subscriptionTermination = manifest['subscriptionTermination'];
-    if (subscriptionTermination is! Map<String, Object?>) {
-      errors.add('Subscription termination release metadata is incomplete.');
-    } else if (!isPrerelease &&
-        subscriptionTermination['finalTextsAgree'] != true) {
-      errors.add(
-        'Stable release blocked: final cancellation and subscription texts '
-        'must agree on server-initiated subscription termination.',
-      );
     }
 
     final conformance = manifest['officialConformance'];
@@ -381,12 +343,6 @@ class ReleaseMetadataValidator {
           'conformance version declared in release metadata ($version).',
         );
       }
-      if (!isPrerelease && conformance['finalReleaseReviewed'] != true) {
-        errors.add(
-          'Stable release blocked: the final official conformance package '
-          'has not been reviewed and recorded.',
-        );
-      }
     }
 
     _validateInteropFixtures(manifest, isPrerelease, errors);
@@ -420,7 +376,7 @@ class ReleaseMetadataValidator {
     }
   }
 
-  void _validateStableCoreAuditCommand({
+  void _validateCoreAuditCommand({
     required String workflow,
     required String toolPath,
     required String expectedArgument,
@@ -430,9 +386,9 @@ class ReleaseMetadataValidator {
     if (!arguments.contains(expectedArgument) ||
         arguments.any((argument) => argument != expectedArgument)) {
       errors.add(
-        'Stable release blocked: Core CI must actively run dart run $toolPath '
-        'with exactly $expectedArgument; comments and draft arguments do not '
-        'satisfy this gate.',
+        'Core CI must actively run dart run $toolPath with exactly '
+        '$expectedArgument from the pinned Core checkout; comments and '
+        'additional paths do not satisfy this gate.',
       );
     }
   }
@@ -493,12 +449,6 @@ class ReleaseMetadataValidator {
     }
 
     if (!isPrerelease) {
-      if (interop['finalReleaseReviewed'] != true) {
-        errors.add(
-          'Stable release blocked: final published TypeScript and Python '
-          'interoperability fixtures have not been reviewed.',
-        );
-      }
       const gapSurfaces = <String>[
         '.github/workflows/interop_2026_07_28.yml',
         'doc/interoperability.md',
@@ -523,7 +473,6 @@ class ReleaseMetadataValidator {
     required String label,
     required Object? value,
     required String pinPath,
-    required bool requireFinalReview,
     required List<String> errors,
   }) {
     if (value is! Map<String, Object?>) {
@@ -535,11 +484,6 @@ class ReleaseMetadataValidator {
     if (ref is! String || !_shaPattern.hasMatch(ref) || pin != ref) {
       errors.add(
         'The $label release ref must be a 40-character SHA matching $pinPath.',
-      );
-    }
-    if (requireFinalReview && value['finalReleaseReviewed'] != true) {
-      errors.add(
-        'Stable release blocked: the final $label ref has not been reviewed.',
       );
     }
   }

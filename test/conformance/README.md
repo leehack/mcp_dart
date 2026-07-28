@@ -74,8 +74,8 @@ The client runner invokes `mcp_2026_07_28_client.dart` against the conformance
 package's scenario servers and writes per-run artifacts under
 `.dart_tool/conformance/2026_07_28_client/`.
 
-The alpha.10 `json-schema-ref-no-deref` canary advertises the draft protocol,
-so the runner exercises it directly with `--spec-version 2026-07-28`. Local
+The alpha.10 `json-schema-ref-no-deref` canary advertises MCP 2026-07-28, so
+the runner exercises it directly with `--spec-version 2026-07-28`. Local
 protocol tests separately verify that network `$ref` values remain opaque and
 are preserved on the wire.
 

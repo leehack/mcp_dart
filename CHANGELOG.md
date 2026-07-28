@@ -1,6 +1,6 @@
-## 2.3.0-dev.3
+## 2.3.0
 
-`mcp_dart 2.3` adds the MCP `2026-07-28` release-candidate surface while
+`mcp_dart 2.3` adds the final MCP `2026-07-28` surface while
 preserving the public `2.2.2` API. See the
 [2.2 to 2.3 migration guide](https://github.com/leehack/mcp_dart/blob/main/doc/migration-2.2-to-2.3.md)
 for upgrade steps and the

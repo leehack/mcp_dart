@@ -235,7 +235,7 @@ Future<void> connect([String? url]) async {
     final protocolVersion = client!.getProtocolVersion();
     sessionId = transport!.sessionId;
     print('Negotiated protocol: $protocolVersion');
-    if (sessionId == null && protocolVersion == previewProtocolVersion) {
+    if (sessionId == null && protocolVersion == stableProtocolVersion) {
       print('No session ID (expected for stateless MCP 2026-07-28).');
     } else {
       print('Transport created with session ID: $sessionId');
@@ -271,7 +271,7 @@ Future<void> terminateSession() async {
     return;
   }
 
-  if (client!.getProtocolVersion() == previewProtocolVersion) {
+  if (client!.getProtocolVersion() == stableProtocolVersion) {
     print(
       'MCP 2026-07-28 is stateless and has no protocol session to terminate.',
     );

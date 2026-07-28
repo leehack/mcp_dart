@@ -9,7 +9,7 @@ const String _fixtureSuite = 'fixture';
 const String _specSuite = 'spec';
 const String _allSuites = 'all';
 const String _serverDiscoverMethod = 'server/discover';
-const String _previewProtocolVersion = '2026-07-28';
+const String _mcp2026ProtocolVersion = '2026-07-28';
 const String _protocolVersionMetaKey =
     'io.modelcontextprotocol/protocolVersion';
 const String _clientInfoMetaKey = 'io.modelcontextprotocol/clientInfo';
@@ -916,7 +916,7 @@ class _DiscoveringConformanceTransport extends Transport
           result: <String, dynamic>{
             'resultType': _resultTypeComplete,
             'supportedVersions': const <String>[
-              _previewProtocolVersion,
+              _mcp2026ProtocolVersion,
             ],
             'capabilities': capabilities,
             '_meta': const <String, dynamic>{
@@ -1005,7 +1005,7 @@ JsonRpcResponse _initializeResponse({
 }
 
 Map<String, dynamic> _statelessRequestMeta({
-  String protocolVersion = _previewProtocolVersion,
+  String protocolVersion = _mcp2026ProtocolVersion,
   ClientCapabilities capabilities = const ClientCapabilities(),
 }) {
   return <String, dynamic>{
@@ -1268,7 +1268,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
       'id': 'discover-1',
       'method': _serverDiscoverMethod,
       '_meta': <String, dynamic>{
-        _protocolVersionMetaKey: _previewProtocolVersion,
+        _protocolVersionMetaKey: _mcp2026ProtocolVersion,
       },
     },
     <String, dynamic>{
@@ -1287,7 +1287,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
     'method': _serverDiscoverMethod,
     'params': <String, dynamic>{
       '_meta': <String, dynamic>{
-        _protocolVersionMetaKey: _previewProtocolVersion,
+        _protocolVersionMetaKey: _mcp2026ProtocolVersion,
         _clientInfoMetaKey: <String, dynamic>{
           'name': 'client',
           'version': '1.0.0',
@@ -1301,7 +1301,7 @@ Future<void> _serverDiscoverRequiresRequestMeta() async {
       'Expected JsonRpcRequest, got ${parsed.runtimeType}.',
     );
   }
-  if (parsed.meta?[_protocolVersionMetaKey] != _previewProtocolVersion) {
+  if (parsed.meta?[_protocolVersionMetaKey] != _mcp2026ProtocolVersion) {
     throw StateError('Expected server/discover metadata to be preserved.');
   }
 }
@@ -1339,9 +1339,9 @@ Future<void> _serverDiscoverReturnsSupportedCapabilities() async {
   }
   final supportedVersions = result['supportedVersions'];
   if (supportedVersions is! List ||
-      !supportedVersions.contains(_previewProtocolVersion)) {
+      !supportedVersions.contains(_mcp2026ProtocolVersion)) {
     throw StateError(
-      'Expected server/discover to include $_previewProtocolVersion.',
+      'Expected server/discover to include $_mcp2026ProtocolVersion.',
     );
   }
   final resultMeta = result['_meta'];
@@ -1410,7 +1410,7 @@ Future<void> _statelessRequestsRequireCompleteRequestMeta() async {
       id: 'missing-client-info',
       method: _serverDiscoverMethod,
       meta: <String, dynamic>{
-        _protocolVersionMetaKey: _previewProtocolVersion,
+        _protocolVersionMetaKey: _mcp2026ProtocolVersion,
         _clientCapabilitiesMetaKey: <String, dynamic>{},
       },
     ),
@@ -1427,7 +1427,7 @@ Future<void> _statelessRequestsRequireCompleteRequestMeta() async {
       id: 'missing-client-capabilities',
       method: _serverDiscoverMethod,
       meta: <String, dynamic>{
-        _protocolVersionMetaKey: _previewProtocolVersion,
+        _protocolVersionMetaKey: _mcp2026ProtocolVersion,
         _clientInfoMetaKey: <String, dynamic>{
           'name': 'client',
           'version': '1.0.0',
@@ -1480,7 +1480,7 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
                     code: ErrorCode.unsupportedProtocolVersion.value,
                     message: 'Unsupported protocol version',
                     data: const <String, dynamic>{
-                      'supported': <String>[_previewProtocolVersion],
+                      'supported': <String>[_mcp2026ProtocolVersion],
                       'requested': '1900-01-01',
                     },
                   ),
@@ -1496,7 +1496,7 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
                   result: const <String, dynamic>{
                     'resultType': _resultTypeComplete,
                     'supportedVersions': <String>[
-                      _previewProtocolVersion,
+                      _mcp2026ProtocolVersion,
                     ],
                     'capabilities': <String, dynamic>{
                       'tools': <String, dynamic>{},
@@ -1547,9 +1547,9 @@ Future<void> _httpModernProtocolErrorsRetryDiscovery() async {
         'Modern HTTP 400 JSON-RPC errors must not trigger initialize fallback.',
       );
     }
-    if (client.getProtocolVersion() != _previewProtocolVersion) {
+    if (client.getProtocolVersion() != _mcp2026ProtocolVersion) {
       throw StateError(
-        'Expected retry to negotiate $_previewProtocolVersion, '
+        'Expected retry to negotiate $_mcp2026ProtocolVersion, '
         'got ${client.getProtocolVersion()}.',
       );
     }
@@ -1626,7 +1626,7 @@ Future<void> _httpModernMissingCapabilityErrorsDoNotFallback() async {
     const Implementation(name: 'client', version: '1.0.0'),
     options: const McpClientOptions(
       protocol: McpProtocol.stable,
-      protocolVersion: _previewProtocolVersion,
+      protocolVersion: _mcp2026ProtocolVersion,
       useServerDiscover: true,
     ),
   );
@@ -1682,9 +1682,9 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
   await server.connect(serverTransport);
   serverTransport.emit(
     JsonRpcInitializeRequest(
-      id: 'draft-initialize',
+      id: 'stateful-initialize',
       initParams: const InitializeRequest(
-        protocolVersion: _previewProtocolVersion,
+        protocolVersion: _mcp2026ProtocolVersion,
         capabilities: ClientCapabilities(),
         clientInfo: Implementation(name: 'client', version: '1.0.0'),
       ),
@@ -1694,7 +1694,7 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
 
   final serverResponse = _expectSingleErrorFreeResponse(
     serverTransport.sentMessages,
-    id: 'draft-initialize',
+    id: 'stateful-initialize',
   );
   if (serverResponse.result['protocolVersion'] !=
       latestInitializationProtocolVersion) {
@@ -1704,7 +1704,7 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
       'got ${serverResponse.result['protocolVersion']}.',
     );
   }
-  if (serverResponse.result['protocolVersion'] == _previewProtocolVersion) {
+  if (serverResponse.result['protocolVersion'] == _mcp2026ProtocolVersion) {
     throw StateError(
       'initialize must not negotiate a stateless protocol version.',
     );
@@ -1746,7 +1746,7 @@ Future<void> _initializeNegotiatesStatefulProtocolVersion() async {
       '${initializeRequest.params?['protocolVersion']}.',
     );
   }
-  if (initializeRequest.params?['protocolVersion'] == _previewProtocolVersion) {
+  if (initializeRequest.params?['protocolVersion'] == _mcp2026ProtocolVersion) {
     throw StateError(
       'client fallback initialize must not send a stateless protocol version.',
     );
@@ -1847,7 +1847,7 @@ Future<void> _rejectsMismatchedStatelessHttpRoutingHeaders() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _previewProtocolVersion)
+      ..set('MCP-Protocol-Version', _mcp2026ProtocolVersion)
       ..set('Mcp-Method', Method.toolsCall)
       ..set('Mcp-Name', 'wrong-tool');
     request.write(
@@ -1974,7 +1974,7 @@ Future<void> _requiresStatelessHttpRoutingHeaders() async {
     await expectHeaderMismatch(
       'http-missing-method-header',
       addRoutingHeaders: (headers) {
-        headers.set('MCP-Protocol-Version', _previewProtocolVersion);
+        headers.set('MCP-Protocol-Version', _mcp2026ProtocolVersion);
       },
       messageFragment: 'Mcp-Method header is required',
     );
@@ -2008,7 +2008,7 @@ Future<void> _rejectsStatelessHttpNonPostMethods() async {
     );
     request.headers.set(
       'MCP-Protocol-Version',
-      _previewProtocolVersion,
+      _mcp2026ProtocolVersion,
     );
 
     final response = await request.close();
@@ -2076,7 +2076,7 @@ Future<void> _rejectsStatelessHttpBatchPayloads() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _previewProtocolVersion);
+      ..set('MCP-Protocol-Version', _mcp2026ProtocolVersion);
     request.write(
       jsonEncode(
         <Map<String, dynamic>>[
@@ -2172,7 +2172,7 @@ Future<void> _taskRequestsRequireStatelessHttpNameHeader() async {
     missingNameRequest.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _previewProtocolVersion)
+      ..set('MCP-Protocol-Version', _mcp2026ProtocolVersion)
       ..set('Mcp-Method', _methodTasksUpdate);
     missingNameRequest.write(
       jsonEncode(
@@ -2230,7 +2230,7 @@ Future<void> _taskRequestsRequireStatelessHttpNameHeader() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _previewProtocolVersion)
+      ..set('MCP-Protocol-Version', _mcp2026ProtocolVersion)
       ..set('Mcp-Method', _methodTasksUpdate)
       ..set('Mcp-Name', 'task-1');
     request.write(
@@ -2290,8 +2290,8 @@ Future<void> _validatesStatelessHttpParameterHeaders() async {
       enableJsonResponse: true,
     ),
   );
-  // Keep this dynamic so mcp_dart_cli remains analyzable against the published
-  // mcp_dart lower bound until this SDK branch is released.
+  // Keep this dynamic so this diagnostic remains compatible with the oldest
+  // mcp_dart version allowed by the package constraint.
   (transport as dynamic).setToolParameterHeaderMappings(
     const <String, Map<String, String>>{
       'execute': <String, String>{
@@ -2336,7 +2336,7 @@ Future<void> _validatesStatelessHttpParameterHeaders() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _previewProtocolVersion)
+      ..set('MCP-Protocol-Version', _mcp2026ProtocolVersion)
       ..set('Mcp-Method', Method.toolsCall)
       ..set('Mcp-Name', 'execute');
     headers.forEach(request.headers.set);
@@ -2459,9 +2459,9 @@ Future<void> _validatesNumericParameterHeaders() async {
   var requestCount = 0;
   final transport = StreamableHttpClientTransport(
     Uri.parse('http://127.0.0.1:${httpServer.port}/mcp'),
-  )..protocolVersion = _previewProtocolVersion;
-  // Keep this dynamic so mcp_dart_cli remains analyzable against the published
-  // mcp_dart lower bound until this SDK branch is released.
+  )..protocolVersion = _mcp2026ProtocolVersion;
+  // Keep this dynamic so this diagnostic remains compatible with the oldest
+  // mcp_dart version allowed by the package constraint.
   (transport as dynamic).setToolParameterHeaderMappings(
     const <String, Map<String, String>>{
       'calculate': <String, String>{
@@ -2591,9 +2591,9 @@ Future<void> _encodesStatelessHttpParameterHeaderValues() async {
   final responseMessage = Completer<JsonRpcMessage>();
   final transport = StreamableHttpClientTransport(
     Uri.parse('http://127.0.0.1:${httpServer.port}/mcp'),
-  )..protocolVersion = _previewProtocolVersion;
-  // Keep this dynamic so mcp_dart_cli remains analyzable against the published
-  // mcp_dart lower bound until this SDK branch is released.
+  )..protocolVersion = _mcp2026ProtocolVersion;
+  // Keep this dynamic so this diagnostic remains compatible with the oldest
+  // mcp_dart version allowed by the package constraint.
   (transport as dynamic).setToolParameterHeaderMappings(
     const <String, Map<String, String>>{
       'echo': <String, String>{
@@ -2731,7 +2731,7 @@ Future<void> _rejectsStatelessHttpResponsePosts() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _previewProtocolVersion);
+      ..set('MCP-Protocol-Version', _mcp2026ProtocolVersion);
     request.write(
       jsonEncode(
         const JsonRpcResponse(
@@ -2854,7 +2854,7 @@ Future<void> _statelessHttpOmitsSessionHeaderAfterInitialize() async {
     statelessRequest.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _previewProtocolVersion)
+      ..set('MCP-Protocol-Version', _mcp2026ProtocolVersion)
       ..set('Mcp-Method', Method.toolsList)
       ..set('Mcp-Session-Id', confirmedSessionId);
     statelessRequest.write(
@@ -2927,7 +2927,7 @@ Future<void> _taskSubscriptionRequiresClientCapability() async {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.acceptHeader, 'application/json, text/event-stream')
-      ..set('MCP-Protocol-Version', _previewProtocolVersion)
+      ..set('MCP-Protocol-Version', _mcp2026ProtocolVersion)
       ..set('Mcp-Method', _methodSubscriptionsListen);
     request.write(
       jsonEncode(
@@ -4111,7 +4111,7 @@ Future<void> _rejectsRemovedStatelessCoreRpcs() async {
       id: 1,
       method: Method.initialize,
       params: const <String, dynamic>{
-        'protocolVersion': _previewProtocolVersion,
+        'protocolVersion': _mcp2026ProtocolVersion,
         'capabilities': <String, dynamic>{},
         'clientInfo': <String, dynamic>{
           'name': 'client',
@@ -4468,8 +4468,8 @@ McpServerOptions _mcpServerOptionsWithTaskStore({
   required ServerCapabilities capabilities,
   required InMemoryTaskStore taskStore,
 }) {
-  // Keep this dynamic so mcp_dart_cli remains analyzable against the published
-  // mcp_dart lower bound until this SDK branch is released.
+  // Keep this dynamic so this diagnostic remains compatible with the oldest
+  // mcp_dart version allowed by the package constraint.
   return Function.apply(
         McpServerOptions.new,
         const <Object?>[],
@@ -4484,8 +4484,8 @@ McpServerOptions _mcpServerOptionsWithTaskStore({
 
 Future<void> _subscriptionTaskIdsRequireClientCapability() async {
   final transport = _ConformanceTransport();
-  // Raw map parsing exercises the wire shape without depending on draft-only
-  // subscription request symbols in the hosted CLI package analysis.
+  // Raw map parsing exercises the wire shape without requiring
+  // protocol-specific subscription request symbols in hosted package analysis.
   // ignore: deprecated_member_use
   final server = Server(
     const Implementation(name: 'server', version: '1.0.0'),
@@ -4564,7 +4564,7 @@ Future<void> _subscriptionsListenRequiresRequestMeta() async {
     },
   );
   if (parsed is! JsonRpcRequest ||
-      parsed.meta?[_protocolVersionMetaKey] != _previewProtocolVersion) {
+      parsed.meta?[_protocolVersionMetaKey] != _mcp2026ProtocolVersion) {
     throw StateError(
       'Expected subscriptions/listen request to preserve params._meta, got '
       '$parsed.',
@@ -5156,7 +5156,7 @@ Future<void> _acceptsNumericElicitationNumberSchemaKeywords() async {
         },
       },
       '_meta': <String, dynamic>{
-        _protocolVersionMetaKey: _previewProtocolVersion,
+        _protocolVersionMetaKey: _mcp2026ProtocolVersion,
       },
     },
   });
@@ -5184,7 +5184,7 @@ Future<void> _acceptsNumericElicitationNumberSchemaKeywords() async {
           },
         },
         '_meta': <String, dynamic>{
-          _protocolVersionMetaKey: _previewProtocolVersion,
+          _protocolVersionMetaKey: _mcp2026ProtocolVersion,
         },
       },
     }),
@@ -5676,7 +5676,7 @@ void _expectUnsupportedProtocolVersionData(
   }
   final supported = data['supported'];
   if (supported is! List ||
-      !supported.contains(_previewProtocolVersion) ||
+      !supported.contains(_mcp2026ProtocolVersion) ||
       !supported.contains('2025-11-25')) {
     throw StateError(
       'Expected supported protocol versions in error data, got $supported.',
@@ -5749,9 +5749,9 @@ Future<void> _preservesIntegerProgressToken() async {
 }
 
 Future<void> _advertisesLatestProtocolVersion() async {
-  if (defaultProtocolVersion != previewProtocolVersion) {
+  if (defaultProtocolVersion != stableProtocolVersion) {
     throw StateError(
-      'Expected defaultProtocolVersion $previewProtocolVersion, '
+      'Expected defaultProtocolVersion $stableProtocolVersion, '
       'got $defaultProtocolVersion.',
     );
   }
@@ -5796,14 +5796,14 @@ Future<void> _stableProfileAdvertises2026ProtocolVersion() async {
   if (supportedVersions is! List) {
     throw StateError('Expected server/discover supportedVersions list.');
   }
-  if (supportedVersions.firstOrNull != _previewProtocolVersion) {
+  if (supportedVersions.firstOrNull != _mcp2026ProtocolVersion) {
     throw StateError(
-      'Expected $_previewProtocolVersion to be advertised first.',
+      'Expected $_mcp2026ProtocolVersion to be advertised first.',
     );
   }
-  if (!supportedVersions.contains(_previewProtocolVersion)) {
+  if (!supportedVersions.contains(_mcp2026ProtocolVersion)) {
     throw StateError(
-      'Expected server/discover to advertise $_previewProtocolVersion.',
+      'Expected server/discover to advertise $_mcp2026ProtocolVersion.',
     );
   }
 

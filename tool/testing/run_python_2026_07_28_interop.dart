@@ -38,7 +38,7 @@ Future<void> main(List<String> args) async {
   if (args.contains('--expect-published-python-client-gap')) {
     stderr.writeln(
       '--expect-published-python-client-gap is retired: the pinned published '
-      'Python release candidate must pass both directions.',
+      'Python stable release must pass both directions.',
     );
     exitCode = 64;
     return;
@@ -194,7 +194,7 @@ Future<void> _exerciseDartClient(String url) async {
   try {
     await client.connect(transport).timeout(const Duration(seconds: 20));
     final version = client.getProtocolVersion();
-    if (version != previewProtocolVersion) {
+    if (version != stableProtocolVersion) {
       throw StateError('Expected 2026-07-28, got $version');
     }
     final serverInfo = client.getServerVersion();

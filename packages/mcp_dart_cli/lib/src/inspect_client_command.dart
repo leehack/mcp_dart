@@ -354,7 +354,7 @@ class ClientInspectorHarness {
     _sendResult(
       request.id,
       const DiscoverResult(
-        supportedVersions: <String>[previewProtocolVersion],
+        supportedVersions: <String>[stableProtocolVersion],
         capabilities: ServerCapabilities(
           tools: ServerCapabilitiesTools(),
           resources: ServerCapabilitiesResources(),
@@ -381,12 +381,12 @@ class ClientInspectorHarness {
         'Missing required request metadata: ${McpMetaKey.protocolVersion}',
       );
     }
-    if (requestedVersion != previewProtocolVersion) {
+    if (requestedVersion != stableProtocolVersion) {
       return McpError(
         ErrorCode.unsupportedProtocolVersion.value,
         'Unsupported protocol version',
         <String, dynamic>{
-          'supported': const <String>[previewProtocolVersion],
+          'supported': const <String>[stableProtocolVersion],
           'requested': requestedVersion,
         },
       );
@@ -981,7 +981,7 @@ class ClientInspectorHarness {
             ? 'Stateless request protocol metadata is missing or invalid.'
             : 'initialize.params.protocolVersion is missing.',
       );
-    } else if (stateless && _clientProtocolVersion == previewProtocolVersion) {
+    } else if (stateless && _clientProtocolVersion == stableProtocolVersion) {
       _checks.pass(
         'lifecycle.protocol-version',
         'Client requested supported stateless protocol version '

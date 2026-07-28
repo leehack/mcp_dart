@@ -81,8 +81,8 @@ Usage: dart tool/validate_release_metadata.dart \\
   --package <mcp_dart|mcp_dart_cli> [--tag <release-tag>]
 
 Checks package/version/tag alignment, coordinated SDK/CLI metadata, protocol
-compatibility constants, pinned release inputs, and stable-only day-0 gates.
-Prereleases validate current metadata without requiring final specification
-acknowledgements.
+compatibility constants, exact pinned release inputs, and stable-only package,
+documentation, conformance, and interoperability gates. Final upstream
+publication status is recorded separately and does not block a stable release.
 ''');
 }

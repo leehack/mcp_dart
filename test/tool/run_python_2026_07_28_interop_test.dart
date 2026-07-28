@@ -35,7 +35,7 @@ void main() {
       final meta = params['_meta']! as Map<String, Object?>;
 
       expect(request['method'], Method.serverDiscover);
-      expect(meta[McpMetaKey.protocolVersion], previewProtocolVersion);
+      expect(meta[McpMetaKey.protocolVersion], stableProtocolVersion);
       expect(meta[McpMetaKey.clientCapabilities], isEmpty);
       expect(meta.containsKey(McpMetaKey.clientInfo), isFalse);
     });
@@ -124,7 +124,7 @@ Map<String, Object?> _validDiscoveryResponse() {
     'jsonrpc': '2.0',
     'id': 'dart-discovery-wire-probe',
     'result': {
-      'supportedVersions': [previewProtocolVersion],
+      'supportedVersions': [stableProtocolVersion],
       '_meta': {
         McpMetaKey.serverInfo: {
           'name': 'dart-test-server',

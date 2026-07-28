@@ -217,7 +217,7 @@ Future<HttpServer> _startOAuthServerWithOmittedTokenAuthMetadata({
 }
 
 Map<String, dynamic> _statelessMeta() => buildProtocolRequestMeta(
-      protocolVersion: previewProtocolVersion,
+      protocolVersion: stableProtocolVersion,
       clientInfo: const Implementation(name: 'TestClient', version: '1.0.0'),
       clientCapabilities: const ClientCapabilities(),
     );
@@ -379,7 +379,7 @@ void main() {
 
     test('stateless clients reject direct JSON-RPC response sends', () async {
       transport = StreamableHttpClientTransport(serverUrl)
-        ..protocolVersion = previewProtocolVersion;
+        ..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       for (final message in <JsonRpcMessage>[
@@ -413,7 +413,7 @@ void main() {
 
     test('stateless clients reject cancellation notification sends', () async {
       transport = StreamableHttpClientTransport(serverUrl)
-        ..protocolVersion = previewProtocolVersion;
+        ..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -441,7 +441,7 @@ void main() {
     test('stateless clients reject known server-only notification sends',
         () async {
       transport = StreamableHttpClientTransport(serverUrl)
-        ..protocolVersion = previewProtocolVersion;
+        ..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -571,7 +571,7 @@ void main() {
       final discoverMeta = discoverParams['_meta'] as Map<String, dynamic>;
       expect(
         discoverMeta[McpMetaKey.protocolVersion],
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
       expect(client.getServerCapabilities()?.logging, isNotNull);
       expect(client.getServerVersion()?.name, 'PreconfiguredSessionServer');
@@ -1380,7 +1380,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       await transport.send(
@@ -1414,7 +1414,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -1468,7 +1468,7 @@ void main() {
           },
           sessionId: 'legacy-session',
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       final completer = Completer<JsonRpcMessage>();
@@ -1488,7 +1488,7 @@ void main() {
 
       expect(
         capturedHeaders['protocolVersion'],
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
       expect(capturedHeaders['method'], Method.toolsCall);
       expect(capturedHeaders['name'], 'echo');
@@ -1521,7 +1521,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       final transportErrors = <Error>[];
       transport.onerror = transportErrors.add;
       final protocol = _CancellationTestProtocol();
@@ -1591,7 +1591,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       final sendExpectation = expectLater(
@@ -1656,7 +1656,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       final transportErrors = <Error>[];
       transport.onerror = transportErrors.add;
       await transport.start();
@@ -1751,7 +1751,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       final transportErrors = <Error>[];
       transport.onerror = transportErrors.add;
       await transport.start();
@@ -1807,7 +1807,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       final sendExpectation = expectLater(
@@ -1862,7 +1862,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       Future<void> startRequest(int id) => expectLater(
@@ -1935,7 +1935,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       transport = oauthTransport;
       await transport.start();
 
@@ -1999,7 +1999,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
       await expectLater(
         transport.send(
@@ -2069,7 +2069,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
       await expectLater(
         transport.send(
@@ -2126,7 +2126,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       final sendExpectation = expectLater(
         transport.send(
@@ -2175,7 +2175,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           authProvider: authProvider,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       final sendExpectation = expectLater(
         transport.send(
@@ -2220,7 +2220,7 @@ void main() {
           authProvider: authProvider,
           sessionId: 'delete-session',
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       final terminationExpectation = expectLater(
         transport.terminateSession(),
@@ -2281,7 +2281,7 @@ void main() {
         opts: const StreamableHttpClientTransportOptions(
           sessionId: 'delete-body-session',
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       final terminationExpectation = expectLater(
         transport.terminateSession(),
@@ -2395,7 +2395,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       final transportErrors = <Error>[];
       transport.onerror = transportErrors.add;
       final protocol = _CancellationTestProtocol();
@@ -2514,7 +2514,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       final transportErrors = <Error>[];
       transport.onerror = transportErrors.add;
       final protocol = _CancellationTestProtocol();
@@ -2584,7 +2584,7 @@ void main() {
                 JsonRpcResponse(
                   id: body['id'] as int,
                   result: const DiscoverResult(
-                    supportedVersions: [previewProtocolVersion],
+                    supportedVersions: [stableProtocolVersion],
                     capabilities: ServerCapabilities(
                       tools: ServerCapabilitiesTools(listChanged: true),
                     ),
@@ -2729,7 +2729,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       final transportErrors = <Error>[];
       transport.onerror = transportErrors.add;
       final protocol = _CancellationTestProtocol();
@@ -2808,7 +2808,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       final messages = <JsonRpcMessage>[];
       transport.onmessage = messages.add;
       await transport.start();
@@ -2878,7 +2878,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       final protocol = _CancellationTestProtocol();
       addTearDown(protocol.close);
       await protocol.connect(transport);
@@ -2963,7 +2963,7 @@ void main() {
             'name': 'echo',
             'arguments': {'message': 'hello'},
             '_meta': {
-              McpMetaKey.protocolVersion: previewProtocolVersion,
+              McpMetaKey.protocolVersion: stableProtocolVersion,
             },
           },
         ),
@@ -2972,7 +2972,7 @@ void main() {
 
       expect(
         capturedHeaders['protocolVersion'],
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
       expect(capturedHeaders['method'], Method.toolsCall);
       expect(capturedHeaders['name'], 'echo');
@@ -3009,7 +3009,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       final responses = <JsonRpcMessage>[];
@@ -3076,7 +3076,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       const cases = <(String, String, String)>[
@@ -3135,7 +3135,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       await transport.send(
@@ -3170,7 +3170,7 @@ void main() {
           Method.tasksCancel,
         ])
           {
-            'protocolVersion': previewProtocolVersion,
+            'protocolVersion': stableProtocolVersion,
             'method': method,
             'name': 'task-1',
           },
@@ -3195,7 +3195,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       final errorCompleter = Completer<Error>();
@@ -3282,7 +3282,7 @@ void main() {
             maxRetries: 2,
           ),
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       final firstMessageReceived = Completer<JsonRpcMessage>();
@@ -3361,7 +3361,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport
         ..onmessage = messages.add
@@ -3531,7 +3531,7 @@ void main() {
             maxRetries: 2,
           ),
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport.onmessage = (message) {
         messages.add(message);
@@ -3621,7 +3621,7 @@ void main() {
             maxRetries: 2,
           ),
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport.onmessage = (message) {
         if (message is JsonRpcResponse && !terminalResponse.isCompleted) {
@@ -3695,7 +3695,7 @@ void main() {
             maxRetries: 2,
           ),
         ),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -3727,7 +3727,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -3760,7 +3760,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       await transport.close();
 
@@ -3795,7 +3795,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
       await transport.close();
 
@@ -3830,7 +3830,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -3869,7 +3869,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -3922,7 +3922,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       final sendExpectation = expectLater(
@@ -3975,7 +3975,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       final sendExpectation = expectLater(
@@ -4023,7 +4023,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       final sendExpectation = expectLater(
@@ -4071,7 +4071,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport.onmessage = (message) {
         if (message is JsonRpcNotification && !progressReceived.isCompleted) {
@@ -4139,7 +4139,7 @@ void main() {
             maxRetries: 2,
           ),
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -4200,7 +4200,7 @@ void main() {
             maxRetries: 3,
           ),
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       await expectLater(
@@ -4279,7 +4279,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       final originalSendExpectation = expectLater(
@@ -4348,7 +4348,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       final heldSendExpectation = expectLater(
@@ -4411,7 +4411,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       final heldSendExpectation = expectLater(
@@ -4481,7 +4481,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport.onmessage = messages.add;
 
@@ -4538,7 +4538,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport
         ..onmessage = responseReceived.complete
@@ -4609,7 +4609,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
 
       final heldSendExpectation = expectLater(
@@ -4682,7 +4682,7 @@ void main() {
         opts: StreamableHttpClientTransportOptions(
           sessionId: testSessionId,
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport.onmessage = responseReceived.complete;
 
@@ -4730,7 +4730,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport.onmessage = (_) {
         throw StateError('expected callback failure');
@@ -4766,7 +4766,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport.onerror = (_) => throw StateError('callback failed');
 
@@ -4809,7 +4809,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport
         ..onmessage = (message) {
@@ -4883,7 +4883,7 @@ void main() {
             maxRetries: 2,
           ),
         ),
-      )..protocolVersion = stableProtocolVersion;
+      )..protocolVersion = latestInitializationProtocolVersion;
       await transport.start();
       transport.onmessage = (message) {
         if (message is JsonRpcError && !terminalError.isCompleted) {
@@ -4923,7 +4923,7 @@ void main() {
 
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
-      )..protocolVersion = previewProtocolVersion;
+      )..protocolVersion = stableProtocolVersion;
       await transport.start();
 
       final messages = <JsonRpcMessage>[];
@@ -5206,7 +5206,7 @@ void main() {
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
       )
-        ..protocolVersion = previewProtocolVersion
+        ..protocolVersion = stableProtocolVersion
         ..setToolParameterHeaderMappings(
           {
             'execute_sql': {
@@ -5289,7 +5289,7 @@ void main() {
       transport = StreamableHttpClientTransport(
         Uri.parse('http://localhost:${server.port}/mcp'),
       )
-        ..protocolVersion = previewProtocolVersion
+        ..protocolVersion = stableProtocolVersion
         ..setToolParameterHeaderMappings(
           const {
             'execute': {'count': 'Count'},
@@ -6681,7 +6681,7 @@ void main() {
             sessionId: 'legacy-session',
           ),
         );
-        transport.protocolVersion = previewProtocolVersion;
+        transport.protocolVersion = stableProtocolVersion;
         await transport.start();
 
         await transport.terminateSession();
@@ -6718,7 +6718,7 @@ void main() {
         transport = StreamableHttpClientTransport(
           Uri.parse('http://localhost:${server.port}/mcp'),
         );
-        transport.protocolVersion = previewProtocolVersion;
+        transport.protocolVersion = stableProtocolVersion;
         await transport.start();
 
         await transport.send(

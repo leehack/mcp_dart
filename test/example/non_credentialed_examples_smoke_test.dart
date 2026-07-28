@@ -32,7 +32,7 @@ class _PreviewDiscoveryTransport extends Transport
         JsonRpcResponse(
           id: message.id,
           result: const DiscoverResult(
-            supportedVersions: [previewProtocolVersion],
+            supportedVersions: [stableProtocolVersion],
             capabilities: ServerCapabilities(),
             serverInfo: Implementation(name: 'server', version: '1.0.0'),
             ttlMs: 0,
@@ -97,7 +97,7 @@ void main() {
         const Implementation(name: 'client', version: '1.0.0'),
       );
       await negotiatedClient.connect(discoveryTransport);
-      expect(negotiatedClient.getProtocolVersion(), previewProtocolVersion);
+      expect(negotiatedClient.getProtocolVersion(), stableProtocolVersion);
 
       streamable_example.client = negotiatedClient;
       streamable_example.transport = StreamableHttpClientTransport(
@@ -366,7 +366,7 @@ void main() {
             request.headers
               ..contentType = ContentType.json
               ..set('Origin', 'http://localhost:8080')
-              ..set('MCP-Protocol-Version', previewProtocolVersion);
+              ..set('MCP-Protocol-Version', stableProtocolVersion);
             request.write(
               jsonEncode({
                 'jsonrpc': jsonRpcVersion,

@@ -350,7 +350,7 @@ void main() {
             ErrorCode.unsupportedProtocolVersion.value,
             'Unsupported test protocol version',
             {
-              'supported': [previewProtocolVersion],
+              'supported': [stableProtocolVersion],
             },
           );
         },
@@ -369,7 +369,7 @@ void main() {
         'Unsupported test protocol version',
       );
       expect(errorResponse.error.data, {
-        'supported': [previewProtocolVersion],
+        'supported': [stableProtocolVersion],
       });
       expect(handlerCalled, isFalse);
     });

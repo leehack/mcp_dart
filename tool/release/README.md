@@ -21,7 +21,7 @@ The prep PR should contain all release metadata and essential source changes:
   changelog;
 - update package versions, coordinated SDK constraints, generated version
   constants, templates, and the day-0 release manifest as applicable;
-- finish release-facing documentation and required final-spec acknowledgements;
+- finish release-facing documentation and record the exact reviewed inputs;
 - keep same-repository source links on `main`.
 
 `Validate Release Prep` derives the package set from version changes and runs
@@ -50,12 +50,12 @@ substantive release notes, protocol compatibility constants, and pinned
 day-0 inputs.
 
 The `mcp_2026_07_28_release_metadata.json` manifest records the exact inputs
-reviewed for the release. Before the final Core specification is published,
-its final-review acknowledgements intentionally remain `false`; prereleases
-still pass, but a stable SDK or CLI release is blocked. The experimental Tasks
-status, pin, and known differences can be reviewed and recorded in advance. On
-release day, update the final inputs and version pins first, complete the full
-review, and only then set:
+reviewed for the release. Stable publication is gated by exact reviewed inputs,
+not by the publication timing of every upstream project. When a later final
+artifact becomes available before publication, review and record it without
+silently changing the audited contract. The following fields record whether
+final upstream artifacts were available and reviewed, but they are
+informational and do not block publication:
 
 - `coreSpecification.finalReleaseReviewed`
 - `missingRequiredClientCapability.coreFinalReleaseReviewed`
@@ -70,18 +70,16 @@ repository describes it as experimental and not an official MCP extension; a
 stable Core release does not wait for a nonexistent final Tasks release. The
 capability error code must match the SDK implementation, and the conformance
 version must match Core CI and every conformance wrapper.
-Stable Core CI must audit the immutable `schema/2026-07-28` and
-`docs/specification/2026-07-28` paths rather than the moving draft paths.
-The validator inspects active workflow `run` commands and rejects comment-only
-dated paths or any additional active audit that still targets `draft`.
+Core CI audits the schema examples and specification document inventory from
+the exact pinned Core commit. The reviewed final Core uses the versioned
+`schema/2026-07-28` and `docs/specification/2026-07-28` paths. The validator
+requires the active audit commands to use that recorded checkout layout
+exactly; update those expectations together if a later reviewed input uses a
+different layout.
 Published TypeScript and Python versions must match the interop fixtures. A
 stable release also requires both published-SDK directions to pass without an
 `--expect-published-*-client-gap` allowance in CI or any release-facing interop
 command or guide.
-`releaseDocumentation.finalReleaseReviewed` is set only after the day-of sweep
-has removed stale preview, release-candidate, prerelease-version, and old
-protocol-constant claims from every current release-facing surface. Historical
-changelog entries and the completed prerelease rehearsal remain unchanged.
 Stable SDK and CLI checks also reject prerelease dependency/version references
 on their current user-facing release surfaces. The SDK gate scans `README.md`,
 `llms.txt`, and every Markdown file under `doc/` and `example/`. The CLI gate
@@ -100,22 +98,24 @@ wire differences, including:
 - `ttlMs` and `pollIntervalMs` are integer milliseconds in prose, unrestricted
   JSON numbers in the schema, and mathematically integral `int` values in Dart;
 - experimental Tasks uses `-32003` for
-  `MissingRequiredClientCapability`, while final Core and this SDK use
-  `-32021`;
+  `MissingRequiredClientCapability`, while the final Core release and this
+  SDK use `-32021`;
 - Tasks has no official-conformance or checked-in cross-SDK coverage.
 
 These differences are outside the stable Core claim. The gate requires their
 experimental status and disclosure to be reviewed; it does not misrepresent
 them as a final Tasks contract.
 
-The pinned Core draft is also internally ambiguous about server-initiated
+The final Core specification remains internally ambiguous about server-initiated
 subscription teardown. Its cancellation page requires a
 `notifications/cancelled` message, while the subscriptions page describes a
 terminal empty response followed by stream closure and the schema describes
 the server notification specifically for stdio. The current SDK sends both
 the cancellation and terminal response on stdio, and the terminal response on
 Streamable HTTP. Reconcile those final texts and the transport-specific wire
-tests before setting `subscriptionTermination.finalTextsAgree`.
+tests before setting `subscriptionTermination.finalTextsAgree`; leaving this
+informational field false does not block a release whose documented behavior
+and regression tests pass.
 
 Every tag requires exact-commit `mcp_dart/release/<package>` authorization from
 `Create Release`; manually pushed stable and prerelease tags cannot publish.
@@ -125,8 +125,7 @@ writing authorization. New-tag authorization transitions through `pending`
 and becomes `success` only after the PAT-backed tag push succeeds; failures
 overwrite it with `failure`. The publish workflow waits for that transition.
 Every tag additionally requires the latest default-branch source and exact-SHA
-CI runs, and the publish workflow repeats the exact-SHA CI check. Stable tags
-also require the final-spec acknowledgements.
+CI runs, and the publish workflow repeats the exact-SHA CI check.
 CI provenance is matched by the exact workflow files
 `.github/workflows/test_core.yml`, `.github/workflows/test_cli.yml`, and, for
 the SDK, `.github/workflows/interop_2026_07_28.yml`; matching display names are

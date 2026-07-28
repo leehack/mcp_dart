@@ -3,27 +3,25 @@
 `mcp_dart` is a community Dart and Flutter SDK for Model Context Protocol
 (MCP) servers, clients, and hosts.
 
-- SDK preview: `2.3.0-dev.3`
-- CLI preview: `0.2.0-dev.3`
-- SDK preview minimum: Dart 3.4
-- CLI preview minimum: Dart 3.12
+- SDK stable: `2.3.0`
+- CLI stable: `0.2.0`
+- SDK minimum: Dart 3.4
+- CLI minimum: Dart 3.12
 - Repository: https://github.com/leehack/mcp_dart
 - Package: https://pub.dev/packages/mcp_dart
 - License: MIT
 
 ## Release status
 
-The 2.3.0 preview implements the complete core client/server wire surface of
-the locked MCP `2026-07-28` release candidate, retains the MCP `2025-11-25`
+The 2.3.0 release implements the complete core client/server wire surface of
+the final MCP `2026-07-28` specification, retains the MCP `2025-11-25`
 feature set, and negotiates supported earlier initialization versions. Core
 means the normative wire requirements assigned to client and server roles by
-the pinned preview specification; it excludes optional extensions, host UI
+the pinned final specification; it excludes optional extensions, host UI
 behavior, an authorization-server implementation, JSON Schema external
 reference resolution, and custom JSON Schema vocabularies. The official
 alpha.10 MCP 2026-07-28 client and server suites pass against current source
-with no expected failures, including all 25 authorization scenarios. This is
-prerelease evidence, not a claim about the not-yet-published final
-specification.
+with no expected failures, including all 25 authorization scenarios.
 
 Use the latest stable SDK for production:
 
@@ -31,11 +29,11 @@ Use the latest stable SDK for production:
 dart pub add mcp_dart
 ```
 
-Select the preview explicitly:
+Pin the stable 2.3 line explicitly:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.3.0-dev.3
+  mcp_dart: ^2.3.0
 ```
 
 ## Primary import
@@ -201,10 +199,10 @@ https://github.com/leehack/mcp_dart/tree/main/example/authentication
 
 ## CLI
 
-Install the preview after its matching SDK is public:
+Install the coordinated stable CLI:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.0-dev.3
+dart pub global activate mcp_dart_cli 0.2.0
 ```
 
 Common commands:
@@ -224,8 +222,7 @@ mcp_dart conformance --suite all
 ```
 
 The CLI inspector reports only behavior it exercises. It is not a formal
-certification suite for arbitrary targets. Prerelease automatic updates are
-disabled so the stable channel cannot replace a preview installation.
+certification suite for arbitrary targets.
 
 CLI docs:
 https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
@@ -241,9 +238,8 @@ https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
 - Real Chrome cross-origin Streamable HTTP smoke coverage.
 - Checked-in spec example audit pinned to an upstream commit.
 
-Do not infer final MCP 2026-07-28 coverage from those gates. On the official
-spec tag, diff schemas, examples, conformance, and normative prose; then rerun
-the full day-0 release gate.
+The release process also audits the immutable Core schema, examples, document
+inventory, and normative prose before publication.
 
 Evidence and runbooks:
 

@@ -992,10 +992,10 @@ void main() {
 
       final parsed = ElicitRequestParams.fromJson(
         params,
-        protocolVersion: previewProtocolVersion,
+        protocolVersion: stableProtocolVersion,
       );
       final parsedJson = parsed.toJson(
-        protocolVersion: previewProtocolVersion,
+        protocolVersion: stableProtocolVersion,
       );
       expect(
         parsedJson['requestedSchema']['properties']['ratio']['minimum'],
@@ -1017,7 +1017,7 @@ void main() {
             ),
           },
         ),
-      ).toJson(protocolVersion: previewProtocolVersion);
+      ).toJson(protocolVersion: stableProtocolVersion);
       expect(
         serialized['requestedSchema']['properties']['ratio']['default'],
         0.5,
@@ -1030,7 +1030,7 @@ void main() {
         'params': {
           ...params,
           '_meta': {
-            McpMetaKey.protocolVersion: previewProtocolVersion,
+            McpMetaKey.protocolVersion: stableProtocolVersion,
           },
         },
       });
@@ -1058,7 +1058,7 @@ void main() {
               },
             },
             '_meta': {
-              McpMetaKey.protocolVersion: previewProtocolVersion,
+              McpMetaKey.protocolVersion: stableProtocolVersion,
             },
           },
         }),

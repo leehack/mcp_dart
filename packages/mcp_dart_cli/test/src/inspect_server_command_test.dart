@@ -283,7 +283,7 @@ void main() {
 
       expect(report.passed, isTrue);
       expect(report.warningCount, isZero);
-      expect(report.metadata['protocolVersion'], previewProtocolVersion);
+      expect(report.metadata['protocolVersion'], stableProtocolVersion);
       final checksById = <String, InspectionCheck>{
         for (final check in report.checks) check.id: check,
       };

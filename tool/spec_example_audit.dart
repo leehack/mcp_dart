@@ -13,6 +13,14 @@ JsonRpcResponse _response(Map<String, dynamic> json) {
   return message;
 }
 
+Map<String, dynamic> _responseResult(Map<String, dynamic> json) {
+  final response = _response(json);
+  return {
+    ...response.result,
+    if (response.meta != null) '_meta': response.meta,
+  };
+}
+
 void _parseErrorDataOrWrapper(Map<String, dynamic> json) {
   if (json.containsKey('error')) {
     JsonRpcError.fromJson(json);
@@ -83,7 +91,7 @@ final Map<String, Parser> _parsers = {
   'CallToolRequestParams': (json) => CallToolRequest.fromJson(json),
   'CallToolResult': (json) => CallToolResult.fromJson(json),
   'CallToolResultResponse': (json) {
-    CallToolResult.fromJson(_response(json).result);
+    CallToolResult.fromJson(_responseResult(json));
   },
   'CancelledNotification': _parseJsonRpc,
   'CancelledNotificationParams': (json) {
@@ -94,7 +102,7 @@ final Map<String, Parser> _parsers = {
   'CompleteRequestParams': (json) => CompleteRequest.fromJson(json),
   'CompleteResult': (json) => CompleteResult.fromJson(json),
   'CompleteResultResponse': (json) {
-    CompleteResult.fromJson(_response(json).result);
+    CompleteResult.fromJson(_responseResult(json));
   },
   'CreateMessageRequest': _parseRequestLike,
   'CreateMessageRequestParams': (json) {
@@ -104,7 +112,7 @@ final Map<String, Parser> _parsers = {
   'DiscoverRequest': _parseJsonRpc,
   'DiscoverResult': (json) => DiscoverResult.fromJson(json),
   'DiscoverResultResponse': (json) {
-    DiscoverResult.fromJson(_response(json).result);
+    DiscoverResult.fromJson(_responseResult(json));
   },
   'ElicitRequest': _parseRequestLike,
   'ElicitRequestFormParams': (json) {
@@ -126,7 +134,7 @@ final Map<String, Parser> _parsers = {
   'GetPromptRequestParams': (json) => GetPromptRequest.fromJson(json),
   'GetPromptResult': (json) => GetPromptResult.fromJson(json),
   'GetPromptResultResponse': (json) {
-    GetPromptResult.fromJson(_response(json).result);
+    GetPromptResult.fromJson(_responseResult(json));
   },
   'HeaderMismatchError': _parseErrorDataOrWrapper,
   'ImageContent': (json) => ImageContent.fromJson(json),
@@ -141,26 +149,26 @@ final Map<String, Parser> _parsers = {
   'ListPromptsRequest': _parseJsonRpc,
   'ListPromptsResult': (json) => ListPromptsResult.fromJson(json),
   'ListPromptsResultResponse': (json) {
-    ListPromptsResult.fromJson(_response(json).result);
+    ListPromptsResult.fromJson(_responseResult(json));
   },
   'ListResourceTemplatesRequest': _parseJsonRpc,
   'ListResourceTemplatesResult': (json) {
     ListResourceTemplatesResult.fromJson(json);
   },
   'ListResourceTemplatesResultResponse': (json) {
-    ListResourceTemplatesResult.fromJson(_response(json).result);
+    ListResourceTemplatesResult.fromJson(_responseResult(json));
   },
   'ListResourcesRequest': _parseJsonRpc,
   'ListResourcesResult': (json) => ListResourcesResult.fromJson(json),
   'ListResourcesResultResponse': (json) {
-    ListResourcesResult.fromJson(_response(json).result);
+    ListResourcesResult.fromJson(_responseResult(json));
   },
   'ListRootsRequest': _parseRequestLike,
   'ListRootsResult': (json) => ListRootsResult.fromJson(json),
   'ListToolsRequest': _parseJsonRpc,
   'ListToolsResult': (json) => ListToolsResult.fromJson(json),
   'ListToolsResultResponse': (json) {
-    ListToolsResult.fromJson(_response(json).result);
+    ListToolsResult.fromJson(_responseResult(json));
   },
   'LoggingMessageNotification': _parseJsonRpc,
   'LoggingMessageNotificationParams': (json) {
@@ -180,7 +188,7 @@ final Map<String, Parser> _parsers = {
   'ReadResourceRequest': _parseJsonRpc,
   'ReadResourceResult': (json) => ReadResourceResult.fromJson(json),
   'ReadResourceResultResponse': (json) {
-    ReadResourceResult.fromJson(_response(json).result);
+    ReadResourceResult.fromJson(_responseResult(json));
   },
   'Resource': (json) => Resource.fromJson(json),
   'ResourceLink': (json) => ResourceLink.fromJson(json),
@@ -197,6 +205,9 @@ final Map<String, Parser> _parsers = {
   'SubscriptionsListenRequest': _parseJsonRpc,
   'SubscriptionsListenResult': (json) {
     SubscriptionsListenResult.fromJson(json);
+  },
+  'SubscriptionsListenResultResponse': (json) {
+    SubscriptionsListenResult.fromJson(_responseResult(json));
   },
   'TextContent': (json) => TextContent.fromJson(json),
   'TextResourceContents': (json) => ResourceContents.fromJson(json),

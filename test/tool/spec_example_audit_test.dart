@@ -142,11 +142,26 @@ void main() {
           },
         },
       );
+      _writeExample(
+        examplesDir,
+        'SubscriptionsListenResultResponse',
+        'listen-closed-response.json',
+        {
+          'jsonrpc': '2.0',
+          'id': 'listen-1',
+          'result': {
+            'resultType': 'complete',
+            '_meta': {
+              'io.modelcontextprotocol/subscriptionId': 'listen-1',
+            },
+          },
+        },
+      );
 
       final result = await _runAudit(examplesDir);
 
       expect(result.exitCode, 0, reason: _processOutput(result));
-      expect(result.stdout, contains('examples=7 parsed=7 missing=0'));
+      expect(result.stdout, contains('examples=8 parsed=8 missing=0'));
     });
 
     test('fails when an upstream example group has no parser mapping',

@@ -921,7 +921,7 @@ void main() {
 }
 
 Map<String, dynamic> _statelessMeta() => {
-      McpMetaKey.protocolVersion: previewProtocolVersion,
+      McpMetaKey.protocolVersion: stableProtocolVersion,
       McpMetaKey.clientInfo:
           const Implementation(name: 'TestClient', version: '1.0.0').toJson(),
       McpMetaKey.clientCapabilities: const ClientCapabilities().toJson(),

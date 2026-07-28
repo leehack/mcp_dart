@@ -117,16 +117,16 @@ void main() {
   });
 
   Map<String, dynamic> statelessMeta() => buildProtocolRequestMeta(
-        protocolVersion: previewProtocolVersion,
+        protocolVersion: stableProtocolVersion,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
         clientCapabilities: const ClientCapabilities(),
       );
 
   group('StreamableMcpServer', () {
     late StreamableMcpServer server;
-    final port = 8081;
-    final host = 'localhost';
-    final baseUrl = 'http://$host:$port/mcp';
+    late int port;
+    late String baseUrl;
+    const host = 'localhost';
 
     Future<http.Response> postPingWithSession(String sessionId) {
       return http.post(
@@ -200,9 +200,11 @@ void main() {
           );
         },
         host: host,
-        port: port,
+        port: 0,
       );
       await server.start();
+      port = server.boundPort;
+      baseUrl = 'http://$host:$port/mcp';
     });
 
     tearDown(() async {
@@ -473,7 +475,7 @@ void main() {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
           'Origin': 'http://localhost:8080',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -521,7 +523,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -571,7 +573,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'missing_tool',
         },
@@ -630,7 +632,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'validated_tool',
         },
@@ -711,7 +713,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': previewProtocolVersion,
+            'MCP-Protocol-Version': stableProtocolVersion,
             'Mcp-Method': Method.serverDiscover,
           },
         );
@@ -769,7 +771,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.serverDiscover,
         },
       );
@@ -830,7 +832,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.resourcesRead,
           'Mcp-Name': 'file:///private.txt',
         },
@@ -886,7 +888,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': previewProtocolVersion,
+            'MCP-Protocol-Version': stableProtocolVersion,
             'Mcp-Method': method,
           },
         );
@@ -929,7 +931,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsList,
           'mcp-session-id': 'unknown-legacy-session',
         },
@@ -1007,7 +1009,7 @@ void main() {
       await server.start();
 
       final meta = buildProtocolRequestMeta(
-        protocolVersion: previewProtocolVersion,
+        protocolVersion: stableProtocolVersion,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
         clientCapabilities: const ClientCapabilities(
           extensions: {mcpTasksExtensionId: <String, dynamic>{}},
@@ -1025,7 +1027,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'long',
         },
@@ -1049,7 +1051,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.tasksGet,
           'Mcp-Name': taskId,
           'mcp-session-id': 'unknown-legacy-session',
@@ -1137,7 +1139,7 @@ void main() {
       await server.start();
 
       final meta = buildProtocolRequestMeta(
-        protocolVersion: previewProtocolVersion,
+        protocolVersion: stableProtocolVersion,
         clientInfo: const Implementation(name: 'Client', version: '1.0'),
         clientCapabilities: const ClientCapabilities(
           extensions: {mcpTasksExtensionId: <String, dynamic>{}},
@@ -1155,7 +1157,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsCall,
           'Mcp-Name': 'validated_task',
         },
@@ -1180,7 +1182,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.tasksGet,
           'Mcp-Name': taskId,
         },
@@ -1233,7 +1235,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -1269,7 +1271,7 @@ void main() {
     test('uses top-level metadata only as missing-header fallback', () async {
       final request = const JsonRpcListToolsRequest(id: 12).toJson()
         ..['_meta'] = const {
-          McpMetaKey.protocolVersion: previewProtocolVersion,
+          McpMetaKey.protocolVersion: stableProtocolVersion,
         };
       final response = await http.post(
         Uri.parse(baseUrl),
@@ -1295,7 +1297,7 @@ void main() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': previewProtocolVersion,
+          'MCP-Protocol-Version': stableProtocolVersion,
           'Mcp-Method': Method.toolsList,
         },
       );
@@ -1321,7 +1323,7 @@ void main() {
       final getRequest = await client.getUrl(Uri.parse(baseUrl));
       getRequest.headers.set(
         'MCP-Protocol-Version',
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
       final getResponse = await getRequest.close();
       expect(getResponse.statusCode, HttpStatus.methodNotAllowed);
@@ -1331,7 +1333,7 @@ void main() {
       final deleteRequest = await client.deleteUrl(Uri.parse(baseUrl));
       deleteRequest.headers.set(
         'MCP-Protocol-Version',
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
       final deleteResponse = await deleteRequest.close();
       expect(deleteResponse.statusCode, HttpStatus.methodNotAllowed);
@@ -1341,7 +1343,7 @@ void main() {
       final patchRequest = await client.openUrl('PATCH', Uri.parse(baseUrl));
       patchRequest.headers.set(
         'MCP-Protocol-Version',
-        previewProtocolVersion,
+        stableProtocolVersion,
       );
       final patchResponse = await patchRequest.close();
       expect(patchResponse.statusCode, HttpStatus.methodNotAllowed);
@@ -1395,7 +1397,7 @@ void main() {
       expect(body['error']['data']['requested'], '1900-01-01');
       expect(
         body['error']['data']['supported'],
-        contains(previewProtocolVersion),
+        contains(stableProtocolVersion),
       );
     });
 
@@ -1453,7 +1455,7 @@ void main() {
 
       final legacy = await postWithProfile(
         McpProtocol.legacy,
-        previewProtocolVersion,
+        stableProtocolVersion,
         JsonRpcServerDiscoverRequest(
           id: 'legacy-only',
           meta: statelessMeta(),
@@ -2639,7 +2641,7 @@ void main() {
               'Host: $host:$port\r\n'
               'Content-Type: application/json\r\n'
               'Accept: application/json, text/event-stream\r\n'
-              'MCP-Protocol-Version: $previewProtocolVersion\r\n'
+              'MCP-Protocol-Version: $stableProtocolVersion\r\n'
               'Mcp-Method: test/pending\r\n'
               'Content-Length: ${bodyBytes.length}\r\n'
               '\r\n',
@@ -2716,7 +2718,7 @@ void main() {
           'Host: $host:$port\r\n'
           'Content-Type: application/json\r\n'
           'Accept: application/json, text/event-stream\r\n'
-          'MCP-Protocol-Version: $previewProtocolVersion\r\n'
+          'MCP-Protocol-Version: $stableProtocolVersion\r\n'
           'Mcp-Method: test/stop-race\r\n'
           'Content-Length: ${bodyBytes.length}\r\n'
           '\r\n',
@@ -2777,7 +2779,7 @@ void main() {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            'MCP-Protocol-Version': previewProtocolVersion,
+            'MCP-Protocol-Version': stableProtocolVersion,
             'Mcp-Method': Method.toolsList,
           },
         );
@@ -2793,6 +2795,8 @@ void main() {
     test('server can be stopped and restarted', () async {
       await server.stop();
       await server.start();
+      port = server.boundPort;
+      baseUrl = 'http://$host:$port/mcp';
 
       // Should be able to handle OPTIONS request after restart
       final client = http.Client();
@@ -2808,7 +2812,7 @@ void main() {
     });
 
     test('server port is exposed correctly', () async {
-      expect(server.port, equals(port));
+      expect(server.port, equals(0));
       expect(server.boundPort, equals(port));
     });
 

@@ -12,24 +12,21 @@ import 'subscriptions.dart';
 import 'tasks.dart';
 import 'validation.dart';
 
-/// The MCP `2026-07-28` version used by the SDK preview.
-const previewProtocolVersion = "2026-07-28";
-
 /// The newest MCP version that uses the `initialize` lifecycle.
 ///
-/// Keep this separate from [stableProtocolVersion]: after MCP `2026-07-28`
-/// becomes stable, legacy fallback must still initialize with `2025-11-25`.
+/// Keep this separate from [stableProtocolVersion]: legacy fallback must
+/// still initialize with `2025-11-25`.
 const latestInitializationProtocolVersion = "2025-11-25";
 
 /// The latest officially stable MCP protocol version supported.
-const stableProtocolVersion = latestInitializationProtocolVersion;
+const stableProtocolVersion = "2026-07-28";
 
-/// The protocol version preferred by default in this SDK preview.
-///
-/// The upstream `2026-07-28` specification is still a release candidate, but
-/// this preview prefers it by default while retaining
-/// legacy initialization fallback.
-const defaultProtocolVersion = previewProtocolVersion;
+/// Deprecated prerelease name for [stableProtocolVersion].
+@Deprecated('Use stableProtocolVersion.')
+const previewProtocolVersion = stableProtocolVersion;
+
+/// The protocol version preferred by the default SDK profile.
+const defaultProtocolVersion = stableProtocolVersion;
 
 /// The newest MCP version that uses the `initialize` lifecycle.
 ///
@@ -43,8 +40,8 @@ const latestProtocolVersion = latestInitializationProtocolVersion;
 
 /// High-level MCP protocol compatibility profiles.
 ///
-/// In the 2.3.0 preview, [McpClientOptions] and [McpServerOptions]
-/// default to [stable]. Use [legacy] to explicitly keep the MCP `2025-11-25`
+/// In mcp_dart 2.3, [McpClientOptions] and [McpServerOptions] default to
+/// [stable]. Use [legacy] to explicitly keep the MCP `2025-11-25`
 /// initialization flow, or [require2026] when a peer must support the MCP
 /// `2026-07-28` stateless protocol.
 enum McpProtocol {

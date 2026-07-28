@@ -9,7 +9,9 @@ void main() {
   final repoRoot = Directory.current.absolute;
 
   test('accepts coordinated SDK and CLI prerelease metadata', () {
-    final validator = ReleaseMetadataValidator(repoRoot);
+    final fixture = _prereleaseFixture(repoRoot);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final validator = ReleaseMetadataValidator(fixture);
 
     final sdk = validator.validate(
       package: ReleasePackage.sdk,
@@ -29,7 +31,7 @@ void main() {
   test('rejects a tag that does not match package metadata', () {
     final result = ReleaseMetadataValidator(repoRoot).validate(
       package: ReleasePackage.sdk,
-      tag: 'v2.3.0',
+      tag: 'v2.3.0-dev.3',
     );
 
     expect(
@@ -38,7 +40,7 @@ void main() {
     );
   });
 
-  test('blocks stable publishing until final inputs are acknowledged', () {
+  test('accepts stable metadata without unavailable final attestations', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: false);
     addTearDown(() => fixture.deleteSync(recursive: true));
 
@@ -48,29 +50,10 @@ void main() {
     );
 
     expect(result.isPrerelease, isFalse);
-    expect(
-      result.errors,
-      contains(contains('final core specification ref has not been reviewed')),
-    );
-    expect(
-      result.errors,
-      contains(contains('final Core MissingRequiredClientCapability')),
-    );
-    expect(
-      result.errors,
-      contains(contains('server-initiated subscription termination')),
-    );
-    expect(
-      result.errors,
-      contains(contains('release-facing documentation has not been reviewed')),
-    );
-    expect(
-      result.errors,
-      contains(contains('interoperability fixtures have not been reviewed')),
-    );
+    expect(result.errors, isEmpty);
   });
 
-  test('accepts stable SDK metadata after every day-of gate is recorded', () {
+  test('accepts stable SDK metadata with final reviews recorded', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
 
@@ -249,7 +232,7 @@ void main() {
     expect(result.errors, isEmpty);
   });
 
-  test('accepts active Core audit commands with Windows path separators', () {
+  test('accepts pinned Core audit commands with Windows path separators', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
     final workflow = File(
@@ -312,13 +295,13 @@ void main() {
     );
   });
 
-  test('dated Core audit comments cannot hide active draft arguments', () {
+  test('Core audit comments cannot hide unexpected active paths', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
     final workflow = File(
       '${fixture.path}/.github/workflows/test_core.yml',
     );
-    final draftWorkflow = workflow
+    final unexpectedWorkflow = workflow
         .readAsStringSync()
         .replaceFirst(
           '.dart_tool/mcp-spec/schema/2026-07-28/examples',
@@ -329,7 +312,7 @@ void main() {
           '.dart_tool/mcp-spec/docs/specification/draft',
         );
     workflow.writeAsStringSync(
-      '$draftWorkflow\n'
+      '$unexpectedWorkflow\n'
       '# .dart_tool/mcp-spec/schema/2026-07-28/examples\n'
       '# .dart_tool/mcp-spec/docs/specification/2026-07-28\n',
     );
@@ -349,7 +332,7 @@ void main() {
     );
   });
 
-  test('rejects an active draft audit beside the required dated audit', () {
+  test('rejects an additional active Core audit path', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
     final workflow = File(
@@ -554,9 +537,9 @@ void main() {
     );
     constants.writeAsStringSync(
       constants.readAsStringSync().replaceFirst(
-            'const stableProtocolVersion = previewProtocolVersion;',
+            'const stableProtocolVersion = "2026-07-28";',
             'const stableProtocolVersion = latestInitializationProtocolVersion;\n'
-                '// const stableProtocolVersion = previewProtocolVersion;',
+                '// const stableProtocolVersion = "2026-07-28";',
           ),
     );
 
@@ -580,8 +563,8 @@ void main() {
     requirements.writeAsStringSync('''
 mcp==2.0.0b1
 mcp-types==2.0.0b1
-# mcp==2.0.0rc1
-# mcp-types==2.0.0rc1
+# mcp==2.0.0
+# mcp-types==2.0.0
 ''');
 
     final result = ReleaseMetadataValidator(fixture).validate(
@@ -840,6 +823,81 @@ TBD
   });
 }
 
+Directory _prereleaseFixture(Directory repoRoot) {
+  final fixture = _stableFixture(
+    repoRoot,
+    finalInputsReviewed: false,
+    prepareStableCli: true,
+  );
+
+  final pubspec = File('${fixture.path}/pubspec.yaml');
+  pubspec.writeAsStringSync(
+    pubspec.readAsStringSync().replaceFirst(
+          'version: 2.3.0',
+          'version: 2.3.0-dev.3',
+        ),
+  );
+
+  final changelog = File('${fixture.path}/CHANGELOG.md');
+  changelog.writeAsStringSync(
+    changelog.readAsStringSync().replaceFirst(
+          '## 2.3.0',
+          '## 2.3.0-dev.3',
+        ),
+  );
+
+  final cliPubspec = File(
+    '${fixture.path}/packages/mcp_dart_cli/pubspec.yaml',
+  );
+  cliPubspec.writeAsStringSync(
+    cliPubspec
+        .readAsStringSync()
+        .replaceFirst('version: 0.2.0', 'version: 0.2.0-dev.3')
+        .replaceFirst('mcp_dart: ^2.3.0', 'mcp_dart: ^2.3.0-dev.3'),
+  );
+
+  final cliChangelog = File(
+    '${fixture.path}/packages/mcp_dart_cli/CHANGELOG.md',
+  );
+  cliChangelog.writeAsStringSync(
+    cliChangelog.readAsStringSync().replaceFirst(
+          '## 0.2.0',
+          '## 0.2.0-dev.3',
+        ),
+  );
+
+  final cliVersionSource = File(
+    '${fixture.path}/packages/mcp_dart_cli/lib/src/version.dart',
+  );
+  cliVersionSource.writeAsStringSync(
+    cliVersionSource
+        .readAsStringSync()
+        .replaceFirst(
+          "const packageVersion = '0.2.0';",
+          "const packageVersion = '0.2.0-dev.3';",
+        )
+        .replaceFirst(
+          "const generatedSdkConstraint = '^2.3.0';",
+          "const generatedSdkConstraint = '^2.3.0-dev.3';",
+        ),
+  );
+
+  for (final path in <String>[
+    'packages/templates/simple/__brick__/pubspec.yaml',
+    'packages/mcp_dart_cli/test/fixtures/dart_mcp_project/pubspec.yaml',
+  ]) {
+    final file = File('${fixture.path}/$path');
+    file.writeAsStringSync(
+      file.readAsStringSync().replaceFirst(
+            'mcp_dart: ^2.3.0',
+            'mcp_dart: ^2.3.0-dev.3',
+          ),
+    );
+  }
+
+  return fixture;
+}
+
 Directory _stableFixture(
   Directory repoRoot, {
   required bool finalInputsReviewed,
@@ -987,22 +1045,6 @@ Directory _stableFixture(
           ),
     );
   }
-
-  final coreWorkflow = File(
-    '${fixture.path}/.github/workflows/test_core.yml',
-  );
-  coreWorkflow.writeAsStringSync(
-    coreWorkflow
-        .readAsStringSync()
-        .replaceAll(
-          '.dart_tool/mcp-spec/schema/draft/examples',
-          '.dart_tool/mcp-spec/schema/2026-07-28/examples',
-        )
-        .replaceAll(
-          '.dart_tool/mcp-spec/docs/specification/draft',
-          '.dart_tool/mcp-spec/docs/specification/2026-07-28',
-        ),
-  );
 
   const interopGapSurfaces = <String>[
     '.github/workflows/interop_2026_07_28.yml',
