@@ -50,12 +50,12 @@ substantive release notes, protocol compatibility constants, and pinned
 day-0 inputs.
 
 The `mcp_2026_07_28_release_metadata.json` manifest records the exact inputs
-reviewed for the release. Stable publication does not wait for a future final
-Core tag, conformance package, or peer-SDK release. Instead, the gate requires
-the exact currently available pins and package versions to match the audited
-CI, conformance, and interoperability fixtures. The following fields record
-whether later final upstream artifacts were available and reviewed, but they
-are informational and do not block publication:
+reviewed for the release. Stable publication is gated by exact reviewed inputs,
+not by the publication timing of every upstream project. When a later final
+artifact becomes available before publication, review and record it without
+silently changing the audited contract. The following fields record whether
+final upstream artifacts were available and reviewed, but they are
+informational and do not block publication:
 
 - `coreSpecification.finalReleaseReviewed`
 - `missingRequiredClientCapability.coreFinalReleaseReviewed`
@@ -71,11 +71,11 @@ stable Core release does not wait for a nonexistent final Tasks release. The
 capability error code must match the SDK implementation, and the conformance
 version must match Core CI and every conformance wrapper.
 Core CI audits the schema examples and specification document inventory from
-the exact pinned Core commit. A `draft` path inside that immutable checkout is
-acceptable because the commit SHA, rather than the upstream branch, fixes its
-contents. The validator requires the active audit commands to use the recorded
-checkout layout exactly; update those expectations together if a reviewed pin
-uses a different layout.
+the exact pinned Core commit. The reviewed final Core uses the versioned
+`schema/2026-07-28` and `docs/specification/2026-07-28` paths. The validator
+requires the active audit commands to use that recorded checkout layout
+exactly; update those expectations together if a later reviewed input uses a
+different layout.
 Published TypeScript and Python versions must match the interop fixtures. A
 stable release also requires both published-SDK directions to pass without an
 `--expect-published-*-client-gap` allowance in CI or any release-facing interop
@@ -98,7 +98,7 @@ wire differences, including:
 - `ttlMs` and `pollIntervalMs` are integer milliseconds in prose, unrestricted
   JSON numbers in the schema, and mathematically integral `int` values in Dart;
 - experimental Tasks uses `-32003` for
-  `MissingRequiredClientCapability`, while the pinned Core snapshot and this
+  `MissingRequiredClientCapability`, while the final Core release and this
   SDK use `-32021`;
 - Tasks has no official-conformance or checked-in cross-SDK coverage.
 
@@ -106,7 +106,7 @@ These differences are outside the stable Core claim. The gate requires their
 experimental status and disclosure to be reviewed; it does not misrepresent
 them as a final Tasks contract.
 
-The pinned Core draft is also internally ambiguous about server-initiated
+The final Core specification remains internally ambiguous about server-initiated
 subscription teardown. Its cancellation page requires a
 `notifications/cancelled` message, while the subscriptions page describes a
 terminal empty response followed by stream closure and the schema describes

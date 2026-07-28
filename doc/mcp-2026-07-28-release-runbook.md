@@ -4,6 +4,10 @@ Use this checklist with an exact, reviewed MCP `2026-07-28` Core commit. Stable
 Dart publication may proceed before every upstream project publishes a final
 artifact, but it must never follow an unpinned branch.
 
+The final Core tag resolves to
+`5f5440bb26a62e2cf3440b92da5a667efa03b267`. That immutable commit is the
+reviewed Core input for the coordinated GA release.
+
 ## Branch policy
 
 - [PR #306](https://github.com/leehack/mcp_dart/pull/306) merged the MCP
@@ -81,7 +85,8 @@ does not replace review of the exact inputs selected for a stable release.
    acknowledged experimental differences do not block a stable Core release.
 6. Confirm the manifest `MissingRequiredClientCapability` code remains aligned
    with both the pinned Core contract and the SDK implementation.
-7. Keep the pinned Core's server-initiated subscription-termination ambiguity
+7. Keep the reviewed Core's server-initiated subscription-termination
+   ambiguity
    documented. The SDK sends cancellation before the terminal completion or
    error response on stdio and sends the terminal response only on Streamable
    HTTP. Preserve the transport-specific regressions; set
@@ -135,9 +140,9 @@ git clone --filter=blob:none --no-checkout \
 git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
 git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
 dart run tool/spec_example_audit.dart \
-  .dart_tool/mcp-spec/schema/draft/examples
+  .dart_tool/mcp-spec/schema/2026-07-28/examples
 dart run tool/spec_document_inventory_audit.dart \
-  .dart_tool/mcp-spec/docs/specification/draft
+  .dart_tool/mcp-spec/docs/specification/2026-07-28
 TASKS_SPEC_REF="$(tr -d '[:space:]' \
   < tool/testing/mcp_2026_07_28_tasks_spec_ref.txt)"
 git clone --filter=blob:none --no-checkout \
@@ -195,9 +200,9 @@ the formatter uses each package's language version and configuration. In
 particular, formatting the Flutter example without resolving its
 `flutter_lints` include can report false drift.
 
-Run the schema and document audits against paths that exist in the exact pinned
-Core checkout. A `draft` path is deterministic here because CI checks out the
-recorded commit SHA rather than an upstream branch.
+Run the schema and document audits against the final, versioned paths in the
+exact pinned Core checkout. The recorded commit SHA keeps those release
+artifacts immutable.
 
 Also run the nested example and CLI validation already enforced by CI. Require
 the Dart 3.4 minimum-SDK lane and the `dart_apitool` comparison against

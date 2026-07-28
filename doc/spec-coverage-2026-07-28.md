@@ -37,23 +37,23 @@ The alpha.10 MCP 2026-07-28 client suite passes all 25 authorization scenarios.
 The published server suite includes conformance PR #403 and passes every
 checked-in MCP 2026-07-28 scenario without expected failures.
 
-Until the final tag exists, CI checks out the commit pinned in
+CI checks out the final Core release commit pinned in
 [`tool/testing/mcp_2026_07_28_spec_ref.txt`](../tool/testing/mcp_2026_07_28_spec_ref.txt).
-It parses all 128 machine-readable examples and inventories all 31 official
-draft specification documents against checked-in scope, evidence, and
+It parses all 129 machine-readable examples and inventories all 31 official
+versioned specification documents against checked-in scope, evidence, and
 normalized SHA-256 content hashes. Any prose change at a new pinned revision
 fails the inventory until that document is explicitly reviewed and its hash is
-updated. The current day-0 readiness matrix was last reviewed against upstream
+updated. The day-0 readiness matrix was reviewed against final Core release
 commit
-[`88191b9`](https://github.com/modelcontextprotocol/modelcontextprotocol/tree/88191b9f574d67d553ea9372278a14e09d762f55).
-The readable source links below remain mutable; the immutable commit keeps a
-moving draft from changing the evidence underneath a green run.
+[`5f5440b`](https://github.com/modelcontextprotocol/modelcontextprotocol/tree/5f5440bb26a62e2cf3440b92da5a667efa03b267).
+The readable source links below remain mutable; the immutable commit keeps the
+release evidence underneath a green run fixed.
 
 The document inventory is a drift guard, not a semantic proof by itself. The
 matrix, regression tests, interop fixtures, and conformance suites provide the
 behavioral evidence for each claim.
 
-After the final upstream tag exists, audit its machine-readable examples with:
+Audit the final machine-readable examples and specification documents with:
 
 ```bash
 dart run tool/spec_example_audit.dart \
@@ -150,8 +150,7 @@ missing core protocol behavior.
   locally covered but absent from the current official alpha.10 scenario
   inventory and from checked-in MCP 2026-07-28 cross-SDK interop. Do not
   describe it as stable, official, or cross-SDK verified.
-- The currently pinned Core snapshot assigns `MissingRequiredClientCapability`
-  code
+- The final Core release assigns `MissingRequiredClientCapability` code
   `-32021`, while the experimental Tasks extension draft names `-32003`. The
   SDK follows the Core error registry. This known extension difference is not
   part of the stable Core interoperability claim.
@@ -163,8 +162,7 @@ missing core protocol behavior.
   `int` and rejects fractional values. The separately pinned Tasks audit makes
   schema drift visible, and this difference is documented as experimental
   extension behavior.
-- The currently pinned Core snapshot is internally ambiguous about
-  server-initiated
+- The final Core release remains internally ambiguous about server-initiated
   subscription teardown: the cancellation page requires
   `notifications/cancelled`, the subscriptions page describes a terminal empty
   response followed by close, and the schema describes server cancellation
@@ -174,10 +172,6 @@ missing core protocol behavior.
   `subscriptionTermination.finalTextsAgree` field remains false until later
   upstream texts and both transport paths are reconciled; the checked-in wire
   behavior and regression tests define the current release contract.
-- `releaseDocumentation.finalReleaseReviewed` records whether final upstream
-  artifacts received a later documentation sweep. Stable validation does not
-  wait for that artifact, but independently rejects stale package-prerelease
-  markers and inconsistent version or protocol-constant claims.
 - The reverse Dart MCP 2026-07-28 client -> TypeScript SDK 2.0.0 server path covers
   discovery, `tools/list`, `tools/call`, one-time `HeaderMismatch` recovery,
   and a TypeScript-server `input_required` elicitation retry. Broader

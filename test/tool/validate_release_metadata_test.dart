@@ -246,16 +246,16 @@ void main() {
             r'tool\spec_example_audit.dart',
           )
           .replaceAll(
-            '.dart_tool/mcp-spec/schema/draft/examples',
-            r'.dart_tool\mcp-spec\schema\draft\examples',
+            '.dart_tool/mcp-spec/schema/2026-07-28/examples',
+            r'.dart_tool\mcp-spec\schema\2026-07-28\examples',
           )
           .replaceAll(
             'tool/spec_document_inventory_audit.dart',
             r'tool\spec_document_inventory_audit.dart',
           )
           .replaceAll(
-            '.dart_tool/mcp-spec/docs/specification/draft',
-            r'.dart_tool\mcp-spec\docs\specification\draft',
+            '.dart_tool/mcp-spec/docs/specification/2026-07-28',
+            r'.dart_tool\mcp-spec\docs\specification\2026-07-28',
           ),
     );
 
@@ -304,17 +304,17 @@ void main() {
     final unexpectedWorkflow = workflow
         .readAsStringSync()
         .replaceFirst(
-          '.dart_tool/mcp-spec/schema/draft/examples',
           '.dart_tool/mcp-spec/schema/2026-07-28/examples',
+          '.dart_tool/mcp-spec/schema/draft/examples',
         )
         .replaceFirst(
-          '.dart_tool/mcp-spec/docs/specification/draft',
           '.dart_tool/mcp-spec/docs/specification/2026-07-28',
+          '.dart_tool/mcp-spec/docs/specification/draft',
         );
     workflow.writeAsStringSync(
       '$unexpectedWorkflow\n'
-      '# .dart_tool/mcp-spec/schema/draft/examples\n'
-      '# .dart_tool/mcp-spec/docs/specification/draft\n',
+      '# .dart_tool/mcp-spec/schema/2026-07-28/examples\n'
+      '# .dart_tool/mcp-spec/docs/specification/2026-07-28\n',
     );
 
     final result = ReleaseMetadataValidator(fixture).validate(
@@ -340,10 +340,10 @@ void main() {
     );
     workflow.writeAsStringSync(
       workflow.readAsStringSync().replaceFirst(
-            '.dart_tool/mcp-spec/schema/draft/examples',
-            '.dart_tool/mcp-spec/schema/draft/examples;\n'
+            '.dart_tool/mcp-spec/schema/2026-07-28/examples',
+            '.dart_tool/mcp-spec/schema/2026-07-28/examples;\n'
                 '          dart run tool/spec_example_audit.dart\n'
-                '          .dart_tool/mcp-spec/schema/2026-07-28/examples',
+                '          .dart_tool/mcp-spec/schema/draft/examples',
           ),
     );
 

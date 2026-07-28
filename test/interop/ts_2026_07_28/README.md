@@ -45,11 +45,11 @@ client must then complete the full scenario. `src/client.mjs` asserts:
   report monotonic progress from `0` to `100`.
 - Raw Streamable HTTP requests with missing or mismatched
   `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`, and `Mcp-Param-*` headers
-  are rejected with the current draft `HeaderMismatch` error code `-32020`.
+  are rejected with the MCP 2026-07-28 `HeaderMismatch` error code `-32020`.
 - Raw Streamable HTTP requests for removed MCP 2026-07-28 core RPCs such as
   `ping` are rejected with JSON-RPC `Method not found`.
 - Raw Streamable HTTP requests for unsupported protocol versions are rejected
-  with the current draft `UnsupportedProtocolVersion` error code `-32022` and
+  with the MCP 2026-07-28 `UnsupportedProtocolVersion` error code `-32022` and
   include `requested` and `supported` version data.
 - `subscriptions/listen` returns an acknowledgment before list-change
   notifications and tags subscription notifications with

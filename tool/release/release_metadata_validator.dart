@@ -278,13 +278,13 @@ class ReleaseMetadataValidator {
       _validateCoreAuditCommand(
         workflow: coreWorkflow,
         toolPath: 'tool/spec_example_audit.dart',
-        expectedArgument: '.dart_tool/mcp-spec/schema/draft/examples',
+        expectedArgument: '.dart_tool/mcp-spec/schema/2026-07-28/examples',
         errors: errors,
       );
       _validateCoreAuditCommand(
         workflow: coreWorkflow,
         toolPath: 'tool/spec_document_inventory_audit.dart',
-        expectedArgument: '.dart_tool/mcp-spec/docs/specification/draft',
+        expectedArgument: '.dart_tool/mcp-spec/docs/specification/2026-07-28',
         errors: errors,
       );
     }

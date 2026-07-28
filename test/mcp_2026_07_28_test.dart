@@ -863,7 +863,7 @@ void main() {
       );
     });
 
-    test('uses draft URL elicitation shape without elicitationId', () {
+    test('uses MCP 2026 URL elicitation shape without elicitationId', () {
       final parsed = JsonRpcElicitRequest.fromJson({
         'jsonrpc': jsonRpcVersion,
         'id': 1,
@@ -7162,7 +7162,7 @@ void main() {
       );
     });
 
-    test('server initialize never negotiates stateless draft version',
+    test('server initialize never negotiates stateless MCP 2026 version',
         () async {
       final server = Server(
         const Implementation(name: 'server', version: '1.0.0'),

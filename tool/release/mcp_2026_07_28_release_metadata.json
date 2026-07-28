@@ -4,8 +4,8 @@
   "protocolVersion": "2026-07-28",
   "legacyInitializationProtocolVersion": "2025-11-25",
   "coreSpecification": {
-    "ref": "88191b9f574d67d553ea9372278a14e09d762f55",
-    "finalReleaseReviewed": false
+    "ref": "5f5440bb26a62e2cf3440b92da5a667efa03b267",
+    "finalReleaseReviewed": true
   },
   "tasksExtension": {
     "ref": "2c1425d9a288b9b1f489430fe1e00bb392b47e48",
@@ -16,13 +16,13 @@
   },
   "missingRequiredClientCapability": {
     "code": -32021,
-    "coreFinalReleaseReviewed": false
+    "coreFinalReleaseReviewed": true
   },
   "subscriptionTermination": {
     "finalTextsAgree": false
   },
   "releaseDocumentation": {
-    "finalReleaseReviewed": false
+    "finalReleaseReviewed": true
   },
   "officialConformance": {
     "version": "0.2.0-alpha.10",
