@@ -170,12 +170,14 @@ missing core protocol behavior.
   response followed by close, and the schema describes server cancellation
   specifically for stdio. The SDK currently sends cancellation before the
   terminal completion or error response on stdio, and sends the terminal
-  response only on Streamable HTTP. A
-  stable-release metadata gate remains false until the final texts and both
-  transport paths are reconciled.
-- Stable publication is also blocked by
-  `releaseDocumentation.finalReleaseReviewed` until the day-of review verifies
-  every public version and protocol-constant claim against the final release.
+  response only on Streamable HTTP. The informational
+  `subscriptionTermination.finalTextsAgree` field remains false until later
+  upstream texts and both transport paths are reconciled; the checked-in wire
+  behavior and regression tests define the current release contract.
+- `releaseDocumentation.finalReleaseReviewed` records whether final upstream
+  artifacts received a later documentation sweep. Stable validation does not
+  wait for that artifact, but independently rejects stale package-prerelease
+  markers and inconsistent version or protocol-constant claims.
 - The reverse Dart MCP 2026-07-28 client -> TypeScript SDK 2.0.0 server path covers
   discovery, `tools/list`, `tools/call`, one-time `HeaderMismatch` recovery,
   and a TypeScript-server `input_required` elicitation retry. Broader

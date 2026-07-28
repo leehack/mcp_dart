@@ -1,7 +1,8 @@
 # MCP 2026-07-28 Day-0 Release Runbook
 
-Use this checklist after the official MCP `2026-07-28` specification is tagged.
-Do not publish the stable Dart packages from a moving draft commit.
+Use this checklist with an exact, reviewed MCP `2026-07-28` Core commit. Stable
+Dart publication may proceed before every upstream project publishes a final
+artifact, but it must never follow an unpinned branch.
 
 ## Branch policy
 
@@ -20,7 +21,7 @@ Do not publish the stable Dart packages from a moving draft commit.
 - Every pub.dev publication requires the exact release commit to carry the
   `mcp_dart/release/<package>` success status. Only `Create Release` writes
   that status, after latest-`main`, exact-SHA CI, metadata, and publish dry-run
-  checks; stable releases also require the final-spec gates. New tags remain
+  checks. New tags remain
   `pending` until their PAT-backed push succeeds, and a failed push records
   `failure`. A manually pushed stable or prerelease tag therefore cannot
   bypass the release workflow. CLI binaries additionally require that exact
@@ -45,12 +46,17 @@ workflow intentionally rejects an existing tag that does not identify the
 selected source commit.
 
 The prerelease is a public workflow rehearsal and interoperability preview. It
-does not replace the final-spec delta review or authorize a stable release.
+does not replace review of the exact inputs selected for a stable release.
 
-## 1. Freeze the official inputs
+## 1. Freeze the reviewed inputs
 
-1. Record the final core specification tag and commit SHA.
-2. Diff that SHA against `tool/testing/mcp_2026_07_28_spec_ref.txt`.
+1. Record the exact Core commit SHA used for the release and note whether
+   upstream has attached a final tag.
+2. Diff any candidate Core SHA against
+   `tool/testing/mcp_2026_07_28_spec_ref.txt`. Update the pin only after the
+   candidate's schemas, examples, normative prose, and wire contracts are
+   reviewed. Keep the existing reviewed pin when no newer usable artifact is
+   available.
 3. Record the exact experimental Tasks extension commit SHA, then diff it
    against `tool/testing/mcp_2026_07_28_tasks_spec_ref.txt`. Review
    `specification/draft/tasks.md`, `seps/2663-tasks-extension.md`, and
@@ -73,49 +79,37 @@ does not replace the final-spec delta review or authorize a stable release.
      fixture covers Tasks.
    Do not present Tasks as stable, official, or cross-SDK verified. These
    acknowledged experimental differences do not block a stable Core release.
-6. Review the final Core `MissingRequiredClientCapability` contract and confirm
-   that the manifest code remains aligned with the SDK. Set
-   `missingRequiredClientCapability.coreFinalReleaseReviewed` only after that
-   final Core review.
-7. Reconcile server-initiated subscription termination across the final Core
-   cancellation, subscriptions, transport, and schema texts. The current
-   draft requires `notifications/cancelled` in the cancellation page, describes
-   a terminal empty response followed by close in the subscriptions page, and
-   describes server cancellation specifically for stdio in the schema. The
-   SDK currently sends cancellation before the terminal completion or error
-   response on stdio and the terminal response only on Streamable HTTP. Update
-   behavior and tests if
-   the final contract differs, then set
-   `subscriptionTermination.finalTextsAgree`.
-8. Update `tool/testing/mcp_2026_07_28_spec_ref.txt` to the reviewed final Core
-   SHA. Update `tool/testing/mcp_2026_07_28_tasks_spec_ref.txt` only if the
-   separately reviewed experimental Tasks pin changes.
-9. Update `tool/release/mcp_2026_07_28_release_metadata.json` with those exact
-   SHAs. Set final Core, documentation, conformance, and published-peer
-   acknowledgements only after their complete reviews. Keep
-   `tasksExtension.maturity` set to `experimental`; record its status, pinned
-   contents, and known wire-difference reviews separately. These explicit
-   acknowledgements block stable publishing when a required Core input is
-   incomplete without pretending Tasks has a final upstream release.
-10. Update the official conformance package and the published TypeScript and
-   Python SDK fixtures only after each candidate passes locally in both
-   supported directions.
+6. Confirm the manifest `MissingRequiredClientCapability` code remains aligned
+   with both the pinned Core contract and the SDK implementation.
+7. Keep the pinned Core's server-initiated subscription-termination ambiguity
+   documented. The SDK sends cancellation before the terminal completion or
+   error response on stdio and sends the terminal response only on Streamable
+   HTTP. Preserve the transport-specific regressions; set
+   `subscriptionTermination.finalTextsAgree` only if later upstream texts
+   actually agree.
+8. Update the Core or Tasks pin only when its reviewed SHA changes, and keep
+   the manifest refs exactly synchronized with the files under `tool/testing/`.
+9. Keep final-review fields in
+   `tool/release/mcp_2026_07_28_release_metadata.json` truthful. They record
+   upstream publication and review status but do not block stable publication.
+   The separately enforced Tasks review fields remain required.
+10. Pin the latest compatible official conformance package and published
+    TypeScript and Python SDK fixtures that pass locally in both supported
+    directions. A prerelease fixture is acceptable when it is the latest
+    compatible published artifact.
 11. Sweep every release-facing surface, including `README.md`, `llms.txt`,
    `CHANGELOG.md`, `example/example.md`, `doc/`, the CLI README/changelog/docs,
-    generated templates, package metadata, and public API examples. Remove
-    prerelease claims only when the final tag supports them, and keep known
-    peer/referee gaps explicit. Set
-    `releaseDocumentation.finalReleaseReviewed` only after this sweep is
-    complete; the stable metadata gate intentionally rejects an unacknowledged
-    documentation review.
-12. Confirm the final conformance runner defaults, expected-failure manifests,
-   SDK fixture pins, dated spec paths, and document/example inventories all
+   generated templates, package metadata, and public API examples. Remove
+   package-prerelease claims, keep upstream maturity facts accurate, and keep
+   known peer/referee gaps explicit.
+12. Confirm the conformance runner defaults, expected-failure manifests, SDK
+   fixture pins, spec paths, and document/example inventories all
    point at the same reviewed release inputs.
 
-The release is blocked if the final Core source is unavailable, the pinned Core
-example or document audit is incomplete, the experimental Tasks pin/status/gap
-review is incomplete, a final Core wire contract remains ambiguous, or an
-official suite needs an unexplained expected failure.
+The release is blocked if an input is not immutable, its checked-in metadata
+does not match its tests, the pinned Core or Tasks audits are incomplete, or a
+required conformance/interoperability suite has an unexplained failure. The
+absence of a newer final upstream artifact is not itself a blocker.
 
 ## 2. Run the release gate
 
@@ -141,9 +135,9 @@ git clone --filter=blob:none --no-checkout \
 git -C .dart_tool/mcp-spec fetch --depth=1 origin "$SPEC_REF"
 git -C .dart_tool/mcp-spec checkout --detach FETCH_HEAD
 dart run tool/spec_example_audit.dart \
-  .dart_tool/mcp-spec/schema/2026-07-28/examples
+  .dart_tool/mcp-spec/schema/draft/examples
 dart run tool/spec_document_inventory_audit.dart \
-  .dart_tool/mcp-spec/docs/specification/2026-07-28
+  .dart_tool/mcp-spec/docs/specification/draft
 TASKS_SPEC_REF="$(tr -d '[:space:]' \
   < tool/testing/mcp_2026_07_28_tasks_spec_ref.txt)"
 git clone --filter=blob:none --no-checkout \
@@ -169,7 +163,7 @@ dart run tool/testing/run_json_schema_draft7_format_suite.dart \
   .dart_tool/json-schema-test-suite/tests/draft7/optional/format
 dart run test/conformance/run_2025_server_conformance.dart \
   --timeout-seconds 90 --isolate-scenarios
-CONFORMANCE_VERSION=0.2.0-alpha.10 # Replace with the final compatible release.
+CONFORMANCE_VERSION=0.2.0-alpha.10 # Exact version reviewed and used by CI.
 npx -y "@modelcontextprotocol/conformance@$CONFORMANCE_VERSION" client \
   --command "dart run test/conformance/mcp_2026_07_28_client.dart" \
   --suite all --spec-version 2025-11-25 --verbose
@@ -201,11 +195,9 @@ the formatter uses each package's language version and configuration. In
 particular, formatting the Flutter example without resolving its
 `flutter_lints` include can report false drift.
 
-Confirm the final repository's dated schema layout before running this command;
-do not substitute `schema/draft`, which may advance to the next protocol after
-the release tag. Update CI and any pinned audit helpers to the same dated path.
-The stable metadata gate inspects active Core CI `run` commands, so dated paths
-in comments cannot hide an audit that still targets `draft`.
+Run the schema and document audits against paths that exist in the exact pinned
+Core checkout. A `draft` path is deterministic here because CI checks out the
+recorded commit SHA rather than an upstream branch.
 
 Also run the nested example and CLI validation already enforced by CI. Require
 the Dart 3.4 minimum-SDK lane and the `dart_apitool` comparison against
@@ -224,8 +216,8 @@ On the final release-prep commit:
 - Replace prerelease dependency snippets in the README, getting-started,
   quick-reference, migration guide, and release docs with `mcp_dart: ^2.3.0`.
 - Keep the durable `2026-07-28` document, fixture, command, and workflow names;
-  update only maturity wording that changes when the final specification ships.
-- Promote `stableProtocolVersion` and `defaultProtocolVersion` to the final
+  update maturity wording only when it matches the reviewed upstream input.
+- Promote `stableProtocolVersion` and `defaultProtocolVersion` to the
   `2026-07-28` constant, but keep `latestInitializationProtocolVersion` and
   `legacyProtocolVersions.first` at `2025-11-25`. Run the profile regression
   tests to prove `McpProtocol.legacy` never sends a stateless version through
@@ -239,7 +231,8 @@ On the final release-prep commit:
   it only as a deprecated alias of `stableProtocolVersion` for prerelease
   adopters, and update examples to use the stable/default constants.
 - Move the relevant root changelog entries under `## 2.3.0` and remove wording
-  that presents the now-final protocol as draft-only.
+  that presents the stable package itself as a preview. Keep upstream
+  release-candidate facts explicit while they remain true.
 - Keep migration and compatibility notes explicit: `McpProtocol.stable`
   selects the current stable protocol while legacy profiles remain opt-in.
   Re-read the 2.2-to-2.3 migration guide against the final package metadata and
@@ -247,10 +240,10 @@ On the final release-prep commit:
 - Run `dart pub publish --dry-run` again from a clean checkout of the exact
   release commit. Do not create the release tag until this succeeds.
 - Run the shared metadata validator with `--package mcp_dart --tag v2.3.0`.
-  It must report no pending final-input acknowledgement, require substantive
-  notes under the exact `## 2.3.0` changelog heading, and verify that the
-  default protocol is `2026-07-28` while the initialization and deprecated
-  compatibility aliases remain at `2025-11-25`.
+  It must require substantive notes under the exact `## 2.3.0` changelog
+  heading, exact reviewed input versions and pins, and verify that the default
+  protocol is `2026-07-28` while the initialization and deprecated compatibility
+  aliases remain at `2025-11-25`.
 - Verify the tag-triggered publish workflow rejects an SDK or CLI tag whose
   version does not match the selected package `pubspec.yaml`. The release
   workflow derives its candidate tag from that same package version.

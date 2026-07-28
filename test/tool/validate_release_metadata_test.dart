@@ -40,7 +40,7 @@ void main() {
     );
   });
 
-  test('blocks stable publishing until final inputs are acknowledged', () {
+  test('accepts stable metadata without unavailable final attestations', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: false);
     addTearDown(() => fixture.deleteSync(recursive: true));
 
@@ -50,29 +50,10 @@ void main() {
     );
 
     expect(result.isPrerelease, isFalse);
-    expect(
-      result.errors,
-      contains(contains('final core specification ref has not been reviewed')),
-    );
-    expect(
-      result.errors,
-      contains(contains('final Core MissingRequiredClientCapability')),
-    );
-    expect(
-      result.errors,
-      contains(contains('server-initiated subscription termination')),
-    );
-    expect(
-      result.errors,
-      contains(contains('release-facing documentation has not been reviewed')),
-    );
-    expect(
-      result.errors,
-      contains(contains('interoperability fixtures have not been reviewed')),
-    );
+    expect(result.errors, isEmpty);
   });
 
-  test('accepts stable SDK metadata after every day-of gate is recorded', () {
+  test('accepts stable SDK metadata with final reviews recorded', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
 
@@ -251,7 +232,7 @@ void main() {
     expect(result.errors, isEmpty);
   });
 
-  test('accepts active Core audit commands with Windows path separators', () {
+  test('accepts pinned Core audit commands with Windows path separators', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
     final workflow = File(
@@ -265,16 +246,16 @@ void main() {
             r'tool\spec_example_audit.dart',
           )
           .replaceAll(
-            '.dart_tool/mcp-spec/schema/2026-07-28/examples',
-            r'.dart_tool\mcp-spec\schema\2026-07-28\examples',
+            '.dart_tool/mcp-spec/schema/draft/examples',
+            r'.dart_tool\mcp-spec\schema\draft\examples',
           )
           .replaceAll(
             'tool/spec_document_inventory_audit.dart',
             r'tool\spec_document_inventory_audit.dart',
           )
           .replaceAll(
-            '.dart_tool/mcp-spec/docs/specification/2026-07-28',
-            r'.dart_tool\mcp-spec\docs\specification\2026-07-28',
+            '.dart_tool/mcp-spec/docs/specification/draft',
+            r'.dart_tool\mcp-spec\docs\specification\draft',
           ),
     );
 
@@ -314,26 +295,26 @@ void main() {
     );
   });
 
-  test('dated Core audit comments cannot hide active draft arguments', () {
+  test('Core audit comments cannot hide unexpected active paths', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
     final workflow = File(
       '${fixture.path}/.github/workflows/test_core.yml',
     );
-    final draftWorkflow = workflow
+    final unexpectedWorkflow = workflow
         .readAsStringSync()
         .replaceFirst(
-          '.dart_tool/mcp-spec/schema/2026-07-28/examples',
           '.dart_tool/mcp-spec/schema/draft/examples',
+          '.dart_tool/mcp-spec/schema/2026-07-28/examples',
         )
         .replaceFirst(
-          '.dart_tool/mcp-spec/docs/specification/2026-07-28',
           '.dart_tool/mcp-spec/docs/specification/draft',
+          '.dart_tool/mcp-spec/docs/specification/2026-07-28',
         );
     workflow.writeAsStringSync(
-      '$draftWorkflow\n'
-      '# .dart_tool/mcp-spec/schema/2026-07-28/examples\n'
-      '# .dart_tool/mcp-spec/docs/specification/2026-07-28\n',
+      '$unexpectedWorkflow\n'
+      '# .dart_tool/mcp-spec/schema/draft/examples\n'
+      '# .dart_tool/mcp-spec/docs/specification/draft\n',
     );
 
     final result = ReleaseMetadataValidator(fixture).validate(
@@ -351,7 +332,7 @@ void main() {
     );
   });
 
-  test('rejects an active draft audit beside the required dated audit', () {
+  test('rejects an additional active Core audit path', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
     final workflow = File(
@@ -359,10 +340,10 @@ void main() {
     );
     workflow.writeAsStringSync(
       workflow.readAsStringSync().replaceFirst(
-            '.dart_tool/mcp-spec/schema/2026-07-28/examples',
-            '.dart_tool/mcp-spec/schema/2026-07-28/examples;\n'
+            '.dart_tool/mcp-spec/schema/draft/examples',
+            '.dart_tool/mcp-spec/schema/draft/examples;\n'
                 '          dart run tool/spec_example_audit.dart\n'
-                '          .dart_tool/mcp-spec/schema/draft/examples',
+                '          .dart_tool/mcp-spec/schema/2026-07-28/examples',
           ),
     );
 
@@ -1064,22 +1045,6 @@ Directory _stableFixture(
           ),
     );
   }
-
-  final coreWorkflow = File(
-    '${fixture.path}/.github/workflows/test_core.yml',
-  );
-  coreWorkflow.writeAsStringSync(
-    coreWorkflow
-        .readAsStringSync()
-        .replaceAll(
-          '.dart_tool/mcp-spec/schema/draft/examples',
-          '.dart_tool/mcp-spec/schema/2026-07-28/examples',
-        )
-        .replaceAll(
-          '.dart_tool/mcp-spec/docs/specification/draft',
-          '.dart_tool/mcp-spec/docs/specification/2026-07-28',
-        ),
-  );
 
   const interopGapSurfaces = <String>[
     '.github/workflows/interop_2026_07_28.yml',
