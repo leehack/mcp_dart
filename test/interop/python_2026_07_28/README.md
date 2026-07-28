@@ -1,7 +1,7 @@
 # Python SDK 2026-07-28 Interop
 
 This fixture tracks both MCP `2026-07-28` directions against the official
-Python SDK `mcp==2.0.0rc1` and `mcp-types==2.0.0rc1` packages. Both Dart
+Python SDK `mcp==2.0.0` and `mcp-types==2.0.0` packages. Both Dart
 client -> Python server and Python client -> Dart server are required compatible
 paths. This fixture is separate from the stable Python fixture, which continues
 to cover the released MCP 2025-11-25 specification.
@@ -27,5 +27,5 @@ tool execution. The reverse direction first sends an independent anonymous raw
 `server/discover` request to the Dart server. That probe requires MCP
 `2026-07-28` acceptance without `clientInfo`, no obsolete body `serverInfo`,
 and canonical server identity in
-`_meta["io.modelcontextprotocol/serverInfo"]`; the Python release-candidate
-client must then negotiate MCP `2026-07-28` and complete the scenario.
+`_meta["io.modelcontextprotocol/serverInfo"]`; the Python stable client must
+then negotiate MCP `2026-07-28` and complete the scenario.

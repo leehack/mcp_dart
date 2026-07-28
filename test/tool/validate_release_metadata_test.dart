@@ -563,8 +563,8 @@ void main() {
     requirements.writeAsStringSync('''
 mcp==2.0.0b1
 mcp-types==2.0.0b1
-# mcp==2.0.0rc1
-# mcp-types==2.0.0rc1
+# mcp==2.0.0
+# mcp-types==2.0.0
 ''');
 
     final result = ReleaseMetadataValidator(fixture).validate(
