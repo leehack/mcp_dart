@@ -398,7 +398,11 @@ class ReleaseMetadataValidator {
       'doc/spec-coverage-2026-07-28.md',
     ];
     for (final path in paths) {
-      final source = _stripMarkdownCommentsAndFences(_readText(path, errors));
+      final input = _readText(path, errors);
+      if (input.isEmpty && !File(_path(path)).existsSync()) {
+        continue;
+      }
+      final source = _stripMarkdownCommentsAndFences(input);
       final identifiesExperimental = RegExp(
         r'experimental\s+Tasks extension',
         caseSensitive: false,

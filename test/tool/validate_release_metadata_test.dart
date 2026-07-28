@@ -171,6 +171,32 @@ void main() {
     );
   });
 
+  test('does not add a disclosure error for a missing input', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    File('${fixture.path}/README.md').deleteSync();
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains('Missing release input: README.md.'),
+    );
+    expect(
+      result.errors,
+      isNot(
+        contains(
+          contains(
+            'README.md must disclose the Tasks extension as experimental',
+          ),
+        ),
+      ),
+    );
+  });
+
   test('hyphens in stable build metadata do not select prerelease', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
