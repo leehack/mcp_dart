@@ -19,7 +19,21 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 > `mcp_dart_cli 0.2.0`. Current source passes the official alpha.10 MCP
 > `2026-07-28` client and server suites with no expected failures, including
 > all 25 authorization scenarios, plus bidirectional published TypeScript SDK
-> 2.0.0 and Python SDK 2.0.0rc1 interoperability.
+> 2.0.0 and Python SDK 2.0.0 interoperability.
+
+## SDK Tier 1 target
+
+The project is pursuing
+[MCP SDK Tier 1](https://modelcontextprotocol.io/community/sdk-tiers). Tier 1
+is not yet claimed or assigned. The technical baseline is green; the remaining
+official audit, repository-governance, and SDK Working Group steps are tracked
+in the [roadmap](ROADMAP.md) and
+[48-feature coverage inventory](doc/sdk-tier-1-feature-coverage.md).
+
+The public maintenance contract is documented in the
+[contribution guide](CONTRIBUTING.md), [security policy](SECURITY.md),
+[dependency policy](DEPENDENCY_POLICY.md), and
+[versioning policy](VERSIONING.md).
 
 ## Requirements
 
@@ -81,9 +95,13 @@ commands.
   core conformance claim.
 - Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, bidirectional
   published TypeScript SDK 2.0.0 interoperability, bidirectional Python SDK
-  2.0.0rc1 interoperability, real-browser transport tests, a real Flutter Web
+  2.0.0 interoperability, real-browser transport tests, a real Flutter Web
   service integration in Chrome, deterministic widget tests, and an
   independent pinned JSON Schema Test Suite gate.
+- Current unreleased source adds a deprecated, opt-in legacy HTTP+SSE client
+  with same-origin routing and bidirectional interoperability against official
+  TypeScript SDK 1.30.0 and Python SDK 2.0.0 peers. Stable `2.3.0` does not
+  include that client; it requires the next approved minor SDK release.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host
@@ -189,12 +207,15 @@ deployments should use TLS, authenticate requests, and configure the documented
 
 ## Platform support
 
-| Target | Stdio | Streamable HTTP | IO/custom stream |
-| --- | --- | --- | --- |
-| Dart VM / desktop server | Yes | Client and server | Yes |
-| Browser / Flutter Web | No process spawning | Client | Yes |
-| Flutter mobile | Only app-managed native helpers | Remote client | Yes |
-| Flutter desktop | Local helper processes | Client and server | Yes |
+| Target | Stdio | Streamable HTTP | Legacy HTTP+SSE | IO/custom stream |
+| --- | --- | --- | --- | --- |
+| Dart VM / desktop server | Yes | Client and server | Client and server | Yes |
+| Browser / Flutter Web | No process spawning | Client | Client | Yes |
+| Flutter mobile | Only app-managed native helpers | Remote client | Remote client | Yes |
+| Flutter desktop | Local helper processes | Client and server | Client and server | Yes |
+
+Legacy HTTP+SSE is deprecated under MCP SEP-2596 and is retained only for
+explicit compatibility. Use Streamable HTTP for new remote integrations.
 
 See [Flutter host and client recipes](https://github.com/leehack/mcp_dart/blob/main/doc/flutter-recipes.md)
 for lifecycle and secure-storage guidance.
@@ -210,6 +231,11 @@ surface. Re-check both packages' current releases before a production decision.
 ## Support
 
 - [Issues and bug reports](https://github.com/leehack/mcp_dart/issues)
+- [Contribution and issue-triage policy](https://github.com/leehack/mcp_dart/blob/main/CONTRIBUTING.md)
+- [Security policy](https://github.com/leehack/mcp_dart/blob/main/SECURITY.md)
+- [Dependency policy](https://github.com/leehack/mcp_dart/blob/main/DEPENDENCY_POLICY.md)
+- [Versioning policy](https://github.com/leehack/mcp_dart/blob/main/VERSIONING.md)
+- [Tier 1 roadmap](https://github.com/leehack/mcp_dart/blob/main/ROADMAP.md)
 - [SDK on pub.dev](https://pub.dev/packages/mcp_dart)
 - [2.3.0 API reference](https://pub.dev/documentation/mcp_dart/2.3.0/)
 - [Changelog](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)

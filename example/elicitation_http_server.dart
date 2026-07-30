@@ -138,24 +138,33 @@ McpServer getServer() {
 
         final email = emailResult.content?['email'] as String;
 
-        // Collect newsletter preference
-        final newsletterResult = await server.elicitInput(
+        // Collect preferences, including a default and an enum.
+        final preferencesResult = await server.elicitInput(
           ElicitRequest.form(
-            message: 'Subscribe to newsletter?',
+            message: 'Choose your contact preferences',
             requestedSchema: JsonSchema.object(
               properties: {
                 'newsletter': JsonSchema.boolean(
                   defaultValue: false,
                   description: 'Receive updates via email',
                 ),
+                'preferredContact': JsonSchema.string(
+                  enumValues: ['email', 'none'],
+                  defaultValue: 'email',
+                  description: 'How account notifications should be delivered',
+                ),
               },
             ),
           ),
         );
 
-        final newsletter = newsletterResult.accepted
-            ? (newsletterResult.content?['newsletter'] as bool? ?? false)
+        final newsletter = preferencesResult.accepted
+            ? (preferencesResult.content?['newsletter'] as bool? ?? false)
             : false;
+        final preferredContact = preferencesResult.accepted
+            ? (preferencesResult.content?['preferredContact'] as String? ??
+                'email')
+            : 'none';
 
         // Return success response
         return CallToolResult.fromContent(
@@ -165,7 +174,8 @@ McpServer getServer() {
 
 Username: $username
 Email: $email
-Newsletter: ${newsletter ? 'Yes' : 'No'}''',
+Newsletter: ${newsletter ? 'Yes' : 'No'}
+Preferred contact: $preferredContact''',
             ),
           ],
         );

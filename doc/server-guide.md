@@ -139,12 +139,36 @@ server.registerResource('Data', 'file:///data', null, readCallback);
 
 ### Prompt Capabilities
 
-```dart
-// Base prompt support is declared when the first prompt is registered.
-server.registerPrompt('my-prompt', ...);
+Advertise `prompts.listChanged` only when the server can notify clients after
+its prompt registry changes. In an MCP 2026-07-28
+`subscriptions/listen` handler, acknowledge `promptsListChanged` and send the
+typed notification only on that request stream:
 
-// Advertise ServerCapabilitiesPrompts(listChanged: true) before sending
-// prompt-list change notifications.
+```dart
+final acknowledged = request.listenParams.notifications.acknowledgedBy(
+  server.server.getCapabilities(),
+);
+await extra.sendSubscriptionAcknowledged(acknowledged);
+
+if (acknowledged.promptsListChanged == true) {
+  await extra.sendSubscriptionNotification(
+    const JsonRpcPromptListChangedNotification(),
+  );
+}
+```
+
+For an MCP 2025-11-25 stateful session, registering, updating, enabling,
+disabling, or removing a prompt through the high-level registry automatically
+sends the legacy global list-change notification when the server is connected
+and the capability was advertised:
+
+```dart
+final prompt = server.registerPrompt(
+  'my-prompt',
+  callback: (args, extra) async => const GetPromptResult(messages: []),
+);
+
+prompt.update(description: 'Updated prompt');
 ```
 
 ## MCP Apps Metadata
@@ -450,7 +474,10 @@ server.registerResource(
 
 ### Resource with URI Template
 
-Use URI templates for dynamic resources:
+Use URI templates when one resource definition represents a family of concrete
+URIs. Declare variables in the template, validate the expanded values in the
+callback, and return contents whose URI matches the requested concrete
+resource:
 
 ```dart
 server.registerResourceTemplate(
@@ -578,6 +605,10 @@ server.registerResourceTemplate(
 ```
 
 ### Binary Resources
+
+Use `BlobResourceContents` for non-text bytes. Base64-encode the payload and
+provide its MIME type; clients decode `blob` after applying their normal
+resource authorization and size limits.
 
 ```dart
 server.registerResource(

@@ -676,6 +676,29 @@ mcp-types==2.0.0b1
     );
   });
 
+  test('scans repository policy Markdown for stale release markers', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    File('${fixture.path}/ROADMAP.md').writeAsStringSync(
+      'The MCP 2026-07-28 preview is ready.\n',
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(
+        allOf(
+          contains('stale release marker'),
+          contains('ROADMAP.md'),
+        ),
+      ),
+    );
+  });
+
   test('rejects a stale generated-project SDK dependency', () {
     final fixture = _stableFixture(
       repoRoot,
@@ -910,7 +933,12 @@ Directory _stableFixture(
     '.github/workflows/test_core.yml',
     '.github/workflows/interop_2026_07_28.yml',
     'CHANGELOG.md',
+    'CONTRIBUTING.md',
+    'DEPENDENCY_POLICY.md',
     'README.md',
+    'ROADMAP.md',
+    'SECURITY.md',
+    'VERSIONING.md',
     'doc/client-guide.md',
     'doc/getting-started.md',
     'doc/interoperability.md',

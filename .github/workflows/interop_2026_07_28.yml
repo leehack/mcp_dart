@@ -12,14 +12,19 @@ on:
       - main
     paths:
       - 'lib/**'
+      - 'example/server_sse.dart'
       - 'test/conformance/**'
       - 'test/interop/test_dart_server.dart'
+      - 'test/interop/dart_client_with_ts_server_test.dart'
+      - 'test/interop/ts/**'
       - 'test/interop/ts_2026_07_28/**'
       - 'test/interop/python_2026_07_28/**'
+      - 'test/interop/browser_legacy_sse_client_test.dart'
       - 'test/browser/mcp_2026_07_28_streamable_http_test.dart'
       - 'tool/testing/run_ts_2026_07_28_interop.dart'
       - 'tool/testing/run_python_2026_07_28_interop.dart'
       - 'tool/testing/run_browser_2026_07_28_interop.dart'
+      - 'tool/testing/legacy_sse_browser_fixture.dart'
       - 'tool/testing/bounded_response_body.dart'
       - 'tool/testing/mcp_2026_07_28_discovery_wire_probe.dart'
       - '.github/workflows/interop_2026_07_28.yml'
@@ -28,20 +33,59 @@ on:
   pull_request:
     paths:
       - 'lib/**'
+      - 'example/server_sse.dart'
       - 'test/conformance/**'
       - 'test/interop/test_dart_server.dart'
+      - 'test/interop/dart_client_with_ts_server_test.dart'
+      - 'test/interop/ts/**'
       - 'test/interop/ts_2026_07_28/**'
       - 'test/interop/python_2026_07_28/**'
+      - 'test/interop/browser_legacy_sse_client_test.dart'
       - 'test/browser/mcp_2026_07_28_streamable_http_test.dart'
       - 'tool/testing/run_ts_2026_07_28_interop.dart'
       - 'tool/testing/run_python_2026_07_28_interop.dart'
       - 'tool/testing/run_browser_2026_07_28_interop.dart'
+      - 'tool/testing/legacy_sse_browser_fixture.dart'
       - 'tool/testing/bounded_response_body.dart'
       - 'tool/testing/mcp_2026_07_28_discovery_wire_probe.dart'
       - '.github/workflows/interop_2026_07_28.yml'
       - 'pubspec.yaml'
       - 'pubspec.lock'
 jobs:
+  legacy-sse-interop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+        with:
+          sdk: stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      - name: Install TypeScript legacy fixture dependencies
+        working-directory: test/interop/ts
+        run: npm ci
+
+      - name: Verify TypeScript legacy fixtures
+        working-directory: test/interop/ts
+        run: npm run build && npm run lint && npm run format:check
+
+      - name: Run bidirectional legacy SSE interoperability
+        run: >-
+          dart test test/interop/dart_client_with_ts_server_test.dart
+          --tags interop
+          --name "Legacy SSE"
+
   ts-2026-07-28-interop:
     runs-on: ubuntu-latest
 
@@ -96,19 +140,19 @@ jobs:
       - name: Install Dart dependencies
         run: dart pub get
 
-      - name: Install Python 2026-07-28 fixture dependencies
+      - name: Install published Python SDK fixture dependencies
         run: >-
           python -m pip install
           -r test/interop/python_2026_07_28/requirements.txt
 
-      - name: Run Dart client against published Python release candidate server
+      - name: Run Dart clients against published Python SDK servers
         env:
           MCP_PYTHON: python
         run: >-
           dart run tool/testing/run_python_2026_07_28_interop.dart
           --direction=dart-to-python
 
-      - name: Run published Python release candidate client against Dart server
+      - name: Run published Python SDK clients against Dart servers
         env:
           MCP_PYTHON: python
         run: >-

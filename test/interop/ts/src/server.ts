@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -413,6 +414,60 @@ async function main() {
     const server = createInteropServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
+    return;
+  }
+
+  if (transportName === 'sse') {
+    const app = express();
+    const transports = new Map<string, SSEServerTransport>();
+    const servers = new Map<string, McpServer>();
+
+    app.get('/sse', async (req, res) => {
+      const server = createInteropServer();
+      const transport = new SSEServerTransport('/messages', res, {
+        enableDnsRebindingProtection: true,
+        allowedHosts: [`127.0.0.1:${port}`, `localhost:${port}`],
+        allowedOrigins: [
+          `http://127.0.0.1:${port}`,
+          `http://localhost:${port}`,
+        ],
+      });
+      const sessionId = transport.sessionId;
+      transports.set(sessionId, transport);
+      servers.set(sessionId, server);
+      transport.onclose = () => {
+        transport.onclose = undefined;
+        transports.delete(sessionId);
+        servers.delete(sessionId);
+        void server.close().catch((error) => {
+          console.error(
+            `[TS Server] Failed to close legacy SSE session ${sessionId}:`,
+            error
+          );
+        });
+      };
+      await server.connect(transport);
+    });
+
+    app.post('/messages', async (req, res) => {
+      const sessionId =
+        typeof req.query.sessionId === 'string'
+          ? req.query.sessionId
+          : undefined;
+      const transport =
+        sessionId === undefined ? undefined : transports.get(sessionId);
+      if (transport === undefined) {
+        res.status(404).send('SSE session not found');
+        return;
+      }
+      await transport.handlePostMessage(req, res);
+    });
+
+    app.listen(port, '127.0.0.1', () => {
+      console.log(
+        `TS McpServer running on port ${port} with legacy /sse transport`
+      );
+    });
     return;
   }
 

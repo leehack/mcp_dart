@@ -1,3 +1,20 @@
+## Unreleased
+
+### Added
+
+- Added an opt-in, deprecated `SseClientTransport` for compatibility with
+  legacy HTTP+SSE servers. It enforces the first `endpoint` event, same-origin
+  POST routing, JSON-RPC framing, negotiated protocol-version headers, and
+  deterministic client-side close on VM, Flutter, and web.
+- Added a paired legacy SSE client example plus Dart-to-Dart and bidirectional
+  TypeScript/Python interoperability coverage.
+
+### Changed
+
+- Updated all legacy HTTP+SSE client and server APIs to reference MCP
+  SEP-2596, its 2026-08-18 earliest removal-eligibility date, Streamable HTTP
+  migration, and a configurable runtime deprecation warning.
+
 ## 2.3.0
 
 `mcp_dart 2.3` adds the final MCP `2026-07-28` surface while
@@ -72,7 +89,7 @@ for protocol details.
   dependency testing, and pinned core, Tasks, and JSON Schema conformance data.
 - The official alpha.10 MCP `2026-07-28` client and server suites pass with no
   expected failures, including all 25 OAuth scenarios.
-- Published TypeScript SDK 2.0.0 and Python SDK 2.0.0rc1 interoperate
+- Published TypeScript SDK 2.0.0 and Python SDK 2.0.0 interoperate
   bidirectionally on the post-#3002 discovery wire.
 
 ### Breaking and compatibility notes

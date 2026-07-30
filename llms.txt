@@ -11,6 +11,11 @@
 - Package: https://pub.dev/packages/mcp_dart
 - License: MIT
 
+Current unreleased source also provides an explicitly deprecated legacy
+HTTP+SSE client with same-origin endpoint enforcement. It is not part of stable
+2.3.0 and requires the next approved minor SDK release. Prefer Streamable HTTP
+for all new integrations.
+
 ## Release status
 
 The 2.3.0 release implements the complete core client/server wire surface of
@@ -233,7 +238,7 @@ https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
 - Official MCP 2025-11-25 server/client conformance paths.
 - MCP 2026-07-28 alpha.10 client and server coverage with no expected
   failures, including all 25 authorization scenarios.
-- Bidirectional published TypeScript SDK 2.0.0 and Python SDK 2.0.0rc1
+- Bidirectional published TypeScript SDK 2.0.0 and Python SDK 2.0.0
   interoperability on the post-#3002 discovery wire.
 - Real Chrome cross-origin Streamable HTTP smoke coverage.
 - Checked-in spec example audit pinned to an upstream commit.

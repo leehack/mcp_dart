@@ -247,6 +247,11 @@ ImageContent(
   mimeType: 'image/png',
 );
 
+AudioContent(
+  data: base64Audio,
+  mimeType: 'audio/wav',
+);
+
 ResourceLink(
   uri: 'file:///report.txt',
   name: 'Report',
@@ -264,6 +269,24 @@ EmbeddedResource(
 
 Tool results can contain multiple content items. MCP 2026-07-28 also supports
 the documented structured-content helpers.
+
+Prompts use the same content types. For example, a prompt callback can return
+an `ImageContent` in a `PromptMessage` when the selected prompt needs to supply
+an image to the model:
+
+```dart
+return GetPromptResult(
+  messages: [
+    PromptMessage(
+      role: PromptMessageRole.user,
+      content: ImageContent(
+        data: base64Data,
+        mimeType: 'image/png',
+      ),
+    ),
+  ],
+);
+```
 
 ## JSON Schema
 
@@ -322,9 +345,17 @@ server.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
       server.server.getCapabilities(),
     );
     await extra.sendSubscriptionAcknowledged(acknowledged);
-    await extra.sendSubscriptionNotification(
-      const JsonRpcToolListChangedNotification(),
-    );
+
+    if (acknowledged.toolsListChanged == true) {
+      await extra.sendSubscriptionNotification(
+        const JsonRpcToolListChangedNotification(),
+      );
+    }
+    if (acknowledged.promptsListChanged == true) {
+      await extra.sendSubscriptionNotification(
+        const JsonRpcPromptListChangedNotification(),
+      );
+    }
     return const EmptyResult();
   },
   (id, params, meta) => JsonRpcSubscriptionsListenRequest(
@@ -351,13 +382,72 @@ await server.sendStatelessLoggingMessage(
 );
 ```
 
-The request ID is mandatory for routing on Streamable HTTP. Legacy MCP
+The request ID is mandatory for routing on Streamable HTTP, and the server must
+send only notification kinds present in the acknowledged filter. Legacy MCP
 2025-11-25 peers instead use global capability-gated methods such as
-`sendToolListChanged`, `sendResourceUpdated`, and `logging/setLevel`.
+`sendToolListChanged`, `sendPromptListChanged`, `sendResourceUpdated`, and
+`logging/setLevel`.
 
 Stdio servers must reserve stdout for MCP frames; send application logs to
 stderr. Configure internal SDK logs with `setMcpLogHandler`,
 `silenceMcpLogs`, or `resetMcpLogHandler`.
+
+## Basic utilities
+
+Use `ping` to verify that a connected peer is still responsive. Clients can
+ping any connected server; server-to-client ping is available only in the
+legacy stateful profile:
+
+```dart
+await client.ping();
+
+// MCP 2025-11-25 only:
+await server.server.ping();
+```
+
+List operations use opaque cursors. Pass each `nextCursor` back unchanged and
+stop when it is absent. Guard against a faulty peer repeating a cursor:
+
+```dart
+String? cursor;
+final seen = <String>{};
+
+do {
+  final page = await client.listTools(
+    params: cursor == null ? null : ListToolsRequest(cursor: cursor),
+  );
+  for (final tool in page.tools) {
+    print(tool.name);
+  }
+
+  cursor = page.nextCursor;
+  if (cursor != null && !seen.add(cursor)) {
+    throw StateError('tools/list repeated cursor "$cursor"');
+  }
+} while (cursor != null);
+```
+
+For cancellation, pass a `BasicAbortController.signal` in `RequestOptions` and
+abort it when the caller no longer needs the result. Long-running handlers
+should observe `extra.signal.aborted` and stop promptly:
+
+```dart
+final controller = BasicAbortController();
+final pending = client.callTool(
+  const CallToolRequest(name: 'long-running'),
+  options: RequestOptions(signal: controller.signal),
+);
+
+controller.abort('No longer needed');
+try {
+  await pending;
+} on AbortError {
+  // Expected: the caller no longer needs this result.
+}
+```
+
+See [Tools: progress and cancellation](tools.md#progress-notifications) for
+server-side progress and cleanup patterns.
 
 ## Testing and verification
 
@@ -382,6 +472,7 @@ guidance.
 ## Next steps
 
 - [Upgrade from mcp_dart 2.2 to 2.3](migration-2.2-to-2.3.md)
+- [SDK Tier 1 feature coverage](sdk-tier-1-feature-coverage.md)
 - [Getting started](getting-started.md)
 - [Server guide](server-guide.md)
 - [Client guide](client-guide.md)

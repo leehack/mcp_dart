@@ -665,6 +665,13 @@ class ReleaseMetadataValidator {
     final paths = <String>{'README.md', 'llms.txt'};
     if (package == ReleasePackage.sdk) {
       paths
+        ..addAll(const {
+          'CONTRIBUTING.md',
+          'DEPENDENCY_POLICY.md',
+          'ROADMAP.md',
+          'SECURITY.md',
+          'VERSIONING.md',
+        })
         ..addAll(_markdownFilesUnder('doc'))
         ..addAll(_markdownFilesUnder('example'))
         ..addAll(_dartFilesUnder('lib'));

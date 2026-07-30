@@ -7,9 +7,15 @@ void main() {
   group('Module exports', () {
     test('client module symbols are available', () {
       client_module.Client? client;
+      client_module.SseClientError? sseError;
+      client_module.SseClientTransport? sseTransport;
+      client_module.SseClientTransportOptions? sseOptions;
       client_module.StdioClientTransport? stdioTransport;
 
       expect(client, isNull);
+      expect(sseError, isNull);
+      expect(sseTransport, isNull);
+      expect(sseOptions, isNull);
       expect(stdioTransport, isNull);
     });
 

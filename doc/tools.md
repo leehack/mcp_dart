@@ -271,6 +271,9 @@ emitted by `ToolAnnotations.toJson()`.
 
 ### Text Content
 
+Return `TextContent` for human-readable or model-readable text. Put it inside a
+`CallToolResult` so the response retains the MCP tool-result envelope.
+
 ```dart
 return CallToolResult(
   content: [
@@ -280,6 +283,10 @@ return CallToolResult(
 ```
 
 ### Image Content
+
+Return an `ImageContent` block when the model or host needs inline image bytes.
+Base64-encode the bytes and provide the real media type so the receiver can
+decode them safely.
 
 ```dart
 return CallToolResult(
@@ -294,6 +301,23 @@ return CallToolResult(
 
 Theme hints belong to `McpIcon.theme` on icon-bearing resources and tools; the
 wire shape for `ImageContent` does not include a theme field.
+
+### Audio Content
+
+Return audio as a base64-encoded `AudioContent` block inside the tool result.
+Use a MIME type that describes the encoded bytes; do not place filesystem paths
+or raw binary bytes on the wire.
+
+```dart
+return CallToolResult(
+  content: [
+    AudioContent(
+      data: base64Encode(audioBytes),
+      mimeType: 'audio/wav',
+    ),
+  ],
+);
+```
 
 ### Resource Link Content
 
@@ -334,6 +358,10 @@ return CallToolResult(
 
 ### Embedded Resources
 
+Use `EmbeddedResource` when the resource contents should travel with the tool
+result instead of requiring a follow-up `resources/read` request. Keep the
+embedded URI stable enough for attribution and include the correct MIME type.
+
 ```dart
 return CallToolResult(
   content: [
@@ -352,6 +380,10 @@ return CallToolResult(
 ## Error Handling
 
 ### Return Error Results
+
+Expected tool-domain failures should be returned as
+`CallToolResult(isError: true, ...)` so a model can inspect the explanation and
+retry. Reserve thrown `McpError` values for JSON-RPC or MCP protocol failures.
 
 ```dart
 server.registerTool(

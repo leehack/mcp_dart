@@ -1,10 +1,9 @@
-# Python SDK 2026-07-28 Interop
+# Python SDK 2.0.0 Interop
 
-This fixture tracks both MCP `2026-07-28` directions against the official
-Python SDK `mcp==2.0.0` and `mcp-types==2.0.0` packages. Both Dart
-client -> Python server and Python client -> Dart server are required compatible
-paths. This fixture is separate from the stable Python fixture, which continues
-to cover the released MCP 2025-11-25 specification.
+This fixture tracks both directions against the official Python SDK
+`mcp==2.0.0` and `mcp-types==2.0.0` packages. Each direction covers modern
+Streamable HTTP with MCP `2026-07-28` and the published SDK's deprecated
+HTTP+SSE compatibility APIs with MCP `2025-11-25`.
 
 ## Run
 
@@ -23,9 +22,11 @@ MCP_PYTHON=.dart_tool/python-2026-interop/bin/python \
 ```
 
 The Dart client -> Python server direction checks discovery, tool listing, and
-tool execution. The reverse direction first sends an independent anonymous raw
-`server/discover` request to the Dart server. That probe requires MCP
-`2026-07-28` acceptance without `clientInfo`, no obsolete body `serverInfo`,
-and canonical server identity in
-`_meta["io.modelcontextprotocol/serverInfo"]`; the Python stable client must
-then negotiate MCP `2026-07-28` and complete the scenario.
+tool execution over Streamable HTTP, then initialization, tool listing, and a
+tool call over legacy SSE. The reverse direction first sends an independent
+anonymous raw `server/discover` request to the Dart server. That probe requires
+MCP `2026-07-28` acceptance without `clientInfo`, no obsolete body
+`serverInfo`, and canonical server identity in
+`_meta["io.modelcontextprotocol/serverInfo"]`; the Python stable client then
+negotiates MCP `2026-07-28`. Its legacy SSE client separately negotiates MCP
+`2025-11-25` and completes the same public tool flow.

@@ -126,7 +126,9 @@ void main() {
     late StreamableMcpServer server;
     late int port;
     late String baseUrl;
-    const host = 'localhost';
+    // Keep the listener and clients on one address family so concurrent test
+    // servers cannot share the same numeric ephemeral port on another family.
+    const host = '127.0.0.1';
 
     Future<http.Response> postPingWithSession(String sessionId) {
       return http.post(
@@ -2077,7 +2079,7 @@ void main() {
       expect(
         challenge,
         contains(
-          'resource_metadata="http://localhost:$port/.well-known/oauth-protected-resource/mcp"',
+          'resource_metadata="http://$host:$port/.well-known/oauth-protected-resource/mcp"',
         ),
       );
       expect(challenge, contains('scope="tools:read"'));
@@ -2141,7 +2143,7 @@ void main() {
       expect(
         scopeChallenge,
         contains(
-          'resource_metadata="http://localhost:$port/.well-known/oauth-protected-resource/mcp"',
+          'resource_metadata="http://$host:$port/.well-known/oauth-protected-resource/mcp"',
         ),
       );
 
@@ -2196,7 +2198,7 @@ void main() {
       );
       expect(
         challenge,
-        isNot(contains('http://localhost:$port')),
+        isNot(contains('http://$host:$port')),
       );
     });
 
@@ -2209,7 +2211,7 @@ void main() {
         host: host,
         port: port,
         enableDnsRebindingProtection: true,
-        allowedHosts: {'localhost'},
+        allowedHosts: {host},
       );
       await server.start();
 
@@ -2275,7 +2277,7 @@ void main() {
         host: host,
         port: port,
         enableDnsRebindingProtection: true,
-        allowedHosts: {'localhost'},
+        allowedHosts: {host},
         allowedOrigins: {'http://localhost:$port'},
       );
       await server.start();

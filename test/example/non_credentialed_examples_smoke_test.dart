@@ -260,6 +260,75 @@ void main() {
     );
 
     test(
+      'legacy SSE client and server examples complete a tool flow',
+      () async {
+        final portProbe =
+            await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final port = portProbe.port;
+        await portProbe.close(force: true);
+        final server = await Process.start(
+          Platform.resolvedExecutable,
+          ['run', 'example/server_sse.dart'],
+          environment: {
+            ...Platform.environment,
+            'PORT': '$port',
+            'MCP_ALLOWED_ORIGIN': 'http://localhost:8080',
+          },
+        );
+        final serverStdout = server.stdout.transform(utf8.decoder).join();
+        final serverStderr = server.stderr.transform(utf8.decoder).join();
+
+        try {
+          expect(
+            await _sseRequestStatus(
+              port,
+              origin: 'https://readiness-probe.invalid',
+              retryConnection: true,
+            ),
+            HttpStatus.forbidden,
+          );
+          final client = await Process.start(
+            Platform.resolvedExecutable,
+            ['run', 'example/client_sse.dart'],
+            environment: {
+              ...Platform.environment,
+              'MCP_SERVER_URL': 'http://127.0.0.1:$port/sse',
+            },
+          );
+          final clientStdout = client.stdout.transform(utf8.decoder).join();
+          final clientStderr = client.stderr.transform(utf8.decoder).join();
+          final exitCode = await client.exitCode.timeout(
+            const Duration(seconds: 20),
+            onTimeout: () {
+              client.kill();
+              return -1;
+            },
+          );
+          final output = '${await clientStdout}\n${await clientStderr}';
+
+          expect(exitCode, 0, reason: output);
+          expect(output, contains('Negotiated protocol: 2025-11-25'));
+          expect(output, contains('Available tools: calculate'));
+          expect(output, contains('Result: 15'));
+        } finally {
+          server.kill();
+          await server.exitCode.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              if (!Platform.isWindows) {
+                server.kill(ProcessSignal.sigkill);
+              }
+              return -1;
+            },
+          );
+          await serverStdout;
+          await serverStderr;
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test(
       'interactive task server does not log request secrets',
       () async {
         const authorizationSentinel = 'authorization-sentinel-8c27dcb930d1';
