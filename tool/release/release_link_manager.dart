@@ -144,7 +144,17 @@ class ReleaseLinkManager {
 
   List<File> _releaseFacingFiles() {
     final relativeFiles = package == ReleasePackage.sdk
-        ? <String>['CHANGELOG.md', 'README.md', 'llms.txt', 'pubspec.yaml']
+        ? <String>[
+            'CHANGELOG.md',
+            'CONTRIBUTING.md',
+            'DEPENDENCY_POLICY.md',
+            'README.md',
+            'ROADMAP.md',
+            'SECURITY.md',
+            'VERSIONING.md',
+            'llms.txt',
+            'pubspec.yaml',
+          ]
         : <String>[
             'CHANGELOG.md',
             'CONTRIBUTING.md',

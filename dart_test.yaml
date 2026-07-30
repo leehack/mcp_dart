@@ -1,2 +1,5 @@
+# Keep recursive protocol-validation boundary tests deterministic on high-core
+# development hosts while still exercising suites concurrently.
+concurrency: 2
 tags:
   interop:

@@ -14,6 +14,39 @@ void main() {
   final markdownFiles = _markdownFiles(repoRoot).toList()..sort();
 
   group('Markdown docs', () {
+    test('includes repository policy documents', () {
+      expect(
+        markdownFiles.map((file) => p.relative(file, from: repoRoot)).toSet(),
+        containsAll(const {
+          'CONTRIBUTING.md',
+          'DEPENDENCY_POLICY.md',
+          'ROADMAP.md',
+          'SECURITY.md',
+          'VERSIONING.md',
+        }),
+      );
+    });
+
+    test('Tier 1 inventory has exactly 48 unique sequential features', () {
+      final source = File(
+        p.join(repoRoot, 'doc', 'sdk-tier-1-feature-coverage.md'),
+      ).readAsStringSync();
+      final section = source
+          .split('## Canonical feature inventory')
+          .last
+          .split('## Legacy URL elicitation and completion')
+          .first;
+      final rows = RegExp(
+        r'^\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|',
+        multiLine: true,
+      ).allMatches(section).toList();
+      final numbers = rows.map((match) => int.parse(match.group(1)!)).toList();
+      final features = rows.map((match) => match.group(2)!.trim()).toList();
+
+      expect(numbers, List<int>.generate(48, (index) => index + 1));
+      expect(features.toSet(), hasLength(48));
+    });
+
     test('local links resolve to checked-in files or directories', () {
       final brokenLinks = <String>[];
 
@@ -295,6 +328,11 @@ Iterable<String> _markdownFiles(String repoRoot) sync* {
   final roots = [
     'README.md',
     'CHANGELOG.md',
+    'CONTRIBUTING.md',
+    'DEPENDENCY_POLICY.md',
+    'ROADMAP.md',
+    'SECURITY.md',
+    'VERSIONING.md',
     'doc',
     'example',
     p.join('packages', 'templates'),

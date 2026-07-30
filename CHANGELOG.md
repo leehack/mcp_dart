@@ -6,8 +6,8 @@
   legacy HTTP+SSE servers. It enforces the first `endpoint` event, same-origin
   POST routing, JSON-RPC framing, negotiated protocol-version headers, and
   deterministic client-side close on VM, Flutter, and web.
-- Added a paired legacy SSE client example plus Dart-to-Dart and
-  Dart-to-TypeScript interoperability coverage.
+- Added a paired legacy SSE client example plus Dart-to-Dart and bidirectional
+  TypeScript/Python interoperability coverage.
 
 ### Changed
 

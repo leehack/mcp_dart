@@ -19,6 +19,7 @@ Future<void> _waitForTcpServer({
   required io.Process process,
   required String host,
   required int port,
+  String label = 'interop server',
   Duration timeout = const Duration(seconds: 15),
 }) async {
   final deadline = DateTime.now().add(timeout);
@@ -43,16 +44,30 @@ Future<void> _waitForTcpServer({
     ]);
     if (exitCode != null) {
       throw StateError(
-        'TypeScript interop server exited with code $exitCode before '
+        '$label exited with code $exitCode before '
         '$host:$port accepted connections.',
       );
     }
   }
 
   throw TimeoutException(
-    'Timed out waiting for TypeScript interop server at $host:$port. '
+    'Timed out waiting for $label at $host:$port. '
     'Last connection error: $lastConnectionError',
     timeout,
+  );
+}
+
+Future<void> _terminateProcess(io.Process process) async {
+  final exitFuture = process.exitCode;
+  process.kill();
+  await exitFuture.timeout(
+    const Duration(seconds: 5),
+    onTimeout: () {
+      if (!io.Platform.isWindows) {
+        process.kill(io.ProcessSignal.sigkill);
+      }
+      return -1;
+    },
   );
 }
 
@@ -63,15 +78,23 @@ void main() {
       p.join(io.Directory.current.path, 'test/interop/ts/dist/server.js');
   final tsServerScript =
       io.Platform.environment['TS_INTEROP_SERVER_CMD'] ?? defaultTsPath;
+  final defaultTsLegacySseClientPath = p.join(
+    io.Directory.current.path,
+    'test/interop/ts/dist/legacy_sse_client.js',
+  );
+  final tsLegacySseClientScript =
+      io.Platform.environment['TS_LEGACY_SSE_CLIENT_CMD'] ??
+          defaultTsLegacySseClientPath;
 
-  // Check if we should skip
-  final skipTests = !io.File(tsServerScript).existsSync();
+  final tsServerAvailable = io.File(tsServerScript).existsSync();
+  final tsLegacySseClientAvailable =
+      io.File(tsLegacySseClientScript).existsSync();
   final isCi = io.Platform.environment['CI'] == 'true';
 
   group('TS Interop', () {
-    if (skipTests) {
-      final reason =
-          'TS Interop tests require compiled fixture at $tsServerScript';
+    if (!tsServerAvailable) {
+      final reason = 'TS Interop tests require the compiled server fixture at '
+          '$tsServerScript';
       if (isCi) {
         test('TS fixture is available in CI', () {
           fail(reason);
@@ -263,77 +286,157 @@ void main() {
     });
 
     group('Legacy SSE', () {
-      late SseClientTransport transport;
-      late McpClient client;
-      late io.Process serverProcess;
+      group('Dart client to TypeScript server', () {
+        SseClientTransport? transport;
+        McpClient? client;
+        io.Process? serverProcess;
 
-      setUp(() async {
+        setUp(() async {
+          final port = await _findAvailablePort();
+          final startedServer = await io.Process.start(
+            'node',
+            [tsServerScript, '--transport', 'sse', '--port', '$port'],
+            mode: io.ProcessStartMode.normal,
+          );
+          serverProcess = startedServer;
+          startedServer.stdout
+              .transform(io.systemEncoding.decoder)
+              .listen((data) => print('[TS SSE Server] $data'));
+          startedServer.stderr
+              .transform(io.systemEncoding.decoder)
+              .listen((data) => print('[TS SSE Server Error] $data'));
+
+          await _waitForTcpServer(
+            process: startedServer,
+            host: '127.0.0.1',
+            port: port,
+            label: 'TypeScript legacy SSE server',
+          );
+          final startedTransport = SseClientTransport(
+            Uri.parse('http://127.0.0.1:$port/sse'),
+          );
+          transport = startedTransport;
+          final startedClient = McpClient(
+            const Implementation(name: 'dart-sse-test', version: '1.0'),
+            options: const McpClientOptions(
+              protocol: McpProtocol.legacy,
+              capabilities: ClientCapabilities(),
+            ),
+          );
+          client = startedClient;
+          await startedClient.connect(startedTransport);
+        });
+
+        tearDown(() async {
+          try {
+            await client?.close();
+          } finally {
+            final process = serverProcess;
+            if (process != null) {
+              await _terminateProcess(process);
+            }
+          }
+        });
+
+        test('initializes and calls tools through the official TS SSE server',
+            () async {
+          final connectedClient = client!;
+          final connectedTransport = transport!;
+          expect(
+            connectedClient.getProtocolVersion(),
+            latestInitializationProtocolVersion,
+          );
+          expect(connectedTransport.sessionId, isNotEmpty);
+
+          final tools = await connectedClient.listTools();
+          expect(
+            tools.tools.map((tool) => tool.name),
+            containsAll(['echo', 'add']),
+          );
+
+          final result = await connectedClient.callTool(
+            const CallToolRequest(
+              name: 'add',
+              arguments: {'a': 10, 'b': 20},
+            ),
+          );
+          expect((result.content.single as TextContent).text, '30');
+        });
+      });
+
+      test('official TS client initializes and calls the Dart SSE server',
+          () async {
+        if (!tsLegacySseClientAvailable) {
+          final reason = 'Reverse legacy SSE interop requires the compiled '
+              'TypeScript client fixture at $tsLegacySseClientScript';
+          if (isCi) {
+            fail(reason);
+          }
+          markTestSkipped(reason);
+          return;
+        }
+
         final port = await _findAvailablePort();
-        serverProcess = await io.Process.start(
-          'node',
-          [tsServerScript, '--transport', 'sse', '--port', '$port'],
+        final serverProcess = await io.Process.start(
+          io.Platform.resolvedExecutable,
+          ['run', 'example/server_sse.dart'],
           mode: io.ProcessStartMode.normal,
+          environment: {
+            ...io.Platform.environment,
+            'PORT': '$port',
+            'MCP_ALLOWED_ORIGIN': 'http://localhost:$port',
+          },
         );
         serverProcess.stdout
             .transform(io.systemEncoding.decoder)
-            .listen((data) => print('[TS SSE Server] $data'));
+            .listen((data) => print('[Dart SSE Server] $data'));
         serverProcess.stderr
             .transform(io.systemEncoding.decoder)
-            .listen((data) => print('[TS SSE Server Error] $data'));
+            .listen((data) => print('[Dart SSE Server Error] $data'));
+        io.Process? clientProcess;
 
-        await _waitForTcpServer(
-          process: serverProcess,
-          host: '127.0.0.1',
-          port: port,
-        );
-        transport = SseClientTransport(
-          Uri.parse('http://127.0.0.1:$port/sse'),
-        );
-        client = McpClient(
-          const Implementation(name: 'dart-sse-test', version: '1.0'),
-          options: const McpClientOptions(
-            protocol: McpProtocol.legacy,
-            capabilities: ClientCapabilities(),
-          ),
-        );
-        await client.connect(transport);
-      });
+        try {
+          await _waitForTcpServer(
+            process: serverProcess,
+            host: '127.0.0.1',
+            port: port,
+            label: 'Dart legacy SSE server',
+          );
+          final startedClient = await io.Process.start(
+            'node',
+            [
+              tsLegacySseClientScript,
+              '--url',
+              'http://127.0.0.1:$port/sse',
+            ],
+          );
+          clientProcess = startedClient;
+          final clientStdout =
+              startedClient.stdout.transform(io.systemEncoding.decoder).join();
+          final clientStderr =
+              startedClient.stderr.transform(io.systemEncoding.decoder).join();
+          final exitCode = await startedClient.exitCode.timeout(
+            const Duration(seconds: 15),
+            onTimeout: () async {
+              await _terminateProcess(startedClient);
+              return -1;
+            },
+          );
+          final output = '${await clientStdout}\n${await clientStderr}';
 
-      tearDown(() async {
-        await client.close();
-        serverProcess.kill();
-        await serverProcess.exitCode.timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            if (!io.Platform.isWindows) {
-              serverProcess.kill(io.ProcessSignal.sigkill);
-            }
-            return -1;
-          },
-        );
-      });
-
-      test('initializes and calls tools through the official TS SSE server',
-          () async {
-        expect(
-          client.getProtocolVersion(),
-          latestInitializationProtocolVersion,
-        );
-        expect(transport.sessionId, isNotEmpty);
-
-        final tools = await client.listTools();
-        expect(
-          tools.tools.map((tool) => tool.name),
-          containsAll(['echo', 'add']),
-        );
-
-        final result = await client.callTool(
-          const CallToolRequest(
-            name: 'add',
-            arguments: {'a': 10, 'b': 20},
-          ),
-        );
-        expect((result.content.single as TextContent).text, '30');
+          expect(exitCode, 0, reason: output);
+          expect(
+            output,
+            contains(
+              'TypeScript legacy SSE client interop passed: Result: 42',
+            ),
+          );
+        } finally {
+          if (clientProcess != null) {
+            await _terminateProcess(clientProcess);
+          }
+          await _terminateProcess(serverProcess);
+        }
       });
     });
   });

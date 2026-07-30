@@ -35,6 +35,8 @@ class _LegacySseFixture {
   Map<String, dynamic>? _lastRequest;
   var _connectionCount = 0;
   var _postCount = 0;
+  var _redirectTargetCount = 0;
+  final _redirectTargetAuthorizations = <String?>[];
 
   _LegacySseFixture(this._server);
 
@@ -72,8 +74,25 @@ class _LegacySseFixture {
     switch ((request.method, request.uri.path)) {
       case ('GET', '/sse'):
         await _openSse(request);
+      case ('GET', '/sse-redirect'):
+        await _redirect(request);
+      case ('GET', '/sse-post-redirect'):
+        await _openSse(request, messagePath: '/messages-redirect');
       case ('POST', '/messages'):
         await _handlePost(request);
+      case ('POST', '/messages-redirect'):
+        await request.drain<void>();
+        await _redirect(request);
+      case ('GET', '/redirect-target') || ('POST', '/redirect-target'):
+        _redirectTargetCount++;
+        _redirectTargetAuthorizations.add(
+          request.headers.value(HttpHeaders.authorizationHeader),
+        );
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..write('Redirect target must not be reached');
+        await request.response.close();
       case ('GET', '/status'):
         await _writeStatus(request.response);
       default:
@@ -82,15 +101,10 @@ class _LegacySseFixture {
     }
   }
 
-  Future<void> _openSse(HttpRequest request) async {
-    if (_sseResponse != null) {
-      request.response
-        ..statusCode = HttpStatus.conflict
-        ..write('Only one browser SSE connection is supported');
-      await request.response.close();
-      return;
-    }
-
+  Future<void> _openSse(
+    HttpRequest request, {
+    String messagePath = '/messages',
+  }) async {
     final response = request.response;
     final sessionId = 'browser-session-${++_connectionCount}';
     _sseResponse = response;
@@ -107,10 +121,17 @@ class _LegacySseFixture {
       ..set(HttpHeaders.cacheControlHeader, 'no-cache');
     response.write(
       'event: endpoint\n'
-      'data: http://127.0.0.1:${_server.port}/messages'
+      'data: http://127.0.0.1:${_server.port}$messagePath'
       '?sessionId=$sessionId\n\n',
     );
     await response.flush();
+  }
+
+  Future<void> _redirect(HttpRequest request) async {
+    request.response
+      ..statusCode = HttpStatus.temporaryRedirect
+      ..headers.set(HttpHeaders.locationHeader, '/redirect-target');
+    await request.response.close();
   }
 
   Future<void> _handlePost(HttpRequest request) async {
@@ -162,6 +183,8 @@ class _LegacySseFixture {
         'connections': _connectionCount,
         'posts': _postCount,
         'lastRequest': _lastRequest,
+        'redirectTargetCount': _redirectTargetCount,
+        'redirectTargetAuthorizations': _redirectTargetAuthorizations,
       }),
     );
     await response.close();

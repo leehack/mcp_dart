@@ -99,9 +99,9 @@ commands.
   service integration in Chrome, deterministic widget tests, and an
   independent pinned JSON Schema Test Suite gate.
 - Current unreleased source adds a deprecated, opt-in legacy HTTP+SSE client
-  with same-origin routing and official TypeScript SSE server interoperability.
-  Stable `2.3.0` does not include that client; it requires the next approved
-  minor SDK release.
+  with same-origin routing and bidirectional interoperability against official
+  TypeScript SDK 1.30.0 and Python SDK 2.0.0 peers. Stable `2.3.0` does not
+  include that client; it requires the next approved minor SDK release.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host

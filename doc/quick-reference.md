@@ -439,7 +439,11 @@ final pending = client.callTool(
 );
 
 controller.abort('No longer needed');
-await pending;
+try {
+  await pending;
+} on AbortError {
+  // Expected: the caller no longer needs this result.
+}
 ```
 
 See [Tools: progress and cancellation](tools.md#progress-notifications) for

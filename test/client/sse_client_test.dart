@@ -378,6 +378,128 @@ void main() {
       expect(messageRequests.last.followRedirects, isFalse);
     });
 
+    test(
+      'default IO client does not follow an opening redirect or forward auth',
+      () async {
+        final targetRequests = <HttpRequest>[];
+        final target = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final targetSubscription = target.listen((request) {
+          targetRequests.add(request);
+          unawaited(request.response.close());
+        });
+        addTearDown(() async {
+          await targetSubscription.cancel();
+          await target.close(force: true);
+        });
+
+        final source = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final sourceSubscription = source.listen((request) {
+          request.response
+            ..statusCode = HttpStatus.temporaryRedirect
+            ..headers.set(
+              HttpHeaders.locationHeader,
+              'http://127.0.0.1:${target.port}/stolen',
+            );
+          unawaited(request.response.close());
+        });
+        addTearDown(() async {
+          await sourceSubscription.cancel();
+          await source.close(force: true);
+        });
+
+        final transport = SseClientTransport(
+          Uri.parse('http://127.0.0.1:${source.port}/sse'),
+          opts: const SseClientTransportOptions(
+            headers: {'Authorization': 'Bearer opening-secret'},
+          ),
+        );
+        addTearDown(transport.close);
+
+        await expectLater(
+          transport.start(),
+          throwsA(
+            isA<SseClientError>().having(
+              (error) => error.code,
+              'code',
+              HttpStatus.temporaryRedirect,
+            ),
+          ),
+        );
+        await _nextEventLoop();
+
+        expect(targetRequests, isEmpty);
+      },
+    );
+
+    test(
+      'default IO client does not follow a POST redirect or forward auth',
+      () async {
+        final targetRequests = <HttpRequest>[];
+        final target = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final targetSubscription = target.listen((request) {
+          targetRequests.add(request);
+          unawaited(request.response.close());
+        });
+        addTearDown(() async {
+          await targetSubscription.cancel();
+          await target.close(force: true);
+        });
+
+        final source = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final sourceSubscription = source.listen((request) {
+          unawaited(() async {
+            if (request.method == 'GET') {
+              request.response.bufferOutput = false;
+              request.response.headers
+                  .set(HttpHeaders.contentTypeHeader, 'text/event-stream');
+              request.response.write(
+                'event: endpoint\n'
+                'data: /messages\n\n',
+              );
+              await request.response.flush();
+              return;
+            }
+
+            await request.drain<void>();
+            request.response
+              ..statusCode = HttpStatus.temporaryRedirect
+              ..headers.set(
+                HttpHeaders.locationHeader,
+                'http://127.0.0.1:${target.port}/stolen',
+              );
+            await request.response.close();
+          }());
+        });
+        addTearDown(() async {
+          await sourceSubscription.cancel();
+          await source.close(force: true);
+        });
+
+        final transport = SseClientTransport(
+          Uri.parse('http://127.0.0.1:${source.port}/sse'),
+          opts: const SseClientTransportOptions(
+            headers: {'Authorization': 'Bearer message-secret'},
+          ),
+        );
+        addTearDown(transport.close);
+
+        await transport.start();
+        await expectLater(
+          transport.send(const JsonRpcPingRequest(id: 1)),
+          throwsA(
+            isA<SseClientError>().having(
+              (error) => error.code,
+              'code',
+              HttpStatus.temporaryRedirect,
+            ),
+          ),
+        );
+        await _nextEventLoop();
+
+        expect(targetRequests, isEmpty);
+      },
+    );
+
     test('keeps the first endpoint when later endpoint events arrive',
         () async {
       final sse = StreamController<List<int>>();
@@ -771,6 +893,75 @@ void main() {
       await expectLater(transport.start(), throwsStateError);
     });
 
+    test(
+      'failed-start cleanup preserves the primary error and fails closed',
+      () async {
+        final sse = StreamController<List<int>>(
+          onCancel: () async {
+            throw StateError('failed-start cancellation failed');
+          },
+        );
+        addTearDown(sse.close);
+        final errors = <Error>[];
+        final httpClient = _RecordingHttpClient(
+          (_) async => _response(sse.stream),
+        );
+        final transport = SseClientTransport(
+          Uri.parse('http://example.com/sse'),
+          opts: SseClientTransportOptions(httpClient: httpClient),
+        )..onerror = errors.add;
+
+        final started = transport.start();
+        sse.add(
+          utf8.encode(
+            'event: message\n'
+            'data: {"jsonrpc":"2.0","id":1,"result":{}}\n\n',
+          ),
+        );
+
+        await expectLater(
+          started,
+          throwsA(
+            isA<SseClientError>().having(
+              (error) => error.message,
+              'message',
+              contains('Expected endpoint as the first SSE event'),
+            ),
+          ),
+        );
+        expect(errors, hasLength(1));
+        expect(
+          errors.single,
+          isA<SseClientError>().having(
+            (error) => error.message,
+            'message',
+            contains('Expected endpoint as the first SSE event'),
+          ),
+        );
+
+        await expectLater(
+          transport.close(),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'failed-start cancellation failed',
+            ),
+          ),
+        );
+        await expectLater(
+          transport.start(),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'SseClientTransport is closed.',
+            ),
+          ),
+        );
+      },
+    );
+
     test('late opening response cannot resurrect a closed transport', () async {
       final responseReady = Completer<http.StreamedResponse>();
       final responseCancelled = Completer<void>();
@@ -896,6 +1087,40 @@ void main() {
         transport.send(const JsonRpcPingRequest(id: 1)),
         throwsStateError,
       );
+    });
+
+    test('discards an unterminated SSE event when the stream ends', () async {
+      final sse = StreamController<List<int>>();
+      final httpClient = _RecordingHttpClient(
+        (_) async => _response(sse.stream),
+      );
+      final errors = <Error>[];
+      final messages = <JsonRpcMessage>[];
+      final closed = Completer<void>();
+      final transport = SseClientTransport(
+        Uri.parse('http://example.com/sse'),
+        opts: SseClientTransportOptions(httpClient: httpClient),
+      )
+        ..onerror = errors.add
+        ..onmessage = messages.add
+        ..onclose = closed.complete;
+
+      final started = transport.start();
+      sse.add(utf8.encode('event: endpoint\ndata: /messages\n\n'));
+      await started;
+      sse.add(
+        utf8.encode(
+          'event: message\n'
+          'data: {"jsonrpc":"2.0","id":1,"result":{}}\n',
+        ),
+      );
+      await sse.close();
+      await closed.future;
+      await transport.close();
+
+      expect(messages, isEmpty);
+      expect(errors, hasLength(1));
+      expect(errors.single.toString(), contains('closed unexpectedly'));
     });
 
     test(

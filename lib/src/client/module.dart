@@ -1,4 +1,4 @@
-/// This module exports the core components required for the MCP (Multi-Channel Protocol) client implementation.
+/// This module exports the core Model Context Protocol client components.
 ///
 /// - `client.dart`: Contains the client-side implementation for the MCP protocol.
 /// - `stdio.dart`: Provides utilities for client communication using standard I/O.

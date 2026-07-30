@@ -43,6 +43,9 @@ Future<void> main(List<String> args) async {
   Process? legacySseFixture;
   Future<void>? legacySseStdout;
   Future<void>? legacySseStderr;
+  Process? browserTest;
+  Future<void>? browserTestStdout;
+  Future<void>? browserTestStderr;
 
   try {
     legacySseFixture = await Process.start(
@@ -100,10 +103,11 @@ Future<void> main(List<String> args) async {
       ],
       workingDirectory: repoRoot.path,
     );
-    final testStdout = _pipeLines(test.stdout, stdout, '[browser-test]');
-    final testStderr = _pipeLines(test.stderr, stderr, '[browser-test]');
+    browserTest = test;
+    browserTestStdout = _pipeLines(test.stdout, stdout, '[browser-test]');
+    browserTestStderr = _pipeLines(test.stderr, stderr, '[browser-test]');
     final testExit = await test.exitCode.timeout(const Duration(minutes: 3));
-    await Future.wait([testStdout, testStderr]);
+    await Future.wait([browserTestStdout, browserTestStderr]);
     if (testExit != 0) {
       throw StateError('Browser interop tests exited with $testExit');
     }
@@ -112,7 +116,9 @@ Future<void> main(List<String> args) async {
     exitCode = 1;
   } finally {
     final fixture = legacySseFixture;
+    final test = browserTest;
     await Future.wait([
+      if (test != null) _terminate(test),
       _terminate(server),
       if (fixture != null) _terminate(fixture),
     ]);
@@ -121,6 +127,8 @@ Future<void> main(List<String> args) async {
       serverStderr,
       if (legacySseStdout != null) legacySseStdout,
       if (legacySseStderr != null) legacySseStderr,
+      if (browserTestStdout != null) browserTestStdout,
+      if (browserTestStderr != null) browserTestStderr,
     ]);
   }
 }

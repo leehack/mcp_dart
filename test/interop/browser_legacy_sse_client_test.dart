@@ -89,6 +89,51 @@ void main() {
       }
     },
   );
+
+  test('legacy SSE client rejects an opening redirect in Chrome', () async {
+    final transport = SseClientTransport(
+      Uri.parse('$_fixtureBaseUrl/sse-redirect'),
+      opts: const SseClientTransportOptions(
+        headers: {'Authorization': 'Bearer browser-opening-secret'},
+      ),
+    );
+
+    try {
+      await expectLater(
+        transport.start().timeout(const Duration(seconds: 10)),
+        throwsA(isA<SseClientError>()),
+      );
+      final status = await _waitForStatus((_) => true);
+      expect(status['redirectTargetCount'], 0);
+      expect(status['redirectTargetAuthorizations'], isEmpty);
+    } finally {
+      await transport.close();
+    }
+  });
+
+  test('legacy SSE client rejects a POST redirect in Chrome', () async {
+    final transport = SseClientTransport(
+      Uri.parse('$_fixtureBaseUrl/sse-post-redirect'),
+      opts: const SseClientTransportOptions(
+        headers: {'Authorization': 'Bearer browser-message-secret'},
+      ),
+    );
+
+    try {
+      await transport.start().timeout(const Duration(seconds: 10));
+      await expectLater(
+        transport
+            .send(const JsonRpcPingRequest(id: 'redirected-browser-post'))
+            .timeout(const Duration(seconds: 10)),
+        throwsA(isA<SseClientError>()),
+      );
+      final status = await _waitForStatus((_) => true);
+      expect(status['redirectTargetCount'], 0);
+      expect(status['redirectTargetAuthorizations'], isEmpty);
+    } finally {
+      await transport.close();
+    }
+  });
 }
 
 Future<Map<String, dynamic>> _waitForStatus(

@@ -16,17 +16,21 @@ enum _SseClientState { idle, starting, running, closing, closed }
 
 /// Options for the deprecated [SseClientTransport].
 ///
-/// [headers] are sent on both the initial SSE `GET` and every JSON-RPC
-/// `POST`. This can carry a fixed `Authorization` header for a legacy
-/// deployment. New OAuth integrations should use
+/// [headers] supplies additional static headers for the initial SSE `GET` and
+/// every JSON-RPC `POST`. This can carry a fixed `Authorization` header for a
+/// legacy deployment. Transport-controlled `Accept`, `Content-Type`, and
+/// `MCP-Protocol-Version` values take precedence. New OAuth integrations use
 /// [StreamableHttpClientTransport] instead.
 ///
 /// When [httpClient] is supplied, the caller retains ownership and must close
-/// it after the transport is no longer used. Requests made by this transport
-/// are still aborted when [SseClientTransport.close] is called.
+/// it after the transport is no longer used. Closing the transport completes
+/// each request's abort trigger; a supplied client may ignore that trigger if
+/// it does not support [http.AbortableRequest].
 @Deprecated(legacySseDeprecationMessage)
 class SseClientTransportOptions {
-  /// Headers sent with both legs of the legacy HTTP+SSE transport.
+  /// Additional static headers for both legs of the legacy transport.
+  ///
+  /// Transport-controlled protocol headers take precedence.
   final Map<String, String> headers;
 
   /// Optional HTTP client used for the SSE stream and JSON-RPC POSTs.
@@ -156,6 +160,9 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
   }
 
   /// Opens the SSE stream and waits for its first valid `endpoint` event.
+  ///
+  /// Throws [StateError] when the lifecycle does not permit another start and
+  /// [SseClientError] when connection, HTTP, or SSE framing validation fails.
   @override
   Future<void> start() async {
     if (_state == _SseClientState.starting ||
@@ -264,9 +271,23 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
     } catch (error, stackTrace) {
       final reportedError = _asError(error);
       if (_isActiveStart(startToken)) {
-        await _resetAfterFailedStart(startToken);
-        if (_state == _SseClientState.idle) {
+        Object? cleanupError;
+        try {
+          await _resetAfterFailedStart(startToken);
+        } catch (error) {
+          cleanupError = error;
+        }
+        if (cleanupError == null && _state == _SseClientState.idle) {
           _reportError(reportedError);
+        } else if (cleanupError != null && _isActiveStart(startToken)) {
+          _reportError(reportedError);
+          _logger.warn(
+            'Failed to clean up an unsuccessful SSE connection: '
+            '$cleanupError',
+          );
+          // A failed cancellation leaves the old response stream observable.
+          // Fail closed so it cannot interfere with a later start attempt.
+          unawaited(_beginClose());
         }
       }
       Error.throwWithStackTrace(reportedError, stackTrace);
@@ -274,6 +295,9 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
   }
 
   /// Sends one JSON-RPC message to the endpoint advertised by the SSE server.
+  ///
+  /// Throws [StateError] unless the transport is running and [SseClientError]
+  /// when the HTTP exchange fails.
   @override
   Future<void> send(
     JsonRpcMessage message, {
@@ -322,7 +346,11 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
     }
   }
 
-  /// Closes the SSE stream and aborts in-flight POST requests.
+  /// Closes the SSE stream and triggers abortion of in-flight HTTP requests.
+  ///
+  /// The default IO and browser clients honor the trigger. A caller-supplied
+  /// [http.Client] may ignore it. Response-subscription cleanup failures are
+  /// returned to the caller.
   @override
   Future<void> close() {
     final closeFuture = _closeFuture;
@@ -704,7 +732,10 @@ class _SseEventParser {
   }
 
   void close() {
-    _dispatch();
+    // The SSE algorithm discards an incomplete event when the stream ends.
+    // Only a blank line dispatches accumulated data.
+    _event = '';
+    _dataLines.clear();
   }
 
   void _dispatch() {

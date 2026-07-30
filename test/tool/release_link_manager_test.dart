@@ -8,6 +8,7 @@ void main() {
   test('SDK release links rewrite from main to the immutable tag', () {
     final root = Directory.systemTemp.createTempSync('mcp_release_links_sdk_');
     addTearDown(() => root.deleteSync(recursive: true));
+    _writeSdkPolicyFiles(root);
     _write(root, 'pubspec.yaml', '''
 name: mcp_dart
 version: 2.4.0-dev.1
@@ -27,6 +28,11 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
       root,
       'llms.txt',
       'https://github.com/leehack/mcp_dart/tree/main/example\n',
+    );
+    _write(
+      root,
+      'SECURITY.md',
+      '[Policy](https://github.com/leehack/mcp_dart/blob/main/SECURITY.md)\n',
     );
     _write(
       root,
@@ -52,6 +58,7 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
       containsAll([
         'CHANGELOG.md',
         'README.md',
+        'SECURITY.md',
         'doc/guide.md',
         'example/README.md',
         'llms.txt',
@@ -77,6 +84,7 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
     final root =
         Directory.systemTemp.createTempSync('mcp_release_links_stale_');
     addTearDown(() => root.deleteSync(recursive: true));
+    _writeSdkPolicyFiles(root);
     _write(root, 'pubspec.yaml', 'name: mcp_dart\nversion: 2.4.0\n');
     _write(root, 'README.md', '''
 First line
@@ -144,6 +152,18 @@ homepage: https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
       ),
     );
   });
+}
+
+void _writeSdkPolicyFiles(Directory root) {
+  for (final path in const [
+    'CONTRIBUTING.md',
+    'DEPENDENCY_POLICY.md',
+    'ROADMAP.md',
+    'SECURITY.md',
+    'VERSIONING.md',
+  ]) {
+    _write(root, path, 'No links here.\n');
+  }
 }
 
 void _write(Directory root, String relativePath, String contents) {
