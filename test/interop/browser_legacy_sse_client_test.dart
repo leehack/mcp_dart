@@ -13,11 +13,12 @@ const _fixtureBaseUrl = 'http://127.0.0.1:8766';
 
 void main() {
   test(
-    'legacy SSE client exchanges messages and cancels its stream in Chrome',
+    'legacy SSE client exchanges messages and closes in Chrome',
     () async {
       final inboundMessage = Completer<JsonRpcMessage>();
       final closed = Completer<void>();
       final errors = <Error>[];
+      var closeCalls = 0;
       final transport = SseClientTransport(
         Uri.parse('$_fixtureBaseUrl/sse'),
       )
@@ -29,6 +30,7 @@ void main() {
         }
         ..onerror = errors.add
         ..onclose = () {
+          closeCalls++;
           if (!closed.isCompleted) {
             closed.complete();
           }
@@ -59,10 +61,9 @@ void main() {
         });
 
         final connectedStatus = await _waitForStatus(
-          (status) => status['posts'] == 1 && status['activeConnections'] == 1,
+          (status) => status['posts'] == 1,
         );
         expect(connectedStatus['connections'], 1);
-        expect(connectedStatus['disconnects'], 0);
         expect(connectedStatus['lastRequest'], {
           'jsonrpc': '2.0',
           'id': 'browser-request-1',
@@ -73,12 +74,15 @@ void main() {
         await transport.close().timeout(const Duration(seconds: 10));
         await closed.future.timeout(const Duration(seconds: 5));
 
-        final closedStatus = await _waitForStatus(
-          (status) =>
-              status['activeConnections'] == 0 &&
-              (status['disconnects'] as num) >= 1,
+        await expectLater(
+          transport.send(
+            const JsonRpcNotification(method: 'browser/after-close'),
+          ),
+          throwsStateError,
         );
-        expect(closedStatus['posts'], 1);
+        await expectLater(transport.start(), throwsStateError);
+        await transport.close();
+        expect(closeCalls, 1);
         expect(errors, isEmpty);
       } finally {
         await transport.close();

@@ -22,7 +22,7 @@ For MCP 2026-07-28 coverage, see the
 | Dart client -> Dart server | stdio | MCP 2026-07-28 with initialization-era fallback | [`test/integration/stdio_integration_test.dart`](../test/integration/stdio_integration_test.dart), [`example/server_stdio.dart`](../example/server_stdio.dart), [`example/client_stdio.dart`](../example/client_stdio.dart) | Verified | The default dual-era pair covers local process startup and tool/resource/prompt flows. |
 | Strict Dart MCP 2026-07-28 client -> Dart server | stdio | MCP 2026-07-28 | [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/), [`test/example/non_credentialed_examples_smoke_test.dart`](../test/example/non_credentialed_examples_smoke_test.dart) | Verified | Requires `server/discover`, asserts the negotiated version, completes a `subscriptions/listen` resource update, and retries `input_required` with non-object structured output. |
 | Dart client -> Dart server | Streamable HTTP | MCP 2025-11-25 and MCP 2026-07-28 | [`test/client/streamable_https_test.dart`](../test/client/streamable_https_test.dart), [`test/server/streamable_https_test.dart`](../test/server/streamable_https_test.dart), [`test/mcp_2026_07_28_test.dart`](../test/mcp_2026_07_28_test.dart), [`example/streamable_https/`](../example/streamable_https/) | Verified | Includes session handling, strict header validation, stale-session recovery, resumability coverage, and stable-profile examples that use `server/discover` negotiation. |
-| Dart client -> Dart server | Legacy HTTP+SSE | MCP 2025-11-25 | [`test/client/sse_client_test.dart`](../test/client/sse_client_test.dart), [`test/interop/browser_legacy_sse_client_test.dart`](../test/interop/browser_legacy_sse_client_test.dart), [`example/server_sse.dart`](../example/server_sse.dart), [`example/client_sse.dart`](../example/client_sse.dart) | Verified in source | Covers endpoint discovery, same-origin redirect-free POST routing, initialization, tool listing, tool execution, clean shutdown, and real-Chrome stream cancellation. HTTP+SSE is deprecated; use Streamable HTTP for new integrations. |
+| Dart client -> Dart server | Legacy HTTP+SSE | MCP 2025-11-25 | [`test/client/sse_client_test.dart`](../test/client/sse_client_test.dart), [`test/interop/browser_legacy_sse_client_test.dart`](../test/interop/browser_legacy_sse_client_test.dart), [`example/server_sse.dart`](../example/server_sse.dart), [`example/client_sse.dart`](../example/client_sse.dart) | Verified in source | Covers endpoint discovery, same-origin redirect-free POST routing, initialization, tool listing, tool execution, clean shutdown, and real-Chrome client lifecycle behavior. HTTP+SSE is deprecated; use Streamable HTTP for new integrations. |
 | Dart client -> TypeScript SDK server | stdio | MCP 2025-11-25 | [`test/interop/dart_client_with_ts_server_test.dart`](../test/interop/dart_client_with_ts_server_test.dart), [`test/interop/ts/`](../test/interop/ts/) | Verified | Requires the TypeScript fixture to be built before running the tagged interop tests. |
 | Dart client -> TypeScript SDK server | Streamable HTTP | MCP 2025-11-25 | [`test/interop/dart_client_with_ts_server_test.dart`](../test/interop/dart_client_with_ts_server_test.dart), [`test/interop/ts/`](../test/interop/ts/) | Verified | Covers tool calls and stale preconfigured session-id recovery. |
 | Dart client -> TypeScript SDK 1.29.0 server | Legacy HTTP+SSE | MCP 2025-11-25 | [`test/interop/dart_client_with_ts_server_test.dart`](../test/interop/dart_client_with_ts_server_test.dart), [`test/interop/ts/src/server.ts`](../test/interop/ts/src/server.ts) | Verified in source | The deprecated official TypeScript `SSEServerTransport` completes initialization, tool listing, and a tool call through Dart's same-origin legacy client. |
@@ -112,9 +112,11 @@ list requests and 12 tool calls in both the MCP 2026-07-28 default and MCP
 2025-11-25 legacy profiles. It also covers MCP 2026-07-28 request cancellation
 and follow-up recovery. A separate deprecated HTTP+SSE scenario proves endpoint
 discovery, an exact JSON-RPC POST, the inbound SSE response, close notification,
-and server-observed browser stream cancellation. The short Streamable HTTP
-legacy reconnect delay ensures completed POST response streams do not silently
-consume Chrome connection slots.
+and rejection of sends or restarts after client-side close. Browser Fetch does
+not guarantee that cancelling its response reader is immediately observable as
+a peer-side TCP disconnect. The short Streamable HTTP legacy reconnect delay
+ensures completed POST response streams do not silently consume Chrome
+connection slots.
 
 Run the Flutter Web example's real service integration separately:
 

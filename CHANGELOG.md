@@ -5,7 +5,7 @@
 - Added an opt-in, deprecated `SseClientTransport` for compatibility with
   legacy HTTP+SSE servers. It enforces the first `endpoint` event, same-origin
   POST routing, JSON-RPC framing, negotiated protocol-version headers, and
-  clean cancellation on VM, Flutter, and web.
+  deterministic client-side close on VM, Flutter, and web.
 - Added a paired legacy SSE client example plus Dart-to-Dart and
   Dart-to-TypeScript interoperability coverage.
 

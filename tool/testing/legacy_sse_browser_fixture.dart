@@ -34,8 +34,6 @@ class _LegacySseFixture {
   String? _sessionId;
   Map<String, dynamic>? _lastRequest;
   var _connectionCount = 0;
-  var _activeConnections = 0;
-  var _disconnectCount = 0;
   var _postCount = 0;
 
   _LegacySseFixture(this._server);
@@ -97,29 +95,6 @@ class _LegacySseFixture {
     final sessionId = 'browser-session-${++_connectionCount}';
     _sseResponse = response;
     _sessionId = sessionId;
-    _activeConnections++;
-    var disconnectRecorded = false;
-    Timer? heartbeat;
-    void recordDisconnect() {
-      if (disconnectRecorded) {
-        return;
-      }
-      disconnectRecorded = true;
-      heartbeat?.cancel();
-      _activeConnections--;
-      _disconnectCount++;
-      if (identical(_sseResponse, response)) {
-        _sseResponse = null;
-        _sessionId = null;
-      }
-    }
-
-    unawaited(
-      response.done.then<void>(
-        (_) => recordDisconnect(),
-        onError: (Object _) => recordDisconnect(),
-      ),
-    );
     response
       ..statusCode = HttpStatus.ok
       ..bufferOutput = false;
@@ -136,21 +111,6 @@ class _LegacySseFixture {
       '?sessionId=$sessionId\n\n',
     );
     await response.flush();
-    heartbeat = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      if (disconnectRecorded) {
-        return;
-      }
-      try {
-        response.write(': heartbeat\n\n');
-        unawaited(
-          response.flush().catchError((Object _) {
-            recordDisconnect();
-          }),
-        );
-      } on Object {
-        recordDisconnect();
-      }
-    });
   }
 
   Future<void> _handlePost(HttpRequest request) async {
@@ -200,8 +160,6 @@ class _LegacySseFixture {
     response.write(
       jsonEncode({
         'connections': _connectionCount,
-        'activeConnections': _activeConnections,
-        'disconnects': _disconnectCount,
         'posts': _postCount,
         'lastRequest': _lastRequest,
       }),
