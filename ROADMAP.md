@@ -10,9 +10,9 @@ is not claimed until the MCP SDK Working Group assigns it.
 - Stable `mcp_dart 2.3.0` and `mcp_dart_cli 0.2.0` releases.
 - Complete Core client/server support for MCP 2026-07-28 with an explicit
   MCP 2025-11-25 compatibility profile.
-- The official Tier 1 scorecard passes 20/20 server scenarios and 32/32 client
-  scenarios for the applicable dated specifications, with no expected-failure
-  allowance.
+- Exact-head CI passes the published official conformance package for both
+  supported protocol profiles and both client/server roles, with no
+  expected-failure allowance.
 - Published TypeScript SDK 2.0.0 and Python SDK 2.0.0 interoperability runs in
   both directions.
 - Protocol coverage, examples, and known gaps are tracked in
@@ -34,17 +34,19 @@ outside the Tier 1 Core claim.
 
 ## Latest deterministic scorecard
 
-The conformance portion of the official repository's `tier-check` command was
-run on 2026-07-30 against `mcp_dart` source at
-`85af40702c25da39d30eb6673414fd079b6273e1`. The added legacy SSE client has no
-current executable official scenario and is validated separately. Policy,
-label, triage, release, and specification-tracking checks query GitHub `main`;
-the checker cannot evaluate unpushed local policy files.
+The repository-policy portion of the official conformance repository's
+`tier-check` command was run on 2026-07-30 against the pushed
+`governance/tier-1-readiness` branch. That invocation used
+`--skip-conformance`; it evaluated the branch's policy files plus live labels,
+issues, releases, and specification tracking. Executable conformance is a
+separate exact-head GitHub Actions gate. The added legacy SSE client has no
+current executable official scenario and is validated through Dart and
+published TypeScript SDK interoperability instead.
 
 | Check | Result |
 | --- | --- |
-| Server conformance | 20/20, 100% |
-| Client conformance | 32/32, 100% |
+| Published conformance in exact-head CI | MCP 2025-11-25 and MCP 2026-07-28, client and server roles, 100% with no expected failures |
+| `tier-check` executable conformance | Skipped in the repository-policy invocation |
 | Required issue labels | 12/12 |
 | Open-issue triage | 2/3, 66.7%; issue #177 is protected from automatic changes |
 | Open `P0` issues | 0 |

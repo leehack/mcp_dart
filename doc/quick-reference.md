@@ -345,9 +345,17 @@ server.server.setRequestHandler<JsonRpcSubscriptionsListenRequest>(
       server.server.getCapabilities(),
     );
     await extra.sendSubscriptionAcknowledged(acknowledged);
-    await extra.sendSubscriptionNotification(
-      const JsonRpcToolListChangedNotification(),
-    );
+
+    if (acknowledged.toolsListChanged == true) {
+      await extra.sendSubscriptionNotification(
+        const JsonRpcToolListChangedNotification(),
+      );
+    }
+    if (acknowledged.promptsListChanged == true) {
+      await extra.sendSubscriptionNotification(
+        const JsonRpcPromptListChangedNotification(),
+      );
+    }
     return const EmptyResult();
   },
   (id, params, meta) => JsonRpcSubscriptionsListenRequest(
@@ -374,9 +382,11 @@ await server.sendStatelessLoggingMessage(
 );
 ```
 
-The request ID is mandatory for routing on Streamable HTTP. Legacy MCP
+The request ID is mandatory for routing on Streamable HTTP, and the server must
+send only notification kinds present in the acknowledged filter. Legacy MCP
 2025-11-25 peers instead use global capability-gated methods such as
-`sendToolListChanged`, `sendResourceUpdated`, and `logging/setLevel`.
+`sendToolListChanged`, `sendPromptListChanged`, `sendResourceUpdated`, and
+`logging/setLevel`.
 
 Stdio servers must reserve stdout for MCP frames; send application logs to
 stderr. Configure internal SDK logs with `setMcpLogHandler`,

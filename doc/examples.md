@@ -364,6 +364,7 @@ dart run example/elicitation_http_server.dart
 
 - Multiple input types (boolean, string, number, enum)
 - Schema validation
+- Boolean, numeric, and enum default values
 - Action handling (accept/decline/cancel)
 - Structured, non-secret form data results
 

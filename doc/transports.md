@@ -33,6 +33,10 @@ frames later in the same input chunk are still processed.
 
 ### Server Setup
 
+Use `StdioServerTransport` when the server is launched as a local child process
+or CLI integration. Connect only after registering capabilities, reserve stdout
+for newline-delimited MCP frames, and send application diagnostics to stderr.
+
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
 
@@ -63,6 +67,10 @@ void main() async {
 ### Client Setup
 
 #### Connect to Dart Server
+
+Use `StdioClientTransport` to start a trusted local Dart entry point and own its
+lifecycle. The client launches the configured process, communicates over its
+stdin/stdout, and terminates it when the client closes.
 
 ```dart
 final client = McpClient(
@@ -632,6 +640,11 @@ void main() async {
 
 ### Client Setup
 
+Use `StreamableHttpClientTransport` for remote services, browser clients, and
+Flutter applications. Pass the single MCP endpoint, connect before issuing
+requests, and close the client when the application no longer needs the
+connection.
+
 ```dart
 final client = McpClient(
   Implementation(name: 'client', version: '1.0.0'),
@@ -1001,7 +1014,9 @@ the first dispatched SSE event to be `endpoint`, and then sends each JSON-RPC
 message as a separate JSON `POST` to the advertised URL. Relative endpoint URLs
 are resolved against the SSE URL. Absolute endpoints are accepted only when
 their scheme, host, and effective port match the SSE connection; credentials
-and URL fragments are rejected.
+and URL fragments are rejected. The opening `GET` and every message `POST`
+also reject HTTP redirects rather than forwarding configured headers or MCP
+messages to another URL.
 
 ```dart
 final transport = SseClientTransport(

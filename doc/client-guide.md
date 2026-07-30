@@ -123,6 +123,10 @@ if (getUiCapability(client.getServerCapabilities())
 
 ### List Available Tools
 
+Call `listTools()` after the client is connected to discover the tools the
+server currently exposes. Treat the returned definitions as the source of truth
+for names and input schemas, and paginate when `nextCursor` is present.
+
 ```dart
 // Get all tools
 final response = await client.listTools();
@@ -135,6 +139,10 @@ for (final tool in response.tools) {
 ```
 
 ### Call a Tool
+
+Use the advertised tool name and schema to build a `CallToolRequest`. Inspect
+every returned content block because one result can combine text, images,
+audio, embedded resources, and resource links.
 
 ```dart
 // Simple tool call
@@ -247,6 +255,10 @@ try {
 
 ### List Available Resources
 
+Call `listResources()` to discover fixed resources before presenting or reading
+them. Resource templates are listed separately with
+`listResourceTemplates()`.
+
 ```dart
 // Get all resources
 final response = await client.listResources();
@@ -263,6 +275,10 @@ for (final resource in response.resources) {
 ```
 
 ### Read a Resource
+
+Pass an advertised resource URI, or an application-expanded template URI, to
+`readResource()`. Branch on the returned content type: text is already decoded,
+while `BlobResourceContents.blob` is base64-encoded binary data.
 
 ```dart
 // Read specific resource
@@ -377,6 +393,10 @@ await client.unsubscribeResource(
 
 ### Resource Templates
 
+Resource templates describe parameterized resource families. Discover the
+template, substitute application-validated values for its variables, and read
+the resulting concrete URI through the normal resource API.
+
 ```dart
 // Templates have their own discovery method.
 final response = await client.listResourceTemplates();
@@ -396,6 +416,10 @@ final result = await client.readResource(
 ## Using Prompts
 
 ### List Available Prompts
+
+Call `listPrompts()` after connecting to discover reusable prompt templates and
+their declared arguments. Refresh the list when the server emits a
+prompt-list-change notification.
 
 ```dart
 // Get all prompts
@@ -417,6 +441,10 @@ for (final prompt in response.prompts) {
 
 ### Get a Prompt
 
+Use `getPrompt()` without arguments when the advertised prompt has no required
+parameters. The result contains one or more ordered messages ready for the host
+application to pass to its model.
+
 ```dart
 // Get prompt without arguments
 final result = await client.getPrompt(
@@ -435,6 +463,10 @@ for (final message in result.messages) {
 ```
 
 ### Get Prompt with Arguments
+
+For parameterized prompts, send values using the exact advertised argument
+names. Validate required application input before requesting the expanded
+prompt.
 
 ```dart
 // Get prompt with arguments
@@ -458,6 +490,11 @@ for (final message in result.messages) {
 ```
 
 ### Handle Embedded Resources in Prompts
+
+A prompt message can embed resource contents or link to a separately readable
+resource. Handle both forms so model context is not silently dropped; dereference
+a `ResourceLink` only after applying the application's URI and authorization
+policy.
 
 ```dart
 final result = await client.getPrompt(
@@ -545,7 +582,12 @@ client.onSamplingRequest = (request) async {
 
 ## Completions
 
-Get argument completion suggestions:
+Use `completion/complete` while a user is entering a resource-template or prompt
+argument. Send the appropriate reference plus the partial value, preserve any
+cross-argument context, and treat `hasMore` as a signal that additional
+suggestions remain.
+
+Complete a resource-template argument:
 
 ```dart
 // Complete resource template variable
@@ -748,6 +790,10 @@ Future<McpClient> connectWithRetry(
 ```
 
 ### Capability Negotiation
+
+Initialization advertises optional server behavior. Check the negotiated
+capabilities before calling optional methods, and do not infer support merely
+because the SDK exposes a convenience API.
 
 ```dart
 // After connection, check server capabilities

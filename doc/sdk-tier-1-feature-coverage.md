@@ -29,7 +29,7 @@ compatibility profile where required.
 | 2 | Tools - calling | [Client guide: call a tool](client-guide.md#call-a-tool) | Covered |
 | 3 | Tools - text results | [Tools: text content](tools.md#text-content) | Covered |
 | 4 | Tools - image results | [Tools: image content](tools.md#image-content) | Covered |
-| 5 | Tools - audio results | [Quick reference: content types](quick-reference.md#content-types) | Covered |
+| 5 | Tools - audio results | [Tools: audio content](tools.md#audio-content) | Covered |
 | 6 | Tools - embedded resources | [Tools: embedded resources](tools.md#embedded-resources) | Covered |
 | 7 | Tools - error handling | [Tools: error handling](tools.md#error-handling) | Covered |
 | 8 | Tools - change notifications | [Server guide: dynamic registration](server-guide.md#dynamic-capability-registration) and [notification routing](quick-reference.md#notifications-and-logging) | Covered |
@@ -56,7 +56,7 @@ compatibility profile where required.
 | 29 | Elicitation - complete notification | [Legacy URL elicitation](#legacy-url-elicitation-and-completion) | Covered |
 | 30 | Roots - listing | [Client guide: roots](client-guide.md#managing-roots) | Covered |
 | 31 | Roots - change notifications | [Client guide: roots](client-guide.md#managing-roots) | Covered |
-| 32 | Logging - sending log messages | [Client guide: receive logs](client-guide.md#receive-log-messages) and [server observability](server-guide.md#observability-and-deprecated-protocol-logging) | Covered |
+| 32 | Logging - sending log messages | [Quick reference: compatibility logging](quick-reference.md#notifications-and-logging) and [server observability](server-guide.md#observability-and-deprecated-protocol-logging) | Covered |
 | 33 | Logging - setting level | [Client guide: set logging level](client-guide.md#set-logging-level-mcp-2025-11-25) | Covered |
 | 34 | Completions - resource argument | [Client guide: completions](client-guide.md#completions) | Covered |
 | 35 | Completions - prompt argument | [Client guide: completions](client-guide.md#completions) | Covered |
@@ -78,22 +78,38 @@ compatibility profile where required.
 
 URL elicitation lets an MCP 2025-11-25 server direct a user to a trusted URL
 for an out-of-band interaction. Advertise and verify the client's URL
-elicitation capability before use. The completion notification tells the client
-that a legacy elicitation flow identified by `elicitationId` has finished.
-MCP 2026-07-28 stateless URL elicitation does not use that notification.
+elicitation capability before use. An `accept` response grants consent to open
+or navigate to the URL; it does not mean the out-of-band interaction has
+finished. Send the completion notification only after the application verifies
+that the interaction completed for the same authenticated subject and client
+session that initiated it. MCP 2026-07-28 stateless URL elicitation does not use
+that notification.
 
 ```dart
-final result = await server.server.elicitInput(
+const elicitationId = 'authorization-1';
+final initiatingSubject = authenticatedSubject;
+final initiatingSessionId = authenticatedSessionId;
+
+final result = await server.elicitInput(
   const ElicitRequest.url(
     message: 'Authorize access in your browser.',
     url: 'https://example.com/authorize',
-    elicitationId: 'authorization-1',
+    elicitationId: elicitationId,
   ),
 );
 
 if (result.accepted) {
+  // This application-owned stream is completed by the trusted callback
+  // endpoint, not by the client's consent response.
+  await authorizationCompletions.firstWhere(
+    (completion) =>
+        completion.elicitationId == elicitationId &&
+        completion.subject == initiatingSubject &&
+        completion.sessionId == initiatingSessionId,
+  );
+
   final notifyComplete =
-      server.server.createElicitationCompletionNotifier('authorization-1');
+      server.server.createElicitationCompletionNotifier(elicitationId);
   await notifyComplete();
 }
 ```
