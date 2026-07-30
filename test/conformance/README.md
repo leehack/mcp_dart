@@ -1,7 +1,7 @@
 # MCP Conformance
 
-This directory contains conformance harnesses for MCP 2025-11-25 and the
-unreleased MCP 2026-07-28 suite. These fixtures are intentionally
+This directory contains conformance harnesses for MCP 2025-11-25 and
+MCP 2026-07-28. These fixtures are intentionally
 separate from the cross-SDK interop tests because the official conformance
 package calls hard-coded diagnostic tools, prompts, and resources.
 
@@ -12,9 +12,9 @@ conformance suites from `.github/workflows/test_core.yml`. The server suites
 use dedicated fixtures because the official conformance package calls
 hard-coded diagnostic tools, prompts, and resources.
 
-The MCP 2026-07-28 suite still targets a preview alpha conformance package. If
-the official suite changes before the specification is final, record
-intentional temporary gaps in `2026_07_28_expected_failures.txt` or
+The MCP 2026-07-28 suite currently targets the published alpha conformance
+channel because no final conformance package is available. If that package
+changes, record intentional temporary gaps in `2026_07_28_expected_failures.txt` or
 `2026_07_28_client_expected_failures.txt` so CI distinguishes known preview
 churn from regressions.
 
