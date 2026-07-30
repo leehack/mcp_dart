@@ -30,7 +30,7 @@ outside the Tier 1 Core claim.
 | --- | --- | --- |
 | Publish maintenance, security, dependency, and versioning policies | Policies are linked from the README and pass the official policy evaluation | Complete: the official checker finds all required policy signals; final qualitative judgment remains with reviewers |
 | Adopt the MCP issue taxonomy | All required type, status, and priority labels exist; every open issue is triaged | Complete: 12/12 labels and 100% current open-issue triage |
-| Audit the project-maintained Tier 1 documentation inventory | All 48 items mapped from the published non-experimental tier requirements have user-facing prose and a runnable or near-runnable example | Complete in source: 48/48; stable `2.3.0` is 47/48 because the additive legacy SSE client requires the next approved minor release |
+| Audit the project-maintained Tier 1 documentation inventory | All 48 items mapped from the published non-experimental tier requirements have user-facing prose and a runnable or near-runnable example | Complete in source: 48/48; published `mcp_dart 2.3.0` is 47/48 because the additive legacy SSE client requires the next approved minor release |
 | Join the official SDK conformance matrix | The conformance repository can build and run `mcp_dart` client and server fixtures by repository/ref | Planned |
 | Resolve SDK tiering eligibility | The SDK Working Group confirms whether an external community SDK can receive a tier or accepts `mcp_dart` into the official SDK roster | Planned: the tiering page describes community-driven SDKs, while the [SDK Working Group charter](https://modelcontextprotocol.io/community/working-groups/sdk) excludes third-party SDKs outside the MCP organization |
 | Produce a repository evidence scorecard | Current client and server fixtures each score 100% for applicable dated scenarios | Complete: the pinned self-assessment returns Tier 1 on deterministic checks; official matrix integration remains planned |
@@ -56,8 +56,8 @@ interoperability instead.
 | Required issue labels | 12/12 |
 | Open-issue triage | 100% within two business days; 2 open issues, median 0 hours |
 | Open `P0` issues | 0 |
-| Stable SDK release | `2.3.0` |
-| Stable documentation inventory | 47/48; current source is 48/48 |
+| Published stable SDK release | `mcp_dart 2.3.0` |
+| Published stable documentation inventory | `mcp_dart 2.3.0` is 47/48; current source is 48/48 |
 | Latest-spec release gap | 0 days |
 | Self-assessment result | Tier 1; all deterministic checks pass |
 
