@@ -983,24 +983,98 @@ void main() {
 
 ## Legacy SSE Transport (Deprecated)
 
-The SDK includes an older SSE transport implementation that is deprecated but still supported for backward compatibility.
+The SDK retains client and server implementations of the original HTTP+SSE
+transport for compatibility with servers that have not migrated to Streamable
+HTTP. Do not select it for a new deployment.
+
+HTTP+SSE is Deprecated under
+[SEP-2596](https://modelcontextprotocol.io/seps/2596-spec-feature-lifecycle-and-deprecation)
+with an earliest removal-eligibility date of 2026-08-18. Eligibility is not
+automatic removal: the MCP Core Maintainers still make that decision during
+release preparation. The Dart APIs are marked `@Deprecated` and emit one
+warning per transport type through the configurable MCP runtime logger.
+
+### Legacy Client Setup
+
+The client opens the configured URL with `Accept: text/event-stream`, waits for
+the first dispatched SSE event to be `endpoint`, and then sends each JSON-RPC
+message as a separate JSON `POST` to the advertised URL. Relative endpoint URLs
+are resolved against the SSE URL. Absolute endpoints are accepted only when
+their scheme, host, and effective port match the SSE connection; credentials
+and URL fragments are rejected.
+
+```dart
+final transport = SseClientTransport(
+  Uri.parse('http://127.0.0.1:3000/sse'),
+  opts: const SseClientTransportOptions(
+    // Applied to both GET and POST. Use secure token storage in production.
+    headers: {'Authorization': 'Bearer legacy-token'},
+  ),
+);
+final client = McpClient(
+  const Implementation(name: 'legacy-client', version: '1.0.0'),
+  options: const McpClientOptions(protocol: McpProtocol.legacy),
+);
+
+await client.connect(transport);
+final tools = await client.listTools();
+```
+
+The transport supports static custom headers. It intentionally does not
+duplicate the Streamable HTTP OAuth discovery and authorization-code system.
+Use `StreamableHttpClientTransport` for OAuth-managed deployments.
+
+An unexpected end to the SSE stream closes the transport. Legacy HTTP+SSE has
+no dependable MCP replay contract, so the client does not replay POSTs or
+silently create a replacement session. Reconnect at the application level by
+creating a new client and repeating initialization.
+
+### Legacy Server Setup
+
+`SseServerManager` routes the SSE `GET` and message `POST` endpoints for the
+existing server transport:
+
+```dart
+final manager = SseServerManager(
+  mcpServer,
+  enableDnsRebindingProtection: true,
+  allowedHosts: {'127.0.0.1', 'localhost'},
+  allowedOrigins: {'https://trusted-app.example'},
+);
+await manager.handleRequest(request);
+```
+
+Validate any present `Origin`, allow only intended hosts, bind loopback-only
+for local servers, and authenticate both endpoints. The compatibility default
+for DNS-rebinding protection remains `false`, so production code must enable
+it explicitly.
 
 ### Why Deprecated?
 
-- Replaced by Streamable HTTP (more flexible)
-- Limited session management
-- No resumability
-- Use Streamable HTTP for new projects
+- Streamable HTTP replaced the two-endpoint design with one MCP endpoint.
+- Legacy sessions have no dependable resumption or replay contract.
+- The legacy transport does not provide the modern OAuth integration.
+- Streamable HTTP is the active transport for new clients and servers.
 
 ### Migration Guide
 
 ```dart
-// Old (deprecated)
+// Old client (deprecated)
+final oldClientTransport = SseClientTransport(
+  Uri.parse('https://mcp.example.com/sse'),
+);
+
+// Old server (deprecated)
 final manager = SseServerManager(mcpServer);
 await manager.handleRequest(request);
 
-// New (recommended)
-final transport = StreamableHTTPServerTransport(
+// New client (recommended)
+final clientTransport = StreamableHttpClientTransport(
+  Uri.parse('https://mcp.example.com/mcp'),
+);
+
+// New server (recommended)
+final serverTransport = StreamableHTTPServerTransport(
   options: StreamableHTTPServerTransportOptions(
     sessionIdGenerator: () => generateUUID(),
     eventStore: InMemoryEventStore(),
@@ -1010,9 +1084,15 @@ final transport = StreamableHTTPServerTransport(
   ),
 );
 
-await mcpServer.connect(transport);
-await transport.handleRequest(request);
+await mcpServer.connect(serverTransport);
+await serverTransport.handleRequest(request);
 ```
+
+When an application accepts a URL whose transport is unknown, follow the
+official modern-first compatibility sequence: try the Streamable HTTP
+initialize POST first and consider legacy SSE only after HTTP 400, 404, or 405.
+Keep that policy in application code; `SseClientTransport` never silently
+downgrades a modern connection.
 
 ## Choosing a Transport
 

@@ -60,7 +60,20 @@ and
 [elicitation server](https://github.com/leehack/mcp_dart/blob/main/example/elicitation_http_server.dart),
 and
 [SSE server](https://github.com/leehack/mcp_dart/blob/main/example/server_sse.dart)
+and
+[SSE client](https://github.com/leehack/mcp_dart/blob/main/example/client_sse.dart)
 intentionally demonstrate retained initialization-era behavior.
+
+Run the deprecated SSE pair in separate terminals:
+
+```bash
+dart run example/server_sse.dart
+dart run example/client_sse.dart
+```
+
+The client selects `McpProtocol.legacy`, validates the advertised POST endpoint
+against the SSE origin, lists tools, and calls the server's `calculate` tool.
+Use the Streamable HTTP pair above for new integrations.
 
 ## Integrations
 

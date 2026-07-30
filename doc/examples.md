@@ -11,7 +11,7 @@ protocol era. Choose the profile that matches what you want to test:
 | --- | --- | --- |
 | Strict MCP `2026-07-28` | [`example/mcp_2026_07_28/`](../example/mcp_2026_07_28/) | Guarantee discovery and the stateless MCP 2026-07-28 request model |
 | Default dual-era | [`server_stdio.dart`](../example/server_stdio.dart), [`client_stdio.dart`](../example/client_stdio.dart), [`streamable_https/`](../example/streamable_https/) | Prefer MCP 2026-07-28 and retain legacy fallback |
-| Representative MCP 2025-11-25 / legacy | [`simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`elicitation_http_server.dart`](../example/elicitation_http_server.dart), [`server_sse.dart`](../example/server_sse.dart) | Demonstrate initialization-era APIs retained for compatibility |
+| Representative MCP 2025-11-25 / legacy | [`simple_task_interactive_server.dart`](../example/simple_task_interactive_server.dart), [`elicitation_http_server.dart`](../example/elicitation_http_server.dart), [`server_sse.dart`](../example/server_sse.dart), [`client_sse.dart`](../example/client_sse.dart) | Demonstrate initialization-era APIs retained for compatibility |
 
 For task-focused guidance, also see:
 
@@ -118,24 +118,30 @@ egress, authentication, and rate-limit responsibilities.
 
 ## Transport Examples
 
-### Legacy SSE Server (Deprecated)
+### Legacy SSE Client and Server (Deprecated)
 
-**Location**: [`example/server_sse.dart`](../example/server_sse.dart)
+**Location**: [`example/server_sse.dart`](../example/server_sse.dart), [`example/client_sse.dart`](../example/client_sse.dart)
 
 Older Server-Sent Events transport retained with `McpProtocol.legacy`. Use the
 Streamable HTTP example below for new projects.
 
 ```bash
+# Terminal 1
 dart run example/server_sse.dart
+
+# Terminal 2
+dart run example/client_sse.dart
 ```
 
 **Features**:
 
 - HTTP server setup
-- SSE transport configuration
+- Legacy SSE client and server transport configuration
+- Same-origin endpoint validation
 - Session management
-- Multiple concurrent connections
+- A real initialization, tool-list, and tool-call flow
 - Explicit Host and Origin allowlists for DNS-rebinding protection
+- A process smoke test and official TypeScript SSE server interoperability test
 
 ### Streamable HTTP
 
@@ -731,7 +737,9 @@ dart run example/client_stdio.dart
 dart run example/mcp_2026_07_28/client.dart
 
 # HTTP examples
+# Run the legacy pair in separate terminals.
 dart run example/server_sse.dart
+dart run example/client_sse.dart
 dart run example/streamable_https/server_streamable_https.dart
 
 # Auth examples (server also needs MCP_BEARER_TOKEN)

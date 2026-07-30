@@ -213,5 +213,76 @@ void main() {
         }
       });
     });
+
+    group('Legacy SSE', () {
+      late SseClientTransport transport;
+      late McpClient client;
+      late io.Process serverProcess;
+
+      setUp(() async {
+        final port = await _findAvailablePort();
+        serverProcess = await io.Process.start(
+          'node',
+          [tsServerScript, '--transport', 'sse', '--port', '$port'],
+          mode: io.ProcessStartMode.normal,
+        );
+        serverProcess.stdout
+            .transform(io.systemEncoding.decoder)
+            .listen((data) => print('[TS SSE Server] $data'));
+        serverProcess.stderr
+            .transform(io.systemEncoding.decoder)
+            .listen((data) => print('[TS SSE Server Error] $data'));
+
+        await Future.delayed(const Duration(seconds: 2));
+        transport = SseClientTransport(
+          Uri.parse('http://127.0.0.1:$port/sse'),
+        );
+        client = McpClient(
+          const Implementation(name: 'dart-sse-test', version: '1.0'),
+          options: const McpClientOptions(
+            protocol: McpProtocol.legacy,
+            capabilities: ClientCapabilities(),
+          ),
+        );
+        await client.connect(transport);
+      });
+
+      tearDown(() async {
+        await client.close();
+        serverProcess.kill();
+        await serverProcess.exitCode.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            if (!io.Platform.isWindows) {
+              serverProcess.kill(io.ProcessSignal.sigkill);
+            }
+            return -1;
+          },
+        );
+      });
+
+      test('initializes and calls tools through the official TS SSE server',
+          () async {
+        expect(
+          client.getProtocolVersion(),
+          latestInitializationProtocolVersion,
+        );
+        expect(transport.sessionId, isNotEmpty);
+
+        final tools = await client.listTools();
+        expect(
+          tools.tools.map((tool) => tool.name),
+          containsAll(['echo', 'add']),
+        );
+
+        final result = await client.callTool(
+          const CallToolRequest(
+            name: 'add',
+            arguments: {'a': 10, 'b': 20},
+          ),
+        );
+        expect((result.content.single as TextContent).text, '30');
+      });
+    });
   });
 }

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:mcp_dart/src/shared/legacy_sse_deprecation.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 
 import 'dns_rebinding_protection.dart';
@@ -7,12 +8,13 @@ import 'mcp_server.dart';
 import 'sse.dart';
 
 final _logger = Logger("mcp_dart.server.sse.manager");
+bool _legacySseWarningEmitted = false;
 
 /// Legacy manager for Server-Sent Events (SSE) connections.
 ///
 /// Prefer `StreamableHTTPServerTransport` for new servers. This manager is
 /// retained for backward compatibility with existing SSE integrations.
-@Deprecated('Use StreamableHTTPServerTransport instead')
+@Deprecated(legacySseDeprecationMessage)
 class SseServerManager {
   /// Map to store active SSE transports, keyed by session ID.
   final Map<String, SseServerTransport> activeSseTransports = {};
@@ -42,7 +44,12 @@ class SseServerManager {
     this.enableDnsRebindingProtection = false,
     this.allowedHosts,
     this.allowedOrigins,
-  });
+  }) {
+    if (!_legacySseWarningEmitted) {
+      _legacySseWarningEmitted = true;
+      _logger.warn(legacySseDeprecationMessage);
+    }
+  }
 
   /// Routes incoming HTTP requests to appropriate handlers.
   Future<void> handleRequest(HttpRequest request) async {

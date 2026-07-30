@@ -5,6 +5,7 @@
 library;
 
 export './client.dart'; // Client-side implementation for MCP protocol.
+export './sse.dart'; // Deprecated HTTP+SSE compatibility transport.
 export './stdio.dart'; // Standard I/O-based client communication utilities.
 export './streamable_https.dart'; // Streamable HTTPS communication utilities.
 export './task_client.dart'; // Task client helper.

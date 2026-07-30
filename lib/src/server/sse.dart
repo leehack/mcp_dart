@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:mcp_dart/src/shared/legacy_sse_deprecation.dart';
 import 'package:mcp_dart/src/shared/logging.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/shared/uuid.dart';
 import 'package:mcp_dart/src/types.dart';
 
 final _logger = Logger("mcp_dart.server.sse");
+bool _legacySseWarningEmitted = false;
 
 /// Maximum size for incoming POST message bodies.
 const int _maximumMessageSize = 4 * 1024 * 1024; // 4MB in bytes
@@ -26,7 +28,7 @@ const int _maximumMessageSize = 4 * 1024 * 1024; // 4MB in bytes
 /// `HttpServer` or frameworks like Shelf/Alfred). The `start` method manages
 /// the SSE response stream, while `handlePostMessage` should be called from
 /// the server's routing logic for the designated message endpoint.
-@Deprecated('Use StreamableHTTPServerTransport instead')
+@Deprecated(legacySseDeprecationMessage)
 class SseServerTransport implements Transport {
   StringConversionSink? _sink;
   final HttpResponse _sseResponse;
@@ -69,6 +71,10 @@ class SseServerTransport implements Transport {
     required String messageEndpointPath,
   })  : _sseResponse = response,
         _messageEndpointPath = messageEndpointPath {
+    if (!_legacySseWarningEmitted) {
+      _legacySseWarningEmitted = true;
+      _logger.warn(legacySseDeprecationMessage);
+    }
     _sessionId = generateUUID();
   }
 
