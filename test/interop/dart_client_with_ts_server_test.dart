@@ -1,17 +1,59 @@
 @Tags(['interop'])
 library;
 
-import 'dart:io' as io;
 import 'dart:async';
-import 'package:test/test.dart';
+import 'dart:io' as io;
+
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
 
 Future<int> _findAvailablePort() async {
   final socket = await io.ServerSocket.bind(io.InternetAddress.loopbackIPv4, 0);
   final port = socket.port;
   await socket.close();
   return port;
+}
+
+Future<void> _waitForTcpServer({
+  required io.Process process,
+  required String host,
+  required int port,
+  Duration timeout = const Duration(seconds: 15),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  Object? lastConnectionError;
+
+  while (DateTime.now().isBefore(deadline)) {
+    try {
+      final socket = await io.Socket.connect(
+        host,
+        port,
+        timeout: const Duration(milliseconds: 250),
+      );
+      socket.destroy();
+      return;
+    } on Object catch (error) {
+      lastConnectionError = error;
+    }
+
+    final exitCode = await Future.any<int?>([
+      process.exitCode.then<int?>((code) => code),
+      Future<int?>.delayed(const Duration(milliseconds: 50), () => null),
+    ]);
+    if (exitCode != null) {
+      throw StateError(
+        'TypeScript interop server exited with code $exitCode before '
+        '$host:$port accepted connections.',
+      );
+    }
+  }
+
+  throw TimeoutException(
+    'Timed out waiting for TypeScript interop server at $host:$port. '
+    'Last connection error: $lastConnectionError',
+    timeout,
+  );
 }
 
 void main() {
@@ -127,8 +169,11 @@ void main() {
           mode: io.ProcessStartMode.inheritStdio,
         );
 
-        // Give node server a moment to start
-        await Future.delayed(const Duration(seconds: 2));
+        await _waitForTcpServer(
+          process: serverProcess,
+          host: '127.0.0.1',
+          port: port,
+        );
 
         // 2. Create the StreamableHttpClientTransport
         transport = StreamableHttpClientTransport(
@@ -183,8 +228,11 @@ void main() {
             .transform(io.systemEncoding.decoder)
             .listen((data) => print('[TS Server Error] $data'));
 
-        // Give the node server a moment to start before connecting.
-        await Future.delayed(const Duration(seconds: 2));
+        await _waitForTcpServer(
+          process: staleServerProcess,
+          host: '127.0.0.1',
+          port: stalePort,
+        );
 
         final staleTransport = StreamableHttpClientTransport(
           Uri.parse('http://localhost:$stalePort/mcp'),
@@ -233,7 +281,11 @@ void main() {
             .transform(io.systemEncoding.decoder)
             .listen((data) => print('[TS SSE Server Error] $data'));
 
-        await Future.delayed(const Duration(seconds: 2));
+        await _waitForTcpServer(
+          process: serverProcess,
+          host: '127.0.0.1',
+          port: port,
+        );
         transport = SseClientTransport(
           Uri.parse('http://127.0.0.1:$port/sse'),
         );

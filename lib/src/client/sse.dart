@@ -9,6 +9,8 @@ import 'package:mcp_dart/src/types.dart';
 
 final _logger = Logger('mcp_dart.client.sse');
 bool _legacySseWarningEmitted = false;
+const int _maximumErrorResponseBodyBytes = 64 * 1024;
+const String _truncatedResponseBodySuffix = '\n[response body truncated]';
 
 enum _SseClientState { idle, starting, running, closing, closed }
 
@@ -47,6 +49,8 @@ class SseClientError extends Error {
   final String message;
 
   /// Response body associated with a failed HTTP request, when available.
+  ///
+  /// Large bodies are truncated to a bounded diagnostic.
   final String? responseBody;
 
   /// Creates a legacy SSE client transport error.
@@ -68,9 +72,10 @@ class SseClientError extends Error {
 /// a separate HTTP `POST` to that advertised endpoint. Server JSON-RPC
 /// messages are received as SSE `message` events.
 ///
-/// The advertised endpoint must use HTTP or HTTPS and have the same origin as
-/// [url]. This prevents configured credentials and MCP messages from being
-/// redirected to an untrusted origin.
+/// Both the opening `GET` and every message `POST` reject redirects. The
+/// advertised endpoint must use HTTP or HTTPS and have the same origin as
+/// [url]. Together, these checks prevent configured credentials and MCP
+/// messages from being redirected to an untrusted origin.
 ///
 /// HTTP+SSE has no dependable MCP session-resumption contract. An unexpected
 /// end to the SSE stream closes this transport; it does not replay messages or
@@ -89,6 +94,9 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
   _SseClientState _state = _SseClientState.idle;
   Completer<void>? _abortController;
   Completer<void>? _endpointReady;
+  Object? _startToken;
+  Future<void>? _attemptCleanupFuture;
+  Future<void>? _closeFuture;
   // Cancelled by failed-start cleanup or transport closure.
   // ignore: cancel_subscriptions
   StreamSubscription<String>? _sseSubscription;
@@ -166,6 +174,7 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
     _streamEnded = false;
     _messageEndpoint = null;
     _sessionId = null;
+    final startToken = Object();
     final abortController = Completer<void>();
     final endpointReady = Completer<void>();
     final endpointFuture = endpointReady.future;
@@ -179,6 +188,8 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
         onError: (Object _, StackTrace __) {},
       ),
     );
+    _startToken = startToken;
+    _attemptCleanupFuture = null;
     _abortController = abortController;
     _endpointReady = endpointReady;
 
@@ -187,7 +198,7 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
         'GET',
         _url,
         abortTrigger: abortController.future,
-      );
+      )..followRedirects = false;
       request.headers.addAll(_headers);
       request.headers['Accept'] = 'text/event-stream';
       final version = _protocolVersion;
@@ -196,8 +207,15 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
       }
 
       final response = await _httpClient.send(request);
+      if (!_isActiveStart(startToken)) {
+        await _cancelResponseStream(response.stream);
+        throw SseClientError(
+          null,
+          'SSE connection was closed before it started',
+        );
+      }
       if (response.statusCode != 200) {
-        final body = await response.stream.bytesToString();
+        final body = await _readBoundedResponseBody(response.stream);
         throw SseClientError(
           response.statusCode,
           'SSE connection request failed',
@@ -207,7 +225,7 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
 
       final mediaType = _mediaType(response.headers['content-type']);
       if (mediaType != 'text/event-stream') {
-        await response.stream.drain<void>();
+        await _cancelResponseStream(response.stream);
         throw SseClientError(
           response.statusCode,
           'Expected Content-Type text/event-stream, received '
@@ -228,6 +246,12 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
           );
 
       await endpointFuture;
+      if (!_isActiveStart(startToken)) {
+        throw SseClientError(
+          null,
+          'SSE connection was closed before it finished starting',
+        );
+      }
       if (_streamEnded) {
         throw _streamFailure ??
             SseClientError(
@@ -235,16 +259,15 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
               'SSE stream closed immediately after advertising its endpoint',
             );
       }
-      if (_state == _SseClientState.starting) {
-        _state = _SseClientState.running;
-      }
+      _state = _SseClientState.running;
+      _startToken = null;
     } catch (error, stackTrace) {
       final reportedError = _asError(error);
-      final wasExplicitlyClosed =
-          _state == _SseClientState.closing || _state == _SseClientState.closed;
-      if (!wasExplicitlyClosed) {
-        await _resetAfterFailedStart();
-        onerror?.call(reportedError);
+      if (_isActiveStart(startToken)) {
+        await _resetAfterFailedStart(startToken);
+        if (_state == _SseClientState.idle) {
+          _reportError(reportedError);
+        }
       }
       Error.throwWithStackTrace(reportedError, stackTrace);
     }
@@ -261,7 +284,6 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
       throw StateError('SseClientTransport is not connected.');
     }
 
-    var errorReported = false;
     try {
       final abortController = _abortController;
       if (abortController == null || abortController.isCompleted) {
@@ -271,7 +293,7 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
         'POST',
         endpoint,
         abortTrigger: abortController.future,
-      );
+      )..followRedirects = false;
       request.headers.addAll(_headers);
       request.headers['Content-Type'] = 'application/json';
       final version = _protocolVersion;
@@ -281,23 +303,20 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
       request.body = jsonEncode(message.toJson());
 
       final response = await _httpClient.send(request);
-      final body = await response.stream.bytesToString();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final error = SseClientError(
+        final body = await _readBoundedResponseBody(response.stream);
+        throw SseClientError(
           response.statusCode,
           'Error POSTing JSON-RPC message to the SSE endpoint',
           responseBody: body,
         );
-        errorReported = true;
-        onerror?.call(error);
-        throw error;
       }
+      await _cancelResponseStream(response.stream);
     } catch (error, stackTrace) {
       final reportedError = _asError(error);
-      if (!errorReported &&
-          _state != _SseClientState.closing &&
+      if (_state != _SseClientState.closing &&
           _state != _SseClientState.closed) {
-        onerror?.call(reportedError);
+        _reportError(reportedError);
       }
       Error.throwWithStackTrace(reportedError, stackTrace);
     }
@@ -305,21 +324,84 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
 
   /// Closes the SSE stream and aborts in-flight POST requests.
   @override
-  Future<void> close() async {
-    if (_state == _SseClientState.closing || _state == _SseClientState.closed) {
-      return;
+  Future<void> close() {
+    final closeFuture = _closeFuture;
+    if (closeFuture != null) {
+      return closeFuture;
     }
+    if (_state == _SseClientState.closed) {
+      return Future<void>.value();
+    }
+    return _beginClose();
+  }
 
+  Future<void> _beginClose({Error? error}) {
+    final existingClose = _closeFuture;
+    if (existingClose != null) {
+      return existingClose;
+    }
     _state = _SseClientState.closing;
+    _startToken = null;
+    final closeCompleter = Completer<void>();
+    final closeFuture = closeCompleter.future;
+    _closeFuture = closeFuture;
+    // Remote failures can begin closing without an awaiting caller. Keep
+    // resource-cleanup errors observable to explicit close() callers while
+    // preventing a transient unhandled asynchronous error.
+    unawaited(
+      closeFuture.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace __) {},
+      ),
+    );
     final startCompleter = _endpointReady;
     if (startCompleter != null && !startCompleter.isCompleted) {
       startCompleter.completeError(
         SseClientError(null, 'SSE connection was closed before it started'),
       );
     }
-    await _closeResources();
-    _state = _SseClientState.closed;
-    _notifyClose();
+    unawaited(_settleClose(closeCompleter, error));
+    return closeFuture;
+  }
+
+  Future<void> _settleClose(
+    Completer<void> closeCompleter,
+    Error? error,
+  ) async {
+    try {
+      await _finishClose(error);
+      closeCompleter.complete();
+    } catch (closeError, stackTrace) {
+      closeCompleter.completeError(closeError, stackTrace);
+    }
+  }
+
+  Future<void> _finishClose(Error? error) async {
+    if (error != null) {
+      _reportError(error);
+    }
+    Object? closeError;
+    StackTrace? closeStackTrace;
+    try {
+      await _cleanupAttemptResources();
+    } catch (error, stackTrace) {
+      closeError = error;
+      closeStackTrace = stackTrace;
+    }
+    try {
+      if (_ownsHttpClient) {
+        _httpClient.close();
+      }
+    } catch (error, stackTrace) {
+      closeError ??= error;
+      closeStackTrace ??= stackTrace;
+    } finally {
+      _state = _SseClientState.closed;
+      _notifyClose();
+    }
+    if (closeError != null) {
+      Error.throwWithStackTrace(closeError, closeStackTrace!);
+    }
   }
 
   void _handleSseEvent(String event, String data) {
@@ -339,6 +421,9 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
     }
 
     if (event == 'endpoint') {
+      if (_messageEndpoint != null) {
+        return;
+      }
       try {
         final endpoint = _validateMessageEndpoint(data);
         _messageEndpoint = endpoint;
@@ -369,12 +454,12 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
       try {
         onmessage?.call(message);
       } catch (error) {
-        onerror?.call(
+        _reportError(
           StateError('Error in SseClientTransport.onmessage: $error'),
         );
       }
     } catch (error) {
-      onerror?.call(_asError(error));
+      _reportError(_asError(error));
     }
   }
 
@@ -390,7 +475,7 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
       return;
     }
     if (_state == _SseClientState.running) {
-      unawaited(_closeAfterRemoteFailure(streamError));
+      unawaited(_beginClose(error: streamError));
     }
   }
 
@@ -412,8 +497,8 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
     }
     if (_state == _SseClientState.running) {
       unawaited(
-        _closeAfterRemoteFailure(
-          _streamFailure ??
+        _beginClose(
+          error: _streamFailure ??
               SseClientError(null, 'SSE stream closed unexpectedly'),
         ),
       );
@@ -431,55 +516,52 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
       return;
     }
     if (_state == _SseClientState.running) {
-      unawaited(_closeAfterRemoteFailure(error));
+      unawaited(_beginClose(error: error));
     }
   }
 
-  Future<void> _closeAfterRemoteFailure(Error error) async {
-    if (_state != _SseClientState.running) {
+  Future<void> _resetAfterFailedStart(Object startToken) async {
+    await _cleanupAttemptResources();
+    if (!_isActiveStart(startToken)) {
       return;
     }
-    _state = _SseClientState.closing;
-    onerror?.call(error);
-    await _closeResources();
-    _state = _SseClientState.closed;
-    _notifyClose();
-  }
-
-  Future<void> _resetAfterFailedStart() async {
-    final abortController = _abortController;
-    if (abortController != null && !abortController.isCompleted) {
-      abortController.complete();
-    }
-    final subscription = _sseSubscription;
-    _sseSubscription = null;
-    await subscription?.cancel();
-    _parser = null;
-    _endpointReady = null;
-    _abortController = null;
-    _messageEndpoint = null;
-    _sessionId = null;
+    _startToken = null;
     _streamFailure = null;
     _streamEnded = false;
     _state = _SseClientState.idle;
   }
 
-  Future<void> _closeResources() async {
+  Future<void> _cleanupAttemptResources() {
+    return _attemptCleanupFuture ??= _performAttemptCleanup();
+  }
+
+  Future<void> _performAttemptCleanup() async {
     final abortController = _abortController;
     if (abortController != null && !abortController.isCompleted) {
       abortController.complete();
     }
     final subscription = _sseSubscription;
     _sseSubscription = null;
-    await subscription?.cancel();
-    if (_ownsHttpClient) {
-      _httpClient.close();
+    try {
+      await subscription?.cancel();
+    } finally {
+      _parser = null;
+      _endpointReady = null;
+      _abortController = null;
+      _messageEndpoint = null;
+      _sessionId = null;
     }
-    _parser = null;
-    _endpointReady = null;
-    _abortController = null;
-    _messageEndpoint = null;
-    _sessionId = null;
+  }
+
+  bool _isActiveStart(Object startToken) =>
+      _state == _SseClientState.starting && identical(_startToken, startToken);
+
+  void _reportError(Error error) {
+    try {
+      onerror?.call(error);
+    } catch (callbackError) {
+      _logger.warn('Error in onerror handler: $callbackError');
+    }
   }
 
   void _notifyClose() {
@@ -487,7 +569,11 @@ class SseClientTransport implements Transport, ProtocolVersionAwareTransport {
       return;
     }
     _closeNotified = true;
-    onclose?.call();
+    try {
+      onclose?.call();
+    } catch (error) {
+      _logger.warn('Error in onclose handler: $error');
+    }
   }
 
   Uri _validateMessageEndpoint(String data) {
@@ -541,6 +627,40 @@ bool _sameOrigin(Uri left, Uri right) =>
 
 String? _mediaType(String? contentType) =>
     contentType?.split(';').first.trim().toLowerCase();
+
+Future<String> _readBoundedResponseBody(Stream<List<int>> stream) async {
+  final bytes = <int>[];
+  var truncated = false;
+  await for (final chunk in stream) {
+    final remaining = _maximumErrorResponseBodyBytes - bytes.length;
+    if (remaining == 0) {
+      truncated = true;
+      break;
+    }
+    if (chunk.length <= remaining) {
+      bytes.addAll(chunk);
+      continue;
+    }
+    bytes.addAll(chunk.take(remaining));
+    truncated = true;
+    break;
+  }
+  final body = utf8.decode(bytes, allowMalformed: true);
+  return truncated ? '$body$_truncatedResponseBodySuffix' : body;
+}
+
+Future<void> _cancelResponseStream(Stream<List<int>> stream) async {
+  try {
+    final subscription = stream.listen(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    await subscription.cancel();
+  } on Object {
+    // The transport is already closing. A response cancellation failure must
+    // not replace the close error returned to start().
+  }
+}
 
 Error _asError(Object error) {
   if (error is Error) {
