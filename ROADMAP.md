@@ -2,8 +2,11 @@
 
 The project is targeting MCP SDK Tier 1. Tier 1 is an ongoing commitment to
 complete non-experimental protocol coverage, 100% applicable conformance,
-timely maintenance, comprehensive documentation, and predictable releases. It
-is not claimed until the MCP SDK Working Group assigns it.
+timely maintenance, comprehensive documentation, and predictable releases.
+The repository reports the deterministic result of its pinned self-assessment
+but does not claim a formal tier until eligibility and assignment are confirmed
+through the
+[MCP SDK tiering process](https://modelcontextprotocol.io/community/sdk-tiers).
 
 ## Current baseline
 
@@ -25,39 +28,47 @@ outside the Tier 1 Core claim.
 
 | Work item | Exit criterion | Status |
 | --- | --- | --- |
-| Publish maintenance, security, dependency, and versioning policies | Policies are linked from the README and pass the official policy evaluation | In progress |
-| Adopt the MCP issue taxonomy | All required type, status, and priority labels exist; every open issue is triaged | In progress: labels complete; 2/3 open issues triaged; issue #177 requires explicit approval |
-| Audit the canonical documentation inventory | All 48 non-experimental features have user-facing prose and a runnable or near-runnable example | Complete in source: 48/48; publish the additive legacy SSE client in the next approved minor release |
+| Publish maintenance, security, dependency, and versioning policies | Policies are linked from the README and pass the official policy evaluation | Complete: the official checker finds all required policy signals; final qualitative judgment remains with reviewers |
+| Adopt the MCP issue taxonomy | All required type, status, and priority labels exist; every open issue is triaged | Complete: 12/12 labels and 100% current open-issue triage |
+| Audit the project-maintained Tier 1 documentation inventory | All 48 items mapped from the published non-experimental tier requirements have user-facing prose and a runnable or near-runnable example | Complete in source: 48/48; stable `2.3.0` is 47/48 because the additive legacy SSE client requires the next approved minor release |
 | Join the official SDK conformance matrix | The conformance repository can build and run `mcp_dart` client and server fixtures by repository/ref | Planned |
-| Produce an official scorecard | Current stable client and server each score 100% for applicable dated scenarios | Complete |
-| Request Tier 1 assignment | A public advancement issue includes the scorecard, policy, documentation, release, and maintenance evidence | Planned |
+| Resolve SDK tiering eligibility | The SDK Working Group confirms whether an external community SDK can receive a tier or accepts `mcp_dart` into the official SDK roster | Planned: the tiering page describes community-driven SDKs, while the [SDK Working Group charter](https://modelcontextprotocol.io/community/working-groups/sdk) excludes third-party SDKs outside the MCP organization |
+| Produce a repository evidence scorecard | Current client and server fixtures each score 100% for applicable dated scenarios | Complete: the pinned self-assessment returns Tier 1 on deterministic checks; official matrix integration remains planned |
+| Request Tier 1 assignment | A public advancement issue includes the scorecard, policy, documentation, release, and maintenance evidence | Planned after eligibility is resolved |
 
-## Latest deterministic scorecard
+## Latest repository self-assessment
 
-The repository-policy portion of the official conformance repository's
-`tier-check` command was run on 2026-07-30 against the pushed
-`governance/tier-1-readiness` branch. That invocation used
-`--skip-conformance`; it evaluated the branch's policy files plus live labels,
-issues, releases, and specification tracking. Executable conformance is a
-separate exact-head GitHub Actions gate. The added legacy SSE client has no
-current executable official scenario and is validated through Dart and
-published TypeScript SDK interoperability instead.
+The official conformance repository's `tier-check` command was run on
+2026-07-30 against `main` commit
+`5f83a552ea27280d63b29dfc8a1898ced466d8a2`, using conformance repository
+commit `49103de6ed70804e940637bf3e9e29e4a3f54e64`. The full invocation exercised
+the Dart client and server fixtures instead of skipping conformance. The added
+legacy SSE client has no current executable official scenario and is validated
+through Dart, published TypeScript SDK, published Python SDK, and real-browser
+interoperability instead.
 
 | Check | Result |
 | --- | --- |
 | Published conformance in exact-head CI | MCP 2025-11-25 and MCP 2026-07-28, client and server roles, 100% with no expected failures |
-| `tier-check` executable conformance | Skipped in the repository-policy invocation |
+| `tier-check` scored server conformance | 20/20, 100% |
+| `tier-check` scored client conformance | 15/15, 100% |
+| `tier-check` informational MCP 2026-07-28 conformance | Server 20/20; client Core 7/7 and Auth 25/25 |
 | Required issue labels | 12/12 |
-| Open-issue triage | 2/3, 66.7%; issue #177 is protected from automatic changes |
+| Open-issue triage | 100% within two business days; 2 open issues, median 0 hours |
 | Open `P0` issues | 0 |
 | Stable SDK release | `2.3.0` |
+| Stable documentation inventory | 47/48; current source is 48/48 |
 | Latest-spec release gap | 0 days |
-| Deterministic implied tier | Tier 2; Tier 1 blocker: triage |
+| Self-assessment result | Tier 1; all deterministic checks pass |
 
-The deterministic result does not assign a tier. Publishing the source-level
-legacy SSE client, the remaining policy judgment, official SDK-matrix
-integration, public advancement request, and SDK Working Group approval are
-separate gates.
+The self-assessment result does not assign a formal tier. Qualitative
+documentation, policy, and roadmap judgment, SDK eligibility, official
+SDK-matrix integration, a public advancement request, and SDK Working Group
+approval remain separate gates. Publishing the source-level legacy SSE client
+is a backward-compatibility release task, not an MCP 2026-07-28 Core blocker.
+The current triage score also does not erase that issue #177 was historically
+labeled outside the two-business-day target; that exception must be disclosed
+in any external review.
 
 ## Specification release commitment
 
