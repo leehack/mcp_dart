@@ -103,8 +103,14 @@ jobs:
         run: dart test
 
   api-compatibility:
-    name: public API compatibility (mcp_dart 2.2.2)
+    name: public API compatibility (mcp_dart ${{ matrix.version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - 2.2.2
+          - 2.3.0
 
     steps:
       - name: Checkout code
@@ -118,14 +124,16 @@ jobs:
       - name: Install API compatibility checker
         run: dart pub global activate dart_apitool 0.23.1
 
-      - name: Compare public API with mcp_dart 2.2.2
+      - name: Compare public API with mcp_dart ${{ matrix.version }}
+        env:
+          PUBLISHED_VERSION: ${{ matrix.version }}
         run: |
           mkdir -p "$RUNNER_TEMP/mcp_dart_api"
           git archive HEAD lib pubspec.yaml analysis_options.yaml |
             tar -x -C "$RUNNER_TEMP/mcp_dart_api"
           set +e
           dart-apitool diff \
-            --old pub://mcp_dart/2.2.2 \
+            --old "pub://mcp_dart/$PUBLISHED_VERSION" \
             --new "$RUNNER_TEMP/mcp_dart_api" \
             --version-check-mode onlyBreakingChanges \
             --ignore-prerelease \
@@ -140,10 +148,12 @@ jobs:
             exit "$API_TOOL_STATUS"
           fi
 
-          # dart_apitool 0.23.1 misclassifies these four newly added optional
-          # static-factory parameters as required. Allow only that exact set;
-          # compile fixtures cover the corresponding public call shapes.
-          if ! jq -e '
+          # Against 2.2.2, dart_apitool 0.23.1 misclassifies these four newly
+          # added optional static-factory parameters as required. Allow only
+          # that exact set on that legacy baseline; compile fixtures cover the
+          # corresponding public call shapes. The latest stable baseline must
+          # report no breaking changes.
+          if ! jq -e --arg publishedVersion "$PUBLISHED_VERSION" '
             def changes($path):
               if type == "object" and has("changeDescription") then
                 [{
@@ -160,28 +170,31 @@ jobs:
               end;
             (.report.breakingChanges | changes([]) | sort_by(.path)) as $actual
             | ($actual | length == 0)
-              or $actual == [
-                {
-                  path: "BREAKING CHANGES > Class JsonSchema > Method boolean",
-                  code: "CE02",
-                  description: "Parameter \"mcpHeader\" added (required)"
-                },
-                {
-                  path: "BREAKING CHANGES > Class JsonSchema > Method integer",
-                  code: "CE02",
-                  description: "Parameter \"mcpHeader\" added (required)"
-                },
-                {
-                  path: "BREAKING CHANGES > Class JsonSchema > Method number",
-                  code: "CE02",
-                  description: "Parameter \"mcpHeader\" added (required)"
-                },
-                {
-                  path: "BREAKING CHANGES > Class JsonSchema > Method string",
-                  code: "CE02",
-                  description: "Parameter \"mcpHeader\" added (required)"
-                }
-              ]
+              or (
+                $publishedVersion == "2.2.2"
+                and $actual == [
+                  {
+                    path: "BREAKING CHANGES > Class JsonSchema > Method boolean",
+                    code: "CE02",
+                    description: "Parameter \"mcpHeader\" added (required)"
+                  },
+                  {
+                    path: "BREAKING CHANGES > Class JsonSchema > Method integer",
+                    code: "CE02",
+                    description: "Parameter \"mcpHeader\" added (required)"
+                  },
+                  {
+                    path: "BREAKING CHANGES > Class JsonSchema > Method number",
+                    code: "CE02",
+                    description: "Parameter \"mcpHeader\" added (required)"
+                  },
+                  {
+                    path: "BREAKING CHANGES > Class JsonSchema > Method string",
+                    code: "CE02",
+                    description: "Parameter \"mcpHeader\" added (required)"
+                  }
+                ]
+              )
           ' "$RUNNER_TEMP/mcp_dart_api_report.json"; then
             jq '.report.breakingChanges' \
               "$RUNNER_TEMP/mcp_dart_api_report.json"

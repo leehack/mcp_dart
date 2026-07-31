@@ -15,8 +15,9 @@ extensions, host UI behavior, an authorization-server implementation, JSON
 Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
-> The coordinated stable release pairs `mcp_dart 2.3.0` with
-> `mcp_dart_cli 0.2.0`. Current source passes the official alpha.10 MCP
+> The current stable packages are `mcp_dart 2.4.0` and
+> `mcp_dart_cli 0.2.0`; the CLI's `^2.3.0` SDK constraint accepts 2.4.
+> Current source passes the official alpha.10 MCP
 > `2026-07-28` client and server suites with no expected failures, including
 > all 25 authorization scenarios, plus bidirectional published TypeScript SDK
 > 2.0.0 and Python SDK 2.0.0 interoperability.
@@ -39,7 +40,7 @@ The public maintenance contract is documented in the
 
 | Package | Minimum Dart SDK |
 | --- | --- |
-| `mcp_dart 2.3.0` | 3.4 |
+| `mcp_dart 2.4.0` | 3.4 |
 | `mcp_dart_cli 0.2.0` | 3.12 |
 
 SDK-only generated projects retain the SDK's Dart 3.4 minimum. CLI projects
@@ -57,22 +58,22 @@ Use the latest stable package for production projects:
 dart pub add mcp_dart
 ```
 
-### Pin the coordinated stable release
+### Pin the stable SDK release
 
-Pin the stable 2.3 line explicitly when reproducible dependency resolution is
+Pin the stable 2.4 line explicitly when reproducible dependency resolution is
 important:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.3.0
+  mcp_dart: ^2.4.0
 ```
 
-The snippets below use the coordinated stable package line. Package versions
+The snippets below use the current stable SDK line. Package versions
 remain separate from protocol profiles: `McpProtocol.stable` names the SDK's
 default compatibility policy.
 
-The coordinated release publishes the SDK first and the CLI after the exact SDK
-version is available on pub.dev.
+The SDK and CLI are versioned independently. The stable CLI's `^2.3.0`
+constraint remains compatible with the 2.4 SDK.
 
 For direct SDK integration, start with the
 [getting-started guide](https://github.com/leehack/mcp_dart/blob/main/doc/getting-started.md).
@@ -98,10 +99,9 @@ commands.
   2.0.0 interoperability, real-browser transport tests, a real Flutter Web
   service integration in Chrome, deterministic widget tests, and an
   independent pinned JSON Schema Test Suite gate.
-- Current unreleased source adds a deprecated, opt-in legacy HTTP+SSE client
+- `mcp_dart 2.4.0` adds a deprecated, opt-in legacy HTTP+SSE client
   with same-origin routing and bidirectional interoperability against official
-  TypeScript SDK 1.30.0 and Python SDK 2.0.0 peers. Stable `2.3.0` does not
-  include that client; it requires the next approved minor SDK release.
+  TypeScript SDK 1.30.0 and Python SDK 2.0.0 peers.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host
@@ -237,7 +237,7 @@ surface. Re-check both packages' current releases before a production decision.
 - [Versioning policy](https://github.com/leehack/mcp_dart/blob/main/VERSIONING.md)
 - [Tier 1 roadmap](https://github.com/leehack/mcp_dart/blob/main/ROADMAP.md)
 - [SDK on pub.dev](https://pub.dev/packages/mcp_dart)
-- [2.3.0 API reference](https://pub.dev/documentation/mcp_dart/2.3.0/)
+- [2.4.0 API reference](https://pub.dev/documentation/mcp_dart/2.4.0/)
 - [Changelog](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)
 - [MCP 2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28)
 - [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25)

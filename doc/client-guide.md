@@ -62,7 +62,7 @@ final client = McpClient(
 
 ### Protocol Profile
 
-Clients in mcp_dart 2.3.0 use `McpProtocol.stable` by default, which
+Clients in mcp_dart 2.3 and later use `McpProtocol.stable` by default, which
 prefers MCP `2026-07-28` negotiation. The default client probes with
 `server/discover`, sends stateless request metadata for a compatible peer, and
 falls back to legacy `initialize` when discovery is unavailable. On body-only

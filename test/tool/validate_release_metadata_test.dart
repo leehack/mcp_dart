@@ -926,6 +926,7 @@ Directory _stableFixture(
   required bool finalInputsReviewed,
   bool prepareStableCli = false,
 }) {
+  const fixtureSdkVersion = '2.3.0';
   final fixture = Directory.systemTemp.createTempSync(
     'mcp_dart_release_metadata_',
   );
@@ -982,12 +983,25 @@ Directory _stableFixture(
   pubspec.writeAsStringSync(
     pubspec
         .readAsStringSync()
-        .replaceFirst('version: 2.3.0-dev.3', 'version: 2.3.0')
+        .replaceFirst(
+          RegExp(r'^version:[^\r\n]*$', multiLine: true),
+          'version: $fixtureSdkVersion',
+        )
         .replaceFirst(
           'documentation: https://github.com/leehack/mcp_dart/tree/'
               'v2.3.0-dev.3/doc',
           'documentation: https://github.com/leehack/mcp_dart/tree/main/doc',
         ),
+  );
+
+  final releaseMetadata = File(
+    '${fixture.path}/tool/release/mcp_2026_07_28_release_metadata.json',
+  );
+  final metadata =
+      jsonDecode(releaseMetadata.readAsStringSync()) as Map<String, dynamic>;
+  metadata['sdkStableVersion'] = fixtureSdkVersion;
+  releaseMetadata.writeAsStringSync(
+    '${const JsonEncoder.withIndent('  ').convert(metadata)}\n',
   );
 
   final changelog = File('${fixture.path}/CHANGELOG.md');

@@ -132,7 +132,8 @@ dart format --output=none --set-exit-if-changed .
 dart analyze
 dart test
 dart tool/validate_release_metadata.dart --package mcp_dart
-dart tool/validate_release_metadata.dart --package mcp_dart_cli
+# For a selected CLI release, also run:
+# dart tool/validate_release_metadata.dart --package mcp_dart_cli
 SPEC_REF="$(tr -d '[:space:]' < tool/testing/mcp_2026_07_28_spec_ref.txt)"
 git clone --filter=blob:none --no-checkout \
   https://github.com/modelcontextprotocol/modelcontextprotocol.git \
@@ -204,26 +205,33 @@ Run the schema and document audits against the final, versioned paths in the
 exact pinned Core checkout. The recorded commit SHA keeps those release
 artifacts immutable.
 
+For a single-package follow-up release, skip the other package's metadata
+command above. Its published version and compatible dependency constraints
+remain unchanged; the release-prep workflow makes the same selection from the
+version diff. Still run that package's normal analysis and tests.
+
 Also run the nested example and CLI validation already enforced by CI. Require
-the Dart 3.4 minimum-SDK lane and the `dart_apitool` comparison against
-published `mcp_dart 2.2.2` to pass, including the checked-in compile fixtures
-for interfaces and callbacks. Review any ignored requiredness diagnostics
-instead of treating the compatibility tool configuration as blanket approval.
-The release PR must have all required checks green and no unresolved review
-thread.
+the Dart 3.4 minimum-SDK lane and the `dart_apitool` comparison against the
+immediately preceding stable SDK to pass. Retain the published `mcp_dart
+2.2.2` lane and compile fixtures while that compatibility promise remains in
+force. Review any ignored requiredness diagnostics instead of treating the
+compatibility tool configuration as blanket approval. The release PR must have
+all required checks green and no unresolved review thread.
 
 ## 3. Prepare stable SDK metadata
 
 On the final release-prep commit:
 
-- Set the root package version to `2.3.0`.
+- Set the root package version to the selected stable SDK version (`2.4.0` for
+  the current follow-up release).
 - Restore root `documentation` and all user-facing repository links to `main`.
-- Replace prerelease dependency snippets in the README, getting-started,
-  quick-reference, migration guide, and release docs with `mcp_dart: ^2.3.0`.
+- Replace older dependency snippets in the README, getting-started,
+  quick-reference, and current release docs with `mcp_dart: ^2.4.0`. Preserve
+  version-specific historical migration guides.
 - Keep the durable `2026-07-28` document, fixture, command, and workflow names;
   update maturity wording only when it matches the reviewed upstream input.
-- Promote `stableProtocolVersion` and `defaultProtocolVersion` to the
-  `2026-07-28` constant, but keep `latestInitializationProtocolVersion` and
+- Keep `stableProtocolVersion` and `defaultProtocolVersion` at the
+  `2026-07-28` constant, and keep `latestInitializationProtocolVersion` and
   `legacyProtocolVersions.first` at `2025-11-25`. Run the profile regression
   tests to prove `McpProtocol.legacy` never sends a stateless version through
   `initialize`.
@@ -235,7 +243,7 @@ On the final release-prep commit:
 - Stop presenting `previewProtocolVersion` as the preferred public name. Keep
   it only as a deprecated alias of `stableProtocolVersion` for prerelease
   adopters, and update examples to use the stable/default constants.
-- Move the relevant root changelog entries under `## 2.3.0` and remove wording
+- Move the relevant root changelog entries under `## 2.4.0` and remove wording
   that presents the stable package itself as a preview. Keep upstream
   release-candidate facts explicit while they remain true.
 - Keep migration and compatibility notes explicit: `McpProtocol.stable`
@@ -244,8 +252,8 @@ On the final release-prep commit:
   link it from the tagged README and changelog.
 - Run `dart pub publish --dry-run` again from a clean checkout of the exact
   release commit. Do not create the release tag until this succeeds.
-- Run the shared metadata validator with `--package mcp_dart --tag v2.3.0`.
-  It must require substantive notes under the exact `## 2.3.0` changelog
+- Run the shared metadata validator with `--package mcp_dart --tag v2.4.0`.
+  It must require substantive notes under the exact `## 2.4.0` changelog
   heading, exact reviewed input versions and pins, and verify that the default
   protocol is `2026-07-28` while the initialization and deprecated compatibility
   aliases remain at `2025-11-25`.
@@ -280,7 +288,7 @@ coordinated prep cannot mix channels.
    reuse an existing tag only when that tag resolves to the exact original
    release commit; the workflow never moves it. Manual dispatch is a recovery
    path only.
-2. Verify tag `v2.3.0`, the GitHub release, and the `Publish to pub.dev` workflow.
+2. Verify tag `v2.4.0`, the GitHub release, and the `Publish to pub.dev` workflow.
    If GitHub release creation fails after the tag was pushed, use **Re-run all
    jobs** on the original failed `Create Release` run so the workflow retains
    the original release commit. Do not start a fresh dispatch after `main`
@@ -288,16 +296,21 @@ coordinated prep cannot mix channels.
    different commit. If publication fails after the tag was pushed, rerun the
    failed tag-triggered `Publish to pub.dev` workflow; reusing a tag does not
    emit another push event.
-3. Confirm pub.dev shows version `2.3.0`, immutable `v2.3.0` documentation
+3. Confirm pub.dev shows version `2.4.0`, immutable `v2.4.0` documentation
    links, and a successful package analysis. Checked-in links on `main` remain
    pointed at `main`.
-4. Create a clean temporary Dart project, resolve `mcp_dart: ^2.3.0`, and run a
+4. Create a clean temporary Dart project, resolve `mcp_dart: ^2.4.0`, and run a
    minimal MCP 2026-07-28 client/server smoke test using only the published
-   package.
+   package. For the 2.4 follow-up, also connect its public
+   `SseClientTransport` to published TypeScript and Python legacy SSE servers.
 
-Do not start the stable CLI release until the published SDK resolves publicly.
+Do not start a selected CLI release until the published SDK dependency resolves
+publicly.
 
 ## 5. Prepare and publish `mcp_dart_cli`
+
+Skip this section for the SDK-only 2.4.0 follow-up. The already-published CLI
+remains 0.2.0 and its `^2.3.0` SDK constraint accepts 2.4.0.
 
 - Set the CLI version and `packageVersion` constant to `0.2.0`, and set
   `generatedSdkConstraint` to `^2.3.0`.
@@ -335,7 +348,11 @@ compatible 2.3.x release.
 
 ## 6. Public day-0 verification
 
-- Activate `mcp_dart_cli 0.2.0` from pub.dev in a clean environment.
+- For an SDK release, resolve the new `mcp_dart` version from pub.dev in a
+  clean environment and repeat the public-package Core, compatibility, and
+  affected transport smoke tests.
+- When the CLI is selected, activate `mcp_dart_cli 0.2.0` from pub.dev in a
+  clean environment.
 - Generate a project and run its tests. Verify stdio with `mcp_dart inspect`
   from the generated directory. Then start Streamable HTTP with
   `mcp_dart serve --transport http --host 127.0.0.1 --port 3000` and inspect
