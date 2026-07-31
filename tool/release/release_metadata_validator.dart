@@ -603,6 +603,11 @@ class ReleaseMetadataValidator {
     if (sdkVersion is! String || cliVersion is! String) {
       return;
     }
+    _validateSupportedReleasePolicy(
+      sdkVersion: sdkVersion,
+      cliVersion: cliVersion,
+      errors: errors,
+    );
 
     final paths = <String>{'README.md', 'llms.txt'};
     if (package == ReleasePackage.sdk) {
@@ -662,6 +667,39 @@ class ReleaseMetadataValidator {
         errors.add(
           'Stable ${package.packageName} release documentation still contains '
           'stale release marker "$marker" in $path.',
+        );
+      }
+    }
+  }
+
+  void _validateSupportedReleasePolicy({
+    required String sdkVersion,
+    required String cliVersion,
+    required List<String> errors,
+  }) {
+    final securityPolicy = maskMarkdownCommentsAndFences(
+      _readText('SECURITY.md', errors),
+    );
+    for (final entry in <(ReleasePackage, String)>[
+      (ReleasePackage.sdk, sdkVersion),
+      (ReleasePackage.cli, cliVersion),
+    ]) {
+      ReleaseVersion parsedVersion;
+      try {
+        parsedVersion = ReleaseVersion.parse(entry.$2);
+      } on FormatException {
+        continue;
+      }
+      final expectedLine = '${parsedVersion.major}.${parsedVersion.minor}.x';
+      final expectedRow = RegExp(
+        '^\\|[ \\t]*`${RegExp.escape(entry.$1.packageName)}`[ \\t]*'
+        '\\|[ \\t]*`${RegExp.escape(expectedLine)}`[ \\t]*\\|[ \\t]*\\r?\$',
+        multiLine: true,
+      );
+      if (!expectedRow.hasMatch(securityPolicy)) {
+        errors.add(
+          'SECURITY.md must list ${entry.$1.packageName} $expectedLine as its '
+          'supported stable line.',
         );
       }
     }
