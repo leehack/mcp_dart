@@ -40,6 +40,8 @@ jobs:
       make_latest: ${{ steps.release-type.outputs.make_latest }}
       prerelease: ${{ steps.release-type.outputs.prerelease }}
       release_sha: ${{ steps.release-source.outputs.release_sha }}
+      release_notes_artifact: ${{ steps.release-notes.outputs.artifact_name }}
+      release_notes_sha: ${{ steps.release-notes.outputs.sha256 }}
       tag: ${{ steps.release-source.outputs.tag }}
       version: ${{ steps.get-version.outputs.version }}
     steps:
@@ -159,6 +161,50 @@ jobs:
             --ref "$RELEASE_TAG"
           echo "working_directory=$PUBLISH_ROOT" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout release-note control tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: release-control
+          persist-credentials: false
+
+      - name: Prepare immutable release notes
+        id: release-notes
+        env:
+          PACKAGE: ${{ inputs.package }}
+          PACKAGE_DIRECTORY: ${{ steps.set-config.outputs.working_directory }}
+          RELEASE_TAG: ${{ steps.release-source.outputs.tag }}
+        run: |
+          NOTES_ROOT="$RUNNER_TEMP/release-notes"
+          rm -rf "$NOTES_ROOT"
+          mkdir -p "$NOTES_ROOT"
+          dart "$GITHUB_WORKSPACE/release-control/tool/release/prepare_release_notes.dart" \
+            --package "$PACKAGE" \
+            --root "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY" \
+            --ref "$RELEASE_TAG" \
+            --output "$NOTES_ROOT/release-notes.md"
+          test -f "$NOTES_ROOT/release-notes.md"
+          test ! -L "$NOTES_ROOT/release-notes.md"
+          RELEASE_NOTES_SHA=$(sha256sum "$NOTES_ROOT/release-notes.md" | awk '{print $1}')
+          if [[ ! "$RELEASE_NOTES_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "❌ Could not hash release notes."
+            exit 1
+          fi
+          ARTIFACT_NAME="release-notes-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$PACKAGE"
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "sha256=$RELEASE_NOTES_SHA" >> "$GITHUB_OUTPUT"
+          echo "✅ Prepared immutable release notes $RELEASE_NOTES_SHA."
+
+      - name: Upload immutable release notes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.release-notes.outputs.artifact_name }}
+          path: ${{ runner.temp }}/release-notes/release-notes.md
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
       - name: Install release dependencies
         working-directory: ${{ steps.publish-dir.outputs.working_directory }}
         run: dart pub get
@@ -176,6 +222,7 @@ jobs:
     needs: validate-release
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write  # Required to create tags and releases
       statuses: write
     steps:
@@ -195,6 +242,27 @@ jobs:
             exit 1
           fi
           echo "✅ Checked out validated commit $ACTUAL_SHA."
+
+      - name: Download immutable release notes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.validate-release.outputs.release_notes_artifact }}
+          path: ${{ runner.temp }}/release-notes
+
+      - name: Verify immutable release notes
+        env:
+          EXPECTED_RELEASE_NOTES_SHA: ${{ needs.validate-release.outputs.release_notes_sha }}
+        run: |
+          if [[ ! "$EXPECTED_RELEASE_NOTES_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "❌ Invalid expected release-note digest."
+            exit 1
+          fi
+          cd "$RUNNER_TEMP/release-notes"
+          test -f release-notes.md
+          test ! -L release-notes.md
+          echo "$EXPECTED_RELEASE_NOTES_SHA  release-notes.md" |
+            sha256sum --check --strict -
+          echo "✅ Verified immutable release notes $EXPECTED_RELEASE_NOTES_SHA."
 
       # Keep this independent of repository scripts: this job holds write
       # permissions, while all package code ran in validate-release.
@@ -329,7 +397,8 @@ jobs:
         with:
           tag_name: ${{ steps.create-tag.outputs.tag }}
           name: ${{ inputs.package }} ${{ needs.validate-release.outputs.version }}
-          generate_release_notes: true
+          body_path: ${{ runner.temp }}/release-notes/release-notes.md
+          append_body: false
           prerelease: ${{ needs.validate-release.outputs.prerelease }}
           make_latest: ${{ needs.validate-release.outputs.make_latest }}
           draft: false

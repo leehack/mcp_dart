@@ -699,6 +699,74 @@ mcp-types==2.0.0b1
     );
   });
 
+  test('rejects a stale supported stable SDK line', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final securityPolicy = File('${fixture.path}/SECURITY.md');
+    securityPolicy.writeAsStringSync(
+      securityPolicy.readAsStringSync().replaceFirst('2.3.x', '2.2.x'),
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(
+        'SECURITY.md must list mcp_dart 2.3.x as its supported stable line.',
+      ),
+    );
+  });
+
+  test('rejects supported SDK rows hidden in comments or fences', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final securityPolicy = File('${fixture.path}/SECURITY.md');
+    securityPolicy.writeAsStringSync(
+      '${securityPolicy.readAsStringSync().replaceFirst('2.3.x', '2.2.x')}'
+      '<!-- | `mcp_dart` | `2.3.x` | -->\n'
+      '```markdown\n'
+      '| `mcp_dart` | `2.3.x` |\n'
+      '```\n',
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(
+        'SECURITY.md must list mcp_dart 2.3.x as its supported stable line.',
+      ),
+    );
+  });
+
+  test('rejects a stale supported stable CLI line', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final securityPolicy = File('${fixture.path}/SECURITY.md');
+    securityPolicy.writeAsStringSync(
+      securityPolicy.readAsStringSync().replaceFirst('0.2.x', '0.1.x'),
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(
+        'SECURITY.md must list mcp_dart_cli 0.2.x as its supported stable '
+        'line.',
+      ),
+    );
+  });
+
   test('rejects a stale generated-project SDK dependency', () {
     final fixture = _stableFixture(
       repoRoot,
@@ -1010,6 +1078,11 @@ Directory _stableFixture(
           '## 2.3.0-dev.3',
           '## 2.3.0',
         ),
+  );
+
+  final securityPolicy = File('${fixture.path}/SECURITY.md');
+  securityPolicy.writeAsStringSync(
+    securityPolicy.readAsStringSync().replaceFirst('2.4.x', '2.3.x'),
   );
 
   final constants = File('${fixture.path}/lib/src/types/json_rpc.dart');

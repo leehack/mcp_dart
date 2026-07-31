@@ -95,9 +95,7 @@ class ReleaseLinkManager {
     final changedFiles = <String>[];
     for (final file in _releaseFacingFiles()) {
       final source = file.readAsStringSync();
-      final updated = source.replaceAllMapped(_repositoryLinkPattern, (match) {
-        return '$_repositoryUrl${match.group(1)}/$expectedRef';
-      });
+      final updated = _rewriteText(source, expectedRef);
       if (updated == source) {
         continue;
       }
@@ -108,6 +106,18 @@ class ReleaseLinkManager {
       changedFiles: List.unmodifiable(changedFiles),
       issues: List.unmodifiable(_issues(expectedRef)),
     );
+  }
+
+  /// Rewrites same-repository source links to [expectedRef].
+  String rewriteText(String source, String expectedRef) {
+    _validateExpectedRef(expectedRef);
+    return _rewriteText(source, expectedRef);
+  }
+
+  String _rewriteText(String source, String expectedRef) {
+    return source.replaceAllMapped(_repositoryLinkPattern, (match) {
+      return '$_repositoryUrl${match.group(1)}/$expectedRef';
+    });
   }
 
   void _validateExpectedRef(String expectedRef) {

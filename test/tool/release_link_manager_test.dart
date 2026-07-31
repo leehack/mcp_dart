@@ -152,6 +152,38 @@ homepage: https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
       ),
     );
   });
+
+  test('rewriteText pins only same-repository source links', () {
+    final root = Directory.systemTemp.createTempSync('mcp_release_links_text_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    _write(root, 'pubspec.yaml', 'name: mcp_dart\nversion: 2.4.0\n');
+    final manager = ReleaseLinkManager(
+      packageRoot: root,
+      package: ReleasePackage.sdk,
+    );
+    const source = '''
+[Blob](https://github.com/leehack/mcp_dart/blob/main/doc/guide.md?plain=1#start)
+[Tree](https://github.com/leehack/mcp_dart/tree/main/example)
+[Pinned](https://github.com/leehack/mcp_dart/blob/v2.4.0/README.md)
+[Release](https://github.com/leehack/mcp_dart/releases/tag/v2.3.0)
+[External](https://example.com/leehack/mcp_dart/blob/main/README.md)
+''';
+
+    final rewritten = manager.rewriteText(source, 'v2.4.0');
+
+    expect(
+      rewritten,
+      contains('/blob/v2.4.0/doc/guide.md?plain=1#start'),
+    );
+    expect(rewritten, contains('/tree/v2.4.0/example'));
+    expect(rewritten, contains('/blob/v2.4.0/README.md'));
+    expect(rewritten, contains('/releases/tag/v2.3.0'));
+    expect(
+      rewritten,
+      contains('https://example.com/leehack/mcp_dart/blob/main/README.md'),
+    );
+    expect(manager.rewriteText(rewritten, 'v2.4.0'), rewritten);
+  });
 }
 
 void _writeSdkPolicyFiles(Directory root) {

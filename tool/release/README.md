@@ -37,6 +37,15 @@ starts `Publish to pub.dev`, which publishes the already validated immutable
 candidate through pub.dev OIDC. Manual `Create Release` dispatch remains only
 as a recovery path; never push release tags by hand or move an existing tag.
 
+The selected package's exact-version changelog section is the source of truth
+for its GitHub release body. The read-only release job extracts that section,
+rewrites same-repository source links to the package's immutable tag, and
+passes the rendered file to the write job with a verified SHA-256 digest.
+Recovery of an existing exact tag replaces the release body with that same
+rendered section; it never appends generated notes. Historical body-only
+repairs remain a separate, explicitly approved API operation because rerunning
+the release workflow can also affect the repository's latest-release marker.
+
 Before using the automation, create the repository label `release-prep` and
 keep the existing `RELEASE_PAT` Actions secret available for the narrowly
 scoped tag push. Branch protection should require the normal SDK, CLI, interop,
@@ -120,10 +129,13 @@ and regression tests pass.
 Every tag requires exact-commit `mcp_dart/release/<package>` authorization from
 `Create Release`; manually pushed stable and prerelease tags cannot publish.
 The workflow validates metadata and the pub.dev dry run in a read-only job,
-then a minimal write job checks the exact validated commit and tag before
-writing authorization. New-tag authorization transitions through `pending`
-and becomes `success` only after the PAT-backed tag push succeeds; failures
-overwrite it with `failure`. The publish workflow waits for that transition.
+then a minimal write job checks the exact validated commit, release-note
+digest, and tag before writing authorization. The renderer comes from the
+exact workflow source, so recovery also works for older tags that predate the
+renderer without executing unvalidated package code in the write job. New-tag
+authorization transitions through `pending` and becomes `success` only after
+the PAT-backed tag push succeeds; failures overwrite it with `failure`. The
+publish workflow waits for that transition.
 Every tag additionally requires the latest default-branch source and exact-SHA
 CI runs, and the publish workflow repeats the exact-SHA CI check.
 CI provenance is matched by the exact workflow files

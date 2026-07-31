@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'release_link_manager.dart';
+import 'release_notes.dart';
 import 'release_prep_plan.dart';
 
 export 'release_link_manager.dart' show ReleasePackage;
@@ -358,7 +359,7 @@ class ReleaseMetadataValidator {
       if (input.isEmpty && !File(_path(path)).existsSync()) {
         continue;
       }
-      final source = _stripMarkdownCommentsAndFences(input);
+      final source = maskMarkdownCommentsAndFences(input);
       final identifiesExperimental = RegExp(
         r'experimental\s+Tasks extension',
         caseSensitive: false,
@@ -503,16 +504,12 @@ class ReleaseMetadataValidator {
         ? 'CHANGELOG.md'
         : 'packages/mcp_dart_cli/CHANGELOG.md';
     final changelog = _readText(changelogPath, errors);
-    final releaseSection =
-        version.isEmpty ? null : _releaseSection(changelog, version);
-    if (version.isNotEmpty && releaseSection == null) {
-      errors.add('$changelogPath has no release heading for $version.');
-    } else if (releaseSection != null &&
-        !_hasSubstantiveReleaseNotes(releaseSection)) {
-      errors.add(
-        '$changelogPath release section for $version has no substantive '
-        'release notes.',
-      );
+    if (version.isNotEmpty) {
+      try {
+        extractReleaseNotes(changelog: changelog, version: version);
+      } on FormatException catch (error) {
+        errors.add('$changelogPath ${error.message}');
+      }
     }
 
     if (package == ReleasePackage.sdk) {
@@ -596,61 +593,6 @@ class ReleaseMetadataValidator {
     }
   }
 
-  String? _releaseSection(String changelog, String version) {
-    final searchable = _stripMarkdownCommentsAndFences(changelog);
-    final heading = RegExp(
-      '^##[ \\t]+${RegExp.escape(version)}[ \\t]*\$',
-      multiLine: true,
-    ).firstMatch(searchable);
-    if (heading == null) {
-      return null;
-    }
-
-    final remainder = searchable.substring(heading.end);
-    final nextHeading = RegExp(
-      r'^##[ \t]+\S.*$',
-      multiLine: true,
-    ).firstMatch(remainder);
-    final end = nextHeading == null
-        ? searchable.length
-        : heading.end + nextHeading.start;
-    return searchable.substring(heading.end, end);
-  }
-
-  bool _hasSubstantiveReleaseNotes(String section) {
-    final withoutComments = section.replaceAll(
-      RegExp(r'<!--[\s\S]*?-->'),
-      '',
-    );
-    const placeholders = <String>{
-      'coming soon',
-      'n/a',
-      'none',
-      'tbd',
-      'todo',
-      'unreleased',
-    };
-    for (final line in withoutComments.split('\n')) {
-      var content = line.trim();
-      if (content.isEmpty ||
-          RegExp(r'^#{1,6}(?:[ \t]|$)').hasMatch(content) ||
-          RegExp(r'^[-*_]{3,}$').hasMatch(content)) {
-        continue;
-      }
-      content = content
-          .replaceFirst(RegExp(r'^(?:[-*+]|\d+[.)])[ \t]+'), '')
-          .replaceFirst(RegExp(r'^>[ \t]*'), '')
-          .replaceAll(RegExp(r'[`*_~]'), '')
-          .trim();
-      final normalized =
-          content.replaceFirst(RegExp(r'[.!?]+$'), '').trim().toLowerCase();
-      if (normalized.isNotEmpty && !placeholders.contains(normalized)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   void _validateStableDocumentation(
     ReleasePackage package,
     Map<String, Object?> manifest,
@@ -661,6 +603,11 @@ class ReleaseMetadataValidator {
     if (sdkVersion is! String || cliVersion is! String) {
       return;
     }
+    _validateSupportedReleasePolicy(
+      sdkVersion: sdkVersion,
+      cliVersion: cliVersion,
+      errors: errors,
+    );
 
     final paths = <String>{'README.md', 'llms.txt'};
     if (package == ReleasePackage.sdk) {
@@ -720,6 +667,39 @@ class ReleaseMetadataValidator {
         errors.add(
           'Stable ${package.packageName} release documentation still contains '
           'stale release marker "$marker" in $path.',
+        );
+      }
+    }
+  }
+
+  void _validateSupportedReleasePolicy({
+    required String sdkVersion,
+    required String cliVersion,
+    required List<String> errors,
+  }) {
+    final securityPolicy = maskMarkdownCommentsAndFences(
+      _readText('SECURITY.md', errors),
+    );
+    for (final entry in <(ReleasePackage, String)>[
+      (ReleasePackage.sdk, sdkVersion),
+      (ReleasePackage.cli, cliVersion),
+    ]) {
+      ReleaseVersion parsedVersion;
+      try {
+        parsedVersion = ReleaseVersion.parse(entry.$2);
+      } on FormatException {
+        continue;
+      }
+      final expectedLine = '${parsedVersion.major}.${parsedVersion.minor}.x';
+      final expectedRow = RegExp(
+        '^\\|[ \\t]*`${RegExp.escape(entry.$1.packageName)}`[ \\t]*'
+        '\\|[ \\t]*`${RegExp.escape(expectedLine)}`[ \\t]*\\|[ \\t]*\\r?\$',
+        multiLine: true,
+      );
+      if (!expectedRow.hasMatch(securityPolicy)) {
+        errors.add(
+          'SECURITY.md must list ${entry.$1.packageName} $expectedLine as its '
+          'supported stable line.',
         );
       }
     }
@@ -1059,41 +1039,6 @@ String _stripShellComments(String source) {
     while (index + 1 < source.length && source[index + 1] != '\n') {
       index += 1;
     }
-  }
-  return result.toString();
-}
-
-String _stripMarkdownCommentsAndFences(String source) {
-  final withoutComments = source.replaceAll(
-    RegExp(r'<!--[\s\S]*?-->'),
-    '',
-  );
-  final result = StringBuffer();
-  String? fenceCharacter;
-  var minimumFenceLength = 0;
-  final fence = RegExp(r'^[ \t]*(`{3,}|~{3,})');
-
-  for (final line in withoutComments.split('\n')) {
-    final fenceMatch = fence.firstMatch(line);
-    final marker = fenceMatch?.group(1);
-    if (fenceCharacter == null) {
-      if (marker == null) {
-        result.writeln(line);
-      } else {
-        fenceCharacter = marker[0];
-        minimumFenceLength = marker.length;
-        result.writeln();
-      }
-      continue;
-    }
-    if (marker != null &&
-        marker[0] == fenceCharacter &&
-        marker.length >= minimumFenceLength &&
-        line.substring(fenceMatch!.end).trim().isEmpty) {
-      fenceCharacter = null;
-      minimumFenceLength = 0;
-    }
-    result.writeln();
   }
   return result.toString();
 }
