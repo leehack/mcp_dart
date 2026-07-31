@@ -1,13 +1,13 @@
 # SDK Tier 1 feature coverage
 
-This inventory maps the canonical MCP SDK Tier 1 documentation rubric to
-user-facing `mcp_dart` guides and examples. It is evidence for a tier review,
-not a tier claim: the MCP SDK Working Group assigns tiers.
+This project-maintained inventory maps the published MCP SDK Tier 1
+requirements to user-facing `mcp_dart` guides and examples. It is evidence for
+a tier review, not a tier claim: the MCP SDK Working Group assigns tiers.
 
-The rubric currently contains 48 non-experimental features. Features removed
-or deprecated by MCP 2026-07-28 remain in the inventory because the canonical
-list still includes them. Their examples explicitly select the MCP 2025-11-25
-compatibility profile where required.
+The inventory currently contains 48 non-experimental features. Features
+removed or deprecated by MCP 2026-07-28 remain because the published
+requirements still include them. Their examples explicitly select the MCP
+2025-11-25 compatibility profile where required.
 
 ## Coverage summary
 
@@ -15,13 +15,12 @@ compatibility profile where required.
   examples in current source.
 - The deprecated legacy SSE client and server remain explicit compatibility
   surfaces. Both reference SEP-2596 and Streamable HTTP migration.
-- Published `mcp_dart 2.3.0` predates `SseClientTransport`. The source-level
-  48/48 result becomes stable-package evidence only after the next minor SDK
-  release is explicitly approved and published.
+- Published `mcp_dart 2.4.0` includes `SseClientTransport`, so all 48 items
+  have stable-package documentation and examples.
 - Experimental Tasks and MCP Apps are documented separately and do not count
   toward the 48-feature Core inventory.
 
-## Canonical feature inventory
+## Project-maintained feature inventory
 
 | # | Feature | Documentation and example | Status |
 | --- | --- | --- | --- |
@@ -63,7 +62,7 @@ compatibility profile where required.
 | 36 | Ping | [Quick reference: basic utilities](quick-reference.md#basic-utilities) | Covered |
 | 37 | Streamable HTTP transport - client | [Transport guide: client setup](transports.md#client-setup-1) | Covered |
 | 38 | Streamable HTTP transport - server | [Transport guide: high-level server](transports.md#high-level-streamable-http-server) | Covered |
-| 39 | SSE transport - legacy client | [Transport guide: legacy SSE client](transports.md#legacy-client-setup) and [runnable client](../example/client_sse.dart) | Covered in source |
+| 39 | SSE transport - legacy client | [Transport guide: legacy SSE client](transports.md#legacy-client-setup) and [runnable client](../example/client_sse.dart) | Covered |
 | 40 | SSE transport - legacy server | [Transport guide: legacy SSE](transports.md#legacy-sse-transport-deprecated) and [runnable server](../example/server_sse.dart) | Covered |
 | 41 | stdio transport - client | [Transport guide: stdio client](transports.md#client-setup) and [runnable client](../example/client_stdio.dart) | Covered |
 | 42 | stdio transport - server | [Transport guide: stdio server](transports.md#server-setup) and [runnable server](../example/server_stdio.dart) | Covered |

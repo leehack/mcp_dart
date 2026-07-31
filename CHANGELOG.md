@@ -1,4 +1,7 @@
-## Unreleased
+## 2.4.0
+
+`mcp_dart 2.4` adds an opt-in legacy HTTP+SSE client for connecting to older
+servers while keeping Streamable HTTP as the preferred remote transport.
 
 ### Added
 
