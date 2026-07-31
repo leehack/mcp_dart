@@ -331,8 +331,9 @@ Future<void> main(List<String> arguments) async {
     }
 
     if (method == 'fixture/crash') {
-      exitCode = 17;
-      return;
+      // Model an abrupt crash without waiting for stdin cancellation, which
+      // can stall when an await-for loop unwinds on Windows.
+      exit(17);
     }
 
     if (method == 'fixture/exit') {
