@@ -89,8 +89,31 @@ grep -A3 '^    secrets:$' "$WORKFLOW" | grep -q 'RELEASE_PAT:' ||
 if grep -Fq '${{ needs.validate-release.outputs' "$WRITE_RUN_SCRIPTS"; then
   fail "Validated repository values must enter privileged scripts through env."
 fi
-if grep -qE 'dart |bash .*tool/|prepare_release_notes' "$WRITE_RUN_SCRIPTS"; then
-  fail "The release write job must not execute package or release tooling."
+# Privileged scripts must neither execute Dart nor reference repository tooling.
+FORBIDDEN_WRITE_TOOLING_PATTERN='(^|[^[:alnum:]_.-])dart([^[:alnum:]_.-]|$)|tool/|prepare_release_notes'
+for forbidden_command in \
+  'dart' \
+  $'dart\t--version' \
+  '"/opt/sdk/bin/dart" --version' \
+  $'bash \\\n  tool/release/example.sh' \
+  'sh tool/release/example.sh' \
+  './tool/release/example.sh'; do
+  if ! grep -qE "$FORBIDDEN_WRITE_TOOLING_PATTERN" \
+    <<<"$forbidden_command"; then
+    fail "The write-job tooling guard must reject: $forbidden_command"
+  fi
+done
+for allowed_command in \
+  'echo dartboard' \
+  'echo dart-sdk' \
+  'echo example.dart' \
+  'echo my_dart_tool'; do
+  if grep -qE "$FORBIDDEN_WRITE_TOOLING_PATTERN" <<<"$allowed_command"; then
+    fail "The write-job tooling guard must allow: $allowed_command"
+  fi
+done
+if grep -qE "$FORBIDDEN_WRITE_TOOLING_PATTERN" "$WRITE_RUN_SCRIPTS"; then
+  fail "The release write job must not execute Dart or reference repository tooling."
 fi
 
 CONTROL_CHECKOUT="$FIXTURE_DIR/control-checkout.yml"
