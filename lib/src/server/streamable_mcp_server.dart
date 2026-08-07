@@ -424,6 +424,27 @@ class StreamableMcpServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
+    final remote = request.connectionInfo?.remoteAddress.address;
+    try {
+      await _handleRequestCore(request);
+    } finally {
+      try {
+        final status = request.response.statusCode;
+        final reason = request.response.reasonPhrase;
+        final sessionId = request.headers.value('mcp-session-id');
+        _logger.info(
+          'HTTP ${request.method} ${request.uri.path} -> '
+          '$status${reason.isEmpty ? '' : ' $reason'}'
+          '${sessionId == null || sessionId.isEmpty ? '' : ' session=$sessionId'}'
+          '${remote == null ? '' : ' from=$remote'}',
+        );
+      } catch (_) {
+        // Access logging must never break request handling.
+      }
+    }
+  }
+
+  Future<void> _handleRequestCore(HttpRequest request) async {
     if (enableDnsRebindingProtection &&
         !isRequestAllowedByDnsRebindingProtection(
           request,
@@ -1101,6 +1122,11 @@ class StreamableMcpServer {
     RequestId? id,
     Object? data,
   }) async {
+    _logger.warn(
+      'JSON-RPC error response: HTTP $httpStatus code=${errorCode.name}'
+      '${id == null ? '' : ' id=$id'}'
+      '${message.isEmpty ? '' : ' message="$message"'}',
+    );
     response
       ..statusCode = httpStatus
       ..headers.contentType = ContentType.json
