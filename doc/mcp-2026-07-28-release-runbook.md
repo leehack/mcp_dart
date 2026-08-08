@@ -107,9 +107,9 @@ does not replace review of the exact inputs selected for a stable release.
    generated templates, package metadata, and public API examples. Remove
    package-prerelease claims, keep upstream maturity facts accurate, and keep
    known peer/referee gaps explicit.
-12. Confirm the conformance runner defaults, expected-failure manifests, SDK
-   fixture pins, spec paths, and document/example inventories all
-   point at the same reviewed release inputs.
+12. Confirm the conformance runner defaults, frozen requirement revisions, SDK
+   fixture pins, spec paths, and document/example inventories all point at the
+   same reviewed release inputs.
 
 The release is blocked if an input is not immutable, its checked-in metadata
 does not match its tests, the pinned Core or Tasks audits are incomplete, or a
@@ -168,11 +168,11 @@ dart run tool/testing/run_json_schema_draft7_suite.dart \
 dart run tool/testing/run_json_schema_draft7_format_suite.dart \
   .dart_tool/json-schema-test-suite/tests/draft7/optional/format
 dart run test/conformance/run_2025_server_conformance.dart \
-  --timeout-seconds 90 --isolate-scenarios
-CONFORMANCE_VERSION=0.2.0-alpha.10 # Exact version reviewed and used by CI.
+  --timeout-seconds 90
+CONFORMANCE_VERSION=0.2.0-alpha.11 # Exact version reviewed and used by CI.
 npx -y "@modelcontextprotocol/conformance@$CONFORMANCE_VERSION" client \
   --command "dart run test/conformance/mcp_2026_07_28_client.dart" \
-  --suite all --spec-version 2025-11-25 --verbose
+  --requirements 2025-11-25 --verbose
 dart run test/conformance/run_2026_07_28_server_conformance.dart \
   --timeout-seconds 90
 dart run test/conformance/run_2026_07_28_client_conformance.dart \

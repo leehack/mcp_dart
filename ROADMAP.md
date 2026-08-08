@@ -38,21 +38,18 @@ outside the Tier 1 Core claim.
 
 ## Latest repository self-assessment
 
-The official conformance repository's `tier-check` command was run on
-2026-07-30 against `main` commit
-`5f83a552ea27280d63b29dfc8a1898ced466d8a2`, using conformance repository
-commit `49103de6ed70804e940637bf3e9e29e4a3f54e64`. The full invocation exercised
-the Dart client and server fixtures instead of skipping conformance. The added
-legacy SSE client has no current executable official scenario and is validated
-through Dart, published TypeScript SDK, published Python SDK, and real-browser
-interoperability instead.
+The official `@modelcontextprotocol/conformance@0.2.0-alpha.11` frozen
+requirement sets were run on 2026-08-08 against `main` commit
+`a0f3f7ff81a62f20995f7640d933ff7f762ef0dc`. Every scored scenario passed at
+its dated wire revision. Extensions, pending scenarios, and scenarios added
+after a revision shipped ran as explicitly unscored evidence rather than local
+expected-failure allowances.
 
 | Check | Result |
 | --- | --- |
-| Published conformance in exact-head CI | MCP 2025-11-25 and MCP 2026-07-28, client and server roles, 100% with no expected failures |
-| `tier-check` scored server conformance | 20/20, 100% |
-| `tier-check` scored client conformance | 15/15, 100% |
-| `tier-check` informational MCP 2026-07-28 conformance | Server 20/20; client Core 7/7 and Auth 25/25 |
+| Configured exact-head CI conformance gate | MCP 2025-11-25 and MCP 2026-07-28 frozen requirement sets, client and server roles |
+| MCP 2025-11-25 scored conformance | Server 30/30; client 18/18 |
+| MCP 2026-07-28 scored conformance | Server 37/37; client 32/32, including 25/25 required authorization scenarios |
 | Required issue labels | 12/12 |
 | Open-issue triage | 100% within two business days; 2 open issues, median 0 hours |
 | Open `P0` issues | 0 |
@@ -60,6 +57,13 @@ interoperability instead.
 | Published stable documentation inventory | `mcp_dart 2.4.0` is 48/48 |
 | Latest-spec release gap | 0 days |
 | Self-assessment result | Tier 1; all deterministic checks pass |
+
+The most recent full `tier-check` governance assessment was run on 2026-07-30
+against `main` commit `5f83a552ea27280d63b29dfc8a1898ced466d8a2`,
+using conformance repository commit
+`49103de6ed70804e940637bf3e9e29e4a3f54e64`. It returned the repository's
+deterministic Tier 1 result and exercised both Dart fixtures. The newer frozen
+requirement run supersedes its technical scenario counts.
 
 The self-assessment result does not assign a formal tier. Qualitative
 documentation, policy, and roadmap judgment, SDK eligibility, official

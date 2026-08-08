@@ -2,55 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'conformance_expected_failures.dart';
-import 'conformance_scenario_inventory.dart';
-
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.10';
-const _defaultTimeout = Duration(seconds: 25);
-
-const _serverScenarios = [
-  'server-stateless',
-  'completion-complete',
-  'tools-list',
-  'tools-call-simple-text',
-  'tools-call-image',
-  'tools-call-audio',
-  'tools-call-embedded-resource',
-  'tools-call-mixed-content',
-  'tools-call-error',
-  'tools-call-with-progress',
-  'json-schema-2020-12',
-  'server-sse-multiple-streams',
-  'resources-list',
-  'resources-read-text',
-  'resources-read-binary',
-  'resources-templates-read',
-  'sep-2164-resource-not-found',
-  'prompts-list',
-  'prompts-get-simple',
-  'prompts-get-with-args',
-  'prompts-get-embedded-resource',
-  'prompts-get-with-image',
-  'dns-rebinding-protection',
-  'caching',
-  'http-header-validation',
-  'http-custom-header-server-validation',
-  'input-required-result-basic-elicitation',
-  'input-required-result-basic-sampling',
-  'input-required-result-basic-list-roots',
-  'input-required-result-request-state',
-  'input-required-result-multiple-input-requests',
-  'input-required-result-multi-round',
-  'input-required-result-missing-input-response',
-  'input-required-result-non-tool-request',
-  'input-required-result-result-type',
-  'input-required-result-unsupported-methods',
-  'input-required-result-tampered-state',
-  'input-required-result-capability-check',
-  'input-required-result-ignore-extra-params',
-  'input-required-result-validate-input',
-];
+    '@modelcontextprotocol/conformance@0.2.0-alpha.11';
+const _requirementsRevision = '2026-07-28';
+const _defaultTimeout = Duration(seconds: 90);
 
 Future<void> main(List<String> args) async {
   final options = _Options.parse(args);
@@ -59,21 +14,7 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  final expectedFailures = await readExpectedConformanceFailures(
-    options.expectedFailuresPath,
-  );
   final outputRoot = await _createOutputRoot(options.outputDir);
-  final scenarios =
-      options.scenario == null ? _serverScenarios : [options.scenario!];
-
-  await verifyConformanceScenarioInventory(
-    conformancePackage: options.conformancePackage,
-    role: 'server',
-    specVersion: '2026-07-28',
-    expectedScenarios: scenarios,
-    requireExactMatch: options.scenario == null,
-  );
-
   Process? serverProcess;
   var serverOutputSubscriptions = <StreamSubscription<String>>[];
   late final Uri serverUrl;
@@ -96,66 +37,22 @@ Future<void> main(List<String> args) async {
       serverUrl = Uri.parse(options.url!);
     }
 
-    stdout.writeln('MCP 2026-07-28 conformance URL: $serverUrl');
+    stdout.writeln('MCP $_requirementsRevision conformance URL: $serverUrl');
     stdout.writeln('Conformance package: ${options.conformancePackage}');
     stdout.writeln('Output: ${outputRoot.path}');
     stdout.writeln('');
 
-    final results = <_ScenarioResult>[];
-    for (final scenario in scenarios) {
-      final result = await _runScenario(
-        scenario: scenario,
-        serverUrl: serverUrl,
-        outputRoot: outputRoot,
-        conformancePackage: options.conformancePackage,
-        timeout: options.timeout,
-      );
-      results.add(result);
-      _printScenarioResult(result, expectedFailures);
-    }
-
-    await _writeSummary(
-      outputRoot,
-      results,
-      expectedFailures,
-      options.conformancePackage,
+    final result = await _runConformance(
+      serverUrl: serverUrl,
+      outputRoot: outputRoot,
+      conformancePackage: options.conformancePackage,
+      scenario: options.scenario,
+      timeout: options.timeout,
     );
-    final unexpectedFailures = results
-        .where(
-          (result) =>
-              !result.passed && !_isExpectedFailure(result, expectedFailures),
-        )
-        .toList();
-    final unexpectedPasses = results
-        .where(
-          (result) =>
-              result.passed &&
-              _expectedForScenario(result.scenario, expectedFailures)
-                  .isNotEmpty,
-        )
-        .toList();
-
-    stdout.writeln('');
-    stdout.writeln(
-      'Summary: ${results.where((result) => result.passed).length} passed, '
-      '${results.where((result) => !result.passed).length} failed/timeout.',
-    );
-
-    if (unexpectedFailures.isNotEmpty) {
-      stdout.writeln('Unexpected failures:');
-      for (final result in unexpectedFailures) {
-        stdout.writeln('  - ${result.scenario} (${result.status})');
-        _printExpectationMismatch(result, expectedFailures);
-      }
+    if (result.timedOut) {
+      stderr.writeln('Timed out after ${options.timeout.inSeconds}s.');
     }
-    if (unexpectedPasses.isNotEmpty) {
-      stdout.writeln('Unexpected passes; remove these from expected failures:');
-      for (final result in unexpectedPasses) {
-        stdout.writeln('  - ${result.scenario}');
-      }
-    }
-
-    exitCode = unexpectedFailures.isEmpty && unexpectedPasses.isEmpty ? 0 : 1;
+    exitCode = result.exitCode ?? 1;
   } finally {
     if (serverProcess != null) {
       await _stopProcess(serverProcess);
@@ -232,19 +129,13 @@ Future<void> _waitForPort(String host, int port) async {
   throw StateError('Timed out waiting for $host:$port');
 }
 
-Future<_ScenarioResult> _runScenario({
-  required String scenario,
+Future<_RunResult> _runConformance({
   required Uri serverUrl,
   required Directory outputRoot,
   required String conformancePackage,
+  required String? scenario,
   required Duration timeout,
 }) async {
-  final outputDir = Directory(
-    '${outputRoot.path}/${_sanitize(scenario)}/'
-    'run-${DateTime.now().toUtc().microsecondsSinceEpoch}',
-  );
-  await outputDir.create(recursive: true);
-
   final process = await Process.start(
     'npx',
     [
@@ -253,300 +144,119 @@ Future<_ScenarioResult> _runScenario({
       'server',
       '--url',
       serverUrl.toString(),
-      '--suite',
-      'all',
-      '--spec-version',
-      '2026-07-28',
-      '--scenario',
-      scenario,
+      if (scenario == null) ...[
+        '--requirements',
+        _requirementsRevision,
+      ] else ...[
+        '--scenario',
+        scenario,
+        '--spec-version',
+        _requirementsRevision,
+      ],
       '--verbose',
       '-o',
-      outputDir.path,
+      outputRoot.path,
     ],
     workingDirectory: Directory.current.path,
   );
 
-  final stdoutBuffer = StringBuffer();
-  final stderrBuffer = StringBuffer();
-  final stdoutDone = process.stdout
-      .transform(utf8.decoder)
-      .listen(stdoutBuffer.write)
-      .asFuture<void>();
-  final stderrDone = process.stderr
-      .transform(utf8.decoder)
-      .listen(stderrBuffer.write)
-      .asFuture<void>();
-
+  final stdoutDone = process.stdout.listen(stdout.add).asFuture<void>();
+  final stderrDone = process.stderr.listen(stderr.add).asFuture<void>();
   try {
     final code = await process.exitCode.timeout(timeout);
     await Future.wait([stdoutDone, stderrDone]);
-    var failureDiagnostics = const <ConformanceFailureDiagnostic>[];
-    String? diagnosticReadError;
-    try {
-      failureDiagnostics = await readConformanceFailureDiagnostics(
-        outputDirectory: outputDir,
-        scenario: scenario,
-      );
-    } on Object catch (error) {
-      diagnosticReadError = '$error';
-    }
-    return _ScenarioResult(
-      scenario: scenario,
-      exitCode: code,
-      timedOut: false,
-      stdout: stdoutBuffer.toString(),
-      stderr: stderrBuffer.toString(),
-      failureDiagnostics: failureDiagnostics,
-      diagnosticReadError: diagnosticReadError,
-    );
+    return _RunResult(exitCode: code, timedOut: false);
   } on TimeoutException {
     process.kill(ProcessSignal.sigkill);
-    await process.exitCode;
-    return _ScenarioResult(
-      scenario: scenario,
-      exitCode: null,
-      timedOut: true,
-      stdout: stdoutBuffer.toString(),
-      stderr: stderrBuffer.toString(),
-      failureDiagnostics: const [],
-      diagnosticReadError: null,
-    );
+    await Future.wait([
+      stdoutDone.catchError((_) {}),
+      stderrDone.catchError((_) {}),
+    ]);
+    return const _RunResult(exitCode: null, timedOut: true);
   }
-}
-
-void _printScenarioResult(
-  _ScenarioResult result,
-  List<ConformanceFailureDiagnostic> expectedFailures,
-) {
-  final expected = _expectedForScenario(
-    result.scenario,
-    expectedFailures,
-  ).isNotEmpty;
-  final matchedExpectation = _isExpectedFailure(result, expectedFailures);
-  final marker = result.passed
-      ? expected
-          ? 'UNEXPECTED PASS'
-          : 'PASS'
-      : matchedExpectation
-          ? 'EXPECTED ${result.status.toUpperCase()}'
-          : 'FAIL';
-  stdout.writeln('${marker.padRight(18)} ${result.scenario}');
-}
-
-Future<void> _writeSummary(
-  Directory outputRoot,
-  List<_ScenarioResult> results,
-  List<ConformanceFailureDiagnostic> expectedFailures,
-  String conformancePackage,
-) async {
-  final summary = {
-    'package': conformancePackage,
-    'expectedFailures': [
-      for (final failure in expectedFailures) failure.toJson(),
-    ],
-    'results': [
-      for (final result in results)
-        {
-          'scenario': result.scenario,
-          'status': result.status,
-          'exitCode': result.exitCode,
-          'expectedFailure': _isExpectedFailure(result, expectedFailures),
-          'failureDiagnostics': [
-            for (final failure in result.failureDiagnostics) failure.toJson(),
-          ],
-          if (result.diagnosticReadError != null)
-            'diagnosticReadError': result.diagnosticReadError,
-        },
-    ],
-  };
-  await File('${outputRoot.path}/summary.json').writeAsString(
-    const JsonEncoder.withIndent('  ').convert(summary),
-  );
-}
-
-List<ConformanceFailureDiagnostic> _expectedForScenario(
-  String scenario,
-  Iterable<ConformanceFailureDiagnostic> expectedFailures,
-) {
-  return expectedFailures
-      .where((failure) => failure.scenario == scenario)
-      .toList();
-}
-
-bool _isExpectedFailure(
-  _ScenarioResult result,
-  Iterable<ConformanceFailureDiagnostic> expectedFailures,
-) {
-  return isExpectedConformanceFailure(
-    timedOut: result.timedOut,
-    exitCode: result.exitCode,
-    diagnosticReadError: result.diagnosticReadError,
-    expected: _expectedForScenario(result.scenario, expectedFailures),
-    actual: result.failureDiagnostics,
-  );
-}
-
-void _printExpectationMismatch(
-  _ScenarioResult result,
-  Iterable<ConformanceFailureDiagnostic> expectedFailures,
-) {
-  final expected = _expectedForScenario(result.scenario, expectedFailures);
-  if (expected.isEmpty) {
-    return;
-  }
-  if (result.timedOut) {
-    stdout.writeln('      expected failures never permit a timeout');
-    return;
-  }
-  if (result.exitCode != 1) {
-    stdout.writeln(
-      '      expected conformance exit 1, got ${result.exitCode}',
-    );
-    return;
-  }
-  if (result.diagnosticReadError != null) {
-    stdout.writeln(
-      '      could not read conformance diagnostics: '
-      '${result.diagnosticReadError}',
-    );
-    return;
-  }
-
-  final comparison = compareConformanceFailures(
-    expected,
-    result.failureDiagnostics,
-  );
-  for (final diagnostic in comparison.missing) {
-    stdout.writeln('      missing expected: ${diagnostic.description}');
-  }
-  for (final diagnostic in comparison.unexpected) {
-    stdout.writeln('      unexpected: ${diagnostic.description}');
-  }
-}
-
-String _sanitize(String value) {
-  return value.replaceAll(RegExp('[^A-Za-z0-9_.-]'), '_');
 }
 
 void _printUsage() {
-  stdout.writeln(
-    'Usage: dart run test/conformance/run_2026_07_28_server_conformance.dart '
-    '[--url http://localhost:33125/mcp] [--scenario scenario-name] '
-    '[--timeout-seconds 25]',
-  );
-}
+  stdout.writeln('''
+Usage: dart run test/conformance/run_2026_07_28_server_conformance.dart [options]
 
-class _ScenarioResult {
-  final String scenario;
-  final int? exitCode;
-  final bool timedOut;
-  final String stdout;
-  final String stderr;
-  final List<ConformanceFailureDiagnostic> failureDiagnostics;
-  final String? diagnosticReadError;
-
-  const _ScenarioResult({
-    required this.scenario,
-    required this.exitCode,
-    required this.timedOut,
-    required this.stdout,
-    required this.stderr,
-    required this.failureDiagnostics,
-    required this.diagnosticReadError,
-  });
-
-  bool get passed => !timedOut && exitCode == 0;
-
-  String get status {
-    if (timedOut) {
-      return 'timeout';
-    }
-    if (exitCode == 0) {
-      return 'pass';
-    }
-    return 'exit-$exitCode';
-  }
+Options:
+  --scenario <name>              Run one scenario for debugging instead of the
+                                 frozen MCP $_requirementsRevision requirements.
+  --url <url>                    Use an already-running server.
+  --port <port>                  Port for the local fixture server.
+  --output-dir <path>            Directory for conformance artifacts.
+  --conformance-package <pkg>    Conformance npm package.
+  --timeout-seconds <seconds>    Conformance command timeout.
+  --help                         Show this help.
+''');
 }
 
 class _Options {
-  final bool help;
+  final String? scenario;
   final String? url;
   final int? port;
-  final String? scenario;
   final String? outputDir;
-  final String expectedFailuresPath;
   final String conformancePackage;
   final Duration timeout;
+  final bool help;
 
   const _Options({
-    required this.help,
+    required this.scenario,
     required this.url,
     required this.port,
-    required this.scenario,
     required this.outputDir,
-    required this.expectedFailuresPath,
     required this.conformancePackage,
     required this.timeout,
+    required this.help,
   });
 
   factory _Options.parse(List<String> args) {
-    var help = false;
+    String? scenario;
     String? url;
     int? port;
-    String? scenario;
     String? outputDir;
-    var expectedFailuresPath =
-        'test/conformance/2026_07_28_expected_failures.txt';
     var conformancePackage = _defaultConformancePackage;
     var timeout = _defaultTimeout;
+    var help = false;
 
     for (var i = 0; i < args.length; i++) {
       switch (args[i]) {
-        case '--help':
-          help = true;
-        case '--url':
-          if (i + 1 < args.length) {
-            url = args[++i];
-          }
-        case '--port':
-          if (i + 1 < args.length) {
-            port = int.tryParse(args[++i]);
-          }
         case '--scenario':
-          if (i + 1 < args.length) {
-            scenario = args[++i];
-          }
+          scenario = args[++i];
+        case '--url':
+          url = args[++i];
+        case '--port':
+          port = int.parse(args[++i]);
         case '--output-dir':
-          if (i + 1 < args.length) {
-            outputDir = args[++i];
-          }
-        case '--expected-failures':
-          if (i + 1 < args.length) {
-            expectedFailuresPath = args[++i];
-          }
+          outputDir = args[++i];
         case '--conformance-package':
-          if (i + 1 < args.length) {
-            conformancePackage = args[++i];
-          }
+          conformancePackage = args[++i];
         case '--timeout-seconds':
-          if (i + 1 < args.length) {
-            final seconds = int.tryParse(args[++i]);
-            if (seconds != null && seconds > 0) {
-              timeout = Duration(seconds: seconds);
-            }
-          }
+          timeout = Duration(seconds: int.parse(args[++i]));
+        case '--help':
+        case '-h':
+          help = true;
+        default:
+          throw ArgumentError('Unknown argument: ${args[i]}');
       }
     }
 
     return _Options(
-      help: help,
+      scenario: scenario,
       url: url,
       port: port,
-      scenario: scenario,
       outputDir: outputDir,
-      expectedFailuresPath: expectedFailuresPath,
       conformancePackage: conformancePackage,
       timeout: timeout,
+      help: help,
     );
   }
+}
+
+class _RunResult {
+  final int? exitCode;
+  final bool timedOut;
+
+  const _RunResult({required this.exitCode, required this.timedOut});
 }

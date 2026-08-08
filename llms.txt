@@ -24,8 +24,10 @@ means the normative wire requirements assigned to client and server roles by
 the pinned final specification; it excludes optional extensions, host UI
 behavior, an authorization-server implementation, JSON Schema external
 reference resolution, and custom JSON Schema vocabularies. The official
-alpha.10 MCP 2026-07-28 client and server suites pass against current source
-with no expected failures, including all 25 authorization scenarios.
+alpha.11 frozen requirement sets pass against current source for both client
+and server roles in MCP 2025-11-25 and MCP 2026-07-28. The MCP 2026-07-28 set
+includes all 25 required authorization scenarios. Optional extensions and
+post-release additions remain unscored evidence rather than Core requirements.
 
 Use the latest stable SDK for production:
 
@@ -235,7 +237,7 @@ https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
 
 - Root Dart analyzer and unit/integration tests.
 - Official MCP 2025-11-25 server/client conformance paths.
-- MCP 2026-07-28 alpha.10 client and server coverage with no expected
+- MCP 2026-07-28 alpha.11 client and server coverage with no expected
   failures, including all 25 authorization scenarios.
 - Bidirectional published TypeScript SDK 2.0.0 and Python SDK 2.0.0
   interoperability on the post-#3002 discovery wire.
