@@ -316,13 +316,17 @@ class ReleaseMetadataValidator {
       errors.add('Official conformance release metadata is incomplete.');
     } else {
       final version = conformance['version'] as String;
-      const conformanceWrappers = <String>[
-        'test/conformance/run_2025_server_conformance.dart',
-        'test/conformance/run_2026_07_28_server_conformance.dart',
-        'test/conformance/run_2026_07_28_client_conformance.dart',
-      ];
+      final conformanceWrappers = <String, Object?>{
+        'test/conformance/run_2025_server_conformance.dart':
+            manifest['legacyInitializationProtocolVersion'],
+        'test/conformance/run_2026_07_28_server_conformance.dart':
+            manifest['protocolVersion'],
+        'test/conformance/run_2026_07_28_client_conformance.dart':
+            manifest['protocolVersion'],
+      };
       final expectedPackage = '@modelcontextprotocol/conformance@$version';
-      for (final path in conformanceWrappers) {
+      for (final entry in conformanceWrappers.entries) {
+        final path = entry.key;
         final source = _readText(path, errors);
         final constants = _stringConstants(source);
         if (_resolveStringConstant('_defaultConformancePackage', constants) !=
@@ -330,6 +334,23 @@ class ReleaseMetadataValidator {
           errors.add(
             '$path does not set _defaultConformancePackage to the conformance '
             'version declared in release metadata ($version).',
+          );
+        }
+        final expectedRevision = entry.value;
+        if (expectedRevision is! String ||
+            _resolveStringConstant('_requirementsRevision', constants) !=
+                expectedRevision) {
+          errors.add(
+            '$path does not set _requirementsRevision to its release metadata '
+            'protocol revision ($expectedRevision).',
+          );
+        }
+        final uncommented = _stripDartComments(source);
+        if (!uncommented.contains("'--requirements'") &&
+            !uncommented.contains('"--requirements"')) {
+          errors.add(
+            '$path does not actively run the frozen official conformance '
+            'requirements.',
           );
         }
       }
@@ -342,6 +363,18 @@ class ReleaseMetadataValidator {
         errors.add(
           '.github/workflows/test_core.yml does not actively run only the '
           'conformance version declared in release metadata ($version).',
+        );
+      }
+      final workflowRequirements = _activeNpxConformanceRequirements(
+        coreWorkflow,
+      );
+      final legacyVersion = manifest['legacyInitializationProtocolVersion'];
+      if (legacyVersion is! String ||
+          workflowRequirements.length != 1 ||
+          workflowRequirements.single != legacyVersion) {
+        errors.add(
+          '.github/workflows/test_core.yml must run the frozen official '
+          'requirements for the legacy protocol revision ($legacyVersion).',
         );
       }
     }
@@ -942,6 +975,23 @@ List<String> _activeNpxConformanceVersions(String workflow) {
     }
   }
   return versions;
+}
+
+List<String> _activeNpxConformanceRequirements(String workflow) {
+  final revisions = <String>[];
+  final requirement = RegExp(
+    r'''--requirements[ \t\r\n]+(?:"|')?(\d{4}-\d{2}-\d{2})(?:"|')?''',
+  );
+  for (final script in _yamlRunScripts(workflow)) {
+    final uncommented = _stripShellComments(script);
+    if (!uncommented.contains('@modelcontextprotocol/conformance@')) {
+      continue;
+    }
+    for (final match in requirement.allMatches(uncommented)) {
+      revisions.add(match.group(1)!);
+    }
+  }
+  return revisions;
 }
 
 List<String> _exactRequirementVersions(String source, String packageName) {

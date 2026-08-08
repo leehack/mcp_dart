@@ -13,10 +13,9 @@ Run the matrix-critical local gate from the repository root:
 
 ```bash
 dart run test/conformance/run_2025_server_conformance.dart
-npx -y @modelcontextprotocol/conformance@0.2.0-alpha.10 client \
+npx -y @modelcontextprotocol/conformance@0.2.0-alpha.11 client \
   --command "dart run test/conformance/mcp_2026_07_28_client.dart" \
-  --suite all \
-  --spec-version 2025-11-25
+  --requirements 2025-11-25
 
 cd packages/mcp_dart_cli
 dart pub get
@@ -24,7 +23,8 @@ dart run bin/mcp_dart.dart conformance --suite all --json
 ```
 
 Despite its filename, `mcp_2026_07_28_client.dart` is the dual-era official
-client fixture. `--spec-version 2025-11-25` selects its initialization-era path.
+client fixture. The frozen requirements select its initialization-era wire and
+the scenarios scored for MCP 2025-11-25.
 
 Run the cross-SDK interop gate from the repository root:
 

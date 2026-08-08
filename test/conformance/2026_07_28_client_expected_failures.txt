@@ -1,7 +1,0 @@
-# Expected failures for @modelcontextprotocol/conformance@0.2.0-alpha.10
-# against the MCP 2026-07-28 client suite.
-#
-# Keep this list scenario-based so the baseline is easy to review. When a
-# scenario turns green, remove it from this file in the same PR as the fix.
-#
-# No expected failures.

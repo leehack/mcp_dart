@@ -484,12 +484,12 @@ void main() {
       '${fixture.path}/test/conformance/run_2025_server_conformance.dart',
     );
     final staleWrapper = wrapper.readAsStringSync().replaceFirst(
-          'conformance@0.2.0-alpha.10',
+          'conformance@0.2.0-alpha.11',
           'conformance@0.2.0-alpha.9',
         );
     wrapper.writeAsStringSync(
       '$staleWrapper\n'
-      '// @modelcontextprotocol/conformance@0.2.0-alpha.10\n',
+      '// @modelcontextprotocol/conformance@0.2.0-alpha.11\n',
     );
 
     final result = ReleaseMetadataValidator(fixture).validate(
@@ -503,6 +503,58 @@ void main() {
     );
   });
 
+  test('rejects a commented conformance requirement revision decoy', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final wrapper = File(
+      '${fixture.path}/test/conformance/run_2025_server_conformance.dart',
+    );
+    final staleWrapper = wrapper.readAsStringSync().replaceFirst(
+          "const _requirementsRevision = '2025-11-25';",
+          "const _requirementsRevision = '2026-07-28';",
+        );
+    wrapper.writeAsStringSync(
+      '$staleWrapper\n'
+      "// const _requirementsRevision = '2025-11-25';\n",
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(contains('does not set _requirementsRevision')),
+    );
+  });
+
+  test('rejects a commented frozen-requirements wrapper decoy', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final wrapper = File(
+      '${fixture.path}/test/conformance/run_2026_07_28_server_conformance.dart',
+    );
+    final staleWrapper = wrapper.readAsStringSync().replaceFirst(
+          "'--requirements',",
+          "'--suite',",
+        );
+    wrapper.writeAsStringSync(
+      '$staleWrapper\n'
+      "// '--requirements',\n",
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(contains('does not actively run the frozen')),
+    );
+  });
+
   test('rejects a commented Core CI conformance version decoy', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));
@@ -510,12 +562,12 @@ void main() {
       '${fixture.path}/.github/workflows/test_core.yml',
     );
     final staleWorkflow = workflow.readAsStringSync().replaceFirst(
-          'conformance@0.2.0-alpha.10',
+          'conformance@0.2.0-alpha.11',
           'conformance@0.2.0-alpha.9',
         );
     workflow.writeAsStringSync(
       '$staleWorkflow\n'
-      '# npx -y @modelcontextprotocol/conformance@0.2.0-alpha.10 client\n',
+      '# npx -y @modelcontextprotocol/conformance@0.2.0-alpha.11 client\n',
     );
 
     final result = ReleaseMetadataValidator(fixture).validate(
@@ -526,6 +578,32 @@ void main() {
     expect(
       result.errors,
       contains(contains('.github/workflows/test_core.yml does not actively')),
+    );
+  });
+
+  test('rejects a commented Core CI requirements decoy', () {
+    final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+    addTearDown(() => fixture.deleteSync(recursive: true));
+    final workflow = File(
+      '${fixture.path}/.github/workflows/test_core.yml',
+    );
+    final staleWorkflow = workflow.readAsStringSync().replaceFirst(
+          '--requirements 2025-11-25',
+          '--spec-version 2025-11-25',
+        );
+    workflow.writeAsStringSync(
+      '$staleWorkflow\n'
+      '# --requirements 2025-11-25\n',
+    );
+
+    final result = ReleaseMetadataValidator(fixture).validate(
+      package: ReleasePackage.sdk,
+      tag: 'v2.3.0',
+    );
+
+    expect(
+      result.errors,
+      contains(contains('must run the frozen official requirements')),
     );
   });
 

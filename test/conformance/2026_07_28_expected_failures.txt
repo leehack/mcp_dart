@@ -1,4 +1,0 @@
-# Expected failures for @modelcontextprotocol/conformance@0.2.0-alpha.10
-# against the full MCP 2026-07-28 server suite.
-#
-# No expected failures.
