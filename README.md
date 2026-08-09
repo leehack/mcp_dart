@@ -17,10 +17,10 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 > [!IMPORTANT]
 > The current stable packages are `mcp_dart 2.4.0` and
 > `mcp_dart_cli 0.2.0`; the CLI's `^2.3.0` SDK constraint accepts 2.4.
-> Current source passes the official alpha.10 MCP
-> `2026-07-28` client and server suites with no expected failures, including
-> all 25 authorization scenarios, plus bidirectional published TypeScript SDK
-> 2.0.0 and Python SDK 2.0.0 interoperability.
+> Current source passes every scored requirement in the official alpha.11 MCP
+> `2025-11-25` and `2026-07-28` client and server sets, including all 25
+> required 2026 authorization scenarios, plus bidirectional published
+> TypeScript SDK 2.0.0 and Python SDK 2.0.0 interoperability.
 
 ## SDK Tier 1 target
 

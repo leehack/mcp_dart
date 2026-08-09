@@ -2,51 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'conformance_scenario_inventory.dart';
-
 const _defaultConformancePackage =
-    '@modelcontextprotocol/conformance@0.2.0-alpha.10';
-const _defaultTimeout = Duration(seconds: 60);
-
-// The alpha conformance CLI can occasionally leak or stall server-initiated
-// elicitation state when the complete MCP 2025-11-25 server suite runs in one
-// process
-// on GitHub's Linux runners. Running each pinned scenario in a fresh
-// conformance process preserves coverage while isolating CLI-side state.
-const _serverScenarios = [
-  'server-initialize',
-  'logging-set-level',
-  'ping',
-  'completion-complete',
-  'tools-list',
-  'tools-call-simple-text',
-  'tools-call-image',
-  'tools-call-audio',
-  'tools-call-embedded-resource',
-  'tools-call-mixed-content',
-  'tools-call-with-logging',
-  'tools-call-error',
-  'tools-call-with-progress',
-  'tools-call-sampling',
-  'tools-call-elicitation',
-  'json-schema-2020-12',
-  'elicitation-sep1034-defaults',
-  'server-sse-polling',
-  'server-sse-multiple-streams',
-  'elicitation-sep1330-enums',
-  'resources-list',
-  'resources-read-text',
-  'resources-read-binary',
-  'resources-templates-read',
-  'resources-subscribe',
-  'resources-unsubscribe',
-  'prompts-list',
-  'prompts-get-simple',
-  'prompts-get-with-args',
-  'prompts-get-embedded-resource',
-  'prompts-get-with-image',
-  'dns-rebinding-protection',
-];
+    '@modelcontextprotocol/conformance@0.2.0-alpha.11';
+const _requirementsRevision = '2025-11-25';
+const _defaultTimeout = Duration(seconds: 90);
 
 Future<void> main(List<String> args) async {
   final options = _Options.parse(args);
@@ -55,18 +14,7 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  final scenarios =
-      options.scenario == null ? _serverScenarios : [options.scenario!];
-  await verifyConformanceScenarioInventory(
-    conformancePackage: options.conformancePackage,
-    role: 'server',
-    specVersion: '2025-11-25',
-    expectedScenarios: scenarios,
-    requireExactMatch: options.scenario == null,
-  );
-
   final outputRoot = await _createOutputRoot(options.outputDir);
-
   Process? serverProcess;
   var serverOutputSubscriptions = <StreamSubscription<String>>[];
   late final Uri serverUrl;
@@ -89,31 +37,22 @@ Future<void> main(List<String> args) async {
       serverUrl = Uri.parse(options.url!);
     }
 
-    stdout.writeln('MCP 2025-11-25 conformance URL: $serverUrl');
+    stdout.writeln('MCP $_requirementsRevision conformance URL: $serverUrl');
     stdout.writeln('Conformance package: ${options.conformancePackage}');
     stdout.writeln('Output: ${outputRoot.path}');
     stdout.writeln('');
 
-    final result = options.isolateScenarios && options.scenario == null
-        ? await _runIsolatedConformance(
-            serverUrl: serverUrl,
-            outputRoot: outputRoot,
-            conformancePackage: options.conformancePackage,
-            timeout: options.timeout,
-          )
-        : await _runConformance(
-            serverUrl: serverUrl,
-            outputRoot: outputRoot,
-            conformancePackage: options.conformancePackage,
-            scenario: options.scenario,
-            timeout: options.timeout,
-          );
-
-    exitCode = result.exitCode ?? 1;
+    final result = await _runConformance(
+      serverUrl: serverUrl,
+      outputRoot: outputRoot,
+      conformancePackage: options.conformancePackage,
+      scenario: options.scenario,
+      timeout: options.timeout,
+    );
     if (result.timedOut) {
-      stdout.writeln('Timed out after ${options.timeout.inSeconds}s.');
-      exitCode = 1;
+      stderr.writeln('Timed out after ${options.timeout.inSeconds}s.');
     }
+    exitCode = result.exitCode ?? 1;
   } finally {
     if (serverProcess != null) {
       await _stopProcess(serverProcess);
@@ -205,13 +144,14 @@ Future<_RunResult> _runConformance({
       'server',
       '--url',
       serverUrl.toString(),
-      '--suite',
-      'all',
-      '--spec-version',
-      '2025-11-25',
-      if (scenario != null) ...[
+      if (scenario == null) ...[
+        '--requirements',
+        _requirementsRevision,
+      ] else ...[
         '--scenario',
         scenario,
+        '--spec-version',
+        _requirementsRevision,
       ],
       '--verbose',
       '-o',
@@ -222,7 +162,6 @@ Future<_RunResult> _runConformance({
 
   final stdoutDone = process.stdout.listen(stdout.add).asFuture<void>();
   final stderrDone = process.stderr.listen(stderr.add).asFuture<void>();
-
   try {
     final code = await process.exitCode.timeout(timeout);
     await Future.wait([stdoutDone, stderrDone]);
@@ -237,52 +176,18 @@ Future<_RunResult> _runConformance({
   }
 }
 
-Future<_RunResult> _runIsolatedConformance({
-  required Uri serverUrl,
-  required Directory outputRoot,
-  required String conformancePackage,
-  required Duration timeout,
-}) async {
-  var failed = false;
-  var timedOut = false;
-
-  for (final scenario in _serverScenarios) {
-    stdout.writeln('');
-    stdout.writeln('=== Running isolated scenario: $scenario ===');
-    final result = await _runConformance(
-      serverUrl: serverUrl,
-      outputRoot: Directory('${outputRoot.path}/$scenario'),
-      conformancePackage: conformancePackage,
-      scenario: scenario,
-      timeout: timeout,
-    );
-    if (result.timedOut) {
-      timedOut = true;
-    }
-    if (result.exitCode != 0) {
-      failed = true;
-    }
-  }
-
-  if (timedOut) {
-    return const _RunResult(exitCode: 1, timedOut: true);
-  }
-  return _RunResult(exitCode: failed ? 1 : 0, timedOut: false);
-}
-
 void _printUsage() {
   stdout.writeln('''
 Usage: dart run test/conformance/run_2025_server_conformance.dart [options]
 
 Options:
-  --scenario <name>              Run one scenario instead of the full suite.
+  --scenario <name>              Run one scenario for debugging instead of the
+                                 frozen MCP $_requirementsRevision requirements.
   --url <url>                    Use an already-running server.
   --port <port>                  Port for the local fixture server.
   --output-dir <path>            Directory for conformance artifacts.
   --conformance-package <pkg>    Conformance npm package.
   --timeout-seconds <seconds>    Conformance command timeout.
-  --isolate-scenarios            Run each pinned MCP 2025-11-25 scenario in a fresh
-                                 conformance process.
   --help                         Show this help.
 ''');
 }
@@ -294,7 +199,6 @@ class _Options {
   final String? outputDir;
   final String conformancePackage;
   final Duration timeout;
-  final bool isolateScenarios;
   final bool help;
 
   const _Options({
@@ -304,7 +208,6 @@ class _Options {
     required this.outputDir,
     required this.conformancePackage,
     required this.timeout,
-    required this.isolateScenarios,
     required this.help,
   });
 
@@ -315,7 +218,6 @@ class _Options {
     String? outputDir;
     var conformancePackage = _defaultConformancePackage;
     var timeout = _defaultTimeout;
-    var isolateScenarios = false;
     var help = false;
 
     for (var i = 0; i < args.length; i++) {
@@ -332,9 +234,8 @@ class _Options {
           conformancePackage = args[++i];
         case '--timeout-seconds':
           timeout = Duration(seconds: int.parse(args[++i]));
-        case '--isolate-scenarios':
-          isolateScenarios = true;
         case '--help':
+        case '-h':
           help = true;
         default:
           throw ArgumentError('Unknown argument: ${args[i]}');
@@ -348,7 +249,6 @@ class _Options {
       outputDir: outputDir,
       conformancePackage: conformancePackage,
       timeout: timeout,
-      isolateScenarios: isolateScenarios,
       help: help,
     );
   }
@@ -358,8 +258,5 @@ class _RunResult {
   final int? exitCode;
   final bool timedOut;
 
-  const _RunResult({
-    required this.exitCode,
-    required this.timedOut,
-  });
+  const _RunResult({required this.exitCode, required this.timedOut});
 }
