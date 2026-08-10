@@ -8,7 +8,7 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-  anthropic_sdk_dart: ^6.0.0
+  anthropic_sdk_dart: ^7.0.0
   mcp_dart:
     path: ../../
 
