@@ -5,6 +5,8 @@
 - Added Streamable HTTP access and JSON-RPC error logging. Default records omit
   request paths, JSON-RPC request IDs, MCP session IDs, and remote network
   addresses; JSON-RPC error messages are escaped for single-record logging.
+  Thanks to [@venti1112](https://github.com/venti1112)
+  ([#350](https://github.com/leehack/mcp_dart/pull/350)).
 
 ### Fixed
 
