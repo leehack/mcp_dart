@@ -293,9 +293,14 @@ void main() {
 
     test('default logs omit client and session identifiers', () async {
       final logs = <String>[];
+      final deleteAccessLogged = Completer<void>();
       setMcpLogHandler((loggerName, level, message) {
         if (loggerName == 'StreamableMcpServer' && level == LogLevel.info) {
           logs.add(message);
+          if (message == 'HTTP DELETE -> 200 OK' &&
+              !deleteAccessLogged.isCompleted) {
+            deleteAccessLogged.complete();
+          }
         }
       });
       addTearDown(resetMcpLogHandler);
@@ -312,6 +317,7 @@ void main() {
       expect(unmatched.statusCode, HttpStatus.notFound);
       final deleted = await deleteSession(sessionId);
       expect(deleted.statusCode, HttpStatus.ok);
+      await deleteAccessLogged.future.timeout(const Duration(seconds: 5));
 
       final accessLogs =
           logs.where((message) => message.startsWith('HTTP ')).toList();
