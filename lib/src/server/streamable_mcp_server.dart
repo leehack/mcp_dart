@@ -431,11 +431,9 @@ class StreamableMcpServer {
       try {
         final status = request.response.statusCode;
         final reason = request.response.reasonPhrase;
-        final sessionId = request.headers.value('mcp-session-id');
         _logger.info(
           'HTTP ${request.method} ${request.uri.path} -> '
           '$status${reason.isEmpty ? '' : ' $reason'}'
-          '${sessionId == null || sessionId.isEmpty ? '' : ' session=$sessionId'}'
           '${remote == null ? '' : ' from=$remote'}',
         );
       } catch (_) {
@@ -1122,11 +1120,15 @@ class StreamableMcpServer {
     RequestId? id,
     Object? data,
   }) async {
-    _logger.warn(
-      'JSON-RPC error response: HTTP $httpStatus code=${errorCode.name}'
-      '${id == null ? '' : ' id=$id'}'
-      '${message.isEmpty ? '' : ' message="$message"'}',
-    );
+    try {
+      _logger.warn(
+        'JSON-RPC error response: HTTP $httpStatus code=${errorCode.name}'
+        '${id == null ? '' : ' id=${jsonEncode(id)}'}'
+        '${message.isEmpty ? '' : ' message=${jsonEncode(message)}'}',
+      );
+    } catch (_) {
+      // Error logging must never break request handling.
+    }
     response
       ..statusCode = httpStatus
       ..headers.contentType = ContentType.json

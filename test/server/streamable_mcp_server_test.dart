@@ -213,6 +213,87 @@ void main() {
       await server.stop();
     });
 
+    test('log handler exceptions do not alter JSON-RPC error responses',
+        () async {
+      setMcpLogHandler((loggerName, level, message) {
+        throw StateError('log handler failed');
+      });
+      addTearDown(resetMcpLogHandler);
+
+      final client = http.Client();
+      addTearDown(client.close);
+      final res = await client.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          const JsonRpcRequest(id: 'req-1', method: 'ping').toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': 'nonexistent-session',
+        },
+      );
+
+      expect(res.statusCode, HttpStatus.notFound);
+      expect(res.headers['content-type'], startsWith('application/json'));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      expect(body['id'], 'req-1');
+      expect(body['error']['code'], ErrorCode.connectionClosed.value);
+    });
+
+    test('JSON-RPC error log escapes control characters in request id',
+        () async {
+      final logs = <String>[];
+      setMcpLogHandler((loggerName, level, message) {
+        if (loggerName == 'StreamableMcpServer' && level == LogLevel.warn) {
+          logs.add(message);
+        }
+      });
+      addTearDown(resetMcpLogHandler);
+
+      final client = http.Client();
+      addTearDown(client.close);
+      final res = await client.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          const JsonRpcRequest(id: 'evil\nid', method: 'ping').toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': 'nonexistent-session',
+        },
+      );
+
+      expect(res.statusCode, HttpStatus.notFound);
+      expect(logs, hasLength(1));
+      expect(logs.single.split('\n'), hasLength(1));
+      expect(logs.single, contains(' id="evil\\nid"'));
+    });
+
+    test('access log omits the session id', () async {
+      final logs = <String>[];
+      setMcpLogHandler((loggerName, level, message) {
+        if (loggerName == 'StreamableMcpServer' && level == LogLevel.info) {
+          logs.add(message);
+        }
+      });
+      addTearDown(resetMcpLogHandler);
+
+      final init = await postInitialize();
+      expect(init.statusCode, HttpStatus.ok);
+      final sessionId = init.headers['mcp-session-id'];
+      expect(sessionId, isNotNull);
+      final ping = await postPingWithSession(sessionId!);
+      expect(ping.statusCode, HttpStatus.ok);
+
+      final accessLogs =
+          logs.where((message) => message.startsWith('HTTP ')).toList();
+      expect(accessLogs, isNotEmpty);
+      expect(accessLogs.join('\n'), isNot(contains('session=')));
+      expect(accessLogs.join('\n'), contains('from='));
+    });
+
     test('handle OPTIONS request (CORS)', () async {
       // http.read throws if status is not 200, and by default it sends GET.
       // We want to test OPTIONS method.
