@@ -10,6 +10,9 @@ updates:
         patterns:
           - '*'
 
+  # Keep non-Actions updates ungrouped until
+  # https://github.com/dependabot/dependabot-core/issues/14780 is fixed.
+  # Dynamic group-by PRs cannot currently be rebased or recreated.
   - package-ecosystem: pub
     directories:
       - /
@@ -22,9 +25,6 @@ updates:
       - /example/jaspr-client
     schedule:
       interval: weekly
-    groups:
-      pub-dependencies:
-        group-by: dependency-name
 
   - package-ecosystem: npm
     directories:
@@ -32,9 +32,6 @@ updates:
       - /test/interop/ts_2026_07_28
     schedule:
       interval: weekly
-    groups:
-      npm-dependencies:
-        group-by: dependency-name
     ignore:
       # Keep compile-time Node APIs aligned with the Node 24 CI baseline.
       - dependency-name: '@types/node'
@@ -49,9 +46,6 @@ updates:
     directory: /test/interop/python
     schedule:
       interval: weekly
-    groups:
-      python-dependencies:
-        group-by: dependency-name
     ignore:
       # This fixture intentionally exercises Python SDK 1.x interoperability.
       # Python SDK 2.x is covered by /test/interop/python_2026_07_28. Remove this
@@ -64,6 +58,3 @@ updates:
     directory: /test/interop/python_2026_07_28
     schedule:
       interval: weekly
-    groups:
-      python-dependencies:
-        group-by: dependency-name
