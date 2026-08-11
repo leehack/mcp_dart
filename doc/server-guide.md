@@ -1079,6 +1079,14 @@ New stdio servers should log to `stderr`, deployed services should prefer
 OpenTelemetry, and all logging must exclude secrets and personal identifying
 information.
 
+`StreamableMcpServer` emits local access records with the HTTP method, status,
+and reason, plus session lifecycle and JSON-RPC error records. These records
+omit request paths, JSON-RPC request IDs, MCP session identifiers, and remote
+network addresses by default. Error messages are escaped for single-record
+logging. Applications that need client-attributed telemetry should add it in
+their own observability layer with appropriate redaction, retention, and access
+controls.
+
 ## Server Lifecycle
 
 ### Initialization
