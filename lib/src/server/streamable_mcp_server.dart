@@ -388,7 +388,8 @@ class StreamableMcpServer {
 
     _stopping = false;
     _httpServer = await HttpServer.bind(host, port);
-    _logger.info(
+    _logSafely(
+      LogLevel.info,
       'MCP Streamable HTTP Server listening on http://$host:$boundPort$path',
     );
 
@@ -423,7 +424,38 @@ class StreamableMcpServer {
     clearTaskOutputValidatorsForScope(_statelessTaskOutputValidationScope);
   }
 
+  void _logSafely(LogLevel level, String message) {
+    try {
+      _logger.log(level, message);
+    } catch (_) {
+      // Application-provided log handlers must not affect server behavior.
+    }
+  }
+
+  String _jsonLogMessage(String message) => jsonEncode(message)
+      .replaceAll('\u0085', r'\u0085')
+      .replaceAll('\u2028', r'\u2028')
+      .replaceAll('\u2029', r'\u2029');
+
   Future<void> _handleRequest(HttpRequest request) async {
+    try {
+      await _handleRequestCore(request);
+    } finally {
+      try {
+        final status = request.response.statusCode;
+        final reason = request.response.reasonPhrase;
+        _logSafely(
+          LogLevel.info,
+          'HTTP ${request.method} -> '
+          '$status${reason.isEmpty ? '' : ' $reason'}',
+        );
+      } catch (_) {
+        // Access logging must never break request handling.
+      }
+    }
+  }
+
+  Future<void> _handleRequestCore(HttpRequest request) async {
     if (enableDnsRebindingProtection &&
         !isRequestAllowedByDnsRebindingProtection(
           request,
@@ -465,7 +497,7 @@ class StreamableMcpServer {
       try {
         authResult = await authenticationHandler(request);
       } catch (e) {
-        _logger.error('Authentication error: $e');
+        _logSafely(LogLevel.error, 'Authentication error: $e');
         request.response
           ..statusCode = HttpStatus.internalServerError
           ..write('Authentication Error')
@@ -482,7 +514,7 @@ class StreamableMcpServer {
       try {
         allowed = await authenticator!(request);
       } catch (e) {
-        _logger.error('Authentication error: $e');
+        _logSafely(LogLevel.error, 'Authentication error: $e');
         request.response
           ..statusCode = HttpStatus.internalServerError
           ..write('Authentication Error')
@@ -513,7 +545,7 @@ class StreamableMcpServer {
           ..close();
       }
     } catch (e, stack) {
-      _logger.error('Error handling request: $e\n$stack');
+      _logSafely(LogLevel.error, 'Error handling request: $e\n$stack');
       if (!request.response.headers.contentType
           .toString()
           .startsWith('text/event-stream')) {
@@ -792,7 +824,7 @@ class StreamableMcpServer {
         rejectBatchJsonRpcPayloads: rejectBatchJsonRpcPayloads,
         sseRetryDelay: sseRetryDelay,
         onsessioninitialized: (sid) {
-          _logger.info('Session initialized: $sid');
+          _logSafely(LogLevel.info, 'Session initialized');
           _transports[sid] = transport;
 
           // Create and connect the MCP server
@@ -815,7 +847,7 @@ class StreamableMcpServer {
                 _servers.remove(sid);
               }
               if (removedTransport) {
-                _logger.info('Session closed: $sid');
+                _logSafely(LogLevel.info, 'Session closed');
               }
             }
           };
@@ -831,7 +863,10 @@ class StreamableMcpServer {
           // StreamableHTTPServerTransport calls onsessioninitialized BEFORE processing messages.
           // So we should connect here.
           server.connect(transport).catchError((e) {
-            _logger.error('Error connecting server to transport: $e');
+            _logSafely(
+              LogLevel.error,
+              'Error connecting server to transport: $e',
+            );
             _transports.remove(sid);
             _servers.remove(sid);
           });
@@ -845,7 +880,7 @@ class StreamableMcpServer {
       if (sid != null && identical(_transports[sid], transport)) {
         _transports.remove(sid);
         _servers.remove(sid);
-        _logger.info('Session closed: $sid');
+        _logSafely(LogLevel.info, 'Session closed');
       }
     };
 
@@ -1101,6 +1136,11 @@ class StreamableMcpServer {
     RequestId? id,
     Object? data,
   }) async {
+    _logSafely(
+      LogLevel.warn,
+      'JSON-RPC error response: HTTP $httpStatus code=${errorCode.name}'
+      '${message.isEmpty ? '' : ' message=${_jsonLogMessage(message)}'}',
+    );
     response
       ..statusCode = httpStatus
       ..headers.contentType = ContentType.json

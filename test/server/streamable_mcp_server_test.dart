@@ -213,6 +213,127 @@ void main() {
       await server.stop();
     });
 
+    test('log handler exceptions do not alter protocol responses', () async {
+      final attemptedLogs = <String>[];
+      setMcpLogHandler((loggerName, level, message) {
+        attemptedLogs.add(message);
+        throw StateError('log handler failed');
+      });
+      addTearDown(resetMcpLogHandler);
+
+      final client = http.Client();
+      addTearDown(client.close);
+      final res = await client.post(
+        Uri.parse(baseUrl),
+        body: '{',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+      );
+
+      expect(res.statusCode, HttpStatus.badRequest);
+      expect(res.headers['content-type'], startsWith('application/json'));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      expect(body['jsonrpc'], jsonRpcVersion);
+      expect(body['id'], isNull);
+      expect(body['error']['code'], ErrorCode.parseError.value);
+      expect(body['error']['message'], 'Parse error');
+      expect(
+        attemptedLogs,
+        contains(startsWith('JSON-RPC error response: HTTP 400')),
+      );
+
+      final init = await postInitialize();
+      expect(init.statusCode, HttpStatus.ok);
+      expect(init.headers['mcp-session-id'], isNotNull);
+      expect(attemptedLogs, contains('Session initialized'));
+    });
+
+    test('JSON-RPC error log omits request id without changing wire response',
+        () async {
+      final logs = <String>[];
+      setMcpLogHandler((loggerName, level, message) {
+        if (loggerName == 'StreamableMcpServer' && level == LogLevel.warn) {
+          logs.add(message);
+        }
+      });
+      addTearDown(resetMcpLogHandler);
+
+      final client = http.Client();
+      addTearDown(client.close);
+      const requestId = 'private@example.com\r\nid\u0085nel\u2028ls\u2029ps';
+      final res = await client.post(
+        Uri.parse(baseUrl),
+        body: jsonEncode(
+          const JsonRpcRequest(id: requestId, method: 'ping').toJson(),
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'mcp-session-id': 'nonexistent-session',
+        },
+      );
+
+      expect(res.statusCode, HttpStatus.notFound);
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      expect(body['id'], requestId);
+      expect(body['error']['code'], ErrorCode.connectionClosed.value);
+      expect(body['error']['message'], 'Session not found');
+      expect(logs, hasLength(1));
+      expect(logs.single.split('\n'), hasLength(1));
+      expect(logs.single, isNot(contains('\r')));
+      expect(logs.single, isNot(contains('\u0085')));
+      expect(logs.single, isNot(contains('\u2028')));
+      expect(logs.single, isNot(contains('\u2029')));
+      expect(logs.single, isNot(contains('private@example.com')));
+      expect(logs.single, isNot(contains(' id=')));
+      expect(logs.single, contains(' message="Session not found"'));
+    });
+
+    test('default logs omit client and session identifiers', () async {
+      final logs = <String>[];
+      final deleteAccessLogged = Completer<void>();
+      setMcpLogHandler((loggerName, level, message) {
+        if (loggerName == 'StreamableMcpServer' && level == LogLevel.info) {
+          logs.add(message);
+          if (message == 'HTTP DELETE -> 200 OK' &&
+              !deleteAccessLogged.isCompleted) {
+            deleteAccessLogged.complete();
+          }
+        }
+      });
+      addTearDown(resetMcpLogHandler);
+
+      final init = await postInitialize();
+      expect(init.statusCode, HttpStatus.ok);
+      final sessionId = init.headers['mcp-session-id'];
+      expect(sessionId, isNotNull);
+      final ping = await postPingWithSession(sessionId!);
+      expect(ping.statusCode, HttpStatus.ok);
+      final unmatched = await http.get(
+        Uri.parse('http://$host:$port/private-user@example.com'),
+      );
+      expect(unmatched.statusCode, HttpStatus.notFound);
+      final deleted = await deleteSession(sessionId);
+      expect(deleted.statusCode, HttpStatus.ok);
+      await deleteAccessLogged.future.timeout(const Duration(seconds: 5));
+
+      final accessLogs =
+          logs.where((message) => message.startsWith('HTTP ')).toList();
+      expect(accessLogs, isNotEmpty);
+      expect(accessLogs, contains('HTTP POST -> 200 OK'));
+      expect(accessLogs, contains('HTTP GET -> 404 Not Found'));
+      expect(accessLogs, contains('HTTP DELETE -> 200 OK'));
+      expect(logs, contains('Session initialized'));
+      expect(logs, contains('Session closed'));
+      expect(logs.join('\n'), isNot(contains(sessionId)));
+      expect(logs.join('\n'), isNot(contains(host)));
+      expect(logs.join('\n'), isNot(contains('private-user@example.com')));
+      expect(logs.join('\n'), isNot(contains('session=')));
+      expect(logs.join('\n'), isNot(contains('from=')));
+    });
+
     test('handle OPTIONS request (CORS)', () async {
       // http.read throws if status is not 200, and by default it sends GET.
       // We want to test OPTIONS method.

@@ -1,3 +1,19 @@
+## Unreleased
+
+### Added
+
+- Added Streamable HTTP access and JSON-RPC error logging. Default records omit
+  request paths, JSON-RPC request IDs, MCP session IDs, and remote network
+  addresses; JSON-RPC error messages are escaped for single-record logging.
+  Thanks to [@venti1112](https://github.com/venti1112)
+  ([#350](https://github.com/leehack/mcp_dart/pull/350)).
+
+### Fixed
+
+- Isolated application `LogHandler` failures from `StreamableMcpServer`
+  diagnostics so those logs cannot change server behavior or protocol
+  responses.
+
 ## 2.4.0
 
 `mcp_dart 2.4` adds an opt-in legacy HTTP+SSE client for connecting to older
