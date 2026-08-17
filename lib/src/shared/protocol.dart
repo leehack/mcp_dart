@@ -2185,7 +2185,7 @@ abstract class Protocol {
       }
     }
 
-    Future.microtask(invokeHandler).then(
+    Future.microtask(invokeHandler).then<void>(
       (result) async {
         if (abortController.signal.aborted) {
           return;

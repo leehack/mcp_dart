@@ -76,8 +76,6 @@ class IOStreamTransport implements Transport {
         onDone: _onStreamDone,
         cancelOnError: false,
       );
-
-      return Future.value();
     } catch (error, stackTrace) {
       _started = false; // Reset state
       final startError = StateError(
