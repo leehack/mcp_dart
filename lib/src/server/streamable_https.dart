@@ -1862,7 +1862,7 @@ class StreamableHTTPServerTransport
     try {
       final store = _eventStore;
       if (store == null) {
-        return _enqueueSseWrite(res, const <int>[]);
+        return await _enqueueSseWrite(res, const <int>[]);
       }
 
       final eventId = await store.storeEvent(streamId, _ssePrimingMessage);

@@ -204,14 +204,13 @@ class StreamableMcpService extends ChangeNotifier {
 
           // Refresh resources when list changes
           try {
-            if (_client == null) return Future.value();
+            if (_client == null) return;
             await listResources();
           } catch (error) {
             // Handle error silently
           }
 
           notifyListeners();
-          return Future.value();
         },
         (params, meta) => JsonRpcResourceListChangedNotification.fromJson({
           'jsonrpc': jsonRpcVersion,
