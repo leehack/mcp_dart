@@ -1,3 +1,5 @@
+// @dart=3.12
+
 /// Shared report model for MCP inspector commands.
 class InspectionReport {
   /// Creates an inspector report.

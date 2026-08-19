@@ -8,19 +8,19 @@ Use this page for common `mcp_dart` calls. The [server guide](server-guide.md),
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.4.0
+  mcp_dart: ^2.5.0
 ```
 
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
 ```
 
-The 2.4.0 SDK requires Dart 3.4 or later. The stable 0.2.0 CLI requires
+The 2.5.0 SDK requires Dart 3.4 or later. The stable 0.2.0 CLI requires
 Dart 3.12 or later.
 
 ## Protocol profile
 
-The 2.4.0 SDK defaults to `McpProtocol.stable`: try MCP `2026-07-28`, then
+The 2.5.0 SDK defaults to `McpProtocol.stable`: try MCP `2026-07-28`, then
 fall back to legacy initialization when needed. Body-only
 discovery probes are bounded to five seconds; HTTP retains its normal request
 timeout.

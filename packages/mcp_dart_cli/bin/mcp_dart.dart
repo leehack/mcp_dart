@@ -1,3 +1,5 @@
+// @dart=3.12
+
 import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:mason_logger/mason_logger.dart';

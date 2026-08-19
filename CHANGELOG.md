@@ -1,4 +1,7 @@
-## Unreleased
+## 2.5.0
+
+`mcp_dart 2.5` adds Streamable HTTP access and JSON-RPC error logging while
+keeping application logging failures isolated from protocol behavior.
 
 ### Added
 
@@ -13,6 +16,8 @@
 - Isolated application `LogHandler` failures from `StreamableMcpServer`
   diagnostics so those logs cannot change server behavior or protocol
   responses.
+- Restored clean static analysis and formatting with Dart 3.13
+  ([#361](https://github.com/leehack/mcp_dart/pull/361)).
 
 ## 2.4.0
 
