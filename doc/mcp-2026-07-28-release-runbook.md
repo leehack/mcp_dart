@@ -222,11 +222,11 @@ all required checks green and no unresolved review thread.
 
 On the final release-prep commit:
 
-- Set the root package version to the selected stable SDK version (`2.5.0` for
+- Set the root package version to the selected stable SDK version (`2.4.1` for
   the current follow-up release).
 - Restore root `documentation` and all user-facing repository links to `main`.
 - Replace older dependency snippets in the README, getting-started,
-  quick-reference, and current release docs with `mcp_dart: ^2.5.0`. Preserve
+  quick-reference, and current release docs with `mcp_dart: ^2.4.1`. Preserve
   version-specific historical migration guides.
 - Keep the durable `2026-07-28` document, fixture, command, and workflow names;
   update maturity wording only when it matches the reviewed upstream input.
@@ -243,7 +243,7 @@ On the final release-prep commit:
 - Stop presenting `previewProtocolVersion` as the preferred public name. Keep
   it only as a deprecated alias of `stableProtocolVersion` for prerelease
   adopters, and update examples to use the stable/default constants.
-- Move the relevant root changelog entries under `## 2.5.0` and remove wording
+- Move the relevant root changelog entries under `## 2.4.1` and remove wording
   that presents the stable package itself as a preview. Keep upstream
   release-candidate facts explicit while they remain true.
 - Keep migration and compatibility notes explicit: `McpProtocol.stable`
@@ -252,8 +252,8 @@ On the final release-prep commit:
   link it from the tagged README and changelog.
 - Run `dart pub publish --dry-run` again from a clean checkout of the exact
   release commit. Do not create the release tag until this succeeds.
-- Run the shared metadata validator with `--package mcp_dart --tag v2.5.0`.
-  It must require substantive notes under the exact `## 2.5.0` changelog
+- Run the shared metadata validator with `--package mcp_dart --tag v2.4.1`.
+  It must require substantive notes under the exact `## 2.4.1` changelog
   heading, exact reviewed input versions and pins, and verify that the default
   protocol is `2026-07-28` while the initialization and deprecated compatibility
   aliases remain at `2025-11-25`.
@@ -288,7 +288,7 @@ coordinated prep cannot mix channels.
    reuse an existing tag only when that tag resolves to the exact original
    release commit; the workflow never moves it. Manual dispatch is a recovery
    path only.
-2. Verify tag `v2.5.0`, the GitHub release, and the `Publish to pub.dev` workflow.
+2. Verify tag `v2.4.1`, the GitHub release, and the `Publish to pub.dev` workflow.
    If GitHub release creation fails after the tag was pushed, use **Re-run all
    jobs** on the original failed `Create Release` run so the workflow retains
    the original release commit. Do not start a fresh dispatch after `main`
@@ -296,12 +296,12 @@ coordinated prep cannot mix channels.
    different commit. If publication fails after the tag was pushed, rerun the
    failed tag-triggered `Publish to pub.dev` workflow; reusing a tag does not
    emit another push event.
-3. Confirm pub.dev shows version `2.5.0`, immutable `v2.5.0` documentation
+3. Confirm pub.dev shows version `2.4.1`, immutable `v2.4.1` documentation
    links, and a successful package analysis. Checked-in links on `main` remain
    pointed at `main`.
-4. Create a clean temporary Dart project, resolve `mcp_dart: ^2.5.0`, and run a
+4. Create a clean temporary Dart project, resolve `mcp_dart: ^2.4.1`, and run a
    minimal MCP 2026-07-28 client/server smoke test using only the published
-   package. For the 2.5 follow-up, also exercise Streamable HTTP access and
+   package. For the 2.4.1 follow-up, also exercise Streamable HTTP access and
    JSON-RPC error logging with normal and throwing application log handlers,
    and confirm the published package earns 160/160 under the current Pana.
 
@@ -310,8 +310,8 @@ publicly.
 
 ## 5. Prepare and publish `mcp_dart_cli`
 
-Skip this section for the SDK-only 2.5.0 follow-up. The already-published CLI
-remains 0.2.0 and its `^2.3.0` SDK constraint accepts 2.5.0.
+Skip this section for the SDK-only 2.4.1 follow-up. The already-published CLI
+remains 0.2.0 and its `^2.3.0` SDK constraint accepts 2.4.1.
 
 - Set the CLI version and `packageVersion` constant to `0.2.0`, and set
   `generatedSdkConstraint` to `^2.3.0`.

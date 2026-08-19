@@ -1,18 +1,16 @@
-## 2.5.0
+## 2.4.1
 
-`mcp_dart 2.5` adds Streamable HTTP access and JSON-RPC error logging while
-keeping application logging failures isolated from protocol behavior.
-
-### Added
-
-- Added Streamable HTTP access and JSON-RPC error logging. Default records omit
-  request paths, JSON-RPC request IDs, MCP session IDs, and remote network
-  addresses; JSON-RPC error messages are escaped for single-record logging.
-  Thanks to [@venti1112](https://github.com/venti1112)
-  ([#350](https://github.com/leehack/mcp_dart/pull/350)).
+`mcp_dart 2.4.1` restores Dart 3.13 package-analysis compatibility and hardens
+Streamable HTTP diagnostics without changing public APIs or protocol behavior.
 
 ### Fixed
 
+- Added missing Streamable HTTP access and JSON-RPC error diagnostics. Default
+  records omit request paths, JSON-RPC request IDs, MCP session IDs, and remote
+  network addresses; JSON-RPC error messages are escaped for single-record
+  logging.
+  Thanks to [@venti1112](https://github.com/venti1112)
+  ([#350](https://github.com/leehack/mcp_dart/pull/350)).
 - Isolated application `LogHandler` failures from `StreamableMcpServer`
   diagnostics so those logs cannot change server behavior or protocol
   responses.

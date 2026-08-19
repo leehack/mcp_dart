@@ -15,7 +15,7 @@ requirements still include them. Their examples explicitly select the MCP
   examples in current source.
 - The deprecated legacy SSE client and server remain explicit compatibility
   surfaces. Both reference SEP-2596 and Streamable HTTP migration.
-- Published `mcp_dart 2.5.0` includes `SseClientTransport`, so all 48 items
+- Published `mcp_dart 2.4.1` includes `SseClientTransport`, so all 48 items
   have stable-package documentation and examples.
 - Experimental Tasks and MCP Apps are documented separately and do not count
   toward the 48-feature Core inventory.
