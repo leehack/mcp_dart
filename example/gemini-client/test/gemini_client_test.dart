@@ -1,3 +1,5 @@
+// @dart=3.7
+
 import 'dart:async';
 import 'dart:convert';
 

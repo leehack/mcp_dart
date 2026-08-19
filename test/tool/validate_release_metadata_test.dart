@@ -1160,7 +1160,10 @@ Directory _stableFixture(
 
   final securityPolicy = File('${fixture.path}/SECURITY.md');
   securityPolicy.writeAsStringSync(
-    securityPolicy.readAsStringSync().replaceFirst('2.4.x', '2.3.x'),
+    securityPolicy.readAsStringSync().replaceFirst(
+          RegExp(r'^\| `mcp_dart` \| `[^`]+` \|$', multiLine: true),
+          '| `mcp_dart` | `2.3.x` |',
+        ),
   );
 
   final constants = File('${fixture.path}/lib/src/types/json_rpc.dart');

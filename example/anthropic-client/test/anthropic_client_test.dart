@@ -1,3 +1,5 @@
+// @dart=3.9
+
 import 'dart:convert';
 
 import 'package:anthropic_client/anthropic_client.dart';

@@ -1,3 +1,5 @@
+// @dart=3.9
+
 import 'dart:convert';
 import 'dart:io';
 

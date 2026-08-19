@@ -1,3 +1,5 @@
+// @dart=3.10
+
 /// Main App component for the Jaspr MCP Client.
 library;
 

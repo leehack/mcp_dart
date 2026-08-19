@@ -1,3 +1,5 @@
+// @dart=3.12
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
