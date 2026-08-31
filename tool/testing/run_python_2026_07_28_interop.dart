@@ -398,7 +398,7 @@ Future<void> _exerciseDartLegacySseClient(String url) async {
       throw StateError('Expected 2025-11-25, got $version');
     }
     final serverInfo = client.getServerVersion();
-    if (serverInfo?.name != 'python-2.0.0-legacy-sse-server') {
+    if (serverInfo?.name != 'python-2.1.1-legacy-sse-server') {
       throw StateError(
         'Unexpected Python legacy server info: ${serverInfo?.toJson()}',
       );
