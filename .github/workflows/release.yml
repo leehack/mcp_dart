@@ -107,7 +107,7 @@ jobs:
           echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG_PREFIX$VERSION" >> "$GITHUB_OUTPUT"
 
-      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
 
       - name: Validate coordinated release metadata
         env:
