@@ -107,7 +107,7 @@ jobs:
           echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG_PREFIX$VERSION" >> "$GITHUB_OUTPUT"
 
-      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
 
       - name: Validate coordinated release metadata
         env:
@@ -393,7 +393,7 @@ jobs:
           echo "🏷️ Created and pushed tag: $TAG"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ steps.create-tag.outputs.tag }}
           name: ${{ inputs.package }} ${{ needs.validate-release.outputs.version }}
