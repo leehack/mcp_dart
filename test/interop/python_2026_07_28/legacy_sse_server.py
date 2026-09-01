@@ -4,7 +4,7 @@ import asyncio
 import uvicorn
 from mcp.server import MCPServer
 
-mcp = MCPServer("python-2.0.0-legacy-sse-server", version="1.0.0")
+mcp = MCPServer("python-2.1.1-legacy-sse-server", version="1.0.0")
 
 
 @mcp.tool()
