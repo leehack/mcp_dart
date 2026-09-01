@@ -20,7 +20,7 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 > Current source passes every scored requirement in the official alpha.11 MCP
 > `2025-11-25` and `2026-07-28` client and server sets, including all 25
 > required 2026 authorization scenarios, plus bidirectional published
-> TypeScript SDK 2.0.0 and Python SDK 2.0.0 interoperability.
+> TypeScript SDK 2.0.0 and Python SDK 2.1.1 interoperability.
 
 ## SDK Tier 1 target
 
@@ -96,13 +96,13 @@ commands.
   core conformance claim.
 - Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, bidirectional
   published TypeScript SDK 2.0.0 interoperability, bidirectional Python SDK
-  2.0.0 interoperability, real-browser transport tests, a real Flutter Web
+  2.1.1 interoperability, real-browser transport tests, a real Flutter Web
   service integration in Chrome, deterministic widget tests, and an
   independent pinned JSON Schema Test Suite gate.
 - `mcp_dart 2.4.1` hardens Streamable HTTP access and JSON-RPC error
   diagnostics and retains the deprecated, opt-in legacy HTTP+SSE client with
   same-origin routing and bidirectional interoperability against official
-  TypeScript SDK 1.30.0 and Python SDK 2.0.0 peers.
+  TypeScript SDK 1.30.0 and Python SDK 2.1.1 peers.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host

@@ -16,7 +16,7 @@ through the
 - Exact-head CI passes the published official conformance package for both
   supported protocol profiles and both client/server roles, with no
   expected-failure allowance.
-- Published TypeScript SDK 2.0.0 and Python SDK 2.0.0 interoperability runs in
+- Published TypeScript SDK 2.0.0 and Python SDK 2.1.1 interoperability runs in
   both directions.
 - Protocol coverage, examples, and known gaps are tracked in
   [`doc/spec-coverage-2026-07-28.md`](doc/spec-coverage-2026-07-28.md).
