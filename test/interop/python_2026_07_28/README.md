@@ -1,7 +1,7 @@
-# Python SDK 2.0.0 Interop
+# Python SDK 2.1.1 Interop
 
 This fixture tracks both directions against the official Python SDK
-`mcp==2.0.0` and `mcp-types==2.0.0` packages. Each direction covers modern
+`mcp==2.1.1` and `mcp-types==2.1.1` packages. Each direction covers modern
 Streamable HTTP with MCP `2026-07-28` and the published SDK's deprecated
 HTTP+SSE compatibility APIs with MCP `2025-11-25`.
 
