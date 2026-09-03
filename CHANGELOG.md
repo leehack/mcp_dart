@@ -1,12 +1,32 @@
-## Unreleased
+## 2.4.2
 
-### Fixed
+`mcp_dart 2.4.2` prevents unbounded buffering of incoming stdio and IO stream
+messages and adds configurable per-message byte limits.
+
+### Security
 
 - Bounded each incoming stdio and IO stream message to 10 MiB by default. Each
   transport now reports an error and closes when a peer exceeds its configured
-  `maxIncomingMessageBytes` limit.
+  `maxIncomingMessageBytes` limit. In 2.4.1, a faulty or hostile peer could
+  exhaust process memory by sending an unbounded frame without a newline.
 - Stopped stdio client message delivery immediately on oversized input, including
   while a blocked outgoing write delays process shutdown.
+
+### Upgrade notes
+
+- Integrations that intentionally exchange messages larger than 10 MiB must
+  configure a suitable finite `maxIncomingMessageBytes` on each receiving
+  transport. The limit counts UTF-8 bytes before the newline delimiter. See
+  the [transport guide](https://github.com/leehack/mcp_dart/blob/main/doc/transports.md)
+  for configuration and shutdown behavior.
+- Existing protocol profiles and minimum Dart 3.4 support are unchanged. The
+  separately versioned CLI remains at 0.2.0; its `^2.3.0` SDK constraint
+  accepts this release.
+
+### Thanks
+
+Thanks to [Leo Farias (@leoafarias)](https://github.com/leoafarias) for
+responsibly reporting the vulnerability and contributing the fix.
 
 ## 2.4.1
 

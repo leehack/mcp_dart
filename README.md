@@ -15,8 +15,8 @@ extensions, host UI behavior, an authorization-server implementation, JSON
 Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
-> The current stable packages are `mcp_dart 2.4.1` and
-> `mcp_dart_cli 0.2.0`; the CLI's `^2.3.0` SDK constraint accepts 2.4.
+> This release is `mcp_dart 2.4.2`. The separately versioned stable CLI remains
+> `mcp_dart_cli 0.2.0`; its `^2.3.0` SDK constraint accepts 2.4.
 > Current source passes every scored requirement in the official alpha.11 MCP
 > `2025-11-25` and `2026-07-28` client and server sets, including all 25
 > required 2026 authorization scenarios, plus bidirectional published
@@ -40,7 +40,7 @@ The public maintenance contract is documented in the
 
 | Package | Minimum Dart SDK |
 | --- | --- |
-| `mcp_dart 2.4.1` | 3.4 |
+| `mcp_dart 2.4.2` | 3.4 |
 | `mcp_dart_cli 0.2.0` | 3.12 |
 
 SDK-only generated projects retain the SDK's Dart 3.4 minimum. CLI projects
@@ -65,7 +65,7 @@ important:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.4.1
+  mcp_dart: ^2.4.2
 ```
 
 The snippets below use the current stable SDK line. Package versions
@@ -99,8 +99,12 @@ commands.
   2.1.1 interoperability, real-browser transport tests, a real Flutter Web
   service integration in Chrome, deterministic widget tests, and an
   independent pinned JSON Schema Test Suite gate.
-- `mcp_dart 2.4.1` hardens Streamable HTTP access and JSON-RPC error
-  diagnostics and retains the deprecated, opt-in legacy HTTP+SSE client with
+- `mcp_dart 2.4.2` bounds incoming stdio and IO stream messages to 10 MiB by
+  default, with configurable limits for larger messages. See the
+  [transport guide](doc/transports.md) before upgrading integrations that
+  exchange larger frames.
+- Hardened Streamable HTTP access and JSON-RPC error diagnostics, plus the
+  deprecated, opt-in legacy HTTP+SSE client with
   same-origin routing and bidirectional interoperability against official
   TypeScript SDK 1.30.0 and Python SDK 2.1.1 peers.
 
@@ -238,7 +242,7 @@ surface. Re-check both packages' current releases before a production decision.
 - [Versioning policy](https://github.com/leehack/mcp_dart/blob/main/VERSIONING.md)
 - [Tier 1 roadmap](https://github.com/leehack/mcp_dart/blob/main/ROADMAP.md)
 - [SDK on pub.dev](https://pub.dev/packages/mcp_dart)
-- [2.4.1 API reference](https://pub.dev/documentation/mcp_dart/2.4.1/)
+- [2.4.2 API reference](https://pub.dev/documentation/mcp_dart/2.4.2/)
 - [Changelog](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)
 - [MCP 2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28)
 - [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25)

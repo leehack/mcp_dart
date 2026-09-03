@@ -3,7 +3,7 @@
 `mcp_dart` is a community Dart and Flutter SDK for Model Context Protocol
 (MCP) servers, clients, and hosts.
 
-- SDK stable: `2.4.1`
+- SDK release: `2.4.2`
 - CLI stable: `0.2.0`
 - SDK minimum: Dart 3.4
 - CLI minimum: Dart 3.12
@@ -11,13 +11,17 @@
 - Package: https://pub.dev/packages/mcp_dart
 - License: MIT
 
-Stable 2.4.1 hardens Streamable HTTP access and JSON-RPC error diagnostics and
-retains an explicitly deprecated legacy HTTP+SSE client with same-origin
-endpoint enforcement. Prefer Streamable HTTP for all new integrations.
+Release 2.4.2 bounds incoming stdio and IO stream messages to 10 MiB by
+default. Set a suitable finite `maxIncomingMessageBytes` on receiving
+transports when valid messages exceed that limit. Overflow closes the
+transport; stdio clients stop message delivery immediately and do not
+automatically restart. Protocol profiles and minimum Dart support are unchanged.
+The deprecated legacy HTTP+SSE client remains available; prefer Streamable HTTP
+for new remote integrations.
 
 ## Release status
 
-The 2.4.1 release retains the complete core client/server wire surface of the
+The 2.4.2 release retains the complete core client/server wire surface of the
 final MCP `2026-07-28` specification, the MCP `2025-11-25` feature set, and
 negotiation with supported earlier initialization versions. Core
 means the normative wire requirements assigned to client and server roles by
@@ -39,7 +43,7 @@ Pin the stable 2.4 line explicitly:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.4.1
+  mcp_dart: ^2.4.2
 ```
 
 ## Primary import
