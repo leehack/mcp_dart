@@ -18,7 +18,7 @@ class IOStreamTransport implements Transport {
   final StreamSink<List<int>> sink;
 
   /// Buffer for incoming data from the stream.
-  final ReadBuffer _readBuffer = ReadBuffer();
+  final ReadBuffer _readBuffer;
 
   /// Subscription to the input stream
   StreamSubscription<List<int>>? _streamSubscription;
@@ -49,10 +49,15 @@ class IOStreamTransport implements Transport {
   ///
   /// [stream] is the stream to read from.
   /// [sink] is the sink to write to.
+  /// [maxIncomingMessageBytes] limits each message before its newline and
+  /// defaults to 10 MiB. The transport reports an error and closes on overflow.
   IOStreamTransport({
     required this.stream,
     required this.sink,
-  });
+    int maxIncomingMessageBytes = defaultMaxIncomingMessageBytes,
+  }) : _readBuffer = ReadBuffer(
+          maxIncomingMessageBytes: maxIncomingMessageBytes,
+        );
 
   /// Starts the transport by setting up listeners on the input stream.
   ///
@@ -93,7 +98,17 @@ class IOStreamTransport implements Transport {
   /// Internal handler for data received from the input stream
   void _onStreamData(List<int> chunk) {
     if (chunk is! Uint8List) chunk = Uint8List.fromList(chunk);
-    _readBuffer.append(chunk);
+    try {
+      _readBuffer.append(chunk);
+    } on StdioMessageTooLargeException catch (error) {
+      try {
+        onerror?.call(error);
+      } catch (callbackError) {
+        _logger.warn("Error in onerror handler: $callbackError");
+      }
+      unawaited(close());
+      return;
+    }
     _processReadBuffer();
   }
 

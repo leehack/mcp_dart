@@ -334,6 +334,37 @@ void main() {
       expect((received as JsonRpcPingRequest).id, 8);
     });
 
+    test('Transport closes when one incoming message exceeds its limit',
+        () async {
+      serverTransport = IOStreamTransport(
+        stream: clientToServerController.stream,
+        sink: serverToClientController.sink,
+        maxIncomingMessageBytes: 32,
+      );
+      final receivedError = Completer<Error>();
+      final closed = Completer<void>();
+      serverTransport
+        ..onerror = receivedError.complete
+        ..onclose = closed.complete;
+
+      await serverTransport.start();
+      clientToServerController.add(List.filled(33, 120));
+
+      expect(
+        await receivedError.future.timeout(const Duration(seconds: 2)),
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('limit of 32 bytes'),
+        ),
+      );
+      await closed.future.timeout(const Duration(seconds: 2));
+      await expectLater(
+        serverTransport.send(const JsonRpcPingRequest(id: 9)),
+        throwsStateError,
+      );
+    });
+
     test('Cannot start transport twice', () async {
       await serverTransport.start();
 

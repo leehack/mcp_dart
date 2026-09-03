@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:mcp_dart/src/shared/stdio.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 
@@ -40,6 +41,11 @@ class StdioServerParameters {
   /// the conditional export API-compatible with the Dart IO implementation.
   final bool restartOnUnexpectedExit;
 
+  /// Maximum byte length for one incoming newline-delimited message.
+  ///
+  /// The limit excludes the newline delimiter and defaults to 10 MiB.
+  final int maxIncomingMessageBytes;
+
   /// Creates parameters for launching the stdio server.
   const StdioServerParameters({
     required this.command,
@@ -49,6 +55,7 @@ class StdioServerParameters {
     this.stderrMode,
     this.workingDirectory,
     this.restartOnUnexpectedExit = true,
+    this.maxIncomingMessageBytes = defaultMaxIncomingMessageBytes,
   });
 }
 
@@ -56,7 +63,15 @@ class StdioServerParameters {
 class StdioClientTransport
     implements Transport, SubscriptionReplayAcknowledgmentTransport {
   /// Creates a stdio client transport stub.
-  StdioClientTransport(this.serverParams);
+  StdioClientTransport(this.serverParams) {
+    if (serverParams.maxIncomingMessageBytes <= 0) {
+      throw ArgumentError.value(
+        serverParams.maxIncomingMessageBytes,
+        'maxIncomingMessageBytes',
+        'Must be greater than zero',
+      );
+    }
+  }
 
   /// Configuration for launching the server process.
   final StdioServerParameters serverParams;

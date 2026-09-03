@@ -61,6 +61,12 @@ class StdioServerParameters {
   /// in-flight requests are not replayed automatically.
   final bool restartOnUnexpectedExit;
 
+  /// Maximum byte length for one incoming newline-delimited message.
+  ///
+  /// The limit excludes the newline delimiter. The transport reports an error
+  /// and closes when server output exceeds this limit. Defaults to 10 MiB.
+  final int maxIncomingMessageBytes;
+
   /// Creates parameters for launching the stdio server.
   const StdioServerParameters({
     required this.command,
@@ -70,6 +76,7 @@ class StdioServerParameters {
     this.stderrMode = io.ProcessStartMode.inheritStdio,
     this.workingDirectory,
     this.restartOnUnexpectedExit = true,
+    this.maxIncomingMessageBytes = defaultMaxIncomingMessageBytes,
   });
 }
 
@@ -110,7 +117,10 @@ class StdioClientTransport
   io.Process? _process;
 
   /// Buffer for incoming data from the process's stdout.
-  final ReadBuffer _readBuffer = ReadBuffer();
+  final ReadBuffer _readBuffer;
+
+  /// Fatal input ends message delivery before graceful process cleanup finishes.
+  bool _inputRejected = false;
 
   /// Flag to prevent multiple starts.
   bool _started = false;
@@ -220,7 +230,11 @@ class StdioClientTransport
   /// Creates a stdio client transport.
   ///
   /// Requires [_serverParams] detailing how to launch the server process.
-  StdioClientTransport(this._serverParams);
+  StdioClientTransport(StdioServerParameters serverParams)
+      : _serverParams = serverParams,
+        _readBuffer = ReadBuffer(
+          maxIncomingMessageBytes: serverParams.maxIncomingMessageBytes,
+        );
 
   /// Starts the server process and establishes communication pipes.
   ///
@@ -240,6 +254,7 @@ class StdioClientTransport
     }
     _started = true;
     _closing = false;
+    _inputRejected = false;
     _closeNotified = false;
     _restartGeneration++;
     _restartArmed = false;
@@ -446,8 +461,17 @@ class StdioClientTransport
 
   /// Internal handler for data received from the process's stdout.
   void _onStdoutData(List<int> chunk) {
+    // Keep draining stdout during shutdown without parsing more peer input.
+    if (_inputRejected) return;
     if (chunk is! Uint8List) chunk = Uint8List.fromList(chunk);
-    _readBuffer.append(chunk);
+    try {
+      _readBuffer.append(chunk);
+    } on StdioMessageTooLargeException catch (error) {
+      _inputRejected = true;
+      unawaited(close());
+      _reportError(error);
+      return;
+    }
     _processReadBuffer();
   }
 

@@ -31,6 +31,14 @@ corresponding JSON-RPC error, while malformed notifications and responses do
 not receive a response. A malformed frame is consumed independently so valid
 frames later in the same input chunk are still processed.
 
+Each stdio transport accepts at most 10 MiB before one message delimiter by
+default. The transport reports an error and closes when a peer exceeds this
+limit. The stdio client immediately stops delivering messages on overflow,
+even while waiting for an outgoing write or child-process shutdown. It does
+not automatically restart after overflow; a later explicit `start()` begins a
+new lifecycle. Set `maxIncomingMessageBytes` when a valid integration needs a
+different limit. The limit uses UTF-8 bytes and excludes the newline delimiter.
+
 ### Server Setup
 
 Use `StdioServerTransport` when the server is launched as a local child process
@@ -120,6 +128,7 @@ final transport = StdioClientTransport(
   StdioServerParameters(
     command: 'node',
     args: ['server.js'],
+    maxIncomingMessageBytes: 16 * 1024 * 1024,
     workingDirectory: '/path/to/server',
     environment: {
       'API_KEY': 'secret',
@@ -865,6 +874,10 @@ In-process stream-based communication. Best for:
 - In-process communication
 - Isolate communication
 - Mock servers
+
+`IOStreamTransport` uses the same 10 MiB incoming message limit. Set
+`maxIncomingMessageBytes` on each endpoint when the application needs another
+limit.
 
 ### Setup
 

@@ -7,6 +7,22 @@ import 'package:mcp_dart/src/types/json_rpc.dart' as json_rpc;
 
 final _logger = Logger("mcp_dart.shared.stdio");
 
+/// Default maximum byte length for one incoming newline-delimited message.
+const int defaultMaxIncomingMessageBytes = 10 * 1024 * 1024;
+
+/// An incoming newline-delimited message exceeded its configured byte limit.
+class StdioMessageTooLargeException extends StateError {
+  /// The configured maximum message length.
+  final int maxIncomingMessageBytes;
+
+  /// Creates an error for [maxIncomingMessageBytes].
+  StdioMessageTooLargeException(this.maxIncomingMessageBytes)
+      : super(
+          'Incoming message exceeds the limit of '
+          '$maxIncomingMessageBytes bytes.',
+        );
+}
+
 /// A newline-delimited stdio frame that could not be decoded as an MCP
 /// JSON-RPC message.
 ///
@@ -57,12 +73,45 @@ class _JsonRpcEnvelope {
 /// newline-terminated JSON-RPC messages.
 class ReadBuffer {
   final BytesBuilder _builder = BytesBuilder();
+  final int maxIncomingMessageBytes;
   Uint8List? _bufferCache;
+  int _pendingMessageBytes = 0;
+
+  /// Creates a buffer with a limit for each message before its newline.
+  ReadBuffer({
+    this.maxIncomingMessageBytes = defaultMaxIncomingMessageBytes,
+  }) {
+    if (maxIncomingMessageBytes <= 0) {
+      throw ArgumentError.value(
+        maxIncomingMessageBytes,
+        'maxIncomingMessageBytes',
+        'Must be greater than zero',
+      );
+    }
+  }
 
   /// Appends a chunk of binary data (received from the stream) to the buffer.
+  ///
+  /// Throws [StdioMessageTooLargeException] before retaining bytes when one
+  /// message exceeds [maxIncomingMessageBytes].
   void append(Uint8List chunk) {
+    var pendingMessageBytes = _pendingMessageBytes;
+    for (final byte in chunk) {
+      if (byte == 10) {
+        pendingMessageBytes = 0;
+        continue;
+      }
+
+      pendingMessageBytes++;
+      if (pendingMessageBytes > maxIncomingMessageBytes) {
+        clear();
+        throw StdioMessageTooLargeException(maxIncomingMessageBytes);
+      }
+    }
+
     _builder.add(chunk);
     _bufferCache = null;
+    _pendingMessageBytes = pendingMessageBytes;
   }
 
   /// Attempts to read a complete, newline-terminated JSON-RPC message
@@ -109,6 +158,7 @@ class ReadBuffer {
   void clear() {
     _builder.clear();
     _bufferCache = null;
+    _pendingMessageBytes = 0;
   }
 
   void _updateBufferAfterRead(int newlineIndex) {

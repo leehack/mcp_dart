@@ -22,6 +22,68 @@ void _stdioRecoveryTest(String description, Future<void> Function() body) {
 
 void main() {
   group('StdioClientTransport', () {
+    test('requires a positive incoming message limit', () {
+      expect(
+        () => StdioClientTransport(
+          const StdioServerParameters(
+            command: 'unused',
+            maxIncomingMessageBytes: 0,
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('reports oversized server output and closes the transport', () async {
+      final temporaryDirectory =
+          await io.Directory.systemTemp.createTemp('mcp_stdio_oversized_');
+      final launchCountFile = io.File(
+        '${temporaryDirectory.path}${io.Platform.pathSeparator}launch-count',
+      );
+      final transport = StdioClientTransport(
+        StdioServerParameters(
+          command: io.Platform.resolvedExecutable,
+          args: [
+            'test/client/fixtures/stdio_restart_server.dart',
+            launchCountFile.path,
+            'oversized-frame',
+          ],
+          stderrMode: io.ProcessStartMode.normal,
+          restartOnUnexpectedExit: false,
+          maxIncomingMessageBytes: 64,
+        ),
+      );
+      final receivedError = Completer<Error>();
+      final closed = Completer<void>();
+      transport
+        ..onerror = (error) {
+          if (!receivedError.isCompleted) {
+            receivedError.complete(error);
+          }
+        }
+        ..onclose = () {
+          if (!closed.isCompleted) {
+            closed.complete();
+          }
+        };
+
+      try {
+        await transport.start();
+        expect(
+          await receivedError.future.timeout(const Duration(seconds: 10)),
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('limit of 64 bytes'),
+          ),
+        );
+        await closed.future.timeout(const Duration(seconds: 10));
+      } finally {
+        await transport.close();
+        await temporaryDirectory.delete(recursive: true);
+      }
+    });
+
     test('can launch a child without inheriting the parent environment',
         () async {
       final inheritedEntry = io.Platform.environment.entries.firstWhere(

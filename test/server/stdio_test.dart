@@ -426,6 +426,39 @@ void main() {
       expect(receivedMessage, isA<JsonRpcPingRequest>());
     });
 
+    test('reports an oversized message and closes the transport', () async {
+      transport = StdioServerTransport(
+        stdin: stdin,
+        stdout: stdout,
+        maxIncomingMessageBytes: 32,
+      );
+      final receivedError = Completer<Error>();
+      final closed = Completer<void>();
+      final receivedMessages = <JsonRpcMessage>[];
+      transport
+        ..onerror = receivedError.complete
+        ..onclose = closed.complete
+        ..onmessage = receivedMessages.add;
+
+      await transport.start();
+      stdin.addData(List.filled(33, 120));
+
+      expect(
+        await receivedError.future.timeout(const Duration(seconds: 2)),
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('limit of 32 bytes'),
+        ),
+      );
+      await closed.future.timeout(const Duration(seconds: 2));
+
+      stdin.addString('${jsonEncode(const JsonRpcPingRequest(id: 1))}\n');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(receivedMessages, isEmpty);
+      expect(stdout.writtenData, isEmpty);
+    });
+
     test('calls onerror on malformed JSON', () async {
       Error? receivedError;
       transport.onerror = (error) {

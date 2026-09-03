@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:mcp_dart/src/server/mcp_server.dart';
+import 'package:mcp_dart/src/shared/stdio.dart';
 import 'package:mcp_dart/src/shared/transport.dart';
 import 'package:mcp_dart/src/types.dart';
 
@@ -306,9 +307,22 @@ class SseServerManager {
 class StdioServerTransport
     implements Transport, ServerSubscriptionCancellationTransport {
   /// Creates a new stdio server transport stub.
-  StdioServerTransport({Object? stdin, Object? stdout})
-      : _stdin = stdin,
-        _stdout = stdout;
+  ///
+  /// [maxIncomingMessageBytes] preserves the native transport configuration.
+  StdioServerTransport({
+    Object? stdin,
+    Object? stdout,
+    int maxIncomingMessageBytes = defaultMaxIncomingMessageBytes,
+  })  : _stdin = stdin,
+        _stdout = stdout {
+    if (maxIncomingMessageBytes <= 0) {
+      throw ArgumentError.value(
+        maxIncomingMessageBytes,
+        'maxIncomingMessageBytes',
+        'Must be greater than zero',
+      );
+    }
+  }
 
   final Object? _stdin;
   final Object? _stdout;

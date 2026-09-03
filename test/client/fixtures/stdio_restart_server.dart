@@ -32,6 +32,13 @@ Future<void> main(List<String> arguments) async {
     await stdout.flush();
   }
 
+  if (replayBehavior == 'oversized-frame') {
+    stdout.add(List.filled(65, 120));
+    await stdout.flush();
+    await Future<void>.delayed(const Duration(seconds: 30));
+    return;
+  }
+
   if (launchCount > 1 && replayBehavior == 'closed-stdin-after-restart') {
     final inputSubscription = stdin.listen((_) {});
     await inputSubscription.cancel();

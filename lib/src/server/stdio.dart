@@ -24,7 +24,7 @@ class StdioServerTransport
   final io.IOSink _stdout;
 
   /// Buffer for incoming data from stdin.
-  final ReadBuffer _readBuffer = ReadBuffer();
+  final ReadBuffer _readBuffer;
 
   /// Flag to prevent multiple starts.
   bool _started = false;
@@ -61,8 +61,16 @@ class StdioServerTransport
   ///
   /// By default, uses [io.stdin] and [io.stdout] from `dart:io`.
   /// Provide alternative streams for testing or embedding purposes.
-  StdioServerTransport({io.Stdin? stdin, io.IOSink? stdout})
-      : _stdin = stdin ?? io.stdin,
+  /// [maxIncomingMessageBytes] limits each message before its newline and
+  /// defaults to 10 MiB. The transport reports an error and closes on overflow.
+  StdioServerTransport({
+    io.Stdin? stdin,
+    io.IOSink? stdout,
+    int maxIncomingMessageBytes = defaultMaxIncomingMessageBytes,
+  })  : _stdin = stdin ?? io.stdin,
+        _readBuffer = ReadBuffer(
+          maxIncomingMessageBytes: maxIncomingMessageBytes,
+        ),
         _stdout = stdout ?? io.stdout;
 
   /// Starts listening for messages on stdin.
@@ -95,7 +103,17 @@ class StdioServerTransport
     if (chunk is! Uint8List) {
       chunk = Uint8List.fromList(chunk);
     }
-    _readBuffer.append(chunk);
+    try {
+      _readBuffer.append(chunk);
+    } on StdioMessageTooLargeException catch (error) {
+      try {
+        onerror?.call(error);
+      } catch (callbackError) {
+        _logger.warn("Error within onerror handler: $callbackError");
+      }
+      unawaited(close());
+      return;
+    }
     _processReadBuffer();
   }
 

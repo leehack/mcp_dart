@@ -1,3 +1,13 @@
+## Unreleased
+
+### Fixed
+
+- Bounded each incoming stdio and IO stream message to 10 MiB by default. Each
+  transport now reports an error and closes when a peer exceeds its configured
+  `maxIncomingMessageBytes` limit.
+- Stopped stdio client message delivery immediately on oversized input, including
+  while a blocked outgoing write delays process shutdown.
+
 ## 2.4.1
 
 `mcp_dart 2.4.1` restores Dart 3.13 package-analysis compatibility and hardens
