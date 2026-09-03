@@ -39,6 +39,34 @@ not automatically restart after overflow; a later explicit `start()` begins a
 new lifecycle. Set `maxIncomingMessageBytes` when a valid integration needs a
 different limit. The limit uses UTF-8 bytes and excludes the newline delimiter.
 
+### Upgrading to 2.5
+
+Version 2.4.1 did not bound incoming newline-delimited frames. The 2.5 release
+closes the connection on oversized input to prevent unbounded memory growth.
+If your integration intentionally exchanges larger messages, configure a
+finite limit appropriate for its payloads and memory budget on each receiving
+transport. For example:
+
+```dart
+const maxMessageBytes = 16 * 1024 * 1024;
+
+final clientTransport = StdioClientTransport(
+  StdioServerParameters(
+    command: 'dart',
+    args: ['run', 'server.dart'],
+    maxIncomingMessageBytes: maxMessageBytes,
+  ),
+);
+final serverTransport = StdioServerTransport(
+  maxIncomingMessageBytes: maxMessageBytes,
+);
+```
+
+`IOStreamTransport` accepts the same named parameter. Limits apply to incoming
+messages independently at each endpoint; increasing one side's limit does not
+change its peer's limit. After overflow, correct the peer or limit before an
+explicit restart; do not retry an oversized message in an automatic loop.
+
 ### Server Setup
 
 Use `StdioServerTransport` when the server is launched as a local child process

@@ -6,7 +6,7 @@ Security fixes target the current stable SDK and CLI release lines:
 
 | Package | Supported stable line |
 | --- | --- |
-| `mcp_dart` | `2.4.x` |
+| `mcp_dart` | `2.5.x` |
 | `mcp_dart_cli` | `0.2.x` |
 
 Older lines receive best-effort fixes only. A vulnerability may require
