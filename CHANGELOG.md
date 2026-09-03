@@ -1,6 +1,6 @@
-## 2.5.0
+## 2.4.2
 
-`mcp_dart 2.5.0` prevents unbounded buffering of incoming stdio and IO stream
+`mcp_dart 2.4.2` prevents unbounded buffering of incoming stdio and IO stream
 messages and adds configurable per-message byte limits.
 
 ### Security

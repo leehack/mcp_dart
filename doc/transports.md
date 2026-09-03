@@ -39,9 +39,9 @@ not automatically restart after overflow; a later explicit `start()` begins a
 new lifecycle. Set `maxIncomingMessageBytes` when a valid integration needs a
 different limit. The limit uses UTF-8 bytes and excludes the newline delimiter.
 
-### Upgrading to 2.5
+### Upgrading to 2.4.2
 
-Version 2.4.1 did not bound incoming newline-delimited frames. The 2.5 release
+Version 2.4.1 did not bound incoming newline-delimited frames. The 2.4.2 release
 closes the connection on oversized input to prevent unbounded memory growth.
 If your integration intentionally exchanges larger messages, configure a
 finite limit appropriate for its payloads and memory budget on each receiving
