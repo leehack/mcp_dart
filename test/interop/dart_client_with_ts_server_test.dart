@@ -182,9 +182,10 @@ void main() {
       late StreamableHttpClientTransport transport;
       late McpClient client;
       late io.Process serverProcess;
-      final port = 3001;
+      late int port;
 
       setUp(() async {
+        port = await _findAvailablePort();
         // 1. Manually spawn the external HTTP server
         serverProcess = await io.Process.start(
           'node',
@@ -219,7 +220,7 @@ void main() {
         // This closes the client and its underlying transport
         await client.close();
         // Kill the manually spawned server
-        serverProcess.kill();
+        await _terminateProcess(serverProcess);
       });
 
       test('tools', () async {
