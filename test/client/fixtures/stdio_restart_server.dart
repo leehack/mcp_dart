@@ -82,7 +82,9 @@ Future<void> main(List<String> arguments) async {
 
     if (method == 'server/discover') {
       if (replayBehavior == 'legacy-exit-on-discover') {
-        return;
+        // Exiting the async stdin loop can wait for input cancellation on
+        // Windows. This fixture must terminate the child before fallback.
+        exit(0);
       }
       final exercisesModernDiscoveryRecovery = launchCount == 1 &&
           (replayBehavior == 'modern-discovery-error-exit' ||
