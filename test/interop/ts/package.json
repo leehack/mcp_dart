@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@modelcontextprotocol/server-filesystem": "2026.7.10",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
     "eslint": "^10.9.1",
