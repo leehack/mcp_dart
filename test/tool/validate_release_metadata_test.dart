@@ -1073,6 +1073,18 @@ Directory _stableFixture(
   bool prepareStableCli = false,
 }) {
   const fixtureSdkVersion = '2.3.0';
+  const fixtureCliVersion = '0.2.0';
+  final sourceCliPubspec = File(
+    '${repoRoot.path}/packages/mcp_dart_cli/pubspec.yaml',
+  ).readAsStringSync();
+  final sourceCliVersion = RegExp(
+    r'^version: ([^\r\n]+)$',
+    multiLine: true,
+  ).firstMatch(sourceCliPubspec)!.group(1)!;
+  final sourceSdkConstraint = RegExp(
+    r'^  mcp_dart: ([^\r\n]+)$',
+    multiLine: true,
+  ).firstMatch(sourceCliPubspec)!.group(1)!;
   final fixture = Directory.systemTemp.createTempSync(
     'mcp_dart_release_metadata_',
   );
@@ -1122,7 +1134,13 @@ Directory _stableFixture(
     final source = File('${repoRoot.path}/$path');
     final target = File('${fixture.path}/$path');
     target.parent.createSync(recursive: true);
-    source.copySync(target.path);
+    // Keep synthetic release inputs independent of the current CLI release.
+    target.writeAsStringSync(
+      source
+          .readAsStringSync()
+          .replaceAll(sourceCliVersion, fixtureCliVersion)
+          .replaceAll(sourceSdkConstraint, '^$fixtureSdkVersion'),
+    );
   }
 
   final pubspec = File('${fixture.path}/pubspec.yaml');
@@ -1138,6 +1156,12 @@ Directory _stableFixture(
               'v2.3.0-dev.3/doc',
           'documentation: https://github.com/leehack/mcp_dart/tree/main/doc',
         ),
+  );
+
+  // A synthetic changelog avoids duplicate headings when the real changelog
+  // already contains the fixture version in its release history.
+  File('${fixture.path}/packages/mcp_dart_cli/CHANGELOG.md').writeAsStringSync(
+    '## $fixtureCliVersion\n\n- Prepare the coordinated CLI release.\n',
   );
 
   final releaseMetadata = File(
