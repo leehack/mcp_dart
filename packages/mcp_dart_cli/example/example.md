@@ -11,7 +11,7 @@ First, install the CLI globally:
 dart pub global activate mcp_dart_cli
 
 # Coordinated MCP 2026-07-28 release
-dart pub global activate mcp_dart_cli 0.2.0
+dart pub global activate mcp_dart_cli 0.2.1
 ```
 
 ## Creating a Project

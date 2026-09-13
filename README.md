@@ -16,7 +16,7 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
 > This release is `mcp_dart 2.4.2`. The separately versioned stable CLI remains
-> `mcp_dart_cli 0.2.0`; its `^2.3.0` SDK constraint accepts 2.4.
+> `mcp_dart_cli 0.2.1`; its `^2.4.2` SDK constraint accepts 2.4.
 > Current source passes every scored requirement in the official alpha.11 MCP
 > `2025-11-25` and `2026-07-28` client and server sets, including all 25
 > required 2026 authorization scenarios, plus bidirectional published
@@ -41,7 +41,7 @@ The public maintenance contract is documented in the
 | Package | Minimum Dart SDK |
 | --- | --- |
 | `mcp_dart 2.4.2` | 3.4 |
-| `mcp_dart_cli 0.2.0` | 3.12 |
+| `mcp_dart_cli 0.2.1` | 3.12 |
 
 SDK-only generated projects retain the SDK's Dart 3.4 minimum. CLI projects
 use Dart 3.12 because the CLI and its toolchain target that release.
@@ -72,7 +72,7 @@ The snippets below use the current stable SDK line. Package versions
 remain separate from protocol profiles: `McpProtocol.stable` names the SDK's
 default compatibility policy.
 
-The SDK and CLI are versioned independently. The stable CLI's `^2.3.0`
+The SDK and CLI are versioned independently. The stable CLI's `^2.4.2`
 constraint remains compatible with the 2.4 SDK.
 
 For direct SDK integration, start with the
@@ -154,13 +154,13 @@ Applications upgrading from the stable 2.2 line should also follow the
 Install the matching stable CLI:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.0
+dart pub global activate mcp_dart_cli 0.2.1
 mcp_dart create my_server
 cd my_server
 mcp_dart inspect
 ```
 
-The `0.2.0` CLI creates a project with `mcp_dart: ^2.3.0`. The inspector
+The `0.2.1` CLI creates a project with `mcp_dart: ^2.4.2`. The inspector
 launches the generated stdio server itself. After leaving the interactive
 inspector, you can run a single tool directly:
 

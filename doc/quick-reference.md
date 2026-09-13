@@ -15,7 +15,7 @@ dependencies:
 import 'package:mcp_dart/mcp_dart.dart';
 ```
 
-The 2.4.2 SDK requires Dart 3.4 or later. The stable 0.2.0 CLI requires
+The 2.4.2 SDK requires Dart 3.4 or later. The stable 0.2.1 CLI requires
 Dart 3.12 or later.
 
 ## Protocol profile

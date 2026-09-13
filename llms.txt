@@ -4,7 +4,7 @@
 (MCP) servers, clients, and hosts.
 
 - SDK release: `2.4.2`
-- CLI stable: `0.2.0`
+- CLI stable: `0.2.1`
 - SDK minimum: Dart 3.4
 - CLI minimum: Dart 3.12
 - Repository: https://github.com/leehack/mcp_dart
@@ -212,7 +212,7 @@ https://github.com/leehack/mcp_dart/tree/main/example/authentication
 Install the coordinated stable CLI:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.0
+dart pub global activate mcp_dart_cli 0.2.1
 ```
 
 Common commands:
