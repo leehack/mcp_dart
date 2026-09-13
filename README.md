@@ -16,7 +16,7 @@ Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
 > This release is `mcp_dart 2.4.2`. The separately versioned stable CLI remains
-> `mcp_dart_cli 0.2.1`; its `^2.4.2` SDK constraint accepts 2.4.
+> `mcp_dart_cli 0.2.1`, which requires `mcp_dart ^2.4.2`.
 > Current source passes every scored requirement in the official alpha.11 MCP
 > `2025-11-25` and `2026-07-28` client and server sets, including all 25
 > required 2026 authorization scenarios, plus bidirectional published
@@ -73,7 +73,7 @@ remain separate from protocol profiles: `McpProtocol.stable` names the SDK's
 default compatibility policy.
 
 The SDK and CLI are versioned independently. The stable CLI's `^2.4.2`
-constraint remains compatible with the 2.4 SDK.
+constraint accepts SDK versions from 2.4.2 up to, but not including, 3.0.0.
 
 For direct SDK integration, start with the
 [getting-started guide](https://github.com/leehack/mcp_dart/blob/main/doc/getting-started.md).

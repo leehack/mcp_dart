@@ -19,8 +19,9 @@ Install the coordinated MCP `2026-07-28` CLI:
 dart pub global activate mcp_dart_cli 0.2.1
 ```
 
-Release automation publishes the SDK first, waits for `mcp_dart 2.3.0` to
-resolve from pub.dev, and then publishes this CLI.
+For coordinated releases, automation publishes the SDK first and waits for it
+to resolve from pub.dev before publishing the CLI. CLI-only releases validate
+against the already published minimum SDK, currently `mcp_dart 2.4.2`.
 
 Without Dart, install the latest stable standalone binary:
 
