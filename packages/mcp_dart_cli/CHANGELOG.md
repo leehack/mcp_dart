@@ -1,3 +1,9 @@
+## 0.2.1
+
+- Require `mcp_dart ^2.4.2` for the CLI and newly generated projects.
+- Support `pub_updater` 0.6.0 while retaining compatibility with 0.5.x and
+  the Dart 3.12 minimum.
+
 ## 0.2.0
 
 - Fixed `inspect-server` support for MCP 2026-07-28 elicitation, roots, and
