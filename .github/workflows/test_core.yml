@@ -403,6 +403,16 @@ jobs:
         # preserving concurrency exercised within individual tests.
         run: dart test --exclude-tags interop --concurrency=2
 
+      - name: Repeat Windows overflow shutdown regression
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          for ($iteration = 1; $iteration -le 20; $iteration++) {
+            Write-Host "Overflow shutdown iteration $iteration/20"
+            dart test test/client/stdio_overflow_shutdown_test.dart --reporter expanded
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
   dart-examples:
     runs-on: ubuntu-latest
     strategy:
