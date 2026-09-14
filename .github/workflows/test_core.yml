@@ -398,7 +398,12 @@ jobs:
       - name: Analyze
         run: dart analyze
 
+      - name: Precompile platform smoke programs
+        run: dart run tool/testing/compile_smoke.dart
+
       - name: Run platform test suite
+        env:
+          MCP_PRECOMPILED_SMOKE: '1'
         # Bound simultaneous child-process compilation on hosted runners while
         # preserving concurrency exercised within individual tests.
         run: dart test --exclude-tags interop --concurrency=2
