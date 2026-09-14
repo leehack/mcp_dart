@@ -10,13 +10,16 @@ through the
 
 ## Current baseline
 
-- Stable `mcp_dart 2.4.1` and `mcp_dart_cli 0.2.0` releases.
+- Stable `mcp_dart 2.4.2` and `mcp_dart_cli 0.2.1` releases.
+- SDK 2.4.2 fixes unbounded incoming stdio and IO stream buffering. See
+  [GHSA-92g6-8c2f-55w5](https://github.com/leehack/mcp_dart/security/advisories/GHSA-92g6-8c2f-55w5)
+  for affected versions and upgrade guidance.
 - Complete Core client/server support for MCP 2026-07-28 with an explicit
   MCP 2025-11-25 compatibility profile.
 - Exact-head CI passes the published official conformance package for both
   supported protocol profiles and both client/server roles, with no
   expected-failure allowance.
-- Published TypeScript SDK 2.0.0 and Python SDK 2.1.1 interoperability runs in
+- Published TypeScript SDK 2.0.0 and Python SDK 2.2.0 interoperability runs in
   both directions.
 - Protocol coverage, examples, and known gaps are tracked in
   [`doc/spec-coverage-2026-07-28.md`](doc/spec-coverage-2026-07-28.md).
@@ -37,6 +40,10 @@ outside the Tier 1 Core claim.
 | Request Tier 1 assignment | A public advancement issue includes the scorecard, policy, documentation, release, and maintenance evidence | Planned after eligibility is resolved |
 
 ## Latest repository self-assessment
+
+The results below are recorded assessment evidence, not a fresh assessment of
+the current releases listed above. Release-reference updates do not rerun the
+governance assessment or change the project's formal tier status.
 
 The official `@modelcontextprotocol/conformance@0.2.0-alpha.11` frozen
 requirement sets were run on 2026-08-08 against `main` commit
