@@ -364,7 +364,9 @@ Future<void> main(List<String> arguments) async {
         },
       });
       await stdout.flush();
-      return;
+      // Preserve the final response, then exit without waiting for stdin
+      // cancellation, which can block while the Windows request pipe is open.
+      exit(0);
     }
   }
 }
