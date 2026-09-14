@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 import '../../example/mcp_2026_07_28/server.dart' as strict_server;
 import '../../example/streamable_https/client_streamable_https.dart'
     as streamable_example;
+import '../../tool/testing/smoke_programs.dart';
 
 class _PreviewDiscoveryTransport extends Transport
     implements ProtocolVersionAwareTransport {
@@ -51,7 +52,11 @@ void main() {
   group('non-credentialed examples smoke tests', () {
     test('stdio client drives stdio server tools resources and prompts',
         () async {
-      final result = await _runDart(['run', 'example/client_stdio.dart']);
+      final result = await _runDart([
+        'run',
+        'example/client_stdio.dart',
+        smokeProgram('example/server_stdio.dart'),
+      ]);
 
       expect(result.exitCode, 0, reason: result.output);
       expect(result.output, contains('Connected to server.'));
@@ -64,6 +69,7 @@ void main() {
       final result = await _runDart([
         'run',
         'example/mcp_2026_07_28/client.dart',
+        smokeProgram('example/mcp_2026_07_28/server.dart'),
       ]);
 
       expect(result.exitCode, 0, reason: result.output);
@@ -126,7 +132,9 @@ void main() {
         await portProbe.close(force: true);
         final server = await Process.start(
           Platform.resolvedExecutable,
-          ['run', 'example/streamable_https/high_level_server.dart'],
+          smokeArguments(
+            ['run', 'example/streamable_https/high_level_server.dart'],
+          ),
           environment: {
             ...Platform.environment,
             'PORT': '$port',
@@ -144,7 +152,10 @@ void main() {
           );
           final client = await Process.start(
             Platform.resolvedExecutable,
-            ['run', 'example/streamable_https/client_streamable_https.dart'],
+            smokeArguments([
+              'run',
+              'example/streamable_https/client_streamable_https.dart',
+            ]),
             environment: {
               ...Platform.environment,
               'MCP_SERVER_URL': 'http://127.0.0.1:$port/mcp',
@@ -214,7 +225,7 @@ void main() {
         await portProbe.close(force: true);
         final process = await Process.start(
           Platform.resolvedExecutable,
-          ['run', 'example/server_sse.dart'],
+          smokeArguments(['run', 'example/server_sse.dart']),
           environment: {
             ...Platform.environment,
             'PORT': '$port',
@@ -268,7 +279,7 @@ void main() {
         await portProbe.close(force: true);
         final server = await Process.start(
           Platform.resolvedExecutable,
-          ['run', 'example/server_sse.dart'],
+          smokeArguments(['run', 'example/server_sse.dart']),
           environment: {
             ...Platform.environment,
             'PORT': '$port',
@@ -289,7 +300,7 @@ void main() {
           );
           final client = await Process.start(
             Platform.resolvedExecutable,
-            ['run', 'example/client_sse.dart'],
+            smokeArguments(['run', 'example/client_sse.dart']),
             environment: {
               ...Platform.environment,
               'MCP_SERVER_URL': 'http://127.0.0.1:$port/sse',
@@ -340,7 +351,9 @@ void main() {
 
         final process = await Process.start(
           Platform.resolvedExecutable,
-          ['run', 'example/simple_task_interactive_server.dart'],
+          smokeArguments(
+            ['run', 'example/simple_task_interactive_server.dart'],
+          ),
           environment: {
             ...Platform.environment,
             'PORT': '$port',
@@ -411,7 +424,7 @@ void main() {
         await portProbe.close(force: true);
         final process = await Process.start(
           Platform.resolvedExecutable,
-          ['run', 'example/elicitation_http_server.dart'],
+          smokeArguments(['run', 'example/elicitation_http_server.dart']),
           environment: {
             ...Platform.environment,
             'PORT': '$port',
@@ -588,7 +601,7 @@ Future<void> _expectBrowserCorsPolicy(String script) async {
 
   final process = await Process.start(
     Platform.resolvedExecutable,
-    ['run', script],
+    smokeArguments(['run', script]),
     environment: {
       ...Platform.environment,
       'PORT': '$port',
@@ -784,7 +797,7 @@ class _PreflightResult {
 Future<_CommandResult> _runDart(List<String> args) {
   return _runCommand(
     Platform.resolvedExecutable,
-    args,
+    smokeArguments(args),
     timeout: const Duration(seconds: 30),
   );
 }
