@@ -399,7 +399,9 @@ jobs:
         run: dart analyze
 
       - name: Run platform test suite
-        run: dart test --exclude-tags interop
+        # Bound simultaneous child-process compilation on hosted runners while
+        # preserving concurrency exercised within individual tests.
+        run: dart test --exclude-tags interop --concurrency=2
 
   dart-examples:
     runs-on: ubuntu-latest
