@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
+import '../../tool/testing/smoke_programs.dart';
+
 void main() {
   group('stdio transport concurrent sends', () {
     late Client client;
@@ -35,7 +37,7 @@ void main() {
       transport = StdioClientTransport(
         StdioServerParameters(
           command: Platform.resolvedExecutable,
-          args: [serverFilePath],
+          args: [smokeProgram('example/server_stdio.dart')],
           stderrMode: ProcessStartMode.normal,
         ),
       );

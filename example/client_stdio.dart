@@ -10,14 +10,18 @@ import 'package:mcp_dart/mcp_dart.dart';
 /// and communicates with it using the StdioClientTransport.
 /// The client sends various requests to the server, including tool calls,
 /// resource reads, and prompt calls.
-Future<void> main() async {
+/// An optional argument selects a server script or precompiled kernel file;
+/// without one, the example runs the server from source.
+Future<void> main(List<String> arguments) async {
   // Define the server executable and arguments
   const serverCommand = 'dart';
   // Adjust the path to the server script as needed
-  const serverArgs = <String>['run', 'example/server_stdio.dart'];
+  final serverArgs = arguments.isEmpty
+      ? <String>['run', 'example/server_stdio.dart']
+      : <String>[arguments.single];
 
   // Create StdioServerParameters
-  final serverParams = const StdioServerParameters(
+  final serverParams = StdioServerParameters(
     command: serverCommand,
     args: serverArgs,
     stderrMode: ProcessStartMode.normal,

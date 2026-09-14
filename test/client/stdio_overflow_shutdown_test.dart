@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
@@ -32,6 +33,8 @@ void main() {
         final messagesAfterOverflow = <JsonRpcMessage>[];
         final callbackStartRejected = Completer<bool>();
         Future<void>? writing;
+        final fixtureOutput = StringBuffer();
+        StreamSubscription<String>? fixtureStderr;
         transport
           ..onmessage = (message) {
             if (overflowCount > 0) messagesAfterOverflow.add(message);
@@ -66,6 +69,9 @@ void main() {
 
         try {
           await transport.start();
+          fixtureStderr = transport.stderr
+              ?.transform(utf8.decoder)
+              .listen(fixtureOutput.write);
           await transport.send(
             const JsonRpcRequest(id: 1, method: 'server/discover'),
           );
@@ -109,7 +115,11 @@ void main() {
           overflowCount = 0;
           discovery = Completer<void>();
           closed = Completer<void>();
+          await fixtureStderr?.cancel();
           await transport.start();
+          fixtureStderr = transport.stderr
+              ?.transform(utf8.decoder)
+              .listen(fixtureOutput.write);
           await discovery.future.timeout(const Duration(seconds: 15));
           await transport.close();
           expect(closeCount, 2);
@@ -117,7 +127,34 @@ void main() {
         } finally {
           await transport.close();
           await writing?.timeout(const Duration(seconds: 5));
-          await temporaryDirectory.delete(recursive: true);
+          await fixtureStderr?.cancel();
+          try {
+            await temporaryDirectory.delete(recursive: true);
+          } on FileSystemException catch (error) {
+            // Keep the original failure; diagnostics must never turn a failed
+            // cleanup into a passing test or replace its exception.
+            print('Overflow cleanup failed: $error');
+            print('closeCount=$closeCount overflowCount=$overflowCount');
+            print('Fixture stderr:\n$fixtureOutput');
+            try {
+              final remaining = await temporaryDirectory
+                  .list(recursive: true, followLinks: false)
+                  .map((entry) => '${entry.runtimeType}: ${entry.path}')
+                  .toList();
+              print('Remaining entries: $remaining');
+              if (Platform.isWindows) {
+                final processes = await Process.run(
+                  'tasklist.exe',
+                  ['/FI', 'IMAGENAME eq dart.exe', '/FO', 'CSV'],
+                );
+                print('Dart processes (${processes.exitCode}): '
+                    '${processes.stdout}\n${processes.stderr}');
+              }
+            } catch (diagnosticError) {
+              print('Cleanup diagnostics unavailable: $diagnosticError');
+            }
+            rethrow;
+          }
         }
       },
       timeout: const Timeout(Duration(seconds: 60)),

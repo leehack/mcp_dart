@@ -7,7 +7,8 @@ import 'package:mcp_dart/mcp_dart.dart';
 /// ```bash
 /// dart run example/mcp_2026_07_28/client.dart
 /// ```
-Future<void> main() async {
+/// An optional argument selects a server script or precompiled kernel file.
+Future<void> main(List<String> arguments) async {
   final client = McpClient(
     const Implementation(name: 'mcp-2026-example-client', version: '1.0.0'),
     options: const McpClientOptions(
@@ -28,9 +29,11 @@ Future<void> main() async {
   };
 
   final transport = StdioClientTransport(
-    const StdioServerParameters(
+    StdioServerParameters(
       command: 'dart',
-      args: ['run', 'example/mcp_2026_07_28/server.dart'],
+      args: arguments.isEmpty
+          ? ['run', 'example/mcp_2026_07_28/server.dart']
+          : [arguments.single],
     ),
   );
 
