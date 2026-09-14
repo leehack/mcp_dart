@@ -10,6 +10,7 @@ Future<void> main(List<String> args) async {
   final launchCount =
       launches.existsSync() ? int.parse(launches.readAsStringSync()) + 1 : 1;
   launches.writeAsStringSync('$launchCount');
+  stderr.writeln('overflow fixture launch=$launchCount pid=$pid');
 
   stdout.writeln(
     jsonEncode({
