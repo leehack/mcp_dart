@@ -540,8 +540,9 @@ void main() {
       expect(result.output, isNot(contains('Failed to list capabilities')));
     });
 
-    _cliTest('CLI inspect invokes MCP Apps helper server tool and resource',
-        () async {
+    // Each CLI invocation starts a fresh Dart client and server. Keep the
+    // independent flows separate so each has its own test timeout under coverage.
+    _cliTest('CLI inspect invokes MCP Apps helper server tool', () async {
       final toolResult = await _runDart([
         'run',
         'packages/mcp_dart_cli/bin/mcp_dart.dart',
@@ -558,7 +559,9 @@ void main() {
       expect(toolResult.exitCode, 0, reason: toolResult.output);
       expect(toolResult.output, contains('Current weather for Seoul'));
       expect(toolResult.output, contains('ui://weather/dashboard.html'));
+    });
 
+    _cliTest('CLI inspect reads MCP Apps helper server resource', () async {
       final resourceResult = await _runDart([
         'run',
         'packages/mcp_dart_cli/bin/mcp_dart.dart',
