@@ -18,6 +18,21 @@ final RegExp _namePattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
 final RegExp _frontmatter = RegExp(r'^---\n([\s\S]*?)\n---\n');
 final RegExp _dartBlock = RegExp(r'```dart\n([\s\S]*?)```');
 final RegExp _frontmatterEntry = RegExp(r'^([A-Za-z][\w-]*):\s*(.*)$');
+// A block starting with this marker is one file of an example package named
+// `my_server`, so its package imports resolve like a consumer project.
+final RegExp _fileMarker = RegExp(r'^// file: (\S+)\n');
+const String _exampleProjectPubspec = '''
+name: my_server
+publish_to: none
+environment:
+  sdk: ^3.4.0
+dependencies:
+  mcp_dart:
+    path: '{{root}}'
+dev_dependencies:
+  lints: ">=4.0.0 <7.0.0"
+  test: ^1.24.0
+''';
 
 void main() {
   final List<Directory> skills = Directory('skills')
@@ -83,12 +98,20 @@ void main() {
       for (final Directory skill in skills) {
         final String markdown = _readSkill(skill);
         final String prefix = p.basename(skill.path).replaceAll('-', '_');
+        final Directory project = Directory(p.join(snippets.path, prefix));
         int index = 0;
         for (final RegExpMatch block in _dartBlock.allMatches(markdown)) {
-          File(
-            p.join(snippets.path, '${prefix}_${index++}.dart'),
-          ).writeAsStringSync(block.group(1)!);
+          final String code = block.group(1)!;
+          final RegExpMatch? file = _fileMarker.firstMatch(code);
+          (file == null
+              ? File(p.join(snippets.path, '${prefix}_${index++}.dart'))
+              : File(p.join(project.path, file.group(1)!)))
+            ..createSync(recursive: true)
+            ..writeAsStringSync(code);
           count++;
+        }
+        if (project.existsSync()) {
+          await _preparePackage(project);
         }
       }
       expect(count, greaterThan(0));
@@ -101,6 +124,24 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
+}
+
+Future<void> _preparePackage(Directory project) async {
+  File(p.join(project.path, 'pubspec.yaml')).writeAsStringSync(
+    _exampleProjectPubspec.replaceFirst(
+      '{{root}}',
+      Directory.current.absolute.path,
+    ),
+  );
+  File(
+    p.join(project.path, 'analysis_options.yaml'),
+  ).writeAsStringSync('include: package:lints/recommended.yaml\n');
+  final ProcessResult result = await Process.run(
+    Platform.resolvedExecutable,
+    ['pub', 'get', '--offline'],
+    workingDirectory: project.path,
+  );
+  expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
 }
 
 // Windows checkouts may convert line endings to CRLF.

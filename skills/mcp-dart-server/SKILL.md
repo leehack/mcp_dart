@@ -1,10 +1,10 @@
 ---
 name: mcp-dart-server
 description: >-
-  Use when building a Model Context Protocol (MCP) server in Dart or Flutter
-  with mcp_dart: creating an McpServer, registering tools, resources, resource
-  templates or prompts, returning tool results and errors, reporting progress,
-  or running the server over stdio.
+  Use when building or extending a Model Context Protocol (MCP) server in Dart
+  with mcp_dart: structuring the project, creating an McpServer, adding tools,
+  resources, resource templates or prompts, returning tool results and errors,
+  reporting progress, running over stdio, or testing the server.
 ---
 
 # Building an MCP server with mcp_dart
@@ -13,6 +13,40 @@ description: >-
 speaks MCP 2026-07-28 and falls back to initialization-era versions (MCP
 2025-11-25 and earlier) for legacy clients. Import everything from
 `package:mcp_dart/mcp_dart.dart`.
+
+## Project structure
+
+Keep MCP wiring thin and separate from the application's logic. This is the
+layout that `mcp_dart create` generates; use it for hand-written servers too:
+
+```text
+my_server/
+  bin/server.dart               # Reads config, builds shared services, picks the transport.
+  lib/mcp/mcp.dart              # createMcpServer(services): the only server factory.
+  lib/mcp/tools/base_tool.dart  # BaseTool + registerBaseTool extension.
+  lib/mcp/tools/*_tool.dart     # One class per tool; dependencies via the constructor.
+  lib/mcp/resources/            # Resources and resource templates.
+  lib/mcp/prompts/              # Prompts.
+  lib/src/                      # Domain services and models; no mcp_dart imports.
+  test/                         # In-process client/server tests.
+```
+
+- If `lib/mcp/tools/base_tool.dart` already exists, the project came from
+  `mcp_dart create`. Follow it: add a `BaseTool` subclass and list it in
+  `createAllTools()`, and use `BaseResource`/`BasePrompt` the same way. Do not
+  add inline `registerTool` calls beside that pattern.
+- To start a new standalone server, `dart pub global activate mcp_dart_cli`
+  then `mcp_dart create my_server` (the CLI needs Dart 3.12; the generated
+  project adds `args` and `logging` and targets Dart 3.4). Adding a server to
+  an existing package needs only `dart pub add mcp_dart`.
+- Tool classes are adapters: parse arguments, call a domain service, map
+  domain failures to `CallToolResult(isError: true)`. Keep business rules,
+  I/O and state in `lib/src/` so they are testable without MCP.
+- Build services once in `bin/server.dart` and pass them to
+  `createMcpServer`. Never create state inside a tool call or inside a
+  Streamable HTTP `serverFactory`, which runs per request or session.
+- Read configuration and secrets at startup (arguments, environment) and pass
+  them in. Never log secrets or read them inside handlers.
 
 ## Guidelines
 
@@ -25,18 +59,16 @@ speaks MCP 2026-07-28 and falls back to initialization-era versions (MCP
   `McpServerOptions(protocol: McpProtocol.legacy)` or
   `McpProtocol.require2026` only when a deployment must pin one protocol era.
 - Register everything before `connect`. One `McpServer` instance owns one
-  transport; build a fresh instance per transport from a shared registration
-  function.
+  transport; build a fresh instance per transport from `createMcpServer`.
 - Describe tool inputs with `JsonSchema.object(properties: ..., required: ...)`.
   The SDK validates arguments before the callback runs, so the callback may
-  cast declared fields (`args['a'] as num`). Still validate business rules in
-  the callback.
-- Tool callbacks have the signature `(Map<String, dynamic> args,
-  RequestHandlerExtra extra)` and return `CallToolResult`. Return
-  `CallToolResult(isError: true, content: [...])` for expected domain failures
-  (not found, bad input, upstream API errors) so the model can recover. Throw
-  `McpError(ErrorCode.x.value, message)` only for protocol-level failures.
-- For typed output, pass `outputSchema:` and return
+  cast declared fields (`args['a'] as num`). Still validate business rules.
+- Tool callbacks take `(Map<String, dynamic> args, RequestHandlerExtra extra)`
+  and return `CallToolResult`. Return `CallToolResult(isError: true, ...)` for
+  expected domain failures (not found, bad input, upstream API errors) so the
+  model can recover. Throw `McpError(ErrorCode.x.value, message)` only for
+  protocol-level failures.
+- For typed output, declare `outputSchema` and return
   `CallToolResult.fromStructuredContent({...})`; it also fills `content` with
   the serialized JSON for clients that ignore structured content.
 - Set `ToolAnnotations(readOnlyHint: true)`, `destructiveHint`,
@@ -49,9 +81,8 @@ speaks MCP 2026-07-28 and falls back to initialization-era versions (MCP
   for fixed URIs; `registerResourceTemplate(name,
   ResourceTemplateRegistration('scheme://{var}', listCallback: null), ...)` for
   URI families. Return contents whose `uri` is the concrete requested URI.
-  For an unknown concrete URI, throw `McpError` with `invalidParams` for MCP
-  2026-07-28 requests and `resourceNotFound` for legacy ones (see the
-  template example).
+  For an unknown URI, throw `McpError` with `invalidParams` for MCP 2026-07-28
+  requests and `resourceNotFound` for legacy ones.
 - Prompts: `registerPrompt(name, argsSchema: {...}, callback: ...)`. The
   prompt callback's `args` and `extra` are nullable.
 - A callback that must ask the client for more input mid-call (MCP 2026-07-28
@@ -63,75 +94,176 @@ speaks MCP 2026-07-28 and falls back to initialization-era versions (MCP
 - Each incoming stdio message is limited to 10 MiB by default; raise it with
   `StdioServerTransport(maxIncomingMessageBytes: ...)` only when needed, and
   keep it finite.
-- Test servers in-process with `IOStreamTransport` pairs instead of spawning
-  processes (see the last example).
+- Test through a real client over an in-process `IOStreamTransport` pair with
+  fake or in-memory services. Check a running server by hand with
+  `mcp_dart inspect` (the CLI's `mcp_dart skills install` adds a debugging
+  workflow skill for its inspect and trace commands).
 
 ## Examples
 
-A complete stdio server with a tool, a structured-output tool, a resource, a
-resource template and a prompt:
+A complete server in the layout above. Each block is one file, named by its
+first line; `my_server` is the package name.
 
 ```dart
-import 'dart:io';
+// file: lib/src/note_repository.dart
+/// Thrown when a note violates a business rule.
+class NoteRejected implements Exception {
+  NoteRejected(this.message);
 
+  final String message;
+}
+
+/// Domain service; it knows nothing about MCP.
+class NoteRepository {
+  final Map<String, String> _notes = {};
+
+  Iterable<String> get ids => _notes.keys;
+
+  String? read(String id) => _notes[id];
+
+  void save(String id, String text) {
+    if (!RegExp(r'^[a-z0-9-]+$').hasMatch(id)) {
+      throw NoteRejected('id must be lowercase letters, digits or hyphens.');
+    }
+    _notes[id] = text;
+  }
+}
+```
+
+```dart
+// file: lib/mcp/tools/base_tool.dart
 import 'package:mcp_dart/mcp_dart.dart';
 
-McpServer buildServer() {
-  final server = McpServer(
-    const Implementation(name: 'notes-server', version: '1.0.0'),
-    options: const McpServerOptions(
-      instructions: 'Stores short notes. Use add_note, then read notes://.',
-    ),
-  );
-  final notes = <String, String>{};
+abstract class BaseTool {
+  String get name;
+  String get description;
+  ToolInputSchema get inputSchema;
+  ToolOutputSchema? get outputSchema => null;
+  ToolAnnotations? get annotations => null;
 
-  server.registerTool(
-    'add_note',
-    description: 'Store a note under an id.',
-    inputSchema: JsonSchema.object(
-      properties: {
-        'id': JsonSchema.string(description: 'Lowercase note id'),
-        'text': JsonSchema.string(description: 'Note body'),
-      },
-      required: ['id', 'text'],
-    ),
-    annotations: const ToolAnnotations(idempotentHint: true),
-    callback: (args, extra) async {
-      final id = args['id'] as String;
-      if (id.isEmpty) {
-        return const CallToolResult(
-          isError: true,
-          content: [TextContent(text: 'id must not be empty.')],
-        );
-      }
-      notes[id] = args['text'] as String;
-      return CallToolResult(content: [TextContent(text: 'Saved $id.')]);
-    },
+  Future<CallToolResult> execute(
+    Map<String, dynamic> args,
+    RequestHandlerExtra extra,
   );
+}
 
-  server.registerTool(
-    'count_notes',
-    description: 'Return how many notes are stored.',
-    inputSchema: JsonSchema.object(properties: {}),
-    outputSchema: JsonSchema.object(
-      properties: {'count': JsonSchema.integer()},
-      required: ['count'],
-    ),
-    annotations: const ToolAnnotations(readOnlyHint: true),
-    callback: (args, extra) async =>
-        CallToolResult.fromStructuredContent({'count': notes.length}),
-  );
+extension ToolRegistration on McpServer {
+  void registerBaseTool(BaseTool tool) {
+    registerTool(
+      tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      outputSchema: tool.outputSchema,
+      annotations: tool.annotations,
+      callback: tool.execute,
+    );
+  }
+}
+```
 
+```dart
+// file: lib/mcp/tools/add_note_tool.dart
+import 'package:mcp_dart/mcp_dart.dart';
+import 'package:my_server/mcp/tools/base_tool.dart';
+import 'package:my_server/src/note_repository.dart';
+
+class AddNoteTool extends BaseTool {
+  AddNoteTool(this._notes);
+
+  final NoteRepository _notes;
+
+  @override
+  String get name => 'add_note';
+
+  @override
+  String get description => 'Store a note under an id.';
+
+  @override
+  ToolInputSchema get inputSchema => JsonSchema.object(
+        properties: {
+          'id': JsonSchema.string(description: 'Lowercase note id'),
+          'text': JsonSchema.string(description: 'Note body'),
+        },
+        required: ['id', 'text'],
+      );
+
+  @override
+  ToolAnnotations get annotations =>
+      const ToolAnnotations(idempotentHint: true);
+
+  @override
+  Future<CallToolResult> execute(
+    Map<String, dynamic> args,
+    RequestHandlerExtra extra,
+  ) async {
+    final id = args['id'] as String;
+    try {
+      _notes.save(id, args['text'] as String);
+    } on NoteRejected catch (error) {
+      return CallToolResult(
+        isError: true,
+        content: [TextContent(text: error.message)],
+      );
+    }
+    return CallToolResult(content: [TextContent(text: 'Saved $id.')]);
+  }
+}
+```
+
+```dart
+// file: lib/mcp/tools/count_notes_tool.dart
+import 'package:mcp_dart/mcp_dart.dart';
+import 'package:my_server/mcp/tools/base_tool.dart';
+import 'package:my_server/src/note_repository.dart';
+
+class CountNotesTool extends BaseTool {
+  CountNotesTool(this._notes);
+
+  final NoteRepository _notes;
+
+  @override
+  String get name => 'count_notes';
+
+  @override
+  String get description => 'Return how many notes are stored.';
+
+  @override
+  ToolInputSchema get inputSchema => JsonSchema.object(properties: {});
+
+  @override
+  ToolOutputSchema get outputSchema => JsonSchema.object(
+        properties: {'count': JsonSchema.integer()},
+        required: ['count'],
+      );
+
+  @override
+  ToolAnnotations get annotations => const ToolAnnotations(readOnlyHint: true);
+
+  @override
+  Future<CallToolResult> execute(
+    Map<String, dynamic> args,
+    RequestHandlerExtra extra,
+  ) async =>
+      CallToolResult.fromStructuredContent({'count': _notes.ids.length});
+}
+```
+
+```dart
+// file: lib/mcp/resources/note_resources.dart
+import 'package:mcp_dart/mcp_dart.dart';
+import 'package:my_server/src/note_repository.dart';
+
+void registerNoteResources(McpServer server, NoteRepository notes) {
   server.registerResource(
     'Note index',
     'notes://index',
     (description: 'All note ids', mimeType: 'text/plain'),
-    (uri, extra) async => ReadResourceResult(
+    (uri, extra) => ReadResourceResult(
       contents: [
         TextResourceContents(
           uri: uri.toString(),
           mimeType: 'text/plain',
-          text: notes.keys.join('\n'),
+          text: notes.ids.join('\n'),
         ),
       ],
     ),
@@ -141,9 +273,9 @@ McpServer buildServer() {
     'Note',
     ResourceTemplateRegistration('notes://{id}', listCallback: null),
     (description: 'One note by id', mimeType: 'text/plain'),
-    (uri, variables, extra) async {
+    (uri, variables, extra) {
       final id = variables['id'];
-      final text = id is String ? notes[id] : null;
+      final text = id is String ? notes.read(id) : null;
       if (text == null) {
         final version = extra.protocolVersion;
         throw McpError(
@@ -165,35 +297,157 @@ McpServer buildServer() {
       );
     },
   );
+}
+```
 
+```dart
+// file: lib/mcp/prompts/note_prompts.dart
+import 'package:mcp_dart/mcp_dart.dart';
+import 'package:my_server/src/note_repository.dart';
+
+void registerNotePrompts(McpServer server, NoteRepository notes) {
   server.registerPrompt(
     'summarize_note',
     description: 'Ask the model to summarize a note.',
     argsSchema: const {
       'id': PromptArgumentDefinition(description: 'Note id', required: true),
     },
-    callback: (args, extra) async {
+    callback: (args, extra) {
       final id = args?['id'] as String? ?? '';
       return GetPromptResult(
         messages: [
           PromptMessage(
             role: PromptMessageRole.user,
             content: TextContent(
-              text: 'Summarize this note:\n${notes[id] ?? '(missing)'}',
+              text: 'Summarize this note:\n${notes.read(id) ?? '(missing)'}',
             ),
           ),
         ],
       );
     },
   );
+}
+```
 
+```dart
+// file: lib/mcp/mcp.dart
+import 'package:mcp_dart/mcp_dart.dart';
+import 'package:my_server/mcp/prompts/note_prompts.dart';
+import 'package:my_server/mcp/resources/note_resources.dart';
+import 'package:my_server/mcp/tools/add_note_tool.dart';
+import 'package:my_server/mcp/tools/base_tool.dart';
+import 'package:my_server/mcp/tools/count_notes_tool.dart';
+import 'package:my_server/src/note_repository.dart';
+
+List<BaseTool> createAllTools(NoteRepository notes) => [
+      AddNoteTool(notes),
+      CountNotesTool(notes),
+    ];
+
+McpServer createMcpServer(NoteRepository notes) {
+  final server = McpServer(
+    const Implementation(name: 'my_server', version: '1.0.0'),
+    options: const McpServerOptions(
+      instructions: 'Stores short notes. Use add_note, then read notes://.',
+    ),
+  );
+  for (final tool in createAllTools(notes)) {
+    server.registerBaseTool(tool);
+  }
+  registerNoteResources(server, notes);
+  registerNotePrompts(server, notes);
   return server;
 }
+```
 
-Future<void> main() async {
-  final server = buildServer();
-  await server.connect(StdioServerTransport());
-  stderr.writeln('notes-server ready on stdio');
+```dart
+// file: bin/server.dart
+import 'dart:io';
+
+import 'package:mcp_dart/mcp_dart.dart';
+import 'package:my_server/mcp/mcp.dart';
+import 'package:my_server/src/note_repository.dart';
+
+Future<void> main(List<String> args) async {
+  final notes = NoteRepository();
+
+  if (!args.contains('--http')) {
+    await createMcpServer(notes).connect(StdioServerTransport());
+    stderr.writeln('my_server ready on stdio');
+    return;
+  }
+
+  final server = StreamableMcpServer(
+    serverFactory: (sessionId) => createMcpServer(notes),
+    host: '127.0.0.1',
+    port: 3000,
+  );
+  await server.start();
+  stderr.writeln('my_server listening on http://127.0.0.1:3000/mcp');
+  await ProcessSignal.sigint.watch().first;
+  await server.stop();
+}
+```
+
+```dart
+// file: test/add_note_tool_test.dart
+import 'dart:async';
+
+import 'package:mcp_dart/mcp_dart.dart';
+import 'package:my_server/mcp/mcp.dart';
+import 'package:my_server/src/note_repository.dart';
+import 'package:test/test.dart';
+
+void main() {
+  late NoteRepository notes;
+  late McpServer server;
+  late McpClient client;
+  late List<StreamController<List<int>>> pipes;
+
+  setUp(() async {
+    notes = NoteRepository();
+    server = createMcpServer(notes);
+    final toServer = StreamController<List<int>>();
+    final toClient = StreamController<List<int>>();
+    pipes = [toServer, toClient];
+    await server.connect(
+      IOStreamTransport(stream: toServer.stream, sink: toClient.sink),
+    );
+    client = McpClient(const Implementation(name: 'test', version: '1.0.0'));
+    await client.connect(
+      IOStreamTransport(stream: toClient.stream, sink: toServer.sink),
+    );
+  });
+
+  tearDown(() async {
+    await client.close();
+    await server.close();
+    for (final pipe in pipes) {
+      await pipe.close();
+    }
+  });
+
+  test('add_note stores the note', () async {
+    final result = await client.callTool(
+      const CallToolRequest(
+        name: 'add_note',
+        arguments: {'id': 'todo', 'text': 'Ship it'},
+      ),
+    );
+    expect(result.isError, isFalse);
+    expect(notes.read('todo'), 'Ship it');
+  });
+
+  test('add_note returns rejected input as a tool error', () async {
+    final result = await client.callTool(
+      const CallToolRequest(
+        name: 'add_note',
+        arguments: {'id': 'Bad Id', 'text': 'x'},
+      ),
+    );
+    expect(result.isError, isTrue);
+    expect(notes.ids, isEmpty);
+  });
 }
 ```
 
@@ -202,94 +456,26 @@ A cancellable tool that reports progress:
 ```dart
 import 'package:mcp_dart/mcp_dart.dart';
 
-void registerExport(McpServer server) {
-  server.registerTool(
-    'export_rows',
-    description: 'Export rows in batches.',
-    inputSchema: JsonSchema.object(
-      properties: {
-        'rows': JsonSchema.integer(minimum: 1, maximum: 10000),
-      },
-      required: ['rows'],
-    ),
-    callback: (args, extra) async {
-      final rows = args['rows'] as int;
-      for (var done = 0; done < rows; done += 100) {
-        if (extra.signal.aborted) {
-          return const CallToolResult(
-            isError: true,
-            content: [TextContent(text: 'Export cancelled.')],
-          );
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-        await extra.sendProgress(
-          done.toDouble(),
-          total: rows.toDouble(),
-          message: 'Exported $done of $rows rows',
-        );
-      }
-      return CallToolResult(
-        content: [TextContent(text: 'Exported $rows rows.')],
+Future<CallToolResult> exportRows(
+  Map<String, dynamic> args,
+  RequestHandlerExtra extra,
+) async {
+  final rows = args['rows'] as int;
+  for (var done = 0; done < rows; done += 100) {
+    if (extra.signal.aborted) {
+      return const CallToolResult(
+        isError: true,
+        content: [TextContent(text: 'Export cancelled.')],
       );
-    },
-  );
-}
-```
-
-Test a server in-process with a connected client:
-
-```dart
-import 'dart:async';
-
-import 'package:mcp_dart/mcp_dart.dart';
-
-Future<void> main() async {
-  final clientToServer = StreamController<List<int>>();
-  final serverToClient = StreamController<List<int>>();
-
-  final server = McpServer(
-    const Implementation(name: 'test-server', version: '1.0.0'),
-  );
-  server.registerTool(
-    'add',
-    inputSchema: JsonSchema.object(
-      properties: {'a': JsonSchema.number(), 'b': JsonSchema.number()},
-      required: ['a', 'b'],
-    ),
-    callback: (args, extra) async => CallToolResult(
-      content: [
-        TextContent(text: '${(args['a'] as num) + (args['b'] as num)}'),
-      ],
-    ),
-  );
-  await server.connect(
-    IOStreamTransport(
-      stream: clientToServer.stream,
-      sink: serverToClient.sink,
-    ),
-  );
-
-  final client = McpClient(
-    const Implementation(name: 'test-client', version: '1.0.0'),
-  );
-  try {
-    await client.connect(
-      IOStreamTransport(
-        stream: serverToClient.stream,
-        sink: clientToServer.sink,
-      ),
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await extra.sendProgress(
+      done.toDouble(),
+      total: rows.toDouble(),
+      message: 'Exported $done of $rows rows',
     );
-    final result = await client.callTool(
-      const CallToolRequest(name: 'add', arguments: {'a': 2, 'b': 3}),
-    );
-    final first = result.content.first;
-    print(first is TextContent ? first.text : first.toJson());
-  } finally {
-    await client.close();
-    await server.close();
-    await clientToServer.close();
-    await serverToClient.close();
   }
+  return CallToolResult(content: [TextContent(text: 'Exported $rows rows.')]);
 }
 ```
 
@@ -298,4 +484,5 @@ Future<void> main() async {
 - Server guide: https://github.com/leehack/mcp_dart/blob/main/doc/server-guide.md
 - Tools, schemas, errors and progress: https://github.com/leehack/mcp_dart/blob/main/doc/tools.md
 - MCP 2026-07-28 APIs (`registerStateless*`, tasks): https://github.com/leehack/mcp_dart/blob/main/doc/mcp-2026-07-28.md
+- CLI (`create`, `inspect`, `skills install`): https://github.com/leehack/mcp_dart/tree/main/packages/mcp_dart_cli
 - Remote HTTP deployment: the `mcp-dart-streamable-http` skill.

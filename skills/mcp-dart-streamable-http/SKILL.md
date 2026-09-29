@@ -20,8 +20,9 @@ need `dart:io`; the client transport also runs on the web.
 ## Guidelines
 
 - `serverFactory` runs once per stateless MCP 2026-07-28 request and once per
-  legacy session. Register tools inside it with a shared function, and keep
-  application state (databases, caches) outside the factory.
+  legacy session. Return `createMcpServer(services)` from it (see the
+  `mcp-dart-server` project structure) and build application state
+  (databases, caches, clients) once, outside the factory.
 - If you change `protocol`, pass the same `McpProtocol` to
   `StreamableMcpServer(protocol: ...)` and to the factory's
   `McpServerOptions(protocol: ...)`.
