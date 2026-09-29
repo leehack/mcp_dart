@@ -75,6 +75,17 @@ default compatibility policy.
 The SDK and CLI are versioned independently. The stable CLI's `^2.4.2`
 constraint accepts SDK versions from 2.4.2 up to, but not including, 3.0.0.
 
+### AI agent skills
+
+`mcp_dart` ships [agent skills](https://dart.dev/tools/pub/package-skills) for
+building servers, building clients, and serving or connecting over Streamable
+HTTP. Install them into your coding agent's skills directory from your app's
+root:
+
+```bash
+dart run skills@ get
+```
+
 For direct SDK integration, start with the
 [getting-started guide](https://github.com/leehack/mcp_dart/blob/main/doc/getting-started.md).
 The CLI below is optional and provides scaffolding, inspection, and conformance

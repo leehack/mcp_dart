@@ -654,6 +654,7 @@ class ReleaseMetadataValidator {
         })
         ..addAll(_markdownFilesUnder('doc'))
         ..addAll(_markdownFilesUnder('example'))
+        ..addAll(_markdownFilesUnder('skills'))
         ..addAll(_dartFilesUnder('lib'));
     } else {
       paths

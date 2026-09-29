@@ -44,6 +44,11 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
       'example/README.md',
       '[Docs](https://github.com/leehack/mcp_dart/tree/main/doc)\n',
     );
+    _write(
+      root,
+      'skills/mcp-dart-server/SKILL.md',
+      '- Guide: https://github.com/leehack/mcp_dart/blob/main/doc/guide.md\n',
+    );
 
     final manager = ReleaseLinkManager(
       packageRoot: root,
@@ -63,6 +68,7 @@ documentation: https://github.com/leehack/mcp_dart/tree/main/doc
         'example/README.md',
         'llms.txt',
         'pubspec.yaml',
+        'skills/mcp-dart-server/SKILL.md',
       ]),
     );
     expect(

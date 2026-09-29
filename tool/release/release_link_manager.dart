@@ -182,7 +182,7 @@ class ReleaseLinkManager {
       }
       files.add(file);
     }
-    for (final relativeDirectory in const ['doc', 'example']) {
+    for (final relativeDirectory in const ['doc', 'example', 'skills']) {
       final directory = Directory(_path(relativeDirectory));
       if (!directory.existsSync()) {
         continue;

@@ -1,3 +1,11 @@
+## Unreleased
+
+### Added
+
+- Shipped agent skills for building MCP servers, building clients, and
+  Streamable HTTP deployment and authentication; install them with
+  `dart run skills@ get`.
+
 ## 2.4.2
 
 `mcp_dart 2.4.2` prevents unbounded buffering of incoming stdio and IO stream

@@ -90,6 +90,9 @@ in focused docs and runbooks.
 
 - Update user-facing documentation and migration guidance in the same PR as a
   public API, behavior, or release-process change.
+- `skills/` is published to consumers' coding agents: a public API or behavior
+  change updates the affected `SKILL.md` in the same PR
+  (`test/tool/package_skills_test.dart` analyzes its examples).
 - Keep changelog entries concise and user-facing. Put implementation details,
   validation logs, and maintainer notes in the PR or focused docs.
 - `main` is the only release source. Checked-in release-facing links remain on
