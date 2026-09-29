@@ -638,8 +638,8 @@ for (final suggestion in result.completion.values) {
 // Testing tools with stream transport
 test('tool execution', () async {
   // Setup streams
-  final s2c = StreamController<String>();
-  final c2s = StreamController<String>();
+  final s2c = StreamController<List<int>>();
+  final c2s = StreamController<List<int>>();
 
   // Create server
   final server = McpServer(

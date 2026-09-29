@@ -90,7 +90,16 @@ void main() async {
   );
 
   // Register capabilities
-  server.registerTool('example', ...);
+  server.registerTool(
+    'echo',
+    inputSchema: JsonSchema.object(
+      properties: {'message': JsonSchema.string()},
+      required: ['message'],
+    ),
+    callback: (args, extra) async => CallToolResult(
+      content: [TextContent(text: args['message'] as String)],
+    ),
+  );
 
   // Connect stdio transport
   final transport = StdioServerTransport();
@@ -915,14 +924,23 @@ import 'package:mcp_dart/mcp_dart.dart';
 
 void main() async {
   // Create bidirectional streams
-  final serverToClient = StreamController<String>();
-  final clientToServer = StreamController<String>();
+  final serverToClient = StreamController<List<int>>();
+  final clientToServer = StreamController<List<int>>();
 
   // Server setup
   final server = McpServer(
     Implementation(name: 'server', version: '1.0.0'),
   );
-  server.registerTool('example', ...);
+  server.registerTool(
+    'echo',
+    inputSchema: JsonSchema.object(
+      properties: {'message': JsonSchema.string()},
+      required: ['message'],
+    ),
+    callback: (args, extra) async => CallToolResult(
+      content: [TextContent(text: args['message'] as String)],
+    ),
+  );
 
   final serverTransport = IOStreamTransport(
     stream: clientToServer.stream,
@@ -944,10 +962,11 @@ void main() async {
   // Use client and server
   final result = await client.callTool(
     CallToolRequest(
-      name: 'example',
-      arguments: {},
+      name: 'echo',
+      arguments: {'message': 'hello'},
     ),
   );
+  print((result.content.first as TextContent).text);
 
   // Cleanup
   await client.close();
@@ -965,8 +984,8 @@ import 'package:test/test.dart';
 void main() {
   test('tool execution', () async {
     // Setup streams
-    final s2c = StreamController<String>();
-    final c2s = StreamController<String>();
+    final s2c = StreamController<List<int>>();
+    final c2s = StreamController<List<int>>();
 
     // Create server
     final server = McpServer(
