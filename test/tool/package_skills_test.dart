@@ -37,7 +37,7 @@ void main() {
       late String markdown;
 
       setUpAll(() {
-        markdown = File(p.join(skill.path, 'SKILL.md')).readAsStringSync();
+        markdown = _readSkill(skill);
       });
 
       test('uses the package-name prefix and a spec-valid name', () {
@@ -81,9 +81,7 @@ void main() {
 
       int count = 0;
       for (final Directory skill in skills) {
-        final String markdown = File(
-          p.join(skill.path, 'SKILL.md'),
-        ).readAsStringSync();
+        final String markdown = _readSkill(skill);
         final String prefix = p.basename(skill.path).replaceAll('-', '_');
         int index = 0;
         for (final RegExpMatch block in _dartBlock.allMatches(markdown)) {
@@ -104,6 +102,11 @@ void main() {
     timeout: const Timeout(Duration(minutes: 3)),
   );
 }
+
+// Windows checkouts may convert line endings to CRLF.
+String _readSkill(Directory skill) => File(
+      p.join(skill.path, 'SKILL.md'),
+    ).readAsStringSync().replaceAll('\r\n', '\n');
 
 /// Reads top-level `key: value` and folded `key: >-` scalars, which is all
 /// the skill frontmatter uses, without adding a YAML dependency.
