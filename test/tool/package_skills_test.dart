@@ -130,7 +130,8 @@ Future<void> _preparePackage(Directory project) async {
   File(p.join(project.path, 'pubspec.yaml')).writeAsStringSync(
     _exampleProjectPubspec.replaceFirst(
       '{{root}}',
-      Directory.current.absolute.path,
+      // Pub expects POSIX-style separators even on Windows.
+      Directory.current.absolute.path.replaceAll(r'\', '/'),
     ),
   );
   File(
