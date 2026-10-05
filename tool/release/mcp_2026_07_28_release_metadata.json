@@ -29,7 +29,7 @@
     "finalReleaseReviewed": false
   },
   "publishedInteropFixtures": {
-    "typescript": "2.0.0",
+    "typescript": "2.2.0",
     "pythonMcp": "2.2.0",
     "pythonMcpTypes": "2.2.0",
     "finalReleaseReviewed": true

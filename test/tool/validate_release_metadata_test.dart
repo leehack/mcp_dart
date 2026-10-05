@@ -632,6 +632,37 @@ void main() {
     );
   });
 
+  for (final packages in const [
+    ['@modelcontextprotocol/client'],
+    ['@modelcontextprotocol/server'],
+    ['@modelcontextprotocol/client', '@modelcontextprotocol/server'],
+  ]) {
+    test('rejects TypeScript pin drift for ${packages.join(' and ')}', () {
+      final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
+      addTearDown(() => fixture.deleteSync(recursive: true));
+      final packageFile = File(
+        '${fixture.path}/test/interop/ts_2026_07_28/package.json',
+      );
+      final package =
+          jsonDecode(packageFile.readAsStringSync()) as Map<String, Object?>;
+      final dependencies = package['dependencies'] as Map<String, Object?>;
+      for (final packageName in packages) {
+        dependencies[packageName] = '0.0.0';
+      }
+      packageFile.writeAsStringSync(jsonEncode(package));
+
+      final result = ReleaseMetadataValidator(fixture).validate(
+        package: ReleasePackage.sdk,
+        tag: 'v2.3.0',
+      );
+
+      expect(
+        result.errors,
+        contains(contains('Published TypeScript interop dependencies')),
+      );
+    });
+  }
+
   test('rejects commented published Python dependency decoys', () {
     final fixture = _stableFixture(repoRoot, finalInputsReviewed: true);
     addTearDown(() => fixture.deleteSync(recursive: true));

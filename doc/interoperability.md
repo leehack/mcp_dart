@@ -28,8 +28,8 @@ For MCP 2026-07-28 coverage, see the
 | Dart SDK ↔ TypeScript SDK 1.30.0 | Legacy HTTP+SSE | MCP 2025-11-25 | [`test/interop/dart_client_with_ts_server_test.dart`](../test/interop/dart_client_with_ts_server_test.dart), [`test/interop/ts/src/server.ts`](../test/interop/ts/src/server.ts), [`test/interop/ts/src/legacy_sse_client.ts`](../test/interop/ts/src/legacy_sse_client.ts) | Verified | The deprecated official TypeScript `SSEServerTransport` and `SSEClientTransport` each complete initialization, tool listing, and a tool call with the corresponding Dart peer over real loopback HTTP+SSE. |
 | TypeScript SDK client -> Dart server | stdio | MCP 2025-11-25 | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Runs the compiled TypeScript client fixture against a Dart server process and checks that an official TS client can list tools immediately after the lifecycle handshake. |
 | TypeScript SDK client -> Dart server | Streamable HTTP | MCP 2025-11-25 | [`test/interop/ts_client_with_dart_server_test.dart`](../test/interop/ts_client_with_dart_server_test.dart), [`test/interop/test_dart_server.dart`](../test/interop/test_dart_server.dart) | Verified | Includes official TS Streamable HTTP client lifecycle coverage, pre-`initialized` operation rejection, GET SSE streams, and `Last-Event-ID` replay behavior. |
-| TypeScript SDK client -> Dart server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/ts_2026_07_28/`](../test/interop/ts_2026_07_28/), [`tool/testing/run_ts_2026_07_28_interop.dart`](../tool/testing/run_ts_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Published `@modelcontextprotocol/client@2.0.0` negotiates the post-#3002 wire with a spec-correct Dart server and covers discovery, routing headers, tool calls, multi-round input, progress, subscriptions, and cancellation. |
-| Dart MCP 2026-07-28 client -> TypeScript SDK server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/ts_2026_07_28/src/server.mjs`](../test/interop/ts_2026_07_28/src/server.mjs), [`tool/testing/run_ts_2026_07_28_interop.dart`](../tool/testing/run_ts_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Uses published `@modelcontextprotocol/server@2.0.0` through its `createMcpHandler` entry; covers `server/discover`, `tools/list`, `tools/call`, one-time `HeaderMismatch` metadata refresh and retry, MCP 2026-07-28 `input_required`, request-stream cancellation, and post-cancellation recovery. |
+| TypeScript SDK client -> Dart server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/ts_2026_07_28/`](../test/interop/ts_2026_07_28/), [`tool/testing/run_ts_2026_07_28_interop.dart`](../tool/testing/run_ts_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Published `@modelcontextprotocol/client@2.2.0` negotiates the post-#3002 wire with a spec-correct Dart server and covers discovery, routing headers, tool calls, multi-round input, progress, subscriptions, and cancellation. |
+| Dart MCP 2026-07-28 client -> TypeScript SDK server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/ts_2026_07_28/src/server.mjs`](../test/interop/ts_2026_07_28/src/server.mjs), [`tool/testing/run_ts_2026_07_28_interop.dart`](../tool/testing/run_ts_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Uses published `@modelcontextprotocol/server@2.2.0` through its `createMcpHandler` entry; covers `server/discover`, `tools/list`, `tools/call`, one-time `HeaderMismatch` metadata refresh and retry, MCP 2026-07-28 `input_required`, request-stream cancellation, and post-cancellation recovery. |
 | Dart client -> Python MCP server | stdio | Server-dependent | [`doc/transports.md`](transports.md#connect-to-python-server) | Documented recipe | The transport can spawn Python servers over stdio; the MCP 2025-11-25 recipe remains separate from the MCP 2026-07-28 fixture. |
 | Python SDK 2.1.1 client -> Dart server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/python_2026_07_28/`](../test/interop/python_2026_07_28/), [`tool/testing/run_python_2026_07_28_interop.dart`](../tool/testing/run_python_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Published `mcp==2.1.1` negotiates the canonical post-#3002 discovery wire and covers discovery, tool listing, and tool execution. |
 | Dart MCP 2026-07-28 client -> Python SDK 2.1.1 server | Streamable HTTP | MCP 2026-07-28 | [`test/interop/python_2026_07_28/server.py`](../test/interop/python_2026_07_28/server.py), [`tool/testing/run_python_2026_07_28_interop.dart`](../tool/testing/run_python_2026_07_28_interop.dart), [`interop_2026_07_28.yml`](../.github/workflows/interop_2026_07_28.yml) | Verified | Uses the official Python SDK `mcp==2.1.1` server and covers discovery, protocol selection, `tools/list`, and `tools/call`. |
@@ -55,7 +55,7 @@ dart test --tags interop
 
 If the compiled fixtures are missing, local test runs skip the interop groups; CI should fail when required fixtures are unavailable.
 
-The TypeScript MCP 2026-07-28 fixture uses the published TypeScript SDK 2.0.0
+The TypeScript MCP 2026-07-28 fixture uses the published TypeScript SDK 2.2.0
 packages:
 
 ```bash
@@ -68,7 +68,7 @@ dart run tool/testing/run_ts_2026_07_28_interop.dart \
 ```
 
 That direction verifies the Dart client -> published TypeScript server path.
-The published 2.0.0 client includes the post-#3002 identity shape, so CI
+The published 2.2.0 client includes the post-#3002 identity shape, so CI
 also requires the reverse direction to pass:
 
 ```bash
@@ -162,5 +162,5 @@ When adding a new interoperability claim:
 - A broader compatibility table once additional SDKs expose published MCP
   2025-11-25 fixtures.
 - Request-scoped cancellation against the Python SDK and additional peer
-  implementations. Published TypeScript SDK 2.0.0 is verified in both
+  implementations. Published TypeScript SDK 2.2.0 is verified in both
   directions.

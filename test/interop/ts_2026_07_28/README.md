@@ -1,12 +1,12 @@
 # MCP 2026-07-28 TypeScript SDK Interop
 
 This fixture is a smoke test for the MCP 2026-07-28 path against the published
-official TypeScript SDK 2.0.0 packages.
+official TypeScript SDK 2.2.0 packages.
 
 It is intentionally separate from `test/interop/ts`, which tracks the published
 stable TypeScript SDK and MCP 2025-11-25 behavior. The fixture pins published
-`@modelcontextprotocol/client@2.0.0` and
-`@modelcontextprotocol/server@2.0.0` packages. This release includes the
+`@modelcontextprotocol/client@2.2.0` and
+`@modelcontextprotocol/server@2.2.0` packages. This release includes the
 post-spec-PR-#3002 identity shape, so both directions are required to pass.
 
 ## Run
@@ -26,7 +26,7 @@ dart run tool/testing/run_ts_2026_07_28_interop.dart \
 The reverse path first probes
 `test/conformance/mcp_2026_07_28_server.dart` directly and requires
 `server/discover` to advertise `2026-07-28`, omit body `serverInfo`, and expose
-identity in `_meta["io.modelcontextprotocol/serverInfo"]`. The published 2.0.0
+identity in `_meta["io.modelcontextprotocol/serverInfo"]`. The published 2.2.0
 client must then complete the full scenario. `src/client.mjs` asserts:
 
 - TypeScript client negotiation selects MCP 2026-07-28.
