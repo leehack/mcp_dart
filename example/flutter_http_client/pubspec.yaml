@@ -33,7 +33,7 @@ dependencies:
 
   # Flutter's web icon tree shaker detects the Cupertino font through the
   # framework even though this example primarily uses Material widgets.
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
 
   # MCP Dart package for Model Context Protocol
   mcp_dart:
