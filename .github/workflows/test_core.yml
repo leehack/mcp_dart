@@ -111,6 +111,7 @@ jobs:
         version:
           - 2.2.2
           - 2.3.0
+          - 2.4.2
 
     steps:
       - name: Checkout code

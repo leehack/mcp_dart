@@ -15,12 +15,12 @@ extensions, host UI behavior, an authorization-server implementation, JSON
 Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
-> This release is `mcp_dart 2.4.2`. The separately versioned stable CLI remains
+> This release is `mcp_dart 2.4.3`. The separately versioned stable CLI remains
 > `mcp_dart_cli 0.2.1`, which requires `mcp_dart ^2.4.2`.
 > Current source passes every scored requirement in the official alpha.11 MCP
 > `2025-11-25` and `2026-07-28` client and server sets, including all 25
 > required 2026 authorization scenarios, plus bidirectional published
-> TypeScript SDK 2.2.0 and Python SDK 2.1.1 interoperability.
+> TypeScript SDK 2.2.0 and Python SDK 2.3.0 interoperability.
 
 ## SDK Tier 1 target
 
@@ -40,7 +40,7 @@ The public maintenance contract is documented in the
 
 | Package | Minimum Dart SDK |
 | --- | --- |
-| `mcp_dart 2.4.2` | 3.4 |
+| `mcp_dart 2.4.3` | 3.4 |
 | `mcp_dart_cli 0.2.1` | 3.12 |
 
 SDK-only generated projects retain the SDK's Dart 3.4 minimum. CLI projects
@@ -65,7 +65,7 @@ important:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.4.2
+  mcp_dart: ^2.4.3
 ```
 
 The snippets below use the current stable SDK line. Package versions
@@ -107,7 +107,7 @@ commands.
   core conformance claim.
 - Automated MCP 2025-11-25 and MCP 2026-07-28 conformance, bidirectional
   published TypeScript SDK 2.2.0 interoperability, bidirectional Python SDK
-  2.1.1 interoperability, real-browser transport tests, a real Flutter Web
+  2.3.0 interoperability, real-browser transport tests, a real Flutter Web
   service integration in Chrome, deterministic widget tests, and an
   independent pinned JSON Schema Test Suite gate.
 - `mcp_dart 2.4.2` bounds incoming stdio and IO stream messages to 10 MiB by
@@ -117,7 +117,7 @@ commands.
 - Hardened Streamable HTTP access and JSON-RPC error diagnostics, plus the
   deprecated, opt-in legacy HTTP+SSE client with
   same-origin routing and bidirectional interoperability against official
-  TypeScript SDK 1.30.0 and Python SDK 2.1.1 peers.
+  TypeScript SDK 1.32.1 and Python SDK 2.3.0 peers.
 
 MCP has three roles: a host owns the user experience, a client connects that
 host to one server, and a server exposes tools, resources, and prompts. A host
@@ -253,7 +253,7 @@ surface. Re-check both packages' current releases before a production decision.
 - [Versioning policy](https://github.com/leehack/mcp_dart/blob/main/VERSIONING.md)
 - [Tier 1 roadmap](https://github.com/leehack/mcp_dart/blob/main/ROADMAP.md)
 - [SDK on pub.dev](https://pub.dev/packages/mcp_dart)
-- [2.4.2 API reference](https://pub.dev/documentation/mcp_dart/2.4.2/)
+- [2.4.3 API reference](https://pub.dev/documentation/mcp_dart/2.4.3/)
 - [Changelog](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)
 - [MCP 2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28)
 - [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25)

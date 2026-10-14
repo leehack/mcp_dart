@@ -141,8 +141,8 @@ dart run example/client_sse.dart
 - Session management
 - A real initialization, tool-list, and tool-call flow
 - Explicit Host and Origin allowlists for DNS-rebinding protection
-- Process smoke tests and bidirectional official TypeScript SDK 1.30.0 and
-  Python SDK 2.1.1 SSE interoperability tests
+- Process smoke tests and bidirectional official TypeScript SDK 1.32.1 and
+  Python SDK 2.3.0 SSE interoperability tests
 
 ### Streamable HTTP
 
