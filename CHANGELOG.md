@@ -1,10 +1,19 @@
-## Unreleased
+## 2.4.3
 
 ### Added
 
 - Shipped agent skills for building MCP servers, building clients, and
   Streamable HTTP deployment and authentication; install them with
   `dart run skills@ get`.
+
+### Fixed
+
+- Corrected IO stream transport examples to use byte streams.
+
+### Compatibility
+
+- Public APIs, protocol behavior, and the minimum Dart 3.4 requirement are
+  unchanged. The separately versioned CLI remains at 0.2.1.
 
 ## 2.4.2
 
