@@ -58,6 +58,29 @@ peers negotiate MCP 2026-07-28; older peers use initialization fallback. On
 body-only transports such as stdio, a silent discovery probe is bounded to
 five seconds.
 
+### Parallel web search and page fetching
+
+**Location**: [`example/parallel_search.dart`](../example/parallel_search.dart)
+
+Run from the repository root with Dart 3.4 or newer:
+
+```bash
+dart pub get
+dart run example/parallel_search.dart search "Dart MCP Streamable HTTP clients"
+dart run example/parallel_search.dart fetch "https://dart.dev/overview"
+```
+
+This client connects to `https://search.parallel.ai/mcp` over Streamable HTTP,
+discovers the available tools, and calls `web_search` or `web_fetch`. It prints
+the returned text, including source URLs and excerpts. No API key, OAuth setup,
+or model is needed. It uses the SDK's default protocol negotiation and closes
+the client after each command. Invalid arguments and failed calls exit nonzero.
+
+The anonymous endpoint is free for exploration and light use, with rate limits.
+See [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)
+for current limits and tool parameters. This example invokes tools directly;
+it does not run an AI agent loop.
+
 ### Stdio Server and Client
 
 **Location**: [`example/server_stdio.dart`](../example/server_stdio.dart), [`example/client_stdio.dart`](../example/client_stdio.dart)
