@@ -1,6 +1,6 @@
 {
   "sdkStableVersion": "2.4.3",
-  "cliStableVersion": "0.2.1",
+  "cliStableVersion": "0.2.2",
   "protocolVersion": "2026-07-28",
   "legacyInitializationProtocolVersion": "2025-11-25",
   "coreSpecification": {
