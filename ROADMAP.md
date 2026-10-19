@@ -10,8 +10,9 @@ through the
 
 ## Current baseline
 
-- SDK 2.4.3 release preparation adds packaged agent skills and documentation
-  fixes. Published stable releases remain `mcp_dart 2.4.2` and
+- Published SDK 2.4.3 adds packaged agent skills and documentation fixes.
+  CLI 0.2.2 release preparation adds support for `build` 5.x while retaining
+  compatibility with 4.x. The published stable CLI remains
   `mcp_dart_cli 0.2.1` until publication is verified.
 - SDK 2.4.2 fixes unbounded incoming stdio and IO stream buffering. See
   [GHSA-92g6-8c2f-55w5](https://github.com/leehack/mcp_dart/security/advisories/GHSA-92g6-8c2f-55w5)

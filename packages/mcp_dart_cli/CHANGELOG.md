@@ -1,3 +1,9 @@
+## 0.2.2
+
+- Support `build` 5.x while retaining compatibility with 4.x. The Dart 3.12
+  minimum is unchanged.
+- Require `mcp_dart ^2.4.3` for the CLI and newly generated projects.
+
 ## 0.2.1
 
 - Require `mcp_dart ^2.4.2` for the CLI and newly generated projects.
