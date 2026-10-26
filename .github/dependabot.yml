@@ -53,6 +53,11 @@ updates:
       - dependency-name: mcp
         update-types:
           - version-update:semver-major
+      # 2026.10.19 requires Python SDK 2.x; retain the 1.x-compatible helper.
+      # Remove when this legacy lane is retired or a compatible helper returns.
+      - dependency-name: mcp-server-time
+        versions:
+          - '>=2026.10.19'
 
   - package-ecosystem: pip
     directory: /test/interop/python_2026_07_28
