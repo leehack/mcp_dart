@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:mcp_dart/mcp_dart.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -205,10 +206,48 @@ void main() {
         }
 
         final root = await Directory.systemTemp.createTemp('mcp_fs_interop_');
-        final canonicalRoot = Directory(root.resolveSymbolicLinksSync());
+        final parent = Directory(root.resolveSymbolicLinksSync());
+        final canonicalRoot = await Directory(
+          p.join(parent.path, 'allowed'),
+        ).create();
+        final sibling = await Directory(
+          p.join(parent.path, 'allowed-sibling'),
+        ).create();
+        final outside = await Directory(
+          p.join(parent.path, 'outside'),
+        ).create();
         final file = File(p.join(canonicalRoot.path, 'hello.txt'));
         await file.writeAsString('hello from filesystem server\n');
         try {
+          final nested = File(
+            p.join(canonicalRoot.path, 'nested', 'child.txt'),
+          );
+          await nested.parent.create();
+          await nested.writeAsString('nested fixture');
+          final hidden = File(p.join(canonicalRoot.path, '.hidden.txt'));
+          await hidden.writeAsString('hidden fixture');
+          final excluded = File(
+            p.join(canonicalRoot.path, 'excluded', 'secret.txt'),
+          );
+          await excluded.parent.create();
+          await excluded.writeAsString('excluded fixture');
+          const outsideFileName = 'outside-secret.txt';
+          await File(
+            p.join(sibling.path, outsideFileName),
+          ).writeAsString('must remain outside the allowed root');
+          final deniedPaths = [
+            outside.path,
+            sibling.path,
+            '${canonicalRoot.path}${p.separator}..${p.separator}outside',
+          ];
+          // Windows symlinks need elevated privileges; the other path-boundary
+          // checks run on every platform.
+          if (!Platform.isWindows) {
+            final escape = Link(p.join(canonicalRoot.path, 'escape'));
+            await escape.create(sibling.path);
+            deniedPaths.add(escape.path);
+          }
+
           final result = await _runCli([
             'inspect-server',
             '--json',
@@ -249,6 +288,111 @@ void main() {
             (content.first as Map<String, dynamic>)['text'],
             contains('hello from filesystem server'),
           );
+
+          final searchArguments = <String, dynamic>{
+            'path': canonicalRoot.path,
+            'pattern': '**/*.txt',
+            'excludePatterns': ['excluded/**'],
+          };
+          final search = await _runCli([
+            'call-tool',
+            'search_files',
+            '--json',
+            '--json-args',
+            jsonEncode(searchArguments),
+            '--',
+            'node',
+            filesystemServer.path,
+            canonicalRoot.path,
+          ], workingDirectory: cliDir);
+          _expectSuccess(search);
+          final searchJson =
+              jsonDecode(search.stdout as String) as Map<String, dynamic>;
+          expect(searchJson['isError'], isNot(true));
+          expect(
+            _toolText(searchJson).split('\n'),
+            unorderedEquals([file.path, nested.path, hidden.path]),
+          );
+
+          final deniedCall = await _runCli([
+            'call-tool',
+            'search_files',
+            '--json',
+            '--json-args',
+            jsonEncode({...searchArguments, 'path': sibling.path}),
+            '--',
+            'node',
+            filesystemServer.path,
+            canonicalRoot.path,
+          ], workingDirectory: cliDir);
+          expect(deniedCall.exitCode, 70);
+          final deniedJson =
+              jsonDecode(deniedCall.stdout as String) as Map<String, dynamic>;
+          expect(deniedJson['isError'], isTrue);
+          expect(_toolText(deniedJson), contains('Access denied'));
+          expect(_toolText(deniedJson), isNot(contains(outsideFileName)));
+
+          // Reuse one public SDK connection to prove errors do not poison the
+          // session. The published peer reports these as tool errors, not
+          // JSON-RPC errors, including malformed tool arguments.
+          final client = McpClient(
+            const Implementation(name: 'filesystem-compat', version: '1.0.0'),
+            options: const McpClientOptions(protocol: McpProtocol.legacy),
+          );
+          try {
+            await client.connect(
+              StdioClientTransport(
+                StdioServerParameters(
+                  command: 'node',
+                  args: [filesystemServer.path, canonicalRoot.path],
+                  stderrMode: ProcessStartMode.normal,
+                ),
+              ),
+            );
+            for (final deniedPath in deniedPaths) {
+              final denied = await client.callTool(
+                CallToolRequest(
+                  name: 'search_files',
+                  arguments: {...searchArguments, 'path': deniedPath},
+                ),
+              );
+              expect(denied.isError, isTrue, reason: deniedPath);
+              expect(
+                _toolText(denied.toJson()),
+                contains('Access denied'),
+                reason: deniedPath,
+              );
+              expect(
+                _toolText(denied.toJson()),
+                isNot(contains(outsideFileName)),
+                reason: deniedPath,
+              );
+            }
+            final malformed = await client.callTool(
+              CallToolRequest(
+                name: 'search_files',
+                arguments: {...searchArguments, 'pattern': 42},
+              ),
+            );
+            expect(malformed.isError, isTrue);
+            expect(
+              _toolText(malformed.toJson()),
+              contains('Invalid arguments'),
+            );
+            final followUp = await client.callTool(
+              CallToolRequest(
+                name: 'search_files',
+                arguments: searchArguments,
+              ),
+            );
+            expect(followUp.isError, isFalse);
+            expect(
+              _toolText(followUp.toJson()).split('\n'),
+              unorderedEquals([file.path, nested.path, hidden.path]),
+            );
+          } finally {
+            await client.close();
+          }
         } finally {
           await root.delete(recursive: true);
         }
@@ -578,6 +722,11 @@ Future<File> _writeTypeScriptProbeConfig(
     }),
   );
   return probeConfig;
+}
+
+String _toolText(Map<String, dynamic> result) {
+  final content = result['content'] as List<dynamic>;
+  return (content.single as Map<String, dynamic>)['text'] as String;
 }
 
 Directory _findRepoRoot(Directory start) {
