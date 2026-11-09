@@ -19,6 +19,7 @@ const smokePrograms = [
   'example/mcp_apps_metadata_server.dart',
   'example/mcp_apps_helpers_server.dart',
   'packages/mcp_dart_cli/bin/mcp_dart.dart',
+  'test/client/fixtures/stdio_subscription_error_server.dart',
 ];
 
 /// Resolves an explicitly enabled, precompiled smoke program, failing closed.
