@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
 
+import '../../tool/testing/smoke_programs.dart';
+
 void main() {
   test('stdio subscription exposes a handler error through done', () async {
     await _expectSubscriptionFailure(
@@ -31,7 +33,9 @@ Future<void> _expectSubscriptionFailure({
     StdioServerParameters(
       command: Platform.resolvedExecutable,
       args: [
-        'test/client/fixtures/stdio_subscription_error_server.dart',
+        smokeProgram(
+          'test/client/fixtures/stdio_subscription_error_server.dart',
+        ),
         ...fixtureArguments,
       ],
       stderrMode: ProcessStartMode.normal,
