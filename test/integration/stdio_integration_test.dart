@@ -1,9 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
+
+import '../../tool/testing/smoke_programs.dart';
 
 void main() {
   group('stdio transport integration test', () {
@@ -13,8 +15,8 @@ void main() {
     StreamSubscription<String>? stderrSub;
 
     // Path to the example stdio server file
-    final String serverFilePath =
-        '${Directory.current.path}/example/server_stdio.dart';
+    const sourcePath = 'example/server_stdio.dart';
+    final String serverFilePath = '${Directory.current.path}/$sourcePath';
 
     setUp(() async {
       // Verify the server file exists
@@ -32,7 +34,7 @@ void main() {
       transport = StdioClientTransport(
         StdioServerParameters(
           command: Platform.resolvedExecutable,
-          args: [serverFilePath],
+          args: ['${Directory.current.path}/${smokeProgram(sourcePath)}'],
           stderrMode: ProcessStartMode.normal, // Pipe stderr for debugging
         ),
       );
