@@ -9,12 +9,16 @@ fixtures in `../ts_2026_07_28/`.
 
 The manifest pins these transitive security fixes:
 
-- `@hono/node-server 2.1.3` addresses
+- `@hono/node-server 2.1.8` addresses
   [GHSA-rmxm-3fg6-px4f](https://github.com/advisories/GHSA-rmxm-3fg6-px4f).
 - `glob 14.0.2` addresses
   [GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4).
 - `minimatch 11.0.1` addresses
   [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+
+The lockfile also resolves `hono 4.13.18` within the SDK's existing range for
+Hono security fixes, including the mount-prefix middleware bypass described in
+[GHSA-4m76-xfj5-7975](https://github.com/honojs/hono/security/advisories/GHSA-4m76-xfj5-7975).
 
 The glob and minimatch overrides cross their parents' declared major ranges.
 They were selected explicitly for this Node 24 fixture; the matching behavior,
