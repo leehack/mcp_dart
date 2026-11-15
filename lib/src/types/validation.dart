@@ -1,10 +1,18 @@
-import 'dart:convert';
+import 'dart:typed_data';
 
 import '../shared/uri_template.dart';
 
-final _base64Pattern = RegExp(
-  r'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$',
-);
+final _base64Values = _createBase64Values();
+
+Uint8List _createBase64Values() {
+  const alphabet =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  final values = Uint8List(128)..fillRange(0, 128, 0xff);
+  for (var i = 0; i < alphabet.length; i++) {
+    values[alphabet.codeUnitAt(i)] = i;
+  }
+  return values;
+}
 
 String readRequiredString(Object? value, String field) {
   if (value is String) {
@@ -56,15 +64,48 @@ void validateUriTemplateString(String value, String field) {
 }
 
 bool isBase64String(String value) {
-  if (!_base64Pattern.hasMatch(value)) {
+  if (value.length % 4 != 0) {
     return false;
   }
-  try {
-    base64.decode(value);
+  var dataEnd = value.length;
+  if (dataEnd > 0 && value.codeUnitAt(dataEnd - 1) == 0x3d) {
+    dataEnd--;
+    if (dataEnd > 0 && value.codeUnitAt(dataEnd - 1) == 0x3d) {
+      dataEnd--;
+    }
+  }
+  // Check four ASCII characters at a time. Invalid table entries are 0xff;
+  // valid sextets are below 64, so OR preserves any invalid entry.
+  var i = 0;
+  for (; i + 3 < dataEnd; i += 4) {
+    final a = value.codeUnitAt(i);
+    final b = value.codeUnitAt(i + 1);
+    final c = value.codeUnitAt(i + 2);
+    final d = value.codeUnitAt(i + 3);
+    if ((a | b | c | d) >= _base64Values.length) {
+      return false;
+    }
+    if ((_base64Values[a] |
+            _base64Values[b] |
+            _base64Values[c] |
+            _base64Values[d]) ==
+        0xff) {
+      return false;
+    }
+  }
+  for (; i < dataEnd; i++) {
+    final code = value.codeUnitAt(i);
+    if (code >= _base64Values.length || _base64Values[code] == 0xff) {
+      return false;
+    }
+  }
+  final padding = value.length - dataEnd;
+  if (padding == 0) {
     return true;
-  } on FormatException {
-    return false;
   }
+  final lastValue = _base64Values[value.codeUnitAt(dataEnd - 1)];
+  // Unused low bits must be zero: four bits for '==', two bits for '='.
+  return (lastValue & (padding == 2 ? 0x0f : 0x03)) == 0;
 }
 
 String readRequiredBase64String(Object? value, String field) {
