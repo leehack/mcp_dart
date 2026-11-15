@@ -1,4 +1,18 @@
+import 'dart:typed_data';
+
 import '../shared/uri_template.dart';
+
+final _base64Values = _createBase64Values();
+
+Uint8List _createBase64Values() {
+  const alphabet =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  final values = Uint8List(128)..fillRange(0, 128, 0xff);
+  for (var i = 0; i < alphabet.length; i++) {
+    values[alphabet.codeUnitAt(i)] = i;
+  }
+  return values;
+}
 
 String readRequiredString(Object? value, String field) {
   if (value is String) {
@@ -60,14 +74,28 @@ bool isBase64String(String value) {
       dataEnd--;
     }
   }
-  // Scan without regex backtracking, whose stack grows with large payloads.
-  for (var i = 0; i < dataEnd; i++) {
+  // Check four ASCII characters at a time. Invalid table entries are 0xff;
+  // valid sextets are below 64, so OR preserves any invalid entry.
+  var i = 0;
+  for (; i + 3 < dataEnd; i += 4) {
+    final a = value.codeUnitAt(i);
+    final b = value.codeUnitAt(i + 1);
+    final c = value.codeUnitAt(i + 2);
+    final d = value.codeUnitAt(i + 3);
+    if ((a | b | c | d) >= _base64Values.length) {
+      return false;
+    }
+    if ((_base64Values[a] |
+            _base64Values[b] |
+            _base64Values[c] |
+            _base64Values[d]) ==
+        0xff) {
+      return false;
+    }
+  }
+  for (; i < dataEnd; i++) {
     final code = value.codeUnitAt(i);
-    if (!((code >= 0x41 && code <= 0x5a) ||
-        (code >= 0x61 && code <= 0x7a) ||
-        (code >= 0x30 && code <= 0x39) ||
-        code == 0x2b ||
-        code == 0x2f)) {
+    if (code >= _base64Values.length || _base64Values[code] == 0xff) {
       return false;
     }
   }
@@ -75,17 +103,7 @@ bool isBase64String(String value) {
   if (padding == 0) {
     return true;
   }
-  final code = value.codeUnitAt(dataEnd - 1);
-  final int lastValue;
-  if (code >= 0x41 && code <= 0x5a) {
-    lastValue = code - 0x41;
-  } else if (code >= 0x61 && code <= 0x7a) {
-    lastValue = code - 0x61 + 26;
-  } else if (code >= 0x30 && code <= 0x39) {
-    lastValue = code - 0x30 + 52;
-  } else {
-    lastValue = code == 0x2b ? 62 : 63;
-  }
+  final lastValue = _base64Values[value.codeUnitAt(dataEnd - 1)];
   // Unused low bits must be zero: four bits for '==', two bits for '='.
   return (lastValue & (padding == 2 ? 0x0f : 0x03)) == 0;
 }

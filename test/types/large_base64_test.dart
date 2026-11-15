@@ -129,6 +129,25 @@ void main() {
     }
   });
 
+  test('invalid characters are rejected in each lookup block and tail', () {
+    for (final valid in ['AAAAAAAA', 'AAAAAAA=', 'AAAAAA==']) {
+      final dataEnd = valid.indexOf('=');
+      final end = dataEnd == -1 ? valid.length : dataEnd;
+      for (var i = 0; i < end; i++) {
+        for (final invalid in [
+          '!',
+          '-',
+          '_',
+          '\u0080',
+          '\uffff',
+          '\ud800',
+        ]) {
+          checkInvalid(valid.replaceRange(i, i + 1, invalid));
+        }
+      }
+    }
+  });
+
   // Decoded payload sizes straddle 4/8 MiB and collectively cover all padding
   // endings without retaining multiple large payloads at once.
   for (final size in [4 * 1024 * 1024, 8 * 1024 * 1024, 8 * 1024 * 1024 + 1]) {
