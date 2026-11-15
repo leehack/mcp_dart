@@ -1,10 +1,4 @@
-import 'dart:convert';
-
 import '../shared/uri_template.dart';
-
-final _base64Pattern = RegExp(
-  r'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$',
-);
 
 String readRequiredString(Object? value, String field) {
   if (value is String) {
@@ -56,15 +50,44 @@ void validateUriTemplateString(String value, String field) {
 }
 
 bool isBase64String(String value) {
-  if (!_base64Pattern.hasMatch(value)) {
+  if (value.length % 4 != 0) {
     return false;
   }
-  try {
-    base64.decode(value);
+  var dataEnd = value.length;
+  if (dataEnd > 0 && value.codeUnitAt(dataEnd - 1) == 0x3d) {
+    dataEnd--;
+    if (dataEnd > 0 && value.codeUnitAt(dataEnd - 1) == 0x3d) {
+      dataEnd--;
+    }
+  }
+  // Scan without regex backtracking, whose stack grows with large payloads.
+  for (var i = 0; i < dataEnd; i++) {
+    final code = value.codeUnitAt(i);
+    if (!((code >= 0x41 && code <= 0x5a) ||
+        (code >= 0x61 && code <= 0x7a) ||
+        (code >= 0x30 && code <= 0x39) ||
+        code == 0x2b ||
+        code == 0x2f)) {
+      return false;
+    }
+  }
+  final padding = value.length - dataEnd;
+  if (padding == 0) {
     return true;
-  } on FormatException {
-    return false;
   }
+  final code = value.codeUnitAt(dataEnd - 1);
+  final int lastValue;
+  if (code >= 0x41 && code <= 0x5a) {
+    lastValue = code - 0x41;
+  } else if (code >= 0x61 && code <= 0x7a) {
+    lastValue = code - 0x61 + 26;
+  } else if (code >= 0x30 && code <= 0x39) {
+    lastValue = code - 0x30 + 52;
+  } else {
+    lastValue = code == 0x2b ? 62 : 63;
+  }
+  // Unused low bits must be zero: four bits for '==', two bits for '='.
+  return (lastValue & (padding == 2 ? 0x0f : 0x03)) == 0;
 }
 
 String readRequiredBase64String(Object? value, String field) {

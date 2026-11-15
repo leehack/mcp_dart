@@ -61,6 +61,11 @@ TypeScript and Python servers alike. Import everything from
   with `tool.name`, `tool.description` and `tool.inputSchema.toJson()`, then
   forward the model's tool calls to `client.callTool`.
 
+- Large image, audio, and blob content uses standard padded base64 (no
+  whitespace or URL-safe alphabet). Validation supports multi-megabyte payloads;
+  allow for base64 expansion when sizing transport messages. Incoming stdio
+  messages still default to a 10 MiB limit.
+
 ## Examples
 
 Launch a local stdio server, list all tools across pages, call one and read a

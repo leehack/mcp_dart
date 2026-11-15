@@ -1,3 +1,10 @@
+## Unreleased
+
+### Fixed
+
+- Prevented stack overflows when parsing or serializing large base64 image,
+  audio, and blob content.
+
 ## 2.4.3
 
 ### Added

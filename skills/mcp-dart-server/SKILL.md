@@ -99,6 +99,11 @@ my_server/
   `mcp_dart inspect` (the CLI's `mcp_dart skills install` adds a debugging
   workflow skill for its inspect and trace commands).
 
+- Large image, audio, and blob content uses standard padded base64 (no
+  whitespace or URL-safe alphabet). Validation supports multi-megabyte payloads;
+  allow for base64 expansion when sizing transport messages. Incoming stdio
+  messages still default to a 10 MiB limit.
+
 ## Examples
 
 A complete server in the layout above. Each block is one file, named by its
