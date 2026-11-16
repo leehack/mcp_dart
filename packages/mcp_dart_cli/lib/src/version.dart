@@ -1,7 +1,7 @@
-const packageVersion = '0.2.2';
+const packageVersion = '0.2.3';
 
 /// SDK constraint written by this CLI when it creates a project.
-const generatedSdkConstraint = '^2.4.3';
+const generatedSdkConstraint = '^2.4.4';
 
 /// Immutable template paired with this CLI release.
 const defaultTemplateUrl =

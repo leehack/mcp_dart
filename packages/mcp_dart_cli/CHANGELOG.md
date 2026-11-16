@@ -1,3 +1,9 @@
+## 0.2.3
+
+- Require `mcp_dart ^2.4.4` for the CLI and newly generated projects, preventing
+  stack overflows when parsing or serializing large base64 image, audio, and
+  blob content.
+
 ## 0.2.2
 
 - Support `build` 5.x while retaining compatibility with 4.x. The Dart 3.12
