@@ -15,8 +15,8 @@ extensions, host UI behavior, an authorization-server implementation, JSON
 Schema external-reference resolution, and custom JSON Schema vocabularies.
 
 > [!IMPORTANT]
-> This release is `mcp_dart 2.4.3`. The separately versioned CLI is
-> `mcp_dart_cli 0.2.2`, which requires `mcp_dart ^2.4.3`.
+> This release is `mcp_dart 2.4.4`. The separately versioned CLI is
+> `mcp_dart_cli 0.2.3`, which requires `mcp_dart ^2.4.4`.
 > Current source passes every scored requirement in the official alpha.11 MCP
 > `2025-11-25` and `2026-07-28` client and server sets, including all 25
 > required 2026 authorization scenarios, plus bidirectional published
@@ -40,8 +40,8 @@ The public maintenance contract is documented in the
 
 | Package | Minimum Dart SDK |
 | --- | --- |
-| `mcp_dart 2.4.3` | 3.4 |
-| `mcp_dart_cli 0.2.2` | 3.12 |
+| `mcp_dart 2.4.4` | 3.4 |
+| `mcp_dart_cli 0.2.3` | 3.12 |
 
 SDK-only generated projects retain the SDK's Dart 3.4 minimum. CLI projects
 use Dart 3.12 because the CLI and its toolchain target that release.
@@ -65,15 +65,15 @@ important:
 
 ```yaml
 dependencies:
-  mcp_dart: ^2.4.3
+  mcp_dart: ^2.4.4
 ```
 
 The snippets below use the current stable SDK line. Package versions
 remain separate from protocol profiles: `McpProtocol.stable` names the SDK's
 default compatibility policy.
 
-The SDK and CLI are versioned independently. The stable CLI's `^2.4.3`
-constraint accepts SDK versions from 2.4.3 up to, but not including, 3.0.0.
+The SDK and CLI are versioned independently. The stable CLI's `^2.4.4`
+constraint accepts SDK versions from 2.4.4 up to, but not including, 3.0.0.
 
 ### AI agent skills
 
@@ -165,13 +165,13 @@ Applications upgrading from the stable 2.2 line should also follow the
 Install the matching stable CLI:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.2
+dart pub global activate mcp_dart_cli 0.2.3
 mcp_dart create my_server
 cd my_server
 mcp_dart inspect
 ```
 
-The `0.2.2` CLI creates a project with `mcp_dart: ^2.4.3`. The inspector
+The `0.2.3` CLI creates a project with `mcp_dart: ^2.4.4`. The inspector
 launches the generated stdio server itself. After leaving the interactive
 inspector, you can run a single tool directly:
 
@@ -253,7 +253,7 @@ surface. Re-check both packages' current releases before a production decision.
 - [Versioning policy](https://github.com/leehack/mcp_dart/blob/main/VERSIONING.md)
 - [Tier 1 roadmap](https://github.com/leehack/mcp_dart/blob/main/ROADMAP.md)
 - [SDK on pub.dev](https://pub.dev/packages/mcp_dart)
-- [2.4.3 API reference](https://pub.dev/documentation/mcp_dart/2.4.3/)
+- [2.4.4 API reference](https://pub.dev/documentation/mcp_dart/2.4.4/)
 - [Changelog](https://github.com/leehack/mcp_dart/blob/main/CHANGELOG.md)
 - [MCP 2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28)
 - [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25)

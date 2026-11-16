@@ -11,17 +11,17 @@ Install the stable CLI with a Dart SDK allowed by that release:
 dart pub global activate mcp_dart_cli
 ```
 
-The `0.2.2` release requires Dart 3.12.
+The `0.2.3` release requires Dart 3.12.
 
 Install the coordinated MCP `2026-07-28` CLI:
 
 ```bash
-dart pub global activate mcp_dart_cli 0.2.2
+dart pub global activate mcp_dart_cli 0.2.3
 ```
 
 For coordinated releases, automation publishes the SDK first and waits for it
 to resolve from pub.dev before publishing the CLI. CLI-only releases validate
-against the already published minimum SDK, currently `mcp_dart 2.4.3`.
+against the already published minimum SDK. This CLI requires `mcp_dart ^2.4.4`.
 
 Without Dart, install the latest stable standalone binary:
 
@@ -46,7 +46,7 @@ cd my_server
 mcp_dart serve
 ```
 
-The 0.2.2 CLI writes `mcp_dart: ^2.4.3`, the SDK version tested with this
+The 0.2.3 CLI writes `mcp_dart: ^2.4.4`, the SDK version tested with this
 CLI. You can also supply a local
 Mason brick, Git URL, GitHub shorthand, or tree URL:
 
