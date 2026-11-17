@@ -944,6 +944,98 @@ void main() {
   });
 
   test(
+    'rejects unknown stop reasons instead of returning partial text',
+    () async {
+      final anthropic = AnthropicClient.withApiKey('unused');
+      addTearDown(anthropic.close);
+
+      const stopReason = 'future_stop_reason';
+      var requestCount = 0;
+      final response = _message([
+        {'type': 'text', 'text': 'Incomplete answer'},
+      ], stopReason: stopReason);
+      expect(response.stopReason, StopReason.unknown);
+      expect(response.stopReasonValue, stopReason);
+      final client = AnthropicMcpClient(
+        anthropic,
+        mcp_dart.McpClient(
+          const mcp_dart.Implementation(name: 'test', version: '1.0.0'),
+        ),
+        messageGenerator: (_) async {
+          requestCount++;
+          return response;
+        },
+        toolLister: _listTools(const []),
+      );
+
+      await expectLater(
+        client.processQuery('Hello'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Anthropic returned an unsupported stop reason: '
+                '${jsonEncode(stopReason)}.',
+          ),
+        ),
+      );
+      expect(requestCount, 1);
+    },
+  );
+
+  test('does not execute tool blocks with unknown stop reasons', () async {
+    final anthropic = AnthropicClient.withApiKey('unused');
+    addTearDown(anthropic.close);
+
+    const stopReason = 'future_tool_stop_reason';
+    var requestCount = 0;
+    var approvalRequested = false;
+    var toolCalled = false;
+    final response = _message([
+      {
+        'type': 'tool_use',
+        'id': 'unknown_stop_call',
+        'name': 'dangerous',
+        'input': <String, dynamic>{},
+      },
+    ], stopReason: stopReason);
+    expect(response.stopReason, StopReason.unknown);
+    final client = AnthropicMcpClient(
+      anthropic,
+      mcp_dart.McpClient(
+        const mcp_dart.Implementation(name: 'test', version: '1.0.0'),
+      ),
+      messageGenerator: (_) async {
+        requestCount++;
+        return response;
+      },
+      toolApprover: (_, _) async {
+        approvalRequested = true;
+        return true;
+      },
+      toolLister: _listNamedTools(['dangerous']),
+      toolCaller: (_) async {
+        toolCalled = true;
+        return const mcp_dart.CallToolResult(content: []);
+      },
+    );
+
+    await expectLater(
+      client.processQuery('Do something'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains(jsonEncode(stopReason)),
+        ),
+      ),
+    );
+    expect(approvalRequested, isFalse);
+    expect(toolCalled, isFalse);
+    expect(requestCount, 1);
+  });
+
+  test(
     'reports refused responses instead of returning empty success',
     () async {
       final anthropic = AnthropicClient.withApiKey('unused');

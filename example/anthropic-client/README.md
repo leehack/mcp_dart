@@ -8,6 +8,18 @@ The client preserves each assistant tool-use turn and returns MCP results as
 correlated Anthropic `tool_result` blocks. Multiple tool calls in one assistant
 turn and multiple tool-use rounds are supported.
 
+This example adopts `anthropic_sdk_dart` 11's default Claude API version
+`2026-10-21` (previously `2023-06-01`), without a legacy API-version override.
+Its requests do not use the removed sampling parameters or unsupported
+assistant document inputs. See the
+[SDK migration guide](https://github.com/davidmigloz/ai_clients_dart/blob/anthropic_sdk_dart-v11.0.0/packages/anthropic_sdk_dart/MIGRATION.md)
+before adapting other request shapes. The SDK upgrade also adds the transitive
+`crypto` dependency (`^3.0.8`); this example adds no direct dependency.
+
+Unknown Anthropic stop reasons fail the query with the original wire value;
+partial text is not returned as success, and accompanying tool calls are not
+approved or executed.
+
 Its `McpClient` uses the SDK's default dual-era compatibility profile: it
 prefers MCP 2026-07-28 and falls back to the MCP 2025-11-25 initialization flow
 for legacy servers.
@@ -50,8 +62,9 @@ before using sensitive queries, schemas, arguments, or results.
 
 ## How to run
 
-This example requires Dart 3.9 or later because it uses the current
-`anthropic_sdk_dart` package.
+This example requires Dart 3.12 or later, matching the minimum required by
+`anthropic_sdk_dart` 10 and 11. This example-only requirement does not change
+the core SDK's Dart 3.4 minimum or the CLI package's Dart 3.12 minimum.
 
 First add the Anthropic API key to your environment variables:
 

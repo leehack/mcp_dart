@@ -378,6 +378,8 @@ class AnthropicMcpClient {
         'Anthropic paused the turn unexpectedly for this client-tool-only request.',
       StopReason.compaction =>
         'Anthropic returned an unsupported compaction stop reason.',
+      StopReason.unknown =>
+        'Anthropic returned an unsupported stop reason: ${jsonEncode(response.stopReasonValue)}.',
       StopReason.endTurn || StopReason.stopSequence || StopReason.toolUse =>
         'Unexpected Anthropic stop reason: ${response.stopReason?.value}.',
       null => 'Anthropic response omitted stop_reason.',
