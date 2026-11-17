@@ -4,11 +4,11 @@ version: 1.0.1
 publish_to: none
 
 environment:
-  sdk: ^3.9.0
+  sdk: ^3.12.0
 
 # Add regular dependencies here.
 dependencies:
-  anthropic_sdk_dart: ^10.0.0
+  anthropic_sdk_dart: ^11.0.0
   mcp_dart:
     path: ../../
 
