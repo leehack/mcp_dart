@@ -346,7 +346,8 @@ Future<void> main(List<String> arguments) async {
     }
 
     if (method == 'fixture/exit') {
-      return;
+      // Exit without awaiting stdin cancellation, which can block on Windows.
+      exit(0);
     }
 
     if (method == 'fixture/exit-zero-request') {
