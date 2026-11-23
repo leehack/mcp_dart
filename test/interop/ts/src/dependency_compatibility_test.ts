@@ -100,22 +100,20 @@ test(
       [
         '--input-type=module',
         '--eval',
-        `import { Minimatch } from 'minimatch';
-const matcher = new Minimatch('**/../a/b/'.repeat(8) + 'target.txt', {
-  optimizationLevel: 2, braceExpandMax: 16,
-});
-console.log(JSON.stringify({ parts: matcher.globParts.length }));`,
+        `import assert from 'node:assert/strict';
+import { Minimatch } from 'minimatch';
+assert.throws(
+  () => new Minimatch('**/../a/b/'.repeat(8) + 'target.txt', {
+    optimizationLevel: 2, braceExpandMax: 16,
+  }),
+  (error) => error instanceof RangeError &&
+    error.message === "optimizationLevel 2: too many patterns from '**/..'",
+);`,
       ],
       { cwd: fixtureRoot, encoding: 'utf8', timeout: 5000, maxBuffer: 16384 }
     );
     assert.ifError(probe.error);
     assert.equal(probe.status, 0, probe.stderr);
-    const result = JSON.parse(probe.stdout) as { parts: number };
-    assert.equal(Number.isInteger(result.parts), true);
-    assert.ok(
-      result.parts > 0 && result.parts <= 16,
-      `expanded ${result.parts} patterns`
-    );
   }
 );
 
